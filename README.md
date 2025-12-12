@@ -11,6 +11,16 @@ A modern, multi-tenant CRM and case management platform built for surrogacy agen
 | **Database** | PostgreSQL 16 (via Docker) |
 | **Migrations** | Alembic |
 
+## AI (Optional / BYOK)
+
+AI is an **optional** capability designed to be safe, auditable, and tenant-configurable.
+
+- Default: **off** (the app works without AI).
+- If enabled: organizations can use **their own AI provider keys** (BYOK) so costs and provider choices stay under their control.
+- Recommended: store the org’s AI key **server-side in the database (encrypted at rest)** so a manager enables AI once and authorized employees can use AI features without handling keys.
+- Early AI surfaces (recommended): analytics/insights, summarization, and drafting (with human review).
+- Early AI safety stance (recommended): AI can **recommend** qualification/flags with reasons + confidence, but a human confirms any final status changes.
+
 ## Project Structure
 
 ```
@@ -100,6 +110,10 @@ Frontend runs at `http://localhost:3000`
 
 ```env
 DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/crm
+# Optional AI (example; exact wiring may evolve):
+# AI_ENABLED=false
+# AI_PROVIDER=openai
+# OPENAI_API_KEY=...
 ```
 
 ### Frontend (`apps/web/.env.local`)
@@ -133,6 +147,13 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 ## Documentation
 
 See [agents.md](./agents.md) for detailed project specifications, architecture decisions, and contribution guidelines.
+
+## Open-source & Customization Strategy
+
+The long-term goal is to keep a **general, open-source-ready core** while supporting organization-level customization via configuration (not forks):
+
+- Shared core entities and APIs (org-scoped, role-scoped)
+- Per-organization settings for pipelines/statuses, templates, rubrics, and (optional) AI policies/keys
 
 ## License
 

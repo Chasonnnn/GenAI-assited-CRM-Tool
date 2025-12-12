@@ -1,10 +1,10 @@
-# agent.md — Surrogacy CRM Platform (Multi-tenant, Open-source Ready)
+# agents.md — Surrogacy CRM Platform (Multi-tenant, Open-source Ready)
 
 This document is the single source of truth for how we build this project: architecture, conventions, workflows, and rules that every contributor (human or AI agent) must follow.
 
 ## 0) Project Summary
 
-We are building an **in-house CRM + case management platform** for a surrogacy agency, with the ability to **scale to multiple companies (multi-tenant)** and potentially be **open-sourced** in the future.
+We are building an **in-house CRM + case management platform** for a surrogacy agency, with the ability to **scale to multiple companies (multi-tenant)** and be **open-source ready** (a general version that can be customized per organization).
 
 Primary user roles (per organization):
 - **Manager** (full access, dashboards, assignments)
@@ -39,6 +39,14 @@ Core modules:
 - Plugin architecture / event bus / webhooks-as-a-product
 - Full white-label theming engine
 - Auto-sending AI emails without human review
+
+## 1.1) Open-source & Generalizability Goals
+
+We aim to keep the codebase **generalizable** so an open-source “core CRM” can exist without being tightly coupled to one agency’s process.
+
+- Prefer **configuration** (org settings, templates, rubrics, stages) over forks.
+- Avoid hard-coding surrogacy-only assumptions into shared core logic; isolate domain specifics behind configuration or clearly named modules.
+- Keep multi-tenancy and authorization rules identical across all verticals.
 
 ## 2) Tech Stack (Target)
 
@@ -228,6 +236,17 @@ Implementation guideline:
 - Enforce org + role scoping
 - Redact/minimize sensitive fields sent to the model
 - Store an audit record of prompts/outputs (safe subset)
+
+Additional rules (provider + keys + governance):
+- AI must be **optional** and **off by default**.
+- Support a provider abstraction (e.g., OpenAI first) so we can switch/extend providers later without rewriting features.
+- Prefer BYOK: **organization-managed keys**, stored in the DB **server-side** (encrypted at rest) and never exposed to the browser.
+- Key handling rules:
+  - Keys are **write-only**: the UI can set/rotate/test a key, but never displays the full value again (show masked last-4 + created_at).
+  - Only `manager` (or org admin) can create/update/disable keys.
+  - Backend must never return keys in API responses and must never log them.
+  - Support rotation (keep “active key id” per org) and an immediate “disable AI” kill switch.
+- Treat classification/qualification as **AI recommendation** (reasons + confidence + rubric signals) until a user confirms a final status/decision.
 
 ## 9) Code Style & Quality
 
