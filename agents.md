@@ -295,16 +295,24 @@ Constraints:
 
 ## 13) Current Status (Update regularly)
 
-- Date:
-- Completed:
-- In progress:
-- Blockers:
-- Next milestones:
+- **Date:** 2024-12-12
+- **Completed:**
+  - Project scaffolding (monorepo with apps/api + apps/web)
+  - PostgreSQL 16 via Docker Compose
+  - FastAPI with health endpoint + DB connectivity check
+  - SQLAlchemy 2.0 + Alembic migrations configured
+  - Next.js 16 with App Router and (app) route group
+  - Basic app layout (sidebar + topbar)
+  - Placeholder pages: Dashboard, Leads, Settings
+  - Project README and .gitignore
+- **In progress:** Authentication & multi-tenancy setup
+- **Blockers:** None
+- **Next milestones:** User/Org/Membership models, JWT auth, Lead CRUD API
 
 ## 14) Decision Log (Update when choices change)
 
-- ORM choice: (SQLAlchemy / SQLModel)
-- Auth token strategy: (JWT in httpOnly cookie vs localStorage)
-- Hosting choice:
-- Meta integration approach:
-- AI provider choice:
+- **ORM choice:** SQLAlchemy 2.0 with DeclarativeBase
+- **Auth token strategy:** TBD
+- **Hosting choice:** TBD (target: Vercel for frontend, Render/Railway for backend)
+- **Meta integration approach:** TBD
+- **AI provider choice:** TBD
