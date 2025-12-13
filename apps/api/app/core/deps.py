@@ -84,8 +84,7 @@ def get_current_session(
     
     Raises:
         HTTPException 401: Not authenticated
-        HTTPException 403: No organization membership
-        HTTPException 500: Invalid role in database
+        HTTPException 403: No membership or unknown role
     """
     # Import here to avoid circular imports
     from app.db.models import Membership
@@ -101,11 +100,14 @@ def get_current_session(
     if not membership:
         raise HTTPException(status_code=403, detail="No organization membership")
     
-    # Validate role is a known enum value
-    try:
-        role = Role(membership.role)
-    except ValueError:
-        raise HTTPException(status_code=500, detail="Invalid role in membership")
+    # Validate role is a known enum value - return 403 not 500
+    if not Role.has_value(membership.role):
+        raise HTTPException(
+            status_code=403, 
+            detail=f"Unknown role '{membership.role}'. Contact administrator."
+        )
+    
+    role = Role(membership.role)
     
     return UserSession(
         user_id=user.id,
@@ -120,19 +122,17 @@ def require_roles(allowed_roles: list):
     """
     Dependency factory for role-based authorization.
     
-    Usage:
-        @router.post("/admin-only", dependencies=[Depends(require_roles([Role.MANAGER]))])
-        def admin_endpoint(...): ...
+    Uses enum values (not strings) to prevent drift.
     
-    Or as a direct dependency:
-        def admin_endpoint(session = Depends(require_roles([Role.MANAGER]))): ...
+    Usage:
+        @router.post("/admin", dependencies=[Depends(require_roles([Role.MANAGER, Role.DEVELOPER]))])
     """
     def dependency(request: Request, db: Session = Depends(get_db)):
         session = get_current_session(request, db)
         if session.role not in allowed_roles:
             raise HTTPException(
                 status_code=403, 
-                detail=f"Role '{session.role.value}' not authorized"
+                detail=f"Role '{session.role.value}' not authorized for this action"
             )
         return session
     return dependency
@@ -142,13 +142,7 @@ def require_csrf_header(request: Request) -> None:
     """
     Verify CSRF header on mutations.
     
-    Apply to state-changing endpoints:
-        @router.post("/leads", dependencies=[Depends(require_csrf_header)])
-    
-    Do NOT apply to:
-        - OAuth redirects/callbacks
-        - GET endpoints
-        - Health checks
+    Apply to state-changing endpoints (POST, PATCH, DELETE).
     
     Raises:
         HTTPException 403: Missing or invalid CSRF header
@@ -169,10 +163,66 @@ def get_org_scope(
     
     Every list/detail query MUST filter by this value
     to ensure proper tenant isolation.
-    
-    Usage:
-        def list_leads(org_id: UUID = Depends(get_org_scope), db: Session = Depends(get_db)):
-            return db.query(Lead).filter(Lead.organization_id == org_id).all()
     """
     session = get_current_session(request, db)
     return session.org_id
+
+
+# =============================================================================
+# Permission Check Helpers (use enum sets from db.enums)
+# =============================================================================
+
+def can_assign(session) -> bool:
+    """Check if user can assign cases to others."""
+    from app.db.enums import ROLES_CAN_ASSIGN
+    return session.role in ROLES_CAN_ASSIGN
+
+
+def can_archive(session) -> bool:
+    """Check if user can archive/restore cases."""
+    from app.db.enums import ROLES_CAN_ARCHIVE
+    return session.role in ROLES_CAN_ARCHIVE
+
+
+def can_hard_delete(session) -> bool:
+    """Check if user can permanently delete cases."""
+    from app.db.enums import ROLES_CAN_HARD_DELETE
+    return session.role in ROLES_CAN_HARD_DELETE
+
+
+def can_manage_settings(session) -> bool:
+    """Check if user can manage org settings."""
+    from app.db.enums import ROLES_CAN_MANAGE_SETTINGS
+    return session.role in ROLES_CAN_MANAGE_SETTINGS
+
+
+def can_manage_integrations(session) -> bool:
+    """Check if user can manage integrations (developer only)."""
+    from app.db.enums import ROLES_CAN_MANAGE_INTEGRATIONS
+    return session.role in ROLES_CAN_MANAGE_INTEGRATIONS
+
+
+def can_invite(session) -> bool:
+    """Check if user can invite new members."""
+    from app.db.enums import ROLES_CAN_INVITE
+    return session.role in ROLES_CAN_INVITE
+
+
+def is_owner_or_can_manage(session, created_by_user_id: UUID) -> bool:
+    """Check if user is the creator OR has manager+ permissions."""
+    from app.db.enums import ROLES_CAN_ARCHIVE  # Manager+ can do anything
+    return session.user_id == created_by_user_id or session.role in ROLES_CAN_ARCHIVE
+
+
+def is_owner_or_assignee_or_manager(
+    session, 
+    created_by_user_id: UUID | None,
+    assigned_to_user_id: UUID | None
+) -> bool:
+    """Check if user is creator, assignee, or manager+. For tasks."""
+    from app.db.enums import ROLES_CAN_ARCHIVE
+    return (
+        session.user_id == created_by_user_id or
+        session.user_id == assigned_to_user_id or
+        session.role in ROLES_CAN_ARCHIVE
+    )
