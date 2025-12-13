@@ -159,16 +159,17 @@ def archive_case(
     case: Case,
     user_id: UUID,
 ) -> Case:
-    """Soft-delete a case (set is_archived). Stores prior status for restore."""
+    """Soft-delete a case (set is_archived and status=ARCHIVED)."""
     if case.is_archived:
         return case  # Already archived
     
     prior_status = case.status
+    case.status = CaseStatus.ARCHIVED.value  # Actually set status to archived
     case.is_archived = True
     case.archived_at = datetime.now(timezone.utc)
     case.archived_by_user_id = user_id
     
-    # Record in status history with prior status in reason for restore reference
+    # Record in status history with prior status for restore reference
     history = CaseStatusHistory(
         case_id=case.id,
         organization_id=case.organization_id,
@@ -214,16 +215,17 @@ def restore_case(
         CaseStatusHistory.to_status == CaseStatus.ARCHIVED.value,
     ).order_by(CaseStatusHistory.changed_at.desc()).first()
     
-    # Extract prior status from reason or default to current status
-    prior_status = case.status  # Fallback
+    # Get prior status from archive history, default to NEW_UNREAD
+    prior_status = CaseStatus.NEW_UNREAD.value  # Safe fallback
     if archive_history and archive_history.from_status:
         prior_status = archive_history.from_status
     
+    case.status = prior_status  # Actually restore the status
     case.is_archived = False
     case.archived_at = None
     case.archived_by_user_id = None
     
-    # Record in status history - restore to prior status
+    # Record in status history
     history = CaseStatusHistory(
         case_id=case.id,
         organization_id=case.organization_id,
