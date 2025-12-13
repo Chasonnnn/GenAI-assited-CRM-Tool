@@ -46,8 +46,8 @@ def seed_test_data(db: Session = Depends(get_db)):
     # Create test users with different roles
     users_data = [
         ("manager@test.com", "Test Manager", Role.MANAGER),
-        ("intake@test.com", "Test Intake", Role.INTAKE),
-        ("specialist@test.com", "Test Specialist", Role.SPECIALIST),
+        ("intake@test.com", "Test Intake", Role.INTAKE_SPECIALIST),
+        ("specialist@test.com", "Test Case Manager", Role.CASE_MANAGER),
     ]
     
     created_users = []

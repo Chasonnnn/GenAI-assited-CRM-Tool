@@ -40,14 +40,24 @@ def update_task(
     task: Task,
     data: TaskUpdate,
 ) -> Task:
-    """Update task fields (non-None values only)."""
+    """
+    Update task fields.
+    
+    Uses exclude_unset=True so only explicitly provided fields are updated.
+    None values ARE applied to clear optional fields.
+    """
     update_data = data.model_dump(exclude_unset=True)
     
+    # Fields that can be cleared (set to None)
+    clearable_fields = {"assigned_to_user_id", "due_date", "due_time", "description"}
+    
     for field, value in update_data.items():
-        if value is not None:
-            if field == "task_type":
-                value = value.value
-            setattr(task, field, value)
+        # For clearable fields, allow None; for others, skip None
+        if value is None and field not in clearable_fields:
+            continue
+        if field == "task_type" and value is not None:
+            value = value.value
+        setattr(task, field, value)
     
     db.commit()
     db.refresh(task)
