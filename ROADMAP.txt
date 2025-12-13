@@ -24,28 +24,33 @@ Tooling/Process
 Deliverable
 - FE loads, BE loads, DB connects; deploy-able skeleton exists
 
-Week 2 — Auth + tenant isolation (the “don’t regret later” week)
+Week 2 — Auth + tenant isolation (the "don't regret later" week) ✓ COMPLETE
 Backend
-- Tables:
-  - organizations
-  - users
-  - memberships (user_id ↔ org_id ↔ role) with constraint enforcing 1 org per user (e.g., UNIQUE(user_id))
-- Auth: Google OAuth (Workspace SSO) + cookie-based session (JWT in HTTP-only cookie) + GET `/auth/me`
-- Invite-only access (org_invites + CLI bootstrap command)
-- Optional domain allowlist via `ALLOWED_EMAIL_DOMAINS`
-- CSRF protection for mutations (e.g., `X-Requested-With: XMLHttpRequest`)
-- Centralized authorization helpers (role checks; membership checks)
-- Centralized query scoping helper: all list/detail endpoints must enforce `organization_id = current_org_id`
-- Seed/bootstrap path:
-  - CLI: create first org + manager invite
-  - Dev-only endpoints (guarded by ENV + secret header) for seeding and login-as
-Frontend
+✓ Tables:
+  ✓ organizations
+  ✓ users
+  ✓ memberships (user_id ↔ org_id ↔ role) with constraint enforcing 1 org per user (UNIQUE(user_id))
+  ✓ auth_identities (SSO provider linking)
+  ✓ org_invites (with partial unique index for pending invites)
+✓ Auth: Google OAuth (Workspace SSO) + cookie-based session (JWT in HTTP-only cookie) + GET `/auth/me`
+✓ Invite-only access (org_invites + CLI bootstrap command)
+✓ Optional domain allowlist via `ALLOWED_EMAIL_DOMAINS`
+✓ CSRF protection for mutations (`X-Requested-With: XMLHttpRequest`)
+✓ Centralized authorization helpers (role checks; membership checks) in `core/deps.py`
+✓ Centralized query scoping helper: `get_org_scope` dependency
+✓ Seed/bootstrap path:
+  ✓ CLI: `python -m app.cli create-org` for first org + manager invite
+  ✓ Dev-only endpoints (`/dev/seed`, `/dev/login-as`) guarded by ENV + X-Dev-Secret header
+✓ Service layer: `auth_service.py`, `user_service.py`, `org_service.py`, `google_oauth.py`
+✓ Schemas: `auth.py`, `user.py`, `org.py`, `invite.py`
+✓ Fresh baseline migration: `0001_baseline.py`
+Frontend (pending)
 - Login page (React Hook Form + Zod)
-- Store session (HTTP-only cookie preferred; token never stored in localStorage if avoidable)
 - Route protection
 - Show nav items by role
 Deliverable
-- Login works, role-based UI works, tenant isolation is enforced by design + tests
+✓ Backend auth works, role-based access works, tenant isolation is enforced by design
+- Frontend integration in progress
 
 Week 3 — Leads v1 (pipeline + list + detail)
 Backend

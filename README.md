@@ -27,8 +27,12 @@ AI is an **optional** capability designed to be safe, auditable, and tenant-conf
 ├── apps/
 │   ├── api/                 # FastAPI backend
 │   │   ├── app/
-│   │   │   ├── core/        # Config, settings
-│   │   │   ├── db/          # Database models, session, migrations
+│   │   │   ├── core/        # Config, security, dependencies
+│   │   │   ├── db/          # Database models, session, enums
+│   │   │   ├── routers/     # API endpoints (auth, dev)
+│   │   │   ├── schemas/     # Pydantic DTOs (auth, user, org, invite)
+│   │   │   ├── services/    # Business logic (auth, user, org, google_oauth)
+│   │   │   ├── cli.py       # CLI commands (create-org, revoke-sessions)
 │   │   │   └── main.py      # FastAPI app entry
 │   │   ├── alembic/         # Database migrations
 │   │   └── requirements.txt
@@ -138,13 +142,19 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ## API Endpoints
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /health` | Health check with database connectivity test |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check with database connectivity test |
+| `/auth/google/login` | GET | Initiate Google OAuth flow |
+| `/auth/google/callback` | GET | Handle OAuth callback, create session |
+| `/auth/me` | GET | Get current user profile + org + role |
+| `/auth/logout` | POST | Clear session cookie (requires CSRF header) |
+| `/dev/seed` | POST | Create test org + users (dev only, requires X-Dev-Secret) |
+| `/dev/login-as/{user_id}` | POST | Bypass OAuth for testing (dev only) |
 
 ## Current Status
 
-**In Development** — Setting up core infrastructure:
+**Week 2 Complete** — Authentication & tenant isolation:
 
 - [x] Project scaffolding (monorepo structure)
 - [x] PostgreSQL with Docker Compose
@@ -153,7 +163,13 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 - [x] Next.js with App Router and (app) route group
 - [x] Basic layout with sidebar/topbar
 - [x] Placeholder pages: Dashboard, Leads, Settings
-- [x] Authentication (Google OAuth) + tenant isolation (invite-only, one-org-per-user)
+- [x] Google OAuth SSO with state/nonce/user-agent binding
+- [x] Invite-only access (one pending invite per email globally)
+- [x] JWT sessions in HTTP-only cookies with key rotation
+- [x] Role-based authorization (manager, intake, specialist)
+- [x] Tenant isolation via Membership (one org per user)
+- [x] CLI bootstrap + dev endpoints
+- [ ] Frontend auth integration (login button, route protection)
 - [ ] Lead management CRUD
 - [ ] Case workflow
 - [ ] Meta Lead Ads integration
