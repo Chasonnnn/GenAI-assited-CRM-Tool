@@ -28,6 +28,12 @@ from app.services.user_service import (
     update_user_profile,
 )
 
+# Import service modules (not individual functions) for cleaner access
+from app.services import case_service
+from app.services import note_service
+from app.services import task_service
+from app.services import meta_lead_service
+
 __all__ = [
     # Auth service
     "find_user_by_identity",
@@ -52,4 +58,9 @@ __all__ = [
     "get_org_by_slug",
     "create_org",
     "update_org",
+    # Service modules
+    "case_service",
+    "note_service",
+    "task_service",
+    "meta_lead_service",
 ]
