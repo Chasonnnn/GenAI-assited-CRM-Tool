@@ -63,7 +63,7 @@ We aim to keep the codebase **generalizable** so an open-source “core CRM” c
 - Pydantic v2
 - PostgreSQL (Supabase for managed hosting)
 - ORM + migrations (SQLAlchemy + Alembic OR SQLModel + Alembic)
-- JWT auth (access tokens)
+- Cookie-based session auth (JWT in HTTP-only cookie) + Google OAuth (Workspace SSO)
 
 ### Optional (Later)
 - Redis + background jobs (Celery/RQ/Arq) if we need queues/reminders at scale
@@ -140,10 +140,17 @@ Role defaults (can be adjusted by org policy):
 - Keep `.env.example` up to date for both apps.
 
 Backend `.env` example:
-- `DATABASE_URL=postgresql+asyncpg://...`
+- `DATABASE_URL=postgresql+psycopg://...`
 - `JWT_SECRET=...`
-- `JWT_EXPIRES_MIN=...`
+- `JWT_SECRET_PREVIOUS=` (optional for rotation)
+- `JWT_EXPIRES_HOURS=4`
+- `GOOGLE_CLIENT_ID=...`
+- `GOOGLE_CLIENT_SECRET=...`
+- `GOOGLE_REDIRECT_URI=http://localhost:8000/auth/google/callback`
+- `ALLOWED_EMAIL_DOMAINS=example.com` (optional)
 - `CORS_ORIGINS=http://localhost:3000`
+- `FRONTEND_URL=http://localhost:3000`
+- `DEV_SECRET=...` (dev-only)
 - `META_APP_SECRET=...`
 - `META_VERIFY_TOKEN=...`
 - `META_PAGE_ACCESS_TOKEN=...` (or a secure token store later)
@@ -159,9 +166,10 @@ Frontend `.env.local` example:
   - leads, intended_parents, cases, notes, events/dates, notifications, analytics snapshots, etc.
 - Every query MUST scope by organization:
   - `WHERE organization_id = current_org_id`
-- Roles are per-organization membership:
+- This project uses **one organization per user account**:
   - `User` is identity
-  - `Membership(user_id, organization_id, role)` is authorization context
+  - `Membership` is authorization context and enforces `UNIQUE(user_id)`
+  - `org_id` is derived from the authenticated session (not from client-supplied org headers)
 
 ### 5.2 Authorization rules
 - Do not scatter `if role == "x"` across routers.
@@ -172,6 +180,10 @@ Frontend `.env.local` example:
   - user authentication
   - membership in org
   - role permission for action
+
+### 5.2.1 Cookie sessions + CSRF
+- Auth is cookie-based; API requests from the frontend must use `credentials: "include"` (or equivalent).
+- For state-changing requests, require a simple CSRF header (e.g. `X-Requested-With: XMLHttpRequest`) and validate it in a centralized dependency.
 
 ### 5.3 Data safety / privacy
 This domain may include sensitive PII and potentially health-related info.
@@ -184,7 +196,7 @@ This domain may include sensitive PII and potentially health-related info.
 
 ### 5.4 API design
 - Prefer RESTful endpoints with predictable resources:
-  - `/auth/login`, `/auth/me`
+  - `/auth/google/login`, `/auth/me`, `/auth/logout`
   - `/orgs`, `/orgs/:id` (admin-only if needed)
   - `/leads`, `/leads/:id`, `/leads/:id/status`, `/leads/:id/assign`
   - `/parents`, `/cases`, `/notes`, `/events`, `/notifications`
@@ -343,7 +355,7 @@ Constraints:
 
 ## 13) Current Status (Update regularly)
 
-- **Date:** 2024-12-12
+- **Date:** 2025-12-13
 - **Completed:**
   - Project scaffolding (monorepo with apps/api + apps/web)
   - PostgreSQL 16 via Docker Compose
@@ -352,15 +364,25 @@ Constraints:
   - Next.js 16 with App Router and (app) route group
   - Basic app layout (sidebar + topbar)
   - Placeholder pages: Dashboard, Leads, Settings
-  - Project README and .gitignore
-- **In progress:** Authentication & multi-tenancy setup
+  - **Week 2 complete:** Authentication & tenant isolation
+    - Google OAuth SSO with state/nonce/user-agent binding
+    - Invite-only access (one pending invite per email globally)
+    - JWT sessions in HTTP-only cookies with key rotation
+    - Role-based authorization (manager, intake, specialist)
+    - Strict tenant isolation via Membership (one org per user)
+    - CLI bootstrap (`python -m app.cli create-org`)
+    - Dev endpoints (`/dev/seed`, `/dev/login-as`)
+- **In progress:** Frontend auth integration
 - **Blockers:** None
-- **Next milestones:** User/Org/Membership models, JWT auth, Lead CRUD API
+- **Next milestones:** Frontend login flow, Leads CRUD API
 
 ## 14) Decision Log (Update when choices change)
 
 - **ORM choice:** SQLAlchemy 2.0 with DeclarativeBase
-- **Auth token strategy:** TBD
+- **Auth token strategy:** Stateless JWT in HTTP-only cookie, signed with HS256, key rotation via `JWT_SECRET` + `JWT_SECRET_PREVIOUS`
+- **Session revocation:** `token_version` on users table; bump to invalidate all sessions
+- **OIDC verification:** `google-auth` library (handles JWKS fetching, signature verification)
+- **CSRF protection:** `SameSite=Lax` + `X-Requested-With: XMLHttpRequest` header on mutations
 - **Hosting choice:** TBD (target: Vercel for frontend, Render/Railway for backend)
 - **Meta integration approach:** TBD
 - **AI provider choice:** TBD
