@@ -7,22 +7,22 @@ Assumptions (important)
 - Tenant context is derived from auth (JWT/session includes `org_id` and `role`); the client does NOT send an org id header/path for scoping.
 - AI is optional (off by default) and BYOK (org-managed key stored server-side in DB, encrypted).
 
-Week 1 — Setup & foundations (repo + tooling + skeleton apps)
+Week 1 — Setup & foundations (repo + tooling + skeleton apps) ✓ COMPLETE
 Backend
-- FastAPI project structure
-- Postgres connectivity (local for dev; Supabase target for prod)
-- Alembic migrations + baseline migration
-- Central request context dependency: returns `{user_id, org_id, role}` (org_id may be null pre-auth)
-- `/health` endpoint (DB connectivity test)
+✓ FastAPI project structure (`apps/api/app/`)
+✓ Postgres connectivity (Docker Compose for dev)
+✓ Alembic migrations + baseline migration (`0001_baseline.py`)
+✓ Central request context dependency (`get_current_session` returns `{user_id, org_id, role}`)
+✓ `/health` endpoint (DB connectivity test)
 Frontend
-- Next.js App Router + TypeScript strict
-- Tailwind + shadcn/ui installed
-- Layout shell (sidebar/topbar) + placeholder routes
+✓ Next.js App Router + TypeScript strict
+✓ Tailwind + shadcn/ui installed
+✓ Layout shell (sidebar/topbar) + placeholder routes (`(app)/dashboard`, `(app)/leads`, `(app)/settings`)
 Tooling/Process
-- CI on PRs: lint/typecheck/tests (minimal smoke)
-- Ensure `.env.example` for both apps stays current
+- CI on PRs: (to be configured)
+✓ `.env` settings documented in README (formal `.env.example` files pending)
 Deliverable
-- FE loads, BE loads, DB connects; deploy-able skeleton exists
+✓ FE loads, BE loads, DB connects; skeleton exists
 
 Week 2 — Auth + tenant isolation (the "don't regret later" week) ✓ COMPLETE
 Backend
