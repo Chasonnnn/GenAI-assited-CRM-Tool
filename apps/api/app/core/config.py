@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     # Dev-only
     DEV_SECRET: str = "change-me"
     
+    # Meta Lead Ads webhook
+    META_VERIFY_TOKEN: str = ""
+    
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse CORS_ORIGINS into a list."""

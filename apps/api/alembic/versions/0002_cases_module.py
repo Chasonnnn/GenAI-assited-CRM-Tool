@@ -171,7 +171,7 @@ def upgrade() -> None:
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.ForeignKeyConstraint(['case_id'], ['cases.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ondelete='CASCADE'),
-        sa.ForeignKeyConstraint(['author_id'], ['users.id'], ondelete='SET NULL'),
+        sa.ForeignKeyConstraint(['author_id'], ['users.id'], ondelete='RESTRICT'),
         sa.PrimaryKeyConstraint('id'),
     )
     
@@ -200,7 +200,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['case_id'], ['cases.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['assigned_to_user_id'], ['users.id'], ondelete='SET NULL'),
-        sa.ForeignKeyConstraint(['created_by_user_id'], ['users.id'], ondelete='SET NULL'),
+        sa.ForeignKeyConstraint(['created_by_user_id'], ['users.id'], ondelete='RESTRICT'),
         sa.ForeignKeyConstraint(['completed_by_user_id'], ['users.id'], ondelete='SET NULL'),
         sa.PrimaryKeyConstraint('id'),
     )
@@ -242,10 +242,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Drop triggers
+    # Drop triggers (but not the shared function - it's used by baseline migration)
     op.execute("DROP TRIGGER IF EXISTS update_tasks_updated_at ON tasks")
     op.execute("DROP TRIGGER IF EXISTS update_cases_updated_at ON cases")
-    op.execute("DROP FUNCTION IF EXISTS update_updated_at_column()")
+    # Note: NOT dropping update_updated_at_column() as it's shared with baseline
     
     # Drop tables in reverse order
     op.drop_table('tasks')
@@ -257,3 +257,4 @@ def downgrade() -> None:
     
     op.drop_table('cases')
     op.drop_table('meta_leads')
+

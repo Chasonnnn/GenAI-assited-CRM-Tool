@@ -423,7 +423,7 @@ class CaseNote(Base):
     )
     author_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
+        ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False
     )
     body: Mapped[str] = mapped_column(Text, nullable=False)  # 2-4000 chars in schema
@@ -478,7 +478,7 @@ class Task(Base):
     )
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
+        ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False
     )
     

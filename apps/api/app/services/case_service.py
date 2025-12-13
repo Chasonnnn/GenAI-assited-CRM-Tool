@@ -76,16 +76,30 @@ def update_case(
     case: Case,
     data: CaseUpdate,
 ) -> Case:
-    """Update case fields (non-None values only)."""
+    """
+    Update case fields.
+    
+    Uses exclude_unset=True so only explicitly provided fields are updated.
+    None values ARE applied to clear optional fields.
+    """
     update_data = data.model_dump(exclude_unset=True)
     
+    # Fields that can be cleared (set to None)
+    clearable_fields = {
+        "phone", "state", "date_of_birth", "race", "height_ft", "weight_lb",
+        "is_age_eligible", "is_citizen_or_pr", "has_child", "is_non_smoker",
+        "has_surrogate_experience", "num_deliveries", "num_csections"
+    }
+    
     for field, value in update_data.items():
-        if value is not None:
-            if field == "full_name":
-                value = normalize_name(value)
-            elif field == "email":
-                value = normalize_email(value)
-            setattr(case, field, value)
+        # For clearable fields, allow None; for others, skip None
+        if value is None and field not in clearable_fields:
+            continue
+        if field == "full_name" and value:
+            value = normalize_name(value)
+        elif field == "email" and value:
+            value = normalize_email(value)
+        setattr(case, field, value)
     
     db.commit()
     db.refresh(case)
@@ -145,23 +159,23 @@ def archive_case(
     case: Case,
     user_id: UUID,
 ) -> Case:
-    """Soft-delete a case (set is_archived)."""
+    """Soft-delete a case (set is_archived). Stores prior status for restore."""
     if case.is_archived:
         return case  # Already archived
     
-    old_status = case.status
+    prior_status = case.status
     case.is_archived = True
     case.archived_at = datetime.now(timezone.utc)
     case.archived_by_user_id = user_id
     
-    # Record in status history
+    # Record in status history with prior status in reason for restore reference
     history = CaseStatusHistory(
         case_id=case.id,
         organization_id=case.organization_id,
-        from_status=old_status,
+        from_status=prior_status,
         to_status=CaseStatus.ARCHIVED.value,
         changed_by_user_id=user_id,
-        reason="Case archived",
+        reason=f"Case archived (was: {prior_status})",
     )
     db.add(history)
     db.commit()
@@ -175,7 +189,7 @@ def restore_case(
     user_id: UUID,
 ) -> tuple[Case | None, str | None]:
     """
-    Restore an archived case.
+    Restore an archived case to its prior status.
     
     Returns:
         (case, error) - case is None if error occurred
@@ -194,19 +208,29 @@ def restore_case(
     if existing:
         return None, f"Email already in use by case #{existing.case_number}"
     
-    old_archived_status = CaseStatus.ARCHIVED.value
+    # Find the prior status from the archive history entry
+    archive_history = db.query(CaseStatusHistory).filter(
+        CaseStatusHistory.case_id == case.id,
+        CaseStatusHistory.to_status == CaseStatus.ARCHIVED.value,
+    ).order_by(CaseStatusHistory.changed_at.desc()).first()
+    
+    # Extract prior status from reason or default to current status
+    prior_status = case.status  # Fallback
+    if archive_history and archive_history.from_status:
+        prior_status = archive_history.from_status
+    
     case.is_archived = False
     case.archived_at = None
     case.archived_by_user_id = None
     
-    # Record in status history
+    # Record in status history - restore to prior status
     history = CaseStatusHistory(
         case_id=case.id,
         organization_id=case.organization_id,
-        from_status=old_archived_status,
-        to_status=CaseStatus.RESTORED.value,
+        from_status=CaseStatus.ARCHIVED.value,
+        to_status=prior_status,
         changed_by_user_id=user_id,
-        reason="Case restored",
+        reason=f"Case restored (back to: {prior_status})",
     )
     db.add(history)
     db.commit()

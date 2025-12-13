@@ -143,12 +143,23 @@ def create_task(
     db: Session = Depends(get_db),
 ):
     """Create a new task."""
+    from app.db.models import Membership
+    
     # Verify case belongs to org if specified
     if data.case_id:
         from app.services import case_service
         case = case_service.get_case(db, session.org_id, data.case_id)
         if not case:
             raise HTTPException(status_code=400, detail="Case not found")
+    
+    # Verify assignee belongs to org if specified
+    if data.assigned_to_user_id:
+        membership = db.query(Membership).filter(
+            Membership.user_id == data.assigned_to_user_id,
+            Membership.organization_id == session.org_id,
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=400, detail="Assigned user not found in organization")
     
     task = task_service.create_task(
         db=db,
@@ -184,6 +195,8 @@ def update_task(
     
     Requires: creator, assignee, or manager+
     """
+    from app.db.models import Membership
+    
     task = task_service.get_task(db, task_id, session.org_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -193,6 +206,17 @@ def update_task(
         session, task.created_by_user_id, task.assigned_to_user_id
     ):
         raise HTTPException(status_code=403, detail="Not authorized to update this task")
+    
+    # Verify new assignee belongs to org if changing assignment
+    if "assigned_to_user_id" in data.model_dump(exclude_unset=True):
+        new_assignee = data.assigned_to_user_id
+        if new_assignee is not None:
+            membership = db.query(Membership).filter(
+                Membership.user_id == new_assignee,
+                Membership.organization_id == session.org_id,
+            ).first()
+            if not membership:
+                raise HTTPException(status_code=400, detail="Assigned user not found in organization")
     
     task = task_service.update_task(db, task, data)
     return _task_to_read(task, db)
