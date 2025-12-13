@@ -30,10 +30,15 @@ Backend
   - organizations
   - users
   - memberships (user_id ↔ org_id ↔ role) with constraint enforcing 1 org per user (e.g., UNIQUE(user_id))
-- Auth: JWT login + GET `/me`
+- Auth: Google OAuth (Workspace SSO) + cookie-based session (JWT in HTTP-only cookie) + GET `/auth/me`
+- Invite-only access (org_invites + CLI bootstrap command)
+- Optional domain allowlist via `ALLOWED_EMAIL_DOMAINS`
+- CSRF protection for mutations (e.g., `X-Requested-With: XMLHttpRequest`)
 - Centralized authorization helpers (role checks; membership checks)
 - Centralized query scoping helper: all list/detail endpoints must enforce `organization_id = current_org_id`
-- Seed/bootstrap path: create first org + first manager (dev-only)
+- Seed/bootstrap path:
+  - CLI: create first org + manager invite
+  - Dev-only endpoints (guarded by ENV + secret header) for seeding and login-as
 Frontend
 - Login page (React Hook Form + Zod)
 - Store session (HTTP-only cookie preferred; token never stored in localStorage if avoidable)

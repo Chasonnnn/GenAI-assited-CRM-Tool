@@ -81,6 +81,9 @@ pip install -r requirements.txt
 # Create .env file
 cp .env.example .env  # Then edit with your settings
 
+# Bootstrap (create first org + manager invite)
+python -m app.cli create-org --name "Acme Surrogacy" --slug "acme" --admin-email "admin@acme.com"
+
 # Run migrations
 alembic upgrade head
 
@@ -110,6 +113,17 @@ Frontend runs at `http://localhost:3000`
 
 ```env
 DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/crm
+# Auth (cookie-based session)
+JWT_SECRET=change-this-in-production-minimum-32-characters
+JWT_SECRET_PREVIOUS=
+JWT_EXPIRES_HOURS=4
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+GOOGLE_REDIRECT_URI=http://localhost:8000/auth/google/callback
+ALLOWED_EMAIL_DOMAINS=
+CORS_ORIGINS=http://localhost:3000
+FRONTEND_URL=http://localhost:3000
+DEV_SECRET=local-dev-secret-change-me
 # Optional AI (example; exact wiring may evolve):
 # AI_ENABLED=false
 # AI_PROVIDER=openai
@@ -139,7 +153,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 - [x] Next.js with App Router and (app) route group
 - [x] Basic layout with sidebar/topbar
 - [x] Placeholder pages: Dashboard, Leads, Settings
-- [ ] Authentication & multi-tenancy
+- [x] Authentication (Google OAuth) + tenant isolation (invite-only, one-org-per-user)
 - [ ] Lead management CRUD
 - [ ] Case workflow
 - [ ] Meta Lead Ads integration
