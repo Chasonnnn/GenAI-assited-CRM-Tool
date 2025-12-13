@@ -142,6 +142,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ## API Endpoints
 
+### Authentication
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/health` | GET | Health check with database connectivity test |
@@ -149,12 +150,45 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 | `/auth/google/callback` | GET | Handle OAuth callback, create session |
 | `/auth/me` | GET | Get current user profile + org + role |
 | `/auth/logout` | POST | Clear session cookie (requires CSRF header) |
-| `/dev/seed` | POST | Create test org + users (dev only, requires X-Dev-Secret) |
-| `/dev/login-as/{user_id}` | POST | Bypass OAuth for testing (dev only) |
+
+### Cases
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/cases` | GET | List cases (paginated, filters: status, source, assigned_to, q) |
+| `/cases` | POST | Create case (auto-generates case_number) |
+| `/cases/{id}` | GET | Get case by ID |
+| `/cases/{id}` | PATCH | Update case fields |
+| `/cases/{id}` | DELETE | Hard delete (requires archived first, manager+) |
+| `/cases/{id}/status` | PATCH | Change status (records history) |
+| `/cases/{id}/assign` | PATCH | Assign to user (manager+ only) |
+| `/cases/{id}/archive` | POST | Soft delete (manager+ only) |
+| `/cases/{id}/restore` | POST | Restore archived case (manager+ only) |
+| `/cases/{id}/history` | GET | Get status change history |
+| `/cases/{id}/notes` | GET, POST | List/create notes |
+
+### Tasks
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/tasks` | GET | List tasks (filters: assigned_to, case_id, is_completed) |
+| `/tasks` | POST | Create task |
+| `/tasks/{id}` | GET, PATCH, DELETE | Task CRUD |
+| `/tasks/{id}/complete` | POST | Mark complete |
+| `/tasks/{id}/uncomplete` | POST | Mark incomplete |
+
+### Notes
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/notes/{id}` | DELETE | Delete note (author or manager+) |
+
+### Development (dev only)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/dev/seed` | POST | Create test org + users (requires X-Dev-Secret) |
+| `/dev/login-as/{user_id}` | POST | Bypass OAuth for testing |
 
 ## Current Status
 
-**Week 2 Complete** — Authentication & tenant isolation:
+**Week 3 Complete** — Cases Module:
 
 - [x] Project scaffolding (monorepo structure)
 - [x] PostgreSQL with Docker Compose
@@ -166,13 +200,20 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 - [x] Google OAuth SSO with state/nonce/user-agent binding
 - [x] Invite-only access (one pending invite per email globally)
 - [x] JWT sessions in HTTP-only cookies with key rotation
-- [x] Role-based authorization (manager, intake, specialist)
+- [x] Role-based authorization (4 roles: intake_specialist, case_manager, manager, developer)
 - [x] Tenant isolation via Membership (one org per user)
 - [x] CLI bootstrap + dev endpoints
+- [x] **Cases module complete:**
+  - [x] Cases CRUD with sequential numbering
+  - [x] Phone normalization (E.164) and state validation
+  - [x] Soft-delete (archive/restore) with status sync
+  - [x] Status history tracking
+  - [x] Notes (2-4000 chars)
+  - [x] Tasks (with due dates and completion)
+  - [x] Meta webhook skeleton
 - [ ] Frontend auth integration (login button, route protection)
-- [ ] Lead management CRUD
-- [ ] Case workflow
-- [ ] Meta Lead Ads integration
+- [ ] Frontend cases UI
+- [ ] Meta Lead Ads full integration
 
 ## Documentation
 

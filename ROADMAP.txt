@@ -52,20 +52,35 @@ Deliverable
 ✓ Backend auth works, role-based access works, tenant isolation is enforced by design
 - Frontend integration in progress
 
-Week 3 — Leads v1 (pipeline + list + detail)
+Week 3 — Cases v1 (renamed from Leads) ✓ COMPLETE
 Backend
-- leads table:
-  - organization_id, source, meta_lead_id, contact fields, status, assigned_to, created_by, timestamps
-- Endpoints:
-  - list (filters + pagination)
-  - create/update
-  - change status (append to status history if present)
-  - assign to intake
-Frontend
-- Leads table (filters, search, status chips)
-- Lead detail page (edit, change status, assign)
+✓ 4 roles: intake_specialist, case_manager, manager, developer
+✓ cases table:
+  ✓ organization_id, source, meta_lead_id, contact fields, status, assigned_to, created_by, timestamps
+  ✓ Sequential case_number per org (00001-99999)
+  ✓ Phone normalization (E.164: +15551234567)
+  ✓ State normalization (2-letter codes: CA, TX, etc.)
+  ✓ Email unique per org (active cases only)
+  ✓ Soft-delete (is_archived, archived_at, archived_by)
+✓ case_status_history table (tracks all status changes with reason)
+✓ case_notes table (2-4000 chars, author tracking)
+✓ tasks table (due date, assignee, completion tracking)
+✓ meta_leads table (raw ingestion skeleton)
+✓ Endpoints:
+  ✓ /cases (list with pagination max 100, search, filters)
+  ✓ /cases CRUD + status change + assign
+  ✓ /cases/:id/archive, /cases/:id/restore (manager+ only)
+  ✓ /cases/:id/history (status timeline)
+  ✓ /cases/:id/notes (list/create)
+  ✓ /notes/:id (delete)
+  ✓ /tasks (CRUD + complete/uncomplete)
+  ✓ /webhooks/meta (verification skeleton)
+Frontend (pending)
+- Cases table (filters, search, status chips)
+- Case detail page (edit, change status, assign)
 Deliverable
-- Intake can run the lead pipeline without spreadsheets
+✓ Backend complete: Cases module with full CRUD, notes, tasks, status history
+- Frontend integration in progress
 
 Week 4 — Notes + activity timeline (the “CRM feel”)
 Backend
