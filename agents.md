@@ -368,13 +368,20 @@ Constraints:
     - Google OAuth SSO with state/nonce/user-agent binding
     - Invite-only access (one pending invite per email globally)
     - JWT sessions in HTTP-only cookies with key rotation
-    - Role-based authorization (manager, intake, specialist)
+    - Role-based authorization
     - Strict tenant isolation via Membership (one org per user)
     - CLI bootstrap (`python -m app.cli create-org`)
     - Dev endpoints (`/dev/seed`, `/dev/login-as`)
-- **In progress:** Frontend auth integration
+  - **Week 3 complete:** Cases module (backend)
+    - 4 roles: intake_specialist, case_manager, manager, developer
+    - Cases table with sequential numbering, soft-delete, status history
+    - Phone normalization (E.164), state validation (2-letter codes)
+    - Notes (2-4000 chars), tasks (with due dates/completion)
+    - Meta leads ingestion skeleton
+    - All CRUD endpoints with pagination (max 100), search, filters
+- **In progress:** Frontend auth integration, Cases UI
 - **Blockers:** None
-- **Next milestones:** Frontend login flow, Leads CRUD API
+- **Next milestones:** Frontend login flow, Cases UI, Meta integration
 
 ## 14) Decision Log (Update when choices change)
 
