@@ -97,6 +97,35 @@ alembic.ini
 package.json
 tsconfig.json
 
+## 3.1) Navigation & Modules (V1 contract)
+
+We implement features as **modules** (enabled per org) and present them as **tabs** (shown per role).
+
+V1 “real” tabs (build first):
+- Home (calendar + quick actions + my work)
+- Work Queue (monitor leads/cases with filters + assignments)
+- Leads
+- Cases
+- Reports
+- Settings
+
+V1-lite tabs (simple versions early; expand later):
+- Inbox/Notifications
+- Tasks
+- Activity (org-scoped timeline/audit)
+
+Later/optional modules:
+- Templates (email/snippets/checklists)
+- Automation (follow-ups, SLAs, assignment rules)
+- Integrations (Meta Lead Ads, email providers, calendar, SMS/telephony)
+- Import/Export and Dedupe tools
+- Contacts/Directory
+
+Role defaults (can be adjusted by org policy):
+- Manager: Home, Work Queue, Leads, Cases, Reports, Inbox, Tasks, Activity, Settings
+- PR/Intake: Home, Work Queue, Leads, Inbox, Tasks, Activity
+- Specialist: Home, Work Queue, Cases, Inbox, Tasks, Activity
+
 ## 4) Local Development Setup (Suggested)
 
 ### Prereqs

@@ -155,6 +155,30 @@ The long-term goal is to keep a **general, open-source-ready core** while suppor
 - Shared core entities and APIs (org-scoped, role-scoped)
 - Per-organization settings for pipelines/statuses, templates, rubrics, and (optional) AI policies/keys
 
+## Tabs & Modules (V1 vs Later)
+
+We will likely expose features as **modules** (enabled per org) and **tabs** (shown per role).
+
+Recommended V1 tabs:
+- Home (calendar + quick actions + my work)
+- Work Queue (monitor leads/cases with filters + assignments)
+- Leads
+- Cases
+- Reports
+- Settings
+
+Useful V1-lite tabs (simple early versions):
+- Inbox/Notifications
+- Tasks
+- Activity
+
+Later/optional modules:
+- Templates (email/snippets/checklists)
+- Automation (follow-up rules, SLAs, assignment rules)
+- Integrations (Meta Lead Ads, email providers, calendar, SMS/telephony)
+- Import/Export and Dedupe
+- Contacts/Directory
+
 ## License
 
 Private — All rights reserved.

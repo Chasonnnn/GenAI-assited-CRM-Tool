@@ -1,0 +1,195 @@
+Surrogacy CRM Platform — 12-Week Roadmap (AI-ready, Multi-tenant, OSS-ready)
+Last updated: 2025-12-13
+
+Assumptions (important)
+- Multi-tenant via shared DB + shared schema, with `organization_id` on all domain rows.
+- Each user account belongs to exactly ONE organization (no org switcher). If the same person works for another org, they create a separate account.
+- Tenant context is derived from auth (JWT/session includes `org_id` and `role`); the client does NOT send an org id header/path for scoping.
+- AI is optional (off by default) and BYOK (org-managed key stored server-side in DB, encrypted).
+
+Week 1 — Setup & foundations (repo + tooling + skeleton apps)
+Backend
+- FastAPI project structure
+- Postgres connectivity (local for dev; Supabase target for prod)
+- Alembic migrations + baseline migration
+- Central request context dependency: returns `{user_id, org_id, role}` (org_id may be null pre-auth)
+- `/health` endpoint (DB connectivity test)
+Frontend
+- Next.js App Router + TypeScript strict
+- Tailwind + shadcn/ui installed
+- Layout shell (sidebar/topbar) + placeholder routes
+Tooling/Process
+- CI on PRs: lint/typecheck/tests (minimal smoke)
+- Ensure `.env.example` for both apps stays current
+Deliverable
+- FE loads, BE loads, DB connects; deploy-able skeleton exists
+
+Week 2 — Auth + tenant isolation (the “don’t regret later” week)
+Backend
+- Tables:
+  - organizations
+  - users
+  - memberships (user_id ↔ org_id ↔ role) with constraint enforcing 1 org per user (e.g., UNIQUE(user_id))
+- Auth: JWT login + GET `/me`
+- Centralized authorization helpers (role checks; membership checks)
+- Centralized query scoping helper: all list/detail endpoints must enforce `organization_id = current_org_id`
+- Seed/bootstrap path: create first org + first manager (dev-only)
+Frontend
+- Login page (React Hook Form + Zod)
+- Store session (HTTP-only cookie preferred; token never stored in localStorage if avoidable)
+- Route protection
+- Show nav items by role
+Deliverable
+- Login works, role-based UI works, tenant isolation is enforced by design + tests
+
+Week 3 — Leads v1 (pipeline + list + detail)
+Backend
+- leads table:
+  - organization_id, source, meta_lead_id, contact fields, status, assigned_to, created_by, timestamps
+- Endpoints:
+  - list (filters + pagination)
+  - create/update
+  - change status (append to status history if present)
+  - assign to intake
+Frontend
+- Leads table (filters, search, status chips)
+- Lead detail page (edit, change status, assign)
+Deliverable
+- Intake can run the lead pipeline without spreadsheets
+
+Week 4 — Notes + activity timeline (the “CRM feel”)
+Backend
+- Generic notes table (organization_id + entity_type/entity_id)
+- status_history table (recommended): stores transitions for analytics and “last activity”
+Frontend
+- Notes timeline on lead detail
+- Quick add note form
+- “Last activity” column in leads table
+Deliverable
+- Every lead has a clear history and audit trail
+
+Week 5 — Workflow automation + email foundation (reminders/jobs/templates)
+Backend
+- Minimal job/outbox system (DB-backed) for:
+  - scheduled reminders (follow-ups)
+  - webhook processing retries (future Meta)
+  - notification fan-out (future)
+- Email foundation (automated email is a V1 requirement):
+  - message log table (org-scoped) for outbound emails tied to leads/cases
+  - template/snippet storage (org-configurable)
+  - send pipeline via the jobs/outbox system (schedule + retry + audit)
+- Tables (example):
+  - jobs (organization_id, type, payload, run_at, attempts, status)
+- Worker process (can be simple for V1)
+Frontend
+- Manager settings scaffold for “follow-up rules” (can be minimal UI)
+- Templates page scaffold (optional early): manage email templates/snippets
+Deliverable
+- You can schedule and reliably run org-scoped background tasks
+- Email sending is logged and can be scheduled (even if templates are basic at first)
+
+Week 6 — Intended parents module
+Backend
+- intended_parents table + CRUD endpoints (org-scoped)
+- Filters by status/country/budget (start minimal; expand as needed)
+Frontend
+- Intended parents list/detail pages
+- Status management
+Deliverable
+- Parents stored cleanly and searchable for matching
+
+Week 7 — Cases module (specialists workflow)
+Backend
+- cases table (organization_id, lead_id, parent_id, specialist_id, status)
+- important_dates/events table (organization_id + entity reference)
+- Endpoints for cases + notes + dates
+Frontend
+- Cases board (grouped by status)
+- Case detail with tabs: Overview / Notes / Dates
+Deliverable
+- Specialists can manage the full case journey + dates
+
+Week 8 — Notifications v1
+Backend
+- notifications table
+- Triggers:
+  - lead assigned
+  - case assigned
+  - status change
+- Endpoints: GET `/me/notifications`, mark as read
+Frontend
+- Notification bell dropdown
+- Notifications page (optional)
+Deliverable
+- Real-time-ish workflow (polling is fine for V1)
+
+Week 9 — Meta Lead Ads integration (real-time lead sync)
+Backend
+- Webhook endpoint for Meta leadgen events
+- Verify callback (hub.challenge pattern)
+- On webhook:
+  - log payload (carefully; avoid storing raw PII unredacted)
+  - enqueue job to fetch lead details via Meta API
+  - map fields → Lead schema
+  - upsert by meta_lead_id (dedupe)
+  - retry logic via jobs/outbox system
+Frontend
+- “META” source badge
+- Filter by source=META
+Deliverable
+- A real Meta lead appears in your CRM automatically
+
+Week 10 — Manager analytics (daily/weekly/monthly/custom) + AI-ready insights tab
+Backend
+- Analytics endpoints:
+  - leads by status over time
+  - funnel counts
+  - cases by status and by specialist
+- If you added status_history, use it here
+Frontend
+- Reports dashboard
+- Date range picker + charts
+- “Insights” tab scaffolding (works without AI; AI enhances it later)
+Deliverable
+- Managers have the “overview + stats” view they asked for
+
+Week 11 — AI assistant v1 (safe + useful, BYOK)
+Backend
+- Org AI settings + key storage:
+  - store provider key encrypted at rest; write-only; masked display; manager-only updates
+  - org policy toggles (enabled, allowed features)
+- Endpoints (org + role scoped):
+  - `/ai/summarize-lead`
+  - `/ai/draft-email`
+  - `/ai/analyze-dashboard`
+- AI audit logging (prompt template version, model, redaction, latency/cost metadata)
+Frontend
+- “AI” panel on lead/case detail:
+  - summary
+  - suggested next steps
+  - draft email button (user must edit/approve)
+- Manager toggle to enable AI + set key
+Deliverable
+- AI saves time without auto-sending anything; org turns it on once for the team
+
+Week 12 — Hardening + deployment + open-source readiness
+Hardening
+- Add indexes (organization_id + status + created_at + assigned_to)
+- Rate limiting on auth and webhooks
+- Tight CORS config
+- Error tracking (optional Sentry)
+- Backups plan (Supabase tier-dependent; confirm)
+Deployment
+- Frontend: Vercel
+- Backend: Render/Railway/Fly.io
+- DB: Supabase
+- Domain + HTTPS
+Open-source readiness
+- Clean README setup steps + `.env.example` completeness
+- Seed script for demo data
+- Clarify “core vs customization”:
+  - per-org settings (pipelines/statuses/templates/rubrics/AI policy) in config tables
+  - avoid per-client forks
+- Decide license if/when you open-source (MIT/Apache/AGPL depending on goals)
+Deliverable
+- Safer, faster, production-ready behavior + clear path to a general OSS core
