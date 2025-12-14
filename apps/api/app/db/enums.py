@@ -78,6 +78,29 @@ class TaskType(str, Enum):
     OTHER = "other"
 
 
+class JobType(str, Enum):
+    """Types of background jobs."""
+    SEND_EMAIL = "send_email"
+    REMINDER = "reminder"
+    WEBHOOK_RETRY = "webhook_retry"
+    NOTIFICATION = "notification"
+
+
+class JobStatus(str, Enum):
+    """Status of background jobs."""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class EmailStatus(str, Enum):
+    """Status of outbound emails."""
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+
+
 # =============================================================================
 # Centralized Defaults (keep models, services, migrations in sync)
 # =============================================================================
@@ -85,6 +108,8 @@ class TaskType(str, Enum):
 DEFAULT_CASE_STATUS = CaseStatus.NEW_UNREAD
 DEFAULT_CASE_SOURCE = CaseSource.MANUAL
 DEFAULT_TASK_TYPE = TaskType.OTHER
+DEFAULT_JOB_STATUS = JobStatus.PENDING
+DEFAULT_EMAIL_STATUS = EmailStatus.PENDING
 
 
 # =============================================================================

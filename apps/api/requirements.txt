@@ -34,3 +34,6 @@ email-validator>=2.0.0
 
 # Security
 nh3>=0.2.0
+
+# Email
+resend>=2.0.0
