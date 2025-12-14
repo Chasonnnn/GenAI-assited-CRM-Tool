@@ -14,7 +14,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 from app.db.enums import (
     DEFAULT_CASE_SOURCE, DEFAULT_CASE_STATUS, DEFAULT_JOB_STATUS, DEFAULT_EMAIL_STATUS,
-    CaseSource, CaseStatus, TaskType, JobType, JobStatus, EmailStatus
+    DEFAULT_IP_STATUS, CaseSource, CaseStatus, TaskType, JobType, JobStatus, EmailStatus,
+    IntendedParentStatus, EntityType
 )
 
 
@@ -747,3 +748,180 @@ class EmailLog(Base):
     job: Mapped["Job | None"] = relationship()
     template: Mapped["EmailTemplate | None"] = relationship()
     case: Mapped["Case | None"] = relationship()
+
+
+# =============================================================================
+# Intended Parents Models
+# =============================================================================
+
+class IntendedParent(Base):
+    """
+    Prospective parents seeking surrogacy services.
+    
+    Mirrors Case patterns: org-scoped, soft-delete, status history.
+    """
+    __tablename__ = "intended_parents"
+    __table_args__ = (
+        Index("idx_ip_org_status", "organization_id", "status"),
+        Index("idx_ip_org_created", "organization_id", "created_at"),
+        # Partial unique index: unique email per org for non-archived records
+        Index(
+            "uq_ip_email_active",
+            "organization_id", "email",
+            unique=True,
+            postgresql_where=text("is_archived = false")
+        ),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # Contact info
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str] = mapped_column(CITEXT, nullable=False)
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    
+    # Location (state only)
+    state: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    
+    # Budget (single field, Decimal for precision)
+    budget: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    
+    # Internal notes (not the polymorphic notes, just a quick text field)
+    notes_internal: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    # Status & workflow
+    status: Mapped[str] = mapped_column(
+        String(50),
+        server_default=text(f"'{DEFAULT_IP_STATUS.value}'"),
+        nullable=False
+    )
+    assigned_to_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    
+    # Soft delete
+    is_archived: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("FALSE"),
+        nullable=False
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    
+    # Activity tracking
+    last_activity: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        onupdate=datetime.utcnow,
+        nullable=False
+    )
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    assigned_to: Mapped["User | None"] = relationship()
+    status_history: Mapped[list["IntendedParentStatusHistory"]] = relationship(
+        back_populates="intended_parent",
+        cascade="all, delete-orphan"
+    )
+
+
+class IntendedParentStatusHistory(Base):
+    """Tracks all status changes on intended parents for audit."""
+    __tablename__ = "intended_parent_status_history"
+    __table_args__ = (
+        Index("idx_ip_history_ip", "intended_parent_id", "changed_at"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    intended_parent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("intended_parents.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    changed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    old_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    new_status: Mapped[str] = mapped_column(String(50), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    changed_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    intended_parent: Mapped["IntendedParent"] = relationship(back_populates="status_history")
+
+
+# =============================================================================
+# Polymorphic Notes (replaces case_notes for new entities)
+# =============================================================================
+
+class EntityNote(Base):
+    """
+    Polymorphic notes for any entity (case, intended_parent, etc.).
+    
+    Uses entity_type + entity_id pattern instead of separate FK columns.
+    Author or manager+ can delete.
+    """
+    __tablename__ = "entity_notes"
+    __table_args__ = (
+        Index("idx_entity_notes_lookup", "entity_type", "entity_id", "created_at"),
+        Index("idx_entity_notes_org", "organization_id", "created_at"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # Polymorphic reference
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False)  # 'case', 'intended_parent'
+    entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    
+    # Note content
+    author_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)  # HTML allowed, sanitized
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    author: Mapped["User"] = relationship()
