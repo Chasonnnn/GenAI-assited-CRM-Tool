@@ -6,7 +6,7 @@ A modern, multi-tenant CRM and case management platform built for surrogacy agen
 
 | Layer | Technology |
 |-------|------------|
-| **Frontend** | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, shadcn/ui |
+| **Frontend** | Next.js 16.0.10, React 19.2.3, TypeScript 5.9, Tailwind CSS 4.1, shadcn/ui, Zod 4 |
 | **Backend** | FastAPI, Pydantic v2, SQLAlchemy 2.0 |
 | **Database** | PostgreSQL 16 (via Docker) |
 | **Migrations** | Alembic |
@@ -186,9 +186,24 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 | `/dev/seed` | POST | Create test org + users (requires X-Dev-Secret) |
 | `/dev/login-as/{user_id}` | POST | Bypass OAuth for testing |
 
+### Intended Parents
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/intended-parents` | GET | List IPs (paginated, filters: status, state, budget, q) |
+| `/intended-parents` | POST | Create intended parent |
+| `/intended-parents/stats` | GET | Get IP counts by status |
+| `/intended-parents/{id}` | GET | Get IP by ID |
+| `/intended-parents/{id}` | PATCH | Update IP fields |
+| `/intended-parents/{id}/status` | PATCH | Change status (records history) |
+| `/intended-parents/{id}/archive` | POST | Archive IP |
+| `/intended-parents/{id}/restore` | POST | Restore archived IP (manager+ only) |
+| `/intended-parents/{id}` | DELETE | Hard delete (requires archived first, manager+) |
+| `/intended-parents/{id}/history` | GET | Get status change history |
+| `/intended-parents/{id}/notes` | GET, POST, DELETE | List/create/delete notes |
+
 ## Current Status
 
-**Week 5 Complete** — Frontend-Backend Integration:
+**Week 6 Complete** — Intended Parents Module:
 
 - [x] Project scaffolding (monorepo structure)
 - [x] PostgreSQL with Docker Compose
@@ -210,6 +225,14 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
   - [x] Notes (2-4000 chars) with XSS sanitization (nh3)
   - [x] Tasks (with due dates and completion)
   - [x] Meta webhook skeleton
+- [x] **Intended Parents module complete (Week 6):**
+  - [x] IP CRUD with full name, email, phone, state, budget
+  - [x] Status workflow (new → contacted → in_review → qualified → matched → declined → on_hold)
+  - [x] Archive/restore with status preservation and duplicate email check
+  - [x] State/phone normalization validators
+  - [x] Polymorphic EntityNotes supporting both Cases and IPs
+  - [x] CSRF protection on all mutations
+  - [x] Frontend pages (list with filters, detail with tabs)
 - [x] **Frontend UI complete (v0 design):**
   - [x] Login page (Duo SSO + username option, glassmorphism)
   - [x] Dashboard (stats cards, charts, recent activity)
@@ -217,18 +240,14 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
   - [x] Case Detail (tabs, status updates, notes)
   - [x] Tasks page (Kanban-style, filters)
   - [x] Intended Parents (list, filters, actions)
-  - [x] Reports (4 chart types, quick stats)
+  - [x] Reports (4 chart types with recharts 3.5.1)
   - [x] Settings (5 tabs: Profile, Org, Notifications, Integrations, Security)
   - [x] Automation (Workflows + Templates tabs)
   - [x] App Sidebar with navigation
-- [x] **Frontend-backend integration complete:**
-  - [x] API client layer with TypeScript types
-  - [x] React Query hooks for cases, tasks, notes
-  - [x] Cases page wired to API (filters, search, pagination)
-  - [x] Case detail with notes, tasks, status history
-  - [x] Dashboard with real stats from /cases/stats
-  - [x] Tasks page with grouping by due date
-  - [x] TipTap rich text editor for notes
+- [x] **Dependencies upgraded (2025-12-14):**
+  - [x] Next.js 16.0.10, React 19.2.3, Zod 4.1.13, recharts 3.5.1
+  - [x] All Radix UI components to latest versions
+  - [x] Base UI combobox/pagination fixed for render prop compatibility
 - [ ] Meta Lead Ads full integration
 
 ## Documentation
