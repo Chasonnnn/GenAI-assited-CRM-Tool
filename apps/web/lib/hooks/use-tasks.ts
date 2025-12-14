@@ -5,6 +5,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as tasksApi from '../api/tasks';
 import type { TaskListParams } from '../api/tasks';
+import { caseKeys } from './use-cases';
 
 // Query keys
 export const taskKeys = {
@@ -77,6 +78,8 @@ export function useCompleteTask() {
         onSuccess: (updatedTask) => {
             queryClient.setQueryData(taskKeys.detail(updatedTask.id), updatedTask);
             queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
+            // Also invalidate dashboard stats since pending_tasks count changes
+            queryClient.invalidateQueries({ queryKey: caseKeys.stats() });
         },
     });
 }
@@ -92,6 +95,8 @@ export function useUncompleteTask() {
         onSuccess: (updatedTask) => {
             queryClient.setQueryData(taskKeys.detail(updatedTask.id), updatedTask);
             queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
+            // Also invalidate dashboard stats since pending_tasks count changes
+            queryClient.invalidateQueries({ queryKey: caseKeys.stats() });
         },
     });
 }
