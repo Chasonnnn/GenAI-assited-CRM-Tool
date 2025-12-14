@@ -121,9 +121,9 @@ def delete_template(
 def send_email(
     data: EmailSendRequest,
     db: Session = Depends(get_db),
-    session: dict = Depends(get_current_session),
+    session: dict = Depends(require_role(Role.MANAGER)),
 ):
-    """Send an email using a template (queues for async sending)."""
+    """Send an email using a template (queues for async sending). Manager only."""
     result = email_service.send_from_template(
         db,
         org_id=session["org_id"],
