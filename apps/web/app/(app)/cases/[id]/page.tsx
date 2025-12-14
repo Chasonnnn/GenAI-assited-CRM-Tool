@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { use } from "react"
 import { useRouter } from "next/navigation"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -76,8 +75,8 @@ const STATUS_OPTIONS: CaseStatus[] = [
     'delivered',
 ]
 
-export default function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = use(params)
+export default function CaseDetailPage({ params }: { params: { id: string } }) {
+    const { id } = params
     const router = useRouter()
     const [copiedEmail, setCopiedEmail] = React.useState(false)
 

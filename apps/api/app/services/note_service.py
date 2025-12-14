@@ -2,9 +2,18 @@
 
 from uuid import UUID
 
+import nh3
 from sqlalchemy.orm import Session
 
 from app.db.models import CaseNote
+
+# Allowed HTML tags for TipTap rich text
+ALLOWED_TAGS = {"p", "br", "strong", "em", "ul", "ol", "li", "a", "blockquote"}
+
+
+def sanitize_html(html: str) -> str:
+    """Sanitize HTML to prevent XSS, allowing only safe rich text tags."""
+    return nh3.clean(html, tags=ALLOWED_TAGS)
 
 
 def create_note(
@@ -15,11 +24,14 @@ def create_note(
     body: str,
 ) -> CaseNote:
     """Create a new note on a case."""
+    # Sanitize HTML to prevent XSS
+    clean_body = sanitize_html(body)
+    
     note = CaseNote(
         case_id=case_id,
         organization_id=org_id,
         author_id=author_id,
-        body=body,
+        body=clean_body,
     )
     db.add(note)
     db.commit()
