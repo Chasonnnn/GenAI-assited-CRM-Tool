@@ -6,12 +6,12 @@ from sqlalchemy import text
 
 from app.core.config import settings
 from app.db.session import engine
-from app.routers import auth, cases, notes, tasks, webhooks
+from app.routers import auth, cases, notes, tasks, webhooks, email_templates, jobs
 
 app = FastAPI(
     title="CRM API",
     description="Multi-tenant CRM and case management API",
-    version="0.2.0",
+    version="0.3.0",
     docs_url="/docs" if settings.ENV == "dev" else None,
     redoc_url="/redoc" if settings.ENV == "dev" else None,
 )
@@ -32,6 +32,10 @@ app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(cases.router, prefix="/cases", tags=["cases"])
 app.include_router(notes.router, tags=["notes"])  # Mixed paths: /cases/{id}/notes and /notes/{id}
 app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
+
+# Email and jobs routers
+app.include_router(email_templates.router, prefix="/email-templates", tags=["email"])
+app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
 
 # Webhooks router (external integrations)
 app.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])

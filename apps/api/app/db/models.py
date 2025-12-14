@@ -13,8 +13,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.db.enums import (
-    DEFAULT_CASE_SOURCE, DEFAULT_CASE_STATUS, 
-    CaseSource, CaseStatus, TaskType
+    DEFAULT_CASE_SOURCE, DEFAULT_CASE_STATUS, DEFAULT_JOB_STATUS, DEFAULT_EMAIL_STATUS,
+    CaseSource, CaseStatus, TaskType, JobType, JobStatus, EmailStatus
 )
 
 
@@ -578,3 +578,172 @@ class MetaLead(Base):
         nullable=False
     )
     converted_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+# =============================================================================
+# Jobs & Email Models
+# =============================================================================
+
+class Job(Base):
+    """
+    Background job for async processing.
+    
+    Used for: email sending, scheduled reminders, webhook retries.
+    Worker polls for pending jobs and processes them.
+    """
+    __tablename__ = "jobs"
+    __table_args__ = (
+        Index("idx_jobs_pending", "status", "run_at", postgresql_where=text("status = 'pending'")),
+        Index("idx_jobs_org", "organization_id", "created_at"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    job_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    run_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        String(20),
+        server_default=text(f"'{DEFAULT_JOB_STATUS.value}'"),
+        nullable=False
+    )
+    attempts: Mapped[int] = mapped_column(
+        Integer,
+        server_default=text("0"),
+        nullable=False
+    )
+    max_attempts: Mapped[int] = mapped_column(
+        Integer,
+        server_default=text("3"),
+        nullable=False
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+class EmailTemplate(Base):
+    """
+    Org-scoped email templates with variable placeholders.
+    
+    Body supports {{variable}} syntax for personalization.
+    """
+    __tablename__ = "email_templates"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "name", name="uq_email_template_name"),
+        Index("idx_email_templates_org", "organization_id", "is_active"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    subject: Mapped[str] = mapped_column(String(200), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("TRUE"),
+        nullable=False
+    )
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        onupdate=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    created_by: Mapped["User | None"] = relationship()
+
+
+class EmailLog(Base):
+    """
+    Log of all outbound emails for audit and debugging.
+    
+    Links to job, template, and optionally case.
+    """
+    __tablename__ = "email_logs"
+    __table_args__ = (
+        Index("idx_email_logs_org", "organization_id", "created_at"),
+        Index("idx_email_logs_case", "case_id", "created_at"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("jobs.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    template_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("email_templates.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    case_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cases.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    
+    recipient_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    subject: Mapped[str] = mapped_column(String(200), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20),
+        server_default=text(f"'{DEFAULT_EMAIL_STATUS.value}'"),
+        nullable=False
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    job: Mapped["Job | None"] = relationship()
+    template: Mapped["EmailTemplate | None"] = relationship()
+    case: Mapped["Case | None"] = relationship()
