@@ -1,5 +1,5 @@
 Surrogacy CRM Platform — 12-Week Roadmap (AI-ready, Multi-tenant, OSS-ready)
-Last updated: 2025-12-13
+Last updated: 2025-12-14
 
 Assumptions (important)
 - Multi-tenant via shared DB + shared schema, with `organization_id` on all domain rows.
@@ -75,14 +75,58 @@ Backend
   ✓ /notes/:id (delete)
   ✓ /tasks (CRUD + complete/uncomplete)
   ✓ /webhooks/meta (verification skeleton)
-Frontend (pending)
-- Cases table (filters, search, status chips)
-- Case detail page (edit, change status, assign)
+Frontend
+✓ Cases table (filters, search, status chips)
+✓ Case detail page (edit, change status, assign)
 Deliverable
 ✓ Backend complete: Cases module with full CRUD, notes, tasks, status history
-- Frontend integration in progress
+✓ Frontend integration complete
 
-Week 4 — Notes + activity timeline (the “CRM feel”)
+Week 4 — Frontend UI (v0 Design Implementation) ✓ COMPLETE
+Frontend (using v0.dev + shadcn/ui)
+✓ Login page:
+  ✓ Duo SSO primary button
+  ✓ Collapsible username + Duo option
+  ✓ Glassmorphism card with watercolor gradient background
+✓ Dashboard page:
+  ✓ Stats cards (Active Cases, Pending Tasks, etc.)
+  ✓ Charts (bar, line using recharts)
+  ✓ Recent activity list
+✓ Cases List page:
+  ✓ Status/source filters
+  ✓ Search input
+  ✓ Table with status badges, assignee avatars
+  ✓ Actions menu, pagination
+✓ Case Detail page:
+  ✓ Tabs (Overview, Notes, Tasks, History)
+  ✓ Status updates, assignment
+✓ Tasks page:
+  ✓ Grid layout with filters
+  ✓ Priority/status badges
+  ✓ Due date display
+✓ Intended Parents page:
+  ✓ Status filters, search
+  ✓ Table with data, actions
+  ✓ Pagination
+✓ Reports page:
+  ✓ 4 chart cards (bar, line, pie, horizontal bar)
+  ✓ Quick stats row
+  ✓ Export dropdown
+✓ Settings page:
+  ✓ 5 tabs: Profile, Organization, Notifications, Integrations, Security
+  ✓ Forms with inputs, toggles, buttons
+✓ Automation page:
+  ✓ Workflows tab (toggle switches, kebab menu)
+  ✓ Templates tab (grid of template cards)
+✓ App Sidebar:
+  ✓ Navigation links for all pages
+  ✓ Organization name, user menu
+  ✓ Logout functionality
+✓ Loading skeletons for all pages
+Deliverable
+✓ Complete frontend UI with v0 design, ready for API integration
+
+Week 5 — Frontend-Backend Integration + Notes timeline
 Backend
 - Generic notes table (organization_id + entity_type/entity_id)
 - status_history table (recommended): stores transitions for analytics and “last activity”
