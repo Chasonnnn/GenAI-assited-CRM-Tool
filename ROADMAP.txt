@@ -326,11 +326,9 @@ Deliverable
 Deferred Improvements (Future Work)
 -----------------------------------
 
-Dependencies (2025-12-14)
+Dependencies (2025-12-14) — COMPLETED
 - Upgraded to Next.js 16, React 19.2.3, Zod 4, latest Radix UI
-- recharts pinned to v2.x — v3 has breaking API changes (payload/label props removed from
-  tooltip/legend content, hooks-based state access) requiring significant chart.tsx rewrite
-  - When ready: migrate chart.tsx to use useActiveTooltipLabel + useActiveTooltipDataPoints hooks
-  - Also update ChartTooltipContent and ChartLegendContent signatures
-- Base UI components (combobox, pagination) were partially fixed; full render prop migration
-  may be needed as Base UI evolves
+- recharts upgraded to v3.5.1 — Rewrote ChartTooltipContent and ChartLegendContent
+  with custom TypeScript interfaces compatible with recharts 3 API
+- Base UI components (combobox, pagination) fixed for render prop compatibility
+
