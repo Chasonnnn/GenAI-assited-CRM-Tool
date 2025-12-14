@@ -2,119 +2,133 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Card } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
-import { PlusIcon, MoreVerticalIcon, SearchIcon } from "lucide-react"
+import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
+import {
+    PlusIcon,
+    SearchIcon,
+    LoaderIcon,
+    UsersIcon,
+    ChevronLeftIcon,
+    ChevronRightIcon,
+} from "lucide-react"
+import {
+    useIntendedParents,
+    useIntendedParentStats,
+    useCreateIntendedParent,
+} from "@/lib/hooks/use-intended-parents"
+import type { IntendedParentStatus, IntendedParentListItem } from "@/lib/types/intended-parent"
 
-// Sample data - TODO: Replace with API data
-const intendedParents = [
-    {
-        id: "IP-001",
-        name: "John & Jane Smith",
-        email: "john.smith@email.com",
-        phone: "(555) 123-4567",
-        status: "Active",
-        cases: 2,
-        created: "1 week ago",
-    },
-    {
-        id: "IP-002",
-        name: "Michael & Sarah Davis",
-        email: "michael.davis@email.com",
-        phone: "(555) 234-5678",
-        status: "Matched",
-        cases: 1,
-        created: "2 weeks ago",
-    },
-    {
-        id: "IP-003",
-        name: "Maria Garcia",
-        email: "maria.garcia@email.com",
-        phone: "(555) 345-6789",
-        status: "Active",
-        cases: 0,
-        created: "3 weeks ago",
-    },
-    {
-        id: "IP-004",
-        name: "Robert & Lisa Chen",
-        email: "robert.chen@email.com",
-        phone: "(555) 456-7890",
-        status: "On Hold",
-        cases: 1,
-        created: "1 month ago",
-    },
-    {
-        id: "IP-005",
-        name: "David Thompson",
-        email: "david.t@email.com",
-        phone: "(555) 567-8901",
-        status: "Active",
-        cases: 3,
-        created: "1 month ago",
-    },
-    {
-        id: "IP-006",
-        name: "James & Emily Wilson",
-        email: "j.wilson@email.com",
-        phone: "(555) 678-9012",
-        status: "Inactive",
-        cases: 0,
-        created: "2 months ago",
-    },
-    {
-        id: "IP-007",
-        name: "Jennifer Anderson",
-        email: "j.anderson@email.com",
-        phone: "(555) 789-0123",
-        status: "Active",
-        cases: 1,
-        created: "2 months ago",
-    },
-    {
-        id: "IP-008",
-        name: "William & Amy Brown",
-        email: "w.brown@email.com",
-        phone: "(555) 890-1234",
-        status: "Matched",
-        cases: 2,
-        created: "3 months ago",
-    },
-    {
-        id: "IP-009",
-        name: "Christopher Lee",
-        email: "c.lee@email.com",
-        phone: "(555) 901-2345",
-        status: "Active",
-        cases: 0,
-        created: "3 months ago",
-    },
-    {
-        id: "IP-010",
-        name: "Daniel & Rachel Martinez",
-        email: "d.martinez@email.com",
-        phone: "(555) 012-3456",
-        status: "On Hold",
-        cases: 1,
-        created: "4 months ago",
-    },
-]
+const STATUS_LABELS: Record<IntendedParentStatus, string> = {
+    new: "New",
+    in_review: "In Review",
+    matched: "Matched",
+    inactive: "Inactive",
+}
 
-const statusColors: Record<string, string> = {
-    Active: "bg-green-500/10 text-green-500 border-green-500/20",
-    Matched: "bg-purple-500/10 text-purple-500 border-purple-500/20",
-    "On Hold": "bg-gray-500/10 text-gray-400 border-gray-500/20",
-    Inactive: "bg-slate-500/10 text-slate-400 border-slate-500/20",
+const STATUS_COLORS: Record<IntendedParentStatus, string> = {
+    new: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+    in_review: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
+    matched: "bg-green-500/10 text-green-500 border-green-500/20",
+    inactive: "bg-gray-500/10 text-gray-500 border-gray-500/20",
 }
 
 export default function IntendedParentsPage() {
-    const [statusFilter, setStatusFilter] = useState("all")
-    const [searchQuery, setSearchQuery] = useState("")
+    const [search, setSearch] = useState("")
+    const [statusFilter, setStatusFilter] = useState<string>("all")
+    const [page, setPage] = useState(1)
+    const [isCreateOpen, setIsCreateOpen] = useState(false)
+
+    // Form state
+    const [formData, setFormData] = useState({
+        full_name: "",
+        email: "",
+        phone: "",
+        state: "",
+        budget: "",
+        notes_internal: "",
+    })
+
+    // Queries
+    const filters = {
+        q: search || undefined,
+        status: statusFilter !== "all" ? [statusFilter] : undefined,
+        page,
+        per_page: 20,
+    }
+    const { data, isLoading } = useIntendedParents(filters)
+    const { data: stats } = useIntendedParentStats()
+    const createMutation = useCreateIntendedParent()
+
+    const resetForm = () => {
+        setFormData({
+            full_name: "",
+            email: "",
+            phone: "",
+            state: "",
+            budget: "",
+            notes_internal: "",
+        })
+    }
+
+    const handleCreate = async () => {
+        await createMutation.mutateAsync({
+            full_name: formData.full_name,
+            email: formData.email,
+            phone: formData.phone || undefined,
+            state: formData.state || undefined,
+            budget: formData.budget ? parseFloat(formData.budget) : undefined,
+            notes_internal: formData.notes_internal || undefined,
+        })
+        setIsCreateOpen(false)
+        resetForm()
+    }
+
+    const formatDate = (dateStr: string) => {
+        return new Date(dateStr).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+        })
+    }
+
+    const formatBudget = (budget: number | null) => {
+        if (!budget) return "—"
+        return new Intl.NumberFormat("en-US", {
+            style: "currency",
+            currency: "USD",
+            maximumFractionDigits: 0,
+        }).format(budget)
+    }
+
+    const totalPages = data ? Math.ceil(data.total / data.per_page) : 1
 
     return (
         <div className="flex min-h-screen flex-col">
@@ -122,133 +136,241 @@ export default function IntendedParentsPage() {
             <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <div className="flex h-16 items-center justify-between px-6">
                     <h1 className="text-2xl font-semibold">Intended Parents</h1>
-                    <Button>
+                    <Button className="bg-teal-600 hover:bg-teal-700" onClick={() => setIsCreateOpen(true)}>
                         <PlusIcon className="mr-2 size-4" />
-                        Add Intended Parent
+                        New Intended Parent
                     </Button>
                 </div>
             </div>
 
             {/* Main Content */}
-            <div className="flex-1 space-y-4 p-6">
-                {/* Filters Row */}
-                <div className="flex flex-wrap items-center gap-3">
-                    <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value || "all")}>
+            <div className="flex-1 p-6 space-y-6">
+                {/* Stats Cards */}
+                <div className="grid gap-4 md:grid-cols-5">
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-muted-foreground">Total</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">{stats?.total ?? 0}</div>
+                        </CardContent>
+                    </Card>
+                    {(["new", "in_review", "matched", "inactive"] as IntendedParentStatus[]).map((status) => (
+                        <Card key={status}>
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-medium text-muted-foreground">
+                                    {STATUS_LABELS[status]}
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold">{stats?.by_status[status] ?? 0}</div>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+
+                {/* Filters */}
+                <div className="flex flex-col gap-4 md:flex-row md:items-center">
+                    <div className="relative flex-1 max-w-sm">
+                        <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            placeholder="Search name, email, phone..."
+                            value={search}
+                            onChange={(e) => {
+                                setSearch(e.target.value)
+                                setPage(1)
+                            }}
+                            className="pl-9"
+                        />
+                    </div>
+                    <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1) }}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="All Statuses" />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All Statuses</SelectItem>
-                            <SelectItem value="active">Active</SelectItem>
+                            <SelectItem value="new">New</SelectItem>
+                            <SelectItem value="in_review">In Review</SelectItem>
                             <SelectItem value="matched">Matched</SelectItem>
-                            <SelectItem value="on-hold">On Hold</SelectItem>
                             <SelectItem value="inactive">Inactive</SelectItem>
                         </SelectContent>
                     </Select>
-
-                    <div className="relative ml-auto w-full max-w-sm">
-                        <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                            placeholder="Search intended parents..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-9"
-                        />
-                    </div>
                 </div>
 
-                {/* Table Card */}
-                <Card className="overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <Table className="min-w-[800px]">
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>ID</TableHead>
-                                    <TableHead>Name</TableHead>
-                                    <TableHead>Email</TableHead>
-                                    <TableHead>Phone</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Cases</TableHead>
-                                    <TableHead>Created</TableHead>
-                                    <TableHead className="w-[50px]">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {intendedParents.map((parent) => (
-                                    <TableRow key={parent.id}>
-                                        <TableCell>
-                                            <Link href={`/intended-parents/${parent.id}`} className="font-medium text-primary hover:underline">
-                                                {parent.id}
-                                            </Link>
-                                        </TableCell>
-                                        <TableCell className="font-medium">{parent.name}</TableCell>
-                                        <TableCell className="text-muted-foreground">{parent.email}</TableCell>
-                                        <TableCell className="text-muted-foreground">{parent.phone}</TableCell>
-                                        <TableCell>
-                                            <Badge variant="secondary" className={statusColors[parent.status]}>
-                                                {parent.status}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant="secondary" className="bg-primary/10 text-primary">
-                                                {parent.cases} {parent.cases === 1 ? "case" : "cases"}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-muted-foreground">{parent.created}</TableCell>
-                                        <TableCell>
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger
-                                                    render={
-                                                        <Button variant="ghost" size="sm" className="size-8 p-0">
-                                                            <MoreVerticalIcon className="size-4" />
-                                                            <span className="sr-only">Open menu</span>
-                                                        </Button>
-                                                    }
-                                                />
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem>
-                                                        <Link href={`/intended-parents/${parent.id}`} className="w-full">View</Link>
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem>Edit</DropdownMenuItem>
-                                                    <DropdownMenuItem>Archive</DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </TableCell>
+                {/* Table */}
+                <Card>
+                    <CardContent className="p-0">
+                        {isLoading ? (
+                            <div className="flex items-center justify-center py-12">
+                                <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
+                                <span className="ml-2 text-muted-foreground">Loading...</span>
+                            </div>
+                        ) : !data?.items.length ? (
+                            <div className="flex flex-col items-center justify-center py-12 text-center">
+                                <UsersIcon className="size-12 text-muted-foreground mb-4" />
+                                <h3 className="text-lg font-medium">No intended parents found</h3>
+                                <p className="text-muted-foreground">
+                                    {search || statusFilter !== "all"
+                                        ? "Try adjusting your filters"
+                                        : "Create your first intended parent to get started"}
+                                </p>
+                            </div>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Name</TableHead>
+                                        <TableHead>Email</TableHead>
+                                        <TableHead>Phone</TableHead>
+                                        <TableHead>State</TableHead>
+                                        <TableHead>Budget</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead>Created</TableHead>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </div>
+                                </TableHeader>
+                                <TableBody>
+                                    {data.items.map((ip: IntendedParentListItem) => (
+                                        <TableRow key={ip.id} className="cursor-pointer hover:bg-muted/50">
+                                            <TableCell>
+                                                <Link
+                                                    href={`/intended-parents/${ip.id}`}
+                                                    className="font-medium hover:text-primary hover:underline"
+                                                >
+                                                    {ip.full_name}
+                                                </Link>
+                                            </TableCell>
+                                            <TableCell className="text-muted-foreground">{ip.email}</TableCell>
+                                            <TableCell className="text-muted-foreground">{ip.phone || "—"}</TableCell>
+                                            <TableCell className="text-muted-foreground">{ip.state || "—"}</TableCell>
+                                            <TableCell>{formatBudget(ip.budget)}</TableCell>
+                                            <TableCell>
+                                                <Badge className={STATUS_COLORS[ip.status as IntendedParentStatus]}>
+                                                    {STATUS_LABELS[ip.status as IntendedParentStatus]}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-muted-foreground">
+                                                {formatDate(ip.created_at)}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        )}
+                    </CardContent>
+                </Card>
 
-                    {/* Pagination */}
-                    <div className="flex items-center justify-between border-t border-border px-6 py-4">
-                        <div className="text-sm text-muted-foreground">Showing 1-10 of 48 intended parents</div>
-                        <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" disabled>
-                                Previous
+                {/* Pagination */}
+                {data && data.total > data.per_page && (
+                    <div className="flex items-center justify-between">
+                        <p className="text-sm text-muted-foreground">
+                            Showing {(page - 1) * data.per_page + 1} to{" "}
+                            {Math.min(page * data.per_page, data.total)} of {data.total}
+                        </p>
+                        <div className="flex gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                disabled={page === 1}
+                            >
+                                <ChevronLeftIcon className="size-4" />
                             </Button>
-                            <Button variant="outline" size="sm" className="bg-primary/10 text-primary">
-                                1
-                            </Button>
-                            <Button variant="outline" size="sm">
-                                2
-                            </Button>
-                            <Button variant="outline" size="sm">
-                                3
-                            </Button>
-                            <Button variant="outline" size="sm">
-                                4
-                            </Button>
-                            <Button variant="outline" size="sm">
-                                5
-                            </Button>
-                            <Button variant="outline" size="sm">
-                                Next
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                disabled={page === totalPages}
+                            >
+                                <ChevronRightIcon className="size-4" />
                             </Button>
                         </div>
                     </div>
-                </Card>
+                )}
             </div>
+
+            {/* Create Modal */}
+            <Dialog open={isCreateOpen} onOpenChange={(open) => { setIsCreateOpen(open); if (!open) resetForm() }}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>New Intended Parent</DialogTitle>
+                        <DialogDescription>Add a new intended parent to the system</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="full_name">Full Name *</Label>
+                            <Input
+                                id="full_name"
+                                value={formData.full_name}
+                                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                                placeholder="John and Jane Doe"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="email">Email *</Label>
+                            <Input
+                                id="email"
+                                type="email"
+                                value={formData.email}
+                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                placeholder="john@example.com"
+                            />
+                        </div>
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div className="space-y-2">
+                                <Label htmlFor="phone">Phone</Label>
+                                <Input
+                                    id="phone"
+                                    value={formData.phone}
+                                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                    placeholder="+1 (555) 123-4567"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="state">State</Label>
+                                <Input
+                                    id="state"
+                                    value={formData.state}
+                                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                                    placeholder="California"
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="budget">Budget</Label>
+                            <Input
+                                id="budget"
+                                type="number"
+                                value={formData.budget}
+                                onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                                placeholder="100000"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="notes">Internal Notes</Label>
+                            <Textarea
+                                id="notes"
+                                value={formData.notes_internal}
+                                onChange={(e) => setFormData({ ...formData, notes_internal: e.target.value })}
+                                placeholder="Notes visible only to staff..."
+                                rows={3}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button
+                            className="bg-teal-600 hover:bg-teal-700"
+                            onClick={handleCreate}
+                            disabled={createMutation.isPending || !formData.full_name || !formData.email}
+                        >
+                            {createMutation.isPending && <LoaderIcon className="mr-2 size-4 animate-spin" />}
+                            Create
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
