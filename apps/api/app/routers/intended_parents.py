@@ -55,11 +55,13 @@ def list_intended_parents(
         page=page,
         per_page=per_page,
     )
+    pages = (total + per_page - 1) // per_page  # ceiling division
     return {
         "items": [IntendedParentListItem.model_validate(ip) for ip in items],
         "total": total,
         "page": page,
         "per_page": per_page,
+        "pages": pages,
     }
 
 
@@ -210,6 +212,14 @@ def restore_intended_parent(
         raise HTTPException(status_code=404, detail="Intended parent not found")
     if not ip.is_archived:
         raise HTTPException(status_code=400, detail="Not archived")
+    
+    # Check for duplicate email (another active IP might have same email now)
+    existing = ip_service.get_ip_by_email(db, ip.email, session.org_id)
+    if existing and existing.id != ip.id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot restore: another active intended parent with email '{ip.email}' already exists",
+        )
     
     return ip_service.restore_intended_parent(db, ip, session.user_id)
 

@@ -212,13 +212,14 @@ def archive_intended_parent(
     ip: IntendedParent,
     user_id: UUID,
 ) -> IntendedParent:
-    """Soft delete (archive) an intended parent."""
+    """Soft delete (archive) an intended parent. Sets status to 'archived'."""
     old_status = ip.status
     ip.is_archived = True
     ip.archived_at = datetime.utcnow()
+    ip.status = IntendedParentStatus.ARCHIVED.value  # Actually change the status
     ip.last_activity = datetime.utcnow()
     
-    # Record in history with pseudo-status
+    # Record in history
     history = IntendedParentStatusHistory(
         intended_parent_id=ip.id,
         changed_by_user_id=user_id,
@@ -237,19 +238,29 @@ def restore_intended_parent(
     ip: IntendedParent,
     user_id: UUID,
 ) -> IntendedParent:
-    """Restore an archived intended parent."""
+    """Restore an archived intended parent. Restores to previous status before archive."""
+    # Get the status before archiving from history
+    history = db.query(IntendedParentStatusHistory).filter(
+        IntendedParentStatusHistory.intended_parent_id == ip.id,
+        IntendedParentStatusHistory.new_status == IntendedParentStatus.ARCHIVED.value
+    ).order_by(IntendedParentStatusHistory.changed_at.desc()).first()
+    
+    # Restore to previous status, or default to 'new' if not found
+    previous_status = history.old_status if history and history.old_status else IntendedParentStatus.NEW.value
+    
     ip.is_archived = False
     ip.archived_at = None
+    ip.status = previous_status
     ip.last_activity = datetime.utcnow()
     
-    history = IntendedParentStatusHistory(
+    history_entry = IntendedParentStatusHistory(
         intended_parent_id=ip.id,
         changed_by_user_id=user_id,
         old_status=IntendedParentStatus.ARCHIVED.value,
-        new_status=IntendedParentStatus.RESTORED.value,
+        new_status=previous_status,
         reason="Restored from archive",
     )
-    db.add(history)
+    db.add(history_entry)
     db.commit()
     db.refresh(ip)
     return ip
