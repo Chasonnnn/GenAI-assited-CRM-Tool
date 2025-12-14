@@ -2,7 +2,7 @@
  * Intended Parents API client
  */
 
-import { api } from './base'
+import api from './index'
 import type {
     IntendedParent,
     IntendedParentListItem,

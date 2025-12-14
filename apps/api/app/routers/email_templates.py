@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_session, require_role
+from app.core.deps import get_db, get_current_session, require_roles
 from app.db.enums import Role
 from app.schemas.email import (
     EmailTemplateCreate,
@@ -24,11 +24,11 @@ router = APIRouter(tags=["Email Templates"])
 def list_templates(
     active_only: bool = True,
     db: Session = Depends(get_db),
-    session: dict = Depends(get_current_session),
+    session = Depends(get_current_session),
 ):
     """List email templates for the organization."""
     templates = email_service.list_templates(
-        db, org_id=session["org_id"], active_only=active_only
+        db, org_id=session.org_id, active_only=active_only
     )
     return templates
 
@@ -37,11 +37,11 @@ def list_templates(
 def create_template(
     data: EmailTemplateCreate,
     db: Session = Depends(get_db),
-    session: dict = Depends(require_role(Role.MANAGER)),
+    session = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
 ):
     """Create a new email template (manager only)."""
     # Check for duplicate name
-    existing = email_service.get_template_by_name(db, data.name, session["org_id"])
+    existing = email_service.get_template_by_name(db, data.name, session.org_id)
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -50,8 +50,8 @@ def create_template(
     
     template = email_service.create_template(
         db,
-        org_id=session["org_id"],
-        user_id=session["user_id"],
+        org_id=session.org_id,
+        user_id=session.user_id,
         name=data.name,
         subject=data.subject,
         body=data.body,
@@ -63,10 +63,10 @@ def create_template(
 def get_template(
     template_id: UUID,
     db: Session = Depends(get_db),
-    session: dict = Depends(get_current_session),
+    session = Depends(get_current_session),
 ):
     """Get an email template by ID."""
-    template = email_service.get_template(db, template_id, session["org_id"])
+    template = email_service.get_template(db, template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
     return template
@@ -77,16 +77,16 @@ def update_template(
     template_id: UUID,
     data: EmailTemplateUpdate,
     db: Session = Depends(get_db),
-    session: dict = Depends(require_role(Role.MANAGER)),
+    session = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
 ):
     """Update an email template (manager only)."""
-    template = email_service.get_template(db, template_id, session["org_id"])
+    template = email_service.get_template(db, template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
     
     # Check for duplicate name if changing
     if data.name and data.name != template.name:
-        existing = email_service.get_template_by_name(db, data.name, session["org_id"])
+        existing = email_service.get_template_by_name(db, data.name, session.org_id)
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -107,10 +107,10 @@ def update_template(
 def delete_template(
     template_id: UUID,
     db: Session = Depends(get_db),
-    session: dict = Depends(require_role(Role.MANAGER)),
+    session = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
 ):
     """Soft delete (deactivate) an email template (manager only)."""
-    template = email_service.get_template(db, template_id, session["org_id"])
+    template = email_service.get_template(db, template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
     
@@ -121,12 +121,12 @@ def delete_template(
 def send_email(
     data: EmailSendRequest,
     db: Session = Depends(get_db),
-    session: dict = Depends(require_role(Role.MANAGER)),
+    session = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
 ):
     """Send an email using a template (queues for async sending). Manager only."""
     result = email_service.send_from_template(
         db,
-        org_id=session["org_id"],
+        org_id=session.org_id,
         template_id=data.template_id,
         recipient_email=data.recipient_email,
         variables=data.variables,
