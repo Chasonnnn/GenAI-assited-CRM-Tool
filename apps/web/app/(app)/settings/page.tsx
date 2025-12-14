@@ -10,10 +10,124 @@ import { Switch } from "@/components/ui/switch"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { CameraIcon, CheckIcon, MonitorIcon, SmartphoneIcon } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  CameraIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  CopyIcon,
+  LoaderIcon,
+  MailIcon,
+  MonitorIcon,
+  MoreVerticalIcon,
+  PlusIcon,
+  SmartphoneIcon,
+  TrashIcon,
+} from "lucide-react"
+import {
+  useEmailTemplates,
+  useCreateEmailTemplate,
+  useUpdateEmailTemplate,
+  useDeleteEmailTemplate,
+} from "@/lib/hooks/use-email-templates"
+import type { EmailTemplateListItem } from "@/lib/api/email-templates"
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("profile")
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false)
+  const [isVariablesOpen, setIsVariablesOpen] = useState(false)
+  const [editingTemplate, setEditingTemplate] = useState<EmailTemplateListItem | null>(null)
+  const [showInactive, setShowInactive] = useState(false)
+
+  // Form state
+  const [templateName, setTemplateName] = useState("")
+  const [templateSubject, setTemplateSubject] = useState("")
+  const [templateBody, setTemplateBody] = useState("")
+  const [templateActive, setTemplateActive] = useState(true)
+
+  // API hooks
+  const { data: templates = [], isLoading: templatesLoading } = useEmailTemplates(!showInactive)
+  const createMutation = useCreateEmailTemplate()
+  const updateMutation = useUpdateEmailTemplate()
+  const deleteMutation = useDeleteEmailTemplate()
+
+  const resetForm = () => {
+    setTemplateName("")
+    setTemplateSubject("")
+    setTemplateBody("")
+    setTemplateActive(true)
+    setEditingTemplate(null)
+  }
+
+  const openCreateModal = () => {
+    resetForm()
+    setIsTemplateModalOpen(true)
+  }
+
+  const openEditModal = (template: EmailTemplateListItem) => {
+    setEditingTemplate(template)
+    setTemplateName(template.name)
+    setTemplateSubject(template.subject)
+    setTemplateBody("") // Would need to fetch full template for body
+    setTemplateActive(template.is_active)
+    setIsTemplateModalOpen(true)
+  }
+
+  const handleSaveTemplate = async () => {
+    if (editingTemplate) {
+      await updateMutation.mutateAsync({
+        id: editingTemplate.id,
+        data: {
+          name: templateName,
+          subject: templateSubject,
+          body: templateBody || undefined,
+          is_active: templateActive,
+        },
+      })
+    } else {
+      await createMutation.mutateAsync({
+        name: templateName,
+        subject: templateSubject,
+        body: templateBody,
+      })
+    }
+    setIsTemplateModalOpen(false)
+    resetForm()
+  }
+
+  const handleDeleteTemplate = async (id: string) => {
+    if (confirm("Are you sure you want to delete this template?")) {
+      await deleteMutation.mutateAsync(id)
+    }
+  }
+
+  const insertVariable = (variable: string) => {
+    setTemplateSubject(prev => prev + variable)
+  }
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+    if (diffDays === 0) return "Today"
+    if (diffDays === 1) return "Yesterday"
+    if (diffDays < 7) return `${diffDays} days ago`
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`
+    return date.toLocaleDateString()
+  }
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -60,6 +174,12 @@ export default function SettingsPage() {
                   className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
                 >
                   Security
+                </TabsTrigger>
+                <TabsTrigger
+                  value="email-templates"
+                  className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
+                >
+                  Email Templates
                 </TabsTrigger>
               </TabsList>
             </CardContent>
@@ -185,7 +305,6 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="space-y-4">
-                    {/* Email notifications for new cases */}
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
                         <Label htmlFor="emailNewCases">Email notifications for new cases</Label>
@@ -194,7 +313,6 @@ export default function SettingsPage() {
                       <Switch id="emailNewCases" defaultChecked />
                     </div>
 
-                    {/* Email notifications for task reminders */}
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
                         <Label htmlFor="emailTaskReminders">Email notifications for task reminders</Label>
@@ -203,7 +321,6 @@ export default function SettingsPage() {
                       <Switch id="emailTaskReminders" defaultChecked />
                     </div>
 
-                    {/* Email notifications for status changes */}
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
                         <Label htmlFor="emailStatusChanges">Email notifications for status changes</Label>
@@ -212,7 +329,6 @@ export default function SettingsPage() {
                       <Switch id="emailStatusChanges" defaultChecked />
                     </div>
 
-                    {/* Push notifications */}
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
                         <Label htmlFor="pushNotifications">Push notifications (browser)</Label>
@@ -221,7 +337,6 @@ export default function SettingsPage() {
                       <Switch id="pushNotifications" />
                     </div>
 
-                    {/* Daily digest email */}
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
                         <Label htmlFor="dailyDigest">Daily digest email</Label>
@@ -230,7 +345,6 @@ export default function SettingsPage() {
                       <Switch id="dailyDigest" defaultChecked />
                     </div>
 
-                    {/* Weekly report email */}
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
                         <Label htmlFor="weeklyReport">Weekly report email</Label>
@@ -251,7 +365,6 @@ export default function SettingsPage() {
                   <CardDescription>Manage your third-party integrations</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Meta Leads */}
                   <div className="flex items-center justify-between rounded-lg border border-border p-4">
                     <div className="flex items-center gap-4">
                       <div className="flex size-12 items-center justify-center rounded-lg bg-blue-500/10">
@@ -270,7 +383,6 @@ export default function SettingsPage() {
                     <Button variant="outline">Disconnect</Button>
                   </div>
 
-                  {/* Google Calendar */}
                   <div className="flex items-center justify-between rounded-lg border border-border p-4">
                     <div className="flex items-center gap-4">
                       <div className="flex size-12 items-center justify-center rounded-lg bg-red-500/10">
@@ -286,7 +398,6 @@ export default function SettingsPage() {
                     <Button>Connect</Button>
                   </div>
 
-                  {/* Slack */}
                   <div className="flex items-center justify-between rounded-lg border border-border p-4">
                     <div className="flex items-center gap-4">
                       <div className="flex size-12 items-center justify-center rounded-lg bg-purple-500/10">
@@ -313,7 +424,6 @@ export default function SettingsPage() {
                   <CardDescription>Manage your account security and active sessions</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {/* Change Password */}
                   <div className="space-y-4">
                     <h3 className="font-medium">Change Password</h3>
                     <div className="space-y-2">
@@ -332,7 +442,6 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="border-t border-border pt-6">
-                    {/* Two-factor authentication */}
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
                         <Label htmlFor="twoFactor">Two-factor authentication</Label>
@@ -343,10 +452,8 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="border-t border-border pt-6">
-                    {/* Active Sessions */}
                     <h3 className="mb-4 font-medium">Active Sessions</h3>
                     <div className="space-y-3">
-                      {/* Session 1 */}
                       <div className="flex items-start justify-between rounded-lg border border-border p-4">
                         <div className="flex gap-3">
                           <MonitorIcon className="mt-0.5 size-5 text-muted-foreground" />
@@ -358,7 +465,6 @@ export default function SettingsPage() {
                         <Badge className="bg-green-500/10 text-green-500 border-green-500/20">Current</Badge>
                       </div>
 
-                      {/* Session 2 */}
                       <div className="flex items-start justify-between rounded-lg border border-border p-4">
                         <div className="flex gap-3">
                           <SmartphoneIcon className="mt-0.5 size-5 text-muted-foreground" />
@@ -377,7 +483,6 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="border-t border-border pt-6">
-                    {/* Delete Account */}
                     <div className="space-y-4">
                       <div>
                         <h3 className="font-medium text-destructive">Delete Account</h3>
@@ -388,6 +493,233 @@ export default function SettingsPage() {
                       <Button variant="destructive">Delete Account</Button>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Email Templates Tab */}
+            <TabsContent value="email-templates" className="mt-0">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Email Templates</CardTitle>
+                      <CardDescription>Manage email templates for automated communications</CardDescription>
+                    </div>
+                    <Dialog open={isTemplateModalOpen} onOpenChange={(open) => {
+                      setIsTemplateModalOpen(open)
+                      if (!open) resetForm()
+                    }}>
+                      <DialogTrigger asChild>
+                        <Button className="bg-teal-600 hover:bg-teal-700" onClick={openCreateModal}>
+                          <PlusIcon className="mr-2 size-4" />
+                          New Template
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-2xl">
+                        <DialogHeader>
+                          <DialogTitle>{editingTemplate ? "Edit Template" : "Create Email Template"}</DialogTitle>
+                          <DialogDescription>
+                            {editingTemplate ? "Update your email template" : "Create a new email template for automated communications"}
+                          </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="template-name">
+                              Template Name <span className="text-destructive">*</span>
+                            </Label>
+                            <Input
+                              id="template-name"
+                              placeholder="e.g., Welcome Email"
+                              value={templateName}
+                              onChange={(e) => setTemplateName(e.target.value)}
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="subject">
+                              Subject Line <span className="text-destructive">*</span>
+                            </Label>
+                            <div className="flex gap-2">
+                              <Input
+                                id="subject"
+                                placeholder="e.g., Welcome to {{organization_name}}"
+                                className="flex-1"
+                                value={templateSubject}
+                                onChange={(e) => setTemplateSubject(e.target.value)}
+                              />
+                              <Select onValueChange={insertVariable}>
+                                <SelectTrigger className="w-[180px]">
+                                  <SelectValue placeholder="Insert variable" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="{{full_name}}">{"{{full_name}}"}</SelectItem>
+                                  <SelectItem value="{{case_number}}">{"{{case_number}}"}</SelectItem>
+                                  <SelectItem value="{{status}}">{"{{status}}"}</SelectItem>
+                                  <SelectItem value="{{organization_name}}">{"{{organization_name}}"}</SelectItem>
+                                  <SelectItem value="{{agent_name}}">{"{{agent_name}}"}</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="body">Email Body</Label>
+                            <Textarea
+                              id="body"
+                              rows={8}
+                              placeholder="Write your email template here. Use variables like {{full_name}}, {{case_number}}, etc."
+                              value={templateBody}
+                              onChange={(e) => setTemplateBody(e.target.value)}
+                            />
+                          </div>
+
+                          <Collapsible open={isVariablesOpen} onOpenChange={setIsVariablesOpen}>
+                            <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm font-medium hover:bg-muted">
+                              Available Variables
+                              <ChevronDownIcon
+                                className={`size-4 transition-transform ${isVariablesOpen ? "rotate-180" : ""}`}
+                              />
+                            </CollapsibleTrigger>
+                            <CollapsibleContent className="mt-2 space-y-2 rounded-lg border border-border bg-muted/30 p-4">
+                              <p className="text-xs text-muted-foreground mb-3">
+                                Click to copy a variable to your clipboard:
+                              </p>
+                              <div className="grid grid-cols-2 gap-2">
+                                {[
+                                  { var: "{{full_name}}", desc: "Recipient's full name" },
+                                  { var: "{{first_name}}", desc: "Recipient's first name" },
+                                  { var: "{{case_number}}", desc: "Case number" },
+                                  { var: "{{status}}", desc: "Case status" },
+                                  { var: "{{organization_name}}", desc: "Your organization name" },
+                                  { var: "{{agent_name}}", desc: "Assigned agent name" },
+                                ].map((item) => (
+                                  <button
+                                    key={item.var}
+                                    onClick={() => navigator.clipboard.writeText(item.var)}
+                                    className="flex items-start gap-2 rounded-lg border border-border bg-background px-3 py-2 text-left hover:bg-accent"
+                                  >
+                                    <code className="text-xs font-mono text-teal-600">{item.var}</code>
+                                    <div className="flex-1">
+                                      <p className="text-xs text-muted-foreground">{item.desc}</p>
+                                    </div>
+                                    <CopyIcon className="size-3 text-muted-foreground" />
+                                  </button>
+                                ))}
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
+
+                          <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-3">
+                            <div className="space-y-0.5">
+                              <Label htmlFor="active-toggle">Active</Label>
+                              <p className="text-xs text-muted-foreground">
+                                Enable this template for automated emails
+                              </p>
+                            </div>
+                            <Switch
+                              id="active-toggle"
+                              checked={templateActive}
+                              onCheckedChange={setTemplateActive}
+                            />
+                          </div>
+                        </div>
+
+                        <DialogFooter>
+                          <Button variant="outline" onClick={() => setIsTemplateModalOpen(false)}>
+                            Cancel
+                          </Button>
+                          <Button
+                            className="bg-teal-600 hover:bg-teal-700"
+                            onClick={handleSaveTemplate}
+                            disabled={createMutation.isPending || updateMutation.isPending || !templateName || !templateSubject}
+                          >
+                            {(createMutation.isPending || updateMutation.isPending) && (
+                              <LoaderIcon className="mr-2 size-4 animate-spin" />
+                            )}
+                            {editingTemplate ? "Update Template" : "Save Template"}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {templatesLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
+                      <span className="ml-2 text-muted-foreground">Loading templates...</span>
+                    </div>
+                  ) : templates.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                      <div className="mb-4 flex size-16 items-center justify-center rounded-full bg-muted">
+                        <MailIcon className="size-8 text-muted-foreground" />
+                      </div>
+                      <h3 className="mb-2 text-lg font-medium">No email templates yet</h3>
+                      <p className="mb-4 text-sm text-muted-foreground">Create your first template to get started</p>
+                      <Button className="bg-teal-600 hover:bg-teal-700" onClick={openCreateModal}>
+                        <PlusIcon className="mr-2 size-4" />
+                        Create Template
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {templates.map((template) => (
+                        <Card key={template.id} className="group relative hover:shadow-md transition-shadow">
+                          <CardContent className="p-4">
+                            <div className="mb-3 flex items-start justify-between">
+                              <div className="flex-1">
+                                <h3 className="font-medium">{template.name}</h3>
+                                <p className="mt-1 text-sm text-muted-foreground line-clamp-1">{template.subject}</p>
+                              </div>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
+                                  >
+                                    <MoreVerticalIcon className="size-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => openEditModal(template)}>
+                                    Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem>
+                                    <CopyIcon className="mr-2 size-4" />
+                                    Duplicate
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-destructive"
+                                    onClick={() => handleDeleteTemplate(template.id)}
+                                  >
+                                    <TrashIcon className="mr-2 size-4" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <Badge
+                                className={
+                                  template.is_active
+                                    ? "bg-green-500/10 text-green-500 border-green-500/20"
+                                    : "bg-gray-500/10 text-gray-500 border-gray-500/20"
+                                }
+                              >
+                                {template.is_active ? "Active" : "Inactive"}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                Updated {formatDate(template.updated_at)}
+                              </span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
