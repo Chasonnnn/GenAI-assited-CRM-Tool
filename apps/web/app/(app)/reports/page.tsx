@@ -159,7 +159,7 @@ export default function ReportsPage() {
                                         innerRadius={60}
                                         outerRadius={100}
                                         paddingAngle={2}
-                                        label={({ source, value }) => `${source}: ${value}%`}
+                                        label={({ name, value }) => `${name}: ${value}%`}
                                     />
                                     <ChartLegend content={<ChartLegendContent />} />
                                 </PieChart>
