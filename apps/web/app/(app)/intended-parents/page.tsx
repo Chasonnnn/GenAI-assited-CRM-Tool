@@ -160,7 +160,7 @@ export default function IntendedParentsPage() {
                 {/* Table Card */}
                 <Card className="overflow-hidden">
                     <div className="overflow-x-auto">
-                        <Table>
+                        <Table className="min-w-[800px]">
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>ID</TableHead>
