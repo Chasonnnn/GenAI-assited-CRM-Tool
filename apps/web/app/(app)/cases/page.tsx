@@ -233,15 +233,17 @@ export default function CasesPage() {
                                         <TableCell className="text-muted-foreground">{caseItem.created}</TableCell>
                                         <TableCell>
                                             <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" size="sm" className="size-8 p-0">
-                                                        <MoreVerticalIcon className="size-4" />
-                                                        <span className="sr-only">Open menu</span>
-                                                    </Button>
-                                                </DropdownMenuTrigger>
+                                                <DropdownMenuTrigger
+                                                    render={
+                                                        <Button variant="ghost" size="sm" className="size-8 p-0">
+                                                            <MoreVerticalIcon className="size-4" />
+                                                            <span className="sr-only">Open menu</span>
+                                                        </Button>
+                                                    }
+                                                />
                                                 <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem asChild>
-                                                        <Link href={`/cases/${caseItem.id}`}>View</Link>
+                                                    <DropdownMenuItem>
+                                                        <Link href={`/cases/${caseItem.id}`} className="w-full">View</Link>
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem>Edit</DropdownMenuItem>
                                                     <DropdownMenuItem>Archive</DropdownMenuItem>
