@@ -208,46 +208,41 @@ Case Inline Editing (Week 6+)
 
 ═══════════════════════════════════════════════════════════════════════════════
 
-Week 5b — Workflow automation + email foundation (reminders/jobs/templates)
+Week 5b — Workflow automation + email foundation (reminders/jobs/templates) ✓ COMPLETE
 Backend
-- Minimal job/outbox system (DB-backed) for:
-  - scheduled reminders (follow-ups)
-  - webhook processing retries (future Meta)
-  - notification fan-out (future)
-- Email foundation (automated email is a V1 requirement):
-  - message log table (org-scoped) for outbound emails tied to leads/cases
-  - template/snippet storage (org-configurable)
-  - send pipeline via the jobs/outbox system (schedule + retry + audit)
-- Tables (example):
-  - jobs (organization_id, type, payload, run_at, attempts, status)
-- Worker process (can be simple for V1)
+✓ Minimal job/outbox system (DB-backed) for:
+  ✓ scheduled reminders (follow-ups)
+  ✓ webhook processing retries (future Meta)
+  ✓ notification fan-out (future)
+✓ Email foundation (automated email is a V1 requirement):
+  ✓ message log table (org-scoped) for outbound emails tied to leads/cases
+  ✓ template/snippet storage (org-configurable)
+  ✓ send pipeline via the jobs/outbox system (schedule + retry + audit)
+✓ Tables:
+  ✓ jobs (organization_id, type, payload, run_at, attempts, status)
+  ✓ email_templates (organization_id, name, subject, body_html)
+  ✓ email_logs (organization_id, entity references, status, timestamps)
+✓ Worker process (simple polling worker)
 Frontend
-- Manager settings scaffold for “follow-up rules” (can be minimal UI)
-- Templates page scaffold (optional early): manage email templates/snippets
+✓ Automation page with Workflows + Templates tabs
+✓ UI scaffolds for follow-up rules and email templates
 Deliverable
-- You can schedule and reliably run org-scoped background tasks
-- Email sending is logged and can be scheduled (even if templates are basic at first)
+✓ You can schedule and reliably run org-scoped background tasks
+✓ Email sending is logged and can be scheduled
 
-Week 6 — Intended parents module
+Week 6 — Intended parents module ✓ COMPLETE (see Week 6 above for full details)
 Backend
-- intended_parents table + CRUD endpoints (org-scoped)
-- Filters by status/country/budget (start minimal; expand as needed)
+✓ intended_parents table + CRUD endpoints (org-scoped)
+✓ Filters by status/state/budget
 Frontend
-- Intended parents list/detail pages
-- Status management
+✓ Intended parents list/detail pages
+✓ Status management
 Deliverable
-- Parents stored cleanly and searchable for matching
+✓ Parents stored cleanly and searchable for matching
 
-Week 7 — Cases module (specialists workflow)
-Backend
-- cases table (organization_id, lead_id, parent_id, specialist_id, status)
-- important_dates/events table (organization_id + entity reference)
-- Endpoints for cases + notes + dates
-Frontend
-- Cases board (grouped by status)
-- Case detail with tabs: Overview / Notes / Dates
-Deliverable
-- Specialists can manage the full case journey + dates
+Week 7 — Cases module (specialists workflow) ✓ COMPLETE (moved to Week 3)
+Note: Cases module was completed as part of Week 3 with full CRUD, notes, tasks, and status history.
+See Week 3 section above for complete details.
 
 Week 8 — Notifications v1
 Backend
