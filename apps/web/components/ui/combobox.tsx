@@ -38,7 +38,16 @@ function ComboboxTrigger({
 
 function ComboboxClear({ className, ...props }: ComboboxPrimitive.Clear.Props) {
   return (
-    <ComboboxPrimitive.Clear data-slot="combobox-clear" className={cn(className)} {...props} render={<InputGroupButton variant="ghost" size="icon-xs"><XIcon className="pointer-events-none" /></InputGroupButton>} />
+    <ComboboxPrimitive.Clear
+      data-slot="combobox-clear"
+      className={cn(
+        "size-6 p-0 rounded-4xl text-sm shadow-none flex items-center justify-center gap-2 hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50",
+        className
+      )}
+      {...props}
+    >
+      <XIcon className="pointer-events-none size-4" />
+    </ComboboxPrimitive.Clear>
   )
 }
 
@@ -56,21 +65,30 @@ function ComboboxInput({
   return (
     <InputGroup className={cn("w-auto", className)}>
       <ComboboxPrimitive.Input
-        render={<InputGroupInput disabled={disabled} />}
+        data-slot="input-group-control"
+        className="rounded-none border-0 bg-transparent shadow-none ring-0 focus-visible:ring-0 aria-invalid:ring-0 dark:bg-transparent flex-1 outline-none"
+        disabled={disabled}
         {...props}
       />
       <InputGroupAddon align="inline-end">
         {showTrigger && (
-          <InputGroupButton
-            size="icon-xs"
-            variant="ghost"
-            render={<ComboboxTrigger />}
+          <ComboboxPrimitive.Trigger
             data-slot="input-group-button"
-            className="group-has-data-[slot=combobox-clear]/input-group:hidden data-pressed:bg-transparent"
+            className="size-6 p-0 rounded-4xl text-sm shadow-none flex items-center justify-center gap-2 hover:bg-accent hover:text-accent-foreground group-has-data-[slot=combobox-clear]/input-group:hidden disabled:pointer-events-none disabled:opacity-50"
             disabled={disabled}
-          />
+          >
+            <ChevronDownIcon className="text-muted-foreground size-4 pointer-events-none" />
+          </ComboboxPrimitive.Trigger>
         )}
-        {showClear && <ComboboxClear disabled={disabled} />}
+        {showClear && (
+          <ComboboxPrimitive.Clear
+            data-slot="combobox-clear"
+            className="size-6 p-0 rounded-4xl text-sm shadow-none flex items-center justify-center gap-2 hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+            disabled={disabled}
+          >
+            <XIcon className="pointer-events-none size-4" />
+          </ComboboxPrimitive.Clear>
+        )}
       </InputGroupAddon>
       {children}
     </InputGroup>
@@ -103,7 +121,7 @@ function ComboboxContent({
         <ComboboxPrimitive.Popup
           data-slot="combobox-content"
           data-chips={!!anchor}
-          className={cn("bg-popover text-popover-foreground data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 ring-foreground/5 *:data-[slot=input-group]:bg-input/30 max-h-72 min-w-36 overflow-hidden rounded-2xl shadow-2xl ring-1 duration-100 *:data-[slot=input-group]:m-1 *:data-[slot=input-group]:mb-0 *:data-[slot=input-group]:h-9 *:data-[slot=input-group]:border-none *:data-[slot=input-group]:shadow-none group/combobox-content relative max-h-(--available-height) w-(--anchor-width) max-w-(--available-width) min-w-[calc(var(--anchor-width)+--spacing(7))] origin-(--transform-origin) data-[chips=true]:min-w-(--anchor-width)", className )}
+          className={cn("bg-popover text-popover-foreground data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 ring-foreground/5 *:data-[slot=input-group]:bg-input/30 max-h-72 min-w-36 overflow-hidden rounded-2xl shadow-2xl ring-1 duration-100 *:data-[slot=input-group]:m-1 *:data-[slot=input-group]:mb-0 *:data-[slot=input-group]:h-9 *:data-[slot=input-group]:border-none *:data-[slot=input-group]:shadow-none group/combobox-content relative max-h-(--available-height) w-(--anchor-width) max-w-(--available-width) min-w-[calc(var(--anchor-width)+--spacing(7))] origin-(--transform-origin) data-[chips=true]:min-w-(--anchor-width)", className)}
           {...props}
         />
       </ComboboxPrimitive.Positioner>
@@ -229,7 +247,12 @@ function ComboboxChip({
     >
       {children}
       {showRemove && (
-        <ComboboxPrimitive.ChipRemove className="-ml-1 opacity-50 hover:opacity-100" data-slot="combobox-chip-remove" render={<Button variant="ghost" size="icon-xs"><XIcon className="pointer-events-none" /></Button>} />
+        <ComboboxPrimitive.ChipRemove
+          className="-ml-1 opacity-50 hover:opacity-100 size-5 p-0 rounded-full flex items-center justify-center hover:bg-accent"
+          data-slot="combobox-chip-remove"
+        >
+          <XIcon className="pointer-events-none size-3" />
+        </ComboboxPrimitive.ChipRemove>
       )}
     </ComboboxPrimitive.Chip>
   )
