@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_session, require_role
+from app.core.deps import get_db, get_current_session, require_roles
 from app.db.enums import Role, IntendedParentStatus, EntityType
 from app.schemas.intended_parent import (
     IntendedParentCreate,
@@ -44,7 +44,7 @@ def list_intended_parents(
     """List intended parents with filters and pagination."""
     items, total = ip_service.list_intended_parents(
         db,
-        org_id=session["org_id"],
+        org_id=session.org_id,
         status=status,
         state=state,
         budget_min=budget_min,
@@ -69,7 +69,7 @@ def get_stats(
     session: dict = Depends(get_current_session),
 ):
     """Get IP counts by status."""
-    return ip_service.get_ip_stats(db, org_id=session["org_id"])
+    return ip_service.get_ip_stats(db, org_id=session.org_id)
 
 
 # =============================================================================
@@ -84,7 +84,7 @@ def create_intended_parent(
 ):
     """Create a new intended parent."""
     # Check for duplicate email
-    existing = ip_service.get_ip_by_email(db, data.email, session["org_id"])
+    existing = ip_service.get_ip_by_email(db, data.email, session.org_id)
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -93,8 +93,8 @@ def create_intended_parent(
     
     ip = ip_service.create_intended_parent(
         db,
-        org_id=session["org_id"],
-        user_id=session["user_id"],
+        org_id=session.org_id,
+        user_id=session.user_id,
         full_name=data.full_name,
         email=data.email,
         phone=data.phone,
@@ -113,7 +113,7 @@ def get_intended_parent(
     session: dict = Depends(get_current_session),
 ):
     """Get an intended parent by ID."""
-    ip = ip_service.get_intended_parent(db, ip_id, session["org_id"])
+    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
     return ip
@@ -127,13 +127,13 @@ def update_intended_parent(
     session: dict = Depends(get_current_session),
 ):
     """Update an intended parent."""
-    ip = ip_service.get_intended_parent(db, ip_id, session["org_id"])
+    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
     
     # Check for duplicate email if changing
     if data.email and data.email.lower().strip() != ip.email.lower():
-        existing = ip_service.get_ip_by_email(db, data.email, session["org_id"])
+        existing = ip_service.get_ip_by_email(db, data.email, session.org_id)
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -143,7 +143,7 @@ def update_intended_parent(
     updated = ip_service.update_intended_parent(
         db,
         ip,
-        user_id=session["user_id"],
+        user_id=session.user_id,
         full_name=data.full_name,
         email=data.email,
         phone=data.phone,
@@ -167,7 +167,7 @@ def update_status(
     session: dict = Depends(get_current_session),
 ):
     """Change status of an intended parent."""
-    ip = ip_service.get_intended_parent(db, ip_id, session["org_id"])
+    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
     
@@ -177,7 +177,7 @@ def update_status(
         raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
     
     updated = ip_service.update_ip_status(
-        db, ip, data.status, session["user_id"], data.reason
+        db, ip, data.status, session.user_id, data.reason
     )
     return updated
 
@@ -189,39 +189,39 @@ def archive_intended_parent(
     session: dict = Depends(get_current_session),
 ):
     """Archive (soft delete) an intended parent."""
-    ip = ip_service.get_intended_parent(db, ip_id, session["org_id"])
+    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
     if ip.is_archived:
         raise HTTPException(status_code=400, detail="Already archived")
     
-    return ip_service.archive_intended_parent(db, ip, session["user_id"])
+    return ip_service.archive_intended_parent(db, ip, session.user_id)
 
 
 @router.post("/{ip_id}/restore", response_model=IntendedParentRead)
 def restore_intended_parent(
     ip_id: UUID,
     db: Session = Depends(get_db),
-    session: dict = Depends(require_role(Role.MANAGER)),
+    session = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
 ):
     """Restore an archived intended parent (manager only)."""
-    ip = ip_service.get_intended_parent(db, ip_id, session["org_id"])
+    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
     if not ip.is_archived:
         raise HTTPException(status_code=400, detail="Not archived")
     
-    return ip_service.restore_intended_parent(db, ip, session["user_id"])
+    return ip_service.restore_intended_parent(db, ip, session.user_id)
 
 
 @router.delete("/{ip_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_intended_parent(
     ip_id: UUID,
     db: Session = Depends(get_db),
-    session: dict = Depends(require_role(Role.MANAGER)),
+    session = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
 ):
     """Hard delete an archived intended parent (manager only)."""
-    ip = ip_service.get_intended_parent(db, ip_id, session["org_id"])
+    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
     if not ip.is_archived:
@@ -241,7 +241,7 @@ def get_status_history(
     session: dict = Depends(get_current_session),
 ):
     """Get status history for an intended parent."""
-    ip = ip_service.get_intended_parent(db, ip_id, session["org_id"])
+    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
     
@@ -259,11 +259,11 @@ def list_notes(
     session: dict = Depends(get_current_session),
 ):
     """List notes for an intended parent."""
-    ip = ip_service.get_intended_parent(db, ip_id, session["org_id"])
+    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
     
-    return note_service.list_entity_notes(db, session["org_id"], EntityType.INTENDED_PARENT, ip_id)
+    return note_service.list_entity_notes(db, session.org_id, EntityType.INTENDED_PARENT, ip_id)
 
 
 @router.post("/{ip_id}/notes", response_model=EntityNoteRead, status_code=status.HTTP_201_CREATED)
@@ -274,16 +274,16 @@ def create_note(
     session: dict = Depends(get_current_session),
 ):
     """Add a note to an intended parent."""
-    ip = ip_service.get_intended_parent(db, ip_id, session["org_id"])
+    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
     
     note = note_service.create_entity_note(
         db,
-        org_id=session["org_id"],
+        org_id=session.org_id,
         entity_type=EntityType.INTENDED_PARENT,
         entity_id=ip_id,
-        author_id=session["user_id"],
+        author_id=session.user_id,
         content=data.content,
     )
     
@@ -302,16 +302,16 @@ def delete_note(
     session: dict = Depends(get_current_session),
 ):
     """Delete a note (author or manager only)."""
-    ip = ip_service.get_intended_parent(db, ip_id, session["org_id"])
+    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
     
-    note = note_service.get_entity_note(db, note_id, session["org_id"])
+    note = note_service.get_entity_note(db, note_id, session.org_id)
     if not note or note.entity_id != ip_id:
         raise HTTPException(status_code=404, detail="Note not found")
     
     # Check permission: author or manager+
-    if note.author_id != session["user_id"] and session["role"] not in (Role.MANAGER.value, Role.DEVELOPER.value):
+    if note.author_id != session.user_id and session.role not in (Role.MANAGER, Role.DEVELOPER):
         raise HTTPException(status_code=403, detail="Not authorized to delete this note")
     
     note_service.delete_entity_note(db, note)
