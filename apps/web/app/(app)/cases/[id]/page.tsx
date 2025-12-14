@@ -60,20 +60,20 @@ function getInitials(name: string | null): string {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
-// Status options for dropdown
+// Status options for dropdown - matches backend CaseStatus enum
 const STATUS_OPTIONS: CaseStatus[] = [
     'new_unread',
     'contacted',
-    'phone_screen_scheduled',
-    'phone_screened',
-    'pending_questionnaire',
-    'questionnaire_received',
-    'pending_records',
-    'pending_approval',
+    'followup_scheduled',
+    'application_submitted',
+    'under_review',
     'approved',
     'disqualified',
     'pending_match',
-    'matched',
+    'meds_started',
+    'exam_passed',
+    'embryo_transferred',
+    'delivered',
 ]
 
 export default function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {

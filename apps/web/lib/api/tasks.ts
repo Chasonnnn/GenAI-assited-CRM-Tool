@@ -4,8 +4,8 @@
 
 import api from './index';
 
-// Task type enum
-export type TaskType = 'follow_up' | 'call' | 'email' | 'meeting' | 'document' | 'other';
+// Task type enum - matches backend apps/api/app/db/enums.py
+export type TaskType = 'meeting' | 'follow_up' | 'contact' | 'review' | 'other';
 
 // Task list item for table display
 export interface TaskListItem {

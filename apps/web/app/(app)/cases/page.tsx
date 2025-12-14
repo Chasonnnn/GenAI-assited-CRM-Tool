@@ -109,13 +109,14 @@ export default function CasesPage() {
                             <SelectItem value="all">All Statuses</SelectItem>
                             <SelectItem value="new_unread">New</SelectItem>
                             <SelectItem value="contacted">Contacted</SelectItem>
-                            <SelectItem value="phone_screened">Phone Screened</SelectItem>
-                            <SelectItem value="pending_questionnaire">Pending Questionnaire</SelectItem>
-                            <SelectItem value="pending_approval">Pending Approval</SelectItem>
+                            <SelectItem value="followup_scheduled">Follow-up Scheduled</SelectItem>
+                            <SelectItem value="application_submitted">Application Submitted</SelectItem>
+                            <SelectItem value="under_review">Under Review</SelectItem>
                             <SelectItem value="approved">Approved</SelectItem>
-                            <SelectItem value="pending_match">Pending Match</SelectItem>
-                            <SelectItem value="matched">Matched</SelectItem>
                             <SelectItem value="disqualified">Disqualified</SelectItem>
+                            <SelectItem value="pending_match">Pending Match</SelectItem>
+                            <SelectItem value="meds_started">Meds Started</SelectItem>
+                            <SelectItem value="delivered">Delivered</SelectItem>
                         </SelectContent>
                     </Select>
 
@@ -127,7 +128,8 @@ export default function CasesPage() {
                             <SelectItem value="all">All Sources</SelectItem>
                             <SelectItem value="manual">Manual</SelectItem>
                             <SelectItem value="meta">Meta</SelectItem>
-                            <SelectItem value="import">Import</SelectItem>
+                            <SelectItem value="website">Website</SelectItem>
+                            <SelectItem value="referral">Referral</SelectItem>
                         </SelectContent>
                     </Select>
 
