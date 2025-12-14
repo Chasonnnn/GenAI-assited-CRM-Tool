@@ -4,7 +4,9 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+from app.utils.normalization import normalize_phone, normalize_state
 
 
 # =============================================================================
@@ -21,6 +23,16 @@ class IntendedParentCreate(BaseModel):
     notes_internal: str | None = Field(None, max_length=10000)
     assigned_to_user_id: UUID | None = None
 
+    @field_validator("phone", mode="before")
+    @classmethod
+    def normalize_phone_field(cls, v: str | None) -> str | None:
+        return normalize_phone(v) if v else None
+
+    @field_validator("state", mode="before")
+    @classmethod
+    def normalize_state_field(cls, v: str | None) -> str | None:
+        return normalize_state(v)  # Raises ValueError on invalid
+
 
 class IntendedParentUpdate(BaseModel):
     """Schema for updating an intended parent."""
@@ -31,6 +43,16 @@ class IntendedParentUpdate(BaseModel):
     budget: Decimal | None = Field(None, ge=0, le=9999999999.99)
     notes_internal: str | None = Field(None, max_length=10000)
     assigned_to_user_id: UUID | None = None
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def normalize_phone_field(cls, v: str | None) -> str | None:
+        return normalize_phone(v) if v else None
+
+    @field_validator("state", mode="before")
+    @classmethod
+    def normalize_state_field(cls, v: str | None) -> str | None:
+        return normalize_state(v)
 
 
 class IntendedParentStatusUpdate(BaseModel):
