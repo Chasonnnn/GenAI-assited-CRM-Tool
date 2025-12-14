@@ -242,6 +242,16 @@ CaseStatus:
 - `delivered`
 - `closed`
 
+IntendedParentStatus:
+- `new`
+- `contacted`
+- `in_review`
+- `qualified`
+- `matched`
+- `declined`
+- `on_hold`
+- `archived` (pseudo-status for archive/restore)
+
 Rule: keep enum values centralized in one place (backend constants + frontend types).
 
 ## 7) Meta Lead Ads Integration (Rules)
@@ -391,9 +401,24 @@ Constraints:
     - App Sidebar with navigation and user menu
     - Loading skeletons for all pages
     - All pages use shadcn/ui components with responsive Tailwind classes
-- **In progress:** Frontend-backend API integration
+- **In progress:** Meta Lead Ads integration
 - **Blockers:** None
-- **Next milestones:** Wire UI to real API data, Meta integration, mobile testing
+- **Next milestones:** Meta integration, mobile testing, AI features
+
+### Week 6 (2025-12-14): Intended Parents Module + Dependencies
+- **Completed:**
+  - Intended Parents CRUD (full name, email, phone, state, budget)
+  - Status workflow with history tracking
+  - Archive/restore with status preservation and duplicate email check
+  - State/phone normalization validators in Pydantic schemas
+  - Polymorphic EntityNotes supporting both Cases and IPs
+  - CSRF protection on all IP mutation endpoints
+  - Frontend: IP list page with filters, detail page with tabs
+- **Dependencies upgraded:**
+  - Next.js 16.0.10, React 19.2.3, Zod 4.1.13, recharts 3.5.1
+  - All Radix UI components to latest versions
+  - Base UI combobox/pagination fixed for render prop compatibility
+  - ChartTooltipContent/ChartLegendContent rewritten for recharts 3 API
 
 ## 14) Decision Log (Update when choices change)
 
@@ -405,3 +430,6 @@ Constraints:
 - **Hosting choice:** TBD (target: Vercel for frontend, Render/Railway for backend)
 - **Meta integration approach:** TBD
 - **AI provider choice:** TBD
+- **Frontend deps (2025-12-14):** Next.js 16.0.10, React 19.2.3, Zod 4.1.13, recharts 3.5.1, Tailwind 4.1
+- **Polymorphic notes:** EntityNote table with `entity_type` + `entity_id` supports Cases and IPs
+- **Archive/restore pattern:** Set status to "archived", restore to previous status from history

@@ -157,6 +157,32 @@ Frontend
 Deliverable
 ✓ All frontend pages connected to real API data
 
+Week 6 — Intended Parents Module + Dependencies ✓ COMPLETE
+Backend
+✓ IntendedParent model with full_name, email, phone, state, budget, notes_internal
+✓ 7 status workflow: new → contacted → in_review → qualified → matched → declined → on_hold
+✓ IntendedParentStatusHistory for change tracking
+✓ Archive/restore with status preservation (restores to previous status from history)
+✓ Duplicate email check on create and restore (returns 409 on conflict)
+✓ State/phone normalization validators in Pydantic schemas
+✓ Polymorphic EntityNote system supporting Cases and IPs (entity_type + entity_id)
+✓ CSRF protection (require_csrf_header) on all mutation endpoints
+✓ Pagination with pages field (total/per_page rounded up)
+Frontend
+✓ IP list page with stats cards, filters (status, search), pagination
+✓ IP detail page with contact info, status dropdown, notes, history tabs
+✓ React Query hooks for all IP API operations
+✓ TypeScript types for IP and EntityNote
+Dependencies (2025-12-14)
+✓ Next.js 15.5.9 → 16.0.10
+✓ React 19.2.0 → 19.2.3
+✓ Zod 3.x → 4.1.13
+✓ recharts 2.x → 3.5.1 (rewrote ChartTooltipContent/ChartLegendContent)
+✓ All Radix UI components to latest
+✓ Base UI combobox/pagination fixed for render prop compatibility
+Deliverable
+✓ Full Intended Parents CRUD with proper security, normalization, and frontend integration
+
 ═══════════════════════════════════════════════════════════════════════════════
 DEFERRED IMPROVEMENTS (Technical Debt / Future Enhancements)
 ═══════════════════════════════════════════════════════════════════════════════
