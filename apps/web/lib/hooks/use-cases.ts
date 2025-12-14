@@ -1,80 +1,158 @@
 /**
- * React Query hooks for Cases API.
+ * React Query hooks for Cases module.
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import api from '@/lib/api';
-import type { CaseListResponse, CaseRead } from '@/lib/types/case';
+import * as casesApi from '../api/cases';
+import type { CaseListParams } from '../api/cases';
 
 // Query keys
 export const caseKeys = {
     all: ['cases'] as const,
     lists: () => [...caseKeys.all, 'list'] as const,
-    list: (filters: Record<string, unknown>) => [...caseKeys.lists(), filters] as const,
+    list: (params: CaseListParams) => [...caseKeys.lists(), params] as const,
+    stats: () => [...caseKeys.all, 'stats'] as const,
     details: () => [...caseKeys.all, 'detail'] as const,
     detail: (id: string) => [...caseKeys.details(), id] as const,
+    history: (id: string) => [...caseKeys.detail(id), 'history'] as const,
 };
 
-// List cases
-interface ListCasesParams {
-    page?: number;
-    per_page?: number;
-    status?: string;
-    source?: string;
-    assigned_to?: string;
-    q?: string;
-    include_archived?: boolean;
-}
-
-export function useCases(params: ListCasesParams = {}) {
-    const queryParams = new URLSearchParams();
-
-    if (params.page) queryParams.set('page', String(params.page));
-    if (params.per_page) queryParams.set('per_page', String(params.per_page));
-    if (params.status) queryParams.set('status', params.status);
-    if (params.source) queryParams.set('source', params.source);
-    if (params.assigned_to) queryParams.set('assigned_to', params.assigned_to);
-    if (params.q) queryParams.set('q', params.q);
-    if (params.include_archived) queryParams.set('include_archived', 'true');
-
-    const queryString = queryParams.toString();
-    const path = queryString ? `/cases?${queryString}` : '/cases';
-
+/**
+ * Fetch case statistics for dashboard.
+ */
+export function useCaseStats() {
     return useQuery({
-        queryKey: caseKeys.list(params as Record<string, unknown>),
-        queryFn: () => api.get<CaseListResponse>(path),
+        queryKey: caseKeys.stats(),
+        queryFn: casesApi.getCaseStats,
+        staleTime: 30 * 1000, // 30 seconds
     });
 }
 
-// Get single case
-export function useCase(id: string) {
+/**
+ * Fetch paginated cases list.
+ */
+export function useCases(params: CaseListParams = {}) {
     return useQuery({
-        queryKey: caseKeys.detail(id),
-        queryFn: () => api.get<CaseRead>(`/cases/${id}`),
-        enabled: !!id,
+        queryKey: caseKeys.list(params),
+        queryFn: () => casesApi.getCases(params),
     });
 }
 
-// Archive case
-export function useArchiveCase() {
+/**
+ * Fetch single case by ID.
+ */
+export function useCase(caseId: string) {
+    return useQuery({
+        queryKey: caseKeys.detail(caseId),
+        queryFn: () => casesApi.getCase(caseId),
+        enabled: !!caseId,
+    });
+}
+
+/**
+ * Fetch case status history.
+ */
+export function useCaseHistory(caseId: string) {
+    return useQuery({
+        queryKey: caseKeys.history(caseId),
+        queryFn: () => casesApi.getCaseHistory(caseId),
+        enabled: !!caseId,
+    });
+}
+
+/**
+ * Create a new case.
+ */
+export function useCreateCase() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (id: string) => api.post(`/cases/${id}/archive`),
+        mutationFn: casesApi.createCase,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: caseKeys.all });
+            queryClient.invalidateQueries({ queryKey: caseKeys.lists() });
+            queryClient.invalidateQueries({ queryKey: caseKeys.stats() });
         },
     });
 }
 
-// Restore case
+/**
+ * Update case fields.
+ */
+export function useUpdateCase() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ caseId, data }: { caseId: string; data: casesApi.CaseUpdatePayload }) =>
+            casesApi.updateCase(caseId, data),
+        onSuccess: (updatedCase) => {
+            queryClient.setQueryData(caseKeys.detail(updatedCase.id), updatedCase);
+            queryClient.invalidateQueries({ queryKey: caseKeys.lists() });
+        },
+    });
+}
+
+/**
+ * Change case status.
+ */
+export function useChangeStatus() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ caseId, data }: { caseId: string; data: casesApi.CaseStatusChangePayload }) =>
+            casesApi.changeCaseStatus(caseId, data),
+        onSuccess: (updatedCase) => {
+            queryClient.setQueryData(caseKeys.detail(updatedCase.id), updatedCase);
+            queryClient.invalidateQueries({ queryKey: caseKeys.lists() });
+            queryClient.invalidateQueries({ queryKey: caseKeys.history(updatedCase.id) });
+            queryClient.invalidateQueries({ queryKey: caseKeys.stats() });
+        },
+    });
+}
+
+/**
+ * Assign case to user.
+ */
+export function useAssignCase() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ caseId, userId }: { caseId: string; userId: string | null }) =>
+            casesApi.assignCase(caseId, userId),
+        onSuccess: (updatedCase) => {
+            queryClient.setQueryData(caseKeys.detail(updatedCase.id), updatedCase);
+            queryClient.invalidateQueries({ queryKey: caseKeys.lists() });
+        },
+    });
+}
+
+/**
+ * Archive a case.
+ */
+export function useArchiveCase() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: casesApi.archiveCase,
+        onSuccess: (updatedCase) => {
+            queryClient.setQueryData(caseKeys.detail(updatedCase.id), updatedCase);
+            queryClient.invalidateQueries({ queryKey: caseKeys.lists() });
+            queryClient.invalidateQueries({ queryKey: caseKeys.stats() });
+        },
+    });
+}
+
+/**
+ * Restore an archived case.
+ */
 export function useRestoreCase() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (id: string) => api.post(`/cases/${id}/restore`),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: caseKeys.all });
+        mutationFn: casesApi.restoreCase,
+        onSuccess: (updatedCase) => {
+            queryClient.setQueryData(caseKeys.detail(updatedCase.id), updatedCase);
+            queryClient.invalidateQueries({ queryKey: caseKeys.lists() });
+            queryClient.invalidateQueries({ queryKey: caseKeys.stats() });
         },
     });
 }
