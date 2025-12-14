@@ -1,11 +1,13 @@
 /**
  * TypeScript types for Tasks module.
- * Re-exports from API client for convenience.
+ * Matches backend enums from apps/api/app/db/enums.py
  */
+
+// Task type enum matching backend EXACTLY
+export type TaskType = 'meeting' | 'follow_up' | 'contact' | 'review' | 'other';
 
 // Re-export types from API client
 export type {
-    TaskType,
     TaskListItem,
     TaskRead,
     TaskListResponse,
@@ -14,12 +16,11 @@ export type {
     TaskUpdatePayload,
 } from '../api/tasks';
 
-// Task type display config
-export const TASK_TYPE_CONFIG: Record<string, { label: string; icon: string }> = {
-    follow_up: { label: 'Follow Up', icon: '📞' },
-    call: { label: 'Call', icon: '☎️' },
-    email: { label: 'Email', icon: '✉️' },
+// Task type display config - matches backend TaskType enum
+export const TASK_TYPE_CONFIG: Record<TaskType, { label: string; icon: string }> = {
     meeting: { label: 'Meeting', icon: '📅' },
-    document: { label: 'Document', icon: '📄' },
-    other: { label: 'Other', icon: '📋' },
+    follow_up: { label: 'Follow Up', icon: '📞' },
+    contact: { label: 'Contact', icon: '👤' },
+    review: { label: 'Review', icon: '📋' },
+    other: { label: 'Other', icon: '📌' },
 };

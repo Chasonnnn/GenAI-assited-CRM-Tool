@@ -1,30 +1,29 @@
 /**
  * TypeScript types for Cases module.
- * Matches backend Pydantic schemas.
+ * Matches backend Pydantic schemas from apps/api/app/db/enums.py
  */
 
-// Enums matching backend
+// Enums matching backend EXACTLY
 export type CaseStatus =
+    // Stage A: Intake Pipeline
     | 'new_unread'
     | 'contacted'
-    | 'phone_screen_scheduled'
-    | 'phone_screened'
-    | 'pending_questionnaire'
-    | 'questionnaire_received'
-    | 'pending_records'
-    | 'pending_approval'
+    | 'followup_scheduled'
+    | 'application_submitted'
+    | 'under_review'
     | 'approved'
     | 'disqualified'
+    // Stage B: Post-Approval
     | 'pending_match'
-    | 'matched'
-    | 'pre_screening'
-    | 'synced'
-    | 'pregnant'
+    | 'meds_started'
+    | 'exam_passed'
+    | 'embryo_transferred'
     | 'delivered'
+    // Archive pseudo-statuses
     | 'archived'
     | 'restored';
 
-export type CaseSource = 'manual' | 'meta' | 'import';
+export type CaseSource = 'manual' | 'meta' | 'website' | 'referral';
 
 // List item (minimal for table display)
 export interface CaseListItem {
@@ -69,24 +68,23 @@ export interface CaseListResponse {
     pages: number;
 }
 
-// Status display config
+// Status display config - matches backend CaseStatus enum
 export const STATUS_CONFIG: Record<CaseStatus, { label: string; color: string }> = {
+    // Stage A: Intake Pipeline
     new_unread: { label: 'New', color: 'bg-blue-500' },
     contacted: { label: 'Contacted', color: 'bg-sky-500' },
-    phone_screen_scheduled: { label: 'Screen Scheduled', color: 'bg-cyan-500' },
-    phone_screened: { label: 'Screened', color: 'bg-teal-500' },
-    pending_questionnaire: { label: 'Pending Q', color: 'bg-amber-500' },
-    questionnaire_received: { label: 'Q Received', color: 'bg-yellow-500' },
-    pending_records: { label: 'Pending Records', color: 'bg-orange-500' },
-    pending_approval: { label: 'Pending Approval', color: 'bg-pink-500' },
+    followup_scheduled: { label: 'Follow-up Scheduled', color: 'bg-cyan-500' },
+    application_submitted: { label: 'Application Submitted', color: 'bg-teal-500' },
+    under_review: { label: 'Under Review', color: 'bg-amber-500' },
     approved: { label: 'Approved', color: 'bg-green-500' },
     disqualified: { label: 'Disqualified', color: 'bg-red-500' },
+    // Stage B: Post-Approval
     pending_match: { label: 'Pending Match', color: 'bg-purple-500' },
-    matched: { label: 'Matched', color: 'bg-violet-500' },
-    pre_screening: { label: 'Pre-Screening', color: 'bg-indigo-500' },
-    synced: { label: 'Synced', color: 'bg-fuchsia-500' },
-    pregnant: { label: 'Pregnant', color: 'bg-emerald-500' },
-    delivered: { label: 'Delivered', color: 'bg-lime-500' },
+    meds_started: { label: 'Meds Started', color: 'bg-violet-500' },
+    exam_passed: { label: 'Exam Passed', color: 'bg-indigo-500' },
+    embryo_transferred: { label: 'Embryo Transferred', color: 'bg-fuchsia-500' },
+    delivered: { label: 'Delivered', color: 'bg-emerald-500' },
+    // Archive
     archived: { label: 'Archived', color: 'bg-gray-500' },
     restored: { label: 'Restored', color: 'bg-slate-500' },
 };
