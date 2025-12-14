@@ -188,7 +188,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ## Current Status
 
-**Week 3 Complete** — Cases Module:
+**Week 4 Complete** — Frontend UI (v0 Design Implementation):
 
 - [x] Project scaffolding (monorepo structure)
 - [x] PostgreSQL with Docker Compose
@@ -196,14 +196,13 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 - [x] SQLAlchemy + Alembic migrations configured
 - [x] Next.js with App Router and (app) route group
 - [x] Basic layout with sidebar/topbar
-- [x] Placeholder pages: Dashboard, Leads, Settings
 - [x] Google OAuth SSO with state/nonce/user-agent binding
 - [x] Invite-only access (one pending invite per email globally)
 - [x] JWT sessions in HTTP-only cookies with key rotation
 - [x] Role-based authorization (4 roles: intake_specialist, case_manager, manager, developer)
 - [x] Tenant isolation via Membership (one org per user)
 - [x] CLI bootstrap + dev endpoints
-- [x] **Cases module complete:**
+- [x] **Cases module complete (backend):**
   - [x] Cases CRUD with sequential numbering
   - [x] Phone normalization (E.164) and state validation
   - [x] Soft-delete (archive/restore) with status sync
@@ -211,8 +210,18 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
   - [x] Notes (2-4000 chars)
   - [x] Tasks (with due dates and completion)
   - [x] Meta webhook skeleton
-- [ ] Frontend auth integration (login button, route protection)
-- [ ] Frontend cases UI
+- [x] **Frontend UI complete (v0 design):**
+  - [x] Login page (Duo SSO + username option, glassmorphism)
+  - [x] Dashboard (stats cards, charts, recent activity)
+  - [x] Cases List (filters, search, table, pagination)
+  - [x] Case Detail (tabs, status updates, notes)
+  - [x] Tasks page (Kanban-style, filters)
+  - [x] Intended Parents (list, filters, actions)
+  - [x] Reports (4 chart types, quick stats)
+  - [x] Settings (5 tabs: Profile, Org, Notifications, Integrations, Security)
+  - [x] Automation (Workflows + Templates tabs)
+  - [x] App Sidebar with navigation
+- [ ] Frontend-backend integration (wire UI to real API data)
 - [ ] Meta Lead Ads full integration
 
 ## Documentation

@@ -355,7 +355,7 @@ Constraints:
 
 ## 13) Current Status (Update regularly)
 
-- **Date:** 2025-12-13
+- **Date:** 2025-12-14
 - **Completed:**
   - Project scaffolding (monorepo with apps/api + apps/web)
   - PostgreSQL 16 via Docker Compose
@@ -363,7 +363,6 @@ Constraints:
   - SQLAlchemy 2.0 + Alembic migrations configured
   - Next.js 16 with App Router and (app) route group
   - Basic app layout (sidebar + topbar)
-  - Placeholder pages: Dashboard, Leads, Settings
   - **Week 2 complete:** Authentication & tenant isolation
     - Google OAuth SSO with state/nonce/user-agent binding
     - Invite-only access (one pending invite per email globally)
@@ -379,9 +378,22 @@ Constraints:
     - Notes (2-4000 chars), tasks (with due dates/completion)
     - Meta leads ingestion skeleton
     - All CRUD endpoints with pagination (max 100), search, filters
-- **In progress:** Frontend auth integration, Cases UI
+  - **Week 4 complete:** Frontend UI (v0 design implementation)
+    - Login page (Duo SSO + username option, glassmorphism, watercolor gradient)
+    - Dashboard (stats cards, charts with recharts, recent activity)
+    - Cases List (filters, search, table, pagination)
+    - Case Detail (tabs, status updates, notes)
+    - Tasks page (grid layout, filters, priority badges)
+    - Intended Parents (list, filters, actions, pagination)
+    - Reports (4 chart types, quick stats, export)
+    - Settings (5 tabs: Profile, Org, Notifications, Integrations, Security)
+    - Automation (Workflows + Templates tabs)
+    - App Sidebar with navigation and user menu
+    - Loading skeletons for all pages
+    - All pages use shadcn/ui components with responsive Tailwind classes
+- **In progress:** Frontend-backend API integration
 - **Blockers:** None
-- **Next milestones:** Frontend login flow, Cases UI, Meta integration
+- **Next milestones:** Wire UI to real API data, Meta integration, mobile testing
 
 ## 14) Decision Log (Update when choices change)
 
