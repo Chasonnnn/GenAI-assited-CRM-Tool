@@ -167,3 +167,11 @@ def list_tasks(
     tasks = query.offset(offset).limit(per_page).all()
     
     return tasks, total
+
+
+def count_pending_tasks(db: Session, org_id: UUID) -> int:
+    """Count incomplete tasks for dashboard metrics."""
+    return db.query(Task).filter(
+        Task.organization_id == org_id,
+        Task.is_completed == False,
+    ).count()

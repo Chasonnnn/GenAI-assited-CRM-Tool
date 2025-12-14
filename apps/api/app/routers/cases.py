@@ -24,6 +24,7 @@ from app.schemas.case import (
     CaseListItem,
     CaseListResponse,
     CaseRead,
+    CaseStats,
     CaseStatusChange,
     CaseStatusHistoryRead,
     CaseUpdate,
@@ -90,6 +91,28 @@ def _case_to_list_item(case, db: Session) -> CaseListItem:
         assigned_to_name=assigned_to_name,
         is_archived=case.is_archived,
         created_at=case.created_at,
+    )
+
+
+@router.get("/stats", response_model=CaseStats)
+def get_case_stats(
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """Get aggregated case statistics for dashboard."""
+    from app.services import task_service
+    
+    stats = case_service.get_case_stats(db, session.org_id)
+    
+    # Add pending tasks count (cross-module)
+    pending_tasks = task_service.count_pending_tasks(db, session.org_id)
+    
+    return CaseStats(
+        total=stats["total"],
+        by_status=stats["by_status"],
+        this_week=stats["this_week"],
+        this_month=stats["this_month"],
+        pending_tasks=pending_tasks,
     )
 
 
