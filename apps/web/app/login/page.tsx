@@ -33,93 +33,68 @@ export default function LoginPage() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-4"
+      className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden"
       style={{
-        background: "linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #f5576c 75%, #4facfe 100%)",
-        backgroundSize: "400% 400%",
-        animation: "gradient 15s ease infinite",
+        background: "linear-gradient(135deg, #f8f9fa 0%, #f1f3f5 50%, #f8f9fa 100%)",
       }}
     >
+      {/* Soft watercolor blobs */}
       <div
-        className="absolute inset-0 opacity-0"
+        className="absolute -left-32 top-1/4 w-[500px] h-[500px] rounded-full blur-3xl opacity-60"
         style={{
-          background: "rgba(0, 0, 0, 0.15)",
+          background: "radial-gradient(circle, rgba(99, 102, 241, 0.4) 0%, rgba(139, 92, 246, 0.3) 50%, transparent 70%)",
         }}
-      ></div>
-
-      {/* Floating glass orbs for visual interest */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div
-          className="absolute top-1/4 left-1/4 w-32 h-32 rounded-full opacity-50 animate-pulse"
-          style={{
-            background: "rgba(255, 255, 255, 0.15)",
-            backdropFilter: "blur(20px) saturate(180%)",
-            border: "2px solid rgba(255, 255, 255, 0.3)",
-            boxShadow: "0 8px 32px rgba(255, 255, 255, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.4)",
-          }}
-        ></div>
-        <div
-          className="absolute top-3/4 right-1/4 w-24 h-24 rounded-full opacity-40 animate-pulse delay-1000"
-          style={{
-            background: "rgba(255, 255, 255, 0.15)",
-            backdropFilter: "blur(20px) saturate(180%)",
-            border: "2px solid rgba(255, 255, 255, 0.3)",
-            boxShadow: "0 8px 32px rgba(255, 255, 255, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.4)",
-          }}
-        ></div>
-        <div
-          className="absolute top-1/2 right-1/3 w-16 h-16 rounded-full opacity-45 animate-pulse delay-500"
-          style={{
-            background: "rgba(255, 255, 255, 0.15)",
-            backdropFilter: "blur(20px) saturate(180%)",
-            border: "2px solid rgba(255, 255, 255, 0.3)",
-            boxShadow: "0 8px 32px rgba(255, 255, 255, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.4)",
-          }}
-        ></div>
-      </div>
-
-      <Card
-        className="max-w-md hover-lift shadow-2xl relative z-10 opacity-100 w-[126%] mx-[0] border-transparent"
+      />
+      <div
+        className="absolute -right-32 top-1/3 w-[400px] h-[400px] rounded-full blur-3xl opacity-50"
         style={{
-          background: "rgba(255, 255, 255, 0.25)",
-          backdropFilter: "blur(40px) saturate(250%)",
-          border: "1px solid rgba(255, 255, 255, 0.4)",
-          boxShadow:
-            "0 32px 80px rgba(0, 0, 0, 0.3), 0 16px 64px rgba(255, 255, 255, 0.2), inset 0 3px 0 rgba(255, 255, 255, 0.6), inset 0 -1px 0 rgba(255, 255, 255, 0.3)",
+          background: "radial-gradient(circle, rgba(236, 72, 153, 0.3) 0%, rgba(251, 146, 60, 0.1) 50%, transparent 70%)",
+        }}
+      />
+      <div
+        className="absolute left-1/4 -bottom-32 w-[300px] h-[300px] rounded-full blur-3xl opacity-30"
+        style={{
+          background: "radial-gradient(circle, rgba(99, 102, 241, 0.3) 0%, transparent 70%)",
+        }}
+      />
+      <Card
+        className="w-full max-w-md relative z-10 border-0 shadow-xl"
+        style={{
+          background: "linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(253, 242, 248, 0.9) 100%)",
+          backdropFilter: "blur(20px)",
+          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.1)",
         }}
       >
-        <CardHeader className="text-center space-y-3">
+        <CardHeader className="text-center space-y-4 pb-2">
           <div className="flex justify-center mb-2">
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-white/20 backdrop-blur-md border border-white/40">
-              <ShieldCheck className="w-9 h-9 text-card-foreground" strokeWidth={2.5} />
+            <div className="w-14 h-14 rounded-xl flex items-center justify-center bg-gray-100 border border-gray-200">
+              <ShieldCheck className="w-8 h-8 text-gray-700" strokeWidth={1.5} />
             </div>
           </div>
           <div className="space-y-1">
-            <div className="text-sm font-semibold text-card-foreground/80 font-sans tracking-wide">SURROGACY CRM</div>
-            <CardTitle className="text-3xl font-bold font-sans text-card-foreground">Welcome Back</CardTitle>
+            <div className="text-xs font-semibold text-gray-500 tracking-widest">SURROGACY CRM</div>
+            <CardTitle className="text-3xl font-bold text-gray-900">Welcome Back</CardTitle>
           </div>
-          <CardDescription className="text-card-foreground/70 font-sans">Sign in with Single Sign-On</CardDescription>
+          <CardDescription className="text-gray-500">Sign in with Single Sign-On</CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-5">
           <Button
             onClick={handleDuoSSOLogin}
-            className="w-full ripple-effect hover-lift font-sans font-bold py-6 text-base transition-all duration-300 shadow-lg"
-            style={{ backgroundColor: "#0C115B", color: "white" }}
+            className="w-full font-semibold py-6 text-base rounded-full transition-all duration-300"
+            style={{ backgroundColor: "#1e1b4b", color: "white" }}
             disabled={isLoading}
           >
-            <svg className="w-6 h-6 mr-3" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z" />
-            </svg>
+            <ShieldCheck className="w-5 h-5 mr-2" />
             {isLoading ? "Signing In..." : "Sign in with Duo SSO"}
           </Button>
 
-          <div className="relative">
+          <div className="relative py-2">
             <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-white/30" />
+              <span className="w-full border-t border-gray-200" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="px-3 bg-transparent text-card-foreground/60 font-sans font-semibold tracking-wider">
+              <span className="px-3 bg-white text-gray-400 font-medium tracking-wider">
                 Or use other sign-in options
               </span>
             </div>
@@ -128,17 +103,17 @@ export default function LoginPage() {
           <div className="space-y-4">
             <button
               onClick={() => setShowOtherOptions(!showOtherOptions)}
-              className="w-full flex items-center justify-between px-4 py-3 rounded-lg border border-white/30 bg-white/10 hover:bg-white/20 text-card-foreground font-sans font-medium transition-all duration-200"
+              className="w-full flex items-center justify-between px-4 py-3 rounded-lg border border-gray-200 bg-gray-50/50 hover:bg-gray-100/50 text-gray-700 font-medium transition-all duration-200"
             >
               <span>Other sign-in methods</span>
-              {showOtherOptions ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              {showOtherOptions ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
             </button>
 
             {showOtherOptions && (
               <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-2 duration-300">
                 <form onSubmit={handleUsernameLogin} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="username" className="text-sm font-medium text-card-foreground font-sans">
+                    <Label htmlFor="username" className="text-sm font-medium text-gray-700">
                       Username
                     </Label>
                     <Input
@@ -147,7 +122,7 @@ export default function LoginPage() {
                       placeholder="Enter your username"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
-                      className="border-white/40 bg-white/10 placeholder:text-card-foreground/50 text-card-foreground py-3 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:bg-white/15 transition-all duration-200"
+                      className="border-gray-200 bg-white placeholder:text-gray-400 text-gray-900 py-3 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all duration-200"
                       required
                     />
                   </div>
@@ -155,31 +130,31 @@ export default function LoginPage() {
                   <Button
                     type="submit"
                     variant="outline"
-                    className="w-full glass-effect border-white/40 hover-lift ripple-effect text-card-foreground hover:bg-white/25 font-sans font-semibold py-5 transition-all duration-300 bg-transparent"
+                    className="w-full border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold py-5 transition-all duration-300 rounded-lg"
                     disabled={isLoading}
                   >
                     {isLoading ? "Authenticating..." : "Continue with Duo"}
                   </Button>
                 </form>
 
-                <p className="text-xs text-center text-card-foreground/60 font-sans">
+                <p className="text-xs text-center text-gray-400">
                   You will receive a Duo push notification to complete authentication
                 </p>
               </div>
             )}
           </div>
 
-          <div className="pt-4 space-y-3 border-t border-white/20">
+          <div className="pt-4 space-y-3 border-t border-gray-100">
             <div className="text-center">
               <a
                 href="#"
-                className="text-sm text-card-foreground/70 hover:text-card-foreground font-sans transition-colors inline-flex items-center gap-1"
+                className="text-sm text-gray-500 hover:text-gray-700 transition-colors inline-flex items-center gap-1"
               >
                 Need help signing in? Contact IT Support
               </a>
             </div>
             <div className="text-center">
-              <p className="text-xs text-card-foreground/50 font-sans">© 2025 Surrogacy CRM. All rights reserved.</p>
+              <p className="text-xs text-gray-400">© 2025 Surrogacy CRM. All rights reserved.</p>
             </div>
           </div>
         </CardContent>
