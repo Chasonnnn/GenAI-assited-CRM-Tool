@@ -15,8 +15,8 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { RichTextEditor } from "@/components/rich-text-editor"
 import {
     PlusIcon,
     MoreVerticalIcon,
@@ -31,6 +31,9 @@ import { useCase, useCaseHistory, useChangeStatus, useArchiveCase, useRestoreCas
 import { useNotes, useCreateNote, useDeleteNote } from "@/lib/hooks/use-notes"
 import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-tasks"
 import { STATUS_CONFIG, type CaseStatus } from "@/lib/types/case"
+import type { NoteRead } from "@/lib/types/note"
+import type { TaskListItem } from "@/lib/types/task"
+import type { CaseStatusHistory } from "@/lib/api/cases"
 
 // Format date for display
 function formatDateTime(dateString: string): string {
@@ -77,7 +80,6 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
     const { id } = use(params)
     const router = useRouter()
     const [copiedEmail, setCopiedEmail] = React.useState(false)
-    const [newNote, setNewNote] = React.useState("")
 
     // Fetch data
     const { data: caseData, isLoading, error } = useCase(id)
@@ -115,10 +117,9 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
         await restoreMutation.mutateAsync(id)
     }
 
-    const handleAddNote = async () => {
-        if (!newNote.trim()) return
-        await createNoteMutation.mutateAsync({ caseId: id, body: newNote })
-        setNewNote("")
+    const handleAddNote = async (html: string) => {
+        if (!html || html === '<p></p>') return
+        await createNoteMutation.mutateAsync({ caseId: id, body: html })
     }
 
     const handleDeleteNote = async (noteId: string) => {
@@ -180,7 +181,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
                             }
                         />
                         <DropdownMenuContent align="end">
-                            {STATUS_OPTIONS.map((status) => {
+                            {STATUS_OPTIONS.map((status: CaseStatus) => {
                                 const config = STATUS_CONFIG[status]
                                 return (
                                     <DropdownMenuItem
@@ -344,20 +345,12 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
                         <Card>
                             <CardContent className="pt-6">
                                 <div className="space-y-4">
-                                    <div className="flex gap-2">
-                                        <Textarea
-                                            placeholder="Add a note..."
-                                            className="min-h-24"
-                                            value={newNote}
-                                            onChange={(e) => setNewNote(e.target.value)}
-                                        />
-                                        <Button
-                                            onClick={handleAddNote}
-                                            disabled={!newNote.trim() || createNoteMutation.isPending}
-                                        >
-                                            {createNoteMutation.isPending ? 'Adding...' : 'Submit'}
-                                        </Button>
-                                    </div>
+                                    <RichTextEditor
+                                        placeholder="Add a note..."
+                                        onSubmit={handleAddNote}
+                                        submitLabel="Add Note"
+                                        isSubmitting={createNoteMutation.isPending}
+                                    />
 
                                     {notes && notes.length > 0 ? (
                                         <div className="space-y-4 border-t pt-4">
