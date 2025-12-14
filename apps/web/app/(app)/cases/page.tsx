@@ -1,123 +1,87 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { PlusIcon, MoreVerticalIcon, SearchIcon, XIcon } from "lucide-react"
+import { PlusIcon, MoreVerticalIcon, SearchIcon, XIcon, LoaderIcon } from "lucide-react"
+import { useCases, useArchiveCase, useRestoreCase } from "@/lib/hooks/use-cases"
+import { STATUS_CONFIG, type CaseStatus, type CaseSource } from "@/lib/types/case"
 
-// Sample data - TODO: Replace with API data
-const cases = [
-    {
-        id: "00042",
-        name: "Sarah Johnson",
-        status: "In Process",
-        source: "Meta",
-        assignee: { name: "Emily Chen", avatar: "/avatars/emily.jpg", initials: "EC" },
-        created: "2 days ago",
-    },
-    {
-        id: "00041",
-        name: "Michael Thompson",
-        status: "Contacted",
-        source: "Manual",
-        assignee: { name: "John Smith", avatar: "/avatars/john.jpg", initials: "JS" },
-        created: "3 days ago",
-    },
-    {
-        id: "00040",
-        name: "Amanda Rodriguez",
-        status: "Matched",
-        source: "Import",
-        assignee: { name: "Emily Chen", avatar: "/avatars/emily.jpg", initials: "EC" },
-        created: "5 days ago",
-    },
-    {
-        id: "00039",
-        name: "Jessica Williams",
-        status: "Qualified",
-        source: "Meta",
-        assignee: { name: "Sarah Davis", avatar: "/avatars/sarah.jpg", initials: "SD" },
-        created: "1 week ago",
-    },
-    {
-        id: "00038",
-        name: "David Martinez",
-        status: "New",
-        source: "Manual",
-        assignee: { name: "John Smith", avatar: "/avatars/john.jpg", initials: "JS" },
-        created: "1 week ago",
-    },
-    {
-        id: "00037",
-        name: "Jennifer Lee",
-        status: "On Hold",
-        source: "Import",
-        assignee: { name: "Emily Chen", avatar: "/avatars/emily.jpg", initials: "EC" },
-        created: "2 weeks ago",
-    },
-    {
-        id: "00036",
-        name: "Robert Anderson",
-        status: "In Process",
-        source: "Meta",
-        assignee: { name: "Sarah Davis", avatar: "/avatars/sarah.jpg", initials: "SD" },
-        created: "2 weeks ago",
-    },
-    {
-        id: "00035",
-        name: "Maria Garcia",
-        status: "Contacted",
-        source: "Manual",
-        assignee: { name: "John Smith", avatar: "/avatars/john.jpg", initials: "JS" },
-        created: "3 weeks ago",
-    },
-    {
-        id: "00034",
-        name: "Christopher Brown",
-        status: "Archived",
-        source: "Import",
-        assignee: { name: "Emily Chen", avatar: "/avatars/emily.jpg", initials: "EC" },
-        created: "1 month ago",
-    },
-    {
-        id: "00033",
-        name: "Lisa Taylor",
-        status: "Qualified",
-        source: "Meta",
-        assignee: { name: "Sarah Davis", avatar: "/avatars/sarah.jpg", initials: "SD" },
-        created: "1 month ago",
-    },
-]
+// Format date for display
+function formatDate(dateString: string): string {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
-const statusColors: Record<string, string> = {
-    New: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-    Contacted: "bg-teal-500/10 text-teal-500 border-teal-500/20",
-    Qualified: "bg-green-500/10 text-green-500 border-green-500/20",
-    "In Process": "bg-amber-500/10 text-amber-500 border-amber-500/20",
-    Matched: "bg-purple-500/10 text-purple-500 border-purple-500/20",
-    "On Hold": "bg-gray-500/10 text-gray-400 border-gray-500/20",
-    Archived: "bg-slate-500/10 text-slate-400 border-slate-500/20",
+    if (diffDays === 0) return "Today"
+    if (diffDays === 1) return "Yesterday"
+    if (diffDays < 7) return `${diffDays} days ago`
+    if (diffDays < 14) return "1 week ago"
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`
+    if (diffDays < 60) return "1 month ago"
+    return `${Math.floor(diffDays / 30)} months ago`
+}
+
+// Get initials from name
+function getInitials(name: string | null): string {
+    if (!name) return "?"
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
 export default function CasesPage() {
-    const [statusFilter, setStatusFilter] = useState("all")
-    const [sourceFilter, setSourceFilter] = useState("all")
+    const [statusFilter, setStatusFilter] = useState<CaseStatus | "all">("all")
+    const [sourceFilter, setSourceFilter] = useState<CaseSource | "all">("all")
     const [searchQuery, setSearchQuery] = useState("")
+    const [debouncedSearch, setDebouncedSearch] = useState("")
+    const [page, setPage] = useState(1)
+    const perPage = 20
+
+    // Debounce search input
+    useEffect(() => {
+        const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300)
+        return () => clearTimeout(timer)
+    }, [searchQuery])
+
+    // Reset page when filters change
+    useEffect(() => {
+        setPage(1)
+    }, [statusFilter, sourceFilter, debouncedSearch])
+
+    // Fetch cases with filters
+    const { data, isLoading, error } = useCases({
+        page,
+        per_page: perPage,
+        status: statusFilter === "all" ? undefined : statusFilter,
+        source: sourceFilter === "all" ? undefined : sourceFilter,
+        q: debouncedSearch || undefined,
+    })
+
+    const archiveMutation = useArchiveCase()
+    const restoreMutation = useRestoreCase()
 
     const hasActiveFilters = statusFilter !== "all" || sourceFilter !== "all" || searchQuery !== ""
 
-    const resetFilters = () => {
+    const resetFilters = useCallback(() => {
         setStatusFilter("all")
         setSourceFilter("all")
         setSearchQuery("")
+    }, [])
+
+    const handleArchive = async (caseId: string) => {
+        await archiveMutation.mutateAsync(caseId)
+    }
+
+    const handleRestore = async (caseId: string) => {
+        await restoreMutation.mutateAsync(caseId)
     }
 
     return (
@@ -137,23 +101,25 @@ export default function CasesPage() {
             <div className="flex-1 space-y-4 p-6">
                 {/* Filters Row */}
                 <div className="flex flex-wrap items-center gap-3">
-                    <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value || "all")}>
+                    <Select value={statusFilter} onValueChange={(value) => setStatusFilter((value || "all") as CaseStatus | "all")}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="All Statuses" />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All Statuses</SelectItem>
-                            <SelectItem value="new">New</SelectItem>
+                            <SelectItem value="new_unread">New</SelectItem>
                             <SelectItem value="contacted">Contacted</SelectItem>
-                            <SelectItem value="qualified">Qualified</SelectItem>
-                            <SelectItem value="in-process">In Process</SelectItem>
+                            <SelectItem value="phone_screened">Phone Screened</SelectItem>
+                            <SelectItem value="pending_questionnaire">Pending Questionnaire</SelectItem>
+                            <SelectItem value="pending_approval">Pending Approval</SelectItem>
+                            <SelectItem value="approved">Approved</SelectItem>
+                            <SelectItem value="pending_match">Pending Match</SelectItem>
                             <SelectItem value="matched">Matched</SelectItem>
-                            <SelectItem value="on-hold">On Hold</SelectItem>
-                            <SelectItem value="archived">Archived</SelectItem>
+                            <SelectItem value="disqualified">Disqualified</SelectItem>
                         </SelectContent>
                     </Select>
 
-                    <Select value={sourceFilter} onValueChange={(value) => setSourceFilter(value || "all")}>
+                    <Select value={sourceFilter} onValueChange={(value) => setSourceFilter((value || "all") as CaseSource | "all")}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="All Sources" />
                         </SelectTrigger>
@@ -183,101 +149,158 @@ export default function CasesPage() {
                     )}
                 </div>
 
-                {/* Table Card */}
-                <Card className="overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <Table className="min-w-[700px]">
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Case #</TableHead>
-                                    <TableHead>Name</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Source</TableHead>
-                                    <TableHead>Assignee</TableHead>
-                                    <TableHead>Created</TableHead>
-                                    <TableHead className="w-[50px]">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {cases.map((caseItem) => (
-                                    <TableRow key={caseItem.id}>
-                                        <TableCell>
-                                            <Link href={`/cases/${caseItem.id}`} className="font-medium text-primary hover:underline">
-                                                #{caseItem.id}
-                                            </Link>
-                                        </TableCell>
-                                        <TableCell className="font-medium">{caseItem.name}</TableCell>
-                                        <TableCell>
-                                            <Badge variant="secondary" className={statusColors[caseItem.status]}>
-                                                {caseItem.status}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant="secondary">{caseItem.source}</Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                            <TooltipProvider>
-                                                <Tooltip>
-                                                    <TooltipTrigger>
-                                                        <Avatar className="size-8">
-                                                            <AvatarImage src={caseItem.assignee.avatar || "/placeholder.svg"} />
-                                                            <AvatarFallback>{caseItem.assignee.initials}</AvatarFallback>
-                                                        </Avatar>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p>{caseItem.assignee.name}</p>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-                                        </TableCell>
-                                        <TableCell className="text-muted-foreground">{caseItem.created}</TableCell>
-                                        <TableCell>
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger
-                                                    render={
-                                                        <Button variant="ghost" size="sm" className="size-8 p-0">
-                                                            <MoreVerticalIcon className="size-4" />
-                                                            <span className="sr-only">Open menu</span>
-                                                        </Button>
-                                                    }
-                                                />
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem>
-                                                        <Link href={`/cases/${caseItem.id}`} className="w-full">View</Link>
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem>Edit</DropdownMenuItem>
-                                                    <DropdownMenuItem>Archive</DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </div>
+                {/* Error State */}
+                {error && (
+                    <Card className="p-6 text-center text-destructive">
+                        Error loading cases: {error.message}
+                    </Card>
+                )}
 
-                    {/* Pagination */}
-                    <div className="flex items-center justify-between border-t border-border px-6 py-4">
-                        <div className="text-sm text-muted-foreground">Showing 1-10 of 156 cases</div>
-                        <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" disabled>
-                                Previous
-                            </Button>
-                            <Button variant="outline" size="sm" className="bg-primary/10 text-primary">
-                                1
-                            </Button>
-                            <Button variant="outline" size="sm">
-                                2
-                            </Button>
-                            <Button variant="outline" size="sm">
-                                3
-                            </Button>
-                            <Button variant="outline" size="sm">
-                                Next
-                            </Button>
+                {/* Loading State */}
+                {isLoading && (
+                    <Card className="flex items-center justify-center p-12">
+                        <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
+                        <span className="ml-2 text-muted-foreground">Loading cases...</span>
+                    </Card>
+                )}
+
+                {/* Table Card */}
+                {!isLoading && !error && data && (
+                    <Card className="overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <Table className="min-w-[700px]">
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Case #</TableHead>
+                                        <TableHead>Name</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead>Source</TableHead>
+                                        <TableHead>Assignee</TableHead>
+                                        <TableHead>Created</TableHead>
+                                        <TableHead className="w-[50px]">Actions</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {data.items.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                                                No cases found
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        data.items.map((caseItem) => {
+                                            const statusConfig = STATUS_CONFIG[caseItem.status] || { label: caseItem.status, color: 'bg-gray-500' }
+                                            return (
+                                                <TableRow key={caseItem.id}>
+                                                    <TableCell>
+                                                        <Link href={`/cases/${caseItem.id}`} className="font-medium text-primary hover:underline">
+                                                            #{caseItem.case_number}
+                                                        </Link>
+                                                    </TableCell>
+                                                    <TableCell className="font-medium">{caseItem.full_name}</TableCell>
+                                                    <TableCell>
+                                                        <Badge variant="secondary" className={`${statusConfig.color} text-white`}>
+                                                            {statusConfig.label}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge variant="secondary" className="capitalize">{caseItem.source}</Badge>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {caseItem.assigned_to_name ? (
+                                                            <TooltipProvider>
+                                                                <Tooltip>
+                                                                    <TooltipTrigger>
+                                                                        <Avatar className="size-8">
+                                                                            <AvatarFallback>{getInitials(caseItem.assigned_to_name)}</AvatarFallback>
+                                                                        </Avatar>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent>
+                                                                        <p>{caseItem.assigned_to_name}</p>
+                                                                    </TooltipContent>
+                                                                </Tooltip>
+                                                            </TooltipProvider>
+                                                        ) : (
+                                                            <span className="text-muted-foreground text-sm">Unassigned</span>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="text-muted-foreground">{formatDate(caseItem.created_at)}</TableCell>
+                                                    <TableCell>
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger
+                                                                render={
+                                                                    <Button variant="ghost" size="sm" className="size-8 p-0">
+                                                                        <MoreVerticalIcon className="size-4" />
+                                                                        <span className="sr-only">Open menu</span>
+                                                                    </Button>
+                                                                }
+                                                            />
+                                                            <DropdownMenuContent align="end">
+                                                                <DropdownMenuItem>
+                                                                    <Link href={`/cases/${caseItem.id}`} className="w-full">View</Link>
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem>Edit</DropdownMenuItem>
+                                                                {caseItem.is_archived ? (
+                                                                    <DropdownMenuItem onClick={() => handleRestore(caseItem.id)}>
+                                                                        Restore
+                                                                    </DropdownMenuItem>
+                                                                ) : (
+                                                                    <DropdownMenuItem onClick={() => handleArchive(caseItem.id)}>
+                                                                        Archive
+                                                                    </DropdownMenuItem>
+                                                                )}
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )
+                                        })
+                                    )}
+                                </TableBody>
+                            </Table>
                         </div>
-                    </div>
-                </Card>
+
+                        {/* Pagination */}
+                        <div className="flex items-center justify-between border-t border-border px-6 py-4">
+                            <div className="text-sm text-muted-foreground">
+                                Showing {((page - 1) * perPage) + 1}-{Math.min(page * perPage, data.total)} of {data.total} cases
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={page === 1}
+                                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                                >
+                                    Previous
+                                </Button>
+                                {Array.from({ length: Math.min(5, data.pages) }, (_, i) => {
+                                    const pageNum = i + 1
+                                    return (
+                                        <Button
+                                            key={pageNum}
+                                            variant="outline"
+                                            size="sm"
+                                            className={page === pageNum ? "bg-primary/10 text-primary" : ""}
+                                            onClick={() => setPage(pageNum)}
+                                        >
+                                            {pageNum}
+                                        </Button>
+                                    )
+                                })}
+                                {data.pages > 5 && <span className="text-muted-foreground">...</span>}
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={page >= data.pages}
+                                    onClick={() => setPage(p => Math.min(data.pages, p + 1))}
+                                >
+                                    Next
+                                </Button>
+                            </div>
+                        </div>
+                    </Card>
+                )}
             </div>
         </div>
     )
