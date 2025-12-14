@@ -1,155 +1,208 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { PlusIcon, SearchIcon } from "lucide-react"
+import { PlusIcon, SearchIcon, LoaderIcon } from "lucide-react"
+import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-tasks"
+import type { TaskListItem } from "@/lib/types/task"
 
-// Sample data - TODO: Replace with API data
-const tasks = [
-    // Overdue
-    {
-        id: "1",
-        title: "Follow up with Case #00042",
-        caseId: "00042",
-        status: "overdue",
-        assignee: { name: "Emily Chen", avatar: "/avatars/emily.jpg", initials: "EC" },
-        completed: false,
-    },
-    {
-        id: "2",
-        title: "Review questionnaire for Case #00038",
-        caseId: "00038",
-        status: "overdue",
-        assignee: { name: "John Smith", avatar: "/avatars/john.jpg", initials: "JS" },
-        completed: false,
-    },
-    // Today
-    {
-        id: "3",
-        title: "Schedule medical consultation",
-        caseId: "00042",
-        status: "today",
-        assignee: { name: "Emily Chen", avatar: "/avatars/emily.jpg", initials: "EC" },
-        completed: false,
-    },
-    {
-        id: "4",
-        title: "Update contact information",
-        caseId: "00039",
-        status: "today",
-        assignee: { name: "Sarah Davis", avatar: "/avatars/sarah.jpg", initials: "SD" },
-        completed: false,
-    },
-    {
-        id: "5",
-        title: "Send welcome packet",
-        caseId: "00041",
-        status: "today",
-        assignee: { name: "John Smith", avatar: "/avatars/john.jpg", initials: "JS" },
-        completed: false,
-    },
-    // Tomorrow
-    {
-        id: "6",
-        title: "Prepare contract documents",
-        caseId: "00045",
-        status: "tomorrow",
-        assignee: { name: "Emily Chen", avatar: "/avatars/emily.jpg", initials: "EC" },
-        completed: false,
-    },
-    {
-        id: "7",
-        title: "Schedule follow-up call",
-        caseId: "00038",
-        status: "tomorrow",
-        assignee: { name: "Sarah Davis", avatar: "/avatars/sarah.jpg", initials: "SD" },
-        completed: false,
-    },
-    // Next Week
-    {
-        id: "8",
-        title: "Review application documents",
-        caseId: "00040",
-        status: "next-week",
-        assignee: { name: "John Smith", avatar: "/avatars/john.jpg", initials: "JS" },
-        completed: false,
-    },
-    {
-        id: "9",
-        title: "Coordinate with legal team",
-        caseId: "00042",
-        status: "next-week",
-        assignee: { name: "Emily Chen", avatar: "/avatars/emily.jpg", initials: "EC" },
-        completed: false,
-    },
-    {
-        id: "10",
-        title: "Submit background check",
-        caseId: "00039",
-        status: "next-week",
-        assignee: { name: "Sarah Davis", avatar: "/avatars/sarah.jpg", initials: "SD" },
-        completed: false,
-    },
-]
-
-const completedTasks = [
-    {
-        id: "c1",
-        title: "Complete initial screening",
-        caseId: "00042",
-        status: "completed",
-        assignee: { name: "Emily Chen", avatar: "/avatars/emily.jpg", initials: "EC" },
-        completed: true,
-    },
-    {
-        id: "c2",
-        title: "Send confirmation email",
-        caseId: "00041",
-        status: "completed",
-        assignee: { name: "John Smith", avatar: "/avatars/john.jpg", initials: "JS" },
-        completed: true,
-    },
-    {
-        id: "c3",
-        title: "Review medical records",
-        caseId: "00039",
-        status: "completed",
-        assignee: { name: "Sarah Davis", avatar: "/avatars/sarah.jpg", initials: "SD" },
-        completed: true,
-    },
-]
-
-const statusBadgeColors: Record<string, string> = {
-    overdue: "bg-destructive/10 text-destructive border-destructive/20",
-    today: "bg-amber-500/10 text-amber-500 border-amber-500/20",
-    tomorrow: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-    "next-week": "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20",
+// Get initials from name
+function getInitials(name: string | null): string {
+    if (!name) return "?"
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
-const statusLabels: Record<string, string> = {
-    overdue: "Overdue",
-    today: "Today",
-    tomorrow: "Tomorrow",
-    "next-week": "Next Week",
+// Check if task is overdue
+function isOverdue(dueDate: string | null): boolean {
+    if (!dueDate) return false
+    return new Date(dueDate) < new Date()
+}
+
+// Check if task is due today
+function isDueToday(dueDate: string | null): boolean {
+    if (!dueDate) return false
+    const due = new Date(dueDate)
+    const today = new Date()
+    return due.toDateString() === today.toDateString()
+}
+
+// Check if task is due tomorrow
+function isDueTomorrow(dueDate: string | null): boolean {
+    if (!dueDate) return false
+    const due = new Date(dueDate)
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    return due.toDateString() === tomorrow.toDateString()
+}
+
+// Check if task is due this week
+function isDueThisWeek(dueDate: string | null): boolean {
+    if (!dueDate) return false
+    const due = new Date(dueDate)
+    const today = new Date()
+    const endOfWeek = new Date(today)
+    endOfWeek.setDate(today.getDate() + 7)
+    return due > today && due <= endOfWeek && !isDueToday(dueDate) && !isDueTomorrow(dueDate)
+}
+
+type DueCategory = 'overdue' | 'today' | 'tomorrow' | 'this-week' | 'later' | 'no-date'
+
+function getDueCategory(task: TaskListItem): DueCategory {
+    if (!task.due_date) return 'no-date'
+    if (isOverdue(task.due_date)) return 'overdue'
+    if (isDueToday(task.due_date)) return 'today'
+    if (isDueTomorrow(task.due_date)) return 'tomorrow'
+    if (isDueThisWeek(task.due_date)) return 'this-week'
+    return 'later'
+}
+
+const categoryLabels: Record<DueCategory, string> = {
+    overdue: 'Overdue',
+    today: 'Today',
+    tomorrow: 'Tomorrow',
+    'this-week': 'This Week',
+    later: 'Later',
+    'no-date': 'No Due Date',
+}
+
+const categoryColors: Record<DueCategory, { text: string; badge: string }> = {
+    overdue: { text: 'text-destructive', badge: 'bg-destructive/10 text-destructive border-destructive/20' },
+    today: { text: 'text-amber-500', badge: 'bg-amber-500/10 text-amber-500 border-amber-500/20' },
+    tomorrow: { text: 'text-blue-500', badge: 'bg-blue-500/10 text-blue-500 border-blue-500/20' },
+    'this-week': { text: 'text-muted-foreground', badge: 'bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20' },
+    later: { text: 'text-muted-foreground', badge: 'bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20' },
+    'no-date': { text: 'text-muted-foreground', badge: 'bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20' },
 }
 
 export default function TasksPage() {
-    const [filter, setFilter] = useState<"all" | "assigned" | "unassigned">("all")
+    const [filter, setFilter] = useState<"all" | "my_tasks">("my_tasks")
     const [searchQuery, setSearchQuery] = useState("")
+    const [debouncedSearch, setDebouncedSearch] = useState("")
     const [showCompleted, setShowCompleted] = useState(false)
 
-    // Group tasks by status
-    const overdueItems = tasks.filter((t) => t.status === "overdue")
-    const todayItems = tasks.filter((t) => t.status === "today")
-    const tomorrowItems = tasks.filter((t) => t.status === "tomorrow")
-    const nextWeekItems = tasks.filter((t) => t.status === "next-week")
+    // Debounce search
+    useEffect(() => {
+        const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300)
+        return () => clearTimeout(timer)
+    }, [searchQuery])
+
+    // Fetch incomplete tasks
+    const { data: incompleteTasks, isLoading: loadingIncomplete } = useTasks({
+        my_tasks: filter === "my_tasks",
+        is_completed: false,
+        q: debouncedSearch || undefined,
+        per_page: 100,
+    })
+
+    // Fetch completed tasks (only when shown)
+    const { data: completedTasks, isLoading: loadingCompleted } = useTasks({
+        my_tasks: filter === "my_tasks",
+        is_completed: true,
+        q: debouncedSearch || undefined,
+        per_page: 50,
+    })
+
+    const completeTask = useCompleteTask()
+    const uncompleteTask = useUncompleteTask()
+
+    const handleTaskToggle = async (taskId: string, isCompleted: boolean) => {
+        if (isCompleted) {
+            await uncompleteTask.mutateAsync(taskId)
+        } else {
+            await completeTask.mutateAsync(taskId)
+        }
+    }
+
+    // Group tasks by due category
+    const groupedTasks = {
+        overdue: [] as TaskListItem[],
+        today: [] as TaskListItem[],
+        tomorrow: [] as TaskListItem[],
+        'this-week': [] as TaskListItem[],
+        later: [] as TaskListItem[],
+        'no-date': [] as TaskListItem[],
+    }
+
+    incompleteTasks?.items.forEach((task: TaskListItem) => {
+        const category = getDueCategory(task)
+        groupedTasks[category].push(task)
+    })
+
+    const renderTaskItem = (task: TaskListItem, showCategory = true) => {
+        const category = getDueCategory(task)
+        const colors = categoryColors[category]
+
+        return (
+            <div
+                key={task.id}
+                className={`flex items-start gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-accent/50 ${task.is_completed ? 'opacity-60' : ''}`}
+            >
+                <Checkbox
+                    className="mt-0.5"
+                    checked={task.is_completed}
+                    onCheckedChange={() => handleTaskToggle(task.id, task.is_completed)}
+                />
+                <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-2">
+                        <span className={`font-medium ${task.is_completed ? 'line-through' : ''}`}>{task.title}</span>
+                        {showCategory && !task.is_completed && (
+                            <Badge variant="secondary" className={colors.badge}>
+                                {categoryLabels[category]}
+                            </Badge>
+                        )}
+                    </div>
+                    {task.case_id && (
+                        <Link href={`/cases/${task.case_id}`} className="text-sm text-muted-foreground hover:underline">
+                            Case #{task.case_number}
+                        </Link>
+                    )}
+                </div>
+                {task.assigned_to_name && (
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger>
+                                <Avatar className="size-8">
+                                    <AvatarFallback>{getInitials(task.assigned_to_name)}</AvatarFallback>
+                                </Avatar>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>{task.assigned_to_name}</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                )}
+            </div>
+        )
+    }
+
+    const renderSection = (category: DueCategory, tasks: TaskListItem[]) => {
+        if (tasks.length === 0) return null
+        const colors = categoryColors[category]
+
+        return (
+            <div key={category} className="space-y-3">
+                <div className="flex items-center gap-3">
+                    <div className={`h-px flex-1 ${category === 'overdue' ? 'bg-destructive' : 'bg-border'}`} />
+                    <h3 className={`text-sm font-medium ${colors.text}`}>
+                        {categoryLabels[category]} ({tasks.length})
+                    </h3>
+                    <div className={`h-px flex-1 ${category === 'overdue' ? 'bg-destructive' : 'bg-border'}`} />
+                </div>
+                <div className="space-y-2">
+                    {tasks.map(task => renderTaskItem(task, false))}
+                </div>
+            </div>
+        )
+    }
+
+    const isLoading = loadingIncomplete
 
     return (
         <div className="flex min-h-screen flex-col">
@@ -157,7 +210,7 @@ export default function TasksPage() {
             <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <div className="flex h-16 items-center justify-between px-6">
                     <h1 className="text-2xl font-semibold">Tasks</h1>
-                    <Button>
+                    <Button disabled>
                         <PlusIcon className="mr-2 size-4" />
                         Add Task
                     </Button>
@@ -169,22 +222,19 @@ export default function TasksPage() {
                 {/* Filters Row */}
                 <div className="flex flex-wrap items-center gap-3">
                     <div className="flex gap-2">
-                        <Button variant={filter === "all" ? "secondary" : "ghost"} size="sm" onClick={() => setFilter("all")}>
-                            All
+                        <Button
+                            variant={filter === "my_tasks" ? "secondary" : "ghost"}
+                            size="sm"
+                            onClick={() => setFilter("my_tasks")}
+                        >
+                            My Tasks
                         </Button>
                         <Button
-                            variant={filter === "assigned" ? "secondary" : "ghost"}
+                            variant={filter === "all" ? "secondary" : "ghost"}
                             size="sm"
-                            onClick={() => setFilter("assigned")}
+                            onClick={() => setFilter("all")}
                         >
-                            Assigned to Me
-                        </Button>
-                        <Button
-                            variant={filter === "unassigned" ? "secondary" : "ghost"}
-                            size="sm"
-                            onClick={() => setFilter("unassigned")}
-                        >
-                            Unassigned
+                            All Tasks
                         </Button>
                     </div>
 
@@ -199,237 +249,61 @@ export default function TasksPage() {
                     </div>
                 </div>
 
+                {/* Loading State */}
+                {isLoading && (
+                    <Card className="flex items-center justify-center p-12">
+                        <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
+                        <span className="ml-2 text-muted-foreground">Loading tasks...</span>
+                    </Card>
+                )}
+
                 {/* Tasks Card */}
-                <Card className="p-6">
-                    <div className="space-y-6">
-                        {/* Overdue Section */}
-                        {overdueItems.length > 0 && (
-                            <div className="space-y-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="h-px flex-1 bg-destructive" />
-                                    <h3 className="text-sm font-medium text-destructive">Overdue</h3>
-                                    <div className="h-px flex-1 bg-destructive" />
-                                </div>
-                                <div className="space-y-2">
-                                    {overdueItems.map((task) => (
-                                        <div
-                                            key={task.id}
-                                            className="flex items-start gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-accent/50"
-                                        >
-                                            <Checkbox className="mt-0.5" />
-                                            <div className="flex-1 space-y-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-medium">{task.title}</span>
-                                                    <Badge variant="secondary" className={statusBadgeColors[task.status]}>
-                                                        {statusLabels[task.status]}
-                                                    </Badge>
-                                                </div>
-                                                <Link href={`/cases/${task.caseId}`} className="text-sm text-muted-foreground hover:underline">
-                                                    Case #{task.caseId}
-                                                </Link>
-                                            </div>
-                                            <TooltipProvider>
-                                                <Tooltip>
-                                                    <TooltipTrigger>
-                                                        <Avatar className="size-8">
-                                                            <AvatarImage src={task.assignee.avatar || "/placeholder.svg"} />
-                                                            <AvatarFallback>{task.assignee.initials}</AvatarFallback>
-                                                        </Avatar>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p>{task.assignee.name}</p>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
+                {!isLoading && (
+                    <Card className="p-6">
+                        <div className="space-y-6">
+                            {/* Task sections by due date */}
+                            {renderSection('overdue', groupedTasks.overdue)}
+                            {renderSection('today', groupedTasks.today)}
+                            {renderSection('tomorrow', groupedTasks.tomorrow)}
+                            {renderSection('this-week', groupedTasks['this-week'])}
+                            {renderSection('later', groupedTasks.later)}
+                            {renderSection('no-date', groupedTasks['no-date'])}
 
-                        {/* Today Section */}
-                        {todayItems.length > 0 && (
-                            <div className="space-y-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="h-px flex-1 bg-border" />
-                                    <h3 className="text-sm font-medium text-amber-500">Today</h3>
-                                    <div className="h-px flex-1 bg-border" />
-                                </div>
-                                <div className="space-y-2">
-                                    {todayItems.map((task) => (
-                                        <div
-                                            key={task.id}
-                                            className="flex items-start gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-accent/50"
-                                        >
-                                            <Checkbox className="mt-0.5" />
-                                            <div className="flex-1 space-y-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-medium">{task.title}</span>
-                                                    <Badge variant="secondary" className={statusBadgeColors[task.status]}>
-                                                        {statusLabels[task.status]}
-                                                    </Badge>
-                                                </div>
-                                                <Link href={`/cases/${task.caseId}`} className="text-sm text-muted-foreground hover:underline">
-                                                    Case #{task.caseId}
-                                                </Link>
-                                            </div>
-                                            <TooltipProvider>
-                                                <Tooltip>
-                                                    <TooltipTrigger>
-                                                        <Avatar className="size-8">
-                                                            <AvatarImage src={task.assignee.avatar || "/placeholder.svg"} />
-                                                            <AvatarFallback>{task.assignee.initials}</AvatarFallback>
-                                                        </Avatar>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p>{task.assignee.name}</p>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Tomorrow Section */}
-                        {tomorrowItems.length > 0 && (
-                            <div className="space-y-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="h-px flex-1 bg-border" />
-                                    <h3 className="text-sm font-medium text-muted-foreground">Tomorrow</h3>
-                                    <div className="h-px flex-1 bg-border" />
-                                </div>
-                                <div className="space-y-2">
-                                    {tomorrowItems.map((task) => (
-                                        <div
-                                            key={task.id}
-                                            className="flex items-start gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-accent/50"
-                                        >
-                                            <Checkbox className="mt-0.5" />
-                                            <div className="flex-1 space-y-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-medium">{task.title}</span>
-                                                    <Badge variant="secondary" className={statusBadgeColors[task.status]}>
-                                                        {statusLabels[task.status]}
-                                                    </Badge>
-                                                </div>
-                                                <Link href={`/cases/${task.caseId}`} className="text-sm text-muted-foreground hover:underline">
-                                                    Case #{task.caseId}
-                                                </Link>
-                                            </div>
-                                            <TooltipProvider>
-                                                <Tooltip>
-                                                    <TooltipTrigger>
-                                                        <Avatar className="size-8">
-                                                            <AvatarImage src={task.assignee.avatar || "/placeholder.svg"} />
-                                                            <AvatarFallback>{task.assignee.initials}</AvatarFallback>
-                                                        </Avatar>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p>{task.assignee.name}</p>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Next Week Section */}
-                        {nextWeekItems.length > 0 && (
-                            <div className="space-y-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="h-px flex-1 bg-border" />
-                                    <h3 className="text-sm font-medium text-muted-foreground">Next Week</h3>
-                                    <div className="h-px flex-1 bg-border" />
-                                </div>
-                                <div className="space-y-2">
-                                    {nextWeekItems.map((task) => (
-                                        <div
-                                            key={task.id}
-                                            className="flex items-start gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-accent/50"
-                                        >
-                                            <Checkbox className="mt-0.5" />
-                                            <div className="flex-1 space-y-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-medium">{task.title}</span>
-                                                    <Badge variant="secondary" className={statusBadgeColors[task.status]}>
-                                                        {statusLabels[task.status]}
-                                                    </Badge>
-                                                </div>
-                                                <Link href={`/cases/${task.caseId}`} className="text-sm text-muted-foreground hover:underline">
-                                                    Case #{task.caseId}
-                                                </Link>
-                                            </div>
-                                            <TooltipProvider>
-                                                <Tooltip>
-                                                    <TooltipTrigger>
-                                                        <Avatar className="size-8">
-                                                            <AvatarImage src={task.assignee.avatar || "/placeholder.svg"} />
-                                                            <AvatarFallback>{task.assignee.initials}</AvatarFallback>
-                                                        </Avatar>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p>{task.assignee.name}</p>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Completed Tasks Section */}
-                        <div className="border-t border-border pt-4">
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setShowCompleted(!showCompleted)}
-                                className="w-full justify-center"
-                            >
-                                {showCompleted ? "Hide" : "Show"} completed tasks ({completedTasks.length})
-                            </Button>
-
-                            {showCompleted && (
-                                <div className="mt-4 space-y-2">
-                                    {completedTasks.map((task) => (
-                                        <div
-                                            key={task.id}
-                                            className="flex items-start gap-3 rounded-lg border border-border p-3 opacity-60"
-                                        >
-                                            <Checkbox checked className="mt-0.5" />
-                                            <div className="flex-1 space-y-1">
-                                                <span className="font-medium line-through">{task.title}</span>
-                                                <Link
-                                                    href={`/cases/${task.caseId}`}
-                                                    className="block text-sm text-muted-foreground hover:underline"
-                                                >
-                                                    Case #{task.caseId}
-                                                </Link>
-                                            </div>
-                                            <TooltipProvider>
-                                                <Tooltip>
-                                                    <TooltipTrigger>
-                                                        <Avatar className="size-8">
-                                                            <AvatarImage src={task.assignee.avatar || "/placeholder.svg"} />
-                                                            <AvatarFallback>{task.assignee.initials}</AvatarFallback>
-                                                        </Avatar>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p>{task.assignee.name}</p>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-                                        </div>
-                                    ))}
-                                </div>
+                            {/* Empty state */}
+                            {incompleteTasks?.items.length === 0 && (
+                                <p className="text-center text-muted-foreground py-8">
+                                    No pending tasks. Nice work!
+                                </p>
                             )}
+
+                            {/* Completed Tasks Section */}
+                            <div className="border-t border-border pt-4">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setShowCompleted(!showCompleted)}
+                                    className="w-full justify-center"
+                                >
+                                    {showCompleted ? "Hide" : "Show"} completed tasks ({completedTasks?.total || 0})
+                                </Button>
+
+                                {showCompleted && completedTasks && (
+                                    <div className="mt-4 space-y-2">
+                                        {loadingCompleted ? (
+                                            <div className="flex items-center justify-center py-4">
+                                                <LoaderIcon className="size-4 animate-spin text-muted-foreground" />
+                                            </div>
+                                        ) : completedTasks.items.length === 0 ? (
+                                            <p className="text-center text-muted-foreground py-4">No completed tasks</p>
+                                        ) : (
+                                            completedTasks.items.map((task: TaskListItem) => renderTaskItem(task))
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                </Card>
+                    </Card>
+                )}
             </div>
         </div>
     )
