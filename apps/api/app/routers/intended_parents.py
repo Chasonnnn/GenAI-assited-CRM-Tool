@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_session, require_roles
+from app.core.deps import get_db, get_current_session, require_roles, require_csrf_header
 from app.db.enums import Role, IntendedParentStatus, EntityType
 from app.schemas.intended_parent import (
     IntendedParentCreate,
@@ -78,7 +78,7 @@ def get_stats(
 # CRUD
 # =============================================================================
 
-@router.post("", response_model=IntendedParentRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=IntendedParentRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_csrf_header)])
 def create_intended_parent(
     data: IntendedParentCreate,
     db: Session = Depends(get_db),
@@ -121,7 +121,7 @@ def get_intended_parent(
     return ip
 
 
-@router.patch("/{ip_id}", response_model=IntendedParentRead)
+@router.patch("/{ip_id}", response_model=IntendedParentRead, dependencies=[Depends(require_csrf_header)])
 def update_intended_parent(
     ip_id: UUID,
     data: IntendedParentUpdate,
@@ -161,7 +161,7 @@ def update_intended_parent(
 # Status / Archive / Restore / Delete
 # =============================================================================
 
-@router.patch("/{ip_id}/status", response_model=IntendedParentRead)
+@router.patch("/{ip_id}/status", response_model=IntendedParentRead, dependencies=[Depends(require_csrf_header)])
 def update_status(
     ip_id: UUID,
     data: IntendedParentStatusUpdate,
@@ -184,7 +184,7 @@ def update_status(
     return updated
 
 
-@router.post("/{ip_id}/archive", response_model=IntendedParentRead)
+@router.post("/{ip_id}/archive", response_model=IntendedParentRead, dependencies=[Depends(require_csrf_header)])
 def archive_intended_parent(
     ip_id: UUID,
     db: Session = Depends(get_db),
@@ -200,7 +200,7 @@ def archive_intended_parent(
     return ip_service.archive_intended_parent(db, ip, session.user_id)
 
 
-@router.post("/{ip_id}/restore", response_model=IntendedParentRead)
+@router.post("/{ip_id}/restore", response_model=IntendedParentRead, dependencies=[Depends(require_csrf_header)])
 def restore_intended_parent(
     ip_id: UUID,
     db: Session = Depends(get_db),
@@ -224,7 +224,7 @@ def restore_intended_parent(
     return ip_service.restore_intended_parent(db, ip, session.user_id)
 
 
-@router.delete("/{ip_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{ip_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_csrf_header)])
 def delete_intended_parent(
     ip_id: UUID,
     db: Session = Depends(get_db),
@@ -276,7 +276,7 @@ def list_notes(
     return note_service.list_entity_notes(db, session.org_id, EntityType.INTENDED_PARENT, ip_id)
 
 
-@router.post("/{ip_id}/notes", response_model=EntityNoteRead, status_code=status.HTTP_201_CREATED)
+@router.post("/{ip_id}/notes", response_model=EntityNoteRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_csrf_header)])
 def create_note(
     ip_id: UUID,
     data: EntityNoteCreate,
@@ -304,7 +304,7 @@ def create_note(
     return note
 
 
-@router.delete("/{ip_id}/notes/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{ip_id}/notes/{note_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_csrf_header)])
 def delete_note(
     ip_id: UUID,
     note_id: UUID,
