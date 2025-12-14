@@ -126,18 +126,63 @@ Frontend (using v0.dev + shadcn/ui)
 Deliverable
 ✓ Complete frontend UI with v0 design, ready for API integration
 
-Week 5 — Frontend-Backend Integration + Notes timeline
+Week 5 — Frontend-Backend Integration ✓ COMPLETE
 Backend
-- Generic notes table (organization_id + entity_type/entity_id)
-- status_history table (recommended): stores transitions for analytics and “last activity”
+✓ /cases/stats endpoint (total, by_status, this_week, this_month, pending_tasks)
+✓ XSS sanitization for notes using nh3 (allowed: p, br, strong, em, ul, ol, li, a, blockquote)
 Frontend
-- Notes timeline on lead detail
-- Quick add note form
-- “Last activity” column in leads table
+✓ API client layer (apps/web/lib/api/cases.ts, tasks.ts, notes.ts)
+✓ TypeScript types matching backend enums exactly
+✓ React Query hooks for all operations
+✓ Cases page wired to API:
+  ✓ Status/source filters
+  ✓ Debounced search (300ms)
+  ✓ Pagination
+  ✓ Archive/restore actions
+✓ Case detail page wired to API:
+  ✓ Contact info, demographics, eligibility from API
+  ✓ Status change dropdown (12 stages)
+  ✓ Notes tab with TipTap rich text editor
+  ✓ Tasks tab with complete/uncomplete
+  ✓ Status history timeline
+✓ Dashboard wired to API:
+  ✓ Stats cards from /cases/stats
+  ✓ My Tasks section with complete toggle
+  ✓ Cases by status breakdown
+✓ Tasks page wired to API:
+  ✓ My Tasks / All Tasks toggle
+  ✓ Grouped by due date (overdue, today, tomorrow, this week, later)
+  ✓ Complete/uncomplete toggle
+  ✓ Show/hide completed section
 Deliverable
-- Every lead has a clear history and audit trail
+✓ All frontend pages connected to real API data
 
-Week 5 — Workflow automation + email foundation (reminders/jobs/templates)
+═══════════════════════════════════════════════════════════════════════════════
+DEFERRED IMPROVEMENTS (Technical Debt / Future Enhancements)
+═══════════════════════════════════════════════════════════════════════════════
+
+Metadata API for Picklists (Week 10-11)
+- Problem: Status/source/type enums are duplicated in backend enums.py and frontend types
+- Solution: Add /metadata/statuses, /metadata/task-types endpoints
+  - Frontend fetches allowed values on load, populates dropdowns dynamically
+  - Single source of truth, no manual sync needed
+- Enables: Admin-managed picklists, versioned taxonomy with migration scripts
+
+Task Search (Week 10-11)
+- Problem: Backend /tasks endpoint has no search/filter by title/description
+- Solution: Add `q` query param to /tasks for server-side search
+  - Also add: due_before, due_after params for date filtering
+- Enables: Search UI in tasks page, better filtering for large task lists
+
+Case Inline Editing (Week 6+)
+- Problem: Case detail shows data but can't edit most fields inline
+- Solution: Inline editing for simple fields (name, email, phone)
+  - Modal for complex edits (demographics, eligibility)
+- Enables: Faster data entry without leaving the page
+
+═══════════════════════════════════════════════════════════════════════════════
+
+Week 5b — Workflow automation + email foundation (reminders/jobs/templates)
 Backend
 - Minimal job/outbox system (DB-backed) for:
   - scheduled reminders (follow-ups)
