@@ -38,23 +38,17 @@ export default function LoginPage() {
         background: "linear-gradient(135deg, #f8f9fa 0%, #f1f3f5 50%, #f8f9fa 100%)",
       }}
     >
-      {/* Soft watercolor blobs */}
+      {/* Soft watercolor blobs - purple bottom-left, pink top-right */}
       <div
-        className="absolute -left-20 top-1/4 w-[600px] h-[600px] rounded-full blur-3xl"
+        className="absolute -left-32 top-1/2 w-[600px] h-[600px] rounded-full blur-3xl"
         style={{
           background: "radial-gradient(circle, rgba(99, 102, 241, 0.6) 0%, rgba(139, 92, 246, 0.5) 40%, transparent 70%)",
         }}
       />
       <div
-        className="absolute -right-20 top-1/4 w-[500px] h-[500px] rounded-full blur-3xl"
+        className="absolute -right-32 top-0 w-[500px] h-[500px] rounded-full blur-3xl"
         style={{
           background: "radial-gradient(circle, rgba(236, 72, 153, 0.5) 0%, rgba(244, 114, 182, 0.4) 40%, transparent 70%)",
-        }}
-      />
-      <div
-        className="absolute left-1/3 -bottom-20 w-[400px] h-[400px] rounded-full blur-3xl"
-        style={{
-          background: "radial-gradient(circle, rgba(139, 92, 246, 0.4) 0%, transparent 60%)",
         }}
       />
       <Card
