@@ -101,6 +101,29 @@ class EmailStatus(str, Enum):
     FAILED = "failed"
 
 
+class IntendedParentStatus(str, Enum):
+    """
+    Intended Parent status workflow.
+    
+    new → in_review → matched → inactive
+    Plus archive/restore pseudo-statuses for history tracking.
+    """
+    NEW = "new"
+    IN_REVIEW = "in_review"
+    MATCHED = "matched"
+    INACTIVE = "inactive"
+    
+    # Archive pseudo-statuses (for history tracking)
+    ARCHIVED = "archived"
+    RESTORED = "restored"
+
+
+class EntityType(str, Enum):
+    """Entity types for polymorphic relationships (e.g., notes)."""
+    CASE = "case"
+    INTENDED_PARENT = "intended_parent"
+
+
 # =============================================================================
 # Centralized Defaults (keep models, services, migrations in sync)
 # =============================================================================
@@ -110,6 +133,7 @@ DEFAULT_CASE_SOURCE = CaseSource.MANUAL
 DEFAULT_TASK_TYPE = TaskType.OTHER
 DEFAULT_JOB_STATUS = JobStatus.PENDING
 DEFAULT_EMAIL_STATUS = EmailStatus.PENDING
+DEFAULT_IP_STATUS = IntendedParentStatus.NEW
 
 
 # =============================================================================
