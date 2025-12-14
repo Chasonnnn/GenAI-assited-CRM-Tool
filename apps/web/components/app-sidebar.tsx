@@ -40,6 +40,7 @@ import {
     LogOut,
     User,
     Bell,
+    Zap,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 
@@ -68,6 +69,11 @@ const navigation = [
         title: "Reports",
         url: "/reports",
         icon: BarChart3,
+    },
+    {
+        title: "Automation",
+        url: "/automation",
+        icon: Zap,
     },
     {
         title: "Settings",
