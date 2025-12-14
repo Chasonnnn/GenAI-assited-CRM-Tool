@@ -262,3 +262,16 @@ Open-source readiness
 - Decide license if/when you open-source (MIT/Apache/AGPL depending on goals)
 Deliverable
 - Safer, faster, production-ready behavior + clear path to a general OSS core
+
+Week 13 — User Theme Customization (Optional Enhancement)
+Frontend
+- Theme provider context (next-themes or custom)
+- 4-5 preset color themes (Teal, Blue, Purple, Rose, Orange)
+- Theme selector in Settings page
+- Store preference in localStorage + optionally user profile
+- Light/Dark mode toggle
+Backend (optional)
+- User settings table field for theme preference
+- Sync preference across devices
+Deliverable
+- Users can personalize the CRM appearance with preset themes
