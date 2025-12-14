@@ -2,7 +2,7 @@
  * Email Templates API client
  */
 
-import { api } from './base'
+import api from './index'
 
 // Types
 export interface EmailTemplate {

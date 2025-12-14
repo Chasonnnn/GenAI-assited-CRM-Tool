@@ -183,7 +183,7 @@ export default function IntendedParentsPage() {
                             className="pl-9"
                         />
                     </div>
-                    <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1) }}>
+                    <Select value={statusFilter} onValueChange={(v) => { if (v) { setStatusFilter(v); setPage(1) } }}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="All Statuses" />
                         </SelectTrigger>

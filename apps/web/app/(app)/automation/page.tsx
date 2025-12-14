@@ -180,8 +180,10 @@ export default function AutomationPage() {
         }
     }
 
-    const insertVariable = (variable: string) => {
-        setTemplateSubject((prev) => prev + variable)
+    const insertVariable = (variable: string | null) => {
+        if (variable) {
+            setTemplateSubject((prev) => prev + variable)
+        }
     }
 
     const formatDate = (dateStr: string) => {
@@ -254,7 +256,7 @@ export default function AutomationPage() {
                                                 onCheckedChange={() => handleToggle(automation.id)}
                                             />
                                             <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
+                                                <DropdownMenuTrigger>
                                                     <Button variant="ghost" size="sm" className="size-8 p-0">
                                                         <MoreVerticalIcon className="size-4" />
                                                         <span className="sr-only">Open menu</span>
@@ -314,7 +316,7 @@ export default function AutomationPage() {
                                                     <p className="mt-1 text-sm text-muted-foreground line-clamp-1">{template.subject}</p>
                                                 </div>
                                                 <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
+                                                    <DropdownMenuTrigger>
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
