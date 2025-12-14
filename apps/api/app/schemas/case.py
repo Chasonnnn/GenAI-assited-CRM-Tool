@@ -185,3 +185,12 @@ class CaseStatusHistoryRead(BaseModel):
     changed_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class CaseStats(BaseModel):
+    """Dashboard aggregation stats."""
+    total: int
+    by_status: dict[str, int]
+    this_week: int
+    this_month: int
+    pending_tasks: int = 0  # Cross-module, filled by router

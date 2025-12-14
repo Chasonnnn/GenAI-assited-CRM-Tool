@@ -339,3 +339,50 @@ def hard_delete_case(db: Session, case: Case) -> bool:
     db.delete(case)
     db.commit()
     return True
+
+
+def get_case_stats(db: Session, org_id: UUID) -> dict:
+    """
+    Get aggregated case statistics for dashboard.
+    
+    Returns:
+        dict with total, by_status, this_week, this_month
+    """
+    from datetime import timedelta
+    
+    now = datetime.now(timezone.utc)
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+    
+    # Base query for non-archived cases
+    base = db.query(Case).filter(
+        Case.organization_id == org_id,
+        Case.is_archived == False,
+    )
+    
+    # Total count
+    total = base.count()
+    
+    # Count by status
+    status_counts = db.query(
+        Case.status,
+        func.count(Case.id).label('count')
+    ).filter(
+        Case.organization_id == org_id,
+        Case.is_archived == False,
+    ).group_by(Case.status).all()
+    
+    by_status = {row.status: row.count for row in status_counts}
+    
+    # This week
+    this_week = base.filter(Case.created_at >= week_ago).count()
+    
+    # This month
+    this_month = base.filter(Case.created_at >= month_ago).count()
+    
+    return {
+        "total": total,
+        "by_status": by_status,
+        "this_week": this_week,
+        "this_month": this_month,
+    }
