@@ -1,15 +1,14 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { PlusIcon, SearchIcon, LoaderIcon } from "lucide-react"
+import { PlusIcon, LoaderIcon } from "lucide-react"
 import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-tasks"
 import type { TaskListItem } from "@/lib/types/task"
 
@@ -83,21 +82,12 @@ const categoryColors: Record<DueCategory, { text: string; badge: string }> = {
 
 export default function TasksPage() {
     const [filter, setFilter] = useState<"all" | "my_tasks">("my_tasks")
-    const [searchQuery, setSearchQuery] = useState("")
-    const [debouncedSearch, setDebouncedSearch] = useState("")
     const [showCompleted, setShowCompleted] = useState(false)
-
-    // Debounce search
-    useEffect(() => {
-        const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300)
-        return () => clearTimeout(timer)
-    }, [searchQuery])
 
     // Fetch incomplete tasks
     const { data: incompleteTasks, isLoading: loadingIncomplete } = useTasks({
         my_tasks: filter === "my_tasks",
         is_completed: false,
-        q: debouncedSearch || undefined,
         per_page: 100,
     })
 
@@ -105,7 +95,6 @@ export default function TasksPage() {
     const { data: completedTasks, isLoading: loadingCompleted } = useTasks({
         my_tasks: filter === "my_tasks",
         is_completed: true,
-        q: debouncedSearch || undefined,
         per_page: 50,
     })
 
@@ -236,16 +225,6 @@ export default function TasksPage() {
                         >
                             All Tasks
                         </Button>
-                    </div>
-
-                    <div className="relative ml-auto w-full max-w-sm">
-                        <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                            placeholder="Search tasks..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-9"
-                        />
                     </div>
                 </div>
 

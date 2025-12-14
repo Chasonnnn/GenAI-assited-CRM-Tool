@@ -31,3 +31,6 @@ pyjwt>=2.8.0
 google-auth>=2.29.0
 requests>=2.31.0
 email-validator>=2.0.0
+
+# Security
+nh3>=0.2.0
