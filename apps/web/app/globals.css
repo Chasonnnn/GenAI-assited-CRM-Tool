@@ -4,50 +4,40 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Clean modern color scheme with white background */
-  --background: oklch(1 0 0);
-  /* Pure white background */
-  --foreground: oklch(0.25 0.02 260);
-  /* Dark slate text */
-  --card: oklch(1 0 0);
-  /* White cards */
-  --card-foreground: oklch(0.25 0.02 260);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.25 0.02 260);
-  --primary: oklch(0.55 0.2 265);
-  /* Purple-blue primary */
-  --primary-foreground: oklch(1 0 0);
-  /* White text on primary */
-  --secondary: oklch(0.96 0.01 260);
-  /* Light gray secondary */
-  --secondary-foreground: oklch(0.25 0.02 260);
-  --muted: oklch(0.97 0.01 260);
-  /* Very light gray muted */
-  --muted-foreground: oklch(0.45 0.02 260);
-  --accent: oklch(0.96 0.01 260);
-  --accent-foreground: oklch(0.25 0.02 260);
+  /* Updated color tokens to match liquid glass design brief with pastel gradients and amber accents */
+  --background: oklch(0.98 0.02 85); /* #fefce8 - soft cream background */
+  --foreground: oklch(0.35 0.02 220); /* #374151 - dark gray text */
+  --card: oklch(1 0 0 / 0.7); /* Semi-transparent white for glass effect */
+  --card-foreground: oklch(0.35 0.02 220); /* #374151 - dark gray text on cards */
+  --popover: oklch(1 0 0 / 0.9); /* More opaque white for popovers */
+  --popover-foreground: oklch(0.35 0.02 220);
+  --primary: oklch(0.65 0.15 45); /* #d97706 - warm amber primary */
+  --primary-foreground: oklch(1 0 0); /* White text on primary */
+  --secondary: oklch(0.75 0.12 50); /* #f59e0b - lighter amber secondary */
+  --secondary-foreground: oklch(0.35 0.02 220);
+  --muted: oklch(0.98 0.02 85); /* Same as background for consistency */
+  --muted-foreground: oklch(0.35 0.02 220);
+  --accent: oklch(0.75 0.12 50); /* #f59e0b - accent color for interactions */
+  --accent-foreground: oklch(1 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.92 0.01 260);
-  /* Light gray border */
-  --input: oklch(1 0 0);
-  --ring: oklch(0.55 0.2 265 / 0.5);
-  /* Purple focus ring */
+  --border: oklch(0.9 0.01 85); /* Soft border color */
+  --input: oklch(1 0 0); /* White input backgrounds */
+  --ring: oklch(0.65 0.15 45 / 0.5); /* Semi-transparent amber for focus rings */
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 0.75rem;
-  --sidebar: oklch(0.98 0.005 260);
-  /* Very light gray sidebar */
-  --sidebar-foreground: oklch(0.25 0.02 260);
-  --sidebar-primary: oklch(0.55 0.2 265);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.96 0.01 260);
-  --sidebar-accent-foreground: oklch(0.25 0.02 260);
-  --sidebar-border: oklch(0.92 0.01 260);
-  --sidebar-ring: oklch(0.55 0.2 265 / 0.5);
+  --radius: 1rem; /* Increased radius for modern look */
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.35 0.02 220);
+  --sidebar-primary: oklch(0.98 0.02 85);
+  --sidebar-primary-foreground: oklch(0.35 0.02 220);
+  --sidebar-accent: oklch(0.75 0.12 50);
+  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar-border: oklch(0.9 0.01 85);
+  --sidebar-ring: oklch(0.65 0.15 45 / 0.5);
   --font-inter: "Inter", sans-serif;
 }
 
@@ -131,7 +121,6 @@
   * {
     @apply border-border outline-ring/50;
   }
-
   body {
     @apply bg-background text-foreground;
   }
@@ -209,11 +198,9 @@
   0% {
     background-position: 0% 50%;
   }
-
   50% {
     background-position: 100% 50%;
   }
-
   100% {
     background-position: 0% 50%;
   }
