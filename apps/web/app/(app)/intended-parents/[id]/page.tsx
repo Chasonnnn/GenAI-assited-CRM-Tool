@@ -151,8 +151,10 @@ export default function IntendedParentDetailPage() {
         setIsEditOpen(false)
     }
 
-    const handleStatusChange = async (newStatus: string) => {
-        await statusMutation.mutateAsync({ id, data: { status: newStatus as IntendedParentStatus } })
+    const handleStatusChange = async (newStatus: string | null) => {
+        if (newStatus) {
+            await statusMutation.mutateAsync({ id, data: { status: newStatus as IntendedParentStatus } })
+        }
     }
 
     const handleArchive = async () => {
@@ -191,9 +193,9 @@ export default function IntendedParentDetailPage() {
             <div className="flex min-h-screen flex-col items-center justify-center">
                 <h1 className="text-2xl font-semibold">Not Found</h1>
                 <p className="text-muted-foreground">This intended parent doesn&apos;t exist.</p>
-                <Button asChild className="mt-4">
-                    <Link href="/intended-parents">Back to List</Link>
-                </Button>
+                <Link href="/intended-parents" className="mt-4 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90">
+                    Back to List
+                </Link>
             </div>
         )
     }
@@ -204,11 +206,9 @@ export default function IntendedParentDetailPage() {
             <div className="border-b border-border bg-background/95 backdrop-blur">
                 <div className="flex h-16 items-center justify-between px-6">
                     <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="icon" asChild>
-                            <Link href="/intended-parents">
-                                <ArrowLeftIcon className="size-5" />
-                            </Link>
-                        </Button>
+                        <Link href="/intended-parents" className="inline-flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground size-9">
+                            <ArrowLeftIcon className="size-5" />
+                        </Link>
                         <div>
                             <h1 className="text-xl font-semibold">{ip.full_name}</h1>
                             <p className="text-sm text-muted-foreground">{ip.email}</p>
@@ -219,7 +219,7 @@ export default function IntendedParentDetailPage() {
                             {STATUS_LABELS[ip.status as IntendedParentStatus]}
                         </Badge>
                         <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
+                            <DropdownMenuTrigger>
                                 <Button variant="outline" size="icon">
                                     <MoreVerticalIcon className="size-4" />
                                 </Button>

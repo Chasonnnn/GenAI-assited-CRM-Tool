@@ -70,7 +70,7 @@ export default function ReportsPage() {
                 <div className="flex h-16 items-center justify-between px-6">
                     <h1 className="text-2xl font-semibold">Reports</h1>
                     <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
+                        <DropdownMenuTrigger>
                             <Button>
                                 Export
                                 <ChevronDownIcon className="ml-2 size-4" />

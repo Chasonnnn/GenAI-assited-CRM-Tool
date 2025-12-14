@@ -179,7 +179,7 @@ export function SidebarIconExample() {
           <SidebarMenu>
             <SidebarMenuItem>
               <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+                <DropdownMenuTrigger>
                   <SidebarMenuButton
                     size="lg"
                     className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
@@ -267,9 +267,9 @@ export function SidebarIconExample() {
             <SidebarGroupLabel>Platform</SidebarGroupLabel>
             <SidebarMenu>
               {data.navMain.map((item) => (
-                <Collapsible key={item.title} asChild defaultOpen={item.isActive} className="group/collapsible">
+                <Collapsible key={item.title} defaultOpen={item.isActive} className="group/collapsible">
                   <SidebarMenuItem>
-                    <CollapsibleTrigger asChild>
+                    <CollapsibleTrigger>
                       <SidebarMenuButton tooltip={item.title}>
                         {item.icon}
                         <span>{item.title}</span>
@@ -293,11 +293,11 @@ export function SidebarIconExample() {
             </SidebarMenu>
           </SidebarGroup>
           <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-            
+
             <SidebarMenu>
               {data.projects.map((item) => (
                 <SidebarMenuItem key={item.name}>
-                  
+
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
@@ -307,7 +307,7 @@ export function SidebarIconExample() {
           <SidebarMenu>
             <SidebarMenuItem>
               <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+                <DropdownMenuTrigger>
                   <SidebarMenuButton
                     size="lg"
                     className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
