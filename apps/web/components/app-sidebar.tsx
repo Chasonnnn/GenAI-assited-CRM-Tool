@@ -99,6 +99,21 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
     const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
 
+    const handleLogout = async () => {
+        try {
+            await fetch(`${API_BASE}/auth/logout`, {
+                method: "POST",
+                credentials: "include",
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+            })
+        } catch {
+            // Ignore errors - we'll redirect anyway
+        }
+        window.location.href = "/login"
+    }
+
     return (
         <SidebarProvider>
             <Sidebar collapsible="icon">
@@ -217,11 +232,9 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                         </DropdownMenuItem>
                                     </DropdownMenuGroup>
                                     <DropdownMenuSeparator />
-                                    <DropdownMenuItem>
-                                        <a href={`${API_BASE}/auth/logout`} className="flex items-center w-full">
-                                            <LogOut className="mr-2 h-4 w-4" />
-                                            Log out
-                                        </a>
+                                    <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
+                                        <LogOut className="mr-2 h-4 w-4" />
+                                        Log out
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
