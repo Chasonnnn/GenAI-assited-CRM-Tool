@@ -186,7 +186,7 @@ export default function CasesPage() {
                 {/* Table Card */}
                 <Card className="overflow-hidden">
                     <div className="overflow-x-auto">
-                        <Table>
+                        <Table className="min-w-[700px]">
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Case #</TableHead>
