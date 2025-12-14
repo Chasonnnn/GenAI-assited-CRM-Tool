@@ -58,11 +58,12 @@ export default function LoginPage() {
         }}
       />
       <Card
-        className="w-full max-w-md relative z-10 border-0 shadow-xl"
+        className="w-full max-w-md relative z-10 border border-white/40 shadow-2xl"
         style={{
-          background: "linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(253, 242, 248, 0.9) 100%)",
-          backdropFilter: "blur(20px)",
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.1)",
+          background: "linear-gradient(180deg, rgba(255, 255, 255, 0.7) 0%, rgba(253, 242, 248, 0.6) 100%)",
+          backdropFilter: "blur(24px) saturate(180%)",
+          WebkitBackdropFilter: "blur(24px) saturate(180%)",
+          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.6)",
         }}
       >
         <CardHeader className="text-center space-y-4 pb-2">
@@ -91,10 +92,10 @@ export default function LoginPage() {
 
           <div className="relative py-2">
             <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-gray-200" />
+              <span className="w-full border-t border-gray-300/50" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="px-3 bg-white text-gray-400 font-medium tracking-wider">
+              <span className="px-3 bg-transparent text-gray-500 font-medium tracking-wider">
                 Or use other sign-in options
               </span>
             </div>
