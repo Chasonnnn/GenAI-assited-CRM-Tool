@@ -40,21 +40,21 @@ export default function LoginPage() {
     >
       {/* Soft watercolor blobs */}
       <div
-        className="absolute -left-32 top-1/4 w-[500px] h-[500px] rounded-full blur-3xl opacity-60"
+        className="absolute -left-20 top-1/4 w-[600px] h-[600px] rounded-full blur-3xl"
         style={{
-          background: "radial-gradient(circle, rgba(99, 102, 241, 0.4) 0%, rgba(139, 92, 246, 0.3) 50%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(99, 102, 241, 0.6) 0%, rgba(139, 92, 246, 0.5) 40%, transparent 70%)",
         }}
       />
       <div
-        className="absolute -right-32 top-1/3 w-[400px] h-[400px] rounded-full blur-3xl opacity-50"
+        className="absolute -right-20 top-1/4 w-[500px] h-[500px] rounded-full blur-3xl"
         style={{
-          background: "radial-gradient(circle, rgba(236, 72, 153, 0.3) 0%, rgba(251, 146, 60, 0.1) 50%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(236, 72, 153, 0.5) 0%, rgba(244, 114, 182, 0.4) 40%, transparent 70%)",
         }}
       />
       <div
-        className="absolute left-1/4 -bottom-32 w-[300px] h-[300px] rounded-full blur-3xl opacity-30"
+        className="absolute left-1/3 -bottom-20 w-[400px] h-[400px] rounded-full blur-3xl"
         style={{
-          background: "radial-gradient(circle, rgba(99, 102, 241, 0.3) 0%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(139, 92, 246, 0.4) 0%, transparent 60%)",
         }}
       />
       <Card
