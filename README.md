@@ -188,7 +188,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ## Current Status
 
-**Week 4 Complete** — Frontend UI (v0 Design Implementation):
+**Week 5 Complete** — Frontend-Backend Integration:
 
 - [x] Project scaffolding (monorepo structure)
 - [x] PostgreSQL with Docker Compose
@@ -207,7 +207,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
   - [x] Phone normalization (E.164) and state validation
   - [x] Soft-delete (archive/restore) with status sync
   - [x] Status history tracking
-  - [x] Notes (2-4000 chars)
+  - [x] Notes (2-4000 chars) with XSS sanitization (nh3)
   - [x] Tasks (with due dates and completion)
   - [x] Meta webhook skeleton
 - [x] **Frontend UI complete (v0 design):**
@@ -221,7 +221,14 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
   - [x] Settings (5 tabs: Profile, Org, Notifications, Integrations, Security)
   - [x] Automation (Workflows + Templates tabs)
   - [x] App Sidebar with navigation
-- [ ] Frontend-backend integration (wire UI to real API data)
+- [x] **Frontend-backend integration complete:**
+  - [x] API client layer with TypeScript types
+  - [x] React Query hooks for cases, tasks, notes
+  - [x] Cases page wired to API (filters, search, pagination)
+  - [x] Case detail with notes, tasks, status history
+  - [x] Dashboard with real stats from /cases/stats
+  - [x] Tasks page with grouping by due date
+  - [x] TipTap rich text editor for notes
 - [ ] Meta Lead Ads full integration
 
 ## Documentation
