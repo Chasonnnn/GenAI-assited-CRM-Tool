@@ -95,6 +95,12 @@ class CaseUpdate(BaseModel):
         return normalize_state(v)
 
 
+class BulkAssign(BaseModel):
+    """Request schema for bulk case assignment."""
+    case_ids: list[UUID] = Field(..., min_length=1, max_length=100)
+    assigned_to_user_id: UUID | None = None  # None = unassign
+
+
 class CaseRead(BaseModel):
     """Full case response for detail views."""
     id: UUID

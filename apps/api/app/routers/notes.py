@@ -79,6 +79,19 @@ def create_note(
         author_id=session.user_id,
         body=data.body,
     )
+    
+    # Log to case activity
+    from app.services import activity_service
+    activity_service.log_note_added(
+        db=db,
+        case_id=case_id,
+        organization_id=session.org_id,
+        actor_user_id=session.user_id,
+        note_id=note.id,
+        content=data.body,
+    )
+    db.commit()
+    
     return _note_to_read(note, db)
 
 
@@ -107,6 +120,19 @@ def delete_note(
     # Permission: author or manager+
     if not is_owner_or_can_manage(session, note.author_id):
         raise HTTPException(status_code=403, detail="Not authorized to delete this note")
+    
+    # Log to case activity before delete (only if linked to a case)
+    if note.case_id:
+        from app.services import activity_service
+        activity_service.log_note_deleted(
+            db=db,
+            case_id=note.case_id,
+            organization_id=session.org_id,
+            actor_user_id=session.user_id,
+            note_id=note.id,
+            content_preview=note.body[:200] if note.body else "",
+        )
+        db.commit()
     
     note_service.delete_note(db, note)
     return None

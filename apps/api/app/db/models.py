@@ -401,6 +401,51 @@ class CaseStatusHistory(Base):
     case: Mapped["Case"] = relationship(back_populates="status_history")
 
 
+class CaseActivityLog(Base):
+    """
+    Comprehensive activity log for all case changes.
+    
+    Tracks: create, edit, status change, assign, archive, notes, etc.
+    Stores new values only (not old) for PII protection.
+    Actor names resolved at read-time (not stored).
+    """
+    __tablename__ = "case_activity_log"
+    __table_args__ = (
+        Index("idx_case_activity_case_time", "case_id", "created_at"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    case_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cases.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    activity_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    case: Mapped["Case"] = relationship()
+    actor: Mapped["User | None"] = relationship(foreign_keys=[actor_user_id])
+
+
 class CaseNote(Base):
     """
     Notes attached to cases.
