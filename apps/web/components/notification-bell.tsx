@@ -9,7 +9,6 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -72,8 +71,8 @@ export function NotificationBell() {
                 </span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-80">
-                <DropdownMenuLabel className="flex items-center justify-between">
-                    <span>Notifications</span>
+                <div className="flex items-center justify-between px-3 py-2.5 text-xs text-muted-foreground">
+                    <span className="font-medium">Notifications</span>
                     {unreadCount > 0 && (
                         <Button
                             variant="ghost"
@@ -84,7 +83,7 @@ export function NotificationBell() {
                             Mark all read
                         </Button>
                     )}
-                </DropdownMenuLabel>
+                </div>
                 <DropdownMenuSeparator />
 
                 {notifications.length === 0 ? (
