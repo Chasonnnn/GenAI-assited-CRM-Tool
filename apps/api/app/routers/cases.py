@@ -50,6 +50,7 @@ def _case_to_read(case, db: Session) -> CaseRead:
         case_number=case.case_number,
         status=CaseStatus(case.status),
         source=CaseSource(case.source),
+        is_priority=case.is_priority,
         assigned_to_user_id=case.assigned_to_user_id,
         assigned_to_name=assigned_to_name,
         created_by_user_id=case.created_by_user_id,
@@ -92,6 +93,7 @@ def _case_to_list_item(case, db: Session) -> CaseListItem:
         phone=case.phone,
         state=case.state,
         assigned_to_name=assigned_to_name,
+        is_priority=case.is_priority,
         is_archived=case.is_archived,
         created_at=case.created_at,
     )

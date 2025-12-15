@@ -51,8 +51,9 @@ export interface CaseListItem {
     phone: string | null;
     state: string | null;
     assigned_to_name: string | null;
-    created_at: string;
+    is_priority: boolean;
     is_archived: boolean;
+    created_at: string;
 }
 
 // Full case detail

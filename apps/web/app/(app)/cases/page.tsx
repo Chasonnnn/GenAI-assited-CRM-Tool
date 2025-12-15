@@ -202,6 +202,8 @@ export default function CasesPage() {
                                 <TableRow>
                                     <TableHead className="w-[100px]">Case #</TableHead>
                                     <TableHead>Name</TableHead>
+                                    <TableHead>Phone</TableHead>
+                                    <TableHead>Email</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead>Source</TableHead>
                                     <TableHead>Assigned To</TableHead>
@@ -215,15 +217,24 @@ export default function CasesPage() {
                                         label: caseItem.status,
                                         color: "bg-gray-100 text-gray-700"
                                     }
+                                    // Apply gold styling for priority cases
+                                    const priorityClass = caseItem.is_priority ? "text-amber-600 font-semibold" : ""
 
                                     return (
                                         <TableRow key={caseItem.id}>
                                             <TableCell>
-                                                <Link href={`/cases/${caseItem.id}`} className="font-medium text-primary hover:underline">
+                                                <Link href={`/cases/${caseItem.id}`} className={`font-medium hover:underline ${caseItem.is_priority ? "text-amber-600" : "text-primary"}`}>
+                                                    {caseItem.is_priority && <span className="mr-1">★</span>}
                                                     #{caseItem.case_number}
                                                 </Link>
                                             </TableCell>
-                                            <TableCell className="font-medium">{caseItem.full_name}</TableCell>
+                                            <TableCell className={`font-medium ${priorityClass}`}>{caseItem.full_name}</TableCell>
+                                            <TableCell className="text-muted-foreground">
+                                                {caseItem.phone || "—"}
+                                            </TableCell>
+                                            <TableCell className="text-muted-foreground max-w-[200px] truncate" title={caseItem.email}>
+                                                {caseItem.email}
+                                            </TableCell>
                                             <TableCell>
                                                 <Badge className={statusConfig.color}>
                                                     {statusConfig.label}

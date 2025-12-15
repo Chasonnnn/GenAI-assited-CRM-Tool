@@ -92,6 +92,10 @@ class CaseSource(str, Enum):
     REFERRAL = "referral"
 
 
+# Note: is_priority is a boolean field on Case model, not an enum
+# Default: False (normal), True (priority - shown with gold styling in UI)
+
+
 class TaskType(str, Enum):
     """Types of tasks."""
     MEETING = "meeting"
