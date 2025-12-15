@@ -7,6 +7,9 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -26,7 +29,7 @@ import {
     LoaderIcon,
     ArrowLeftIcon,
 } from "lucide-react"
-import { useCase, useCaseHistory, useChangeStatus, useArchiveCase, useRestoreCase } from "@/lib/hooks/use-cases"
+import { useCase, useCaseHistory, useChangeStatus, useArchiveCase, useRestoreCase, useUpdateCase } from "@/lib/hooks/use-cases"
 import { useNotes, useCreateNote, useDeleteNote } from "@/lib/hooks/use-notes"
 import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-tasks"
 import { STATUS_CONFIG, type CaseStatus } from "@/lib/types/case"
@@ -83,6 +86,7 @@ export default function CaseDetailPage() {
     const id = params.id as string
     const router = useRouter()
     const [copiedEmail, setCopiedEmail] = React.useState(false)
+    const [editDialogOpen, setEditDialogOpen] = React.useState(false)
 
     // Fetch data
     const { data: caseData, isLoading, error } = useCase(id)
@@ -98,6 +102,7 @@ export default function CaseDetailPage() {
     const deleteNoteMutation = useDeleteNote()
     const completeTaskMutation = useCompleteTask()
     const uncompleteTaskMutation = useUncompleteTask()
+    const updateCaseMutation = useUpdateCase()
 
     const copyEmail = () => {
         if (!caseData) return
@@ -211,7 +216,7 @@ export default function CaseDetailPage() {
                             }
                         />
                         <DropdownMenuContent align="end">
-                            <DropdownMenuItem>Edit</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setEditDialogOpen(true)}>Edit</DropdownMenuItem>
                             {caseData.is_archived ? (
                                 <DropdownMenuItem onClick={handleRestore}>Restore</DropdownMenuItem>
                             ) : (
@@ -484,6 +489,142 @@ export default function CaseDetailPage() {
                     </TabsContent>
                 </Tabs>
             </div>
+
+            {/* Edit Case Dialog */}
+            <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+                <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Edit Case: #{caseData?.case_number}</DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={async (e) => {
+                        e.preventDefault()
+                        const form = e.target as HTMLFormElement
+                        const formData = new FormData(form)
+                        const data: Record<string, unknown> = {}
+
+                        // Text fields
+                        if (formData.get('full_name')) data.full_name = formData.get('full_name')
+                        if (formData.get('email')) data.email = formData.get('email')
+                        data.phone = formData.get('phone') || null
+                        data.state = formData.get('state') || null
+                        data.date_of_birth = formData.get('date_of_birth') || null
+                        data.race = formData.get('race') || null
+
+                        // Number fields
+                        const heightFt = formData.get('height_ft')
+                        data.height_ft = heightFt ? parseFloat(heightFt as string) : null
+                        const weightLb = formData.get('weight_lb')
+                        data.weight_lb = weightLb ? parseFloat(weightLb as string) : null
+                        const numDeliveries = formData.get('num_deliveries')
+                        data.num_deliveries = numDeliveries ? parseInt(numDeliveries as string) : null
+                        const numCsections = formData.get('num_csections')
+                        data.num_csections = numCsections ? parseInt(numCsections as string) : null
+
+                        // Boolean fields (checkboxes)
+                        data.is_age_eligible = formData.get('is_age_eligible') === 'on'
+                        data.is_citizen_or_pr = formData.get('is_citizen_or_pr') === 'on'
+                        data.has_child = formData.get('has_child') === 'on'
+                        data.is_non_smoker = formData.get('is_non_smoker') === 'on'
+                        data.has_surrogate_experience = formData.get('has_surrogate_experience') === 'on'
+                        data.is_priority = formData.get('is_priority') === 'on'
+
+                        await updateCaseMutation.mutateAsync({ caseId: id, data })
+                        setEditDialogOpen(false)
+                    }}>
+                        <div className="grid gap-4 py-4">
+                            {/* Contact Info */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="full_name">Full Name *</Label>
+                                    <Input id="full_name" name="full_name" defaultValue={caseData?.full_name} required />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="email">Email *</Label>
+                                    <Input id="email" name="email" type="email" defaultValue={caseData?.email} required />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="phone">Phone</Label>
+                                    <Input id="phone" name="phone" defaultValue={caseData?.phone ?? ''} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="state">State</Label>
+                                    <Input id="state" name="state" defaultValue={caseData?.state ?? ''} />
+                                </div>
+                            </div>
+
+                            {/* Personal Info */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="date_of_birth">Date of Birth</Label>
+                                    <Input id="date_of_birth" name="date_of_birth" type="date" defaultValue={caseData?.date_of_birth ?? ''} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="race">Race</Label>
+                                    <Input id="race" name="race" defaultValue={caseData?.race ?? ''} />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="height_ft">Height (ft)</Label>
+                                    <Input id="height_ft" name="height_ft" type="number" step="0.1" defaultValue={caseData?.height_ft ?? ''} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="weight_lb">Weight (lb)</Label>
+                                    <Input id="weight_lb" name="weight_lb" type="number" defaultValue={caseData?.weight_lb ?? ''} />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="num_deliveries">Number of Deliveries</Label>
+                                    <Input id="num_deliveries" name="num_deliveries" type="number" min="0" max="20" defaultValue={caseData?.num_deliveries ?? ''} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="num_csections">Number of C-Sections</Label>
+                                    <Input id="num_csections" name="num_csections" type="number" min="0" max="10" defaultValue={caseData?.num_csections ?? ''} />
+                                </div>
+                            </div>
+
+                            {/* Boolean Fields */}
+                            <div className="grid grid-cols-2 gap-4 pt-2">
+                                <div className="flex items-center gap-2">
+                                    <Checkbox id="is_priority" name="is_priority" defaultChecked={caseData?.is_priority} />
+                                    <Label htmlFor="is_priority">Priority Case</Label>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Checkbox id="is_age_eligible" name="is_age_eligible" defaultChecked={caseData?.is_age_eligible ?? false} />
+                                    <Label htmlFor="is_age_eligible">Age Eligible</Label>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Checkbox id="is_citizen_or_pr" name="is_citizen_or_pr" defaultChecked={caseData?.is_citizen_or_pr ?? false} />
+                                    <Label htmlFor="is_citizen_or_pr">US Citizen/PR</Label>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Checkbox id="has_child" name="has_child" defaultChecked={caseData?.has_child ?? false} />
+                                    <Label htmlFor="has_child">Has Child</Label>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Checkbox id="is_non_smoker" name="is_non_smoker" defaultChecked={caseData?.is_non_smoker ?? false} />
+                                    <Label htmlFor="is_non_smoker">Non-Smoker</Label>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Checkbox id="has_surrogate_experience" name="has_surrogate_experience" defaultChecked={caseData?.has_surrogate_experience ?? false} />
+                                    <Label htmlFor="has_surrogate_experience">Surrogate Experience</Label>
+                                </div>
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)}>
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={updateCaseMutation.isPending}>
+                                {updateCaseMutation.isPending ? 'Saving...' : 'Save Changes'}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
