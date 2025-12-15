@@ -199,3 +199,83 @@ export function acceptHandoff(caseId: string): Promise<CaseRead> {
 export function denyHandoff(caseId: string, reason?: string): Promise<CaseRead> {
     return api.post<CaseRead>(`/cases/${caseId}/deny`, { reason });
 }
+
+// =============================================================================
+// Bulk Operations
+// =============================================================================
+
+export interface Assignee {
+    id: string;
+    name: string;
+    role: string;
+}
+
+/**
+ * Get list of org members who can be assigned cases.
+ */
+export function getAssignees(): Promise<Assignee[]> {
+    return api.get<Assignee[]>('/cases/assignees');
+}
+
+export interface BulkAssignPayload {
+    case_ids: string[];
+    assigned_to_user_id: string | null;
+}
+
+export interface BulkAssignResult {
+    assigned: number;
+    failed: { case_id: string; reason: string }[];
+}
+
+/**
+ * Bulk assign multiple cases to a user.
+ */
+export function bulkAssignCases(data: BulkAssignPayload): Promise<BulkAssignResult> {
+    return api.post<BulkAssignResult>('/cases/bulk-assign', data);
+}
+
+/**
+ * Bulk archive multiple cases.
+ */
+export function bulkArchiveCases(caseIds: string[]): Promise<{ archived: number; failed: string[] }> {
+    // Archive cases one by one - backend doesn't have bulk archive yet
+    return Promise.all(caseIds.map(id => archiveCase(id).catch(() => null)))
+        .then(results => ({
+            archived: results.filter(r => r !== null).length,
+            failed: caseIds.filter((_, i) => results[i] === null),
+        }));
+}
+
+// =============================================================================
+// Activity Log
+// =============================================================================
+
+export interface CaseActivity {
+    id: string;
+    activity_type: string;
+    actor_user_id: string | null;
+    actor_name: string | null;
+    details: Record<string, unknown> | null;
+    created_at: string;
+}
+
+export interface CaseActivityResponse {
+    items: CaseActivity[];
+    total: number;
+    page: number;
+    pages: number;
+}
+
+/**
+ * Get comprehensive activity log for a case (paginated).
+ */
+export function getCaseActivity(
+    caseId: string,
+    page: number = 1,
+    perPage: number = 20
+): Promise<CaseActivityResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.set('page', String(page));
+    searchParams.set('per_page', String(perPage));
+    return api.get<CaseActivityResponse>(`/cases/${caseId}/activity?${searchParams.toString()}`);
+}

@@ -406,8 +406,7 @@ class CaseActivityLog(Base):
     Comprehensive activity log for all case changes.
     
     Tracks: create, edit, status change, assign, archive, notes, etc.
-    Stores new values only (not old) for PII protection.
-    Actor names resolved at read-time (not stored).
+    Stores new values for changed fields. Actor names resolved at read-time.
     """
     __tablename__ = "case_activity_log"
     __table_args__ = (

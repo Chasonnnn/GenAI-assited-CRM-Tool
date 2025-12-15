@@ -217,3 +217,55 @@ export function useDenyHandoff() {
         },
     });
 }
+
+/**
+ * Fetch list of org members who can be assigned cases.
+ */
+export function useAssignees() {
+    return useQuery({
+        queryKey: [...caseKeys.all, 'assignees'],
+        queryFn: casesApi.getAssignees,
+        staleTime: 60 * 1000, // 1 minute
+    });
+}
+
+/**
+ * Bulk assign multiple cases to a user.
+ */
+export function useBulkAssign() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: casesApi.bulkAssignCases,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: caseKeys.lists() });
+            queryClient.invalidateQueries({ queryKey: caseKeys.stats() });
+        },
+    });
+}
+
+/**
+ * Bulk archive multiple cases.
+ */
+export function useBulkArchive() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: casesApi.bulkArchiveCases,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: caseKeys.lists() });
+            queryClient.invalidateQueries({ queryKey: caseKeys.stats() });
+        },
+    });
+}
+
+/**
+ * Fetch case activity log (paginated).
+ */
+export function useCaseActivity(caseId: string, page: number = 1, perPage: number = 20) {
+    return useQuery({
+        queryKey: [...caseKeys.detail(caseId), 'activity', { page, perPage }],
+        queryFn: () => casesApi.getCaseActivity(caseId, page, perPage),
+        enabled: !!caseId,
+    });
+}

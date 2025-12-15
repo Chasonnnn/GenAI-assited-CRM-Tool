@@ -352,6 +352,7 @@ def assign_case(
             organization_id=case.organization_id,
             actor_user_id=user_id,
             to_user_id=assignee_id,
+            from_user_id=old_assignee,  # Capture previous assignee for reassignment tracking
         )
     elif old_assignee:
         activity_service.log_unassigned(
