@@ -244,19 +244,22 @@ Week 7 — Cases module (specialists workflow) ✓ COMPLETE (moved to Week 3)
 Note: Cases module was completed as part of Week 3 with full CRUD, notes, tasks, and status history.
 See Week 3 section above for complete details.
 
-Week 8 — Notifications v1
+Week 8 — Notifications v1 + Case Handoff Notifications
 Backend
-- notifications table
+- notifications table (org_id, user_id, type, title, body, entity_type, entity_id, read_at, created_at)
 - Triggers:
-  - lead assigned
   - case assigned
   - status change
-- Endpoints: GET `/me/notifications`, mark as read
+  - **case approved** (notify all case_manager+ users)
+  - **case accepted** (notify intake user who created it)
+  - **case denied** (notify intake user with reason)
+- Endpoints: GET `/me/notifications`, PATCH `/me/notifications/{id}/read`, POST `/me/notifications/read-all`
 Frontend
-- Notification bell dropdown
+- Notification bell dropdown with unread count badge
 - Notifications page (optional)
+- Real-time polling (every 30s) or WebSocket (later)
 Deliverable
-- Real-time-ish workflow (polling is fine for V1)
+- In-app notification system supporting case handoff workflow
 
 Week 9 — Meta Lead Ads integration (real-time lead sync)
 Backend
