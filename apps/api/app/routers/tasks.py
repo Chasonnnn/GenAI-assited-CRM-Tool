@@ -136,6 +136,7 @@ def list_tasks(
     tasks, total = task_service.list_tasks(
         db=db,
         org_id=session.org_id,
+        user_role=session.role,
         page=page,
         per_page=per_page,
         assigned_to=assigned_to,

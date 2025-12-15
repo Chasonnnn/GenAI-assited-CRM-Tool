@@ -153,6 +153,9 @@ class CaseListItem(BaseModel):
     assigned_to_name: str | None = None
     is_priority: bool
     is_archived: bool
+    # Calculated fields for table display
+    age: int | None = None  # Calculated from date_of_birth
+    bmi: float | None = None  # Calculated from height_ft and weight_lb
     created_at: datetime
 
     model_config = {"from_attributes": True}
