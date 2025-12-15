@@ -29,7 +29,7 @@ import {
     LoaderIcon,
     ArrowLeftIcon,
 } from "lucide-react"
-import { useCase, useCaseHistory, useChangeStatus, useArchiveCase, useRestoreCase, useUpdateCase } from "@/lib/hooks/use-cases"
+import { useCase, useCaseActivity, useChangeStatus, useArchiveCase, useRestoreCase, useUpdateCase } from "@/lib/hooks/use-cases"
 import { useNotes, useCreateNote, useDeleteNote } from "@/lib/hooks/use-notes"
 import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-tasks"
 import { STATUS_CONFIG, type CaseStatus } from "@/lib/types/case"
@@ -81,6 +81,54 @@ const STATUS_OPTIONS: CaseStatus[] = [
     'delivered',
 ]
 
+// Format activity type for display
+function formatActivityType(type: string): string {
+    const labels: Record<string, string> = {
+        case_created: 'Case Created',
+        info_edited: 'Information Edited',
+        status_changed: 'Status Changed',
+        assigned: 'Assigned',
+        unassigned: 'Unassigned',
+        priority_changed: 'Priority Changed',
+        archived: 'Archived',
+        restored: 'Restored',
+        handoff_accepted: 'Handoff Accepted',
+        handoff_denied: 'Handoff Denied',
+        note_added: 'Note Added',
+        note_deleted: 'Note Deleted',
+    }
+    return labels[type] || type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
+// Format activity details for display
+function formatActivityDetails(type: string, details: Record<string, unknown>): string {
+    switch (type) {
+        case 'status_changed':
+            return `${details.from} → ${details.to}${details.reason ? `: ${details.reason}` : ''}`
+        case 'info_edited':
+            if (details.changes && typeof details.changes === 'object') {
+                const changes = Object.entries(details.changes as Record<string, unknown>)
+                    .map(([field, value]) => `${field.replace(/_/g, ' ')}: ${String(value)}`)
+                    .join(', ')
+                return changes
+            }
+            return ''
+        case 'assigned':
+            return details.from_user_id ? 'Reassigned' : 'Assigned to user'
+        case 'unassigned':
+            return 'Removed assignment'
+        case 'priority_changed':
+            return details.is_priority ? 'Marked as priority' : 'Removed priority'
+        case 'handoff_denied':
+            return details.reason ? String(details.reason) : ''
+        case 'note_added':
+        case 'note_deleted':
+            return details.content ? String(details.content).slice(0, 100) + '...' : ''
+        default:
+            return ''
+    }
+}
+
 export default function CaseDetailPage() {
     const params = useParams()
     const id = params.id as string
@@ -90,7 +138,7 @@ export default function CaseDetailPage() {
 
     // Fetch data
     const { data: caseData, isLoading, error } = useCase(id)
-    const { data: history } = useCaseHistory(id)
+    const { data: activityData } = useCaseActivity(id)
     const { data: notes } = useNotes(id)
     const { data: tasksData } = useTasks({ case_id: id })
 
@@ -446,43 +494,36 @@ export default function CaseDetailPage() {
                     <TabsContent value="history" className="space-y-4">
                         <Card>
                             <CardHeader>
-                                <CardTitle>Status History</CardTitle>
+                                <CardTitle>Activity Log</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-6">
-                                {history && history.length > 0 ? (
-                                    history.map((entry, idx) => {
-                                        const toConfig = STATUS_CONFIG[entry.to_status as CaseStatus] || { label: entry.to_status, color: 'bg-gray-500' }
-                                        const fromConfig = STATUS_CONFIG[entry.from_status as CaseStatus] || { label: entry.from_status, color: 'bg-gray-500' }
-                                        const isLast = idx === history.length - 1
-
+                                {activityData && activityData.items.length > 0 ? (
+                                    activityData.items.map((entry, idx) => {
+                                        const isLast = idx === activityData.items.length - 1
                                         return (
                                             <div key={entry.id} className="flex gap-3">
                                                 <div className="relative">
-                                                    <div className={`h-2 w-2 rounded-full ${toConfig.color} mt-1.5`}></div>
+                                                    <div className="h-2 w-2 rounded-full bg-primary mt-1.5"></div>
                                                     {!isLast && <div className="absolute left-1 top-4 h-full w-px bg-border"></div>}
                                                 </div>
                                                 <div className="flex-1 space-y-1 pb-4">
-                                                    <div className="flex items-center gap-2">
-                                                        <Badge variant="secondary" className="text-xs">
-                                                            {fromConfig.label}
-                                                        </Badge>
-                                                        <span className="text-xs text-muted-foreground">→</span>
-                                                        <Badge className={`${toConfig.color} text-white text-xs`}>
-                                                            {toConfig.label}
-                                                        </Badge>
+                                                    <div className="text-sm font-medium">
+                                                        {formatActivityType(entry.activity_type)}
                                                     </div>
                                                     <div className="text-xs text-muted-foreground">
-                                                        Changed by {entry.changed_by_name || 'System'} • {formatDateTime(entry.changed_at)}
+                                                        {entry.actor_name || 'System'} • {formatDateTime(entry.created_at)}
                                                     </div>
-                                                    {entry.reason && (
-                                                        <p className="text-sm pt-1">{entry.reason}</p>
+                                                    {entry.details && (
+                                                        <div className="text-sm pt-1 text-muted-foreground">
+                                                            {formatActivityDetails(entry.activity_type, entry.details)}
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>
                                         )
                                     })
                                 ) : (
-                                    <p className="text-sm text-muted-foreground text-center py-4">No status changes recorded.</p>
+                                    <p className="text-sm text-muted-foreground text-center py-4">No activity recorded.</p>
                                 )}
                             </CardContent>
                         </Card>
