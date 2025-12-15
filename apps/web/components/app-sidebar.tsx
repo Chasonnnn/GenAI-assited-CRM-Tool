@@ -43,6 +43,8 @@ import {
     Zap,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
+import { NotificationBell } from "@/components/notification-bell"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 const navigation = [
     {
@@ -249,8 +251,12 @@ export function AppSidebar({ children }: AppSidebarProps) {
             </Sidebar>
 
             <SidebarInset>
-                <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+                <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b px-4">
                     <SidebarTrigger className="-ml-1" />
+                    <div className="flex items-center gap-2">
+                        <NotificationBell />
+                        <ThemeToggle />
+                    </div>
                 </header>
                 <main className="flex-1">{children}</main>
             </SidebarInset>
