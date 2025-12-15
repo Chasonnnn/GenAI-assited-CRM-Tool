@@ -219,10 +219,8 @@ export default function IntendedParentDetailPage() {
                             {STATUS_LABELS[ip.status as IntendedParentStatus]}
                         </Badge>
                         <DropdownMenu>
-                            <DropdownMenuTrigger>
-                                <Button variant="outline" size="icon">
-                                    <MoreVerticalIcon className="size-4" />
-                                </Button>
+                            <DropdownMenuTrigger className="inline-flex items-center justify-center size-10 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground">
+                                <MoreVerticalIcon className="size-4" />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={handleEdit}>Edit</DropdownMenuItem>

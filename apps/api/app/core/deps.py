@@ -17,7 +17,7 @@ CSRF_HEADER = "X-Requested-With"
 CSRF_HEADER_VALUE = "XMLHttpRequest"
 
 # TEMPORARY: Set to True to bypass auth for testing
-DEV_BYPASS_AUTH = False
+DEV_BYPASS_AUTH = True
 
 
 def get_db() -> Generator[Session, None, None]:

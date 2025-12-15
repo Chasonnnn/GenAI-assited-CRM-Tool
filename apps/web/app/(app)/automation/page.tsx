@@ -256,11 +256,9 @@ export default function AutomationPage() {
                                                 onCheckedChange={() => handleToggle(automation.id)}
                                             />
                                             <DropdownMenu>
-                                                <DropdownMenuTrigger>
-                                                    <Button variant="ghost" size="sm" className="size-8 p-0">
-                                                        <MoreVerticalIcon className="size-4" />
-                                                        <span className="sr-only">Open menu</span>
-                                                    </Button>
+                                                <DropdownMenuTrigger className="inline-flex items-center justify-center size-8 p-0 rounded-md hover:bg-accent hover:text-accent-foreground">
+                                                    <MoreVerticalIcon className="size-4" />
+                                                    <span className="sr-only">Open menu</span>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
                                                     <DropdownMenuItem>Edit</DropdownMenuItem>
@@ -316,14 +314,8 @@ export default function AutomationPage() {
                                                     <p className="mt-1 text-sm text-muted-foreground line-clamp-1">{template.subject}</p>
                                                 </div>
                                                 <DropdownMenu>
-                                                    <DropdownMenuTrigger>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
-                                                        >
-                                                            <MoreVerticalIcon className="size-4" />
-                                                        </Button>
+                                                    <DropdownMenuTrigger className="inline-flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0 rounded-md hover:bg-accent hover:text-accent-foreground">
+                                                        <MoreVerticalIcon className="size-4" />
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end">
                                                         <DropdownMenuItem onClick={() => openEditModal(template)}>Edit</DropdownMenuItem>

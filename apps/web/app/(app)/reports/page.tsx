@@ -70,11 +70,9 @@ export default function ReportsPage() {
                 <div className="flex h-16 items-center justify-between px-6">
                     <h1 className="text-2xl font-semibold">Reports</h1>
                     <DropdownMenu>
-                        <DropdownMenuTrigger>
-                            <Button>
-                                Export
-                                <ChevronDownIcon className="ml-2 size-4" />
-                            </Button>
+                        <DropdownMenuTrigger className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+                            Export
+                            <ChevronDownIcon className="size-4" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                             <DropdownMenuItem>Export PDF</DropdownMenuItem>
