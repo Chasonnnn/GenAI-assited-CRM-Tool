@@ -356,3 +356,15 @@ Dependencies (2025-12-14) — COMPLETED
   with custom TypeScript interfaces compatible with recharts 3 API
 - Base UI components (combobox, pagination) fixed for render prop compatibility
 
+Queue/Ownership System (Week 14+)
+- Problem: Current access control ties visibility to status, which limits flexibility
+- Solution: Add ownership fields to Case model for enterprise-style routing:
+  - owner_role (intake_specialist, case_manager) — current owning role
+  - current_queue — assignment queue name for team-based routing
+  - stage_owner_id — current stage owner (vs original creator)
+- Enables:
+  - Ownership-based access control (independent of status)
+  - Assignment queues with auto-routing rules (like Salesforce Queue)
+  - Team-based views (like HubSpot "owner/team" + pipeline stage)
+  - Flexible handoff without overloading status meaning
+- Pattern: Salesforce/HubSpot/Zendesk enterprise CRM patterns
