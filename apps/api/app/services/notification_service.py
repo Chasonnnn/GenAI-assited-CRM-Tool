@@ -195,11 +195,13 @@ def mark_read(
     db: Session,
     notification_id: UUID,
     user_id: UUID,
+    org_id: UUID,
 ) -> Optional[Notification]:
-    """Mark a notification as read."""
+    """Mark a notification as read (scoped by org for tenant isolation)."""
     notification = db.query(Notification).filter(
         Notification.id == notification_id,
         Notification.user_id == user_id,
+        Notification.organization_id == org_id,
     ).first()
     
     if notification and not notification.read_at:
