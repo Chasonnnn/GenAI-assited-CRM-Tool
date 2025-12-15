@@ -194,3 +194,12 @@ class CaseStats(BaseModel):
     this_week: int
     this_month: int
     pending_tasks: int = 0  # Cross-module, filled by router
+
+
+class CaseHandoffDeny(BaseModel):
+    """Request to deny a pending_handoff case."""
+    reason: str | None = Field(
+        None, 
+        max_length=500, 
+        description="Reason for denial (logged in status history)"
+    )

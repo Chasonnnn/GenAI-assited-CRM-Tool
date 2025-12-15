@@ -12,8 +12,9 @@ export type CaseStatus =
     | 'application_submitted'
     | 'under_review'
     | 'approved'
+    | 'pending_handoff'  // Awaiting case manager review
     | 'disqualified'
-    // Stage B: Post-Approval
+    // Stage B: Post-Approval (Case Manager only)
     | 'pending_match'
     | 'meds_started'
     | 'exam_passed'
@@ -24,6 +25,20 @@ export type CaseStatus =
     | 'restored';
 
 export type CaseSource = 'manual' | 'meta' | 'website' | 'referral';
+
+// Status categories for role-based filtering
+export const INTAKE_VISIBLE_STATUSES: CaseStatus[] = [
+    'new_unread', 'contacted', 'followup_scheduled',
+    'application_submitted', 'under_review', 'approved',
+    'pending_handoff', 'disqualified'
+];
+
+export const CASE_MANAGER_ONLY_STATUSES: CaseStatus[] = [
+    'pending_match', 'meds_started', 'exam_passed',
+    'embryo_transferred', 'delivered'
+];
+
+export const HANDOFF_QUEUE_STATUSES: CaseStatus[] = ['pending_handoff'];
 
 // List item (minimal for table display)
 export interface CaseListItem {
@@ -77,8 +92,9 @@ export const STATUS_CONFIG: Record<CaseStatus, { label: string; color: string }>
     application_submitted: { label: 'Application Submitted', color: 'bg-teal-500' },
     under_review: { label: 'Under Review', color: 'bg-amber-500' },
     approved: { label: 'Approved', color: 'bg-green-500' },
+    pending_handoff: { label: 'Pending Handoff', color: 'bg-orange-500' },
     disqualified: { label: 'Disqualified', color: 'bg-red-500' },
-    // Stage B: Post-Approval
+    // Stage B: Post-Approval (Case Manager only)
     pending_match: { label: 'Pending Match', color: 'bg-purple-500' },
     meds_started: { label: 'Meds Started', color: 'bg-violet-500' },
     exam_passed: { label: 'Exam Passed', color: 'bg-indigo-500' },

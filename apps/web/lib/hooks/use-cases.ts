@@ -156,3 +156,59 @@ export function useRestoreCase() {
         },
     });
 }
+
+// =============================================================================
+// Handoff Workflow Hooks (Case Manager+ only)
+// =============================================================================
+
+export const handoffKeys = {
+    queue: () => ['cases', 'handoff-queue'] as const,
+    queuePage: (page: number) => [...handoffKeys.queue(), { page }] as const,
+};
+
+/**
+ * Fetch cases in pending_handoff status (case_manager+ only).
+ */
+export function useHandoffQueue(params: casesApi.HandoffQueueParams = {}) {
+    return useQuery({
+        queryKey: handoffKeys.queuePage(params.page || 1),
+        queryFn: () => casesApi.getHandoffQueue(params),
+    });
+}
+
+/**
+ * Accept a pending_handoff case → transitions to pending_match.
+ */
+export function useAcceptHandoff() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: casesApi.acceptHandoff,
+        onSuccess: (updatedCase) => {
+            queryClient.setQueryData(caseKeys.detail(updatedCase.id), updatedCase);
+            queryClient.invalidateQueries({ queryKey: caseKeys.lists() });
+            queryClient.invalidateQueries({ queryKey: handoffKeys.queue() });
+            queryClient.invalidateQueries({ queryKey: caseKeys.stats() });
+            queryClient.invalidateQueries({ queryKey: caseKeys.history(updatedCase.id) });
+        },
+    });
+}
+
+/**
+ * Deny a pending_handoff case → reverts to under_review.
+ */
+export function useDenyHandoff() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ caseId, reason }: { caseId: string; reason?: string }) =>
+            casesApi.denyHandoff(caseId, reason),
+        onSuccess: (updatedCase) => {
+            queryClient.setQueryData(caseKeys.detail(updatedCase.id), updatedCase);
+            queryClient.invalidateQueries({ queryKey: caseKeys.lists() });
+            queryClient.invalidateQueries({ queryKey: handoffKeys.queue() });
+            queryClient.invalidateQueries({ queryKey: caseKeys.stats() });
+            queryClient.invalidateQueries({ queryKey: caseKeys.history(updatedCase.id) });
+        },
+    });
+}
