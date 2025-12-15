@@ -6,7 +6,7 @@ from app.db.enums import CaseStatus, Role
 from app.db.models import Case
 
 
-def check_case_access(case: Case, user_role: str) -> None:
+def check_case_access(case: Case, user_role: Role) -> None:
     """
     Check if user can access this case based on role + status.
     
@@ -17,12 +17,12 @@ def check_case_access(case: Case, user_role: str) -> None:
     
     Args:
         case: The case being accessed
-        user_role: The user's role from session
+        user_role: The user's role (Role enum) from session
         
     Raises:
         HTTPException: 403 if access denied
     """
-    if user_role == Role.INTAKE_SPECIALIST.value:
+    if user_role == Role.INTAKE_SPECIALIST:
         if case.status in CaseStatus.case_manager_only():
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -30,7 +30,7 @@ def check_case_access(case: Case, user_role: str) -> None:
             )
 
 
-def can_modify_case(case: Case, user_id: str, user_role: str) -> bool:
+def can_modify_case(case: Case, user_id: str, user_role: Role) -> bool:
     """
     Check if user can modify this case.
     
@@ -44,15 +44,15 @@ def can_modify_case(case: Case, user_id: str, user_role: str) -> bool:
         True if user can modify, False otherwise
     """
     # Manager+ can always modify
-    if user_role in [Role.MANAGER.value, Role.DEVELOPER.value]:
+    if user_role in [Role.MANAGER, Role.DEVELOPER]:
         return True
     
     # Case managers can modify all non-archived cases
-    if user_role == Role.CASE_MANAGER.value:
+    if user_role == Role.CASE_MANAGER:
         return not case.is_archived
     
     # Intake specialists: block if case has been handed off
-    if user_role == Role.INTAKE_SPECIALIST.value:
+    if user_role == Role.INTAKE_SPECIALIST:
         if case.status in CaseStatus.case_manager_only():
             return False
         return not case.is_archived

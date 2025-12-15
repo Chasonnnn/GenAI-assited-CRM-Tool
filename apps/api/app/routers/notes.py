@@ -11,6 +11,7 @@ from app.core.deps import (
     is_owner_or_can_manage,
     require_csrf_header,
 )
+from app.core.case_access import check_case_access
 from app.db.models import User
 from app.schemas.auth import UserSession
 from app.schemas.note import NoteCreate, NoteRead
@@ -42,11 +43,14 @@ def list_notes(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """List notes for a case."""
+    """List notes for a case (respects role-based access)."""
     # Verify case exists and belongs to org
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
+    
+    # Access control: intake can't access handed-off cases
+    check_case_access(case, session.role)
     
     notes = note_service.list_notes(db, case_id, session.org_id)
     return [_note_to_read(n, db) for n in notes]
@@ -59,11 +63,14 @@ def create_note(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Add a note to a case."""
+    """Add a note to a case (respects role-based access)."""
     # Verify case exists and belongs to org
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
+    
+    # Access control: intake can't access handed-off cases
+    check_case_access(case, session.role)
     
     note = note_service.create_note(
         db=db,
