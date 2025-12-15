@@ -102,12 +102,13 @@ export default function CasesPage() {
                         {data?.total ?? 0} total cases
                     </p>
                 </div>
-                <Button asChild>
-                    <Link href="/cases/new">
-                        <PlusIcon className="mr-2 size-4" />
-                        New Case
-                    </Link>
-                </Button>
+                <Link
+                    href="/cases/new"
+                    className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                >
+                    <PlusIcon className="mr-2 size-4" />
+                    New Case
+                </Link>
             </div>
 
             {/* Filters Row */}
@@ -272,7 +273,7 @@ export default function CasesPage() {
                                             </TableCell>
                                             <TableCell>
                                                 <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
+                                                    <DropdownMenuTrigger>
                                                         <Button variant="ghost" size="sm" className="size-8 p-0">
                                                             <MoreVerticalIcon className="size-4" />
                                                         </Button>
