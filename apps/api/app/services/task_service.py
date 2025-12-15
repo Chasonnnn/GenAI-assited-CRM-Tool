@@ -60,14 +60,21 @@ def update_task(
     db: Session,
     task: Task,
     data: TaskUpdate,
+    actor_user_id: UUID | None = None,
 ) -> Task:
     """
     Update task fields.
     
     Uses exclude_unset=True so only explicitly provided fields are updated.
     None values ARE applied to clear optional fields.
+    
+    If actor_user_id is provided, sends notification on assignee change.
     """
     update_data = data.model_dump(exclude_unset=True)
+    
+    # Track assignee for notification
+    old_assignee_id = task.assigned_to_user_id
+    new_assignee_id = update_data.get("assigned_to_user_id")
     
     # Fields that can be cleared (set to None)
     clearable_fields = {"assigned_to_user_id", "due_date", "due_time", "description"}
@@ -82,6 +89,35 @@ def update_task(
     
     db.commit()
     db.refresh(task)
+    
+    # Notify new assignee if reassigned (and not self-assign)
+    if (
+        actor_user_id
+        and "assigned_to_user_id" in update_data
+        and new_assignee_id
+        and new_assignee_id != old_assignee_id
+        and new_assignee_id != actor_user_id
+    ):
+        from app.services import notification_service
+        from app.db.models import User, Case
+        
+        actor = db.query(User).filter(User.id == actor_user_id).first()
+        actor_name = actor.display_name if actor else "Someone"
+        case_number = None
+        if task.case_id:
+            case = db.query(Case).filter(Case.id == task.case_id).first()
+            case_number = case.case_number if case else None
+        
+        notification_service.notify_task_assigned(
+            db=db,
+            task_id=task.id,
+            task_title=task.title,
+            org_id=task.organization_id,
+            assignee_id=new_assignee_id,
+            actor_name=actor_name,
+            case_number=case_number,
+        )
+    
     return task
 
 

@@ -9,6 +9,27 @@ from app.db.models import Job
 from app.db.enums import JobStatus, JobType
 
 
+# =============================================================================
+# TODO: Task Due/Overdue Notifications (Week 8b - deferred)
+# =============================================================================
+# 
+# Implement a daily worker sweep for task notifications:
+# 
+# 1. notify_tasks_due_today(): 
+#    - Query tasks with due_date = today AND is_completed = False
+#    - Send TASK_DUE_TODAY notification to assignee
+#    - Dedupe key: f"task_due_today:{task.id}:{date}"
+# 
+# 2. notify_tasks_overdue():
+#    - Query tasks with due_date < today AND is_completed = False
+#    - Send TASK_OVERDUE notification to assignee
+#    - Dedupe key: f"task_overdue:{task.id}:{date}"
+#
+# Both require adding TASK_DUE_TODAY and TASK_OVERDUE to NotificationType enum.
+# Schedule to run daily at 9am via cron job or scheduler.
+# =============================================================================
+
+
 def schedule_job(
     db: Session,
     org_id: UUID,

@@ -249,7 +249,7 @@ def update_task(
             if not membership:
                 raise HTTPException(status_code=400, detail="Assigned user not found in organization")
     
-    task = task_service.update_task(db, task, data)
+    task = task_service.update_task(db, task, data, actor_user_id=session.user_id)
     return _task_to_read(task, db)
 
 
