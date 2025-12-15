@@ -38,6 +38,7 @@ def get_user_settings(
     """
     settings = db.query(UserNotificationSettings).filter(
         UserNotificationSettings.user_id == user_id,
+        UserNotificationSettings.organization_id == org_id,
     ).first()
     
     if settings:
@@ -70,6 +71,7 @@ def update_user_settings(
     """
     settings = db.query(UserNotificationSettings).filter(
         UserNotificationSettings.user_id == user_id,
+        UserNotificationSettings.organization_id == org_id,
     ).first()
     
     if not settings:
@@ -125,13 +127,15 @@ def create_notification(
     """
     Create a notification.
     
-    Dedupes by dedupe_key within 1 hour window.
+    Dedupes by dedupe_key + org_id + user_id within 1 hour window.
     """
-    # Check dedupe
+    # Check dedupe (scoped by org and user for safety)
     if dedupe_key:
         one_hour_ago = datetime.utcnow() - timedelta(hours=1)
         existing = db.query(Notification).filter(
             Notification.dedupe_key == dedupe_key,
+            Notification.organization_id == org_id,
+            Notification.user_id == user_id,
             Notification.created_at > one_hour_ago,
         ).first()
         
