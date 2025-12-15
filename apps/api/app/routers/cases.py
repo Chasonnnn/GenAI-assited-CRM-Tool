@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.core.case_access import check_case_access, can_modify_case
 from app.core.deps import (
     CSRF_HEADER,
     can_archive,
@@ -14,13 +15,15 @@ from app.core.deps import (
     get_db,
     is_owner_or_can_manage,
     require_csrf_header,
+    require_roles,
 )
-from app.db.enums import CaseSource, CaseStatus, ROLES_CAN_ARCHIVE
+from app.db.enums import CaseSource, CaseStatus, Role, ROLES_CAN_ARCHIVE
 from app.db.models import User
 from app.schemas.auth import UserSession
 from app.schemas.case import (
     CaseAssign,
     CaseCreate,
+    CaseHandoffDeny,
     CaseListItem,
     CaseListResponse,
     CaseRead,
@@ -133,6 +136,7 @@ def list_cases(
     
     - Default excludes archived cases
     - Search (q) searches name, email, phone, case_number
+    - Intake specialists only see Stage A statuses
     """
     cases, total = case_service.list_cases(
         db=db,
@@ -144,6 +148,7 @@ def list_cases(
         assigned_to=assigned_to,
         q=q,
         include_archived=include_archived,
+        role_filter=session.role,  # Filter by user role
     )
     
     pages = (total + per_page - 1) // per_page if per_page > 0 else 0
@@ -186,10 +191,14 @@ def get_case(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Get case by ID."""
+    """Get case by ID (respects role-based access)."""
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
+    
+    # Access control: intake can't view case_manager_only statuses
+    check_case_access(case, session.role)
+    
     return _case_to_read(case, db)
 
 
@@ -203,14 +212,17 @@ def update_case(
     """
     Update case fields.
     
-    Requires: creator or manager+
+    Requires: creator or manager+ (blocked after handoff for intake)
     """
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     
-    # Permission check: creator or manager+
-    if not is_owner_or_can_manage(session, case.created_by_user_id):
+    # Access control: intake can't access handed-off cases
+    check_case_access(case, session.role)
+    
+    # Permission check: must be able to modify
+    if not can_modify_case(case, str(session.user_id), session.role):
         raise HTTPException(status_code=403, detail="Not authorized to update this case")
     
     try:
@@ -228,10 +240,13 @@ def change_status(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Change case status (records history)."""
+    """Change case status (records history, respects access control)."""
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
+    
+    # Access control: intake can't access handed-off cases
+    check_case_access(case, session.role)
     
     if case.is_archived:
         raise HTTPException(status_code=400, detail="Cannot change status of archived case")
@@ -386,3 +401,85 @@ def get_case_history(
         ))
     
     return result
+
+
+# =============================================================================
+# Handoff Workflow Endpoints (Case Manager+ only)
+# =============================================================================
+
+@router.get("/handoff-queue", response_model=CaseListResponse)
+def list_handoff_queue(
+    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.MANAGER, Role.DEVELOPER])),
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
+):
+    """
+    List cases awaiting case manager review (status=pending_handoff).
+    
+    Requires: case_manager+ role
+    """
+    cases, total = case_service.list_handoff_queue(
+        db=db,
+        org_id=session.org_id,
+        page=page,
+        per_page=per_page,
+    )
+    
+    pages = (total + per_page - 1) // per_page if per_page > 0 else 0
+    
+    return CaseListResponse(
+        items=[_case_to_list_item(c, db) for c in cases],
+        total=total,
+        page=page,
+        per_page=per_page,
+        pages=pages,
+    )
+
+
+@router.post("/{case_id}/accept", response_model=CaseRead, dependencies=[Depends(require_csrf_header)])
+def accept_handoff(
+    case_id: UUID,
+    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.MANAGER, Role.DEVELOPER])),
+    db: Session = Depends(get_db),
+):
+    """
+    Accept a pending_handoff case and transition to pending_match.
+    
+    Requires: case_manager+ role
+    Returns 409 if case is not in pending_handoff status.
+    """
+    case = case_service.get_case(db, session.org_id, case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    
+    case, error = case_service.accept_handoff(db, case, session.user_id)
+    if error:
+        raise HTTPException(status_code=409, detail=error)
+    
+    return _case_to_read(case, db)
+
+
+@router.post("/{case_id}/deny", response_model=CaseRead, dependencies=[Depends(require_csrf_header)])
+def deny_handoff(
+    case_id: UUID,
+    data: CaseHandoffDeny,
+    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.MANAGER, Role.DEVELOPER])),
+    db: Session = Depends(get_db),
+):
+    """
+    Deny a pending_handoff case and revert to under_review.
+    
+    Requires: case_manager+ role
+    Reason is optional but stored in status history.
+    Returns 409 if case is not in pending_handoff status.
+    """
+    case = case_service.get_case(db, session.org_id, case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    
+    case, error = case_service.deny_handoff(db, case, session.user_id, data.reason)
+    if error:
+        raise HTTPException(status_code=409, detail=error)
+    
+    return _case_to_read(case, db)

@@ -35,9 +35,9 @@ class CaseStatus(str, Enum):
     
     Stage A (Intake Pipeline):
         new_unread → contacted → followup_scheduled → application_submitted 
-        → under_review → approved/disqualified
+        → under_review → approved → pending_handoff/disqualified
     
-    Stage B (Post-Approval):
+    Stage B (Post-Approval, Case Manager only):
         pending_match → meds_started → exam_passed → embryo_transferred → delivered
     """
     # Stage A: Intake Pipeline
@@ -47,9 +47,10 @@ class CaseStatus(str, Enum):
     APPLICATION_SUBMITTED = "application_submitted"
     UNDER_REVIEW = "under_review"
     APPROVED = "approved"
+    PENDING_HANDOFF = "pending_handoff"  # Awaiting case manager review
     DISQUALIFIED = "disqualified"
     
-    # Stage B: Post-Approval
+    # Stage B: Post-Approval (Case Manager only)
     PENDING_MATCH = "pending_match"
     MEDS_STARTED = "meds_started"
     EXAM_PASSED = "exam_passed"
@@ -59,6 +60,28 @@ class CaseStatus(str, Enum):
     # Archive pseudo-status (for history tracking)
     ARCHIVED = "archived"
     RESTORED = "restored"
+
+    @classmethod
+    def intake_visible(cls) -> list[str]:
+        """Statuses visible to intake specialists (Stage A)."""
+        return [
+            cls.NEW_UNREAD.value, cls.CONTACTED.value, cls.FOLLOWUP_SCHEDULED.value,
+            cls.APPLICATION_SUBMITTED.value, cls.UNDER_REVIEW.value,
+            cls.APPROVED.value, cls.PENDING_HANDOFF.value, cls.DISQUALIFIED.value
+        ]
+    
+    @classmethod
+    def case_manager_only(cls) -> list[str]:
+        """Statuses only accessible by case_manager+ (Stage B)."""
+        return [
+            cls.PENDING_MATCH.value, cls.MEDS_STARTED.value, cls.EXAM_PASSED.value,
+            cls.EMBRYO_TRANSFERRED.value, cls.DELIVERED.value
+        ]
+
+    @classmethod
+    def handoff_queue(cls) -> list[str]:
+        """Statuses awaiting case manager review."""
+        return [cls.PENDING_HANDOFF.value]
 
 
 class CaseSource(str, Enum):

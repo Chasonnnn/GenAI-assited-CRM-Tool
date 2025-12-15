@@ -163,3 +163,38 @@ export function deleteCase(caseId: string): Promise<void> {
 export function getCaseHistory(caseId: string): Promise<CaseStatusHistory[]> {
     return api.get<CaseStatusHistory[]>(`/cases/${caseId}/history`);
 }
+
+// =============================================================================
+// Handoff Workflow (Case Manager+ only)
+// =============================================================================
+
+export interface HandoffQueueParams {
+    page?: number;
+    per_page?: number;
+}
+
+/**
+ * Get cases in pending_handoff status (case_manager+ only).
+ */
+export function getHandoffQueue(params: HandoffQueueParams = {}): Promise<CaseListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.page) searchParams.set('page', String(params.page));
+    if (params.per_page) searchParams.set('per_page', String(params.per_page));
+
+    const query = searchParams.toString();
+    return api.get<CaseListResponse>(`/cases/handoff-queue${query ? `?${query}` : ''}`);
+}
+
+/**
+ * Accept a pending_handoff case → transitions to pending_match.
+ */
+export function acceptHandoff(caseId: string): Promise<CaseRead> {
+    return api.post<CaseRead>(`/cases/${caseId}/accept`);
+}
+
+/**
+ * Deny a pending_handoff case → reverts to under_review.
+ */
+export function denyHandoff(caseId: string, reason?: string): Promise<CaseRead> {
+    return api.post<CaseRead>(`/cases/${caseId}/deny`, { reason });
+}

@@ -117,8 +117,13 @@ def change_status(
     Change case status and record history.
     
     No-op if status unchanged.
+    Auto-transitions: approved → pending_handoff
     """
     old_status = case.status
+    
+    # Auto-transition: approved → pending_handoff
+    if new_status == CaseStatus.APPROVED:
+        new_status = CaseStatus.PENDING_HANDOFF
     
     # No-op if same status
     if old_status == new_status.value:
@@ -139,6 +144,77 @@ def change_status(
     db.commit()
     db.refresh(case)
     return case
+
+
+def accept_handoff(
+    db: Session,
+    case: Case,
+    user_id: UUID,
+) -> tuple[Case | None, str | None]:
+    """
+    Case manager accepts a pending_handoff case.
+    
+    - Must be in pending_handoff status (409 conflict if not)
+    - Changes status to pending_match
+    - Records history
+    
+    Returns:
+        (case, error) - error is set if status mismatch
+    """
+    if case.status != CaseStatus.PENDING_HANDOFF.value:
+        return None, f"Case is not pending handoff (current: {case.status})"
+    
+    old_status = case.status
+    case.status = CaseStatus.PENDING_MATCH.value
+    
+    history = CaseStatusHistory(
+        case_id=case.id,
+        organization_id=case.organization_id,
+        from_status=old_status,
+        to_status=CaseStatus.PENDING_MATCH.value,
+        changed_by_user_id=user_id,
+        reason="Handoff accepted by case manager",
+    )
+    db.add(history)
+    db.commit()
+    db.refresh(case)
+    return case, None
+
+
+def deny_handoff(
+    db: Session,
+    case: Case,
+    user_id: UUID,
+    reason: str | None = None,
+) -> tuple[Case | None, str | None]:
+    """
+    Case manager denies a pending_handoff case.
+    
+    - Must be in pending_handoff status (409 conflict if not)
+    - Reverts status to under_review
+    - Records reason in history
+    
+    Returns:
+        (case, error) - error is set if status mismatch
+    """
+    if case.status != CaseStatus.PENDING_HANDOFF.value:
+        return None, f"Case is not pending handoff (current: {case.status})"
+    
+    old_status = case.status
+    case.status = CaseStatus.UNDER_REVIEW.value
+    
+    history = CaseStatusHistory(
+        case_id=case.id,
+        organization_id=case.organization_id,
+        from_status=old_status,
+        to_status=CaseStatus.UNDER_REVIEW.value,
+        changed_by_user_id=user_id,
+        reason=reason or "Handoff denied by case manager",
+    )
+    db.add(history)
+    db.commit()
+    db.refresh(case)
+    return case, None
 
 
 def assign_case(
@@ -266,18 +342,29 @@ def list_cases(
     assigned_to: UUID | None = None,
     q: str | None = None,
     include_archived: bool = False,
+    role_filter: str | None = None,
 ):
     """
     List cases with filters and pagination.
     
+    Args:
+        role_filter: If 'intake_specialist', excludes CASE_MANAGER_ONLY statuses
+    
     Returns:
         (cases, total_count)
     """
+    from app.db.enums import Role
+    
     query = db.query(Case).filter(Case.organization_id == org_id)
     
     # Archived filter (default: exclude)
     if not include_archived:
         query = query.filter(Case.is_archived == False)
+    
+    # Role-based visibility filter
+    if role_filter == Role.INTAKE_SPECIALIST.value:
+        # Intake can only see INTAKE_VISIBLE statuses (exclude CASE_MANAGER_ONLY)
+        query = query.filter(~Case.status.in_(CaseStatus.case_manager_only()))
     
     # Status filter
     if status:
@@ -310,6 +397,31 @@ def list_cases(
     total = query.count()
     
     # Paginate
+    offset = (page - 1) * per_page
+    cases = query.offset(offset).limit(per_page).all()
+    
+    return cases, total
+
+
+def list_handoff_queue(
+    db: Session,
+    org_id: UUID,
+    page: int = 1,
+    per_page: int = 20,
+):
+    """
+    List cases in pending_handoff status (for case manager review).
+    
+    Returns:
+        (cases, total_count)
+    """
+    query = db.query(Case).filter(
+        Case.organization_id == org_id,
+        Case.status == CaseStatus.PENDING_HANDOFF.value,
+        Case.is_archived == False,
+    ).order_by(Case.created_at.desc())
+    
+    total = query.count()
     offset = (page - 1) * per_page
     cases = query.offset(offset).limit(per_page).all()
     
