@@ -108,6 +108,17 @@ class CaseActivityType(str, Enum):
     NOTE_DELETED = "note_deleted"
 
 
+class NotificationType(str, Enum):
+    """Types of in-app notifications."""
+    CASE_ASSIGNED = "case_assigned"
+    CASE_STATUS_CHANGED = "case_status_changed"
+    CASE_HANDOFF_READY = "case_handoff_ready"
+    CASE_HANDOFF_ACCEPTED = "case_handoff_accepted"
+    CASE_HANDOFF_DENIED = "case_handoff_denied"
+    TASK_ASSIGNED = "task_assigned"
+    # Future: TASK_DUE_TODAY, TASK_OVERDUE (requires worker job)
+
+
 # Note: is_priority is a boolean field on Case model, not an enum
 # Default: False (normal), True (priority - shown with gold styling in UI)
 

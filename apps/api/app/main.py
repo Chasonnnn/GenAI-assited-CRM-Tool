@@ -6,7 +6,7 @@ from sqlalchemy import text
 
 from app.core.config import settings
 from app.db.session import engine
-from app.routers import auth, cases, notes, tasks, webhooks, email_templates, jobs, intended_parents
+from app.routers import auth, cases, notes, tasks, webhooks, email_templates, jobs, intended_parents, notifications
 
 app = FastAPI(
     title="CRM API",
@@ -35,6 +35,9 @@ app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 
 # Intended Parents module
 app.include_router(intended_parents.router, prefix="/intended-parents", tags=["intended-parents"])
+
+# Notifications (user-scoped)
+app.include_router(notifications.router, prefix="/me", tags=["notifications"])
 
 # Email and jobs routers
 app.include_router(email_templates.router, prefix="/email-templates", tags=["email"])
