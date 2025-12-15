@@ -38,6 +38,7 @@ class CaseCreate(BaseModel):
     
     # Workflow
     source: CaseSource = CaseSource.MANUAL
+    is_priority: bool = False
 
     @field_validator("phone")
     @classmethod
@@ -73,6 +74,7 @@ class CaseUpdate(BaseModel):
     has_surrogate_experience: bool | None = None
     num_deliveries: int | None = Field(None, ge=0, le=20)
     num_csections: int | None = Field(None, ge=0, le=10)
+    is_priority: bool | None = None
 
     @field_validator("phone")
     @classmethod
@@ -99,6 +101,7 @@ class CaseRead(BaseModel):
     case_number: str
     status: CaseStatus
     source: CaseSource
+    is_priority: bool
     
     # Assignment
     assigned_to_user_id: UUID | None
@@ -148,6 +151,7 @@ class CaseListItem(BaseModel):
     phone: str | None
     state: str | None
     assigned_to_name: str | None = None
+    is_priority: bool
     is_archived: bool
     created_at: datetime
 

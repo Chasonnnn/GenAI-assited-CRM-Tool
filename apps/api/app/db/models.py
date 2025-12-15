@@ -277,6 +277,11 @@ class Case(Base):
         server_default=text(f"'{DEFAULT_CASE_SOURCE.value}'"),
         nullable=False
     )
+    is_priority: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("FALSE"),
+        nullable=False
+    )
     assigned_to_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
