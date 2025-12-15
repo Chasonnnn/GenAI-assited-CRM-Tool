@@ -193,290 +193,297 @@ export default function CasesPage() {
     }
 
     return (
-        <div className="flex flex-col gap-6 p-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold">Cases</h1>
-                    <p className="text-muted-foreground">
-                        {data?.total ?? 0} total cases
-                    </p>
+        <div className="flex flex-col h-full overflow-hidden">
+            {/* Sticky Header */}
+            <div className="flex-shrink-0 p-6 pb-0">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-6">
+                    <div>
+                        <h1 className="text-2xl font-bold">Cases</h1>
+                        <p className="text-muted-foreground">
+                            {data?.total ?? 0} total cases
+                        </p>
+                    </div>
+                    {/* New Case button removed - route /cases/new doesn't exist */}
                 </div>
-                {/* New Case button removed - route /cases/new doesn't exist */}
+
+                {/* Filters Row */}
+                <div className="flex flex-wrap items-center gap-3">
+                    <Select value={statusFilter} onValueChange={(value) => setStatusFilter((value || "all") as CaseStatus | "all")}>
+                        <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="All Statuses" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Statuses</SelectItem>
+                            <SelectItem value="new_unread">New</SelectItem>
+                            <SelectItem value="contacted">Contacted</SelectItem>
+                            <SelectItem value="followup_scheduled">Follow-up Scheduled</SelectItem>
+                            <SelectItem value="application_submitted">Application Submitted</SelectItem>
+                            <SelectItem value="under_review">Under Review</SelectItem>
+                            <SelectItem value="approved">Approved</SelectItem>
+                            <SelectItem value="pending_handoff">Pending Handoff</SelectItem>
+                            <SelectItem value="disqualified">Disqualified</SelectItem>
+                            <SelectItem value="pending_match">Pending Match</SelectItem>
+                            <SelectItem value="meds_started">Meds Started</SelectItem>
+                            <SelectItem value="exam_passed">Exam Passed</SelectItem>
+                            <SelectItem value="embryo_transferred">Embryo Transferred</SelectItem>
+                            <SelectItem value="delivered">Delivered</SelectItem>
+                        </SelectContent>
+                    </Select>
+
+                    <Select value={sourceFilter} onValueChange={(value) => setSourceFilter((value || "all") as CaseSource | "all")}>
+                        <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="All Sources" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Sources</SelectItem>
+                            <SelectItem value="manual">Manual</SelectItem>
+                            <SelectItem value="meta">Meta</SelectItem>
+                            <SelectItem value="website">Website</SelectItem>
+                            <SelectItem value="referral">Referral</SelectItem>
+                        </SelectContent>
+                    </Select>
+
+                    <div className="relative ml-auto w-full max-w-sm">
+                        <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            placeholder="Search cases..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-9"
+                        />
+                    </div>
+
+                    {hasActiveFilters && (
+                        <Button variant="ghost" onClick={resetFilters}>
+                            <XIcon className="mr-2 size-4" />
+                            Reset
+                        </Button>
+                    )}
+                </div>
             </div>
 
-            {/* Filters Row */}
-            <div className="flex flex-wrap items-center gap-3">
-                <Select value={statusFilter} onValueChange={(value) => setStatusFilter((value || "all") as CaseStatus | "all")}>
-                    <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="All Statuses" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Statuses</SelectItem>
-                        <SelectItem value="new_unread">New</SelectItem>
-                        <SelectItem value="contacted">Contacted</SelectItem>
-                        <SelectItem value="followup_scheduled">Follow-up Scheduled</SelectItem>
-                        <SelectItem value="application_submitted">Application Submitted</SelectItem>
-                        <SelectItem value="under_review">Under Review</SelectItem>
-                        <SelectItem value="approved">Approved</SelectItem>
-                        <SelectItem value="pending_handoff">Pending Handoff</SelectItem>
-                        <SelectItem value="disqualified">Disqualified</SelectItem>
-                        <SelectItem value="pending_match">Pending Match</SelectItem>
-                        <SelectItem value="meds_started">Meds Started</SelectItem>
-                        <SelectItem value="exam_passed">Exam Passed</SelectItem>
-                        <SelectItem value="embryo_transferred">Embryo Transferred</SelectItem>
-                        <SelectItem value="delivered">Delivered</SelectItem>
-                    </SelectContent>
-                </Select>
+            {/* Scrollable Content Area */}
+            <div className="flex-1 overflow-auto p-6 pt-4">
 
-                <Select value={sourceFilter} onValueChange={(value) => setSourceFilter((value || "all") as CaseSource | "all")}>
-                    <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="All Sources" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Sources</SelectItem>
-                        <SelectItem value="manual">Manual</SelectItem>
-                        <SelectItem value="meta">Meta</SelectItem>
-                        <SelectItem value="website">Website</SelectItem>
-                        <SelectItem value="referral">Referral</SelectItem>
-                    </SelectContent>
-                </Select>
+                {/* Error State */}
+                {error && (
+                    <Card className="p-6 text-center text-destructive">
+                        Error loading cases: {error.message}
+                    </Card>
+                )}
 
-                <div className="relative ml-auto w-full max-w-sm">
-                    <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                        placeholder="Search cases..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-9"
+                {/* Loading State */}
+                {isLoading && (
+                    <Card className="p-12 flex items-center justify-center">
+                        <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+                    </Card>
+                )}
+
+                {/* Empty State */}
+                {!isLoading && !error && data?.items.length === 0 && (
+                    <Card className="p-12 text-center">
+                        <div className="flex flex-col items-center gap-3">
+                            <p className="text-muted-foreground">
+                                {hasActiveFilters
+                                    ? "No cases match your filters"
+                                    : "No cases yet"
+                                }
+                            </p>
+                            {hasActiveFilters && (
+                                <Button variant="outline" onClick={resetFilters}>
+                                    Clear Filters
+                                </Button>
+                            )}
+                        </div>
+                    </Card>
+                )}
+
+                {/* Cases Table */}
+                {!isLoading && !error && data && data.items.length > 0 && (
+                    <Card className="overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="w-[40px]">
+                                            <Checkbox
+                                                checked={data?.items && data.items.length > 0 && selectedCases.size === data.items.length}
+                                                onCheckedChange={(checked) => handleSelectAll(!!checked)}
+                                            />
+                                        </TableHead>
+                                        <TableHead className="w-[100px]">Case #</TableHead>
+                                        <TableHead>Name</TableHead>
+                                        <TableHead>Age</TableHead>
+                                        <TableHead>BMI</TableHead>
+                                        <TableHead>Phone</TableHead>
+                                        <TableHead>Email</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead>Source</TableHead>
+                                        <TableHead>Assigned To</TableHead>
+                                        <TableHead>Created</TableHead>
+                                        <TableHead className="w-[50px]"></TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {data.items.map((caseItem) => {
+                                        const statusConfig = STATUS_CONFIG[caseItem.status as CaseStatus] || {
+                                            label: caseItem.status,
+                                            color: "bg-gray-100 text-gray-700"
+                                        }
+                                        // Apply gold styling for entire row on priority cases
+                                        const rowClass = caseItem.is_priority ? "text-amber-600" : ""
+
+                                        return (
+                                            <TableRow key={caseItem.id} className={rowClass}>
+                                                <TableCell>
+                                                    <Checkbox
+                                                        checked={selectedCases.has(caseItem.id)}
+                                                        onCheckedChange={(checked) => handleSelectCase(caseItem.id, !!checked)}
+                                                    />
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Link href={`/cases/${caseItem.id}`} className={`font-medium hover:underline ${caseItem.is_priority ? "text-amber-600" : "text-primary"}`}>
+                                                        #{caseItem.case_number}
+                                                    </Link>
+                                                </TableCell>
+                                                <TableCell className="font-medium">{caseItem.full_name}</TableCell>
+                                                <TableCell className="text-center">
+                                                    {caseItem.age ?? "—"}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    {caseItem.bmi ?? "—"}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {caseItem.phone || "—"}
+                                                </TableCell>
+                                                <TableCell className="max-w-[200px] truncate" title={caseItem.email}>
+                                                    {caseItem.email}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge className={statusConfig.color}>
+                                                        {statusConfig.label}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant="secondary" className="capitalize">{caseItem.source}</Badge>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {caseItem.assigned_to_name ? (
+                                                        <TooltipProvider>
+                                                            <Tooltip>
+                                                                <TooltipTrigger>
+                                                                    <Avatar className="h-7 w-7">
+                                                                        <AvatarFallback className="text-xs">
+                                                                            {getInitials(caseItem.assigned_to_name)}
+                                                                        </AvatarFallback>
+                                                                    </Avatar>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent>
+                                                                    {caseItem.assigned_to_name}
+                                                                </TooltipContent>
+                                                            </Tooltip>
+                                                        </TooltipProvider>
+                                                    ) : (
+                                                        <span className="text-muted-foreground">—</span>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {formatDate(caseItem.created_at)}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger className="inline-flex items-center justify-center size-8 p-0 rounded-md hover:bg-accent hover:text-accent-foreground">
+                                                            <MoreVerticalIcon className="size-4" />
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                            <DropdownMenuItem onClick={() => window.location.href = `/cases/${caseItem.id}`}>
+                                                                View Details
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem
+                                                                onClick={() => handleTogglePriority(caseItem.id, caseItem.is_priority)}
+                                                                disabled={updateMutation.isPending}
+                                                            >
+                                                                {caseItem.is_priority ? "Remove Priority" : "Mark as Priority"}
+                                                            </DropdownMenuItem>
+                                                            {!caseItem.is_archived ? (
+                                                                <DropdownMenuItem
+                                                                    onClick={() => handleArchive(caseItem.id)}
+                                                                    disabled={archiveMutation.isPending}
+                                                                    className="text-destructive"
+                                                                >
+                                                                    Archive
+                                                                </DropdownMenuItem>
+                                                            ) : (
+                                                                <DropdownMenuItem
+                                                                    onClick={() => handleRestore(caseItem.id)}
+                                                                    disabled={restoreMutation.isPending}
+                                                                >
+                                                                    Restore
+                                                                </DropdownMenuItem>
+                                                            )}
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </div>
+
+                        {/* Pagination */}
+                        {data.pages > 1 && (
+                            <div className="flex items-center justify-between border-t border-border px-6 py-4">
+                                <div className="text-sm text-muted-foreground">
+                                    Showing {((page - 1) * perPage) + 1}-{Math.min(page * perPage, data.total)} of {data.total} cases
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={page === 1}
+                                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                                    >
+                                        Previous
+                                    </Button>
+                                    {[...Array(Math.min(5, data.pages))].map((_, i) => {
+                                        const pageNum = i + 1
+                                        return (
+                                            <Button
+                                                key={pageNum}
+                                                variant={page === pageNum ? "default" : "outline"}
+                                                size="sm"
+                                                onClick={() => setPage(pageNum)}
+                                            >
+                                                {pageNum}
+                                            </Button>
+                                        )
+                                    })}
+                                    {data.pages > 5 && <span className="text-muted-foreground">...</span>}
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={page >= data.pages}
+                                        onClick={() => setPage(p => Math.min(data.pages, p + 1))}
+                                    >
+                                        Next
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                    </Card>
+                )}
+
+                {/* Floating Action Bar for Multi-Select */}
+                {selectedCases.size > 0 && (
+                    <FloatingActionBar
+                        selectedCount={selectedCases.size}
+                        selectedCaseIds={Array.from(selectedCases)}
+                        onClear={clearSelection}
                     />
-                </div>
-
-                {hasActiveFilters && (
-                    <Button variant="ghost" onClick={resetFilters}>
-                        <XIcon className="mr-2 size-4" />
-                        Reset
-                    </Button>
                 )}
             </div>
-
-            {/* Error State */}
-            {error && (
-                <Card className="p-6 text-center text-destructive">
-                    Error loading cases: {error.message}
-                </Card>
-            )}
-
-            {/* Loading State */}
-            {isLoading && (
-                <Card className="p-12 flex items-center justify-center">
-                    <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
-                </Card>
-            )}
-
-            {/* Empty State */}
-            {!isLoading && !error && data?.items.length === 0 && (
-                <Card className="p-12 text-center">
-                    <div className="flex flex-col items-center gap-3">
-                        <p className="text-muted-foreground">
-                            {hasActiveFilters
-                                ? "No cases match your filters"
-                                : "No cases yet"
-                            }
-                        </p>
-                        {hasActiveFilters && (
-                            <Button variant="outline" onClick={resetFilters}>
-                                Clear Filters
-                            </Button>
-                        )}
-                    </div>
-                </Card>
-            )}
-
-            {/* Cases Table */}
-            {!isLoading && !error && data && data.items.length > 0 && (
-                <Card className="overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-[40px]">
-                                        <Checkbox
-                                            checked={data?.items && data.items.length > 0 && selectedCases.size === data.items.length}
-                                            onCheckedChange={(checked) => handleSelectAll(!!checked)}
-                                        />
-                                    </TableHead>
-                                    <TableHead className="w-[100px]">Case #</TableHead>
-                                    <TableHead>Name</TableHead>
-                                    <TableHead>Age</TableHead>
-                                    <TableHead>BMI</TableHead>
-                                    <TableHead>Phone</TableHead>
-                                    <TableHead>Email</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Source</TableHead>
-                                    <TableHead>Assigned To</TableHead>
-                                    <TableHead>Created</TableHead>
-                                    <TableHead className="w-[50px]"></TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {data.items.map((caseItem) => {
-                                    const statusConfig = STATUS_CONFIG[caseItem.status as CaseStatus] || {
-                                        label: caseItem.status,
-                                        color: "bg-gray-100 text-gray-700"
-                                    }
-                                    // Apply gold styling for entire row on priority cases
-                                    const rowClass = caseItem.is_priority ? "text-amber-600" : ""
-
-                                    return (
-                                        <TableRow key={caseItem.id} className={rowClass}>
-                                            <TableCell>
-                                                <Checkbox
-                                                    checked={selectedCases.has(caseItem.id)}
-                                                    onCheckedChange={(checked) => handleSelectCase(caseItem.id, !!checked)}
-                                                />
-                                            </TableCell>
-                                            <TableCell>
-                                                <Link href={`/cases/${caseItem.id}`} className={`font-medium hover:underline ${caseItem.is_priority ? "text-amber-600" : "text-primary"}`}>
-                                                    #{caseItem.case_number}
-                                                </Link>
-                                            </TableCell>
-                                            <TableCell className="font-medium">{caseItem.full_name}</TableCell>
-                                            <TableCell className="text-center">
-                                                {caseItem.age ?? "—"}
-                                            </TableCell>
-                                            <TableCell className="text-center">
-                                                {caseItem.bmi ?? "—"}
-                                            </TableCell>
-                                            <TableCell>
-                                                {caseItem.phone || "—"}
-                                            </TableCell>
-                                            <TableCell className="max-w-[200px] truncate" title={caseItem.email}>
-                                                {caseItem.email}
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge className={statusConfig.color}>
-                                                    {statusConfig.label}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant="secondary" className="capitalize">{caseItem.source}</Badge>
-                                            </TableCell>
-                                            <TableCell>
-                                                {caseItem.assigned_to_name ? (
-                                                    <TooltipProvider>
-                                                        <Tooltip>
-                                                            <TooltipTrigger>
-                                                                <Avatar className="h-7 w-7">
-                                                                    <AvatarFallback className="text-xs">
-                                                                        {getInitials(caseItem.assigned_to_name)}
-                                                                    </AvatarFallback>
-                                                                </Avatar>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent>
-                                                                {caseItem.assigned_to_name}
-                                                            </TooltipContent>
-                                                        </Tooltip>
-                                                    </TooltipProvider>
-                                                ) : (
-                                                    <span className="text-muted-foreground">—</span>
-                                                )}
-                                            </TableCell>
-                                            <TableCell>
-                                                {formatDate(caseItem.created_at)}
-                                            </TableCell>
-                                            <TableCell>
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger className="inline-flex items-center justify-center size-8 p-0 rounded-md hover:bg-accent hover:text-accent-foreground">
-                                                        <MoreVerticalIcon className="size-4" />
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end">
-                                                        <DropdownMenuItem onClick={() => window.location.href = `/cases/${caseItem.id}`}>
-                                                            View Details
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem
-                                                            onClick={() => handleTogglePriority(caseItem.id, caseItem.is_priority)}
-                                                            disabled={updateMutation.isPending}
-                                                        >
-                                                            {caseItem.is_priority ? "Remove Priority" : "Mark as Priority"}
-                                                        </DropdownMenuItem>
-                                                        {!caseItem.is_archived ? (
-                                                            <DropdownMenuItem
-                                                                onClick={() => handleArchive(caseItem.id)}
-                                                                disabled={archiveMutation.isPending}
-                                                                className="text-destructive"
-                                                            >
-                                                                Archive
-                                                            </DropdownMenuItem>
-                                                        ) : (
-                                                            <DropdownMenuItem
-                                                                onClick={() => handleRestore(caseItem.id)}
-                                                                disabled={restoreMutation.isPending}
-                                                            >
-                                                                Restore
-                                                            </DropdownMenuItem>
-                                                        )}
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            </TableCell>
-                                        </TableRow>
-                                    )
-                                })}
-                            </TableBody>
-                        </Table>
-                    </div>
-
-                    {/* Pagination */}
-                    {data.pages > 1 && (
-                        <div className="flex items-center justify-between border-t border-border px-6 py-4">
-                            <div className="text-sm text-muted-foreground">
-                                Showing {((page - 1) * perPage) + 1}-{Math.min(page * perPage, data.total)} of {data.total} cases
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={page === 1}
-                                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                                >
-                                    Previous
-                                </Button>
-                                {[...Array(Math.min(5, data.pages))].map((_, i) => {
-                                    const pageNum = i + 1
-                                    return (
-                                        <Button
-                                            key={pageNum}
-                                            variant={page === pageNum ? "default" : "outline"}
-                                            size="sm"
-                                            onClick={() => setPage(pageNum)}
-                                        >
-                                            {pageNum}
-                                        </Button>
-                                    )
-                                })}
-                                {data.pages > 5 && <span className="text-muted-foreground">...</span>}
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={page >= data.pages}
-                                    onClick={() => setPage(p => Math.min(data.pages, p + 1))}
-                                >
-                                    Next
-                                </Button>
-                            </div>
-                        </div>
-                    )}
-                </Card>
-            )}
-
-            {/* Floating Action Bar for Multi-Select */}
-            {selectedCases.size > 0 && (
-                <FloatingActionBar
-                    selectedCount={selectedCases.size}
-                    selectedCaseIds={Array.from(selectedCases)}
-                    onClear={clearSelection}
-                />
-            )}
         </div>
     )
 }
