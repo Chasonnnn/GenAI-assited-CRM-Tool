@@ -96,6 +96,17 @@ def _task_to_list_item(task, db: Session) -> TaskListItem:
     )
 
 
+def _check_task_case_access(task, session: "UserSession", db: Session) -> None:
+    """Check case access for a task linked to a case."""
+    from app.core.case_access import check_case_access
+    from app.services import case_service
+    
+    if task.case_id:
+        case = case_service.get_case(db, session.org_id, task.case_id)
+        if case:
+            check_case_access(case, session.role)
+
+
 @router.get("", response_model=TaskListResponse)
 def list_tasks(
     session: UserSession = Depends(get_current_session),
@@ -112,7 +123,16 @@ def list_tasks(
     List tasks.
     
     - my_tasks=true: Filter to tasks created by or assigned to current user
+    - If case_id is specified, role-based access is checked
     """
+    # If filtering by case_id, check access first
+    if case_id:
+        from app.core.case_access import check_case_access
+        from app.services import case_service
+        case = case_service.get_case(db, session.org_id, case_id)
+        if case:
+            check_case_access(case, session.role)
+    
     tasks, total = task_service.list_tasks(
         db=db,
         org_id=session.org_id,
@@ -179,10 +199,14 @@ def get_task(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Get task by ID."""
+    """Get task by ID (respects role-based case access)."""
     task = task_service.get_task(db, task_id, session.org_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Access control: check case access if task is linked to a case
+    _check_task_case_access(task, session, db)
+    
     return _task_to_read(task, db)
 
 
@@ -203,6 +227,9 @@ def update_task(
     task = task_service.get_task(db, task_id, session.org_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Access control: check case access if task is linked to a case
+    _check_task_case_access(task, session, db)
     
     # Permission: creator, assignee, or manager+
     if not is_owner_or_assignee_or_manager(
@@ -240,6 +267,9 @@ def complete_task(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
+    # Access control: check case access if task is linked to a case
+    _check_task_case_access(task, session, db)
+    
     if not is_owner_or_assignee_or_manager(
         session, task.created_by_user_id, task.assigned_to_user_id
     ):
@@ -255,10 +285,13 @@ def uncomplete_task(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Mark task as not completed."""
+    """Mark task as not completed (respects role-based case access)."""
     task = task_service.get_task(db, task_id, session.org_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Access control: check case access if task is linked to a case
+    _check_task_case_access(task, session, db)
     
     if not is_owner_or_assignee_or_manager(
         session, task.created_by_user_id, task.assigned_to_user_id
@@ -279,10 +312,14 @@ def delete_task(
     Delete task.
     
     Requires: creator or manager+ (assignee cannot delete)
+    Access: Respects role-based case access
     """
     task = task_service.get_task(db, task_id, session.org_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Access control: check case access if task is linked to a case
+    _check_task_case_access(task, session, db)
     
     # Permission: creator or manager+ only (not assignee)
     if not is_owner_or_can_manage(session, task.created_by_user_id):

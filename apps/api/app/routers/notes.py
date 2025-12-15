@@ -92,10 +92,17 @@ def delete_note(
     Delete a note.
     
     Requires: author or manager+
+    Access: Respects role-based case access (intake can't delete on handed-off cases)
     """
     note = note_service.get_note(db, note_id, session.org_id)
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
+    
+    # Access control: check case access if note is linked to a case
+    if note.case_id:
+        case = case_service.get_case(db, session.org_id, note.case_id)
+        if case:
+            check_case_access(case, session.role)
     
     # Permission: author or manager+
     if not is_owner_or_can_manage(session, note.author_id):

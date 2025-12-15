@@ -79,8 +79,11 @@ export default function CasesPage() {
         q: debouncedSearch || undefined,
     })
 
-    // Fetch handoff queue (case_manager+ only)
-    const handoffQuery = useHandoffQueue({ page: handoffPage, per_page: perPage })
+    // Fetch handoff queue (case_manager+ only) - skip query for other roles
+    const handoffQuery = useHandoffQueue(
+        canSeeHandoffQueue ? { page: handoffPage, per_page: perPage } : {},
+        { enabled: Boolean(canSeeHandoffQueue) }
+    )
 
     const archiveMutation = useArchiveCase()
     const restoreMutation = useRestoreCase()
