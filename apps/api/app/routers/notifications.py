@@ -140,6 +140,7 @@ def mark_notification_read(
         db=db,
         notification_id=notification_id,
         user_id=session.user_id,
+        org_id=session.org_id,
     )
     
     if not notification:

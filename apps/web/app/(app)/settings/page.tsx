@@ -10,7 +10,92 @@ import { Switch } from "@/components/ui/switch"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { CameraIcon, CheckIcon, MonitorIcon, SmartphoneIcon } from "lucide-react"
+import { CameraIcon, CheckIcon, MonitorIcon, SmartphoneIcon, LoaderIcon } from "lucide-react"
+import { useNotificationSettings, useUpdateNotificationSettings } from "@/lib/hooks/use-notifications"
+
+// Notification Settings Card - wired to real API
+function NotificationsSettingsCard() {
+  const { data: settings, isLoading } = useNotificationSettings()
+  const updateMutation = useUpdateNotificationSettings()
+
+  const handleToggle = (key: string, value: boolean) => {
+    updateMutation.mutate({ [key]: value })
+  }
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-12 flex items-center justify-center">
+          <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>In-App Notification Preferences</CardTitle>
+        <CardDescription>Control which notifications you receive</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="case_assigned">Case assigned to me</Label>
+              <p className="text-sm text-muted-foreground">Get notified when a case is assigned to you</p>
+            </div>
+            <Switch
+              id="case_assigned"
+              checked={settings?.case_assigned ?? true}
+              onCheckedChange={(checked) => handleToggle("case_assigned", checked)}
+              disabled={updateMutation.isPending}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="case_status_changed">Case status changes</Label>
+              <p className="text-sm text-muted-foreground">Get notified when case status changes</p>
+            </div>
+            <Switch
+              id="case_status_changed"
+              checked={settings?.case_status_changed ?? true}
+              onCheckedChange={(checked) => handleToggle("case_status_changed", checked)}
+              disabled={updateMutation.isPending}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="case_handoff">Case handoff events</Label>
+              <p className="text-sm text-muted-foreground">Get notified for handoff requests and approvals</p>
+            </div>
+            <Switch
+              id="case_handoff"
+              checked={settings?.case_handoff ?? true}
+              onCheckedChange={(checked) => handleToggle("case_handoff", checked)}
+              disabled={updateMutation.isPending}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="task_assigned">Task assigned to me</Label>
+              <p className="text-sm text-muted-foreground">Get notified when a task is assigned to you</p>
+            </div>
+            <Switch
+              id="task_assigned"
+              checked={settings?.task_assigned ?? true}
+              onCheckedChange={(checked) => handleToggle("task_assigned", checked)}
+              disabled={updateMutation.isPending}
+            />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("profile")
@@ -178,63 +263,7 @@ export default function SettingsPage() {
 
             {/* Notifications Tab */}
             <TabsContent value="notifications" className="mt-0">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Notification Preferences</CardTitle>
-                  <CardDescription>Manage how you receive notifications</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label htmlFor="emailNewCases">Email notifications for new cases</Label>
-                        <p className="text-sm text-muted-foreground">Get notified when a new case is created</p>
-                      </div>
-                      <Switch id="emailNewCases" defaultChecked />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label htmlFor="emailTaskReminders">Email notifications for task reminders</Label>
-                        <p className="text-sm text-muted-foreground">Get reminded about upcoming tasks</p>
-                      </div>
-                      <Switch id="emailTaskReminders" defaultChecked />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label htmlFor="emailStatusChanges">Email notifications for status changes</Label>
-                        <p className="text-sm text-muted-foreground">Get notified when case status changes</p>
-                      </div>
-                      <Switch id="emailStatusChanges" defaultChecked />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label htmlFor="pushNotifications">Push notifications (browser)</Label>
-                        <p className="text-sm text-muted-foreground">Receive browser push notifications</p>
-                      </div>
-                      <Switch id="pushNotifications" />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label htmlFor="dailyDigest">Daily digest email</Label>
-                        <p className="text-sm text-muted-foreground">Receive a daily summary of activity</p>
-                      </div>
-                      <Switch id="dailyDigest" defaultChecked />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label htmlFor="weeklyReport">Weekly report email</Label>
-                        <p className="text-sm text-muted-foreground">Receive a weekly performance report</p>
-                      </div>
-                      <Switch id="weeklyReport" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <NotificationsSettingsCard />
             </TabsContent>
 
             {/* Integrations Tab */}
