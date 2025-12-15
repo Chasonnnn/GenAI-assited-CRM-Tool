@@ -102,13 +102,7 @@ export default function CasesPage() {
                         {data?.total ?? 0} total cases
                     </p>
                 </div>
-                <Link
-                    href="/cases/new"
-                    className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                >
-                    <PlusIcon className="mr-2 size-4" />
-                    New Case
-                </Link>
+                {/* New Case button removed - route /cases/new doesn't exist */}
             </div>
 
             {/* Filters Row */}
@@ -208,6 +202,8 @@ export default function CasesPage() {
                                 <TableRow>
                                     <TableHead className="w-[100px]">Case #</TableHead>
                                     <TableHead>Name</TableHead>
+                                    <TableHead>Age</TableHead>
+                                    <TableHead>BMI</TableHead>
                                     <TableHead>Phone</TableHead>
                                     <TableHead>Email</TableHead>
                                     <TableHead>Status</TableHead>
@@ -234,6 +230,12 @@ export default function CasesPage() {
                                                 </Link>
                                             </TableCell>
                                             <TableCell className="font-medium">{caseItem.full_name}</TableCell>
+                                            <TableCell className="text-center">
+                                                {caseItem.age ?? "—"}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                {caseItem.bmi ?? "—"}
+                                            </TableCell>
                                             <TableCell>
                                                 {caseItem.phone || "—"}
                                             </TableCell>
@@ -273,10 +275,8 @@ export default function CasesPage() {
                                             </TableCell>
                                             <TableCell>
                                                 <DropdownMenu>
-                                                    <DropdownMenuTrigger>
-                                                        <Button variant="ghost" size="sm" className="size-8 p-0">
-                                                            <MoreVerticalIcon className="size-4" />
-                                                        </Button>
+                                                    <DropdownMenuTrigger className="inline-flex items-center justify-center size-8 p-0 rounded-md hover:bg-accent hover:text-accent-foreground">
+                                                        <MoreVerticalIcon className="size-4" />
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end">
                                                         <DropdownMenuItem onClick={() => window.location.href = `/cases/${caseItem.id}`}>

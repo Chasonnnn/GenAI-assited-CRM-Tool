@@ -53,6 +53,8 @@ export interface CaseListItem {
     assigned_to_name: string | null;
     is_priority: boolean;
     is_archived: boolean;
+    age: number | null;  // Calculated from date_of_birth
+    bmi: number | null;  // Calculated from height_ft and weight_lb
     created_at: string;
 }
 

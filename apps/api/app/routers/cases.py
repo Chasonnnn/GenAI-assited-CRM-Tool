@@ -78,10 +78,27 @@ def _case_to_read(case, db: Session) -> CaseRead:
 
 def _case_to_list_item(case, db: Session) -> CaseListItem:
     """Convert Case model to CaseListItem schema."""
+    from datetime import date
+    
     assigned_to_name = None
     if case.assigned_to_user_id:
         user = db.query(User).filter(User.id == case.assigned_to_user_id).first()
         assigned_to_name = user.display_name if user else None
+    
+    # Calculate age from date_of_birth
+    age = None
+    if case.date_of_birth:
+        today = date.today()
+        dob = case.date_of_birth
+        age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+    
+    # Calculate BMI from height_ft and weight_lb
+    # BMI = (weight in lbs / (height in inches)^2) * 703
+    bmi = None
+    if case.height_ft and case.weight_lb:
+        height_inches = case.height_ft * 12  # Convert feet to inches
+        if height_inches > 0:
+            bmi = round((case.weight_lb / (height_inches ** 2)) * 703, 1)
     
     return CaseListItem(
         id=case.id,
@@ -95,6 +112,8 @@ def _case_to_list_item(case, db: Session) -> CaseListItem:
         assigned_to_name=assigned_to_name,
         is_priority=case.is_priority,
         is_archived=case.is_archived,
+        age=age,
+        bmi=bmi,
         created_at=case.created_at,
     )
 
