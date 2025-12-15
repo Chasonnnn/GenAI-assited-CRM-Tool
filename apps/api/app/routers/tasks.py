@@ -142,8 +142,9 @@ def create_task(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Create a new task."""
+    """Create a new task (respects case access control)."""
     from app.db.models import Membership
+    from app.core.case_access import check_case_access
     
     # Verify case belongs to org if specified
     if data.case_id:
@@ -151,6 +152,8 @@ def create_task(
         case = case_service.get_case(db, session.org_id, data.case_id)
         if not case:
             raise HTTPException(status_code=400, detail="Case not found")
+        # Access control: intake can't access handed-off cases
+        check_case_access(case, session.role)
     
     # Verify assignee belongs to org if specified
     if data.assigned_to_user_id:

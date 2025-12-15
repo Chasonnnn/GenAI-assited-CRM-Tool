@@ -60,13 +60,16 @@ function getInitials(name: string | null): string {
 }
 
 // Status options for dropdown - matches backend CaseStatus enum
+// Note: 'approved' auto-transitions to 'pending_handoff' on backend
+// Note: Stage-B statuses (pending_match+) blocked for intake on backend
 const STATUS_OPTIONS: CaseStatus[] = [
     'new_unread',
     'contacted',
     'followup_scheduled',
     'application_submitted',
     'under_review',
-    'approved',
+    'approved',        // Backend auto-converts to pending_handoff
+    'pending_handoff', // Visible but only changeable via Accept
     'disqualified',
     'pending_match',
     'meds_started',

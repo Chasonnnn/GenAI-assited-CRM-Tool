@@ -162,6 +162,37 @@ def list_cases(
     )
 
 
+# NOTE: /handoff-queue MUST come before /{case_id} routes to avoid routing conflict
+@router.get("/handoff-queue", response_model=CaseListResponse)
+def list_handoff_queue(
+    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.MANAGER, Role.DEVELOPER])),
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
+):
+    """
+    List cases awaiting case manager review (status=pending_handoff).
+    
+    Requires: case_manager+ role
+    """
+    cases, total = case_service.list_handoff_queue(
+        db=db,
+        org_id=session.org_id,
+        page=page,
+        per_page=per_page,
+    )
+    
+    pages = (total + per_page - 1) // per_page if per_page > 0 else 0
+    
+    return CaseListResponse(
+        items=[_case_to_list_item(c, db) for c in cases],
+        total=total,
+        page=page,
+        per_page=per_page,
+        pages=pages,
+    )
+
+
 @router.post("", response_model=CaseRead, status_code=201, dependencies=[Depends(require_csrf_header)])
 def create_case(
     data: CaseCreate,
@@ -251,13 +282,17 @@ def change_status(
     if case.is_archived:
         raise HTTPException(status_code=400, detail="Cannot change status of archived case")
     
-    case = case_service.change_status(
-        db=db,
-        case=case,
-        new_status=data.status,
-        user_id=session.user_id,
-        reason=data.reason,
-    )
+    try:
+        case = case_service.change_status(
+            db=db,
+            case=case,
+            new_status=data.status,
+            user_id=session.user_id,
+            user_role=session.role,
+            reason=data.reason,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     return _case_to_read(case, db)
 
 
@@ -404,37 +439,8 @@ def get_case_history(
 
 
 # =============================================================================
-# Handoff Workflow Endpoints (Case Manager+ only)
+# Handoff Accept/Deny Endpoints (Case Manager+ only)
 # =============================================================================
-
-@router.get("/handoff-queue", response_model=CaseListResponse)
-def list_handoff_queue(
-    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.MANAGER, Role.DEVELOPER])),
-    db: Session = Depends(get_db),
-    page: int = Query(1, ge=1),
-    per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
-):
-    """
-    List cases awaiting case manager review (status=pending_handoff).
-    
-    Requires: case_manager+ role
-    """
-    cases, total = case_service.list_handoff_queue(
-        db=db,
-        org_id=session.org_id,
-        page=page,
-        per_page=per_page,
-    )
-    
-    pages = (total + per_page - 1) // per_page if per_page > 0 else 0
-    
-    return CaseListResponse(
-        items=[_case_to_list_item(c, db) for c in cases],
-        total=total,
-        page=page,
-        per_page=per_page,
-        pages=pages,
-    )
 
 
 @router.post("/{case_id}/accept", response_model=CaseRead, dependencies=[Depends(require_csrf_header)])

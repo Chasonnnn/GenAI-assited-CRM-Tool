@@ -111,6 +111,7 @@ def change_status(
     case: Case,
     new_status: CaseStatus,
     user_id: UUID,
+    user_role: "Role",  # Import at runtime to avoid circular
     reason: str | None = None,
 ) -> Case:
     """
@@ -118,12 +119,23 @@ def change_status(
     
     No-op if status unchanged.
     Auto-transitions: approved → pending_handoff
+    
+    Transition guard: Intake specialists cannot set CASE_MANAGER_ONLY statuses.
+    Returns:
+        Case object or raises error if transition not allowed
     """
+    from app.db.enums import Role
+    
     old_status = case.status
     
     # Auto-transition: approved → pending_handoff
     if new_status == CaseStatus.APPROVED:
         new_status = CaseStatus.PENDING_HANDOFF
+    
+    # Transition guard: Intake cannot set CASE_MANAGER_ONLY statuses
+    if user_role == Role.INTAKE_SPECIALIST:
+        if new_status.value in CaseStatus.case_manager_only():
+            raise ValueError(f"Intake specialists cannot set status to {new_status.value}")
     
     # No-op if same status
     if old_status == new_status.value:
@@ -362,7 +374,7 @@ def list_cases(
         query = query.filter(Case.is_archived == False)
     
     # Role-based visibility filter
-    if role_filter == Role.INTAKE_SPECIALIST.value:
+    if role_filter == Role.INTAKE_SPECIALIST:
         # Intake can only see INTAKE_VISIBLE statuses (exclude CASE_MANAGER_ONLY)
         query = query.filter(~Case.status.in_(CaseStatus.case_manager_only()))
     
