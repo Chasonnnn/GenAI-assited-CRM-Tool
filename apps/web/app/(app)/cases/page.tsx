@@ -11,7 +11,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { PlusIcon, MoreVerticalIcon, SearchIcon, XIcon, LoaderIcon } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
+import { PlusIcon, MoreVerticalIcon, SearchIcon, XIcon, LoaderIcon, CheckIcon } from "lucide-react"
 import { useCases, useArchiveCase, useRestoreCase, useUpdateCase } from "@/lib/hooks/use-cases"
 import { STATUS_CONFIG, type CaseStatus, type CaseSource } from "@/lib/types/case"
 
@@ -43,6 +44,7 @@ export default function CasesPage() {
     const [searchQuery, setSearchQuery] = useState("")
     const [debouncedSearch, setDebouncedSearch] = useState("")
     const [page, setPage] = useState(1)
+    const [selectedCases, setSelectedCases] = useState<Set<string>>(new Set())
     const perPage = 20
 
     // Debounce search input
@@ -78,7 +80,31 @@ export default function CasesPage() {
         setStatusFilter("all")
         setSourceFilter("all")
         setSearchQuery("")
+        setSelectedCases(new Set()) // Clear selection on filter reset
     }, [])
+
+    // Multi-select handlers
+    const handleSelectAll = (checked: boolean) => {
+        if (checked && data?.items) {
+            setSelectedCases(new Set(data.items.map(c => c.id)))
+        } else {
+            setSelectedCases(new Set())
+        }
+    }
+
+    const handleSelectCase = (caseId: string, checked: boolean) => {
+        const newSelected = new Set(selectedCases)
+        if (checked) {
+            newSelected.add(caseId)
+        } else {
+            newSelected.delete(caseId)
+        }
+        setSelectedCases(newSelected)
+    }
+
+    const clearSelection = () => {
+        setSelectedCases(new Set())
+    }
 
     const handleArchive = async (caseId: string) => {
         await archiveMutation.mutateAsync(caseId)
@@ -200,6 +226,12 @@ export default function CasesPage() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
+                                    <TableHead className="w-[40px]">
+                                        <Checkbox
+                                            checked={data?.items && data.items.length > 0 && selectedCases.size === data.items.length}
+                                            onCheckedChange={(checked) => handleSelectAll(!!checked)}
+                                        />
+                                    </TableHead>
                                     <TableHead className="w-[100px]">Case #</TableHead>
                                     <TableHead>Name</TableHead>
                                     <TableHead>Age</TableHead>
@@ -224,6 +256,12 @@ export default function CasesPage() {
 
                                     return (
                                         <TableRow key={caseItem.id} className={rowClass}>
+                                            <TableCell>
+                                                <Checkbox
+                                                    checked={selectedCases.has(caseItem.id)}
+                                                    onCheckedChange={(checked) => handleSelectCase(caseItem.id, !!checked)}
+                                                />
+                                            </TableCell>
                                             <TableCell>
                                                 <Link href={`/cases/${caseItem.id}`} className={`font-medium hover:underline ${caseItem.is_priority ? "text-amber-600" : "text-primary"}`}>
                                                     #{caseItem.case_number}
@@ -355,6 +393,24 @@ export default function CasesPage() {
                         </div>
                     )}
                 </Card>
+            )}
+
+            {/* Floating Action Bar for Multi-Select */}
+            {selectedCases.size > 0 && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+                    <div className="bg-primary text-primary-foreground shadow-lg rounded-lg px-6 py-3 flex items-center gap-4">
+                        <span className="font-medium">{selectedCases.size} case{selectedCases.size > 1 ? 's' : ''} selected</span>
+                        <div className="h-4 w-px bg-primary-foreground/30" />
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={clearSelection}
+                        >
+                            <XIcon className="h-4 w-4 mr-1" />
+                            Clear
+                        </Button>
+                    </div>
+                </div>
             )}
         </div>
     )
