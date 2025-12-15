@@ -435,6 +435,27 @@ Constraints:
   - Permission alignment: case_manager can now assign cases
   - All roles can archive cases (ROLES_CAN_ARCHIVE updated)
 
+### Week 8 (2025-12-15): In-App Notifications + Theme System
+- **Completed:**
+  - Notification model with dedupe_key, read_at, org-scoping, proper indexes
+  - UserNotificationSettings model (per-user toggles for 4 notification types)
+  - NotificationType enum (6 types: case/task events)
+  - Notification service with create, list, count, mark_read, settings
+  - Triggers integrated into case_service.py and task_service.py
+  - Notifications router with 6 endpoints under /me/
+  - ThemeProvider using next-themes (system/light/dark)
+  - ThemeToggle dropdown in header
+  - Stone base + Teal theme colors for both light and dark modes
+  - NotificationBell component with unread badge and dropdown
+  - Notifications page (/notifications)
+  - Settings page wired to real notification settings API
+  - 30-second polling for unread count
+- **Bug fixes:**
+  - DropdownMenuLabel Menu.Group error
+  - Cases table scroll (header/filters fixed)
+  - mark_read() org_id for tenant isolation
+  - Dedupe query org_id + user_id for multi-tenancy
+
 ## 14) Decision Log (Update when choices change)
 
 - **ORM choice:** SQLAlchemy 2.0 with DeclarativeBase
@@ -451,3 +472,6 @@ Constraints:
 - **Activity logging (2025-12-15):** CaseActivityLog with JSONB details, stores new values only, actor names resolved at read-time
 - **Bulk operations (2025-12-15):** case_manager+ can bulk assign, all roles can archive
 - **Assignment permissions (2025-12-15):** case_manager added to ROLES_CAN_ASSIGN for consistency
+- **Notification dedupe (2025-12-15):** App-level dedupe with 1-hour window, DB constraint deferred until noisy
+- **Theme system (2025-12-15):** Stone base + Teal theme using next-themes, warm oklch colors
+

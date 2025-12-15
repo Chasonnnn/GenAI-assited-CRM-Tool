@@ -207,6 +207,16 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 | `/intended-parents/{id}/history` | GET | Get status change history |
 | `/intended-parents/{id}/notes` | GET, POST, DELETE | List/create/delete notes |
 
+### Notifications
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/me/notifications` | GET | List notifications (filters: unread_only, limit, offset) |
+| `/me/notifications/count` | GET | Get unread count (for polling) |
+| `/me/notifications/{id}/read` | PATCH | Mark notification as read |
+| `/me/notifications/read-all` | POST | Mark all notifications as read |
+| `/me/settings/notifications` | GET | Get notification preferences |
+| `/me/settings/notifications` | PATCH | Update notification preferences |
+
 ## Current Status
 
 **Week 6+ Complete** — Case Handoff Workflow:
@@ -269,6 +279,16 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
   - [x] Bulk assign (case_manager+) and bulk archive (all roles)
   - [x] Case inline editing dialog
   - [x] Permission alignment (case_manager can now assign)
+- [x] **In-App Notifications + Theme System (Week 8):**
+  - [x] Notification model with dedupe, read status, org-scoping
+  - [x] 6 notification types (case/task events)
+  - [x] User notification settings (toggleable per type)
+  - [x] NotificationBell component with unread badge
+  - [x] Notifications page (/notifications)
+  - [x] Settings page wired to real notifications API
+  - [x] Theme system (light/dark/system) with Stone + Teal colors
+  - [x] ThemeToggle dropdown in header
+  - [x] 30-second polling for real-time updates
 - [ ] Meta Lead Ads full integration
 
 ## Documentation

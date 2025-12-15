@@ -304,22 +304,76 @@ Week 7 — Cases module (specialists workflow) ✓ COMPLETE (moved to Week 3)
 Note: Cases module was completed as part of Week 3 with full CRUD, notes, tasks, and status history.
 See Week 3 section above for complete details.
 
-Week 8 — Notifications v1 + Case Handoff Notifications
+Week 8 — In-App Notifications + Theme System ✓ COMPLETE
 Backend
-- notifications table (org_id, user_id, type, title, body, entity_type, entity_id, read_at, created_at)
-- Triggers:
-  - case assigned
-  - status change
-  - **case approved** (notify all case_manager+ users)
-  - **case accepted** (notify intake user who created it)
-  - **case denied** (notify intake user with reason)
-- Endpoints: GET `/me/notifications`, PATCH `/me/notifications/{id}/read`, POST `/me/notifications/read-all`
+✓ Notification model with:
+  ✓ organization_id, user_id, type, title, body, entity_type, entity_id
+  ✓ dedupe_key for preventing duplicate notifications (1-hour window)
+  ✓ read_at for read status tracking
+  ✓ Proper indexes for performance
+✓ UserNotificationSettings model:
+  ✓ Per-user toggles: case_assigned, case_status_changed, case_handoff, task_assigned
+  ✓ Defaults to all ON if no row exists
+  ✓ Org-scoped for multi-tenancy
+✓ NotificationType enum (6 types):
+  ✓ CASE_ASSIGNED, CASE_STATUS_CHANGED, CASE_HANDOFF_READY
+  ✓ CASE_HANDOFF_ACCEPTED, CASE_HANDOFF_DENIED, TASK_ASSIGNED
+✓ Notification service (notification_service.py):
+  ✓ create_notification() with dedupe logic (org+user scoped)
+  ✓ get_notifications(), get_unread_count() with org-scoping
+  ✓ mark_read(), mark_all_read() with org_id for tenant isolation
+  ✓ get_user_settings(), update_user_settings() org-scoped
+  ✓ Trigger functions: notify_case_assigned, notify_case_status_changed,
+    notify_case_handoff_ready, notify_case_handoff_accepted,
+    notify_case_handoff_denied, notify_task_assigned
+✓ Triggers integrated into services:
+  ✓ case_service.py: assign_case, update_status, accept_handoff, deny_handoff
+  ✓ task_service.py: create_task, update_task (reassignment detection)
+✓ Endpoints (notifications router):
+  ✓ GET /me/notifications (paginated list with unread_count)
+  ✓ GET /me/notifications/count (polling endpoint)
+  ✓ PATCH /me/notifications/{id}/read (mark single read)
+  ✓ POST /me/notifications/read-all (mark all read)
+  ✓ GET /me/settings/notifications (get user preferences)
+  ✓ PATCH /me/settings/notifications (update preferences)
+✓ CSRF protection on all mutation endpoints
 Frontend
-- Notification bell dropdown with unread count badge
-- Notifications page (optional)
-- Real-time polling (every 30s) or WebSocket (later)
+✓ Theme System:
+  ✓ ThemeProvider using next-themes (system/light/dark)
+  ✓ ThemeToggle dropdown in header (sun/moon icon)
+  ✓ Stone base + Teal theme colors for both modes
+  ✓ Dark mode with warm Stone grays (not pure black)
+  ✓ Teal-tinted secondary/accent buttons
+✓ Notification Components:
+  ✓ NotificationBell component with unread badge
+  ✓ Dropdown with recent notifications list
+  ✓ Click-through navigation to cases/tasks
+  ✓ "Mark all read" button
+  ✓ Header placement (all pages via AppSidebar)
+✓ Notifications API client (lib/api/notifications.ts)
+✓ React Query hooks:
+  ✓ useNotifications, useUnreadCount (30s polling)
+  ✓ useMarkRead, useMarkAllRead
+  ✓ useNotificationSettings, useUpdateNotificationSettings
+✓ Notifications page (/notifications):
+  ✓ Full list view with mark read functionality
+  ✓ Time-relative timestamps
+  ✓ Empty state handling
+✓ Settings page wired to real API:
+  ✓ NotificationsSettingsCard component
+  ✓ Real-time toggles for all 4 notification types
+  ✓ Uses useNotificationSettings/useUpdateNotificationSettings hooks
+Bug Fixes
+✓ DropdownMenuLabel Menu.Group error - replaced with styled div
+✓ Cases table scroll - header/filters fixed, only table scrolls
+✓ mark_read() - added org_id for tenant isolation
+✓ Dedupe query - added org_id + user_id for multi-tenancy safety
+Deferred (TODO in job_service.py)
+- TASK_DUE_TODAY notifications (requires daily worker)
+- TASK_OVERDUE notifications (requires daily worker)
+- DB unique constraint on dedupe_key (if concurrent inserts become noisy)
 Deliverable
-- In-app notification system supporting case handoff workflow
+✓ Complete in-app notification system with theme toggle
 
 Week 9 — Meta Lead Ads integration (real-time lead sync)
 Backend
