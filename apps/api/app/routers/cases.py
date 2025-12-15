@@ -31,6 +31,7 @@ from app.schemas.case import (
     CaseStatusChange,
     CaseStatusHistoryRead,
     CaseUpdate,
+    BulkAssign,
 )
 from app.services import case_service
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
@@ -278,7 +279,11 @@ def update_case(
         raise HTTPException(status_code=403, detail="Not authorized to update this case")
     
     try:
-        case = case_service.update_case(db, case, data)
+        case = case_service.update_case(
+            db, case, data,
+            user_id=session.user_id,
+            org_id=session.org_id,
+        )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     
@@ -348,6 +353,51 @@ def assign_case(
     
     case = case_service.assign_case(db, case, data.user_id, session.user_id)
     return _case_to_read(case, db)
+
+
+@router.post("/bulk-assign", dependencies=[Depends(require_csrf_header)])
+def bulk_assign_cases(
+    data: BulkAssign,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """
+    Bulk assign multiple cases to a user.
+    
+    Requires: case_manager, manager, or developer role
+    """
+    from app.db.enums import Role
+    
+    # Role check: case_manager+
+    allowed_roles = {Role.CASE_MANAGER, Role.MANAGER, Role.DEVELOPER}
+    if session.role not in allowed_roles:
+        raise HTTPException(status_code=403, detail="Only case managers and above can bulk assign cases")
+    
+    # Verify assignee exists and is in same org (if assigning, not unassigning)
+    if data.assigned_to_user_id:
+        from app.db.models import Membership
+        membership = db.query(Membership).filter(
+            Membership.user_id == data.assigned_to_user_id,
+            Membership.organization_id == session.org_id,
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=400, detail="User not found in organization")
+    
+    # Process each case
+    results = {"assigned": 0, "failed": []}
+    for case_id in data.case_ids:
+        case = case_service.get_case(db, session.org_id, case_id)
+        if not case:
+            results["failed"].append({"case_id": str(case_id), "reason": "Case not found"})
+            continue
+        
+        try:
+            case_service.assign_case(db, case, data.assigned_to_user_id, session.user_id)
+            results["assigned"] += 1
+        except Exception as e:
+            results["failed"].append({"case_id": str(case_id), "reason": str(e)})
+    
+    return results
 
 
 @router.post("/{case_id}/archive", response_model=CaseRead, dependencies=[Depends(require_csrf_header)])

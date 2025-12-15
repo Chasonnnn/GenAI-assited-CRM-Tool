@@ -92,6 +92,22 @@ class CaseSource(str, Enum):
     REFERRAL = "referral"
 
 
+class CaseActivityType(str, Enum):
+    """Types of activities logged in case history."""
+    CASE_CREATED = "case_created"
+    INFO_EDITED = "info_edited"
+    STATUS_CHANGED = "status_changed"
+    ASSIGNED = "assigned"
+    UNASSIGNED = "unassigned"
+    PRIORITY_CHANGED = "priority_changed"
+    ARCHIVED = "archived"
+    RESTORED = "restored"
+    HANDOFF_ACCEPTED = "handoff_accepted"
+    HANDOFF_DENIED = "handoff_denied"
+    NOTE_ADDED = "note_added"
+    NOTE_DELETED = "note_deleted"
+
+
 # Note: is_priority is a boolean field on Case model, not an enum
 # Default: False (normal), True (priority - shown with gold styling in UI)
 

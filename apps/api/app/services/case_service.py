@@ -43,6 +43,8 @@ def create_case(
     
     Phone and state are validated in schema layer.
     """
+    from app.services import activity_service
+    
     case = Case(
         case_number=generate_case_number(db, org_id),
         organization_id=org_id,
@@ -64,10 +66,21 @@ def create_case(
         has_surrogate_experience=data.has_surrogate_experience,
         num_deliveries=data.num_deliveries,
         num_csections=data.num_csections,
+        is_priority=data.is_priority if hasattr(data, 'is_priority') else False,
     )
     db.add(case)
     db.commit()
     db.refresh(case)
+    
+    # Log case creation
+    activity_service.log_case_created(
+        db=db,
+        case_id=case.id,
+        organization_id=org_id,
+        actor_user_id=user_id,
+    )
+    db.commit()
+    
     return case
 
 
@@ -75,13 +88,18 @@ def update_case(
     db: Session,
     case: Case,
     data: CaseUpdate,
+    user_id: UUID | None = None,
+    org_id: UUID | None = None,
 ) -> Case:
     """
     Update case fields.
     
     Uses exclude_unset=True so only explicitly provided fields are updated.
     None values ARE applied to clear optional fields.
+    Logs changes to activity log if user_id is provided.
     """
+    from app.services import activity_service
+    
     update_data = data.model_dump(exclude_unset=True)
     
     # Fields that can be cleared (set to None)
@@ -91,6 +109,11 @@ def update_case(
         "has_surrogate_experience", "num_deliveries", "num_csections"
     }
     
+    # Track changes for activity log (new values only)
+    changes = {}
+    priority_changed = False
+    old_priority = case.is_priority
+    
     for field, value in update_data.items():
         # For clearable fields, allow None; for others, skip None
         if value is None and field not in clearable_fields:
@@ -99,10 +122,49 @@ def update_case(
             value = normalize_name(value)
         elif field == "email" and value:
             value = normalize_email(value)
-        setattr(case, field, value)
+        
+        # Check if value actually changed
+        current_value = getattr(case, field, None)
+        if current_value != value:
+            # Special handling for priority (separate log type)
+            if field == "is_priority":
+                priority_changed = True
+            else:
+                # Convert to string for JSON serialization
+                if hasattr(value, 'isoformat'):  # datetime/date
+                    changes[field] = value.isoformat()
+                elif hasattr(value, '__str__') and not isinstance(value, (str, int, float, bool, type(None))):
+                    changes[field] = str(value)
+                else:
+                    changes[field] = value
+            
+            setattr(case, field, value)
     
     db.commit()
     db.refresh(case)
+    
+    # Log activity if changes were made and user_id provided
+    if user_id and org_id:
+        if changes:
+            activity_service.log_info_edited(
+                db=db,
+                case_id=case.id,
+                organization_id=org_id,
+                actor_user_id=user_id,
+                changes=changes,
+            )
+            db.commit()
+        
+        if priority_changed:
+            activity_service.log_priority_changed(
+                db=db,
+                case_id=case.id,
+                organization_id=org_id,
+                actor_user_id=user_id,
+                is_priority=case.is_priority,
+            )
+            db.commit()
+    
     return case
 
 
@@ -125,6 +187,7 @@ def change_status(
         Case object or raises error if transition not allowed
     """
     from app.db.enums import Role
+    from app.services import activity_service
     
     old_status = case.status
     
@@ -143,7 +206,7 @@ def change_status(
     
     case.status = new_status.value
     
-    # Record history
+    # Record history (legacy table)
     history = CaseStatusHistory(
         case_id=case.id,
         organization_id=case.organization_id,
@@ -155,6 +218,19 @@ def change_status(
     db.add(history)
     db.commit()
     db.refresh(case)
+    
+    # Log to activity log
+    activity_service.log_status_changed(
+        db=db,
+        case_id=case.id,
+        organization_id=case.organization_id,
+        actor_user_id=user_id,
+        from_status=old_status,
+        to_status=new_status.value,
+        reason=reason,
+    )
+    db.commit()
+    
     return case
 
 
@@ -173,6 +249,8 @@ def accept_handoff(
     Returns:
         (case, error) - error is set if status mismatch
     """
+    from app.services import activity_service
+    
     if case.status != CaseStatus.PENDING_HANDOFF.value:
         return None, f"Case is not pending handoff (current: {case.status})"
     
@@ -190,6 +268,16 @@ def accept_handoff(
     db.add(history)
     db.commit()
     db.refresh(case)
+    
+    # Log to activity log
+    activity_service.log_handoff_accepted(
+        db=db,
+        case_id=case.id,
+        organization_id=case.organization_id,
+        actor_user_id=user_id,
+    )
+    db.commit()
+    
     return case, None
 
 
@@ -209,6 +297,8 @@ def deny_handoff(
     Returns:
         (case, error) - error is set if status mismatch
     """
+    from app.services import activity_service
+    
     if case.status != CaseStatus.PENDING_HANDOFF.value:
         return None, f"Case is not pending handoff (current: {case.status})"
     
@@ -226,6 +316,17 @@ def deny_handoff(
     db.add(history)
     db.commit()
     db.refresh(case)
+    
+    # Log to activity log
+    activity_service.log_handoff_denied(
+        db=db,
+        case_id=case.id,
+        organization_id=case.organization_id,
+        actor_user_id=user_id,
+        reason=reason,
+    )
+    db.commit()
+    
     return case, None
 
 
@@ -236,9 +337,32 @@ def assign_case(
     user_id: UUID,
 ) -> Case:
     """Assign case to a user (or unassign with None)."""
+    from app.services import activity_service
+    
+    old_assignee = case.assigned_to_user_id
     case.assigned_to_user_id = assignee_id
     db.commit()
     db.refresh(case)
+    
+    # Log activity
+    if assignee_id:
+        activity_service.log_assigned(
+            db=db,
+            case_id=case.id,
+            organization_id=case.organization_id,
+            actor_user_id=user_id,
+            to_user_id=assignee_id,
+        )
+    elif old_assignee:
+        activity_service.log_unassigned(
+            db=db,
+            case_id=case.id,
+            organization_id=case.organization_id,
+            actor_user_id=user_id,
+            from_user_id=old_assignee,
+        )
+    db.commit()
+    
     return case
 
 
@@ -248,6 +372,8 @@ def archive_case(
     user_id: UUID,
 ) -> Case:
     """Soft-delete a case (set is_archived and status=ARCHIVED)."""
+    from app.services import activity_service
+    
     if case.is_archived:
         return case  # Already archived
     
@@ -269,6 +395,16 @@ def archive_case(
     db.add(history)
     db.commit()
     db.refresh(case)
+    
+    # Log to activity log
+    activity_service.log_archived(
+        db=db,
+        case_id=case.id,
+        organization_id=case.organization_id,
+        actor_user_id=user_id,
+    )
+    db.commit()
+    
     return case
 
 
@@ -283,6 +419,8 @@ def restore_case(
     Returns:
         (case, error) - case is None if error occurred
     """
+    from app.services import activity_service
+    
     if not case.is_archived:
         return case, None  # Already active
     
@@ -325,6 +463,16 @@ def restore_case(
     db.add(history)
     db.commit()
     db.refresh(case)
+    
+    # Log to activity log
+    activity_service.log_restored(
+        db=db,
+        case_id=case.id,
+        organization_id=case.organization_id,
+        actor_user_id=user_id,
+    )
+    db.commit()
+    
     return case, None
 
 
