@@ -122,8 +122,9 @@ function formatActivityDetails(type: string, details: Record<string, unknown>): 
         case 'handoff_denied':
             return details.reason ? String(details.reason) : ''
         case 'note_added':
-        case 'note_deleted':
             return details.content ? String(details.content).slice(0, 100) + '...' : ''
+        case 'note_deleted':
+            return details.preview ? String(details.preview).slice(0, 100) + '...' : ''
         default:
             return ''
     }
