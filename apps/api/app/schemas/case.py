@@ -216,3 +216,21 @@ class CaseHandoffDeny(BaseModel):
         max_length=500, 
         description="Reason for denial (logged in status history)"
     )
+
+
+class CaseActivityRead(BaseModel):
+    """Response schema for case activity log entry."""
+    id: UUID
+    activity_type: str
+    actor_user_id: UUID | None
+    actor_name: str | None  # Resolved at read-time
+    details: dict | None
+    created_at: datetime
+
+
+class CaseActivityResponse(BaseModel):
+    """Paginated response for case activity log."""
+    items: list[CaseActivityRead]
+    total: int
+    page: int
+    pages: int

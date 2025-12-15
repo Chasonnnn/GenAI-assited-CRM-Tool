@@ -184,7 +184,7 @@ DEFAULT_IP_STATUS = IntendedParentStatus.NEW
 # =============================================================================
 
 # Roles that can assign cases to other users
-ROLES_CAN_ASSIGN = {Role.MANAGER, Role.DEVELOPER}
+ROLES_CAN_ASSIGN = {Role.CASE_MANAGER, Role.MANAGER, Role.DEVELOPER}
 
 # Roles that can archive/restore cases
 ROLES_CAN_ARCHIVE = {Role.MANAGER, Role.DEVELOPER}

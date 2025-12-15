@@ -32,6 +32,8 @@ from app.schemas.case import (
     CaseStatusHistoryRead,
     CaseUpdate,
     BulkAssign,
+    CaseActivityRead,
+    CaseActivityResponse,
 )
 from app.services import case_service
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
@@ -139,6 +141,35 @@ def get_case_stats(
         this_month=stats["this_month"],
         pending_tasks=pending_tasks,
     )
+
+
+@router.get("/assignees")
+def get_assignees(
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """
+    Get list of org members who can be assigned cases.
+    
+    Returns users with their ID, name, and role.
+    """
+    from app.db.models import Membership
+    
+    members = db.query(Membership).filter(
+        Membership.organization_id == session.org_id
+    ).all()
+    
+    result = []
+    for m in members:
+        user = db.query(User).filter(User.id == m.user_id).first()
+        if user:
+            result.append({
+                "id": str(user.id),
+                "name": user.display_name,
+                "role": m.role,
+            })
+    
+    return result
 
 
 @router.get("", response_model=CaseListResponse)
@@ -507,6 +538,67 @@ def get_case_history(
         ))
     
     return result
+
+
+@router.get("/{case_id}/activity", response_model=CaseActivityResponse)
+def get_case_activity(
+    case_id: UUID,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """
+    Get comprehensive activity log for a case (paginated).
+    
+    Includes: creates, edits, status changes, assignments, notes, etc.
+    """
+    from sqlalchemy import func
+    from app.db.models import CaseActivityLog
+    
+    case = case_service.get_case(db, session.org_id, case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    
+    # Access control
+    check_case_access(case, session.role)
+    
+    # Query activity log with pagination
+    base_query = db.query(CaseActivityLog).filter(
+        CaseActivityLog.case_id == case_id,
+        CaseActivityLog.organization_id == session.org_id,
+    )
+    
+    total = base_query.count()
+    pages = (total + per_page - 1) // per_page if total > 0 else 1
+    
+    activities = base_query.order_by(
+        CaseActivityLog.created_at.desc()
+    ).offset((page - 1) * per_page).limit(per_page).all()
+    
+    # Resolve actor names
+    items = []
+    for activity in activities:
+        actor_name = None
+        if activity.actor_user_id:
+            actor = db.query(User).filter(User.id == activity.actor_user_id).first()
+            actor_name = actor.display_name if actor else None
+        
+        items.append(CaseActivityRead(
+            id=activity.id,
+            activity_type=activity.activity_type,
+            actor_user_id=activity.actor_user_id,
+            actor_name=actor_name,
+            details=activity.details,
+            created_at=activity.created_at,
+        ))
+    
+    return CaseActivityResponse(
+        items=items,
+        total=total,
+        page=page,
+        pages=pages,
+    )
 
 
 # =============================================================================

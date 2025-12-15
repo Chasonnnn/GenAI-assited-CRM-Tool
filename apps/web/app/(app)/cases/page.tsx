@@ -12,8 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Checkbox } from "@/components/ui/checkbox"
-import { PlusIcon, MoreVerticalIcon, SearchIcon, XIcon, LoaderIcon, CheckIcon } from "lucide-react"
-import { useCases, useArchiveCase, useRestoreCase, useUpdateCase } from "@/lib/hooks/use-cases"
+import { PlusIcon, MoreVerticalIcon, SearchIcon, XIcon, LoaderIcon, CheckIcon, ArchiveIcon, UserPlusIcon } from "lucide-react"
+import { useCases, useArchiveCase, useRestoreCase, useUpdateCase, useAssignees, useBulkAssign, useBulkArchive } from "@/lib/hooks/use-cases"
+import { useAuth } from "@/lib/auth-context"
 import { STATUS_CONFIG, type CaseStatus, type CaseSource } from "@/lib/types/case"
 
 // Format date for display
@@ -36,6 +37,79 @@ function formatDate(dateString: string): string {
 function getInitials(name: string | null): string {
     if (!name) return "?"
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+}
+
+// Floating Action Bar for bulk operations
+function FloatingActionBar({
+    selectedCount,
+    selectedCaseIds,
+    onClear,
+}: {
+    selectedCount: number
+    selectedCaseIds: string[]
+    onClear: () => void
+}) {
+    const { user } = useAuth()
+    const { data: assignees } = useAssignees()
+    const bulkAssignMutation = useBulkAssign()
+    const bulkArchiveMutation = useBulkArchive()
+
+    const canAssign = user?.role && ['case_manager', 'manager', 'developer'].includes(user.role)
+
+    const handleAssign = async (userId: string) => {
+        await bulkAssignMutation.mutateAsync({
+            case_ids: selectedCaseIds,
+            assigned_to_user_id: userId,
+        })
+        onClear()
+    }
+
+    const handleArchive = async () => {
+        await bulkArchiveMutation.mutateAsync(selectedCaseIds)
+        onClear()
+    }
+
+    const isLoading = bulkAssignMutation.isPending || bulkArchiveMutation.isPending
+
+    return (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+            <div className="bg-primary text-primary-foreground shadow-lg rounded-lg px-6 py-3 flex items-center gap-4">
+                <span className="font-medium">{selectedCount} case{selectedCount > 1 ? 's' : ''} selected</span>
+                <div className="h-4 w-px bg-primary-foreground/30" />
+
+                {/* Assign Dropdown - case_manager+ only */}
+                {canAssign && (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger>
+                            <Button variant="secondary" size="sm" disabled={isLoading}>
+                                <UserPlusIcon className="h-4 w-4 mr-1" />
+                                Assign to...
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                            {assignees?.map((user) => (
+                                <DropdownMenuItem key={user.id} onClick={() => handleAssign(user.id)}>
+                                    {user.name}
+                                </DropdownMenuItem>
+                            ))}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                )}
+
+                {/* Archive Button */}
+                <Button variant="secondary" size="sm" onClick={handleArchive} disabled={isLoading}>
+                    <ArchiveIcon className="h-4 w-4 mr-1" />
+                    Archive
+                </Button>
+
+                {/* Clear Button */}
+                <Button variant="ghost" size="sm" onClick={onClear} disabled={isLoading}>
+                    <XIcon className="h-4 w-4 mr-1" />
+                    Clear
+                </Button>
+            </div>
+        </div>
+    )
 }
 
 export default function CasesPage() {
@@ -397,20 +471,11 @@ export default function CasesPage() {
 
             {/* Floating Action Bar for Multi-Select */}
             {selectedCases.size > 0 && (
-                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-                    <div className="bg-primary text-primary-foreground shadow-lg rounded-lg px-6 py-3 flex items-center gap-4">
-                        <span className="font-medium">{selectedCases.size} case{selectedCases.size > 1 ? 's' : ''} selected</span>
-                        <div className="h-4 w-px bg-primary-foreground/30" />
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={clearSelection}
-                        >
-                            <XIcon className="h-4 w-4 mr-1" />
-                            Clear
-                        </Button>
-                    </div>
-                </div>
+                <FloatingActionBar
+                    selectedCount={selectedCases.size}
+                    selectedCaseIds={Array.from(selectedCases)}
+                    onClear={clearSelection}
+                />
             )}
         </div>
     )

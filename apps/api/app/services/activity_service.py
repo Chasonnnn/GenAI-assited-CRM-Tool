@@ -104,15 +104,19 @@ def log_assigned(
     organization_id: UUID,
     actor_user_id: UUID,
     to_user_id: UUID,
+    from_user_id: UUID | None = None,
 ) -> CaseActivityLog:
-    """Log case assignment."""
+    """Log case assignment (includes previous assignee if reassignment)."""
+    details = {"to_user_id": str(to_user_id)}
+    if from_user_id:
+        details["from_user_id"] = str(from_user_id)
     return log_activity(
         db=db,
         case_id=case_id,
         organization_id=organization_id,
         activity_type=CaseActivityType.ASSIGNED,
         actor_user_id=actor_user_id,
-        details={"to_user_id": str(to_user_id)},
+        details=details,
     )
 
 
