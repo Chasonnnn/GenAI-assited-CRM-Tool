@@ -120,35 +120,36 @@ export function AppSidebar({ children }: AppSidebarProps) {
                 <SidebarHeader>
                     <SidebarMenu>
                         <SidebarMenuItem>
-                            <SidebarMenuButton
-                                size="lg"
-                                tooltip="Surrogacy CRM"
-                                render={<Link href="/dashboard" />}
-                            >
-                                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                                    <svg
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        strokeWidth="2"
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        className="size-4"
-                                    >
-                                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                                        <circle cx="9" cy="7" r="4" />
-                                        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-                                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                                    </svg>
-                                </div>
-                                <div className="grid flex-1 text-left text-sm leading-tight">
-                                    <span className="truncate font-semibold">Surrogacy CRM</span>
-                                    <span className="truncate text-xs text-muted-foreground">
-                                        {user?.organization?.name || "Loading..."}
-                                    </span>
-                                </div>
-                            </SidebarMenuButton>
+                            <Link href="/dashboard">
+                                <SidebarMenuButton
+                                    size="lg"
+                                    tooltip="Surrogacy CRM"
+                                >
+                                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                                        <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="2"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            className="size-4"
+                                        >
+                                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                                            <circle cx="9" cy="7" r="4" />
+                                            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                                            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                                        </svg>
+                                    </div>
+                                    <div className="grid flex-1 text-left text-sm leading-tight">
+                                        <span className="truncate font-semibold">Surrogacy CRM</span>
+                                        <span className="truncate text-xs text-muted-foreground">
+                                            {user?.organization?.name || "Loading..."}
+                                        </span>
+                                    </div>
+                                </SidebarMenuButton>
+                            </Link>
                         </SidebarMenuItem>
                     </SidebarMenu>
                 </SidebarHeader>
@@ -159,14 +160,15 @@ export function AppSidebar({ children }: AppSidebarProps) {
                         <SidebarMenu>
                             {navigation.map((item) => (
                                 <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton
-                                        isActive={pathname === item.url || pathname?.startsWith(item.url + "/")}
-                                        tooltip={item.title}
-                                        render={<Link href={item.url} />}
-                                    >
-                                        <item.icon />
-                                        <span>{item.title}</span>
-                                    </SidebarMenuButton>
+                                    <Link href={item.url}>
+                                        <SidebarMenuButton
+                                            isActive={pathname === item.url || pathname?.startsWith(item.url + "/")}
+                                            tooltip={item.title}
+                                        >
+                                            <item.icon />
+                                            <span>{item.title}</span>
+                                        </SidebarMenuButton>
+                                    </Link>
                                 </SidebarMenuItem>
                             ))}
                         </SidebarMenu>

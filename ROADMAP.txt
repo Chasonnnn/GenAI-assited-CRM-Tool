@@ -183,6 +183,28 @@ Dependencies (2025-12-14)
 Deliverable
 ✓ Full Intended Parents CRUD with proper security, normalization, and frontend integration
 
+Week 6b — Case Handoff Workflow ✓ COMPLETE
+Backend
+✓ Added PENDING_HANDOFF status to CaseStatus enum
+✓ Auto-transition: approved → pending_handoff
+✓ Centralized access control (case_access.py):
+  ✓ check_case_access() - raises 403 if intake tries to access post-handoff cases
+  ✓ can_modify_case() - checks modification rights per role
+✓ Transition guards - intake cannot set CASE_MANAGER_ONLY statuses
+✓ Access checks on notes and tasks routers
+✓ Endpoints (case_manager+ only):
+  ✓ GET /cases/handoff-queue - list pending handoff cases
+  ✓ POST /cases/{id}/accept - accept handoff (→ pending_match)
+  ✓ POST /cases/{id}/deny - deny with optional reason (→ under_review)
+Frontend
+✓ Cases page - Tabs (All Cases / Pending Handoff)
+✓ Pending Handoff tab (case_manager+ only) with Accept/Deny buttons
+✓ Badge with count on Pending Handoff tab
+✓ Deny dialog with reason textarea
+✓ STATUS_CONFIG entry for pending_handoff
+Deliverable
+✓ Complete intake → case manager handoff workflow with role-based access control
+
 ═══════════════════════════════════════════════════════════════════════════════
 DEFERRED IMPROVEMENTS (Technical Debt / Future Enhancements)
 ═══════════════════════════════════════════════════════════════════════════════

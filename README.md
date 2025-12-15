@@ -156,6 +156,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 |----------|--------|-------------|
 | `/cases` | GET | List cases (paginated, filters: status, source, assigned_to, q) |
 | `/cases` | POST | Create case (auto-generates case_number) |
+| `/cases/handoff-queue` | GET | List pending handoff cases (case_manager+ only) |
 | `/cases/{id}` | GET | Get case by ID |
 | `/cases/{id}` | PATCH | Update case fields |
 | `/cases/{id}` | DELETE | Hard delete (requires archived first, manager+) |
@@ -165,6 +166,8 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 | `/cases/{id}/restore` | POST | Restore archived case (manager+ only) |
 | `/cases/{id}/history` | GET | Get status change history |
 | `/cases/{id}/notes` | GET, POST | List/create notes |
+| `/cases/{id}/accept` | POST | Accept handoff (case_manager+ only) |
+| `/cases/{id}/deny` | POST | Deny handoff with reason (case_manager+ only) |
 
 ### Tasks
 | Endpoint | Method | Description |
@@ -203,7 +206,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ## Current Status
 
-**Week 6 Complete** — Intended Parents Module:
+**Week 6+ Complete** — Case Handoff Workflow:
 
 - [x] Project scaffolding (monorepo structure)
 - [x] PostgreSQL with Docker Compose
@@ -225,6 +228,12 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
   - [x] Notes (2-4000 chars) with XSS sanitization (nh3)
   - [x] Tasks (with due dates and completion)
   - [x] Meta webhook skeleton
+  - [x] **Case handoff workflow (intake → case manager)**
+    - [x] `pending_handoff` status with auto-transition from `approved`
+    - [x] Handoff queue endpoint (case_manager+ only)
+    - [x] Accept/Deny endpoints with reason tracking
+    - [x] Role-based access control (intake can't see post-handoff cases)
+    - [x] Transition guards (intake can't skip handoff)
 - [x] **Intended Parents module complete (Week 6):**
   - [x] IP CRUD with full name, email, phone, state, budget
   - [x] Status workflow (new → contacted → in_review → qualified → matched → declined → on_hold)
@@ -237,6 +246,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
   - [x] Login page (Duo SSO + username option, glassmorphism)
   - [x] Dashboard (stats cards, charts, recent activity)
   - [x] Cases List (filters, search, table, pagination)
+    - [x] Pending Handoff tab (case_manager+ only, with badge)
   - [x] Case Detail (tabs, status updates, notes)
   - [x] Tasks page (Kanban-style, filters)
   - [x] Intended Parents (list, filters, actions)
