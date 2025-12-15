@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { PlusIcon, MoreVerticalIcon, SearchIcon, XIcon, LoaderIcon } from "lucide-react"
-import { useCases, useArchiveCase, useRestoreCase } from "@/lib/hooks/use-cases"
+import { useCases, useArchiveCase, useRestoreCase, useUpdateCase } from "@/lib/hooks/use-cases"
 import { STATUS_CONFIG, type CaseStatus, type CaseSource } from "@/lib/types/case"
 
 // Format date for display
@@ -70,6 +70,7 @@ export default function CasesPage() {
 
     const archiveMutation = useArchiveCase()
     const restoreMutation = useRestoreCase()
+    const updateMutation = useUpdateCase()
 
     const hasActiveFilters = statusFilter !== "all" || sourceFilter !== "all" || searchQuery !== ""
 
@@ -85,6 +86,10 @@ export default function CasesPage() {
 
     const handleRestore = async (caseId: string) => {
         await restoreMutation.mutateAsync(caseId)
+    }
+
+    const handleTogglePriority = async (caseId: string, currentPriority: boolean) => {
+        await updateMutation.mutateAsync({ caseId, data: { is_priority: !currentPriority } })
     }
 
     return (
@@ -217,22 +222,21 @@ export default function CasesPage() {
                                         label: caseItem.status,
                                         color: "bg-gray-100 text-gray-700"
                                     }
-                                    // Apply gold styling for priority cases
-                                    const priorityClass = caseItem.is_priority ? "text-amber-600 font-semibold" : ""
+                                    // Apply gold styling for entire row on priority cases
+                                    const rowClass = caseItem.is_priority ? "text-amber-600" : ""
 
                                     return (
-                                        <TableRow key={caseItem.id}>
+                                        <TableRow key={caseItem.id} className={rowClass}>
                                             <TableCell>
                                                 <Link href={`/cases/${caseItem.id}`} className={`font-medium hover:underline ${caseItem.is_priority ? "text-amber-600" : "text-primary"}`}>
-                                                    {caseItem.is_priority && <span className="mr-1">★</span>}
                                                     #{caseItem.case_number}
                                                 </Link>
                                             </TableCell>
-                                            <TableCell className={`font-medium ${priorityClass}`}>{caseItem.full_name}</TableCell>
-                                            <TableCell className="text-muted-foreground">
+                                            <TableCell className="font-medium">{caseItem.full_name}</TableCell>
+                                            <TableCell>
                                                 {caseItem.phone || "—"}
                                             </TableCell>
-                                            <TableCell className="text-muted-foreground max-w-[200px] truncate" title={caseItem.email}>
+                                            <TableCell className="max-w-[200px] truncate" title={caseItem.email}>
                                                 {caseItem.email}
                                             </TableCell>
                                             <TableCell>
@@ -263,7 +267,7 @@ export default function CasesPage() {
                                                     <span className="text-muted-foreground">—</span>
                                                 )}
                                             </TableCell>
-                                            <TableCell className="text-muted-foreground">
+                                            <TableCell>
                                                 {formatDate(caseItem.created_at)}
                                             </TableCell>
                                             <TableCell>
@@ -274,8 +278,14 @@ export default function CasesPage() {
                                                         </Button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end">
-                                                        <DropdownMenuItem asChild>
-                                                            <Link href={`/cases/${caseItem.id}`}>View Details</Link>
+                                                        <DropdownMenuItem onClick={() => window.location.href = `/cases/${caseItem.id}`}>
+                                                            View Details
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem
+                                                            onClick={() => handleTogglePriority(caseItem.id, caseItem.is_priority)}
+                                                            disabled={updateMutation.isPending}
+                                                        >
+                                                            {caseItem.is_priority ? "Remove Priority" : "Mark as Priority"}
                                                         </DropdownMenuItem>
                                                         {!caseItem.is_archived ? (
                                                             <DropdownMenuItem

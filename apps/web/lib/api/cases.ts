@@ -60,6 +60,7 @@ export interface CaseCreatePayload {
     num_deliveries?: number;
     num_csections?: number;
     source?: CaseSource;
+    is_priority?: boolean;
 }
 
 // Update case payload (all optional)
