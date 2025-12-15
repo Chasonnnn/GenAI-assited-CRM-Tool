@@ -1,5 +1,5 @@
 Surrogacy CRM Platform — 12-Week Roadmap (AI-ready, Multi-tenant, OSS-ready)
-Last updated: 2025-12-14
+Last updated: 2025-12-15
 
 Assumptions (important)
 - Multi-tenant via shared DB + shared schema, with `organization_id` on all domain rows.
@@ -157,7 +157,39 @@ Frontend
 Deliverable
 ✓ All frontend pages connected to real API data
 
-Week 6 — Intended Parents Module + Dependencies ✓ COMPLETE
+Week 5b — Workflow automation + email foundation (reminders/jobs/templates) ✓ COMPLETE
+Backend
+✓ Minimal job/outbox system (DB-backed) for:
+  ✓ scheduled reminders (follow-ups)
+  ✓ webhook processing retries (future Meta)
+  ✓ notification fan-out (future)
+✓ Email foundation (automated email is a V1 requirement):
+  ✓ message log table (org-scoped) for outbound emails tied to leads/cases
+  ✓ template/snippet storage (org-configurable)
+  ✓ send pipeline via the jobs/outbox system (schedule + retry + audit)
+✓ Tables:
+  ✓ jobs (organization_id, type, payload, run_at, attempts, status)
+  ✓ email_templates (organization_id, name, subject, body_html)
+  ✓ email_logs (organization_id, entity references, status, timestamps)
+✓ Worker process (simple polling worker)
+Frontend
+✓ Automation page with Workflows + Templates tabs
+✓ UI scaffolds for follow-up rules and email templates
+Deliverable
+✓ You can schedule and reliably run org-scoped background tasks
+✓ Email sending is logged and can be scheduled
+
+Week 6a — Intended Parents Module + Dependencies ✓ COMPLETE
+Backend
+✓ intended_parents table + CRUD endpoints (org-scoped)
+✓ Filters by status/state/budget
+Frontend
+✓ Intended parents list/detail pages
+✓ Status management
+Deliverable
+✓ Parents stored cleanly and searchable for matching
+
+Week 6b — Intended Parents Module + Dependencies ✓ COMPLETE
 Backend
 ✓ IntendedParent model with full_name, email, phone, state, budget, notes_internal
 ✓ 7 status workflow: new → contacted → in_review → qualified → matched → declined → on_hold
@@ -183,7 +215,7 @@ Dependencies (2025-12-14)
 Deliverable
 ✓ Full Intended Parents CRUD with proper security, normalization, and frontend integration
 
-Week 6b — Case Handoff Workflow ✓ COMPLETE
+Week 6c — Case Handoff Workflow ✓ COMPLETE
 Backend
 ✓ Added PENDING_HANDOFF status to CaseStatus enum
 ✓ Auto-transition: approved → pending_handoff
@@ -204,6 +236,44 @@ Frontend
 ✓ STATUS_CONFIG entry for pending_handoff
 Deliverable
 ✓ Complete intake → case manager handoff workflow with role-based access control
+
+Week 6d — Case Management Enhancements ✓ COMPLETE
+Backend
+✓ Priority Cases:
+  ✓ Added is_priority boolean field to Case model
+  ✓ Toggle priority from cases list and detail pages
+  ✓ Gold highlighting for priority cases in table
+✓ Case Activity Logging (CaseActivityLog model):
+  ✓ 12 activity types: case_created, info_edited, status_changed, assigned,
+    unassigned, priority_changed, archived, restored, handoff_accepted,
+    handoff_denied, note_added, note_deleted
+  ✓ JSONB details field for type-specific data
+  ✓ Activity service with helper functions for each type
+  ✓ Assignment tracking captures from→to on reassignment
+  ✓ GET /cases/{id}/activity endpoint (paginated)
+✓ Bulk Operations:
+  ✓ GET /cases/assignees endpoint for user picker
+  ✓ POST /cases/bulk-assign endpoint (case_manager+ role)
+  ✓ ROLES_CAN_ASSIGN updated to include case_manager
+  ✓ ROLES_CAN_ARCHIVE updated to include all roles
+✓ Case Inline Editing:
+  ✓ Edit dialog in case detail page
+  ✓ All editable fields: name, email, phone, state, DOB, demographics
+Frontend
+✓ Multi-Select Cases:
+  ✓ Checkbox column with "select all" in table header
+  ✓ Row checkboxes for individual selection
+  ✓ Floating action bar when cases selected
+  ✓ "Assign to..." dropdown (case_manager+ only)
+  ✓ "Archive" button (all roles)
+  ✓ Selection count and Clear button
+✓ Activity Log Tab:
+  ✓ Renamed from "Status History" to "Activity Log"
+  ✓ Uses useCaseActivity hook (paginated)
+  ✓ Human-readable activity type labels
+  ✓ Formatted details for each activity type
+Deliverable
+✓ Comprehensive case history tracking and bulk operations UI
 
 ═══════════════════════════════════════════════════════════════════════════════
 DEFERRED IMPROVEMENTS (Technical Debt / Future Enhancements)
@@ -229,38 +299,6 @@ Case Inline Editing (Week 6+)
 - Enables: Faster data entry without leaving the page
 
 ═══════════════════════════════════════════════════════════════════════════════
-
-Week 5b — Workflow automation + email foundation (reminders/jobs/templates) ✓ COMPLETE
-Backend
-✓ Minimal job/outbox system (DB-backed) for:
-  ✓ scheduled reminders (follow-ups)
-  ✓ webhook processing retries (future Meta)
-  ✓ notification fan-out (future)
-✓ Email foundation (automated email is a V1 requirement):
-  ✓ message log table (org-scoped) for outbound emails tied to leads/cases
-  ✓ template/snippet storage (org-configurable)
-  ✓ send pipeline via the jobs/outbox system (schedule + retry + audit)
-✓ Tables:
-  ✓ jobs (organization_id, type, payload, run_at, attempts, status)
-  ✓ email_templates (organization_id, name, subject, body_html)
-  ✓ email_logs (organization_id, entity references, status, timestamps)
-✓ Worker process (simple polling worker)
-Frontend
-✓ Automation page with Workflows + Templates tabs
-✓ UI scaffolds for follow-up rules and email templates
-Deliverable
-✓ You can schedule and reliably run org-scoped background tasks
-✓ Email sending is logged and can be scheduled
-
-Week 6 — Intended parents module ✓ COMPLETE (see Week 6 above for full details)
-Backend
-✓ intended_parents table + CRUD endpoints (org-scoped)
-✓ Filters by status/state/budget
-Frontend
-✓ Intended parents list/detail pages
-✓ Status management
-Deliverable
-✓ Parents stored cleanly and searchable for matching
 
 Week 7 — Cases module (specialists workflow) ✓ COMPLETE (moved to Week 3)
 Note: Cases module was completed as part of Week 3 with full CRUD, notes, tasks, and status history.

@@ -365,7 +365,7 @@ Constraints:
 
 ## 13) Current Status (Update regularly)
 
-- **Date:** 2025-12-14
+- **Date:** 2025-12-15
 - **Completed:**
   - Project scaffolding (monorepo with apps/api + apps/web)
   - PostgreSQL 16 via Docker Compose
@@ -420,6 +420,21 @@ Constraints:
   - Base UI combobox/pagination fixed for render prop compatibility
   - ChartTooltipContent/ChartLegendContent rewritten for recharts 3 API
 
+### Week 6c (2025-12-15): Case Management Enhancements
+- **Completed:**
+  - Priority cases with `is_priority` field and gold highlighting
+  - Comprehensive CaseActivityLog model (12 activity types)
+  - Activity service with helper functions for each type
+  - Assignment tracking captures from→to on reassignment
+  - GET /cases/{id}/activity endpoint (paginated)
+  - GET /cases/assignees endpoint for user picker
+  - POST /cases/bulk-assign endpoint (case_manager+ role)
+  - Multi-select UI with checkboxes and floating action bar
+  - Activity Log tab (renamed from Status History)
+  - Case inline editing dialog
+  - Permission alignment: case_manager can now assign cases
+  - All roles can archive cases (ROLES_CAN_ARCHIVE updated)
+
 ## 14) Decision Log (Update when choices change)
 
 - **ORM choice:** SQLAlchemy 2.0 with DeclarativeBase
@@ -433,3 +448,6 @@ Constraints:
 - **Frontend deps (2025-12-14):** Next.js 16.0.10, React 19.2.3, Zod 4.1.13, recharts 3.5.1, Tailwind 4.1
 - **Polymorphic notes:** EntityNote table with `entity_type` + `entity_id` supports Cases and IPs
 - **Archive/restore pattern:** Set status to "archived", restore to previous status from history
+- **Activity logging (2025-12-15):** CaseActivityLog with JSONB details, stores new values only, actor names resolved at read-time
+- **Bulk operations (2025-12-15):** case_manager+ can bulk assign, all roles can archive
+- **Assignment permissions (2025-12-15):** case_manager added to ROLES_CAN_ASSIGN for consistency
