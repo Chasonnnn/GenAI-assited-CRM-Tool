@@ -231,6 +231,25 @@ def change_status(
     )
     db.commit()
     
+    # Send notifications
+    from app.services import notification_service
+    actor = db.query(User).filter(User.id == user_id).first()
+    actor_name = actor.display_name if actor else "Someone"
+    
+    # Notify assignee and creator of status change
+    notification_service.notify_case_status_changed(
+        db=db,
+        case=case,
+        from_status=old_status,
+        to_status=new_status.value,
+        actor_id=user_id,
+        actor_name=actor_name,
+    )
+    
+    # If transitioning to pending_handoff, notify all case_manager+
+    if new_status == CaseStatus.PENDING_HANDOFF:
+        notification_service.notify_case_handoff_ready(db=db, case=case)
+    
     return case
 
 
@@ -277,6 +296,16 @@ def accept_handoff(
         actor_user_id=user_id,
     )
     db.commit()
+    
+    # Notify case creator that handoff was accepted
+    from app.services import notification_service
+    actor = db.query(User).filter(User.id == user_id).first()
+    actor_name = actor.display_name if actor else "Case Manager"
+    notification_service.notify_case_handoff_accepted(
+        db=db,
+        case=case,
+        actor_name=actor_name,
+    )
     
     return case, None
 
@@ -327,6 +356,17 @@ def deny_handoff(
     )
     db.commit()
     
+    # Notify case creator that handoff was denied
+    from app.services import notification_service
+    actor = db.query(User).filter(User.id == user_id).first()
+    actor_name = actor.display_name if actor else "Case Manager"
+    notification_service.notify_case_handoff_denied(
+        db=db,
+        case=case,
+        actor_name=actor_name,
+        reason=reason,
+    )
+    
     return case, None
 
 
@@ -354,6 +394,18 @@ def assign_case(
             to_user_id=assignee_id,
             from_user_id=old_assignee,  # Capture previous assignee for reassignment tracking
         )
+        
+        # Send notification to assignee (if not self-assign)
+        if assignee_id != user_id:
+            from app.services import notification_service
+            actor = db.query(User).filter(User.id == user_id).first()
+            actor_name = actor.display_name if actor else "Someone"
+            notification_service.notify_case_assigned(
+                db=db,
+                case=case,
+                assignee_id=assignee_id,
+                actor_name=actor_name,
+            )
     elif old_assignee:
         activity_service.log_unassigned(
             db=db,

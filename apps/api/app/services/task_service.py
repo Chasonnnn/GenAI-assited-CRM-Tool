@@ -32,6 +32,27 @@ def create_task(
     db.add(task)
     db.commit()
     db.refresh(task)
+    
+    # Notify assignee (if different from creator)
+    if data.assigned_to_user_id and data.assigned_to_user_id != user_id:
+        from app.services import notification_service
+        from app.db.models import User, Case
+        actor = db.query(User).filter(User.id == user_id).first()
+        actor_name = actor.display_name if actor else "Someone"
+        case_number = None
+        if data.case_id:
+            case = db.query(Case).filter(Case.id == data.case_id).first()
+            case_number = case.case_number if case else None
+        notification_service.notify_task_assigned(
+            db=db,
+            task_id=task.id,
+            task_title=task.title,
+            org_id=org_id,
+            assignee_id=data.assigned_to_user_id,
+            actor_name=actor_name,
+            case_number=case_number,
+        )
+    
     return task
 
 
