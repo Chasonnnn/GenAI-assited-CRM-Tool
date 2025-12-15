@@ -168,11 +168,16 @@ export const handoffKeys = {
 
 /**
  * Fetch cases in pending_handoff status (case_manager+ only).
+ * Pass enabled: false to skip the query for non-case-manager roles.
  */
-export function useHandoffQueue(params: casesApi.HandoffQueueParams = {}) {
+export function useHandoffQueue(
+    params: casesApi.HandoffQueueParams = {},
+    options: { enabled?: boolean } = {}
+) {
     return useQuery({
         queryKey: handoffKeys.queuePage(params.page || 1),
         queryFn: () => casesApi.getHandoffQueue(params),
+        enabled: options.enabled !== false,
     });
 }
 
