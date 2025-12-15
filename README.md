@@ -164,10 +164,13 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 | `/cases/{id}/assign` | PATCH | Assign to user (manager+ only) |
 | `/cases/{id}/archive` | POST | Soft delete (manager+ only) |
 | `/cases/{id}/restore` | POST | Restore archived case (manager+ only) |
-| `/cases/{id}/history` | GET | Get status change history |
+| `/cases/{id}/history` | GET | Get status change history (legacy) |
+| `/cases/{id}/activity` | GET | Get comprehensive activity log (paginated) |
 | `/cases/{id}/notes` | GET, POST | List/create notes |
 | `/cases/{id}/accept` | POST | Accept handoff (case_manager+ only) |
 | `/cases/{id}/deny` | POST | Deny handoff with reason (case_manager+ only) |
+| `/cases/assignees` | GET | Get org members for assignment dropdown |
+| `/cases/bulk-assign` | POST | Bulk assign cases (case_manager+ only) |
 
 ### Tasks
 | Endpoint | Method | Description |
@@ -258,6 +261,14 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
   - [x] Next.js 16.0.10, React 19.2.3, Zod 4.1.13, recharts 3.5.1
   - [x] All Radix UI components to latest versions
   - [x] Base UI combobox/pagination fixed for render prop compatibility
+- [x] **Case Management Enhancements (2025-12-15):**
+  - [x] Priority cases with `is_priority` field and gold highlighting
+  - [x] Comprehensive activity logging (12 activity types)
+  - [x] Activity Log tab replacing Status History
+  - [x] Multi-select with checkboxes and floating action bar
+  - [x] Bulk assign (case_manager+) and bulk archive (all roles)
+  - [x] Case inline editing dialog
+  - [x] Permission alignment (case_manager can now assign)
 - [ ] Meta Lead Ads full integration
 
 ## Documentation
