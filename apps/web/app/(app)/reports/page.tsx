@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -42,9 +42,15 @@ const chartColors = [
 export default function ReportsPage() {
     const [period, setPeriod] = useState<'day' | 'week' | 'month'>('day')
 
-    // Get date range (last 30 days)
-    const toDate = new Date().toISOString()
-    const fromDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+    // Memoize date range to prevent query key churn on each render
+    const { fromDate, toDate } = useMemo(() => {
+        const now = new Date()
+        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+        return {
+            fromDate: thirtyDaysAgo.toISOString().split('T')[0], // Just date, no time
+            toDate: now.toISOString().split('T')[0],
+        }
+    }, []) // Empty deps = computed once on mount
 
     // Fetch data
     const { data: summary, isLoading: summaryLoading } = useAnalyticsSummary({ from_date: fromDate, to_date: toDate })

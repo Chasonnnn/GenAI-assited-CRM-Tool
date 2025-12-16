@@ -56,7 +56,8 @@ export function useResolveAlert() {
     return useMutation({
         mutationFn: opsApi.resolveAlert,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: opsKeys.alerts() });
+            // Use prefix matching to invalidate all alert queries regardless of params
+            queryClient.invalidateQueries({ queryKey: [...opsKeys.all, 'alerts'] });
             queryClient.invalidateQueries({ queryKey: opsKeys.alertsSummary() });
         },
     });
@@ -71,7 +72,10 @@ export function useAcknowledgeAlert() {
     return useMutation({
         mutationFn: opsApi.acknowledgeAlert,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: opsKeys.alerts() });
+            // Use prefix matching to invalidate all alert queries regardless of params
+            queryClient.invalidateQueries({ queryKey: [...opsKeys.all, 'alerts'] });
+            // Acknowledge changes status, affecting summary counts
+            queryClient.invalidateQueries({ queryKey: opsKeys.alertsSummary() });
         },
     });
 }
@@ -86,7 +90,8 @@ export function useSnoozeAlert() {
         mutationFn: ({ alertId, hours }: { alertId: string; hours?: number }) =>
             opsApi.snoozeAlert(alertId, hours),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: opsKeys.alerts() });
+            // Use prefix matching to invalidate all alert queries regardless of params
+            queryClient.invalidateQueries({ queryKey: [...opsKeys.all, 'alerts'] });
             queryClient.invalidateQueries({ queryKey: opsKeys.alertsSummary() });
         },
     });
