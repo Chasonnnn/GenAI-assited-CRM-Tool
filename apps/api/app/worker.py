@@ -104,8 +104,127 @@ async def process_job(db, job) -> None:
         logger.info(f"Processing notification: {job.payload}")
         # TODO: Implement notification logic
         
+    elif job.job_type == JobType.META_LEAD_FETCH.value:
+        await process_meta_lead_fetch(db, job)
+        
     else:
         raise Exception(f"Unknown job type: {job.job_type}")
+
+
+async def process_meta_lead_fetch(db, job) -> None:
+    """
+    Process a Meta Lead Ads fetch job.
+    
+    1. Get page mapping and decrypt token
+    2. Fetch lead details from Meta API
+    3. Normalize field data
+    4. Store in meta_leads table
+    5. Update status on success/failure
+    """
+    from datetime import datetime
+    from app.db.models import MetaPageMapping, MetaLead
+    from app.core.encryption import decrypt_token
+    from app.services import meta_api, meta_lead_service
+    
+    leadgen_id = job.payload.get("leadgen_id")
+    page_id = job.payload.get("page_id")
+    
+    if not leadgen_id or not page_id:
+        raise Exception("Missing leadgen_id or page_id in job payload")
+    
+    # Get page mapping
+    mapping = db.query(MetaPageMapping).filter(
+        MetaPageMapping.page_id == page_id,
+        MetaPageMapping.is_active == True,
+    ).first()
+    
+    if not mapping:
+        raise Exception(f"No active mapping for page {page_id}")
+    
+    # Decrypt access token
+    try:
+        access_token = decrypt_token(mapping.access_token_encrypted) if mapping.access_token_encrypted else ""
+    except Exception as e:
+        mapping.last_error = f"Token decryption failed: {str(e)[:100]}"
+        mapping.last_error_at = datetime.utcnow()
+        db.commit()
+        raise Exception(f"Token decryption failed: {e}")
+    
+    # Fetch lead from Meta API
+    lead_data, error = await meta_api.fetch_lead_details(leadgen_id, access_token)
+    
+    if error:
+        # Update mapping with error
+        mapping.last_error = error
+        mapping.last_error_at = datetime.utcnow()
+        db.commit()
+        
+        # Check if we have an existing meta_lead to update
+        existing = db.query(MetaLead).filter(
+            MetaLead.organization_id == mapping.organization_id,
+            MetaLead.meta_lead_id == leadgen_id,
+        ).first()
+        if existing:
+            existing.status = "fetch_failed"
+            existing.fetch_error = error
+            db.commit()
+        
+        raise Exception(error)
+    
+    # Normalize field data
+    field_data = meta_api.normalize_field_data(lead_data.get("field_data", []))
+    
+    # Add ad_id for campaign tracking (stored in field_data for conversion)
+    if lead_data.get("ad_id"):
+        field_data["meta_ad_id"] = lead_data["ad_id"]
+    
+    # Parse Meta timestamp
+    meta_created_time = meta_api.parse_meta_timestamp(lead_data.get("created_time"))
+    
+    # Store meta lead (handles dedupe)
+    meta_lead, store_error = meta_lead_service.store_meta_lead(
+        db=db,
+        org_id=mapping.organization_id,
+        meta_lead_id=leadgen_id,
+        field_data=field_data,
+        raw_payload=None,  # PII minimization - don't store raw
+        meta_form_id=lead_data.get("form_id"),
+        meta_page_id=page_id,
+        meta_created_time=meta_created_time,
+    )
+    
+    if store_error:
+        # Likely duplicate - log and continue
+        logger.info(f"Meta lead store skipped: {store_error}")
+    else:
+        # Update success tracking
+        mapping.last_success_at = datetime.utcnow()
+        mapping.last_error = None
+        db.commit()
+        
+        # Update lead status
+        meta_lead.status = "stored"
+        db.commit()
+        
+        logger.info(f"Meta lead {leadgen_id} stored successfully for org {mapping.organization_id}")
+        
+        # Auto-convert to case so it appears in Cases list immediately
+        # This allows case managers to see and bulk-assign new leads
+        # We use a system user ID (None → will be assigned to no one initially)
+        case, convert_error = meta_lead_service.convert_to_case(
+            db=db,
+            meta_lead=meta_lead,
+            user_id=None,  # No assignee - managers can bulk-assign later
+        )
+        
+        if convert_error:
+            logger.warning(f"Meta lead auto-conversion failed: {convert_error}")
+            meta_lead.status = "convert_failed"
+            db.commit()
+        else:
+            meta_lead.status = "converted"
+            db.commit()
+            logger.info(f"Meta lead {leadgen_id} auto-converted to case {case.case_number}")
 
 
 async def worker_loop() -> None:

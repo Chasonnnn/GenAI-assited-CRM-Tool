@@ -36,11 +36,14 @@ def schedule_job(
     job_type: JobType,
     payload: dict,
     run_at: datetime | None = None,
+    idempotency_key: str | None = None,
 ) -> Job:
     """
     Schedule a new background job.
     
     If run_at is None, the job runs immediately.
+    If idempotency_key is provided, duplicate jobs with same key will fail
+    with IntegrityError (caller should catch and handle).
     """
     job = Job(
         organization_id=org_id,
@@ -48,6 +51,7 @@ def schedule_job(
         payload=payload,
         run_at=run_at or datetime.utcnow(),
         status=JobStatus.PENDING.value,
+        idempotency_key=idempotency_key,
     )
     db.add(job)
     db.commit()

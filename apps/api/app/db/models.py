@@ -297,6 +297,9 @@ class Case(Base):
         ForeignKey("meta_leads.id", ondelete="SET NULL"),
         nullable=True
     )
+    # Campaign tracking (denormalized from meta_leads for easy filtering)
+    meta_ad_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    meta_form_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     
     # Contact (normalized: E.164 phone, 2-letter state)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -628,6 +631,72 @@ class MetaLead(Base):
         nullable=False
     )
     converted_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    
+    # Processing status (for observability)
+    # Values: received, fetching, fetch_failed, stored, converted, convert_failed
+    status: Mapped[str] = mapped_column(
+        String(20),
+        server_default=text("'received'"),
+        nullable=False
+    )
+    fetch_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class MetaPageMapping(Base):
+    """
+    Maps Meta page IDs to organizations for webhook routing.
+    
+    Stores encrypted access tokens for secure API calls.
+    """
+    __tablename__ = "meta_page_mappings"
+    __table_args__ = (
+        UniqueConstraint("page_id", name="uq_meta_page_id"),
+        Index("idx_meta_page_org", "organization_id"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # Meta page info
+    page_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    page_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    
+    # Encrypted access token (Fernet)
+    access_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    token_expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    
+    # Status
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("TRUE"),
+        nullable=False
+    )
+    
+    # Observability
+    last_success_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_error_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
 
 
 # =============================================================================
@@ -686,6 +755,9 @@ class Job(Base):
         nullable=False
     )
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    
+    # Idempotency key for deduplication (unique constraint in migration)
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
 class EmailTemplate(Base):

@@ -35,11 +35,17 @@ def generate_case_number(db: Session, org_id: UUID) -> str:
 def create_case(
     db: Session,
     org_id: UUID,
-    user_id: UUID,
+    user_id: UUID | None,
     data: CaseCreate,
 ) -> Case:
     """
     Create a new case with generated case number.
+    
+    Args:
+        db: Database session
+        org_id: Organization ID
+        user_id: User ID for created_by (None for auto-created cases like Meta leads)
+        data: Case creation data
     
     Phone and state are validated in schema layer.
     """
@@ -72,14 +78,15 @@ def create_case(
     db.commit()
     db.refresh(case)
     
-    # Log case creation
-    activity_service.log_case_created(
-        db=db,
-        case_id=case.id,
-        organization_id=org_id,
-        actor_user_id=user_id,
-    )
-    db.commit()
+    # Log case creation (only if we have a user)
+    if user_id:
+        activity_service.log_case_created(
+            db=db,
+            case_id=case.id,
+            organization_id=org_id,
+            actor_user_id=user_id,
+        )
+        db.commit()
     
     return case
 

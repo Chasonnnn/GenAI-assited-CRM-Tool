@@ -55,10 +55,15 @@ def store_meta_lead(
 def convert_to_case(
     db: Session,
     meta_lead: MetaLead,
-    user_id: UUID,
+    user_id: UUID | None = None,
 ) -> tuple[Case | None, str | None]:
     """
     Convert a Meta lead to a normalized case.
+    
+    Args:
+        db: Database session
+        meta_lead: The MetaLead to convert
+        user_id: Optional user ID for created_by (None for auto-conversion)
     
     Returns:
         (case, error) - case is None if error
@@ -134,8 +139,11 @@ def convert_to_case(
         meta_lead.conversion_error = None
         db.commit()
         
-        # Link case back to meta lead
+        # Link case back to meta lead and add campaign tracking
         case.meta_lead_id = meta_lead.id
+        case.meta_form_id = meta_lead.meta_form_id
+        # Get ad_id from field_data if available (stored during fetch)
+        case.meta_ad_id = fields.get("meta_ad_id")
         db.commit()
         
         return case, None
