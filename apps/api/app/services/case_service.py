@@ -198,12 +198,11 @@ def change_status(
     
     old_status = case.status
     
-    # Capture requested status BEFORE auto-transition for CAPI
+    # Capture requested status for CAPI (no auto-transition anymore)
     requested_status = new_status.value
     
-    # Auto-transition: approved → pending_handoff
-    if new_status == CaseStatus.APPROVED:
-        new_status = CaseStatus.PENDING_HANDOFF
+    # NOTE: Auto-transition from approved → pending_handoff was REMOVED
+    # Intake specialists should manually set 'pending_handoff' when ready to submit to case manager
     
     # Transition guard: Intake cannot set CASE_MANAGER_ONLY statuses
     if user_role == Role.INTAKE_SPECIALIST:
