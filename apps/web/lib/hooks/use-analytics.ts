@@ -70,3 +70,84 @@ export function useMetaPerformance(params: DateRangeParams = {}) {
         staleTime: 60 * 1000,
     });
 }
+
+/**
+ * Fetch cases by source.
+ */
+export function useCasesBySource(params: DateRangeParams = {}) {
+    return useQuery({
+        queryKey: [...analyticsKeys.all, 'by-source', params] as const,
+        queryFn: () => analyticsApi.getCasesBySource(params),
+        staleTime: 60 * 1000,
+    });
+}
+
+/**
+ * Fetch cases by state.
+ */
+export function useCasesByState(params: DateRangeParams = {}) {
+    return useQuery({
+        queryKey: [...analyticsKeys.all, 'by-state', params] as const,
+        queryFn: () => analyticsApi.getCasesByState(params),
+        staleTime: 60 * 1000,
+    });
+}
+
+/**
+ * Fetch conversion funnel.
+ */
+export function useFunnel(params: DateRangeParams = {}) {
+    return useQuery({
+        queryKey: [...analyticsKeys.all, 'funnel', params] as const,
+        queryFn: () => analyticsApi.getFunnel(params),
+        staleTime: 60 * 1000,
+    });
+}
+
+/**
+ * Fetch KPIs.
+ */
+export function useKPIs(params: DateRangeParams = {}) {
+    return useQuery({
+        queryKey: [...analyticsKeys.all, 'kpis', params] as const,
+        queryFn: () => analyticsApi.getKPIs(params),
+        staleTime: 60 * 1000,
+    });
+}
+
+interface CompareParams extends DateRangeParams {
+    ad_id?: string;
+}
+
+/**
+ * Fetch campaigns for filter dropdown.
+ */
+export function useCampaigns() {
+    return useQuery({
+        queryKey: [...analyticsKeys.all, 'campaigns'] as const,
+        queryFn: analyticsApi.getCampaigns,
+        staleTime: 5 * 60 * 1000,
+    });
+}
+
+/**
+ * Fetch funnel with campaign filter.
+ */
+export function useFunnelCompare(params: CompareParams = {}) {
+    return useQuery({
+        queryKey: [...analyticsKeys.all, 'funnel-compare', params] as const,
+        queryFn: () => analyticsApi.getFunnelCompare(params),
+        staleTime: 60 * 1000,
+    });
+}
+
+/**
+ * Fetch cases by state with campaign filter.
+ */
+export function useCasesByStateCompare(params: CompareParams = {}) {
+    return useQuery({
+        queryKey: [...analyticsKeys.all, 'by-state-compare', params] as const,
+        queryFn: () => analyticsApi.getCasesByStateCompare(params),
+        staleTime: 60 * 1000,
+    });
+}

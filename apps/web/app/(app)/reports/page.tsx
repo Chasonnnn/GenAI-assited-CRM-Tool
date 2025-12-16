@@ -14,7 +14,10 @@ import {
     ChartLegend,
     ChartLegendContent,
 } from "@/components/ui/chart"
-import { useAnalyticsSummary, useCasesByStatus, useCasesByAssignee, useCasesTrend, useMetaPerformance } from "@/lib/hooks/use-analytics"
+import { useAnalyticsSummary, useCasesByStatus, useCasesByAssignee, useCasesTrend, useMetaPerformance, useFunnelCompare, useCasesByStateCompare, useCampaigns } from "@/lib/hooks/use-analytics"
+import { FunnelChart } from "@/components/charts/funnel-chart"
+import { USMapChart } from "@/components/charts/us-map-chart"
+import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 
 // Chart configs
 const casesOverviewConfig = {
@@ -40,24 +43,66 @@ const chartColors = [
 ]
 
 export default function ReportsPage() {
-    const [period, setPeriod] = useState<'day' | 'week' | 'month'>('day')
+    const [dateRange, setDateRange] = useState<DateRangePreset>('all')
+    const [customRange, setCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
+        from: undefined,
+        to: undefined,
+    })
+    const [selectedCampaign, setSelectedCampaign] = useState<string>('')
 
-    // Memoize date range to prevent query key churn on each render
+    // Compute date range based on selected option
     const { fromDate, toDate } = useMemo(() => {
         const now = new Date()
-        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-        return {
-            fromDate: thirtyDaysAgo.toISOString().split('T')[0], // Just date, no time
-            toDate: now.toISOString().split('T')[0],
+
+        switch (dateRange) {
+            case 'all':
+                return { fromDate: undefined, toDate: undefined }
+            case 'today':
+                return {
+                    fromDate: now.toISOString().split('T')[0],
+                    toDate: now.toISOString().split('T')[0],
+                }
+            case 'week':
+                return {
+                    fromDate: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                    toDate: now.toISOString().split('T')[0],
+                }
+            case 'custom':
+                if (customRange.from && customRange.to) {
+                    return {
+                        fromDate: customRange.from.toISOString().split('T')[0],
+                        toDate: customRange.to.toISOString().split('T')[0],
+                    }
+                }
+                return { fromDate: undefined, toDate: undefined }
+            case 'month':
+            default:
+                return {
+                    fromDate: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                    toDate: now.toISOString().split('T')[0],
+                }
         }
-    }, []) // Empty deps = computed once on mount
+    }, [dateRange, customRange])
 
     // Fetch data
     const { data: summary, isLoading: summaryLoading } = useAnalyticsSummary({ from_date: fromDate, to_date: toDate })
     const { data: byStatus, isLoading: byStatusLoading } = useCasesByStatus()
     const { data: byAssignee, isLoading: byAssigneeLoading } = useCasesByAssignee()
-    const { data: trend, isLoading: trendLoading } = useCasesTrend({ from_date: fromDate, to_date: toDate, period })
+    const { data: trend, isLoading: trendLoading } = useCasesTrend({ from_date: fromDate, to_date: toDate })
     const { data: metaPerf, isLoading: metaLoading } = useMetaPerformance({ from_date: fromDate, to_date: toDate })
+
+    // New hooks for funnel and map
+    const { data: campaigns } = useCampaigns()
+    const { data: funnel, isLoading: funnelLoading } = useFunnelCompare({
+        from_date: fromDate,
+        to_date: toDate,
+        ad_id: selectedCampaign || undefined
+    })
+    const { data: byState, isLoading: byStateLoading } = useCasesByStateCompare({
+        from_date: fromDate,
+        to_date: toDate,
+        ad_id: selectedCampaign || undefined
+    })
 
     // Transform data for charts
     const statusChartData = (byStatus || []).map((item, i) => ({
@@ -87,14 +132,23 @@ export default function ReportsPage() {
                 <div className="flex h-16 items-center justify-between px-6">
                     <h1 className="text-2xl font-semibold">Reports</h1>
                     <div className="flex items-center gap-3">
-                        <Select value={period} onValueChange={(v) => setPeriod(v as 'day' | 'week' | 'month')}>
-                            <SelectTrigger className="w-32">
-                                <SelectValue />
+                        <DateRangePicker
+                            preset={dateRange}
+                            onPresetChange={setDateRange}
+                            customRange={customRange}
+                            onCustomRangeChange={setCustomRange}
+                        />
+                        <Select value={selectedCampaign} onValueChange={(v) => setSelectedCampaign(v || '')}>
+                            <SelectTrigger className="w-48">
+                                <SelectValue placeholder="All" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="day">Daily</SelectItem>
-                                <SelectItem value="week">Weekly</SelectItem>
-                                <SelectItem value="month">Monthly</SelectItem>
+                                <SelectItem value="">All</SelectItem>
+                                {campaigns?.map(c => (
+                                    <SelectItem key={c.ad_id} value={c.ad_id}>
+                                        {c.ad_name} ({c.lead_count})
+                                    </SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                         <DropdownMenu>
@@ -326,6 +380,20 @@ export default function ReportsPage() {
                         </CardContent>
                         <CardFooter className="text-sm text-muted-foreground">Last 30 days</CardFooter>
                     </Card>
+                </div>
+
+                {/* Funnel & Map Charts */}
+                <div className="mt-6 grid gap-6 lg:grid-cols-2">
+                    <FunnelChart
+                        data={funnel}
+                        isLoading={funnelLoading}
+                        title="Conversion Funnel"
+                    />
+                    <USMapChart
+                        data={byState}
+                        isLoading={byStateLoading}
+                        title="Cases by State"
+                    />
                 </div>
             </div>
         </div>
