@@ -34,8 +34,8 @@ class CaseStatus(str, Enum):
     Case status enum covering Intake (Stage A) and Post-approval (Stage B).
     
     Stage A (Intake Pipeline):
-        new_unread → contacted → followup_scheduled → application_submitted 
-        → under_review → approved → pending_handoff/disqualified
+        new_unread → contacted → qualified → applied → followup_scheduled
+        → application_submitted → under_review → approved → pending_handoff/disqualified
     
     Stage B (Post-Approval, Case Manager only):
         pending_match → meds_started → exam_passed → embryo_transferred → delivered
@@ -43,6 +43,8 @@ class CaseStatus(str, Enum):
     # Stage A: Intake Pipeline
     NEW_UNREAD = "new_unread"
     CONTACTED = "contacted"
+    QUALIFIED = "qualified"  # Intake confirmed info, applicant is qualified
+    APPLIED = "applied"  # Applicant submitted full application form
     FOLLOWUP_SCHEDULED = "followup_scheduled"
     APPLICATION_SUBMITTED = "application_submitted"
     UNDER_REVIEW = "under_review"
@@ -65,7 +67,8 @@ class CaseStatus(str, Enum):
     def intake_visible(cls) -> list[str]:
         """Statuses visible to intake specialists (Stage A)."""
         return [
-            cls.NEW_UNREAD.value, cls.CONTACTED.value, cls.FOLLOWUP_SCHEDULED.value,
+            cls.NEW_UNREAD.value, cls.CONTACTED.value, cls.QUALIFIED.value,
+            cls.APPLIED.value, cls.FOLLOWUP_SCHEDULED.value,
             cls.APPLICATION_SUBMITTED.value, cls.UNDER_REVIEW.value,
             cls.APPROVED.value, cls.PENDING_HANDOFF.value, cls.DISQUALIFIED.value
         ]

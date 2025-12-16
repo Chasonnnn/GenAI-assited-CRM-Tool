@@ -198,6 +198,9 @@ def change_status(
     
     old_status = case.status
     
+    # Capture requested status BEFORE auto-transition for CAPI
+    requested_status = new_status.value
+    
     # Auto-transition: approved → pending_handoff
     if new_status == CaseStatus.APPROVED:
         new_status = CaseStatus.PENDING_HANDOFF
@@ -258,8 +261,8 @@ def change_status(
         notification_service.notify_case_handoff_ready(db=db, case=case)
     
     # Meta CAPI: Send lead quality signal for Meta-sourced cases
-    # This helps Meta optimize ad targeting for higher-quality leads
-    _maybe_send_capi_event(db, case, old_status, new_status.value)
+    # Uses requested_status (before auto-transition) so 'approved' triggers CAPI
+    _maybe_send_capi_event(db, case, old_status, requested_status)
     
     return case
 
@@ -320,26 +323,36 @@ def _maybe_send_capi_event(db: Session, case: Case, old_status: str, new_status:
     
     # Send async (fire-and-forget for status change flow)
     from app.services.meta_capi import send_qualified_event
+    import logging
+    capi_logger = logging.getLogger(__name__)
+    
     try:
         # Run in existing event loop if available, otherwise create one
         loop = asyncio.get_event_loop()
+        coro = send_qualified_event(
+            meta_lead_id=meta_lead.meta_lead_id,
+            case_status=new_status,
+            email=case.email,
+            phone=case.phone,
+            access_token=access_token,
+        )
+        
         if loop.is_running():
-            # Schedule as task
-            asyncio.create_task(send_qualified_event(
-                meta_lead_id=meta_lead.meta_lead_id,
-                case_status=new_status,
-                access_token=access_token,
-            ))
+            # Schedule as task and log result when done
+            async def log_capi_result():
+                success, error = await coro
+                if not success:
+                    capi_logger.warning(f"Meta CAPI failed for case {case.case_number}: {error}")
+                else:
+                    capi_logger.info(f"Meta CAPI success for case {case.case_number}")
+            asyncio.create_task(log_capi_result())
         else:
-            loop.run_until_complete(send_qualified_event(
-                meta_lead_id=meta_lead.meta_lead_id,
-                case_status=new_status,
-                access_token=access_token,
-            ))
+            success, error = loop.run_until_complete(coro)
+            if not success:
+                capi_logger.warning(f"Meta CAPI failed for case {case.case_number}: {error}")
     except Exception as e:
         # Log but don't fail the status change
-        import logging
-        logging.getLogger(__name__).warning(f"Meta CAPI event failed: {e}")
+        capi_logger.warning(f"Meta CAPI event exception for case {case.case_number}: {e}")
 
 
 def accept_handoff(

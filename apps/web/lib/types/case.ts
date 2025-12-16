@@ -8,6 +8,8 @@ export type CaseStatus =
     // Stage A: Intake Pipeline
     | 'new_unread'
     | 'contacted'
+    | 'qualified'  // Intake confirmed info, applicant is qualified
+    | 'applied'    // Applicant submitted full application form
     | 'followup_scheduled'
     | 'application_submitted'
     | 'under_review'
@@ -28,9 +30,9 @@ export type CaseSource = 'manual' | 'meta' | 'website' | 'referral';
 
 // Status categories for role-based filtering
 export const INTAKE_VISIBLE_STATUSES: CaseStatus[] = [
-    'new_unread', 'contacted', 'followup_scheduled',
-    'application_submitted', 'under_review', 'approved',
-    'pending_handoff', 'disqualified'
+    'new_unread', 'contacted', 'qualified', 'applied',
+    'followup_scheduled', 'application_submitted', 'under_review',
+    'approved', 'pending_handoff', 'disqualified'
 ];
 
 export const CASE_MANAGER_ONLY_STATUSES: CaseStatus[] = [
@@ -91,6 +93,8 @@ export const STATUS_CONFIG: Record<CaseStatus, { label: string; color: string }>
     // Stage A: Intake Pipeline
     new_unread: { label: 'New', color: 'bg-blue-500' },
     contacted: { label: 'Contacted', color: 'bg-sky-500' },
+    qualified: { label: 'Qualified', color: 'bg-lime-500' },
+    applied: { label: 'Applied', color: 'bg-emerald-400' },
     followup_scheduled: { label: 'Follow-up Scheduled', color: 'bg-cyan-500' },
     application_submitted: { label: 'Application Submitted', color: 'bg-teal-500' },
     under_review: { label: 'Under Review', color: 'bg-amber-500' },
