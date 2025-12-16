@@ -1,9 +1,11 @@
 "use client"
 
+import { useState } from "react"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { ChevronDownIcon, TrendingUpIcon, UsersIcon, CheckCircle2Icon, ClockIcon } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ChevronDownIcon, TrendingUpIcon, UsersIcon, CheckCircle2Icon, ClockIcon, Loader2Icon, AlertCircleIcon, FacebookIcon } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Line, LineChart, Pie, PieChart } from "recharts"
 import {
     ChartContainer,
@@ -12,224 +14,311 @@ import {
     ChartLegend,
     ChartLegendContent,
 } from "@/components/ui/chart"
+import { useAnalyticsSummary, useCasesByStatus, useCasesByAssignee, useCasesTrend, useMetaPerformance } from "@/lib/hooks/use-analytics"
 
-// Chart data
-const casesOverviewData = [
-    { status: "New", cases: 24, fill: "hsl(var(--chart-1))" },
-    { status: "Contacted", cases: 32, fill: "hsl(var(--chart-2))" },
-    { status: "Qualified", cases: 18, fill: "hsl(var(--chart-3))" },
-    { status: "In Process", cases: 28, fill: "hsl(var(--chart-4))" },
-    { status: "Matched", cases: 15, fill: "hsl(var(--chart-5))" },
-    { status: "On Hold", cases: 8, fill: "hsl(var(--chart-6))" },
-]
-
-const monthlyTrendsData = [
-    { month: "Jan", newCases: 18, matched: 5 },
-    { month: "Feb", newCases: 22, matched: 6 },
-    { month: "Mar", newCases: 28, matched: 8 },
-    { month: "Apr", newCases: 24, matched: 7 },
-    { month: "May", newCases: 32, matched: 9 },
-    { month: "Jun", newCases: 26, matched: 8 },
-]
-
-const casesBySourceData = [
-    { source: "Meta", value: 58, fill: "hsl(var(--chart-1))" },
-    { source: "Manual", value: 28, fill: "hsl(var(--chart-2))" },
-    { source: "Import", value: 14, fill: "hsl(var(--chart-3))" },
-]
-
-const teamPerformanceData = [
-    { member: "Emily Chen", cases: 38, fill: "hsl(var(--chart-1))" },
-    { member: "John Smith", cases: 32, fill: "hsl(var(--chart-2))" },
-    { member: "Sarah Davis", cases: 28, fill: "hsl(var(--chart-3))" },
-    { member: "Mike Johnson", cases: 25, fill: "hsl(var(--chart-4))" },
-]
-
+// Chart configs
 const casesOverviewConfig = {
-    cases: { label: "Cases" },
+    count: { label: "Cases" },
 }
 
 const monthlyTrendsConfig = {
-    newCases: { label: "New Cases", color: "hsl(var(--chart-1))" },
-    matched: { label: "Matched", color: "hsl(var(--chart-2))" },
+    count: { label: "Cases", color: "hsl(var(--chart-1))" },
 }
 
-const casesBySourceConfig = {
-    value: { label: "Cases" },
+const casesByAssigneeConfig = {
+    count: { label: "Cases" },
 }
 
-const teamPerformanceConfig = {
-    cases: { label: "Cases" },
-}
+// Color palette for charts
+const chartColors = [
+    "hsl(var(--chart-1))",
+    "hsl(var(--chart-2))",
+    "hsl(var(--chart-3))",
+    "hsl(var(--chart-4))",
+    "hsl(var(--chart-5))",
+    "hsl(var(--chart-6))",
+]
 
 export default function ReportsPage() {
+    const [period, setPeriod] = useState<'day' | 'week' | 'month'>('day')
+
+    // Get date range (last 30 days)
+    const toDate = new Date().toISOString()
+    const fromDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+
+    // Fetch data
+    const { data: summary, isLoading: summaryLoading } = useAnalyticsSummary({ from_date: fromDate, to_date: toDate })
+    const { data: byStatus, isLoading: byStatusLoading } = useCasesByStatus()
+    const { data: byAssignee, isLoading: byAssigneeLoading } = useCasesByAssignee()
+    const { data: trend, isLoading: trendLoading } = useCasesTrend({ from_date: fromDate, to_date: toDate, period })
+    const { data: metaPerf, isLoading: metaLoading } = useMetaPerformance({ from_date: fromDate, to_date: toDate })
+
+    // Transform data for charts
+    const statusChartData = (byStatus || []).map((item, i) => ({
+        status: item.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        count: item.count,
+        fill: chartColors[i % chartColors.length],
+    }))
+
+    const assigneeChartData = (byAssignee || [])
+        .filter(item => item.user_email)
+        .slice(0, 5)
+        .map((item, i) => ({
+            member: item.user_email?.split('@')[0] || 'Unassigned',
+            count: item.count,
+            fill: chartColors[i % chartColors.length],
+        }))
+
+    const trendChartData = (trend || []).map(item => ({
+        date: item.date,
+        count: item.count,
+    }))
+
     return (
         <div className="flex min-h-screen flex-col">
             {/* Page Header */}
             <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <div className="flex h-16 items-center justify-between px-6">
                     <h1 className="text-2xl font-semibold">Reports</h1>
-                    <DropdownMenu>
-                        <DropdownMenuTrigger className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-                            Export
-                            <ChevronDownIcon className="size-4" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem>Export PDF</DropdownMenuItem>
-                            <DropdownMenuItem>Export CSV</DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                    <div className="flex items-center gap-3">
+                        <Select value={period} onValueChange={(v) => setPeriod(v as 'day' | 'week' | 'month')}>
+                            <SelectTrigger className="w-32">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="day">Daily</SelectItem>
+                                <SelectItem value="week">Weekly</SelectItem>
+                                <SelectItem value="month">Monthly</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+                                Export
+                                <ChevronDownIcon className="size-4" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem>Export PDF</DropdownMenuItem>
+                                <DropdownMenuItem>Export CSV</DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
                 </div>
             </div>
 
             {/* Main Content */}
             <div className="flex-1 space-y-6 p-6">
-                {/* Charts Grid - 2x2 layout */}
-                <div className="grid gap-6 md:grid-cols-2">
-                    {/* Card 1 - Cases Overview (Bar Chart) */}
-                    <Card className="animate-in fade-in-50 duration-500">
-                        <CardHeader>
-                            <CardTitle>Cases Overview</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <ChartContainer config={casesOverviewConfig} className="h-[300px] w-full">
-                                <BarChart data={casesOverviewData}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                    <XAxis dataKey="status" tickLine={false} axisLine={false} />
-                                    <YAxis tickLine={false} axisLine={false} />
-                                    <ChartTooltip content={<ChartTooltipContent />} />
-                                    <ChartLegend content={<ChartLegendContent />} />
-                                    <Bar dataKey="cases" radius={[8, 8, 0, 0]} />
-                                </BarChart>
-                            </ChartContainer>
-                        </CardContent>
-                        <CardFooter className="text-sm text-muted-foreground">Last 30 days</CardFooter>
-                    </Card>
-
-                    {/* Card 2 - Monthly Trends (Line Chart) */}
-                    <Card className="animate-in fade-in-50 duration-500 delay-100">
-                        <CardHeader>
-                            <CardTitle>Monthly Trends</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <ChartContainer config={monthlyTrendsConfig} className="h-[300px] w-full">
-                                <LineChart data={monthlyTrendsData}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                    <XAxis dataKey="month" tickLine={false} axisLine={false} />
-                                    <YAxis tickLine={false} axisLine={false} />
-                                    <ChartTooltip content={<ChartTooltipContent />} />
-                                    <ChartLegend content={<ChartLegendContent />} />
-                                    <Line
-                                        type="monotone"
-                                        dataKey="newCases"
-                                        stroke="hsl(var(--chart-1))"
-                                        strokeWidth={2}
-                                        dot={{ r: 4 }}
-                                    />
-                                    <Line
-                                        type="monotone"
-                                        dataKey="matched"
-                                        stroke="hsl(var(--chart-2))"
-                                        strokeWidth={2}
-                                        dot={{ r: 4 }}
-                                    />
-                                </LineChart>
-                            </ChartContainer>
-                        </CardContent>
-                        <CardFooter className="text-sm text-muted-foreground">Last 6 months</CardFooter>
-                    </Card>
-
-                    {/* Card 3 - Cases by Source (Pie Chart) */}
-                    <Card className="animate-in fade-in-50 duration-500 delay-200">
-                        <CardHeader>
-                            <CardTitle>Cases by Source</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <ChartContainer config={casesBySourceConfig} className="h-[300px] w-full">
-                                <PieChart>
-                                    <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                                    <Pie
-                                        data={casesBySourceData}
-                                        dataKey="value"
-                                        nameKey="source"
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={60}
-                                        outerRadius={100}
-                                        paddingAngle={2}
-                                        label={({ name, value }) => `${name}: ${value}%`}
-                                    />
-                                    <ChartLegend content={<ChartLegendContent />} />
-                                </PieChart>
-                            </ChartContainer>
-                        </CardContent>
-                        <CardFooter className="text-sm text-muted-foreground">All time</CardFooter>
-                    </Card>
-
-                    {/* Card 4 - Team Performance (Horizontal Bar Chart) */}
-                    <Card className="animate-in fade-in-50 duration-500 delay-300">
-                        <CardHeader>
-                            <CardTitle>Team Performance</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <ChartContainer config={teamPerformanceConfig} className="h-[300px] w-full">
-                                <BarChart data={teamPerformanceData} layout="vertical">
-                                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                                    <XAxis type="number" tickLine={false} axisLine={false} />
-                                    <YAxis dataKey="member" type="category" tickLine={false} axisLine={false} width={100} />
-                                    <ChartTooltip content={<ChartTooltipContent />} />
-                                    <Bar dataKey="cases" radius={[0, 8, 8, 0]} />
-                                </BarChart>
-                            </ChartContainer>
-                        </CardContent>
-                        <CardFooter className="text-sm text-muted-foreground">Last 30 days</CardFooter>
-                    </Card>
-                </div>
-
                 {/* Quick Stats Row */}
                 <div className="grid gap-4 md:grid-cols-4">
-                    <Card className="animate-in fade-in-50 duration-500 delay-400">
+                    <Card className="animate-in fade-in-50 duration-500">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Total Cases</CardTitle>
                             <TrendingUpIcon className="size-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">156</div>
-                            <p className="text-xs text-muted-foreground">+12% from last month</p>
+                            {summaryLoading ? (
+                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                            ) : (
+                                <>
+                                    <div className="text-2xl font-bold">{summary?.total_cases ?? 0}</div>
+                                    <p className="text-xs text-muted-foreground">Active cases</p>
+                                </>
+                            )}
                         </CardContent>
                     </Card>
 
-                    <Card className="animate-in fade-in-50 duration-500 delay-500">
+                    <Card className="animate-in fade-in-50 duration-500 delay-100">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Active Cases</CardTitle>
+                            <CardTitle className="text-sm font-medium">New This Period</CardTitle>
                             <UsersIcon className="size-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">42</div>
-                            <p className="text-xs text-muted-foreground">Currently in progress</p>
+                            {summaryLoading ? (
+                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                            ) : (
+                                <>
+                                    <div className="text-2xl font-bold">{summary?.new_this_period ?? 0}</div>
+                                    <p className="text-xs text-muted-foreground">Last 30 days</p>
+                                </>
+                            )}
                         </CardContent>
                     </Card>
 
-                    <Card className="animate-in fade-in-50 duration-500 delay-[600ms]">
+                    <Card className="animate-in fade-in-50 duration-500 delay-200">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Matched This Month</CardTitle>
+                            <CardTitle className="text-sm font-medium">Qualified Rate</CardTitle>
                             <CheckCircle2Icon className="size-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">8</div>
-                            <p className="text-xs text-muted-foreground">+2 from last month</p>
+                            {summaryLoading ? (
+                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                            ) : (
+                                <>
+                                    <div className="text-2xl font-bold">{summary?.qualified_rate ?? 0}%</div>
+                                    <p className="text-xs text-muted-foreground">Qualified + approved</p>
+                                </>
+                            )}
                         </CardContent>
                     </Card>
 
-                    <Card className="animate-in fade-in-50 duration-500 delay-700">
+                    <Card className="animate-in fade-in-50 duration-500 delay-300">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Avg Days to Match</CardTitle>
-                            <ClockIcon className="size-4 text-muted-foreground" />
+                            <CardTitle className="text-sm font-medium">Meta Conversion</CardTitle>
+                            <FacebookIcon className="size-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">45</div>
-                            <p className="text-xs text-muted-foreground">-5 days improvement</p>
+                            {metaLoading ? (
+                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                            ) : (
+                                <>
+                                    <div className="text-2xl font-bold">{metaPerf?.conversion_rate ?? 0}%</div>
+                                    <p className="text-xs text-muted-foreground">
+                                        {metaPerf?.leads_converted ?? 0} / {metaPerf?.leads_received ?? 0} leads
+                                    </p>
+                                </>
+                            )}
                         </CardContent>
+                    </Card>
+                </div>
+
+                {/* Charts Grid */}
+                <div className="grid gap-6 md:grid-cols-2">
+                    {/* Cases by Status */}
+                    <Card className="animate-in fade-in-50 duration-500 delay-400">
+                        <CardHeader>
+                            <CardTitle>Cases by Status</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {byStatusLoading ? (
+                                <div className="flex h-[300px] items-center justify-center">
+                                    <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                                </div>
+                            ) : statusChartData.length > 0 ? (
+                                <ChartContainer config={casesOverviewConfig} className="h-[300px] w-full">
+                                    <BarChart data={statusChartData}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                        <XAxis dataKey="status" tickLine={false} axisLine={false} fontSize={12} />
+                                        <YAxis tickLine={false} axisLine={false} />
+                                        <ChartTooltip content={<ChartTooltipContent />} />
+                                        <Bar dataKey="count" radius={[8, 8, 0, 0]} />
+                                    </BarChart>
+                                </ChartContainer>
+                            ) : (
+                                <div className="flex h-[300px] items-center justify-center text-muted-foreground">
+                                    <AlertCircleIcon className="mr-2 size-4" /> No data available
+                                </div>
+                            )}
+                        </CardContent>
+                        <CardFooter className="text-sm text-muted-foreground">Current distribution</CardFooter>
+                    </Card>
+
+                    {/* Cases Trend */}
+                    <Card className="animate-in fade-in-50 duration-500 delay-500">
+                        <CardHeader>
+                            <CardTitle>Cases Trend</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {trendLoading ? (
+                                <div className="flex h-[300px] items-center justify-center">
+                                    <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                                </div>
+                            ) : trendChartData.length > 0 ? (
+                                <ChartContainer config={monthlyTrendsConfig} className="h-[300px] w-full">
+                                    <LineChart data={trendChartData}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                        <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={12} />
+                                        <YAxis tickLine={false} axisLine={false} />
+                                        <ChartTooltip content={<ChartTooltipContent />} />
+                                        <Line
+                                            type="monotone"
+                                            dataKey="count"
+                                            stroke="hsl(var(--chart-1))"
+                                            strokeWidth={2}
+                                            dot={{ r: 4 }}
+                                        />
+                                    </LineChart>
+                                </ChartContainer>
+                            ) : (
+                                <div className="flex h-[300px] items-center justify-center text-muted-foreground">
+                                    <AlertCircleIcon className="mr-2 size-4" /> No data available
+                                </div>
+                            )}
+                        </CardContent>
+                        <CardFooter className="text-sm text-muted-foreground">Last 30 days</CardFooter>
+                    </Card>
+
+                    {/* Team Performance */}
+                    <Card className="animate-in fade-in-50 duration-500 delay-[600ms]">
+                        <CardHeader>
+                            <CardTitle>Team Performance</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {byAssigneeLoading ? (
+                                <div className="flex h-[300px] items-center justify-center">
+                                    <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                                </div>
+                            ) : assigneeChartData.length > 0 ? (
+                                <ChartContainer config={casesByAssigneeConfig} className="h-[300px] w-full">
+                                    <BarChart data={assigneeChartData} layout="vertical">
+                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                                        <XAxis type="number" tickLine={false} axisLine={false} />
+                                        <YAxis dataKey="member" type="category" tickLine={false} axisLine={false} width={100} fontSize={12} />
+                                        <ChartTooltip content={<ChartTooltipContent />} />
+                                        <Bar dataKey="count" radius={[0, 8, 8, 0]} />
+                                    </BarChart>
+                                </ChartContainer>
+                            ) : (
+                                <div className="flex h-[300px] items-center justify-center text-muted-foreground">
+                                    <AlertCircleIcon className="mr-2 size-4" /> No assigned cases
+                                </div>
+                            )}
+                        </CardContent>
+                        <CardFooter className="text-sm text-muted-foreground">Cases per assignee</CardFooter>
+                    </Card>
+
+                    {/* Meta Performance */}
+                    <Card className="animate-in fade-in-50 duration-500 delay-700">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <FacebookIcon className="size-5 text-blue-600" />
+                                Meta Lead Ads Performance
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {metaLoading ? (
+                                <div className="flex h-[300px] items-center justify-center">
+                                    <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                                </div>
+                            ) : (
+                                <div className="grid h-[300px] grid-rows-2 gap-4 p-4">
+                                    <div className="flex items-center justify-between rounded-lg border p-4">
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">Leads Received</p>
+                                            <p className="text-3xl font-bold">{metaPerf?.leads_received ?? 0}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">Leads Converted</p>
+                                            <p className="text-3xl font-bold text-green-600">{metaPerf?.leads_converted ?? 0}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">Conversion Rate</p>
+                                            <p className="text-3xl font-bold text-blue-600">{metaPerf?.conversion_rate ?? 0}%</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center justify-center rounded-lg bg-muted/50 p-4">
+                                        <div className="text-center">
+                                            <p className="text-sm text-muted-foreground">Avg Time to Convert</p>
+                                            <p className="text-4xl font-bold">
+                                                {metaPerf?.avg_time_to_convert_hours
+                                                    ? `${metaPerf.avg_time_to_convert_hours}h`
+                                                    : '—'
+                                                }
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </CardContent>
+                        <CardFooter className="text-sm text-muted-foreground">Last 30 days</CardFooter>
                     </Card>
                 </div>
             </div>
