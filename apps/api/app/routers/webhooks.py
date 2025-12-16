@@ -1,17 +1,21 @@
 """Webhooks router - external service integrations."""
 
+import json
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import PlainTextResponse
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import get_db
+from app.db.models import MetaPageMapping
+from app.db.enums import JobType
+from app.services import job_service, meta_api
 
 router = APIRouter()
-
-
-# Meta webhook verification token (set in app config)
-# In production, this would be per-org and stored in DB
-META_VERIFY_TOKEN = getattr(settings, "META_VERIFY_TOKEN", "")
+logger = logging.getLogger(__name__)
 
 
 @router.get("/meta")
@@ -24,11 +28,12 @@ async def verify_meta_webhook(
     Meta webhook verification endpoint.
     
     When you configure the webhook in Meta, it sends a GET request
-    with a challenge that must be echoed back.
+    with a challenge that must be echoed back as PLAIN TEXT (not JSON).
     """
-    if mode == "subscribe" and token == META_VERIFY_TOKEN:
-        return int(challenge) if challenge else ""
+    if mode == "subscribe" and token == settings.META_VERIFY_TOKEN:
+        return PlainTextResponse(challenge or "")
     
+    logger.warning(f"Meta webhook verification failed: mode={mode}")
     raise HTTPException(status_code=403, detail="Verification failed")
 
 
@@ -40,37 +45,163 @@ async def receive_meta_webhook(
     """
     Receive Meta Lead Ads webhook.
     
-    NOTE: This is a skeleton. Full implementation requires:
-    1. Signature verification (X-Hub-Signature header)
-    2. Page-to-org mapping
-    3. Lead data retrieval via Meta API
+    Security:
+    - Validates X-Hub-Signature-256 HMAC (except in test mode)
+    - Validates payload size
+    - Validates page_id is mapped
     
-    For now, we just acknowledge receipt.
+    Processing:
+    - Enqueues async jobs for lead fetching (idempotent via DB constraint)
+    - Returns 200 fast before heavy DB work
     """
-    # Get raw body for signature verification (future)
+    # 1. Check payload size
+    content_length = request.headers.get("content-length", "0")
     try:
-        body = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
+        if int(content_length) > settings.META_WEBHOOK_MAX_PAYLOAD_BYTES:
+            raise HTTPException(413, "Payload too large")
+    except ValueError:
+        pass
     
-    # Log receipt (in production: process asynchronously)
-    # TODO: Implement full Meta Lead Ads processing:
-    # 1. Verify signature using app secret
-    # 2. Extract leadgen_id from webhook payload
-    # 3. Call Meta API to get lead details
-    # 4. Map page_id to organization
-    # 5. Store in meta_leads table
-    # 6. Optionally auto-convert to case
+    # 2. Get raw body for signature verification
+    body = await request.body()
+    signature = request.headers.get("X-Hub-Signature-256", "")
     
-    # For now, just acknowledge
-    return {"status": "received", "object": body.get("object")}
+    # 3. Validate signature (skip in test mode)
+    if not settings.META_TEST_MODE:
+        if not signature:
+            logger.warning("Meta webhook missing signature")
+            raise HTTPException(403, "Missing signature")
+        if not meta_api.verify_signature(body, signature):
+            logger.warning("Meta webhook invalid signature")
+            raise HTTPException(403, "Invalid signature")
+    
+    # 4. Parse payload
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        raise HTTPException(400, "Invalid JSON")
+    
+    # 5. Validate object type
+    if data.get("object") != "page":
+        logger.warning(f"Meta webhook invalid object: {data.get('object')}")
+        raise HTTPException(400, f"Invalid object: {data.get('object')}")
+    
+    # 6. Process entries
+    jobs_created = 0
+    jobs_skipped = 0
+    
+    for entry in data.get("entry", []):
+        page_id = str(entry.get("id", ""))
+        if not page_id:
+            continue
+        
+        # Validate page_id is mapped to an org
+        mapping = db.query(MetaPageMapping).filter(
+            MetaPageMapping.page_id == page_id,
+            MetaPageMapping.is_active == True,
+        ).first()
+        
+        if not mapping:
+            logger.info(f"Meta webhook: unmapped page_id={page_id}")
+            continue
+        
+        for change in entry.get("changes", []):
+            if change.get("field") != "leadgen":
+                continue
+            
+            value = change.get("value", {})
+            leadgen_id = value.get("leadgen_id")
+            
+            if not leadgen_id:
+                logger.warning("Meta webhook: missing leadgen_id in change")
+                continue
+            
+            # Idempotent job creation via DB unique constraint
+            job_key = f"meta_lead_fetch:{page_id}:{leadgen_id}"
+            
+            try:
+                job_service.schedule_job(
+                    db=db,
+                    org_id=mapping.organization_id,
+                    job_type=JobType.META_LEAD_FETCH,
+                    payload={
+                        "leadgen_id": leadgen_id,
+                        "page_id": page_id,
+                    },
+                    idempotency_key=job_key,
+                )
+                jobs_created += 1
+                logger.info(f"Meta webhook: enqueued job for leadgen_id={leadgen_id}")
+            except IntegrityError:
+                db.rollback()
+                jobs_skipped += 1
+                logger.info(f"Meta webhook: duplicate job skipped for leadgen_id={leadgen_id}")
+    
+    return {
+        "status": "ok",
+        "jobs_enqueued": jobs_created,
+        "jobs_skipped": jobs_skipped,
+    }
 
 
 # =============================================================================
-# Future: Manual conversion endpoint
+# Dev/Test endpoint for simulating Meta webhook
 # =============================================================================
 
-# @router.post("/meta-leads/{meta_lead_id}/convert")
-# async def convert_meta_lead(...):
-#     """Manually convert a Meta lead to a case."""
-#     pass
+@router.post("/meta/simulate", include_in_schema=False)
+async def simulate_meta_webhook(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Simulate a Meta webhook for testing.
+    
+    Only works in test mode. Requires X-Dev-Secret header.
+    """
+    if not settings.META_TEST_MODE:
+        raise HTTPException(403, "Only available in test mode")
+    
+    dev_secret = request.headers.get("X-Dev-Secret", "")
+    if dev_secret != settings.DEV_SECRET:
+        raise HTTPException(403, "Invalid dev secret")
+    
+    # Create a mock webhook payload
+    import uuid
+    mock_leadgen_id = str(uuid.uuid4())
+    
+    # Find any active page mapping (or use mock)
+    mapping = db.query(MetaPageMapping).filter(
+        MetaPageMapping.is_active == True
+    ).first()
+    
+    page_id = mapping.page_id if mapping else "mock_page_456"
+    org_id = mapping.organization_id if mapping else None
+    
+    if not org_id:
+        raise HTTPException(400, "No active page mapping found. Create one first.")
+    
+    # Enqueue the job
+    job_key = f"meta_lead_fetch:{page_id}:{mock_leadgen_id}"
+    
+    try:
+        job = job_service.schedule_job(
+            db=db,
+            org_id=org_id,
+            job_type=JobType.META_LEAD_FETCH,
+            payload={
+                "leadgen_id": mock_leadgen_id,
+                "page_id": page_id,
+            },
+            idempotency_key=job_key,
+        )
+        
+        return {
+            "status": "ok",
+            "job_id": str(job.id),
+            "leadgen_id": mock_leadgen_id,
+            "page_id": page_id,
+            "message": "Job enqueued. Run worker to process.",
+        }
+    except IntegrityError:
+        db.rollback()
+        return {"status": "ok", "message": "Duplicate job already exists"}

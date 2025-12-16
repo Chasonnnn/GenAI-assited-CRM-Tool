@@ -43,7 +43,7 @@ app.include_router(notifications.router, prefix="/me", tags=["notifications"])
 app.include_router(email_templates.router, prefix="/email-templates", tags=["email"])
 app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
 
-# Webhooks router (external integrations)
+# Webhooks (Meta Lead Ads webhook handler)
 app.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 
 # Dev router (ONLY mounted in dev mode)

@@ -138,6 +138,7 @@ class JobType(str, Enum):
     REMINDER = "reminder"
     WEBHOOK_RETRY = "webhook_retry"
     NOTIFICATION = "notification"
+    META_LEAD_FETCH = "meta_lead_fetch"
 
 
 class JobStatus(str, Enum):

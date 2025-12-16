@@ -39,6 +39,14 @@ class Settings(BaseSettings):
     # Meta Lead Ads webhook
     META_VERIFY_TOKEN: str = ""
     
+    # Meta Lead Ads API
+    META_APP_ID: str = ""
+    META_APP_SECRET: str = ""
+    META_TEST_MODE: bool = True  # Set to False in production
+    META_API_VERSION: str = "v21.0"
+    META_ENCRYPTION_KEY: str = ""  # Fernet key for encrypting page tokens
+    META_WEBHOOK_MAX_PAYLOAD_BYTES: int = 100000  # 100KB limit
+    
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse CORS_ORIGINS into a list."""
