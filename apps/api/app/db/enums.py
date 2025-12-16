@@ -196,6 +196,56 @@ DEFAULT_IP_STATUS = IntendedParentStatus.NEW
 
 
 # =============================================================================
+# Week 10: Integration Health + Alerts Enums
+# =============================================================================
+
+class IntegrationType(str, Enum):
+    """Types of integrations tracked for health monitoring."""
+    META_LEADS = "meta_leads"
+    META_CAPI = "meta_capi"
+    WORKER = "worker"
+
+
+class IntegrationStatus(str, Enum):
+    """Health status of an integration."""
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    ERROR = "error"
+
+
+class ConfigStatus(str, Enum):
+    """Configuration status of an integration."""
+    CONFIGURED = "configured"
+    MISSING_TOKEN = "missing_token"
+    EXPIRED_TOKEN = "expired_token"
+
+
+class AlertType(str, Enum):
+    """Types of system alerts."""
+    META_FETCH_FAILED = "meta_fetch_failed"
+    META_CONVERT_FAILED = "meta_convert_failed"
+    META_TOKEN_EXPIRING = "meta_token_expiring"
+    META_TOKEN_EXPIRED = "meta_token_expired"
+    WORKER_JOB_FAILED = "worker_job_failed"
+    API_ERROR = "api_error"
+
+
+class AlertSeverity(str, Enum):
+    """Severity levels for alerts."""
+    WARN = "warn"
+    ERROR = "error"
+    CRITICAL = "critical"
+
+
+class AlertStatus(str, Enum):
+    """Status of an alert."""
+    OPEN = "open"
+    ACKNOWLEDGED = "acknowledged"
+    RESOLVED = "resolved"
+    SNOOZED = "snoozed"
+
+
+# =============================================================================
 # Role Permission Helpers (avoid string literals, use enum values)
 # =============================================================================
 
@@ -219,3 +269,6 @@ ROLES_CAN_INVITE = {Role.MANAGER, Role.DEVELOPER}
 
 # Roles that can view audit logs / diagnostics
 ROLES_CAN_VIEW_LOGS = {Role.DEVELOPER}
+
+# Roles that can view/manage ops alerts
+ROLES_CAN_VIEW_ALERTS = {Role.MANAGER, Role.DEVELOPER}
