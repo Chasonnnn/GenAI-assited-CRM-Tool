@@ -1,5 +1,5 @@
 Surrogacy CRM Platform — 12-Week Roadmap (AI-ready, Multi-tenant, OSS-ready)
-Last updated: 2025-12-15
+Last updated: 2025-12-16
 
 Assumptions (important)
 - Multi-tenant via shared DB + shared schema, with `organization_id` on all domain rows.
@@ -404,57 +404,72 @@ Deliverable
 ✓ Meta leads auto-convert to Cases with campaign tracking
 ✓ CAPI feedback optimizes Meta ad targeting for higher-quality leads
 
-Week 10 — Ops Console + Manager Analytics
-Backend (Ops Console)
-- Split events vs alerts (enterprise pattern):
-  - system_events table (append-only, high volume):
-    - id, created_at, organization_id, component (api/worker/webhook)
-    - event_type, severity (info/warn/error/critical)
-    - message, details (JSONB, truncated, PII-redacted)
-    - Correlation fields: request_id, job_id, idempotency_key,
-      actor_user_id, entity_type, entity_id, correlation_id
-    - Indexes: (created_at), (organization_id, created_at), (correlation_id)
-    - Retention: 30-90 days, partitioned by month
-  - system_alerts table (deduped, actionable):
-    - id, organization_id, dedupe_key (unique per org)
-    - severity, status (open/acknowledged/resolved/snoozed)
-    - first_seen_at, last_seen_at, occurrence_count
-    - title, message, details (JSONB)
-    - resolved_at, resolved_by_user_id
-    - Indexes: (status, severity, last_seen_at)
-- Alert types:
-  - WORKER_JOB_FAILED - job failed after max retries
-  - META_FETCH_FAILED - Meta API call failed
-  - META_CONVERSION_FAILED - lead conversion issues
-  - API_ERROR_500 - unhandled exceptions
-  - TOKEN_EXPIRY_SOON - Meta tokens expiring within 7 days
-  - DB_MIGRATION_FAILED - critical system failure
-- Token expiry scheduled job:
-  - Daily sweep of token_expires_at, creates/updates TOKEN_EXPIRY_SOON:{page_id}
-- External integration path:
-  - Forward critical alerts to Slack/PagerDuty (future)
-  - Send exceptions to Sentry (future)
-Backend (Analytics)
-- Analytics endpoints:
-  - leads by status over time
-  - funnel counts
-  - cases by status and by specialist
-  - Uses status_history for historical data
+Week 10 — Ops Console + Manager Analytics ✓ COMPLETE
+Backend (Database + Services)
+✓ Migration 0008_integration_health.py:
+  ✓ integration_health - per-integration status tracking (status, config_status, last_success/error)
+  ✓ integration_error_rollup - hourly error counts for 24h totals
+  ✓ system_alerts - deduplicated actionable alerts with fingerprinting
+  ✓ request_metrics_rollup - aggregated API metrics (multi-replica safe)
+✓ New enums: IntegrationType, IntegrationStatus, AlertType, AlertSeverity, AlertStatus
+✓ Services:
+  ✓ ops_service.py - integration health tracking, success/error recording, hourly rollups
+  ✓ alert_service.py - fingerprint-based deduplication, lifecycle management
+  ✓ metrics_service.py - request metrics with DB upserts
+✓ Worker integration:
+  ✓ _record_job_success() - records success for META_LEAD_FETCH, META_CAPI_EVENT jobs
+  ✓ _record_job_failure() - records errors, creates alerts on max retry failures
+  ✓ Proper integration_key extraction (page_id or meta_page_id)
+  ✓ Actual exception class for alert fingerprinting
+✓ Scheduled token check endpoint:
+  ✓ POST /internal/scheduled/token-check (X-Internal-Secret protected)
+  ✓ Daily sweep for META_TOKEN_EXPIRING (< 7 days) and META_TOKEN_EXPIRED alerts
+  ✓ Updates integration_health config_status accordingly
+Backend (Analytics Endpoints)
+✓ GET /analytics/summary - total cases, new this period, qualified rate, avg time to qualified
+✓ GET /analytics/cases/by-status - case counts grouped by status
+✓ GET /analytics/cases/by-assignee - case counts grouped by assignee
+✓ GET /analytics/cases/trend - case creation trend (day/week/month bucketing)
+✓ GET /analytics/meta/performance - Meta Lead Ads performance (leads, conversions, avg time)
+Backend (Ops Endpoints)
+✓ GET /ops/health - integration health status for all integrations
+✓ GET /ops/alerts/summary - open alert counts by severity (warn/error/critical)
+✓ GET /ops/alerts - list alerts with status/severity filters, pagination
+✓ POST /ops/alerts/{id}/resolve - resolve alert (CSRF protected)
+✓ POST /ops/alerts/{id}/acknowledge - acknowledge alert (CSRF protected)
+✓ POST /ops/alerts/{id}/snooze - snooze alert for N hours (CSRF protected)
 Frontend
-- Ops Console (developer/manager only):
-  - Dashboard with alert counts by severity
-  - Alerts list with filter/search
-  - Mark as resolved/acknowledged/snoozed
-  - View event stream (latest N events)
-- Reports dashboard:
-  - Date range picker + charts
-  - "Insights" tab scaffolding
+✓ /reports page - real data from analytics API:
+  ✓ Summary stats (total cases, new, qualified rate, Meta conversion)
+  ✓ Cases by status bar chart
+  ✓ Cases trend line chart with period selector
+  ✓ Team performance by assignee
+  ✓ Meta Lead Ads performance panel
+✓ /settings/alerts page:
+  ✓ Alert summary cards (critical/error/warn counts)
+  ✓ Alert list with status filter
+  ✓ Resolve/Acknowledge/Snooze actions
+✓ /settings/integrations page:
+  ✓ Integration health cards with status indicator
+  ✓ Config status (configured/expired_token/missing_token)
+  ✓ Error counts and last error display
+✓ API clients + React Query hooks:
+  ✓ lib/api/analytics.ts, lib/api/ops.ts
+  ✓ lib/hooks/use-analytics.ts, lib/hooks/use-ops.ts
+Security Fixes (code review)
+✓ CSRF headers on ops mutation endpoints
+✓ Literal types for query params (prevents 500 on bad enum)
+✓ count_alerts includes severity for consistent pagination
+✓ Token-check handles naive datetime comparison
+✓ Use 'default' instead of NULL for integration_key upserts
+✓ Analytics qualified_statuses includes all post-qualified stages
+✓ Trend endpoint excludes archived cases
 Permissions
-- developer role: sees all orgs (if supported), can view/resolve alerts
-- manager role: sees org-level ops only
+✓ All ops/analytics endpoints require manager or developer role
+✓ CSRF protection on all state-changing POST endpoints
 Deliverable
-- Enterprise-grade logging/alerting system
-- Managers have the "overview + stats" view they asked for
+✓ Enterprise-grade integration health tracking and alerting system
+✓ Manager analytics dashboard with real-time data
 
 Week 11 — AI assistant v1 (safe + useful, BYOK)
 Backend

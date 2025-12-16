@@ -219,7 +219,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ## Current Status
 
-**Week 6+ Complete** — Case Handoff Workflow:
+**Week 10 Complete** — Ops Console + Manager Analytics:
 
 - [x] Project scaffolding (monorepo structure)
 - [x] PostgreSQL with Docker Compose
@@ -297,7 +297,14 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
   - [x] CLI: update-meta-page-token, deactivate-meta-page
   - [x] New statuses: qualified, applied
   - [x] New workflow: contacted → qualified → applied → under_review → approved → pending_handoff
-- [ ] Ops Console + Manager Analytics
+- [x] **Ops Console + Manager Analytics (Week 10):**
+  - [x] Integration health tracking (status, errors, 24h rollups)
+  - [x] System alerts with fingerprint-based deduplication
+  - [x] Analytics endpoints (summary, by-status, by-assignee, trend, Meta performance)
+  - [x] Ops endpoints (health, alerts with resolve/acknowledge/snooze)
+  - [x] Scheduled token-check endpoint for Meta token expiry
+  - [x] Frontend: /reports with real data, /settings/alerts, /settings/integrations
+- [ ] AI Assistant (Week 11)
 
 ## Documentation
 

@@ -360,7 +360,7 @@ Constraints:
 
 ## 13) Current Status (Update regularly)
 
-- **Date:** 2025-12-15
+- **Date:** 2025-12-16
 - **Completed:**
   - Project scaffolding (monorepo with apps/api + apps/web)
   - PostgreSQL 16 via Docker Compose
@@ -396,24 +396,15 @@ Constraints:
     - App Sidebar with navigation and user menu
     - Loading skeletons for all pages
     - All pages use shadcn/ui components with responsive Tailwind classes
-- **In progress:** Week 10 (Ops Console + Manager Analytics)
+  - **Week 5 complete:** Frontend-Backend Integration
+  - **Week 5b complete:** Workflow automation + email foundation
+  - **Week 6 complete:** Intended Parents module + handoff workflow + case enhancements
+  - **Week 8 complete:** In-App Notifications + Theme System
+  - **Week 9 complete:** Meta Lead Ads Integration + CAPI
+  - **Week 10 complete:** Ops Console + Manager Analytics
+- **In progress:** None (Week 10 just completed)
 - **Blockers:** None
-- **Next milestones:** Ops Console, AI features, deployment
-
-### Week 9 (2025-12-16): Meta Lead Ads Integration ✓ COMPLETE
-- **Completed:**
-  - Webhook endpoint with HMAC signature verification
-  - Meta API client (fetch lead details, appsecret_proof)
-  - Auto-conversion: Meta leads → Cases (source=META)
-  - Campaign tracking: meta_ad_id, meta_form_id on Case
-  - Meta Conversions API (CAPI): sends signals on qualified/approved
-  - Fernet encryption for page access tokens
-  - CLI commands: update-meta-page-token, deactivate-meta-page
-  - Dev endpoints: /dev/meta-leads/alerts, /dev/meta-leads/all
-- **Workflow changes:**
-  - New statuses: qualified (intake confirms), applied (full app submitted)
-  - Removed auto-transition approved → pending_handoff
-  - New flow: new → contacted → qualified → applied → under_review → approved → pending_handoff
+- **Next milestones:** AI assistant (Week 11), deployment (Week 12)
 
 ### Week 6 (2025-12-14): Intended Parents Module + Dependencies
 - **Completed:**
@@ -466,6 +457,38 @@ Constraints:
   - mark_read() org_id for tenant isolation
   - Dedupe query org_id + user_id for multi-tenancy
 
+### Week 9 (2025-12-16): Meta Lead Ads Integration ✓ COMPLETE
+- **Completed:**
+  - Webhook endpoint with HMAC signature verification
+  - Meta API client (fetch lead details, appsecret_proof)
+  - Auto-conversion: Meta leads → Cases (source=META)
+  - Campaign tracking: meta_ad_id, meta_form_id on Case
+  - Meta Conversions API (CAPI): sends signals on qualified/approved
+  - Fernet encryption for page access tokens
+  - CLI commands: update-meta-page-token, deactivate-meta-page
+  - Dev endpoints: /dev/meta-leads/alerts, /dev/meta-leads/all
+- **Workflow changes:**
+  - New statuses: qualified (intake confirms), applied (full app submitted)
+  - Removed auto-transition approved → pending_handoff
+  - New flow: new → contacted → qualified → applied → under_review → approved → pending_handoff
+
+### Week 10 (2025-12-16): Ops Console + Manager Analytics ✓ COMPLETE
+- **Completed:**
+  - Database: integration_health, integration_error_rollup, system_alerts, request_metrics_rollup
+  - Services: ops_service.py, alert_service.py, metrics_service.py
+  - Worker integration: job success/failure tracking, alert creation on max retry failures
+  - Scheduled endpoint: POST /internal/scheduled/token-check (meta token expiry checks)
+  - Analytics endpoints: /analytics/summary, /cases/by-status, /cases/by-assignee, /cases/trend, /meta/performance
+  - Ops endpoints: /ops/health, /ops/alerts/summary, /ops/alerts, resolve/acknowledge/snooze
+  - Frontend: /reports with real data, /settings/alerts, /settings/integrations
+  - API clients + React Query hooks for analytics and ops
+- **Security fixes:**
+  - CSRF on all ops mutation endpoints
+  - Literal types for enum query params (prevents 500)
+  - Consistent pagination with severity filter
+  - Naive datetime comparison fixed in token-check
+  - 'default' instead of NULL for upsert keys
+
 ## 14) Decision Log (Update when choices change)
 
 - **ORM choice:** SQLAlchemy 2.0 with DeclarativeBase
@@ -485,4 +508,5 @@ Constraints:
 - **Assignment permissions (2025-12-15):** case_manager added to ROLES_CAN_ASSIGN for consistency
 - **Notification dedupe (2025-12-15):** App-level dedupe with 1-hour window, DB constraint deferred until noisy
 - **Theme system (2025-12-15):** Stone base + Teal theme using next-themes, warm oklch colors
+- **Ops/alerts design (2025-12-16):** Fingerprint-based alert deduplication, hourly error rollups, 'default' for null integration keys
 
