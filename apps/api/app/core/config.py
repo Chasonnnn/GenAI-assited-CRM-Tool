@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     # Meta Conversions API (CAPI) - for sending lead quality signals back to Meta
     META_PIXEL_ID: str = ""  # Dataset ID for Conversions API
     META_CAPI_ENABLED: bool = False  # Enable sending status updates to Meta
+    META_CAPI_ACCESS_TOKEN: str = ""  # System user access token for CAPI (optional, falls back to page token)
     
     @property
     def cors_origins_list(self) -> list[str]:
