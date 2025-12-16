@@ -4,14 +4,14 @@ Ops/Alerts endpoints for integration health and system alerts.
 Manager+ access for viewing integration status and managing alerts.
 """
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db, require_roles
+from app.core.deps import get_current_session, get_db, require_roles, require_csrf_header
 from app.db.enums import Role, AlertStatus, AlertSeverity
 from app.db.models import SystemAlert
 from app.schemas.auth import UserSession
@@ -62,6 +62,11 @@ class AlertsListResponse(BaseModel):
     total: int
 
 
+# Valid enum values for typed query params
+AlertStatusParam = Literal["open", "acknowledged", "resolved", "snoozed"]
+AlertSeverityParam = Literal["warn", "error", "critical"]
+
+
 # =============================================================================
 # Endpoints
 # =============================================================================
@@ -87,14 +92,15 @@ def get_alerts_summary(
 
 @router.get("/alerts", response_model=AlertsListResponse)
 def list_alerts(
-    status: Optional[str] = Query(None, description="Filter by status: open, acknowledged, resolved, snoozed"),
-    severity: Optional[str] = Query(None, description="Filter by severity: warn, error, critical"),
+    status: Optional[AlertStatusParam] = Query(None, description="Filter by status"),
+    severity: Optional[AlertSeverityParam] = Query(None, description="Filter by severity"),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
     db: Session = Depends(get_db),
 ):
     """List system alerts with optional filters."""
+    # FastAPI validates the Literal types, so these are safe
     status_enum = AlertStatus(status) if status else None
     severity_enum = AlertSeverity(severity) if severity else None
     
@@ -107,7 +113,8 @@ def list_alerts(
         offset=offset,
     )
     
-    total = alert_service.count_alerts(db, session.org_id, status_enum)
+    # Pass severity to count_alerts for consistent pagination
+    total = alert_service.count_alerts(db, session.org_id, status_enum, severity_enum)
     
     return AlertsListResponse(
         items=[
@@ -130,7 +137,7 @@ def list_alerts(
     )
 
 
-@router.post("/alerts/{alert_id}/resolve")
+@router.post("/alerts/{alert_id}/resolve", dependencies=[Depends(require_csrf_header)])
 def resolve_alert(
     alert_id: UUID,
     session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
@@ -150,7 +157,7 @@ def resolve_alert(
     return {"status": "resolved", "alert_id": str(alert_id)}
 
 
-@router.post("/alerts/{alert_id}/acknowledge")
+@router.post("/alerts/{alert_id}/acknowledge", dependencies=[Depends(require_csrf_header)])
 def acknowledge_alert(
     alert_id: UUID,
     session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
@@ -170,7 +177,7 @@ def acknowledge_alert(
     return {"status": "acknowledged", "alert_id": str(alert_id)}
 
 
-@router.post("/alerts/{alert_id}/snooze")
+@router.post("/alerts/{alert_id}/snooze", dependencies=[Depends(require_csrf_header)])
 def snooze_alert(
     alert_id: UUID,
     hours: int = Query(24, ge=1, le=168),  # 1 hour to 1 week

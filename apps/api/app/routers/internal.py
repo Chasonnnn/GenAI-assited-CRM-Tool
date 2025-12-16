@@ -66,8 +66,13 @@ def check_meta_tokens(x_internal_secret: str = Header(...)):
             if not mapping.token_expires_at:
                 continue
             
+            # Handle naive datetime (make it timezone-aware assuming UTC)
+            token_expires = mapping.token_expires_at
+            if token_expires.tzinfo is None:
+                token_expires = token_expires.replace(tzinfo=timezone.utc)
+            
             # Check if expired
-            if mapping.token_expires_at < now:
+            if token_expires < now:
                 expired += 1
                 
                 # Update config status
@@ -92,10 +97,10 @@ def check_meta_tokens(x_internal_secret: str = Header(...)):
                 alerts_created += 1
                 
             # Check if expiring soon
-            elif mapping.token_expires_at < expiry_threshold:
+            elif token_expires < expiry_threshold:
                 expiring_soon += 1
                 
-                days_until = (mapping.token_expires_at - now).days
+                days_until = (token_expires - now).days
                 
                 # Update config status (degraded but not fully broken)
                 health = ops_service.get_or_create_health(

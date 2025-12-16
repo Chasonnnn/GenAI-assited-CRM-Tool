@@ -14,6 +14,9 @@ from sqlalchemy.dialects.postgresql import insert
 from app.db.models import IntegrationHealth, IntegrationErrorRollup
 from app.db.enums import IntegrationType, IntegrationStatus, ConfigStatus
 
+# Use 'default' instead of NULL for integration_key to ensure proper upsert deduplication
+DEFAULT_INTEGRATION_KEY = 'default'
+
 
 def get_hour_bucket(dt: datetime | None = None) -> datetime:
     """Get the start of the hour for a given datetime."""
@@ -29,17 +32,18 @@ def get_or_create_health(
     integration_key: str | None = None,
 ) -> IntegrationHealth:
     """Get or create an IntegrationHealth record."""
+    key = integration_key or DEFAULT_INTEGRATION_KEY
     health = db.query(IntegrationHealth).filter(
         IntegrationHealth.organization_id == org_id,
         IntegrationHealth.integration_type == integration_type.value,
-        IntegrationHealth.integration_key == integration_key,
+        IntegrationHealth.integration_key == key,
     ).first()
     
     if not health:
         health = IntegrationHealth(
             organization_id=org_id,
             integration_type=integration_type.value,
-            integration_key=integration_key,
+            integration_key=key,
             status=IntegrationStatus.HEALTHY.value,
             config_status=ConfigStatus.CONFIGURED.value,
         )
@@ -89,10 +93,11 @@ def record_error(
     health.status = IntegrationStatus.ERROR.value
     
     # Upsert error rollup (increment count)
+    key = integration_key or DEFAULT_INTEGRATION_KEY
     stmt = insert(IntegrationErrorRollup).values(
         organization_id=org_id,
         integration_type=integration_type.value,
-        integration_key=integration_key,
+        integration_key=key,
         period_start=hour_bucket,
         error_count=1,
         last_error=error_message[:1000],
@@ -117,6 +122,7 @@ def get_error_count_24h(
 ) -> int:
     """Get error count for last 24 hours from rollups."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    key = integration_key or DEFAULT_INTEGRATION_KEY
     
     result = db.execute(
         text("""
@@ -124,13 +130,13 @@ def get_error_count_24h(
             FROM integration_error_rollup
             WHERE organization_id = :org_id
               AND integration_type = :integration_type
-              AND (integration_key = :integration_key OR (integration_key IS NULL AND :integration_key IS NULL))
+              AND integration_key = :integration_key
               AND period_start > :cutoff
         """),
         {
             "org_id": org_id,
             "integration_type": integration_type.value,
-            "integration_key": integration_key,
+            "integration_key": key,
             "cutoff": cutoff,
         }
     )

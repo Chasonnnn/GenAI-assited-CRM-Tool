@@ -128,7 +128,10 @@ def _record_job_success(db, job) -> None:
     integration_type = job_to_integration.get(job.job_type)
     if integration_type and job.organization_id:
         try:
-            integration_key = job.payload.get("page_id") if job.payload else None
+            # Check both page_id and meta_page_id (CAPI uses latter)
+            integration_key = None
+            if job.payload:
+                integration_key = job.payload.get("page_id") or job.payload.get("meta_page_id")
             ops_service.record_success(
                 db=db,
                 org_id=job.organization_id,
@@ -139,7 +142,7 @@ def _record_job_success(db, job) -> None:
             logger.warning(f"Failed to record job success: {e}")
 
 
-def _record_job_failure(db, job, error_msg: str) -> None:
+def _record_job_failure(db, job, error_msg: str, exception: Exception | None = None) -> None:
     """Record failed job for integration health and create alert if final failure."""
     from app.services import ops_service, alert_service
     from app.db.enums import IntegrationType, AlertType, AlertSeverity
@@ -153,7 +156,10 @@ def _record_job_failure(db, job, error_msg: str) -> None:
     integration_type = job_to_integration.get(job.job_type)
     if integration_type and job.organization_id:
         try:
-            integration_key = job.payload.get("page_id") if job.payload else None
+            # Check both page_id and meta_page_id (CAPI uses latter)
+            integration_key = None
+            if job.payload:
+                integration_key = job.payload.get("page_id") or job.payload.get("meta_page_id")
             
             # Record error in integration health
             ops_service.record_error(
@@ -173,6 +179,9 @@ def _record_job_failure(db, job, error_msg: str) -> None:
                 }
                 alert_type = alert_type_map.get(job.job_type, AlertType.WORKER_JOB_FAILED)
                 
+                # Use actual exception class name for fingerprinting
+                error_class = type(exception).__name__ if exception else "UnknownError"
+                
                 alert_service.create_or_update_alert(
                     db=db,
                     org_id=job.organization_id,
@@ -181,7 +190,7 @@ def _record_job_failure(db, job, error_msg: str) -> None:
                     title=f"{job.job_type} failed after {job.attempts} attempts",
                     message=error_msg[:500],
                     integration_key=integration_key,
-                    error_class=type(Exception).__name__,
+                    error_class=error_class,
                 )
         except Exception as e:
             logger.warning(f"Failed to record job failure: {e}")
@@ -392,7 +401,7 @@ async def worker_loop() -> None:
                         logger.error(f"Job {job.id} failed: {error_msg}")
                         
                         # Record failure for integration health
-                        _record_job_failure(db, job, error_msg)
+                        _record_job_failure(db, job, error_msg, exception=e)
                         
                         # Also mark email as failed if applicable
                         if job.job_type == JobType.SEND_EMAIL.value:

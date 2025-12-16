@@ -102,11 +102,15 @@ def get_analytics_summary(
         Case.created_at < end,
     ).count()
     
-    # Qualified rate (qualified + approved + later stages / total)
+    # Qualified rate (qualified + all post-qualified stages / total)
+    # Includes all statuses from QUALIFIED onwards except DISQUALIFIED
     qualified_statuses = [
         CaseStatus.QUALIFIED.value, CaseStatus.APPLIED.value,
-        CaseStatus.APPROVED.value, CaseStatus.PENDING_HANDOFF.value,
-        CaseStatus.PENDING_MATCH.value, CaseStatus.DELIVERED.value,
+        CaseStatus.FOLLOWUP_SCHEDULED.value, CaseStatus.APPLICATION_SUBMITTED.value,
+        CaseStatus.UNDER_REVIEW.value, CaseStatus.APPROVED.value, 
+        CaseStatus.PENDING_HANDOFF.value, CaseStatus.PENDING_MATCH.value,
+        CaseStatus.MEDS_STARTED.value, CaseStatus.EXAM_PASSED.value,
+        CaseStatus.EMBRYO_TRANSFERRED.value, CaseStatus.DELIVERED.value,
     ]
     qualified_count = db.query(Case).filter(
         Case.organization_id == org_id,
@@ -198,6 +202,7 @@ def get_cases_trend(
             SELECT date_trunc(:trunc, created_at) as period_start, COUNT(*) as count
             FROM cases
             WHERE organization_id = :org_id
+              AND is_archived = false
               AND created_at >= :start
               AND created_at < :end
             GROUP BY period_start
