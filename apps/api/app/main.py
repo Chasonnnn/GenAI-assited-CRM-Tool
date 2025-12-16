@@ -54,6 +54,10 @@ app.include_router(internal.router)
 from app.routers import analytics
 app.include_router(analytics.router)
 
+# Ops endpoints (integration health, alerts)
+from app.routers import ops
+app.include_router(ops.router)
+
 # Dev router (ONLY mounted in dev mode)
 if settings.ENV == "dev":
     from app.routers import dev
