@@ -274,9 +274,9 @@ def _maybe_send_capi_event(db: Session, case: Case, old_status: str, new_status:
     - Status changes to a qualified-like status
     - CAPI is enabled
     """
-    import asyncio
     from app.core.config import settings
-    from app.db.enums import CaseSource
+    from app.db.enums import CaseSource, JobType
+    from app.services import job_service
     
     # Only for Meta-sourced cases
     if case.source != CaseSource.META.value:
@@ -301,56 +301,25 @@ def _maybe_send_capi_event(db: Session, case: Case, old_status: str, new_status:
     if not meta_lead:
         return
     
-    # Get access token from page mapping
-    from app.db.models import MetaPageMapping
-    from app.core.encryption import decrypt_token
-    
-    page_mapping = None
-    if meta_lead.meta_page_id:
-        page_mapping = db.query(MetaPageMapping).filter(
-            MetaPageMapping.page_id == meta_lead.meta_page_id,
-            MetaPageMapping.is_active == True,
-        ).first()
-    
-    access_token = None
-    if page_mapping and page_mapping.access_token_encrypted:
-        try:
-            access_token = decrypt_token(page_mapping.access_token_encrypted)
-        except Exception:
-            pass  # Will fail gracefully in CAPI service
-    
-    # Send async (fire-and-forget for status change flow)
-    from app.services.meta_capi import send_qualified_event
-    import logging
-    capi_logger = logging.getLogger(__name__)
-    
     try:
-        # Run in existing event loop if available, otherwise create one
-        loop = asyncio.get_event_loop()
-        coro = send_qualified_event(
-            meta_lead_id=meta_lead.meta_lead_id,
-            case_status=new_status,
-            email=case.email,
-            phone=case.phone,
-            access_token=access_token,
+        # Offload to worker for reliability (no event-loop assumptions, retries supported)
+        idempotency_key = f"meta_capi:{meta_lead.meta_lead_id}:{new_status}"
+        job_service.schedule_job(
+            db=db,
+            org_id=case.organization_id,
+            job_type=JobType.META_CAPI_EVENT,
+            payload={
+                "meta_lead_id": meta_lead.meta_lead_id,
+                "case_status": new_status,
+                "email": case.email,
+                "phone": case.phone,
+                "meta_page_id": meta_lead.meta_page_id,
+            },
+            idempotency_key=idempotency_key,
         )
-        
-        if loop.is_running():
-            # Schedule as task and log result when done
-            async def log_capi_result():
-                success, error = await coro
-                if not success:
-                    capi_logger.warning(f"Meta CAPI failed for case {case.case_number}: {error}")
-                else:
-                    capi_logger.info(f"Meta CAPI success for case {case.case_number}")
-            asyncio.create_task(log_capi_result())
-        else:
-            success, error = loop.run_until_complete(coro)
-            if not success:
-                capi_logger.warning(f"Meta CAPI failed for case {case.case_number}: {error}")
-    except Exception as e:
-        # Log but don't fail the status change
-        capi_logger.warning(f"Meta CAPI event exception for case {case.case_number}: {e}")
+    except Exception:
+        # Best-effort: never block status change on CAPI scheduling.
+        db.rollback()
 
 
 def accept_handoff(

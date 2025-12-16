@@ -142,6 +142,7 @@ class JobType(str, Enum):
     WEBHOOK_RETRY = "webhook_retry"
     NOTIFICATION = "notification"
     META_LEAD_FETCH = "meta_lead_fetch"
+    META_CAPI_EVENT = "meta_capi_event"
 
 
 class JobStatus(str, Enum):

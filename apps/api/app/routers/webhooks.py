@@ -64,6 +64,9 @@ async def receive_meta_webhook(
     
     # 2. Get raw body for signature verification
     body = await request.body()
+    # Fallback size check in case Content-Length is missing/incorrect
+    if len(body) > settings.META_WEBHOOK_MAX_PAYLOAD_BYTES:
+        raise HTTPException(413, "Payload too large")
     signature = request.headers.get("X-Hub-Signature-256", "")
     
     # 3. Validate signature (skip in test mode)

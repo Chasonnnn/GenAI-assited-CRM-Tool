@@ -173,7 +173,7 @@ async def send_qualified_event(
             user_data["ph"] = hash_for_capi(phone_digits)
     
     # Generate event_id for deduplication
-    event_id = f"capi_{meta_lead_id}_{case_status}_{int(time.time())}"
+    event_id = f"capi_{meta_lead_id}_{case_status}"
     
     return await send_lead_event(
         lead_id=meta_lead_id,
@@ -193,8 +193,7 @@ def should_send_capi_event(from_status: str, to_status: str) -> bool:
     Determine if this status change should trigger a CAPI event.
     
     Triggers on:
-    - Any transition TO approved status (before auto-transition)
-    - Or directly to pending_handoff from non-qualified status
+    - Any first transition into a qualified-like status (qualified/approved)
     """
     # Only trigger when entering a qualified-like status for the first time
     if to_status in CAPI_TRIGGER_STATUSES and from_status not in CAPI_TRIGGER_STATUSES:
