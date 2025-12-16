@@ -123,13 +123,16 @@ def count_alerts(
     db: Session,
     org_id: UUID,
     status: AlertStatus | None = None,
+    severity: AlertSeverity | None = None,
 ) -> int:
-    """Count alerts with optional status filter."""
+    """Count alerts with optional status and severity filter."""
     query = db.query(SystemAlert).filter(
         SystemAlert.organization_id == org_id
     )
     if status:
         query = query.filter(SystemAlert.status == status.value)
+    if severity:
+        query = query.filter(SystemAlert.severity == severity.value)
     return query.count()
 
 
