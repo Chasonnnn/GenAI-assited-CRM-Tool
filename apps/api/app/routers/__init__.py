@@ -7,6 +7,7 @@ from app.routers.tasks import router as tasks_router
 from app.routers.webhooks import router as webhooks_router
 from app.routers.internal import router as internal_router
 from app.routers.analytics import router as analytics_router
+from app.routers.ops import router as ops_router
 
 __all__ = [
     "auth_router",
@@ -16,5 +17,6 @@ __all__ = [
     "webhooks_router",
     "internal_router",
     "analytics_router",
+    "ops_router",
 ]
 

@@ -1,0 +1,191 @@
+"""
+Ops/Alerts endpoints for integration health and system alerts.
+
+Manager+ access for viewing integration status and managing alerts.
+"""
+from datetime import datetime
+from typing import Optional
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.core.deps import get_current_session, get_db, require_roles
+from app.db.enums import Role, AlertStatus, AlertSeverity
+from app.db.models import SystemAlert
+from app.schemas.auth import UserSession
+from app.services import ops_service, alert_service
+
+
+router = APIRouter(prefix="/ops", tags=["ops"])
+
+
+# =============================================================================
+# Pydantic Schemas
+# =============================================================================
+
+class IntegrationHealthResponse(BaseModel):
+    id: str
+    integration_type: str
+    integration_key: Optional[str]
+    status: str
+    config_status: str
+    last_success_at: Optional[str]
+    last_error_at: Optional[str]
+    last_error: Optional[str]
+    error_count_24h: int
+
+
+class AlertResponse(BaseModel):
+    id: str
+    alert_type: str
+    severity: str
+    status: str
+    title: str
+    message: Optional[str]
+    integration_key: Optional[str]
+    occurrence_count: int
+    first_seen_at: datetime
+    last_seen_at: datetime
+    resolved_at: Optional[datetime]
+
+
+class AlertSummaryResponse(BaseModel):
+    warn: int
+    error: int
+    critical: int
+
+
+class AlertsListResponse(BaseModel):
+    items: list[AlertResponse]
+    total: int
+
+
+# =============================================================================
+# Endpoints
+# =============================================================================
+
+@router.get("/health", response_model=list[IntegrationHealthResponse])
+def get_integration_health(
+    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    db: Session = Depends(get_db),
+):
+    """Get health status of all integrations."""
+    return ops_service.list_integration_health(db, session.org_id)
+
+
+@router.get("/alerts/summary", response_model=AlertSummaryResponse)
+def get_alerts_summary(
+    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    db: Session = Depends(get_db),
+):
+    """Get count of open alerts by severity."""
+    summary = alert_service.get_alert_summary(db, session.org_id)
+    return AlertSummaryResponse(**summary)
+
+
+@router.get("/alerts", response_model=AlertsListResponse)
+def list_alerts(
+    status: Optional[str] = Query(None, description="Filter by status: open, acknowledged, resolved, snoozed"),
+    severity: Optional[str] = Query(None, description="Filter by severity: warn, error, critical"),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    db: Session = Depends(get_db),
+):
+    """List system alerts with optional filters."""
+    status_enum = AlertStatus(status) if status else None
+    severity_enum = AlertSeverity(severity) if severity else None
+    
+    alerts = alert_service.list_alerts(
+        db=db,
+        org_id=session.org_id,
+        status=status_enum,
+        severity=severity_enum,
+        limit=limit,
+        offset=offset,
+    )
+    
+    total = alert_service.count_alerts(db, session.org_id, status_enum)
+    
+    return AlertsListResponse(
+        items=[
+            AlertResponse(
+                id=str(a.id),
+                alert_type=a.alert_type,
+                severity=a.severity,
+                status=a.status,
+                title=a.title,
+                message=a.message,
+                integration_key=a.integration_key,
+                occurrence_count=a.occurrence_count,
+                first_seen_at=a.first_seen_at,
+                last_seen_at=a.last_seen_at,
+                resolved_at=a.resolved_at,
+            )
+            for a in alerts
+        ],
+        total=total,
+    )
+
+
+@router.post("/alerts/{alert_id}/resolve")
+def resolve_alert(
+    alert_id: UUID,
+    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    db: Session = Depends(get_db),
+):
+    """Resolve an alert."""
+    # Verify alert belongs to org
+    alert = db.query(SystemAlert).filter(
+        SystemAlert.id == alert_id,
+        SystemAlert.organization_id == session.org_id,
+    ).first()
+    
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    
+    result = alert_service.resolve_alert(db, alert_id, session.user_id)
+    return {"status": "resolved", "alert_id": str(alert_id)}
+
+
+@router.post("/alerts/{alert_id}/acknowledge")
+def acknowledge_alert(
+    alert_id: UUID,
+    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    db: Session = Depends(get_db),
+):
+    """Acknowledge an alert (stops notifications but keeps open)."""
+    # Verify alert belongs to org
+    alert = db.query(SystemAlert).filter(
+        SystemAlert.id == alert_id,
+        SystemAlert.organization_id == session.org_id,
+    ).first()
+    
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    
+    alert_service.acknowledge_alert(db, alert_id)
+    return {"status": "acknowledged", "alert_id": str(alert_id)}
+
+
+@router.post("/alerts/{alert_id}/snooze")
+def snooze_alert(
+    alert_id: UUID,
+    hours: int = Query(24, ge=1, le=168),  # 1 hour to 1 week
+    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    db: Session = Depends(get_db),
+):
+    """Snooze an alert for specified hours."""
+    # Verify alert belongs to org
+    alert = db.query(SystemAlert).filter(
+        SystemAlert.id == alert_id,
+        SystemAlert.organization_id == session.org_id,
+    ).first()
+    
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    
+    alert_service.snooze_alert(db, alert_id, hours)
+    return {"status": "snoozed", "alert_id": str(alert_id), "hours": hours}
