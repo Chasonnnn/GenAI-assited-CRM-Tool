@@ -391,19 +391,57 @@ Frontend
 Deliverable
 - A real Meta lead appears in your CRM automatically
 
-Week 10 — Manager analytics (daily/weekly/monthly/custom) + AI-ready insights tab
-Backend
+Week 10 — Ops Console + Manager Analytics
+Backend (Ops Console)
+- Split events vs alerts (enterprise pattern):
+  - system_events table (append-only, high volume):
+    - id, created_at, organization_id, component (api/worker/webhook)
+    - event_type, severity (info/warn/error/critical)
+    - message, details (JSONB, truncated, PII-redacted)
+    - Correlation fields: request_id, job_id, idempotency_key,
+      actor_user_id, entity_type, entity_id, correlation_id
+    - Indexes: (created_at), (organization_id, created_at), (correlation_id)
+    - Retention: 30-90 days, partitioned by month
+  - system_alerts table (deduped, actionable):
+    - id, organization_id, dedupe_key (unique per org)
+    - severity, status (open/acknowledged/resolved/snoozed)
+    - first_seen_at, last_seen_at, occurrence_count
+    - title, message, details (JSONB)
+    - resolved_at, resolved_by_user_id
+    - Indexes: (status, severity, last_seen_at)
+- Alert types:
+  - WORKER_JOB_FAILED - job failed after max retries
+  - META_FETCH_FAILED - Meta API call failed
+  - META_CONVERSION_FAILED - lead conversion issues
+  - API_ERROR_500 - unhandled exceptions
+  - TOKEN_EXPIRY_SOON - Meta tokens expiring within 7 days
+  - DB_MIGRATION_FAILED - critical system failure
+- Token expiry scheduled job:
+  - Daily sweep of token_expires_at, creates/updates TOKEN_EXPIRY_SOON:{page_id}
+- External integration path:
+  - Forward critical alerts to Slack/PagerDuty (future)
+  - Send exceptions to Sentry (future)
+Backend (Analytics)
 - Analytics endpoints:
   - leads by status over time
   - funnel counts
   - cases by status and by specialist
-- If you added status_history, use it here
+  - Uses status_history for historical data
 Frontend
-- Reports dashboard
-- Date range picker + charts
-- “Insights” tab scaffolding (works without AI; AI enhances it later)
+- Ops Console (developer/manager only):
+  - Dashboard with alert counts by severity
+  - Alerts list with filter/search
+  - Mark as resolved/acknowledged/snoozed
+  - View event stream (latest N events)
+- Reports dashboard:
+  - Date range picker + charts
+  - "Insights" tab scaffolding
+Permissions
+- developer role: sees all orgs (if supported), can view/resolve alerts
+- manager role: sees org-level ops only
 Deliverable
-- Managers have the “overview + stats” view they asked for
+- Enterprise-grade logging/alerting system
+- Managers have the "overview + stats" view they asked for
 
 Week 11 — AI assistant v1 (safe + useful, BYOK)
 Backend
