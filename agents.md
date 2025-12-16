@@ -103,9 +103,7 @@ We implement features as **modules** (enabled per org) and present them as **tab
 
 V1 “real” tabs (build first):
 - Home (calendar + quick actions + my work)
-- Work Queue (monitor leads/cases with filters + assignments)
-- Leads
-- Cases
+- Cases (unified pipeline: new → delivered, role-filtered)
 - Reports
 - Settings
 
@@ -122,9 +120,9 @@ Later/optional modules:
 - Contacts/Directory
 
 Role defaults (can be adjusted by org policy):
-- Manager: Home, Work Queue, Leads, Cases, Reports, Inbox, Tasks, Activity, Settings
-- PR/Intake: Home, Work Queue, Leads, Inbox, Tasks, Activity
-- Specialist: Home, Work Queue, Cases, Inbox, Tasks, Activity
+- Manager: Home, Cases, Reports, Inbox, Tasks, Activity, Settings
+- PR/Intake: Home, Cases (Stage A only), Inbox, Tasks, Activity
+- Specialist/Case Manager: Home, Cases (full pipeline), Inbox, Tasks, Activity
 
 ## 4) Local Development Setup (Suggested)
 
