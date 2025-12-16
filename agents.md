@@ -234,25 +234,20 @@ LeadStatus:
 - `approved`
 - `not_qualified`
 
-CaseStatus:
-- `waiting_for_match`
-- `matched`
-- `embryo_transfer`
-- `pregnant`
-- `delivered`
-- `closed`
-
-IntendedParentStatus:
-- `new`
-- `contacted`
-- `in_review`
-- `qualified`
-- `matched`
-- `declined`
-- `on_hold`
-- `archived` (pseudo-status for archive/restore)
-
-Rule: keep enum values centralized in one place (backend constants + frontend types).
+CaseStatus (Intake Pipeline + Post-Approval):
+- `new_unread` (initial status)
+- `contacted` (intake reached out)
+- `qualified` (intake confirmed applicant is a good lead) ← triggers Meta CAPI
+- `applied` (applicant submitted full application form)
+- `followup_scheduled`
+- `application_submitted`
+- `under_review`
+- `approved` (case approved, intake reviews before handoff)
+- `pending_handoff` (intake submits to case manager)
+- `disqualified`
+- Post-Approval (case_manager+ only):
+  - `pending_match`, `meds_started`, `exam_passed`, `embryo_transferred`, `delivered`
+  - `archived` (soft-delete pseudo-status)
 
 ## 7) Meta Lead Ads Integration (Rules)
 
@@ -401,9 +396,24 @@ Constraints:
     - App Sidebar with navigation and user menu
     - Loading skeletons for all pages
     - All pages use shadcn/ui components with responsive Tailwind classes
-- **In progress:** Meta Lead Ads integration
+- **In progress:** Week 10 (Ops Console + Manager Analytics)
 - **Blockers:** None
-- **Next milestones:** Meta integration, mobile testing, AI features
+- **Next milestones:** Ops Console, AI features, deployment
+
+### Week 9 (2025-12-16): Meta Lead Ads Integration ✓ COMPLETE
+- **Completed:**
+  - Webhook endpoint with HMAC signature verification
+  - Meta API client (fetch lead details, appsecret_proof)
+  - Auto-conversion: Meta leads → Cases (source=META)
+  - Campaign tracking: meta_ad_id, meta_form_id on Case
+  - Meta Conversions API (CAPI): sends signals on qualified/approved
+  - Fernet encryption for page access tokens
+  - CLI commands: update-meta-page-token, deactivate-meta-page
+  - Dev endpoints: /dev/meta-leads/alerts, /dev/meta-leads/all
+- **Workflow changes:**
+  - New statuses: qualified (intake confirms), applied (full app submitted)
+  - Removed auto-transition approved → pending_handoff
+  - New flow: new → contacted → qualified → applied → under_review → approved → pending_handoff
 
 ### Week 6 (2025-12-14): Intended Parents Module + Dependencies
 - **Completed:**
@@ -464,7 +474,8 @@ Constraints:
 - **OIDC verification:** `google-auth` library (handles JWKS fetching, signature verification)
 - **CSRF protection:** `SameSite=Lax` + `X-Requested-With: XMLHttpRequest` header on mutations
 - **Hosting choice:** TBD (target: Vercel for frontend, Render/Railway for backend)
-- **Meta integration approach:** TBD
+- **Meta integration approach (2025-12-16):** Webhook → Job Queue → Worker → Auto-convert to Case; CAPI on qualified/approved
+- **Status workflow change (2025-12-16):** No auto-transition from approved → pending_handoff; intake manually submits
 - **AI provider choice:** TBD
 - **Frontend deps (2025-12-14):** Next.js 16.0.10, React 19.2.3, Zod 4.1.13, recharts 3.5.1, Tailwind 4.1
 - **Polymorphic notes:** EntityNote table with `entity_type` + `entity_id` supports Cases and IPs
