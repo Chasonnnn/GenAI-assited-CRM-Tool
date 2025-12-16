@@ -136,3 +136,113 @@ def login_as(
         "role": membership.role,
         "org_id": str(membership.organization_id),
     }
+
+
+# =============================================================================
+# Meta Lead Monitoring (for dev/admin visibility)
+# =============================================================================
+
+@router.get("/meta-leads/alerts", dependencies=[Depends(_verify_dev_secret)])
+def get_meta_lead_alerts(
+    db: Session = Depends(get_db),
+    limit: int = 50,
+):
+    """
+    Get Meta leads with issues (failed conversion, fetch errors, etc).
+    
+    Dev-only endpoint for monitoring Meta lead ingestion health.
+    """
+    from app.db.models import MetaLead, MetaPageMapping
+    from sqlalchemy import or_
+    
+    # Get problematic leads
+    problem_leads = db.query(MetaLead).filter(
+        or_(
+            MetaLead.status.in_(["fetch_failed", "convert_failed"]),
+            MetaLead.fetch_error.isnot(None),
+            MetaLead.conversion_error.isnot(None),
+        )
+    ).order_by(MetaLead.received_at.desc()).limit(limit).all()
+    
+    # Get page mappings with recent errors
+    problem_pages = db.query(MetaPageMapping).filter(
+        MetaPageMapping.last_error.isnot(None)
+    ).all()
+    
+    # Summary stats
+    total_leads = db.query(MetaLead).count()
+    failed_leads = db.query(MetaLead).filter(
+        MetaLead.status.in_(["fetch_failed", "convert_failed"])
+    ).count()
+    
+    return {
+        "summary": {
+            "total_leads": total_leads,
+            "failed_leads": failed_leads,
+            "problem_pages": len(problem_pages),
+        },
+        "problem_leads": [
+            {
+                "id": str(lead.id),
+                "meta_lead_id": lead.meta_lead_id,
+                "status": lead.status,
+                "fetch_error": lead.fetch_error,
+                "conversion_error": lead.conversion_error,
+                "received_at": lead.received_at.isoformat() if lead.received_at else None,
+                "field_data_preview": str(lead.field_data)[:200] if lead.field_data else None,
+            }
+            for lead in problem_leads
+        ],
+        "problem_pages": [
+            {
+                "page_id": page.page_id,
+                "page_name": page.page_name,
+                "is_active": page.is_active,
+                "last_error": page.last_error,
+                "last_error_at": page.last_error_at.isoformat() if page.last_error_at else None,
+                "last_success_at": page.last_success_at.isoformat() if page.last_success_at else None,
+            }
+            for page in problem_pages
+        ],
+    }
+
+
+@router.get("/meta-leads/all", dependencies=[Depends(_verify_dev_secret)])
+def get_all_meta_leads(
+    db: Session = Depends(get_db),
+    limit: int = 100,
+    status: str | None = None,
+):
+    """
+    Get all Meta leads for debugging.
+    
+    Dev-only endpoint for viewing raw lead data.
+    """
+    from app.db.models import MetaLead
+    
+    query = db.query(MetaLead).order_by(MetaLead.received_at.desc())
+    
+    if status:
+        query = query.filter(MetaLead.status == status)
+    
+    leads = query.limit(limit).all()
+    
+    return {
+        "count": len(leads),
+        "leads": [
+            {
+                "id": str(lead.id),
+                "meta_lead_id": lead.meta_lead_id,
+                "meta_form_id": lead.meta_form_id,
+                "meta_page_id": lead.meta_page_id,
+                "status": lead.status,
+                "is_converted": lead.is_converted,
+                "converted_case_id": str(lead.converted_case_id) if lead.converted_case_id else None,
+                "fetch_error": lead.fetch_error,
+                "conversion_error": lead.conversion_error,
+                "field_data": lead.field_data,
+                "received_at": lead.received_at.isoformat() if lead.received_at else None,
+            }
+            for lead in leads
+        ],
+    }

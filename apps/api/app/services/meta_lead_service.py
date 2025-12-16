@@ -60,6 +60,9 @@ def convert_to_case(
     """
     Convert a Meta lead to a normalized case.
     
+    Lenient conversion: handles missing/invalid data by using placeholders
+    rather than rejecting the lead outright.
+    
     Args:
         db: Database session
         meta_lead: The MetaLead to convert
@@ -68,6 +71,8 @@ def convert_to_case(
     Returns:
         (case, error) - case is None if error
     """
+    import re
+    
     # Prevent double conversion
     if meta_lead.is_converted:
         return None, "Meta lead already converted"
@@ -83,21 +88,26 @@ def convert_to_case(
     phone = fields.get("phone_number") or fields.get("phone")
     state = fields.get("state")
     
-    if not email:
-        meta_lead.conversion_error = "Missing email"
-        db.commit()
-        return None, "Missing email in field data"
+    # Sanitize name - remove non-printable and limit length
+    full_name = re.sub(r'[^\w\s\-\.\,\']+', '', str(full_name)).strip()[:255]
     
-    if not full_name:
-        meta_lead.conversion_error = "Missing name"
-        db.commit()
-        return None, "Missing name in field data"
+    # If no name, use placeholder with lead ID
+    if not full_name or len(full_name) < 2:
+        full_name = f"Meta Lead {meta_lead.meta_lead_id[:8]}"
     
-    # Normalize fields, handle validation errors
+    # Sanitize email
+    email = str(email).strip().lower()[:255]
+    
+    # Basic email validation - if invalid, generate placeholder
+    if not email or '@' not in email or '.' not in email.split('@')[-1]:
+        # Generate unique placeholder email
+        email = f"meta-{meta_lead.meta_lead_id[:16]}@placeholder.invalid"
+    
+    # Normalize fields, handle validation errors gracefully
     try:
         normalized_phone = normalize_phone(phone) if phone else None
     except ValueError:
-        normalized_phone = None  # Log but don't fail
+        normalized_phone = None  # Invalid phone format - continue without it
     
     try:
         normalized_state = normalize_state(state) if state else None
