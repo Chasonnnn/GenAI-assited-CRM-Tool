@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     META_CAPI_ENABLED: bool = False  # Enable sending status updates to Meta
     META_CAPI_ACCESS_TOKEN: str = ""  # System user access token for CAPI (optional, falls back to page token)
     
+    # Internal scheduled endpoints (cron jobs)
+    INTERNAL_SECRET: str = ""  # Secret for /internal/scheduled/* endpoints
+    
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse CORS_ORIGINS into a list."""
