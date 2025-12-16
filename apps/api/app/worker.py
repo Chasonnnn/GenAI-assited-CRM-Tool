@@ -107,6 +107,9 @@ async def process_job(db, job) -> None:
     elif job.job_type == JobType.META_LEAD_FETCH.value:
         await process_meta_lead_fetch(db, job)
         
+    elif job.job_type == JobType.META_CAPI_EVENT.value:
+        await process_meta_capi_event(db, job)
+        
     else:
         raise Exception(f"Unknown job type: {job.job_type}")
 
@@ -194,37 +197,95 @@ async def process_meta_lead_fetch(db, job) -> None:
     )
     
     if store_error:
-        # Likely duplicate - log and continue
-        logger.info(f"Meta lead store skipped: {store_error}")
+        raise Exception(store_error)
+    
+    # Update success tracking (even for idempotent re-stores)
+    mapping.last_success_at = datetime.utcnow()
+    mapping.last_error = None
+    db.commit()
+    
+    logger.info(f"Meta lead {leadgen_id} stored successfully for org {mapping.organization_id}")
+    
+    # Auto-convert to case so it appears in Cases list immediately
+    if meta_lead.is_converted:
+        meta_lead.status = "converted"
+        db.commit()
+        return
+    
+    meta_lead.status = "stored"
+    db.commit()
+    
+    case, convert_error = meta_lead_service.convert_to_case(
+        db=db,
+        meta_lead=meta_lead,
+        user_id=None,  # No assignee - managers can bulk-assign later
+    )
+    
+    if convert_error:
+        logger.warning(f"Meta lead auto-conversion failed: {convert_error}")
+        meta_lead.status = "convert_failed"
+        db.commit()
     else:
-        # Update success tracking
-        mapping.last_success_at = datetime.utcnow()
-        mapping.last_error = None
+        meta_lead.status = "converted"
         db.commit()
-        
-        # Update lead status
-        meta_lead.status = "stored"
-        db.commit()
-        
-        logger.info(f"Meta lead {leadgen_id} stored successfully for org {mapping.organization_id}")
-        
-        # Auto-convert to case so it appears in Cases list immediately
-        # This allows case managers to see and bulk-assign new leads
-        # We use a system user ID (None → will be assigned to no one initially)
-        case, convert_error = meta_lead_service.convert_to_case(
-            db=db,
-            meta_lead=meta_lead,
-            user_id=None,  # No assignee - managers can bulk-assign later
-        )
-        
-        if convert_error:
-            logger.warning(f"Meta lead auto-conversion failed: {convert_error}")
-            meta_lead.status = "convert_failed"
+        logger.info(f"Meta lead {leadgen_id} auto-converted to case {case.case_number}")
+
+
+async def process_meta_capi_event(db, job) -> None:
+    """
+    Process a Meta CAPI conversion event job.
+    
+    Payload:
+      - meta_lead_id (leadgen id)
+      - case_status
+      - email, phone (optional)
+      - meta_page_id (optional, used to find a page token)
+    """
+    from datetime import datetime
+    from app.core.encryption import decrypt_token
+    from app.db.models import MetaPageMapping
+    from app.services import meta_capi
+    
+    meta_lead_id = job.payload.get("meta_lead_id")
+    case_status = job.payload.get("case_status")
+    email = job.payload.get("email")
+    phone = job.payload.get("phone")
+    meta_page_id = job.payload.get("meta_page_id")
+    
+    if not meta_lead_id or not case_status:
+        raise Exception("Missing meta_lead_id or case_status in job payload")
+    
+    access_token = None
+    page_mapping = None
+    if meta_page_id:
+        page_mapping = db.query(MetaPageMapping).filter(
+            MetaPageMapping.page_id == str(meta_page_id),
+            MetaPageMapping.is_active == True,
+        ).first()
+    
+    if page_mapping and page_mapping.access_token_encrypted:
+        try:
+            access_token = decrypt_token(page_mapping.access_token_encrypted)
+        except Exception as e:
+            page_mapping.last_error = f"Token decryption failed: {str(e)[:100]}"
+            page_mapping.last_error_at = datetime.utcnow()
             db.commit()
-        else:
-            meta_lead.status = "converted"
+            raise Exception(f"Token decryption failed: {e}")
+    
+    success, error = await meta_capi.send_qualified_event(
+        meta_lead_id=str(meta_lead_id),
+        case_status=str(case_status),
+        email=str(email) if email else None,
+        phone=str(phone) if phone else None,
+        access_token=access_token,
+    )
+    
+    if not success:
+        if page_mapping:
+            page_mapping.last_error = error
+            page_mapping.last_error_at = datetime.utcnow()
             db.commit()
-            logger.info(f"Meta lead {leadgen_id} auto-converted to case {case.case_number}")
+        raise Exception(error or "Meta CAPI failed")
 
 
 async def worker_loop() -> None:

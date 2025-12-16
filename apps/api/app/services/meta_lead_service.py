@@ -28,14 +28,25 @@ def store_meta_lead(
     Returns:
         (meta_lead, error) - meta_lead is None if error
     """
-    # Check for duplicate
+    # Idempotent store: if the lead already exists, update it with any new data.
     existing = db.query(MetaLead).filter(
         MetaLead.organization_id == org_id,
         MetaLead.meta_lead_id == meta_lead_id,
     ).first()
     
     if existing:
-        return None, f"Meta lead {meta_lead_id} already exists"
+        existing.field_data = field_data
+        if raw_payload is not None:
+            existing.raw_payload = raw_payload
+        if meta_form_id is not None:
+            existing.meta_form_id = meta_form_id
+        if meta_page_id is not None:
+            existing.meta_page_id = meta_page_id
+        if meta_created_time is not None:
+            existing.meta_created_time = meta_created_time
+        db.commit()
+        db.refresh(existing)
+        return existing, None
     
     lead = MetaLead(
         organization_id=org_id,
@@ -142,18 +153,18 @@ def convert_to_case(
             data=case_data,
         )
         
-        # Update meta lead
-        meta_lead.is_converted = True
-        meta_lead.converted_case_id = case.id
-        meta_lead.converted_at = datetime.now(timezone.utc)
-        meta_lead.conversion_error = None
-        db.commit()
-        
         # Link case back to meta lead and add campaign tracking
         case.meta_lead_id = meta_lead.id
         case.meta_form_id = meta_lead.meta_form_id
         # Get ad_id from field_data if available (stored during fetch)
         case.meta_ad_id = fields.get("meta_ad_id")
+        
+        # Update meta lead
+        meta_lead.is_converted = True
+        meta_lead.converted_case_id = case.id
+        meta_lead.converted_at = datetime.now(timezone.utc)
+        meta_lead.conversion_error = None
+        
         db.commit()
         
         return case, None
