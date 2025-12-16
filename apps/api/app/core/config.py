@@ -55,6 +55,17 @@ class Settings(BaseSettings):
     # Internal scheduled endpoints (cron jobs)
     INTERNAL_SECRET: str = ""  # Secret for /internal/scheduled/* endpoints
     
+    # Zoom OAuth (for per-user Zoom integration)
+    ZOOM_CLIENT_ID: str = ""
+    ZOOM_CLIENT_SECRET: str = ""
+    ZOOM_REDIRECT_URI: str = "http://localhost:8000/integrations/zoom/callback"
+    
+    # Token Encryption (for storing OAuth tokens, AI API keys)
+    FERNET_KEY: str = ""  # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    
+    # Gmail OAuth (per-user, different from Google Login OAuth)
+    GMAIL_REDIRECT_URI: str = "http://localhost:8000/integrations/gmail/callback"
+    
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse CORS_ORIGINS into a list."""

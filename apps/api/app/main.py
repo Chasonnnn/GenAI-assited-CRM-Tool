@@ -58,6 +58,14 @@ app.include_router(analytics.router)
 from app.routers import ops
 app.include_router(ops.router)
 
+# AI Assistant endpoints
+from app.routers import ai
+app.include_router(ai.router)
+
+# User Integrations (Gmail, Zoom OAuth)
+from app.routers import integrations
+app.include_router(integrations.router)
+
 # Dev router (ONLY mounted in dev mode)
 if settings.ENV == "dev":
     from app.routers import dev

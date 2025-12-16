@@ -80,3 +80,107 @@ export async function getMetaPerformance(params: DateRangeParams = {}): Promise<
     const query = searchParams.toString();
     return api.get<MetaPerformance>(`/analytics/meta/performance${query ? `?${query}` : ''}`);
 }
+
+// New types for Phase A endpoints
+export interface SourceCount {
+    source: string;
+    count: number;
+}
+
+export interface StateCount {
+    state: string;
+    count: number;
+}
+
+export interface FunnelStage {
+    stage: string;
+    label: string;
+    count: number;
+    percentage: number;
+}
+
+export interface KPIs {
+    new_cases: number;
+    new_cases_change_pct: number;
+    total_active: number;
+    needs_attention: number;
+    period_days: number;
+}
+
+// New API functions
+export async function getCasesBySource(params: DateRangeParams = {}): Promise<SourceCount[]> {
+    const searchParams = new URLSearchParams();
+    if (params.from_date) searchParams.set('from_date', params.from_date);
+    if (params.to_date) searchParams.set('to_date', params.to_date);
+
+    const query = searchParams.toString();
+    const res = await api.get<{ data: SourceCount[] }>(`/analytics/cases/by-source${query ? `?${query}` : ''}`);
+    return res.data;
+}
+
+export async function getCasesByState(params: DateRangeParams = {}): Promise<StateCount[]> {
+    const searchParams = new URLSearchParams();
+    if (params.from_date) searchParams.set('from_date', params.from_date);
+    if (params.to_date) searchParams.set('to_date', params.to_date);
+
+    const query = searchParams.toString();
+    const res = await api.get<{ data: StateCount[] }>(`/analytics/cases/by-state${query ? `?${query}` : ''}`);
+    return res.data;
+}
+
+export async function getFunnel(params: DateRangeParams = {}): Promise<FunnelStage[]> {
+    const searchParams = new URLSearchParams();
+    if (params.from_date) searchParams.set('from_date', params.from_date);
+    if (params.to_date) searchParams.set('to_date', params.to_date);
+
+    const query = searchParams.toString();
+    const res = await api.get<{ data: FunnelStage[] }>(`/analytics/funnel${query ? `?${query}` : ''}`);
+    return res.data;
+}
+
+export async function getKPIs(params: DateRangeParams = {}): Promise<KPIs> {
+    const searchParams = new URLSearchParams();
+    if (params.from_date) searchParams.set('from_date', params.from_date);
+    if (params.to_date) searchParams.set('to_date', params.to_date);
+
+    const query = searchParams.toString();
+    return api.get<KPIs>(`/analytics/kpis${query ? `?${query}` : ''}`);
+}
+
+// Campaign types
+export interface Campaign {
+    ad_id: string;
+    ad_name: string;
+    lead_count: number;
+}
+
+interface CompareParams extends DateRangeParams {
+    ad_id?: string;
+}
+
+export async function getCampaigns(): Promise<Campaign[]> {
+    const res = await api.get<{ data: Campaign[] }>('/analytics/campaigns');
+    return res.data;
+}
+
+export async function getFunnelCompare(params: CompareParams = {}): Promise<FunnelStage[]> {
+    const searchParams = new URLSearchParams();
+    if (params.from_date) searchParams.set('from_date', params.from_date);
+    if (params.to_date) searchParams.set('to_date', params.to_date);
+    if (params.ad_id) searchParams.set('ad_id', params.ad_id);
+
+    const query = searchParams.toString();
+    const res = await api.get<{ data: FunnelStage[] }>(`/analytics/funnel/compare${query ? `?${query}` : ''}`);
+    return res.data;
+}
+
+export async function getCasesByStateCompare(params: CompareParams = {}): Promise<StateCount[]> {
+    const searchParams = new URLSearchParams();
+    if (params.from_date) searchParams.set('from_date', params.from_date);
+    if (params.to_date) searchParams.set('to_date', params.to_date);
+    if (params.ad_id) searchParams.set('ad_id', params.ad_id);
+
+    const query = searchParams.toString();
+    const res = await api.get<{ data: StateCount[] }>(`/analytics/cases/by-state/compare${query ? `?${query}` : ''}`);
+    return res.data;
+}

@@ -267,3 +267,130 @@ def get_meta_performance(
         conversion_rate=round(conversion_rate, 1),
         avg_time_to_convert_hours=avg_hours,
     )
+
+
+# =============================================================================
+# New Analytics Endpoints (Phase A)
+# =============================================================================
+
+@router.get("/cases/by-state")
+def get_cases_by_state(
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    source: Optional[str] = Query(None),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Get case count by US state for map visualization."""
+    from app.services import analytics_service
+    
+    start, end = parse_date_range(from_date, to_date)
+    data = analytics_service.get_cases_by_state(
+        db, session.org_id, start.date() if start else None, end.date() if end else None, source
+    )
+    return {"data": data}
+
+
+@router.get("/cases/by-source")
+def get_cases_by_source(
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Get case count by lead source."""
+    from app.services import analytics_service
+    
+    start, end = parse_date_range(from_date, to_date)
+    data = analytics_service.get_cases_by_source(
+        db, session.org_id, start.date() if start else None, end.date() if end else None
+    )
+    return {"data": data}
+
+
+@router.get("/funnel")
+def get_conversion_funnel(
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Get conversion funnel data."""
+    from app.services import analytics_service
+    
+    start, end = parse_date_range(from_date, to_date)
+    data = analytics_service.get_conversion_funnel(
+        db, session.org_id, start.date() if start else None, end.date() if end else None
+    )
+    return {"data": data}
+
+
+@router.get("/kpis")
+def get_kpis(
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Get summary KPIs for dashboard cards."""
+    from app.services import analytics_service
+    
+    start, end = parse_date_range(from_date, to_date)
+    data = analytics_service.get_summary_kpis(
+        db, session.org_id, start.date() if start else None, end.date() if end else None
+    )
+    return data
+
+
+@router.get("/campaigns")
+def get_campaigns(
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Get campaigns for filter dropdown."""
+    from app.services import analytics_service
+    
+    data = analytics_service.get_campaigns(db, session.org_id)
+    return {"data": data}
+
+
+@router.get("/funnel/compare")
+def get_funnel_compare(
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    ad_id: Optional[str] = Query(None),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Get funnel with optional campaign filter for comparison."""
+    from app.services import analytics_service
+    
+    start, end = parse_date_range(from_date, to_date)
+    data = analytics_service.get_funnel_with_filter(
+        db, session.org_id,
+        start.date() if start else None,
+        end.date() if end else None,
+        ad_id
+    )
+    return {"data": data}
+
+
+@router.get("/cases/by-state/compare")
+def get_cases_by_state_compare(
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    ad_id: Optional[str] = Query(None),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Get cases by state with optional campaign filter."""
+    from app.services import analytics_service
+    
+    start, end = parse_date_range(from_date, to_date)
+    data = analytics_service.get_cases_by_state_with_filter(
+        db, session.org_id,
+        start.date() if start else None,
+        end.date() if end else None,
+        ad_id
+    )
+    return {"data": data}
