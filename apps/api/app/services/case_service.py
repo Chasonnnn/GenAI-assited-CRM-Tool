@@ -257,7 +257,89 @@ def change_status(
     if new_status == CaseStatus.PENDING_HANDOFF:
         notification_service.notify_case_handoff_ready(db=db, case=case)
     
+    # Meta CAPI: Send lead quality signal for Meta-sourced cases
+    # This helps Meta optimize ad targeting for higher-quality leads
+    _maybe_send_capi_event(db, case, old_status, new_status.value)
+    
     return case
+
+
+def _maybe_send_capi_event(db: Session, case: Case, old_status: str, new_status: str) -> None:
+    """
+    Send Meta Conversions API event if applicable.
+    
+    Triggers when:
+    - Case source is META
+    - Status changes to a qualified-like status
+    - CAPI is enabled
+    """
+    import asyncio
+    from app.core.config import settings
+    from app.db.enums import CaseSource
+    
+    # Only for Meta-sourced cases
+    if case.source != CaseSource.META.value:
+        return
+    
+    # Only if CAPI is enabled
+    if not settings.META_CAPI_ENABLED:
+        return
+    
+    # Check if this status change should trigger CAPI
+    from app.services.meta_capi import should_send_capi_event
+    if not should_send_capi_event(old_status, new_status):
+        return
+    
+    # Need the original meta_lead_id
+    if not case.meta_lead_id:
+        return
+    
+    # Get the meta lead to get the original Meta leadgen_id
+    from app.db.models import MetaLead
+    meta_lead = db.query(MetaLead).filter(MetaLead.id == case.meta_lead_id).first()
+    if not meta_lead:
+        return
+    
+    # Get access token from page mapping
+    from app.db.models import MetaPageMapping
+    from app.core.encryption import decrypt_token
+    
+    page_mapping = None
+    if meta_lead.meta_page_id:
+        page_mapping = db.query(MetaPageMapping).filter(
+            MetaPageMapping.page_id == meta_lead.meta_page_id,
+            MetaPageMapping.is_active == True,
+        ).first()
+    
+    access_token = None
+    if page_mapping and page_mapping.access_token_encrypted:
+        try:
+            access_token = decrypt_token(page_mapping.access_token_encrypted)
+        except Exception:
+            pass  # Will fail gracefully in CAPI service
+    
+    # Send async (fire-and-forget for status change flow)
+    from app.services.meta_capi import send_qualified_event
+    try:
+        # Run in existing event loop if available, otherwise create one
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # Schedule as task
+            asyncio.create_task(send_qualified_event(
+                meta_lead_id=meta_lead.meta_lead_id,
+                case_status=new_status,
+                access_token=access_token,
+            ))
+        else:
+            loop.run_until_complete(send_qualified_event(
+                meta_lead_id=meta_lead.meta_lead_id,
+                case_status=new_status,
+                access_token=access_token,
+            ))
+    except Exception as e:
+        # Log but don't fail the status change
+        import logging
+        logging.getLogger(__name__).warning(f"Meta CAPI event failed: {e}")
 
 
 def accept_handoff(

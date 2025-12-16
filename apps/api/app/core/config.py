@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     META_ENCRYPTION_KEY: str = ""  # Fernet key for encrypting page tokens
     META_WEBHOOK_MAX_PAYLOAD_BYTES: int = 100000  # 100KB limit
     
+    # Meta Conversions API (CAPI) - for sending lead quality signals back to Meta
+    META_PIXEL_ID: str = ""  # Dataset ID for Conversions API
+    META_CAPI_ENABLED: bool = False  # Enable sending status updates to Meta
+    
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse CORS_ORIGINS into a list."""
