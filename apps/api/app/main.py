@@ -46,6 +46,10 @@ app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
 # Webhooks (Meta Lead Ads webhook handler)
 app.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 
+# Internal endpoints (scheduled/cron jobs - protected by INTERNAL_SECRET)
+from app.routers import internal
+app.include_router(internal.router)
+
 # Dev router (ONLY mounted in dev mode)
 if settings.ENV == "dev":
     from app.routers import dev
