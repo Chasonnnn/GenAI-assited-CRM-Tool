@@ -50,6 +50,10 @@ app.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 from app.routers import internal
 app.include_router(internal.router)
 
+# Analytics endpoints (manager dashboards)
+from app.routers import analytics
+app.include_router(analytics.router)
+
 # Dev router (ONLY mounted in dev mode)
 if settings.ENV == "dev":
     from app.routers import dev
