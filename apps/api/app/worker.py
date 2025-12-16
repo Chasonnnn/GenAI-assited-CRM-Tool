@@ -114,6 +114,79 @@ async def process_job(db, job) -> None:
         raise Exception(f"Unknown job type: {job.job_type}")
 
 
+def _record_job_success(db, job) -> None:
+    """Record successful job for integration health."""
+    from app.services import ops_service
+    from app.db.enums import IntegrationType
+    
+    # Map job types to integration types
+    job_to_integration = {
+        JobType.META_LEAD_FETCH.value: IntegrationType.META_LEADS,
+        JobType.META_CAPI_EVENT.value: IntegrationType.META_CAPI,
+    }
+    
+    integration_type = job_to_integration.get(job.job_type)
+    if integration_type and job.organization_id:
+        try:
+            integration_key = job.payload.get("page_id") if job.payload else None
+            ops_service.record_success(
+                db=db,
+                org_id=job.organization_id,
+                integration_type=integration_type,
+                integration_key=integration_key,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record job success: {e}")
+
+
+def _record_job_failure(db, job, error_msg: str) -> None:
+    """Record failed job for integration health and create alert if final failure."""
+    from app.services import ops_service, alert_service
+    from app.db.enums import IntegrationType, AlertType, AlertSeverity
+    
+    # Map job types to integration types
+    job_to_integration = {
+        JobType.META_LEAD_FETCH.value: IntegrationType.META_LEADS,
+        JobType.META_CAPI_EVENT.value: IntegrationType.META_CAPI,
+    }
+    
+    integration_type = job_to_integration.get(job.job_type)
+    if integration_type and job.organization_id:
+        try:
+            integration_key = job.payload.get("page_id") if job.payload else None
+            
+            # Record error in integration health
+            ops_service.record_error(
+                db=db,
+                org_id=job.organization_id,
+                integration_type=integration_type,
+                error_message=error_msg,
+                integration_key=integration_key,
+            )
+            
+            # Create alert if this is the final failure (max attempts reached)
+            if job.attempts >= job.max_attempts:
+                # Map to alert types
+                alert_type_map = {
+                    JobType.META_LEAD_FETCH.value: AlertType.META_FETCH_FAILED,
+                    JobType.META_CAPI_EVENT.value: AlertType.WORKER_JOB_FAILED,
+                }
+                alert_type = alert_type_map.get(job.job_type, AlertType.WORKER_JOB_FAILED)
+                
+                alert_service.create_or_update_alert(
+                    db=db,
+                    org_id=job.organization_id,
+                    alert_type=alert_type,
+                    severity=AlertSeverity.ERROR,
+                    title=f"{job.job_type} failed after {job.attempts} attempts",
+                    message=error_msg[:500],
+                    integration_key=integration_key,
+                    error_class=type(Exception).__name__,
+                )
+        except Exception as e:
+            logger.warning(f"Failed to record job failure: {e}")
+
+
 async def process_meta_lead_fetch(db, job) -> None:
     """
     Process a Meta Lead Ads fetch job.
@@ -309,10 +382,17 @@ async def worker_loop() -> None:
                         await process_job(db, job)
                         job_service.mark_job_completed(db, job)
                         logger.info(f"Job {job.id} completed successfully")
+                        
+                        # Record success for integration health (Meta jobs)
+                        _record_job_success(db, job)
+                        
                     except Exception as e:
                         error_msg = str(e)
                         job_service.mark_job_failed(db, job, error_msg)
                         logger.error(f"Job {job.id} failed: {error_msg}")
+                        
+                        # Record failure for integration health
+                        _record_job_failure(db, job, error_msg)
                         
                         # Also mark email as failed if applicable
                         if job.job_type == JobType.SEND_EMAIL.value:
