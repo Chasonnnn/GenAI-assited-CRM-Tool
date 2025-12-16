@@ -187,7 +187,6 @@ def change_status(
     Change case status and record history.
     
     No-op if status unchanged.
-    Auto-transitions: approved → pending_handoff
     
     Transition guard: Intake specialists cannot set CASE_MANAGER_ONLY statuses.
     Returns:
