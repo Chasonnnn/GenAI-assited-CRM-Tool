@@ -242,7 +242,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
   - [x] Tasks (with due dates and completion)
   - [x] Meta webhook skeleton
   - [x] **Case handoff workflow (intake → case manager)**
-    - [x] `pending_handoff` status with auto-transition from `approved`
+    - [x] `pending_handoff` status (manual, intake submits when ready)
     - [x] Handoff queue endpoint (case_manager+ only)
     - [x] Accept/Deny endpoints with reason tracking
     - [x] Role-based access control (intake can't see post-handoff cases)
@@ -289,7 +289,15 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
   - [x] Theme system (light/dark/system) with Stone + Teal colors
   - [x] ThemeToggle dropdown in header
   - [x] 30-second polling for real-time updates
-- [ ] Meta Lead Ads full integration
+- [x] **Meta Lead Ads Integration (Week 9):**
+  - [x] Webhook endpoint with HMAC signature verification
+  - [x] Auto-conversion: Meta leads → Cases (source=META)
+  - [x] Campaign tracking (meta_ad_id, meta_form_id)
+  - [x] Meta Conversions API (CAPI) on qualified/approved
+  - [x] CLI: update-meta-page-token, deactivate-meta-page
+  - [x] New statuses: qualified, applied
+  - [x] New workflow: contacted → qualified → applied → under_review → approved → pending_handoff
+- [ ] Ops Console + Manager Analytics
 
 ## Documentation
 

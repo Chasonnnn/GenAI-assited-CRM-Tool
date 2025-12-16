@@ -375,21 +375,34 @@ Deferred (TODO in job_service.py)
 Deliverable
 ✓ Complete in-app notification system with theme toggle
 
-Week 9 — Meta Lead Ads integration (real-time lead sync)
+Week 9 — Meta Lead Ads Integration ✓ COMPLETE
 Backend
-- Webhook endpoint for Meta leadgen events
-- Verify callback (hub.challenge pattern)
-- On webhook:
-  - log payload (carefully; avoid storing raw PII unredacted)
-  - enqueue job to fetch lead details via Meta API
-  - map fields → Lead schema
-  - upsert by meta_lead_id (dedupe)
-  - retry logic via jobs/outbox system
+✓ Webhook endpoint with HMAC signature verification
+✓ Verify callback (hub.challenge pattern)
+✓ On webhook:
+  ✓ Validate payload size and signature
+  ✓ Enqueue META_LEAD_FETCH job with idempotency
+  ✓ Worker fetches lead details via Meta API
+  ✓ Auto-convert to Case (source=META)
+  ✓ Campaign tracking: meta_ad_id, meta_form_id on Case
+✓ Meta Conversions API (CAPI):
+  ✓ Sends lead quality signals when status → qualified/approved
+  ✓ Hashed email/phone for better Meta user matching
+  ✓ Event deduplication via event_id
+  ✓ Proper logging of success/failure
+✓ CLI: update-meta-page-token, deactivate-meta-page
+✓ Fernet encryption for page access tokens
+✓ Dev endpoints: /dev/meta-leads/alerts, /dev/meta-leads/all
 Frontend
-- “META” source badge
-- Filter by source=META
+✓ "META" source badge in Cases list
+✓ Filter by source=META
+✓ New statuses: qualified, applied (intake workflow enhancement)
+Workflow Changes
+✓ New status flow: new → contacted → qualified → applied → under_review → approved → pending_handoff
+✓ Removed auto-transition approved → pending_handoff (intake manually submits)
 Deliverable
-- A real Meta lead appears in your CRM automatically
+✓ Meta leads auto-convert to Cases with campaign tracking
+✓ CAPI feedback optimizes Meta ad targeting for higher-quality leads
 
 Week 10 — Ops Console + Manager Analytics
 Backend (Ops Console)
