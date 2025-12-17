@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     ENV: str = "dev"
     
     # App Version (format: a.bc.de - major.feature.patch)
-    VERSION: str = "0.04.00"
+    VERSION: str = "0.05.00"
     
     # Version Control Encryption (Fernet key for config snapshots)
     VERSION_ENCRYPTION_KEY: str = ""  # Falls back to META_ENCRYPTION_KEY if empty
