@@ -72,9 +72,12 @@ def log_event(
     target_id: UUID | None = None,
     details: dict[str, Any] | None = None,
     request: Request | None = None,
+    request_id: UUID | None = None,
+    before_version_id: UUID | None = None,
+    after_version_id: UUID | None = None,
 ) -> AuditLog:
     """
-    Log an audit event.
+    Log an audit event with hash chain.
     
     Args:
         db: Database session
@@ -85,10 +88,19 @@ def log_event(
         target_id: ID of the affected entity
         details: Additional context (must be redacted - no secrets/raw PII)
         request: FastAPI request for IP/user-agent extraction
+        request_id: Optional request ID for correlating related events
+        before_version_id: EntityVersion ID before change (for config changes)
+        after_version_id: EntityVersion ID after change (for config changes)
     
     Returns:
-        The created audit log entry
+        The created audit log entry with computed hash chain
     """
+    from app.services import version_service
+    import json as json_module
+    
+    # Get previous hash for chain
+    prev_hash = version_service.get_last_audit_hash(db, org_id)
+    
     entry = AuditLog(
         organization_id=org_id,
         actor_user_id=actor_user_id,
@@ -98,10 +110,66 @@ def log_event(
         details=details,
         ip_address=get_client_ip(request),
         user_agent=get_user_agent(request),
+        request_id=request_id,
+        prev_hash=prev_hash,
+        before_version_id=before_version_id,
+        after_version_id=after_version_id,
     )
     db.add(entry)
-    db.flush()  # Get ID, let caller control commit
+    db.flush()  # Get ID and created_at
+    
+    # Compute entry hash
+    details_json = json_module.dumps(details, sort_keys=True, default=str) if details else "{}"
+    entry_hash = version_service.compute_audit_hash(
+        prev_hash=prev_hash,
+        entry_id=str(entry.id),
+        org_id=str(org_id),
+        event_type=event_type.value,
+        created_at=str(entry.created_at),
+        details_json=details_json,
+    )
+    entry.entry_hash = entry_hash
+    
     return entry
+
+
+def log_config_changed(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    entity_type: str,
+    entity_id: UUID,
+    before_version_id: UUID | None,
+    after_version_id: UUID,
+    action: str = "updated",  # "created", "updated", "rolled_back"
+    request: Request | None = None,
+) -> AuditLog:
+    """
+    Log versioned config change with before/after version links.
+    
+    Used for: pipelines, email templates, AI settings, integrations
+    """
+    event_map = {
+        "pipeline": AuditEventType.CONFIG_PIPELINE_UPDATED,
+        "email_template": AuditEventType.CONFIG_TEMPLATE_UPDATED,
+        "ai_settings": AuditEventType.SETTINGS_AI_UPDATED,
+        "org_settings": AuditEventType.SETTINGS_ORG_UPDATED,
+        "integration": AuditEventType.INTEGRATION_CONNECTED,
+    }
+    event_type = event_map.get(entity_type, AuditEventType.SETTINGS_ORG_UPDATED)
+    
+    return log_event(
+        db=db,
+        org_id=org_id,
+        event_type=event_type,
+        actor_user_id=user_id,
+        target_type=entity_type,
+        target_id=entity_id,
+        details={"action": action},
+        request=request,
+        before_version_id=before_version_id,
+        after_version_id=after_version_id,
+    )
 
 
 # =============================================================================

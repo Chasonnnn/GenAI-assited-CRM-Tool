@@ -285,6 +285,7 @@ class AuditEventType(str, Enum):
     Groups:
     - AUTH_*: Authentication events
     - SETTINGS_*: Configuration changes
+    - CONFIG_*: Versioned config changes
     - DATA_*: Data exports and imports
     - AI_*: AI feature usage
     - INTEGRATION_*: Third-party connections
@@ -300,6 +301,11 @@ class AuditEventType(str, Enum):
     SETTINGS_AI_UPDATED = "settings_ai_updated"
     SETTINGS_AI_CONSENT_ACCEPTED = "settings_ai_consent_accepted"
     SETTINGS_API_KEY_ROTATED = "settings_api_key_rotated"  # AI provider key
+    
+    # Versioned config changes (with before/after version links)
+    CONFIG_PIPELINE_UPDATED = "config_pipeline_updated"
+    CONFIG_TEMPLATE_UPDATED = "config_template_updated"
+    CONFIG_ROLLED_BACK = "config_rolled_back"
     
     # Data operations
     DATA_EXPORT_CASES = "data_export_cases"
@@ -320,3 +326,4 @@ class AuditEventType(str, Enum):
     USER_INVITED = "user_invited"
     USER_ROLE_CHANGED = "user_role_changed"
     USER_DEACTIVATED = "user_deactivated"
+

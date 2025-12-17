@@ -5,7 +5,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 
 from sqlalchemy import (
-    Boolean, Date, ForeignKey, Index, Integer, Numeric, String, 
+    Boolean, Date, ForeignKey, Index, Integer, LargeBinary, Numeric, String, 
     Text, Time, UniqueConstraint, text
 )
 from sqlalchemy.dialects.postgresql import CITEXT, JSONB, UUID
@@ -1531,6 +1531,7 @@ class AuditLog(Base):
     - Never stores secrets/tokens
     - PII in details is hashed (email) or ID-only
     - IP captured from X-Forwarded-For or client IP
+    - Hash chain makes tampering detectable
     """
     __tablename__ = "audit_logs"
     __table_args__ = (
@@ -1569,6 +1570,25 @@ class AuditLog(Base):
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)  # IPv6 max length
     user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
     
+    # Request correlation (for grouping related audit events)
+    request_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    
+    # Tamper-evident hash chain
+    prev_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)  # SHA256 hex
+    entry_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)  # SHA256 hex
+    
+    # Version control links (for config change auditing)
+    before_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("entity_versions.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    after_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("entity_versions.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    
     created_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"),
         nullable=False
@@ -1577,6 +1597,7 @@ class AuditLog(Base):
     # Relationships
     organization: Mapped["Organization"] = relationship()
     actor: Mapped["User | None"] = relationship()
+
 
 
 # =============================================================================
@@ -1683,6 +1704,9 @@ class Pipeline(Base):
     # Stage configuration (JSON array of stage objects)
     stages: Mapped[list] = mapped_column(JSONB, nullable=False)
     
+    # Version control
+    current_version: Mapped[int] = mapped_column(default=1, nullable=False)
+    
     created_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"),
         nullable=False
@@ -1694,3 +1718,78 @@ class Pipeline(Base):
     
     # Relationships
     organization: Mapped["Organization"] = relationship()
+
+
+# =============================================================================
+# Entity Versioning (Encrypted Config Snapshots)
+# =============================================================================
+
+class EntityVersion(Base):
+    """
+    Append-only configuration version snapshots.
+    
+    Used for:
+    - Pipelines, email templates, AI settings, org settings
+    - Integration configs (tokens redacted)
+    - Membership/role changes
+    
+    NOT used for: Cases, tasks, notes (use activity logs instead)
+    
+    Security:
+    - payload_encrypted: Fernet-encrypted JSON
+    - checksum: SHA256 of decrypted payload for integrity
+    - Never store secrets (tokens stored as [REDACTED:key_id])
+    
+    Rollback:
+    - Creates new version from old payload (never rewrites history)
+    - comment field tracks "Rollback from v{N}"
+    """
+    __tablename__ = "entity_versions"
+    __table_args__ = (
+        # Unique version per entity
+        UniqueConstraint("organization_id", "entity_type", "entity_id", "version"),
+        # History queries
+        Index("idx_entity_versions_lookup", "organization_id", "entity_type", "entity_id", "created_at"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # What's being versioned
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False)  # "pipeline", "email_template", etc.
+    entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    
+    # Version metadata
+    version: Mapped[int] = mapped_column(nullable=False)  # Monotonic, starts at 1
+    schema_version: Mapped[int] = mapped_column(default=1, nullable=False)  # For future payload migrations
+    
+    # Encrypted payload (Fernet)
+    payload_encrypted: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    
+    # Integrity verification
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA256 of decrypted payload
+    
+    # Audit trail
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    comment: Mapped[str | None] = mapped_column(String(500), nullable=True)  # "Updated stages", "Rollback from v3"
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    created_by: Mapped["User | None"] = relationship()
