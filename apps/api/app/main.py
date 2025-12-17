@@ -114,6 +114,10 @@ app.include_router(ai.router)
 from app.routers import integrations
 app.include_router(integrations.router)
 
+# Audit Trail (Manager+)
+from app.routers import audit
+app.include_router(audit.router)
+
 # Dev router (ONLY mounted in dev mode)
 if settings.ENV == "dev":
     from app.routers import dev

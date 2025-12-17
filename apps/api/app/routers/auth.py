@@ -217,12 +217,27 @@ def get_me(
 
 
 @router.post("/logout", dependencies=[Depends(require_csrf_header)])
-def logout(response: Response):
+def logout(
+    request: Request,
+    response: Response,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
     """
-    Clear session cookie.
+    Clear session cookie and log logout event.
     
     Requires X-Requested-With header for CSRF protection.
     """
+    # Audit log before clearing cookie
+    from app.services import audit_service
+    audit_service.log_logout(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        request=request,
+    )
+    db.commit()
+    
     response.delete_cookie(COOKIE_NAME, path="/")
     return {"status": "logged_out"}
 

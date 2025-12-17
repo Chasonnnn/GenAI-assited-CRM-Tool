@@ -1514,3 +1514,66 @@ class UserIntegration(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "integration_type"),
     )
+
+
+# =============================================================================
+# Audit Trail
+# =============================================================================
+
+class AuditLog(Base):
+    """
+    Security and compliance audit log.
+    
+    Tracks authentication, settings changes, data exports, AI actions,
+    and integration events for enterprise compliance.
+    
+    Security:
+    - Never stores secrets/tokens
+    - PII in details is hashed (email) or ID-only
+    - IP captured from X-Forwarded-For or client IP
+    """
+    __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("idx_audit_org_created", "organization_id", "created_at"),
+        Index("idx_audit_org_event_created", "organization_id", "event_type", "created_at"),
+        Index("idx_audit_org_actor_created", "organization_id", "actor_user_id", "created_at"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True  # System events have no actor
+    )
+    
+    # Event classification
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False)  # AuditEventType
+    
+    # Target entity (optional)
+    target_type: Mapped[str | None] = mapped_column(String(50), nullable=True)  # 'user', 'case', 'ai_action', etc.
+    target_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    
+    # Event details (redacted - no secrets, hashed PII)
+    details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    
+    # Request metadata
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)  # IPv6 max length
+    user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    actor: Mapped["User | None"] = relationship()

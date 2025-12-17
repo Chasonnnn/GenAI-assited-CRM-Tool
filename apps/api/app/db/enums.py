@@ -268,7 +268,55 @@ ROLES_CAN_MANAGE_INTEGRATIONS = {Role.DEVELOPER}
 ROLES_CAN_INVITE = {Role.MANAGER, Role.DEVELOPER}
 
 # Roles that can view audit logs / diagnostics
-ROLES_CAN_VIEW_LOGS = {Role.DEVELOPER}
+ROLES_CAN_VIEW_AUDIT = {Role.MANAGER, Role.DEVELOPER}
 
 # Roles that can view/manage ops alerts
 ROLES_CAN_VIEW_ALERTS = {Role.MANAGER, Role.DEVELOPER}
+
+
+# =============================================================================
+# Audit Trail
+# =============================================================================
+
+class AuditEventType(str, Enum):
+    """
+    Security and compliance audit events.
+    
+    Groups:
+    - AUTH_*: Authentication events
+    - SETTINGS_*: Configuration changes
+    - DATA_*: Data exports and imports
+    - AI_*: AI feature usage
+    - INTEGRATION_*: Third-party connections
+    """
+    # Authentication
+    AUTH_LOGIN_SUCCESS = "auth_login_success"
+    AUTH_LOGIN_FAILED = "auth_login_failed"
+    AUTH_LOGOUT = "auth_logout"
+    AUTH_SESSION_REVOKED = "auth_session_revoked"
+    
+    # Settings changes
+    SETTINGS_ORG_UPDATED = "settings_org_updated"
+    SETTINGS_AI_UPDATED = "settings_ai_updated"
+    SETTINGS_AI_CONSENT_ACCEPTED = "settings_ai_consent_accepted"
+    SETTINGS_API_KEY_ROTATED = "settings_api_key_rotated"  # AI provider key
+    
+    # Data operations
+    DATA_EXPORT_CASES = "data_export_cases"
+    DATA_EXPORT_ANALYTICS = "data_export_analytics"
+    DATA_IMPORT_STARTED = "data_import_started"
+    DATA_IMPORT_COMPLETED = "data_import_completed"
+    
+    # AI actions
+    AI_ACTION_APPROVED = "ai_action_approved"
+    AI_ACTION_REJECTED = "ai_action_rejected"
+    
+    # Integrations
+    INTEGRATION_CONNECTED = "integration_connected"
+    INTEGRATION_DISCONNECTED = "integration_disconnected"
+    INTEGRATION_TOKEN_REFRESHED = "integration_token_refreshed"
+    
+    # User management
+    USER_INVITED = "user_invited"
+    USER_ROLE_CHANGED = "user_role_changed"
+    USER_DEACTIVATED = "user_deactivated"
