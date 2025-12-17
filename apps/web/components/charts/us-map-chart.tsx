@@ -3,13 +3,14 @@
 import { useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2Icon } from "lucide-react"
-import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps"
+import { ComposableMap, Geographies, Geography } from "react-simple-maps"
 import { scaleQuantize } from "d3-scale"
 
 // US Albers map projection
 const geoUrl = "https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json"
 
-// State abbreviation to name mapping for tooltips
+// State abbreviation to name mapping for tooltips (reserved for future use)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const stateNames: Record<string, string> = {
     AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
     CO: "Colorado", CT: "Connecticut", DE: "Delaware", FL: "Florida", GA: "Georgia",

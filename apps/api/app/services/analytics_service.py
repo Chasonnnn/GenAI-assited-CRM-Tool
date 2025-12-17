@@ -275,13 +275,13 @@ def get_conversion_funnel(
     end_date: date | None = None,
 ) -> list[dict[str, Any]]:
     """Get conversion funnel data."""
-    # Define funnel stages in order
+    # Define funnel stages in order (matching actual CaseStatus values)
     funnel_stages = [
-        ("lead_new", "New Leads"),
+        ("new_unread", "New Leads"),
         ("contacted", "Contacted"),
         ("qualified", "Qualified"),
-        ("matched", "Matched"),
-        ("active", "Active"),
+        ("pending_match", "Matched"),
+        ("meds_started", "Active"),
     ]
     
     query = db.query(Case).filter(
@@ -365,7 +365,7 @@ def get_summary_kpis(
     needs_attention = db.query(func.count(Case.id)).filter(
         Case.organization_id == organization_id,
         Case.is_archived == False,
-        Case.status.in_(["lead_new", "contacted"]),
+        Case.status.in_(["new_unread", "contacted"]),
         (Case.last_contacted_at.is_(None)) | (Case.last_contacted_at < stale_date),
     ).scalar() or 0
     
