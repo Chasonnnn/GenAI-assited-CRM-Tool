@@ -1,15 +1,21 @@
 """Pipeline service - manage org-configurable case pipelines.
 
-v1: Display-only customization of existing CaseStatus values.
+v2: With version control integration
+- Creates version snapshot on every change
+- Optimistic locking via expected_version
+- Rollback support with audit trail
+
 Each stage maps to a CaseStatus enum with custom label, color, and order.
 """
 
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from app.db.enums import CaseStatus
 from app.db.models import Pipeline
+from app.services import version_service
 
 
 # Default stage colors (matching typical CRM conventions)
@@ -35,6 +41,8 @@ DEFAULT_COLORS = {
     CaseStatus.ARCHIVED: "#6B7280",  # Gray
     CaseStatus.RESTORED: "#9CA3AF",  # Gray light
 }
+
+ENTITY_TYPE = "pipeline"
 
 
 def get_default_stages() -> list[dict]:
@@ -64,11 +72,25 @@ def get_default_stages() -> list[dict]:
     return stages
 
 
-def get_or_create_default_pipeline(db: Session, org_id: UUID) -> Pipeline:
+def _pipeline_payload(pipeline: Pipeline) -> dict:
+    """Extract versionable payload from pipeline."""
+    return {
+        "name": pipeline.name,
+        "is_default": pipeline.is_default,
+        "stages": pipeline.stages,
+    }
+
+
+def get_or_create_default_pipeline(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID | None = None,
+) -> Pipeline:
     """
     Get the default pipeline for an org, creating if not exists.
     
     Called on first access to ensure every org has a pipeline.
+    Creates initial version snapshot.
     """
     pipeline = db.query(Pipeline).filter(
         Pipeline.organization_id == org_id,
@@ -81,8 +103,21 @@ def get_or_create_default_pipeline(db: Session, org_id: UUID) -> Pipeline:
             name="Default",
             is_default=True,
             stages=get_default_stages(),
+            current_version=1,
         )
         db.add(pipeline)
+        db.flush()
+        
+        # Create initial version snapshot
+        version_service.create_version(
+            db=db,
+            org_id=org_id,
+            entity_type=ENTITY_TYPE,
+            entity_id=pipeline.id,
+            payload=_pipeline_payload(pipeline),
+            created_by_user_id=user_id or pipeline.organization_id,  # Fallback for system
+            comment="Initial version",
+        )
         db.commit()
         db.refresh(pipeline)
     
@@ -108,20 +143,47 @@ def update_pipeline_stages(
     db: Session,
     pipeline: Pipeline,
     stages: list[dict],
+    user_id: UUID,
+    expected_version: int | None = None,
+    comment: str | None = None,
 ) -> Pipeline:
     """
-    Update pipeline stage configuration.
+    Update pipeline stage configuration with version control.
+    
+    Args:
+        expected_version: If provided, checks for conflicts (409 on mismatch)
+        comment: Optional comment for the version
     
     Validates that all stages reference valid CaseStatus values.
     Raises ValueError if invalid status found.
+    Raises VersionConflictError if expected_version doesn't match.
     """
+    # Optimistic locking
+    if expected_version is not None:
+        version_service.check_version(pipeline.current_version, expected_version)
+    
     # Validate stages
     valid_statuses = {s.value for s in CaseStatus}
     for stage in stages:
         if stage.get("status") not in valid_statuses:
             raise ValueError(f"Invalid status: {stage.get('status')}")
     
+    # Update pipeline
     pipeline.stages = stages
+    pipeline.current_version += 1
+    pipeline.updated_at = datetime.now(timezone.utc)
+    
+    # Create version snapshot
+    version_service.create_version(
+        db=db,
+        org_id=pipeline.organization_id,
+        entity_type=ENTITY_TYPE,
+        entity_id=pipeline.id,
+        payload=_pipeline_payload(pipeline),
+        created_by_user_id=user_id,
+        comment=comment or "Updated stages",
+    )
+    
     db.commit()
     db.refresh(pipeline)
     return pipeline
@@ -130,11 +192,12 @@ def update_pipeline_stages(
 def create_pipeline(
     db: Session,
     org_id: UUID,
+    user_id: UUID,
     name: str,
     stages: list[dict] | None = None,
 ) -> Pipeline:
     """
-    Create a new non-default pipeline.
+    Create a new non-default pipeline with initial version.
     
     Uses default stages if not provided.
     """
@@ -143,8 +206,22 @@ def create_pipeline(
         name=name,
         is_default=False,
         stages=stages or get_default_stages(),
+        current_version=1,
     )
     db.add(pipeline)
+    db.flush()
+    
+    # Create initial version snapshot
+    version_service.create_version(
+        db=db,
+        org_id=org_id,
+        entity_type=ENTITY_TYPE,
+        entity_id=pipeline.id,
+        payload=_pipeline_payload(pipeline),
+        created_by_user_id=user_id,
+        comment="Created",
+    )
+    
     db.commit()
     db.refresh(pipeline)
     return pipeline
@@ -155,6 +232,7 @@ def delete_pipeline(db: Session, pipeline: Pipeline) -> bool:
     Delete a pipeline.
     
     Cannot delete the default pipeline.
+    Note: Versions are retained for audit history.
     """
     if pipeline.is_default:
         return False
@@ -162,3 +240,64 @@ def delete_pipeline(db: Session, pipeline: Pipeline) -> bool:
     db.delete(pipeline)
     db.commit()
     return True
+
+
+# =============================================================================
+# Version Control
+# =============================================================================
+
+def get_pipeline_versions(
+    db: Session,
+    org_id: UUID,
+    pipeline_id: UUID,
+    limit: int = 50,
+) -> list:
+    """Get version history for a pipeline."""
+    return version_service.get_version_history(
+        db=db,
+        org_id=org_id,
+        entity_type=ENTITY_TYPE,
+        entity_id=pipeline_id,
+        limit=limit,
+    )
+
+
+def rollback_pipeline(
+    db: Session,
+    pipeline: Pipeline,
+    target_version: int,
+    user_id: UUID,
+) -> tuple[Pipeline | None, str | None]:
+    """
+    Rollback pipeline to a previous version.
+    
+    Creates a NEW version with old payload (never rewrites history).
+    
+    Returns:
+        (updated_pipeline, error) - error is set if rollback failed
+    """
+    # Rollback version (creates new version from old payload)
+    new_version, error = version_service.rollback_to_version(
+        db=db,
+        org_id=pipeline.organization_id,
+        entity_type=ENTITY_TYPE,
+        entity_id=pipeline.id,
+        target_version=target_version,
+        user_id=user_id,
+    )
+    
+    if error:
+        return None, error
+    
+    # Get the rolled-back payload and apply to pipeline
+    payload = version_service.decrypt_payload(new_version.payload_encrypted)
+    
+    pipeline.name = payload.get("name", pipeline.name)
+    pipeline.stages = payload.get("stages", pipeline.stages)
+    pipeline.current_version = new_version.version
+    pipeline.updated_at = datetime.now(timezone.utc)
+    
+    db.commit()
+    db.refresh(pipeline)
+    
+    return pipeline, None
