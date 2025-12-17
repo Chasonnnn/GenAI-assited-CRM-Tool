@@ -1,4 +1,7 @@
-"""Notes router - API endpoints for case notes."""
+"""Notes router - API endpoints for case notes.
+
+Uses unified EntityNote model with entity_type='case'.
+"""
 
 from uuid import UUID
 
@@ -21,7 +24,7 @@ router = APIRouter()
 
 
 def _note_to_read(note, db: Session) -> NoteRead:
-    """Convert Note model to NoteRead schema."""
+    """Convert EntityNote model to NoteRead schema."""
     author_name = None
     if note.author_id:
         user = db.query(User).filter(User.id == note.author_id).first()
@@ -29,10 +32,10 @@ def _note_to_read(note, db: Session) -> NoteRead:
     
     return NoteRead(
         id=note.id,
-        case_id=note.case_id,
+        case_id=note.entity_id,  # EntityNote uses entity_id
         author_id=note.author_id,
         author_name=author_name,
-        body=note.body,
+        body=note.content,  # EntityNote uses content
         created_at=note.created_at,
     )
 
@@ -52,7 +55,7 @@ def list_notes(
     # Access control: intake can't access handed-off cases
     check_case_access(case, session.role)
     
-    notes = note_service.list_notes(db, case_id, session.org_id)
+    notes = note_service.list_notes(db, session.org_id, "case", case_id)
     return [_note_to_read(n, db) for n in notes]
 
 
@@ -74,10 +77,11 @@ def create_note(
     
     note = note_service.create_note(
         db=db,
-        case_id=case_id,
         org_id=session.org_id,
+        entity_type="case",
+        entity_id=case_id,
         author_id=session.user_id,
-        body=data.body,
+        content=data.body,
     )
     
     # Log to case activity
@@ -112,8 +116,8 @@ def delete_note(
         raise HTTPException(status_code=404, detail="Note not found")
     
     # Access control: check case access if note is linked to a case
-    if note.case_id:
-        case = case_service.get_case(db, session.org_id, note.case_id)
+    if note.entity_type == "case":
+        case = case_service.get_case(db, session.org_id, note.entity_id)
         if case:
             check_case_access(case, session.role)
     
@@ -121,16 +125,16 @@ def delete_note(
     if not is_owner_or_can_manage(session, note.author_id):
         raise HTTPException(status_code=403, detail="Not authorized to delete this note")
     
-    # Log to case activity before delete (only if linked to a case)
-    if note.case_id:
+    # Log to case activity before delete (only for case notes)
+    if note.entity_type == "case":
         from app.services import activity_service
         activity_service.log_note_deleted(
             db=db,
-            case_id=note.case_id,
+            case_id=note.entity_id,
             organization_id=session.org_id,
             actor_user_id=session.user_id,
             note_id=note.id,
-            content_preview=note.body[:200] if note.body else "",
+            content_preview=note.content[:200] if note.content else "",
         )
         db.commit()
     

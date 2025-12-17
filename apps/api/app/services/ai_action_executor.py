@@ -12,7 +12,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.db.models import (
-    Case, CaseNote, Task, AIActionApproval
+    Case, EntityNote, Task, AIActionApproval
 )
 from app.db.enums import CaseStatus, TaskType
 
@@ -65,12 +65,13 @@ class AddNoteExecutor(ActionExecutor):
     def execute(self, payload: dict[str, Any], db: Session, user_id: uuid.UUID, org_id: uuid.UUID, entity_id: uuid.UUID) -> dict[str, Any]:
         content = payload.get("content") or payload.get("body") or payload.get("text")
         
-        # Create note (CaseNote uses body, author_id, organization_id)
-        note = CaseNote(
-            case_id=entity_id,
+        # Create note (EntityNote uses entity_type, entity_id, content)
+        note = EntityNote(
+            entity_type="case",
+            entity_id=entity_id,
             organization_id=org_id,
             author_id=user_id,
-            body=content,
+            content=content,
         )
         db.add(note)
         
@@ -240,11 +241,12 @@ class SendEmailExecutor(ActionExecutor):
 {body}
 """
         
-        note = CaseNote(
-            case_id=entity_id,
+        note = EntityNote(
+            entity_type="case",
+            entity_id=entity_id,
             organization_id=org_id,
             author_id=user_id,
-            body=email_content,
+            content=email_content,
         )
         db.add(note)
         
