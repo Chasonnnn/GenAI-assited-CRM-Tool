@@ -115,7 +115,7 @@ def get_settings(
     session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
 ) -> AISettingsResponse:
     """Get AI settings for the organization."""
-    settings = ai_settings_service.get_or_create_ai_settings(db, session.org_id)
+    settings = ai_settings_service.get_or_create_ai_settings(db, session.org_id, session.user_id)
     
     return AISettingsResponse(
         is_enabled=settings.is_enabled,
@@ -184,7 +184,7 @@ def get_consent(
     session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
 ) -> ConsentResponse:
     """Get consent text and status."""
-    settings = ai_settings_service.get_or_create_ai_settings(db, session.org_id)
+    settings = ai_settings_service.get_or_create_ai_settings(db, session.org_id, session.user_id)
     
     return ConsentResponse(
         consent_text=CONSENT_TEXT,

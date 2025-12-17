@@ -189,6 +189,38 @@ def update_pipeline_stages(
     return pipeline
 
 
+def update_pipeline_name(
+    db: Session,
+    pipeline: Pipeline,
+    name: str,
+    user_id: UUID,
+    comment: str | None = None,
+) -> Pipeline:
+    """
+    Update pipeline name with version control.
+    
+    Creates version snapshot on name change.
+    """
+    pipeline.name = name
+    pipeline.current_version += 1
+    pipeline.updated_at = datetime.now(timezone.utc)
+    
+    # Create version snapshot
+    version_service.create_version(
+        db=db,
+        org_id=pipeline.organization_id,
+        entity_type=ENTITY_TYPE,
+        entity_id=pipeline.id,
+        payload=_pipeline_payload(pipeline),
+        created_by_user_id=user_id,
+        comment=comment or "Renamed",
+    )
+    
+    db.commit()
+    db.refresh(pipeline)
+    return pipeline
+
+
 def create_pipeline(
     db: Session,
     org_id: UUID,

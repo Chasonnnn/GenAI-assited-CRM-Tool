@@ -436,5 +436,42 @@ Meta Lead Ads fields are mapped to Case fields:
 
 ---
 
-*Last updated: 2025-12-16*
+## Version Numbering
+
+### Format: a.bc.de
+
+| Part | Range | Meaning |
+|------|-------|---------|
+| **a** | 0-9 | Major version (0 = pre-release) |
+| **bc** | 00-99 | Feature version (major feature additions) |
+| **de** | 00-99 | Patch version (bug fixes, minor changes) |
+
+**Current:** 0.06.00
+
+Defined in `apps/api/app/core/config.py` as `Settings.VERSION`.
+
+---
+
+## Enterprise Features (v0.06.00)
+
+### Global Audit Trail
+- Hash chain on `audit_logs` (`prev_hash`, `entry_hash`)
+- Tamper-evident logging with SHA256
+- Genesis hash backfill for existing entries
+
+### In-App Version Control
+- `entity_versions` table for encrypted configuration snapshots
+- Versioned entities: Pipeline, EmailTemplate, AISettings
+- Encrypted payloads (Fernet), SHA256 checksums
+- Rollback = new version from old payload (never rewrite history)
+- API keys stored as `[REDACTED]` in snapshots
+- Developer-only access for `/versions` and `/rollback`
+
+### Optimistic Locking
+- `current_version` field on versioned models
+- `expected_version` in update requests → 409 on conflict
+
+---
+
+*Last updated: 2025-12-17 (v0.06.00)*
 

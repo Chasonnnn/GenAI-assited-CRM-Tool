@@ -57,6 +57,28 @@ We aim to keep the codebase **generalizable** so an open-source “core CRM” c
 - Users can re-migrate, re-sync, or update their integrations as needed.
 - Focus on **current best practices**, not legacy support.
 
+### **Version Numbering Scheme** - a.bc.de Format
+The application uses a 3-part version format: **a.bc.de**
+
+| Part | Range | Meaning |
+|------|-------|---------|
+| **a** | 0-9 | Major version (0 = pre-release/development) |
+| **bc** | 00-99 | Feature version (major feature additions) |
+| **de** | 00-99 | Patch version (bug fixes, minor changes) |
+
+Examples:
+- `0.06.00` → Pre-release, 6 major features, no patches
+- `1.00.00` → First production release
+- `1.02.05` → Production v1, 2 features since 1.0, 5 patches
+
+**When to increment:**
+- **a (major):** Breaking API changes or production-ready milestone
+- **bc (feature):** New feature completion (e.g., audit trail, versioning)
+- **de (patch):** Bug fixes, documentation, minor improvements
+
+Current version is defined in `apps/api/app/core/config.py` as `Settings.VERSION`.
+
+
 ## 2) Tech Stack (Target)
 
 ### Frontend
@@ -410,9 +432,28 @@ Constraints:
   - **Week 9 complete:** Meta Lead Ads Integration + CAPI
   - **Week 10 complete:** Ops Console + Manager Analytics
   - **Week 10+ complete:** AI Assistant Tab + Meta Ads Spend Integration + UI Refinements
+  - **Enterprise Features (v0.06.00):**
+    - Global Audit Trail (hash chain, tamper-evident)
+    - CSV Import with Email Dedupe
+    - Org-Configurable Pipelines (stage labels, colors, order)
+    - In-App Version Control (encrypted snapshots, rollback)
+- **Current Version:** 0.06.00
 - **In progress:** None
 - **Blockers:** None
-- **Next milestones:** AI chat integration (Week 11), deployment (Week 12)
+- **Next milestones:** Deployment + hardening
+
+### Enterprise Features (2025-12-17, v0.06.00)
+- **Completed:**
+  - Global Audit Trail with hash chain (tamper-evident logging)
+  - CSV Import with email-based duplicate detection
+  - Org-Configurable Pipelines (relabel, recolor, reorder statuses)
+  - In-App Version Control for configurations:
+    - Pipelines, Email Templates, AI Settings
+    - Encrypted snapshots (Fernet), SHA256 checksums
+    - Rollback = new version from old payload (never rewrite history)
+    - API keys stored as [REDACTED] (never versioned)
+    - Developer-only access for /versions and /rollback
+  - Admin Versions API (`/admin/versions/{type}/{id}`)
 
 ### Week 10+ (2025-12-16): AI Assistant Tab + Meta Ads Spend + UI Refinements
 - **Completed:**
