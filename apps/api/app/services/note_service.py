@@ -1,4 +1,8 @@
-"""Note service - business logic for notes (case notes + polymorphic entity notes)."""
+"""Note service - unified EntityNote for all entity types.
+
+Per "No Backward Compatibility" rule, CaseNote has been removed.
+All notes use the polymorphic EntityNote model with entity_type field.
+"""
 
 from uuid import UUID
 
@@ -6,7 +10,7 @@ import nh3
 from sqlalchemy.orm import Session
 
 from app.db.enums import EntityType
-from app.db.models import CaseNote, EntityNote
+from app.db.models import EntityNote
 
 # Allowed HTML tags for TipTap rich text
 ALLOWED_TAGS = {"p", "br", "strong", "em", "ul", "ol", "li", "a", "blockquote", "h1", "h2", "h3", "code", "pre"}
@@ -19,61 +23,13 @@ def sanitize_html(html: str) -> str:
 
 
 # =============================================================================
-# CaseNote functions (backward compatible)
+# Unified EntityNote functions (for all entity types)
 # =============================================================================
 
 def create_note(
     db: Session,
-    case_id: UUID,
     org_id: UUID,
-    author_id: UUID,
-    body: str,
-) -> CaseNote:
-    """Create a new note on a case."""
-    clean_body = sanitize_html(body)
-    
-    note = CaseNote(
-        case_id=case_id,
-        organization_id=org_id,
-        author_id=author_id,
-        body=clean_body,
-    )
-    db.add(note)
-    db.commit()
-    db.refresh(note)
-    return note
-
-
-def list_notes(db: Session, case_id: UUID, org_id: UUID) -> list[CaseNote]:
-    """List notes for a case (org-scoped), newest first."""
-    return db.query(CaseNote).filter(
-        CaseNote.case_id == case_id,
-        CaseNote.organization_id == org_id,
-    ).order_by(CaseNote.created_at.desc()).all()
-
-
-def get_note(db: Session, note_id: UUID, org_id: UUID) -> CaseNote | None:
-    """Get a note by ID (org-scoped)."""
-    return db.query(CaseNote).filter(
-        CaseNote.id == note_id,
-        CaseNote.organization_id == org_id,
-    ).first()
-
-
-def delete_note(db: Session, note: CaseNote) -> None:
-    """Delete a note."""
-    db.delete(note)
-    db.commit()
-
-
-# =============================================================================
-# Polymorphic EntityNote functions (for intended_parents and future entities)
-# =============================================================================
-
-def create_entity_note(
-    db: Session,
-    org_id: UUID,
-    entity_type: EntityType,
+    entity_type: EntityType | str,
     entity_id: UUID,
     author_id: UUID,
     content: str,
@@ -81,9 +37,12 @@ def create_entity_note(
     """Create a note on any entity type."""
     clean_content = sanitize_html(content)
     
+    # Convert enum to string if needed
+    type_str = entity_type.value if isinstance(entity_type, EntityType) else entity_type
+    
     note = EntityNote(
         organization_id=org_id,
-        entity_type=entity_type.value,
+        entity_type=type_str,
         entity_id=entity_id,
         author_id=author_id,
         content=clean_content,
@@ -94,29 +53,42 @@ def create_entity_note(
     return note
 
 
-def list_entity_notes(
+def list_notes(
     db: Session,
     org_id: UUID,
-    entity_type: EntityType,
+    entity_type: EntityType | str,
     entity_id: UUID,
 ) -> list[EntityNote]:
     """List notes for an entity, newest first."""
+    type_str = entity_type.value if isinstance(entity_type, EntityType) else entity_type
+    
     return db.query(EntityNote).filter(
         EntityNote.organization_id == org_id,
-        EntityNote.entity_type == entity_type.value,
+        EntityNote.entity_type == type_str,
         EntityNote.entity_id == entity_id,
     ).order_by(EntityNote.created_at.desc()).all()
 
 
-def get_entity_note(db: Session, note_id: UUID, org_id: UUID) -> EntityNote | None:
-    """Get an entity note by ID (org-scoped)."""
+def get_note(db: Session, note_id: UUID, org_id: UUID) -> EntityNote | None:
+    """Get a note by ID (org-scoped)."""
     return db.query(EntityNote).filter(
         EntityNote.id == note_id,
         EntityNote.organization_id == org_id,
     ).first()
 
 
-def delete_entity_note(db: Session, note: EntityNote) -> None:
-    """Delete an entity note."""
+def delete_note(db: Session, note: EntityNote) -> None:
+    """Delete a note."""
     db.delete(note)
     db.commit()
+
+
+# =============================================================================
+# Aliases for backward compatibility (call the same functions)
+# These can be removed once all callers are updated
+# =============================================================================
+
+create_entity_note = create_note
+list_entity_notes = list_notes
+get_entity_note = get_note
+delete_entity_note = delete_note

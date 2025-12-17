@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import (
     AIConversation, AIMessage, AIActionApproval, AIEntitySummary, 
-    AIUsageLog, Case, CaseNote, Task, UserIntegration
+    AIUsageLog, Case, EntityNote, Task, UserIntegration
 )
 from app.services.ai_provider import ChatMessage, ChatResponse
 from app.services import ai_settings_service
@@ -58,7 +58,7 @@ Example action format:
 
 def _build_dynamic_context(
     case: Case, 
-    notes: list[CaseNote], 
+    notes: list[EntityNote], 
     tasks: list[Task], 
     user_integrations: list[str],
     anonymize: bool = False,
@@ -115,7 +115,7 @@ def _build_dynamic_context(
             known_names.extend(parts)
         
         for note in notes[:5]:  # Limit to 5 notes
-            plain_text = nh3.clean(note.body, tags=set())  # Strip HTML
+            plain_text = nh3.clean(note.content, tags=set())  # Strip HTML
             truncated = plain_text[:200] + "..." if len(plain_text) > 200 else plain_text
             
             # Anonymize note content if enabled
@@ -218,16 +218,17 @@ def get_case_context(
     db: Session,
     case_id: uuid.UUID,
     notes_limit: int = 5,
-) -> tuple[Case | None, list[CaseNote], list[Task]]:
+) -> tuple[Case | None, list[EntityNote], list[Task]]:
     """Load case with notes and tasks for context."""
     case = db.query(Case).filter(Case.id == case_id).first()
     if not case:
         return None, [], []
     
-    # Get notes (most recent first, limited)
-    notes = db.query(CaseNote).filter(
-        CaseNote.case_id == case_id
-    ).order_by(CaseNote.created_at.desc()).limit(notes_limit).all()
+    # Get notes via EntityNote (entity_type='case')
+    notes = db.query(EntityNote).filter(
+        EntityNote.entity_type == "case",
+        EntityNote.entity_id == case_id
+    ).order_by(EntityNote.created_at.desc()).limit(notes_limit).all()
     
     # Get tasks (Task uses case_id, not entity_type/entity_id)
     tasks = db.query(Task).filter(
