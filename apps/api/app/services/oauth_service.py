@@ -7,6 +7,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 from cryptography.fernet import Fernet
@@ -156,8 +157,7 @@ def get_gmail_auth_url(redirect_uri: str, state: str) -> str:
         "prompt": "consent",
         "state": state,
     }
-    query = "&".join(f"{k}={v}" for k, v in params.items())
-    return f"{GMAIL_AUTH_URL}?{query}"
+    return f"{GMAIL_AUTH_URL}?{urlencode(params)}"
 
 
 async def exchange_gmail_code(code: str, redirect_uri: str) -> dict[str, Any]:
@@ -225,8 +225,7 @@ def get_zoom_auth_url(redirect_uri: str, state: str) -> str:
         "response_type": "code",
         "state": state,
     }
-    query = "&".join(f"{k}={v}" for k, v in params.items())
-    return f"{ZOOM_AUTH_URL}?{query}"
+    return f"{ZOOM_AUTH_URL}?{urlencode(params)}"
 
 
 async def exchange_zoom_code(code: str, redirect_uri: str) -> dict[str, Any]:
@@ -298,7 +297,10 @@ async def refresh_zoom_token(refresh_token: str) -> dict[str, Any] | None:
 # ============================================================================
 
 def refresh_token(db: Session, integration: UserIntegration, integration_type: str) -> bool:
-    """Refresh an expired token. Returns True if successful."""
+    """Refresh an expired token. Returns True if successful.
+    
+    Note: This function creates a new event loop if needed, or uses an existing one.
+    """
     import asyncio
     
     if not integration.refresh_token_encrypted:
@@ -306,13 +308,24 @@ def refresh_token(db: Session, integration: UserIntegration, integration_type: s
     
     refresh = decrypt_token(integration.refresh_token_encrypted)
     
-    try:
+    async def do_refresh():
         if integration_type == "gmail":
-            result = asyncio.run(refresh_gmail_token(refresh))
+            return await refresh_gmail_token(refresh)
         elif integration_type == "zoom":
-            result = asyncio.run(refresh_zoom_token(refresh))
-        else:
-            return False
+            return await refresh_zoom_token(refresh)
+        return None
+    
+    try:
+        # Check if we're in an existing event loop
+        try:
+            loop = asyncio.get_running_loop()
+            # We're in an async context - create a task
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                result = pool.submit(asyncio.run, do_refresh()).result()
+        except RuntimeError:
+            # No event loop running - safe to use asyncio.run
+            result = asyncio.run(do_refresh())
         
         if not result:
             return False

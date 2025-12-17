@@ -366,7 +366,7 @@ def approve_action(
         raise HTTPException(status_code=404, detail="Conversation not found")
     
     # Verify user owns this conversation or has manager role
-    is_manager = session.role in ('manager', 'case_manager', 'developer')
+    is_manager = session.role in (Role.MANAGER, Role.CASE_MANAGER, Role.DEVELOPER)
     if conversation.user_id != session.user_id and not is_manager:
         raise HTTPException(status_code=403, detail="Not authorized to approve this action")
     
@@ -421,7 +421,7 @@ def reject_action(
         raise HTTPException(status_code=404, detail="Conversation not found")
     
     # Verify user owns this conversation or has manager role
-    is_manager = session.role in ('manager', 'case_manager', 'developer')
+    is_manager = session.role in (Role.MANAGER, Role.CASE_MANAGER, Role.DEVELOPER)
     if conversation.user_id != session.user_id and not is_manager:
         raise HTTPException(status_code=403, detail="Not authorized to reject this action")
     

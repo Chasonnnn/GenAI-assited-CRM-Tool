@@ -6,29 +6,28 @@ import api from '@/lib/api';
 // TEMPORARY: Set to true to bypass auth for testing
 const DEV_BYPASS_AUTH = true;
 
+// Interface matches backend MeResponse schema
 interface User {
-    id: string;
+    user_id: string;
     email: string;
     display_name: string;
-    organization: {
-        id: string;
-        name: string;
-        slug: string;
-    };
+    avatar_url?: string;
+    org_id: string;
+    org_name: string;
+    org_slug: string;
     role: string;
     ai_enabled: boolean;
 }
 
 // Mock user for testing when auth is bypassed
 const MOCK_USER: User = {
-    id: '4176661a-0bab-4e28-b44f-1591960b88bf',
+    user_id: '4176661a-0bab-4e28-b44f-1591960b88bf',
     email: 'manager@test.com',
     display_name: 'Test Manager',
-    organization: {
-        id: 'd1f370ab-1680-46b3-a37d-7cff639e4a47',
-        name: 'Test Organization',
-        slug: 'test-org',
-    },
+    avatar_url: undefined,
+    org_id: 'd1f370ab-1680-46b3-a37d-7cff639e4a47',
+    org_name: 'Test Organization',
+    org_slug: 'test-org',
     role: 'manager',
     ai_enabled: true, // Enable AI for testing
 };
