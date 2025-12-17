@@ -213,6 +213,7 @@ async def fetch_ad_account_insights(
     date_start: str,
     date_end: str,
     level: str = "campaign",
+    max_pages: int = 10,
 ) -> tuple[list[dict] | None, str | None]:
     """
     Fetch ad insights (spend, impressions, etc.) from Meta Marketing API.
@@ -223,6 +224,7 @@ async def fetch_ad_account_insights(
         date_start: Start date (YYYY-MM-DD)
         date_end: End date (YYYY-MM-DD)
         level: Breakdown level (campaign, adset, ad)
+        max_pages: Maximum number of pages to fetch (default 10)
         
     Returns:
         (data, error) tuple - data is list of insight objects
@@ -244,18 +246,31 @@ async def fetch_ad_account_insights(
         "fields": "campaign_id,campaign_name,spend,impressions,reach,clicks,actions",
         "level": level,
         "time_range": f'{{"since":"{date_start}","until":"{date_end}"}}',
+        "limit": 100,  # Request max per page
     }
+    
+    all_data = []
+    pages_fetched = 0
     
     try:
         async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
-            resp = await client.get(url, params=params)
+            while url and pages_fetched < max_pages:
+                resp = await client.get(url, params=params if pages_fetched == 0 else None)
+                
+                if resp.status_code != 200:
+                    error_body = resp.text[:500]
+                    return None, f"Meta API {resp.status_code}: {error_body}"
+                
+                data = resp.json()
+                all_data.extend(data.get("data", []))
+                pages_fetched += 1
+                
+                # Check for next page
+                paging = data.get("paging", {})
+                url = paging.get("next")
+                params = None  # Next page URL includes all params
             
-            if resp.status_code != 200:
-                error_body = resp.text[:500]
-                return None, f"Meta API {resp.status_code}: {error_body}"
-            
-            data = resp.json()
-            return data.get("data", []), None
+            return all_data, None
             
     except httpx.TimeoutException:
         return None, "Meta API timeout"

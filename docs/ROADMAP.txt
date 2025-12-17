@@ -489,13 +489,14 @@ Frontend
 ✓ Theme toggle animation (View Transitions API, circle blur from top-left)
 ✓ Global font changed to Noto Sans
 ✓ DateRangePicker UX improvements (stays open during selection)
-Known Limitations (Meta Spend - to fix in production):
-- META_AD_ACCOUNT_ID and META_SYSTEM_TOKEN not in Settings class (uses fallback)
-- META_TEST_MODE defaults True (override in prod .env)
-- Errors return zeros silently (should log/surface)
-- Numeric parsing may fail on empty strings
-- Only checks action_type="lead" (may miss leadgen variants)
-- No pagination handling for large campaign lists
+Bug Fixes (Meta Spend):
+✓ META_AD_ACCOUNT_ID and META_SYSTEM_TOKEN added to Settings class
+✓ META_TEST_MODE now defaults False (safer for production)
+✓ Errors are logged with logger.error/warning
+✓ safe_float/safe_int handle empty strings and string numbers
+✓ Checks multiple action types (lead, leadgen, pixel conversions)
+✓ Pagination handling (up to 10 pages / 1000 campaigns)
+✓ Updated .env.example with new settings
 Deliverable
 ✓ AI Assistant UI ready for backend chat integration
 ✓ Meta spend data visible in Reports dashboard
