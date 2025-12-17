@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import get_db, get_current_session
+from app.core.deps import get_db, get_current_session, require_csrf_header
 from app.schemas.auth import UserSession
 from app.services import oauth_service
 
@@ -81,7 +81,7 @@ def list_integrations(
     )
 
 
-@router.delete("/{integration_type}")
+@router.delete("/{integration_type}", dependencies=[Depends(require_csrf_header)])
 def disconnect_integration(
     integration_type: str,
     db: Session = Depends(get_db),

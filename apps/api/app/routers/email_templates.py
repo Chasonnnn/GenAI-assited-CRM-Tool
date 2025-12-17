@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_session, require_roles
+from app.core.deps import get_db, get_current_session, require_roles, require_csrf_header
 from app.db.enums import Role
 from app.schemas.email import (
     EmailTemplateCreate,
@@ -33,7 +33,7 @@ def list_templates(
     return templates
 
 
-@router.post("", response_model=EmailTemplateRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=EmailTemplateRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_csrf_header)])
 def create_template(
     data: EmailTemplateCreate,
     db: Session = Depends(get_db),
@@ -72,7 +72,7 @@ def get_template(
     return template
 
 
-@router.patch("/{template_id}", response_model=EmailTemplateRead)
+@router.patch("/{template_id}", response_model=EmailTemplateRead, dependencies=[Depends(require_csrf_header)])
 def update_template(
     template_id: UUID,
     data: EmailTemplateUpdate,
@@ -103,7 +103,7 @@ def update_template(
     return updated
 
 
-@router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_csrf_header)])
 def delete_template(
     template_id: UUID,
     db: Session = Depends(get_db),
@@ -117,7 +117,7 @@ def delete_template(
     email_service.delete_template(db, template)
 
 
-@router.post("/send", response_model=EmailLogRead, status_code=status.HTTP_201_CREATED)
+@router.post("/send", response_model=EmailLogRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_csrf_header)])
 def send_email(
     data: EmailSendRequest,
     db: Session = Depends(get_db),

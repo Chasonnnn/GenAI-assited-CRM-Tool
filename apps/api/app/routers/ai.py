@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_session, require_roles
+from app.core.deps import get_db, get_current_session, require_roles, require_csrf_header
 from app.db.enums import Role
 from app.db.models import Case, UserIntegration, AIConversation
 from app.schemas.auth import UserSession
@@ -130,7 +130,7 @@ def get_settings(
     )
 
 
-@router.patch("/settings", response_model=AISettingsResponse)
+@router.patch("/settings", response_model=AISettingsResponse, dependencies=[Depends(require_csrf_header)])
 def update_settings(
     update: AISettingsUpdate,
     db: Session = Depends(get_db),
@@ -162,7 +162,7 @@ def update_settings(
     )
 
 
-@router.post("/settings/test", response_model=TestKeyResponse)
+@router.post("/settings/test", response_model=TestKeyResponse, dependencies=[Depends(require_csrf_header)])
 async def test_api_key(
     request: TestKeyRequest,
     session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
@@ -191,7 +191,7 @@ def get_consent(
     )
 
 
-@router.post("/consent/accept")
+@router.post("/consent/accept", dependencies=[Depends(require_csrf_header)])
 def accept_consent(
     db: Session = Depends(get_db),
     session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
@@ -210,7 +210,7 @@ def accept_consent(
 # Chat Endpoints
 # ============================================================================
 
-@router.post("/chat", response_model=ChatResponseModel)
+@router.post("/chat", response_model=ChatResponseModel, dependencies=[Depends(require_csrf_header)])
 @limiter.limit("60/minute")
 def chat(
     request: Request,  # Required by limiter
@@ -346,7 +346,7 @@ class ActionApprovalResponse(BaseModel):
     error: str | None = None
 
 
-@router.post("/actions/{approval_id}/approve", response_model=ActionApprovalResponse)
+@router.post("/actions/{approval_id}/approve", response_model=ActionApprovalResponse, dependencies=[Depends(require_csrf_header)])
 def approve_action(
     approval_id: uuid.UUID,
     db: Session = Depends(get_db),
@@ -402,7 +402,7 @@ def approve_action(
     )
 
 
-@router.post("/actions/{approval_id}/reject")
+@router.post("/actions/{approval_id}/reject", dependencies=[Depends(require_csrf_header)])
 def reject_action(
     approval_id: uuid.UUID,
     db: Session = Depends(get_db),
