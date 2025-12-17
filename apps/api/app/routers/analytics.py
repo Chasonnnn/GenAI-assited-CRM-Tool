@@ -4,7 +4,7 @@ Analytics endpoints for manager dashboards.
 Provides case statistics, trends, and Meta performance metrics.
 """
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -204,7 +204,7 @@ def get_cases_by_assignee(
 def get_cases_trend(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
-    period: str = Query("day", regex="^(day|week|month)$"),
+    period: Literal["day", "week", "month"] = Query("day"),
     session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
     db: Session = Depends(get_db),
 ):

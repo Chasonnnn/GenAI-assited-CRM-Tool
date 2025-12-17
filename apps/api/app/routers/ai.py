@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,9 @@ from app.db.enums import Role
 from app.db.models import Case, UserIntegration, AIConversation
 from app.schemas.auth import UserSession
 from app.services import ai_settings_service, ai_chat_service
+
+# Rate limiting
+from app.main import limiter
 
 router = APIRouter(prefix="/ai", tags=["AI"])
 
@@ -208,8 +211,10 @@ def accept_consent(
 # ============================================================================
 
 @router.post("/chat", response_model=ChatResponseModel)
+@limiter.limit("60/minute")
 def chat(
-    request: ChatRequest,
+    request: Request,  # Required by limiter
+    body: ChatRequest,
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
 ) -> ChatResponseModel:
@@ -223,9 +228,9 @@ def chat(
         )
     
     # Check if user has access to the entity
-    if request.entity_type == "case":
+    if body.entity_type == "case":
         case = db.query(Case).filter(
-            Case.id == request.entity_id,
+            Case.id == body.entity_id,
             Case.organization_id == session.org_id
         ).first()
         if not case:
@@ -245,9 +250,9 @@ def chat(
         db,
         session.org_id,
         session.user_id,
-        request.entity_type,
-        request.entity_id,
-        request.message,
+        body.entity_type,
+        body.entity_id,
+        body.message,
         user_integrations,
     )
     
