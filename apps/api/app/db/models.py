@@ -361,10 +361,7 @@ class Case(Base):
     assigned_to: Mapped["User | None"] = relationship(foreign_keys=[assigned_to_user_id])
     created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
     archived_by: Mapped["User | None"] = relationship(foreign_keys=[archived_by_user_id])
-    notes: Mapped[list["CaseNote"]] = relationship(
-        back_populates="case",
-        cascade="all, delete-orphan"
-    )
+    # Notes use EntityNote with entity_type='case' - no direct relationship
     status_history: Mapped[list["CaseStatusHistory"]] = relationship(
         back_populates="case",
         cascade="all, delete-orphan"
@@ -458,46 +455,8 @@ class CaseActivityLog(Base):
     actor: Mapped["User | None"] = relationship(foreign_keys=[actor_user_id])
 
 
-class CaseNote(Base):
-    """
-    Notes attached to cases.
-    
-    Author or manager+ can delete.
-    """
-    __tablename__ = "case_notes"
-    __table_args__ = (
-        Index("idx_case_notes_case", "case_id", "created_at"),
-    )
-    
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        server_default=text("gen_random_uuid()")
-    )
-    case_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("cases.id", ondelete="CASCADE"),
-        nullable=False
-    )
-    organization_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False
-    )
-    author_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="RESTRICT"),
-        nullable=False
-    )
-    body: Mapped[str] = mapped_column(Text, nullable=False)  # 2-4000 chars in schema
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"),
-        nullable=False
-    )
-    
-    # Relationships
-    case: Mapped["Case"] = relationship(back_populates="notes")
-    author: Mapped["User"] = relationship()
+# NOTE: CaseNote model removed (migrated to EntityNote with entity_type='case')
+# See migration 0013_migrate_casenotes.py
 
 
 class Task(Base):
