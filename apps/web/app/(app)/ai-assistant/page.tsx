@@ -6,79 +6,193 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
-import { SendIcon, SparklesIcon, FileTextIcon, UserIcon, CalendarIcon, ClockIcon, BotIcon } from "lucide-react"
-import { useState } from "react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { SendIcon, SparklesIcon, FileTextIcon, UserIcon, CalendarIcon, ClockIcon, BotIcon, Loader2Icon, AlertCircleIcon, CheckIcon, XIcon } from "lucide-react"
+import { useState, useRef, useEffect } from "react"
+import { useSendMessage, useAISettings, useApproveAction, useRejectAction } from "@/lib/hooks/use-ai"
+import { useQuery } from "@tanstack/react-query"
+import { api } from "@/lib/api"
+
+interface CaseOption {
+    id: string
+    case_number: string
+    full_name: string
+}
+
+interface Message {
+    id: string
+    role: "user" | "assistant"
+    content: string
+    timestamp: string
+    proposed_actions?: ProposedAction[]
+}
+
+interface ProposedAction {
+    approval_id: string
+    action_type: string
+    action_data: Record<string, unknown>
+    status: string
+}
+
+// Fetch recent cases for the selector
+function useCases() {
+    return useQuery({
+        queryKey: ['cases', 'ai-selector'],
+        queryFn: async () => {
+            const response = await api.get<{ items: CaseOption[] }>('/cases?per_page=20');
+            return response.items;
+        },
+        staleTime: 60 * 1000,
+    });
+}
 
 export default function AIAssistantPage() {
+    const [selectedCaseId, setSelectedCaseId] = useState<string>("")
     const [message, setMessage] = useState("")
-    const [messages, setMessages] = useState([
+    const [messages, setMessages] = useState<Message[]>([
         {
-            id: 1,
+            id: "welcome",
             role: "assistant",
-            content: "Hello! I'm your AI assistant. How can I help you with your surrogacy cases today?",
-            timestamp: "10:30 AM",
+            content: "Hello! I'm your AI assistant. Select a case above to start chatting about it, or use the quick actions to get started.",
+            timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
         },
     ])
+    const messagesEndRef = useRef<HTMLDivElement>(null)
+
+    const { data: cases, isLoading: casesLoading } = useCases()
+    const { data: aiSettings } = useAISettings()
+    const sendMessage = useSendMessage()
+    const approveAction = useApproveAction()
+    const rejectAction = useRejectAction()
 
     const quickActions = [
-        { icon: FileTextIcon, label: "Summarize Case", color: "text-blue-500" },
-        { icon: UserIcon, label: "Draft Email", color: "text-green-500" },
-        { icon: CalendarIcon, label: "Schedule Meeting", color: "text-purple-500" },
-        { icon: ClockIcon, label: "Generate Report", color: "text-orange-500" },
+        { icon: FileTextIcon, label: "Summarize this case", color: "text-blue-500" },
+        { icon: UserIcon, label: "Draft a follow-up email", color: "text-green-500" },
+        { icon: CalendarIcon, label: "What are the next steps?", color: "text-purple-500" },
+        { icon: ClockIcon, label: "Create a task list", color: "text-orange-500" },
     ]
 
     const suggestedActions = [
-        "Review pending cases from this week",
-        "Draft welcome email for new intended parents",
-        "Summarize recent activity for Case #12345",
-        "Create task list for upcoming screenings",
+        "What's the current status of this case?",
+        "Are there any pending tasks?",
+        "Summarize recent notes",
+        "Draft an email to the intended parents",
     ]
 
-    const pastConversations = [
-        { id: 1, title: "Case #12345 Summary", date: "Today, 9:15 AM", preview: "Generated case summary for..." },
-        { id: 2, title: "Email Draft for IPs", date: "Yesterday, 4:30 PM", preview: "Drafted welcome email..." },
-        { id: 3, title: "Workflow Automation", date: "Dec 15, 2:20 PM", preview: "Discussed task automation..." },
-        { id: 4, title: "Report Generation", date: "Dec 14, 11:45 AM", preview: "Created monthly report..." },
-        { id: 5, title: "Case Analysis", date: "Dec 13, 3:10 PM", preview: "Analyzed case timeline..." },
-    ]
+    // Scroll to bottom when messages change
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, [messages])
 
-    const handleSend = () => {
-        if (!message.trim()) return
+    const handleSend = async () => {
+        if (!message.trim() || !selectedCaseId) return
 
-        const newMessage = {
-            id: messages.length + 1,
-            role: "user" as const,
+        const userMessage: Message = {
+            id: `user-${Date.now()}`,
+            role: "user",
             content: message,
             timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
         }
 
-        setMessages([...messages, newMessage])
+        setMessages(prev => [...prev, userMessage])
         setMessage("")
 
-        // Simulate AI response
-        setTimeout(() => {
-            const aiResponse = {
-                id: messages.length + 2,
-                role: "assistant" as const,
-                content: "I understand. Let me help you with that. I'm processing your request...",
+        try {
+            const response = await sendMessage.mutateAsync({
+                entity_type: 'case',
+                entity_id: selectedCaseId,
+                message: message,
+            })
+
+            const aiMessage: Message = {
+                id: `ai-${Date.now()}`,
+                role: "assistant",
+                content: response.content,
+                timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+                proposed_actions: response.proposed_actions,
+            }
+
+            setMessages(prev => [...prev, aiMessage])
+        } catch (error) {
+            const errorMessage: Message = {
+                id: `error-${Date.now()}`,
+                role: "assistant",
+                content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
                 timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
             }
-            setMessages((prev) => [...prev, aiResponse])
-        }, 1000)
+            setMessages(prev => [...prev, errorMessage])
+        }
     }
+
+    const handleApprove = async (approvalId: string) => {
+        try {
+            await approveAction.mutateAsync(approvalId)
+            // Update the action status in messages
+            setMessages(prev => prev.map(msg => ({
+                ...msg,
+                proposed_actions: msg.proposed_actions?.map(action =>
+                    action.approval_id === approvalId ? { ...action, status: 'approved' } : action
+                )
+            })))
+        } catch (error) {
+            console.error('Failed to approve action:', error)
+        }
+    }
+
+    const handleReject = async (approvalId: string) => {
+        try {
+            await rejectAction.mutateAsync(approvalId)
+            setMessages(prev => prev.map(msg => ({
+                ...msg,
+                proposed_actions: msg.proposed_actions?.map(action =>
+                    action.approval_id === approvalId ? { ...action, status: 'rejected' } : action
+                )
+            })))
+        } catch (error) {
+            console.error('Failed to reject action:', error)
+        }
+    }
+
+    const selectedCase = cases?.find(c => c.id === selectedCaseId)
+    const isAIEnabled = aiSettings?.is_enabled
+    const modelName = aiSettings?.model || aiSettings?.provider?.toUpperCase() || 'AI'
 
     return (
         <div className="flex h-[calc(100vh-4rem)] flex-col">
             {/* Header */}
             <div className="flex shrink-0 items-center gap-3 border-b p-4">
                 <SidebarTrigger />
-                <div>
+                <div className="flex-1">
                     <h1 className="text-xl font-bold">AI Assistant</h1>
                     <p className="text-xs text-muted-foreground">Get help with your cases, tasks, and workflows</p>
                 </div>
+                {/* Case Selector */}
+                <Select value={selectedCaseId} onValueChange={(v) => setSelectedCaseId(v ?? "")}>
+                    <SelectTrigger className="w-64">
+                        <SelectValue placeholder={casesLoading ? "Loading cases..." : "Select a case"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {cases?.map(c => (
+                            <SelectItem key={c.id} value={c.id}>
+                                #{c.case_number} - {c.full_name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
             </div>
 
-            {/* Main Content - fills remaining height */}
+            {/* AI Not Enabled Warning */}
+            {aiSettings && !isAIEnabled && (
+                <div className="mx-4 mt-4 flex items-center gap-3 rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-3">
+                    <AlertCircleIcon className="h-5 w-5 text-yellow-500" />
+                    <div className="flex-1">
+                        <p className="text-sm font-medium">AI Assistant is not enabled</p>
+                        <p className="text-xs text-muted-foreground">Contact your manager to enable AI features and configure an API key.</p>
+                    </div>
+                </div>
+            )}
+
+            {/* Main Content */}
             <div className="grid min-h-0 flex-1 gap-4 p-4 lg:grid-cols-[280px_1fr]">
                 {/* Left Sidebar - scrollable */}
                 <div className="hidden lg:block lg:overflow-y-auto">
@@ -95,6 +209,7 @@ export default function AIAssistantPage() {
                                         size="sm"
                                         className="w-full justify-start gap-2 bg-transparent text-sm"
                                         onClick={() => setMessage(action.label)}
+                                        disabled={!selectedCaseId}
                                     >
                                         <action.icon className={`h-3.5 w-3.5 ${action.color}`} />
                                         {action.label}
@@ -112,7 +227,8 @@ export default function AIAssistantPage() {
                                     <button
                                         key={index}
                                         onClick={() => setMessage(suggestion)}
-                                        className="flex w-full items-start gap-2 rounded-md py-1 text-left hover:bg-muted/50 transition-colors"
+                                        disabled={!selectedCaseId}
+                                        className="flex w-full items-start gap-2 rounded-md py-1 text-left hover:bg-muted/50 transition-colors disabled:opacity-50"
                                     >
                                         <SparklesIcon className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-teal-500" />
                                         <span className="text-sm leading-tight">{suggestion}</span>
@@ -121,27 +237,21 @@ export default function AIAssistantPage() {
                             </div>
                         </Card>
 
-                        {/* Past Conversations */}
-                        <Card className="gap-2 py-3 px-3">
-                            <div className="text-sm font-medium">Past Conversations</div>
-                            <div className="text-xs text-muted-foreground">Your recent chats</div>
-                            <div className="space-y-1.5">
-                                {pastConversations.map((conv) => (
-                                    <button
-                                        key={conv.id}
-                                        className="flex w-full flex-col items-start gap-0.5 rounded-md border p-2 text-left hover:bg-muted/50 transition-colors"
-                                    >
-                                        <div className="font-medium text-sm">{conv.title}</div>
-                                        <div className="text-xs text-muted-foreground">{conv.date}</div>
-                                        <div className="text-xs text-muted-foreground line-clamp-1">{conv.preview}</div>
-                                    </button>
-                                ))}
-                            </div>
-                        </Card>
+                        {/* Selected Case Info */}
+                        {selectedCase && (
+                            <Card className="gap-2 py-3 px-3">
+                                <div className="text-sm font-medium">Current Case</div>
+                                <div className="text-xs text-muted-foreground">Chatting about:</div>
+                                <div className="rounded-md border p-2">
+                                    <div className="font-medium text-sm">#{selectedCase.case_number}</div>
+                                    <div className="text-xs text-muted-foreground">{selectedCase.full_name}</div>
+                                </div>
+                            </Card>
+                        )}
                     </div>
                 </div>
 
-                {/* Right Chat Window - fixed height, input at bottom */}
+                {/* Right Chat Window */}
                 <Card className="flex min-h-0 flex-col">
                     <CardHeader className="shrink-0 border-b py-3">
                         <div className="flex items-center gap-3">
@@ -151,12 +261,14 @@ export default function AIAssistantPage() {
                             <div className="flex-1">
                                 <CardTitle className="text-sm">AI Assistant</CardTitle>
                                 <div className="flex items-center gap-1.5">
-                                    <div className="h-1.5 w-1.5 rounded-full bg-green-500"></div>
-                                    <CardDescription className="text-xs">Online</CardDescription>
+                                    <div className={`h-1.5 w-1.5 rounded-full ${isAIEnabled ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                                    <CardDescription className="text-xs">
+                                        {isAIEnabled ? 'Online' : 'Not configured'}
+                                    </CardDescription>
                                 </div>
                             </div>
                             <Badge variant="secondary" className="text-[10px]">
-                                GPT-4
+                                {modelName}
                             </Badge>
                         </div>
                     </CardHeader>
@@ -165,36 +277,103 @@ export default function AIAssistantPage() {
                     <ScrollArea className="flex-1 min-h-0">
                         <div className="space-y-3 p-4">
                             {messages.map((msg) => (
-                                <div key={msg.id} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                                    {msg.role === "assistant" && (
-                                        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
-                                            <BotIcon className="h-3.5 w-3.5 text-primary" />
+                                <div key={msg.id} className="space-y-2">
+                                    <div className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                                        {msg.role === "assistant" && (
+                                            <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
+                                                <BotIcon className="h-3.5 w-3.5 text-primary" />
+                                            </div>
+                                        )}
+                                        <div className={`max-w-[80%] space-y-0.5 ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                                            <div
+                                                className={`rounded-lg px-3 py-2 ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
+                                                    }`}
+                                            >
+                                                <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                                            </div>
+                                            <p className="px-1 text-[10px] text-muted-foreground">{msg.timestamp}</p>
                                         </div>
-                                    )}
-                                    <div className={`max-w-[80%] space-y-0.5 ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                                        <div
-                                            className={`rounded-lg px-3 py-2 ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
-                                                }`}
-                                        >
-                                            <p className="text-sm leading-relaxed">{msg.content}</p>
-                                        </div>
-                                        <p className="px-1 text-[10px] text-muted-foreground">{msg.timestamp}</p>
+                                        {msg.role === "user" && (
+                                            <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-muted">
+                                                <UserIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                                            </div>
+                                        )}
                                     </div>
-                                    {msg.role === "user" && (
-                                        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-muted">
-                                            <UserIcon className="h-3.5 w-3.5 text-muted-foreground" />
+
+                                    {/* Proposed Actions */}
+                                    {msg.proposed_actions && msg.proposed_actions.length > 0 && (
+                                        <div className="ml-9 space-y-2">
+                                            {msg.proposed_actions.map((action) => (
+                                                <div
+                                                    key={action.approval_id}
+                                                    className="rounded-lg border bg-muted/50 p-3"
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <div>
+                                                            <div className="text-xs font-medium text-muted-foreground uppercase">
+                                                                Proposed Action
+                                                            </div>
+                                                            <div className="text-sm font-medium capitalize">
+                                                                {action.action_type.replace(/_/g, ' ')}
+                                                            </div>
+                                                        </div>
+                                                        {action.status === 'pending' ? (
+                                                            <div className="flex gap-2">
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    onClick={() => handleReject(action.approval_id)}
+                                                                    disabled={rejectAction.isPending}
+                                                                >
+                                                                    <XIcon className="h-4 w-4" />
+                                                                </Button>
+                                                                <Button
+                                                                    size="sm"
+                                                                    onClick={() => handleApprove(action.approval_id)}
+                                                                    disabled={approveAction.isPending}
+                                                                >
+                                                                    <CheckIcon className="h-4 w-4 mr-1" />
+                                                                    Approve
+                                                                </Button>
+                                                            </div>
+                                                        ) : (
+                                                            <Badge variant={action.status === 'approved' ? 'default' : 'secondary'}>
+                                                                {action.status}
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                    <pre className="mt-2 text-xs bg-background/50 p-2 rounded overflow-x-auto">
+                                                        {JSON.stringify(action.action_data, null, 2)}
+                                                    </pre>
+                                                </div>
+                                            ))}
                                         </div>
                                     )}
                                 </div>
                             ))}
+
+                            {/* Loading indicator */}
+                            {sendMessage.isPending && (
+                                <div className="flex gap-2 justify-start">
+                                    <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
+                                        <BotIcon className="h-3.5 w-3.5 text-primary" />
+                                    </div>
+                                    <div className="rounded-lg px-3 py-2 bg-muted">
+                                        <Loader2Icon className="h-4 w-4 animate-spin" />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Scroll anchor */}
+                            <div ref={messagesEndRef} />
                         </div>
                     </ScrollArea>
 
-                    {/* Input Area - fixed at bottom */}
+                    {/* Input Area */}
                     <CardContent className="shrink-0 border-t p-3">
                         <div className="flex gap-2">
                             <Input
-                                placeholder="Type your message..."
+                                placeholder={selectedCaseId ? "Type your message..." : "Select a case to start chatting"}
                                 value={message}
                                 onChange={(e) => setMessage(e.target.value)}
                                 onKeyDown={(e) => {
@@ -204,15 +383,26 @@ export default function AIAssistantPage() {
                                     }
                                 }}
                                 className="flex-1 text-sm"
+                                disabled={!selectedCaseId || !isAIEnabled || sendMessage.isPending}
                             />
-                            <Button onClick={handleSend} size="icon" disabled={!message.trim()}>
-                                <SendIcon className="h-4 w-4" />
+                            <Button
+                                onClick={handleSend}
+                                size="icon"
+                                disabled={!message.trim() || !selectedCaseId || !isAIEnabled || sendMessage.isPending}
+                            >
+                                {sendMessage.isPending ? (
+                                    <Loader2Icon className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <SendIcon className="h-4 w-4" />
+                                )}
                             </Button>
                         </div>
-                        <p className="mt-1.5 text-[10px] text-muted-foreground">Press Enter to send</p>
+                        <p className="mt-1.5 text-[10px] text-muted-foreground">
+                            {!selectedCaseId ? "Select a case above to start" : "Press Enter to send"}
+                        </p>
                     </CardContent>
                 </Card>
             </div>
-        </div >
+        </div>
     )
 }
