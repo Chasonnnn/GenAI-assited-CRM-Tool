@@ -391,6 +391,16 @@ def approve_action(
         entity_id=conversation.entity_id,
     )
     
+    # Audit log
+    from app.services import audit_service
+    audit_service.log_ai_action_approved(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        approval_id=approval.id,
+        action_type=approval.action_type,
+    )
+    
     db.commit()
     
     return ActionApprovalResponse(
@@ -440,6 +450,17 @@ def reject_action(
     # Mark as rejected
     approval.status = "rejected"
     approval.executed_at = datetime.utcnow()
+    
+    # Audit log
+    from app.services import audit_service
+    audit_service.log_ai_action_rejected(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        approval_id=approval.id,
+        action_type=approval.action_type,
+    )
+    
     db.commit()
     
     return {
