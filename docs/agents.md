@@ -48,6 +48,15 @@ We aim to keep the codebase **generalizable** so an open-source “core CRM” c
 - Avoid hard-coding surrogacy-only assumptions into shared core logic; isolate domain specifics behind configuration or clearly named modules.
 - Keep multi-tenancy and authorization rules identical across all verticals.
 
+## 1.2) Development Rules
+
+### **No Backward Compatibility** - Break Old Formats Freely
+- This is an in-house, rapidly evolving project.
+- **Breaking changes are acceptable** - prioritize better design over maintaining old formats.
+- When improving data structures, API contracts, or database schemas, make the cleanest change without worrying about backward compatibility.
+- Users can re-migrate, re-sync, or update their integrations as needed.
+- Focus on **current best practices**, not legacy support.
+
 ## 2) Tech Stack (Target)
 
 ### Frontend
