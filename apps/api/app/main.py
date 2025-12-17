@@ -1,29 +1,77 @@
 """FastAPI application entry point."""
+import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.core.config import settings
 from app.db.session import engine
-from app.routers import auth, cases, notes, tasks, webhooks, email_templates, jobs, intended_parents, notifications
+
+# ============================================================================
+# Sentry Integration (optional, for production error tracking)
+# ============================================================================
+
+if settings.SENTRY_DSN and settings.ENV != "dev":
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+    
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.ENV,
+        integrations=[
+            FastApiIntegration(transaction_style="endpoint"),
+            SqlalchemyIntegration(),
+        ],
+        traces_sample_rate=0.1,  # 10% of requests for performance monitoring
+        send_default_pii=False,  # Don't send PII to Sentry
+    )
+    logging.info("Sentry initialized for error tracking")
+
+# ============================================================================
+# Rate Limiting
+# ============================================================================
+
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+
+# ============================================================================
+# FastAPI App
+# ============================================================================
 
 app = FastAPI(
     title="CRM API",
     description="Multi-tenant CRM and case management API",
-    version="0.4.0",
+    version="0.5.0",
     docs_url="/docs" if settings.ENV == "dev" else None,
     redoc_url="/redoc" if settings.ENV == "dev" else None,
 )
 
+# Add rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # CORS middleware - must be added before routers
+# Tightened for production
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,  # Required for cookies
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+    expose_headers=["X-Request-ID"],
 )
+
+# ============================================================================
+# Routers
+# ============================================================================
+
+from app.routers import auth, cases, notes, tasks, webhooks, email_templates, jobs, intended_parents, notifications
 
 # Auth router (always mounted)
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -72,6 +120,10 @@ if settings.ENV == "dev":
     app.include_router(dev.router, prefix="/dev", tags=["dev"])
 
 
+# ============================================================================
+# Health Check
+# ============================================================================
+
 @app.get("/health")
 def health():
     """
@@ -81,4 +133,4 @@ def health():
     """
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
-    return {"status": "ok", "env": settings.ENV, "version": "0.2.0"}
+    return {"status": "ok", "env": settings.ENV, "version": "0.5.0"}

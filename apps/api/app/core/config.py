@@ -70,6 +70,14 @@ class Settings(BaseSettings):
     # Gmail OAuth (per-user, different from Google Login OAuth)
     GMAIL_REDIRECT_URI: str = "http://localhost:8000/integrations/gmail/callback"
     
+    # Error Tracking (optional, set in production)
+    SENTRY_DSN: str = ""  # Get from https://sentry.io
+    
+    # Rate Limiting (requests per minute)
+    RATE_LIMIT_AUTH: int = 5  # Login attempts
+    RATE_LIMIT_WEBHOOK: int = 100  # Meta webhooks
+    RATE_LIMIT_API: int = 60  # General API
+    
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse CORS_ORIGINS into a list."""
