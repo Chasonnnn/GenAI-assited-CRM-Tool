@@ -219,92 +219,24 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ## Current Status
 
-**Week 10 Complete** — Ops Console + Manager Analytics:
+**Week 10+ Complete** — AI Assistant Tab + Meta Ads Spend:
 
-- [x] Project scaffolding (monorepo structure)
-- [x] PostgreSQL with Docker Compose
-- [x] FastAPI with health endpoint
-- [x] SQLAlchemy + Alembic migrations configured
-- [x] Next.js with App Router and (app) route group
-- [x] Basic layout with sidebar/topbar
-- [x] Google OAuth SSO with state/nonce/user-agent binding
-- [x] Invite-only access (one pending invite per email globally)
-- [x] JWT sessions in HTTP-only cookies with key rotation
-- [x] Role-based authorization (4 roles: intake_specialist, case_manager, manager, developer)
-- [x] Tenant isolation via Membership (one org per user)
-- [x] CLI bootstrap + dev endpoints
-- [x] **Cases module complete (backend):**
-  - [x] Cases CRUD with sequential numbering
-  - [x] Phone normalization (E.164) and state validation
-  - [x] Soft-delete (archive/restore) with status sync
-  - [x] Status history tracking
-  - [x] Notes (2-4000 chars) with XSS sanitization (nh3)
-  - [x] Tasks (with due dates and completion)
-  - [x] Meta webhook skeleton
-  - [x] **Case handoff workflow (intake → case manager)**
-    - [x] `pending_handoff` status (manual, intake submits when ready)
-    - [x] Handoff queue endpoint (case_manager+ only)
-    - [x] Accept/Deny endpoints with reason tracking
-    - [x] Role-based access control (intake can't see post-handoff cases)
-    - [x] Transition guards (intake can't skip handoff)
-- [x] **Intended Parents module complete (Week 6):**
-  - [x] IP CRUD with full name, email, phone, state, budget
-  - [x] Status workflow (new → contacted → in_review → qualified → matched → declined → on_hold)
-  - [x] Archive/restore with status preservation and duplicate email check
-  - [x] State/phone normalization validators
-  - [x] Polymorphic EntityNotes supporting both Cases and IPs
-  - [x] CSRF protection on all mutations
-  - [x] Frontend pages (list with filters, detail with tabs)
-- [x] **Frontend UI complete (v0 design):**
-  - [x] Login page (Duo SSO + username option, glassmorphism)
-  - [x] Dashboard (stats cards, charts, recent activity)
-  - [x] Cases List (filters, search, table, pagination)
-    - [x] Pending Handoff tab (case_manager+ only, with badge)
-  - [x] Case Detail (tabs, status updates, notes)
-  - [x] Tasks page (Kanban-style, filters)
-  - [x] Intended Parents (list, filters, actions)
-  - [x] Reports (4 chart types with recharts 3.5.1)
-  - [x] Settings (5 tabs: Profile, Org, Notifications, Integrations, Security)
-  - [x] Automation (Workflows + Templates tabs)
-  - [x] App Sidebar with navigation
-- [x] **Dependencies upgraded (2025-12-14):**
-  - [x] Next.js 16.0.10, React 19.2.3, Zod 4.1.13, recharts 3.5.1
-  - [x] All Radix UI components to latest versions
-  - [x] Base UI combobox/pagination fixed for render prop compatibility
-- [x] **Case Management Enhancements (2025-12-15):**
-  - [x] Priority cases with `is_priority` field and gold highlighting
-  - [x] Comprehensive activity logging (12 activity types)
-  - [x] Activity Log tab replacing Status History
-  - [x] Multi-select with checkboxes and floating action bar
-  - [x] Bulk assign (case_manager+) and bulk archive (all roles)
-  - [x] Case inline editing dialog
-  - [x] Permission alignment (case_manager can now assign)
-- [x] **In-App Notifications + Theme System (Week 8):**
-  - [x] Notification model with dedupe, read status, org-scoping
-  - [x] 6 notification types (case/task events)
-  - [x] User notification settings (toggleable per type)
-  - [x] NotificationBell component with unread badge
-  - [x] Notifications page (/notifications)
-  - [x] Settings page wired to real notifications API
-  - [x] Theme system (light/dark/system) with Stone + Teal colors
-  - [x] ThemeToggle dropdown in header
-  - [x] 30-second polling for real-time updates
-- [x] **Meta Lead Ads Integration (Week 9):**
-  - [x] Webhook endpoint with HMAC signature verification
-  - [x] Auto-conversion: Meta leads → Cases (source=META)
-  - [x] Campaign tracking (meta_ad_id, meta_form_id)
-  - [x] Meta Conversions API (CAPI) on qualified/approved
-  - [x] CLI: update-meta-page-token, deactivate-meta-page
-  - [x] New statuses: qualified, applied
-  - [x] New workflow: contacted → qualified → applied → under_review → approved → pending_handoff
-- [x] **Ops Console + Manager Analytics (Week 10):**
-  - [x] Integration health tracking (status, errors, 24h rollups)
-  - [x] System alerts with fingerprint-based deduplication
-  - [x] Analytics endpoints (summary, by-status, by-assignee, trend, Meta performance)
-  - [x] Ops endpoints (health, alerts with resolve/acknowledge/snooze)
-  - [x] Scheduled token-check endpoint for Meta token expiry
-  - [x] Frontend: /reports with real data, /settings/alerts, /settings/integrations
-- [ ] AI Assistant (Week 11)
+- [x] Project scaffolding + PostgreSQL + migrations
+- [x] Google OAuth SSO + JWT sessions + role-based auth
+- [x] Cases module (CRUD, notes, tasks, status history, handoff workflow)
+- [x] Intended Parents module (CRUD, status workflow, archive/restore)
+- [x] Frontend UI (v0 design implementation with shadcn/ui)
+- [x] Frontend-Backend integration with React Query
+- [x] Workflow automation + email foundation
+- [x] Case management enhancements (priority, activity log, bulk ops)
+- [x] In-App Notifications + Theme System (light/dark)
+- [x] Meta Lead Ads Integration + CAPI
+- [x] Ops Console + Manager Analytics
+- [x] AI Assistant Tab (ChatGPT-style layout, feature toggle)
+- [x] Meta Ads Spend Integration (spend endpoint, CPL calculation)
+- [x] Theme Toggle Animation (View Transitions API)
+- [ ] AI Chat Integration (Week 11)
+- [ ] Deployment + Hardening (Week 12)
 
 ## Documentation
 

@@ -41,6 +41,7 @@ import {
     User,
     Bell,
     Zap,
+    Bot,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { NotificationBell } from "@/components/notification-bell"
@@ -77,12 +78,19 @@ const navigation = [
         url: "/automation",
         icon: Zap,
     },
-    {
-        title: "Settings",
-        url: "/settings",
-        icon: Settings,
-    },
 ]
+
+const aiNavigation = {
+    title: "AI Assistant",
+    url: "/ai-assistant",
+    icon: Bot,
+}
+
+const settingsNavigation = {
+    title: "Settings",
+    url: "/settings",
+    icon: Settings,
+}
 
 interface AppSidebarProps {
     children: React.ReactNode
@@ -173,6 +181,32 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                     </Link>
                                 </SidebarMenuItem>
                             ))}
+                            {/* AI Assistant - only shown if enabled for org */}
+                            {user?.ai_enabled && (
+                                <SidebarMenuItem>
+                                    <Link href={aiNavigation.url}>
+                                        <SidebarMenuButton
+                                            isActive={pathname === aiNavigation.url || pathname?.startsWith(aiNavigation.url + "/")}
+                                            tooltip={aiNavigation.title}
+                                        >
+                                            <aiNavigation.icon />
+                                            <span>{aiNavigation.title}</span>
+                                        </SidebarMenuButton>
+                                    </Link>
+                                </SidebarMenuItem>
+                            )}
+                            {/* Settings */}
+                            <SidebarMenuItem>
+                                <Link href={settingsNavigation.url}>
+                                    <SidebarMenuButton
+                                        isActive={pathname === settingsNavigation.url || pathname?.startsWith(settingsNavigation.url + "/")}
+                                        tooltip={settingsNavigation.title}
+                                    >
+                                        <settingsNavigation.icon />
+                                        <span>{settingsNavigation.title}</span>
+                                    </SidebarMenuButton>
+                                </Link>
+                            </SidebarMenuItem>
                         </SidebarMenu>
                     </SidebarGroup>
                 </SidebarContent>

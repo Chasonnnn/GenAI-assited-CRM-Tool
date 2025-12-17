@@ -400,9 +400,22 @@ Constraints:
   - **Week 8 complete:** In-App Notifications + Theme System
   - **Week 9 complete:** Meta Lead Ads Integration + CAPI
   - **Week 10 complete:** Ops Console + Manager Analytics
-- **In progress:** None (Week 10 just completed)
+  - **Week 10+ complete:** AI Assistant Tab + Meta Ads Spend Integration + UI Refinements
+- **In progress:** None
 - **Blockers:** None
-- **Next milestones:** AI assistant (Week 11), deployment (Week 12)
+- **Next milestones:** AI chat integration (Week 11), deployment (Week 12)
+
+### Week 10+ (2025-12-16): AI Assistant Tab + Meta Ads Spend + UI Refinements
+- **Completed:**
+  - AI Assistant page (`/ai-assistant`) with ChatGPT-style layout
+  - `ai_enabled` feature toggle on Organization model
+  - AI sidebar link conditional on org's `ai_enabled` setting
+  - Meta Ads Spend endpoint (`GET /analytics/meta/spend`)
+  - `fetch_ad_account_insights()` in meta_api.py
+  - Ad Spend summary card in Reports dashboard (total spend, CPL)
+  - Circle blur theme toggle animation (View Transitions API)
+  - Global font changed to Noto Sans
+  - DateRangePicker UX improvements (stays open during selection)
 
 ### Week 6 (2025-12-14): Intended Parents Module + Dependencies
 - **Completed:**

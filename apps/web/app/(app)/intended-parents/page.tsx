@@ -45,6 +45,7 @@ import {
     useCreateIntendedParent,
 } from "@/lib/hooks/use-intended-parents"
 import type { IntendedParentStatus, IntendedParentListItem } from "@/lib/types/intended-parent"
+import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 
 const STATUS_LABELS: Record<IntendedParentStatus, string> = {
     new: "New",
@@ -63,6 +64,11 @@ const STATUS_COLORS: Record<IntendedParentStatus, string> = {
 export default function IntendedParentsPage() {
     const [search, setSearch] = useState("")
     const [statusFilter, setStatusFilter] = useState<string>("all")
+    const [dateRange, setDateRange] = useState<DateRangePreset>('all')
+    const [customRange, setCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
+        from: undefined,
+        to: undefined,
+    })
     const [page, setPage] = useState(1)
     const [isCreateOpen, setIsCreateOpen] = useState(false)
 
@@ -195,6 +201,12 @@ export default function IntendedParentsPage() {
                             <SelectItem value="inactive">Inactive</SelectItem>
                         </SelectContent>
                     </Select>
+                    <DateRangePicker
+                        preset={dateRange}
+                        onPresetChange={setDateRange}
+                        customRange={customRange}
+                        onCustomRangeChange={setCustomRange}
+                    />
                 </div>
 
                 {/* Table */}

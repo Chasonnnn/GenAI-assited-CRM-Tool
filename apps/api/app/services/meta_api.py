@@ -205,3 +205,109 @@ def _mock_lead_data(leadgen_id: str) -> dict:
         "page_id": "mock_page_456",
         "ad_id": "mock_ad_789",
     }
+
+
+async def fetch_ad_account_insights(
+    ad_account_id: str,
+    access_token: str,
+    date_start: str,
+    date_end: str,
+    level: str = "campaign",
+) -> tuple[list[dict] | None, str | None]:
+    """
+    Fetch ad insights (spend, impressions, etc.) from Meta Marketing API.
+    
+    Args:
+        ad_account_id: Meta Ad Account ID (format: act_XXXXX)
+        access_token: User/system access token with ads_read permission
+        date_start: Start date (YYYY-MM-DD)
+        date_end: End date (YYYY-MM-DD)
+        level: Breakdown level (campaign, adset, ad)
+        
+    Returns:
+        (data, error) tuple - data is list of insight objects
+    """
+    if settings.META_TEST_MODE:
+        return _mock_insights_data(date_start, date_end), None
+    
+    if not access_token:
+        return None, "No access token provided"
+    
+    if not ad_account_id:
+        return None, "No ad account ID provided"
+    
+    proof = compute_appsecret_proof(access_token)
+    url = f"{_graph_base()}/{ad_account_id}/insights"
+    params = {
+        "access_token": access_token,
+        "appsecret_proof": proof,
+        "fields": "campaign_id,campaign_name,spend,impressions,reach,clicks,actions",
+        "level": level,
+        "time_range": f'{{"since":"{date_start}","until":"{date_end}"}}',
+    }
+    
+    try:
+        async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
+            resp = await client.get(url, params=params)
+            
+            if resp.status_code != 200:
+                error_body = resp.text[:500]
+                return None, f"Meta API {resp.status_code}: {error_body}"
+            
+            data = resp.json()
+            return data.get("data", []), None
+            
+    except httpx.TimeoutException:
+        return None, "Meta API timeout"
+    except httpx.ConnectError:
+        return None, "Meta API connection failed"
+    except Exception as e:
+        return None, f"Meta API error: {str(e)[:200]}"
+
+
+def _mock_insights_data(date_start: str, date_end: str) -> list[dict]:
+    """Return mock insights data for test mode."""
+    return [
+        {
+            "campaign_id": "camp_001",
+            "campaign_name": "Surrogacy Leads - CA",
+            "spend": "1250.50",
+            "impressions": "45000",
+            "reach": "32000",
+            "clicks": "850",
+            "actions": [
+                {"action_type": "lead", "value": "42"},
+                {"action_type": "link_click", "value": "850"},
+            ],
+            "date_start": date_start,
+            "date_stop": date_end,
+        },
+        {
+            "campaign_id": "camp_002", 
+            "campaign_name": "Surrogacy Leads - TX",
+            "spend": "980.25",
+            "impressions": "38000",
+            "reach": "28000",
+            "clicks": "620",
+            "actions": [
+                {"action_type": "lead", "value": "35"},
+                {"action_type": "link_click", "value": "620"},
+            ],
+            "date_start": date_start,
+            "date_stop": date_end,
+        },
+        {
+            "campaign_id": "camp_003",
+            "campaign_name": "Surrogacy Leads - FL", 
+            "spend": "875.00",
+            "impressions": "31000",
+            "reach": "24000",
+            "clicks": "510",
+            "actions": [
+                {"action_type": "lead", "value": "28"},
+                {"action_type": "link_click", "value": "510"},
+            ],
+            "date_start": date_start,
+            "date_stop": date_end,
+        },
+    ]

@@ -159,15 +159,16 @@ class UpdateStatusExecutor(ActionExecutor):
         if not case:
             return {"action": "update_status", "success": False, "error": "Case not found"}
         
-        old_status = case.status.value
-        case.status = CaseStatus(new_status)
+        old_status = case.status  # status is a string, not enum
+        case.status = new_status  # assign string value directly
         
         # Add status history entry
         from app.db.models import CaseStatusHistory
         history = CaseStatusHistory(
             case_id=entity_id,
-            previous_status=CaseStatus(old_status),
-            new_status=CaseStatus(new_status),
+            organization_id=org_id,
+            from_status=old_status,
+            to_status=new_status,
             changed_by_user_id=user_id,
         )
         db.add(history)

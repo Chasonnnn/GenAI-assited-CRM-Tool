@@ -47,6 +47,12 @@ class Organization(Base):
         server_default=text("now()"), 
         nullable=False
     )
+    # Feature flags
+    ai_enabled: Mapped[bool] = mapped_column(
+        default=False,
+        server_default=text("false"),
+        nullable=False
+    )
     
     # Relationships
     memberships: Mapped[list["Membership"]] = relationship(

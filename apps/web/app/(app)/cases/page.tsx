@@ -16,6 +16,7 @@ import { PlusIcon, MoreVerticalIcon, SearchIcon, XIcon, LoaderIcon, CheckIcon, A
 import { useCases, useArchiveCase, useRestoreCase, useUpdateCase, useAssignees, useBulkAssign, useBulkArchive } from "@/lib/hooks/use-cases"
 import { useAuth } from "@/lib/auth-context"
 import { STATUS_CONFIG, type CaseStatus, type CaseSource } from "@/lib/types/case"
+import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 
 // Format date for display
 function formatDate(dateString: string): string {
@@ -115,6 +116,11 @@ function FloatingActionBar({
 export default function CasesPage() {
     const [statusFilter, setStatusFilter] = useState<CaseStatus | "all">("all")
     const [sourceFilter, setSourceFilter] = useState<CaseSource | "all">("all")
+    const [dateRange, setDateRange] = useState<DateRangePreset>('all')
+    const [customRange, setCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
+        from: undefined,
+        to: undefined,
+    })
     const [searchQuery, setSearchQuery] = useState("")
     const [debouncedSearch, setDebouncedSearch] = useState("")
     const [page, setPage] = useState(1)
@@ -243,6 +249,13 @@ export default function CasesPage() {
                             <SelectItem value="referral">Referral</SelectItem>
                         </SelectContent>
                     </Select>
+
+                    <DateRangePicker
+                        preset={dateRange}
+                        onPresetChange={setDateRange}
+                        customRange={customRange}
+                        onCustomRangeChange={setCustomRange}
+                    />
 
                     <div className="relative ml-auto w-full max-w-sm">
                         <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />

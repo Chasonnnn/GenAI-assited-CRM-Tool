@@ -323,9 +323,16 @@ def chat(
         ChatMessage(role="system", content=SYSTEM_PROMPT + "\n\n" + dynamic_context),
     ]
     
-    # Add conversation history
+    # Add conversation history (anonymize if PII anonymization is enabled)
     for msg in history:
-        ai_messages.append(ChatMessage(role=msg.role, content=msg.content))
+        content = msg.content
+        if should_anonymize and pii_mapping and case:
+            known_names = []
+            if case.full_name:
+                known_names.append(case.full_name)
+                known_names.extend(case.full_name.split())
+            content = anonymize_text(content, pii_mapping, known_names)
+        ai_messages.append(ChatMessage(role=msg.role, content=content))
     
     # Add current user message (anonymized if enabled)
     ai_messages.append(ChatMessage(role="user", content=anonymized_message))

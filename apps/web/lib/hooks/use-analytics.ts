@@ -151,3 +151,15 @@ export function useCasesByStateCompare(params: CompareParams = {}) {
         staleTime: 60 * 1000,
     });
 }
+
+/**
+ * Fetch Meta Ads spend data.
+ */
+export function useMetaSpend(params: DateRangeParams = {}) {
+    return useQuery({
+        queryKey: [...analyticsKeys.all, 'meta-spend', params] as const,
+        queryFn: () => analyticsApi.getMetaSpend(params),
+        staleTime: 60 * 1000,
+    });
+}
+

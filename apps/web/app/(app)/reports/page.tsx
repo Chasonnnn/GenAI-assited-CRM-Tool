@@ -5,7 +5,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ChevronDownIcon, TrendingUpIcon, UsersIcon, CheckCircle2Icon, ClockIcon, Loader2Icon, AlertCircleIcon, FacebookIcon } from "lucide-react"
+import { ChevronDownIcon, TrendingUpIcon, UsersIcon, CheckCircle2Icon, ClockIcon, Loader2Icon, AlertCircleIcon, FacebookIcon, DollarSignIcon } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Line, LineChart, Pie, PieChart } from "recharts"
 import {
     ChartContainer,
@@ -14,7 +14,7 @@ import {
     ChartLegend,
     ChartLegendContent,
 } from "@/components/ui/chart"
-import { useAnalyticsSummary, useCasesByStatus, useCasesByAssignee, useCasesTrend, useMetaPerformance, useFunnelCompare, useCasesByStateCompare, useCampaigns } from "@/lib/hooks/use-analytics"
+import { useAnalyticsSummary, useCasesByStatus, useCasesByAssignee, useCasesTrend, useMetaPerformance, useFunnelCompare, useCasesByStateCompare, useCampaigns, useMetaSpend } from "@/lib/hooks/use-analytics"
 import { FunnelChart } from "@/components/charts/funnel-chart"
 import { USMapChart } from "@/components/charts/us-map-chart"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
@@ -90,6 +90,7 @@ export default function ReportsPage() {
     const { data: byAssignee, isLoading: byAssigneeLoading } = useCasesByAssignee()
     const { data: trend, isLoading: trendLoading } = useCasesTrend({ from_date: fromDate, to_date: toDate })
     const { data: metaPerf, isLoading: metaLoading } = useMetaPerformance({ from_date: fromDate, to_date: toDate })
+    const { data: metaSpend, isLoading: spendLoading } = useMetaSpend({ from_date: fromDate, to_date: toDate })
 
     // New hooks for funnel and map
     const { data: campaigns } = useCampaigns()
@@ -233,6 +234,27 @@ export default function ReportsPage() {
                                     <div className="text-2xl font-bold">{metaPerf?.conversion_rate ?? 0}%</div>
                                     <p className="text-xs text-muted-foreground">
                                         {metaPerf?.leads_converted ?? 0} / {metaPerf?.leads_received ?? 0} leads
+                                    </p>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    <Card className="animate-in fade-in-50 duration-500 delay-400">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Ad Spend</CardTitle>
+                            <DollarSignIcon className="size-4 text-muted-foreground" />
+                        </CardHeader>
+                        <CardContent>
+                            {spendLoading ? (
+                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                            ) : (
+                                <>
+                                    <div className="text-2xl font-bold">
+                                        ${metaSpend?.total_spend?.toLocaleString() ?? '0'}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                        CPL: ${metaSpend?.cost_per_lead?.toFixed(2) ?? 'N/A'}
                                     </p>
                                 </>
                             )}

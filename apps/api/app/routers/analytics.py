@@ -54,6 +54,25 @@ class MetaPerformance(BaseModel):
     avg_time_to_convert_hours: Optional[float]
 
 
+class CampaignSpend(BaseModel):
+    campaign_id: str
+    campaign_name: str
+    spend: float
+    impressions: int
+    reach: int
+    clicks: int
+    leads: int
+    cost_per_lead: Optional[float]
+
+
+class MetaSpendSummary(BaseModel):
+    total_spend: float
+    total_impressions: int
+    total_leads: int
+    cost_per_lead: Optional[float]
+    campaigns: list[CampaignSpend]
+
+
 # =============================================================================
 # Helper Functions
 # =============================================================================
@@ -266,6 +285,99 @@ def get_meta_performance(
         leads_converted=leads_converted,
         conversion_rate=round(conversion_rate, 1),
         avg_time_to_convert_hours=avg_hours,
+    )
+
+
+@router.get("/meta/spend", response_model=MetaSpendSummary)
+async def get_meta_spend(
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    db: Session = Depends(get_db),
+):
+    """
+    Get Meta Ads spend data from Marketing API.
+    
+    Returns total spend, impressions, leads and cost per lead,
+    broken down by campaign.
+    """
+    from app.core.config import settings
+    from app.services import meta_api
+    
+    start, end = parse_date_range(from_date, to_date)
+    
+    # Format dates for Meta API
+    date_start = start.strftime("%Y-%m-%d")
+    date_end = end.strftime("%Y-%m-%d")
+    
+    # Get ad account ID from settings (would come from org settings in production)
+    ad_account_id = getattr(settings, 'META_AD_ACCOUNT_ID', None) or "act_mock"
+    access_token = getattr(settings, 'META_SYSTEM_TOKEN', None) or "mock_token"
+    
+    # Fetch insights from Meta API
+    insights, error = await meta_api.fetch_ad_account_insights(
+        ad_account_id=ad_account_id,
+        access_token=access_token,
+        date_start=date_start,
+        date_end=date_end,
+        level="campaign",
+    )
+    
+    if error:
+        # Return empty data on error (could log or raise)
+        return MetaSpendSummary(
+            total_spend=0.0,
+            total_impressions=0,
+            total_leads=0,
+            cost_per_lead=None,
+            campaigns=[],
+        )
+    
+    # Process insights data
+    campaigns = []
+    total_spend = 0.0
+    total_impressions = 0
+    total_leads = 0
+    
+    for insight in insights:
+        spend = float(insight.get("spend", 0))
+        impressions = int(insight.get("impressions", 0))
+        reach = int(insight.get("reach", 0))
+        clicks = int(insight.get("clicks", 0))
+        
+        # Extract leads from actions array
+        leads = 0
+        actions = insight.get("actions", [])
+        for action in actions:
+            if action.get("action_type") == "lead":
+                leads = int(action.get("value", 0))
+                break
+        
+        cpl = round(spend / leads, 2) if leads > 0 else None
+        
+        campaigns.append(CampaignSpend(
+            campaign_id=insight.get("campaign_id", ""),
+            campaign_name=insight.get("campaign_name", "Unknown"),
+            spend=spend,
+            impressions=impressions,
+            reach=reach,
+            clicks=clicks,
+            leads=leads,
+            cost_per_lead=cpl,
+        ))
+        
+        total_spend += spend
+        total_impressions += impressions
+        total_leads += leads
+    
+    overall_cpl = round(total_spend / total_leads, 2) if total_leads > 0 else None
+    
+    return MetaSpendSummary(
+        total_spend=round(total_spend, 2),
+        total_impressions=total_impressions,
+        total_leads=total_leads,
+        cost_per_lead=overall_cpl,
+        campaigns=campaigns,
     )
 
 

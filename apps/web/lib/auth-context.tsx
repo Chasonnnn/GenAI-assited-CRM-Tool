@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import api from '@/lib/api';
 
 // TEMPORARY: Set to true to bypass auth for testing
-const DEV_BYPASS_AUTH = false;
+const DEV_BYPASS_AUTH = true;
 
 interface User {
     id: string;
@@ -16,6 +16,7 @@ interface User {
         slug: string;
     };
     role: string;
+    ai_enabled: boolean;
 }
 
 // Mock user for testing when auth is bypassed
@@ -29,6 +30,7 @@ const MOCK_USER: User = {
         slug: 'test-org',
     },
     role: 'manager',
+    ai_enabled: true, // Enable AI for testing
 };
 
 interface AuthContextType {
