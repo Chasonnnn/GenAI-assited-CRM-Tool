@@ -136,10 +136,11 @@ def update_settings(
     db: Session = Depends(get_db),
     session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
 ) -> AISettingsResponse:
-    """Update AI settings for the organization."""
+    """Update AI settings for the organization. Creates version snapshot."""
     settings = ai_settings_service.update_ai_settings(
         db,
         session.org_id,
+        session.user_id,
         is_enabled=update.is_enabled,
         provider=update.provider,
         api_key=update.api_key,
@@ -160,6 +161,7 @@ def update_settings(
         consent_accepted_at=settings.consent_accepted_at.isoformat() if settings.consent_accepted_at else None,
         consent_required=ai_settings_service.is_consent_required(settings),
     )
+
 
 
 @router.post("/settings/test", response_model=TestKeyResponse, dependencies=[Depends(require_csrf_header)])

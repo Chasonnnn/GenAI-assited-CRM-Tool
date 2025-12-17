@@ -1302,6 +1302,10 @@ class AISettings(Base):
     consent_accepted_at: Mapped[datetime | None] = mapped_column(nullable=True)
     consent_accepted_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     anonymize_pii: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    
+    # Version control
+    current_version: Mapped[int] = mapped_column(default=1, nullable=False)
+    
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     
