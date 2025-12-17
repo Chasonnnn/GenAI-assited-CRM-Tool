@@ -42,10 +42,14 @@ class Settings(BaseSettings):
     # Meta Lead Ads API
     META_APP_ID: str = ""
     META_APP_SECRET: str = ""
-    META_TEST_MODE: bool = True  # Set to False in production
+    META_TEST_MODE: bool = False  # Set to True only for local testing
     META_API_VERSION: str = "v21.0"
     META_ENCRYPTION_KEY: str = ""  # Fernet key for encrypting page tokens
     META_WEBHOOK_MAX_PAYLOAD_BYTES: int = 100000  # 100KB limit
+    
+    # Meta Ads Insights (spend/budget data)
+    META_AD_ACCOUNT_ID: str = ""  # Format: act_XXXXXX
+    META_SYSTEM_TOKEN: str = ""  # System user token with ads_read permission
     
     # Meta Conversions API (CAPI) - for sending lead quality signals back to Meta
     META_PIXEL_ID: str = ""  # Dataset ID for Conversions API

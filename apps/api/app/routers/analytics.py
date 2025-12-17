@@ -301,8 +301,11 @@ async def get_meta_spend(
     Returns total spend, impressions, leads and cost per lead,
     broken down by campaign.
     """
+    import logging
     from app.core.config import settings
     from app.services import meta_api
+    
+    logger = logging.getLogger(__name__)
     
     start, end = parse_date_range(from_date, to_date)
     
@@ -310,21 +313,13 @@ async def get_meta_spend(
     date_start = start.strftime("%Y-%m-%d")
     date_end = end.strftime("%Y-%m-%d")
     
-    # Get ad account ID from settings (would come from org settings in production)
-    ad_account_id = getattr(settings, 'META_AD_ACCOUNT_ID', None) or "act_mock"
-    access_token = getattr(settings, 'META_SYSTEM_TOKEN', None) or "mock_token"
+    # Get ad account ID and token from settings
+    ad_account_id = settings.META_AD_ACCOUNT_ID
+    access_token = settings.META_SYSTEM_TOKEN
     
-    # Fetch insights from Meta API
-    insights, error = await meta_api.fetch_ad_account_insights(
-        ad_account_id=ad_account_id,
-        access_token=access_token,
-        date_start=date_start,
-        date_end=date_end,
-        level="campaign",
-    )
-    
-    if error:
-        # Return empty data on error (could log or raise)
+    # Check if properly configured (unless test mode)
+    if not settings.META_TEST_MODE and (not ad_account_id or not access_token):
+        logger.warning("Meta Ads spend: META_AD_ACCOUNT_ID or META_SYSTEM_TOKEN not configured")
         return MetaSpendSummary(
             total_spend=0.0,
             total_impressions=0,
@@ -333,6 +328,45 @@ async def get_meta_spend(
             campaigns=[],
         )
     
+    # Fetch insights from Meta API
+    insights, error = await meta_api.fetch_ad_account_insights(
+        ad_account_id=ad_account_id or "act_mock",
+        access_token=access_token or "mock_token",
+        date_start=date_start,
+        date_end=date_end,
+        level="campaign",
+    )
+    
+    if error:
+        logger.error(f"Meta Ads spend API error: {error}")
+        return MetaSpendSummary(
+            total_spend=0.0,
+            total_impressions=0,
+            total_leads=0,
+            cost_per_lead=None,
+            campaigns=[],
+        )
+    
+    # Helper to safely parse numeric values (Meta often returns strings or empty)
+    def safe_float(val, default=0.0) -> float:
+        if val is None or val == "":
+            return default
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return default
+    
+    def safe_int(val, default=0) -> int:
+        if val is None or val == "":
+            return default
+        try:
+            return int(float(val))  # int(float()) handles "42.0"
+        except (ValueError, TypeError):
+            return default
+    
+    # Lead action types to check (Meta uses different names in different contexts)
+    LEAD_ACTION_TYPES = {"lead", "leadgen", "onsite_conversion.lead_grouped", "offsite_conversion.fb_pixel_lead"}
+    
     # Process insights data
     campaigns = []
     total_spend = 0.0
@@ -340,18 +374,18 @@ async def get_meta_spend(
     total_leads = 0
     
     for insight in insights:
-        spend = float(insight.get("spend", 0))
-        impressions = int(insight.get("impressions", 0))
-        reach = int(insight.get("reach", 0))
-        clicks = int(insight.get("clicks", 0))
+        spend = safe_float(insight.get("spend"))
+        impressions = safe_int(insight.get("impressions"))
+        reach = safe_int(insight.get("reach"))
+        clicks = safe_int(insight.get("clicks"))
         
-        # Extract leads from actions array
+        # Extract leads from actions array - check multiple action types
         leads = 0
-        actions = insight.get("actions", [])
+        actions = insight.get("actions") or []
         for action in actions:
-            if action.get("action_type") == "lead":
-                leads = int(action.get("value", 0))
-                break
+            action_type = action.get("action_type", "")
+            if action_type in LEAD_ACTION_TYPES:
+                leads += safe_int(action.get("value"))
         
         cpl = round(spend / leads, 2) if leads > 0 else None
         
