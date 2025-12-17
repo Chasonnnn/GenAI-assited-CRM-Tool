@@ -240,7 +240,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ## Documentation
 
-See [agents.md](./agents.md) for detailed project specifications, architecture decisions, and contribution guidelines.
+See [agents.md](./docs/agents.md) for detailed project specifications, architecture decisions, and contribution guidelines.
 
 ## Open-source & Customization Strategy
 
