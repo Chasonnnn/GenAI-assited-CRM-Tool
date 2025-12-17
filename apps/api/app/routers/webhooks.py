@@ -14,6 +14,9 @@ from app.db.models import MetaPageMapping
 from app.db.enums import JobType
 from app.services import job_service, meta_api
 
+# Rate limiting
+from app.main import limiter
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
@@ -38,6 +41,7 @@ async def verify_meta_webhook(
 
 
 @router.post("/meta")
+@limiter.limit("100/minute")
 async def receive_meta_webhook(
     request: Request,
     db: Session = Depends(get_db),

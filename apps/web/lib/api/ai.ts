@@ -27,10 +27,17 @@ export interface AISettingsUpdate {
     anonymize_pii?: boolean;
 }
 
+// ConsentInfo for GET, ConsentAcceptResponse for POST
 export interface ConsentInfo {
     consent_text: string;
     consent_accepted_at: string | null;
     consent_accepted_by: string | null;
+}
+
+export interface ConsentAcceptResponse {
+    accepted: boolean;
+    accepted_at: string;
+    accepted_by: string;
 }
 
 export interface ProposedAction {
@@ -94,7 +101,7 @@ export async function updateAISettings(update: AISettingsUpdate): Promise<AISett
 }
 
 export async function testAPIKey(provider: 'openai' | 'gemini', api_key: string): Promise<{ valid: boolean }> {
-    return api.post<{ valid: boolean }>('/ai/test-key', { provider, api_key });
+    return api.post<{ valid: boolean }>('/ai/settings/test', { provider, api_key });
 }
 
 // ============================================================================
@@ -105,8 +112,8 @@ export async function getConsent(): Promise<ConsentInfo> {
     return api.get<ConsentInfo>('/ai/consent');
 }
 
-export async function acceptConsent(): Promise<ConsentInfo> {
-    return api.post<ConsentInfo>('/ai/consent');
+export async function acceptConsent(): Promise<ConsentAcceptResponse> {
+    return api.post<ConsentAcceptResponse>('/ai/consent/accept');
 }
 
 // ============================================================================

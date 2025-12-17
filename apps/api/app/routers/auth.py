@@ -24,6 +24,9 @@ from app.services.google_oauth import (
     verify_id_token,
 )
 
+# Rate limiting
+from app.main import limiter
+
 router = APIRouter()
 
 OAUTH_STATE_COOKIE = "oauth_state"
@@ -35,6 +38,7 @@ OAUTH_STATE_MAX_AGE = 300  # 5 minutes
 # =============================================================================
 
 @router.get("/google/login")
+@limiter.limit("5/minute")
 def google_login(request: Request):
     """
     Initiate Google OAuth flow.

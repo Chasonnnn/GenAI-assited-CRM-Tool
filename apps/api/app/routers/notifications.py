@@ -35,8 +35,7 @@ class NotificationRead(BaseModel):
     read_at: str | None
     created_at: str
     
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class NotificationListResponse(BaseModel):

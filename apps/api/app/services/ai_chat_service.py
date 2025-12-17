@@ -380,6 +380,7 @@ def chat(
     db.flush()  # Get assistant_message.id
     
     # Create action approvals for each proposed action
+    approval_responses = []
     if proposed_actions:
         for i, action in enumerate(proposed_actions):
             approval = AIActionApproval(
@@ -390,6 +391,15 @@ def chat(
                 status="pending",
             )
             db.add(approval)
+            db.flush()  # Get approval.id
+            
+            # Build response matching frontend ProposedAction type
+            approval_responses.append({
+                "approval_id": str(approval.id),
+                "action_type": approval.action_type,
+                "action_data": approval.action_payload,  # Map to frontend field name
+                "status": approval.status,
+            })
     
     # Log usage
     usage_log = AIUsageLog(
@@ -411,7 +421,7 @@ def chat(
     
     return {
         "content": clean_content,
-        "proposed_actions": proposed_actions,
+        "proposed_actions": approval_responses,  # Now includes approval_id
         "tokens_used": {
             "prompt": response.prompt_tokens,
             "completion": response.completion_tokens,
