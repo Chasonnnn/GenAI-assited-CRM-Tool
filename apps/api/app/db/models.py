@@ -1577,3 +1577,65 @@ class AuditLog(Base):
     # Relationships
     organization: Mapped["Organization"] = relationship()
     actor: Mapped["User | None"] = relationship()
+
+
+# =============================================================================
+# CSV Import
+# =============================================================================
+
+class CaseImport(Base):
+    """
+    Tracks CSV import jobs for cases.
+    
+    Flow: upload → preview → confirm (async job) → complete
+    
+    Dedupe:
+    - Matches by email against all cases (including archived)
+    - Also checks for duplicates within the CSV itself
+    """
+    __tablename__ = "case_imports"
+    __table_args__ = (
+        Index("idx_case_imports_org_created", "organization_id", "created_at"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    
+    # File info
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    
+    # Status: pending, processing, completed, failed
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
+    
+    # Counts
+    total_rows: Mapped[int] = mapped_column(default=0, nullable=False)
+    imported_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    skipped_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    error_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    
+    # Error details (list of {row: int, errors: list[str]})
+    errors: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    created_by: Mapped["User | None"] = relationship()
