@@ -221,24 +221,28 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ## Current Status
 
-**Week 10+ Complete** — AI Assistant Tab + Meta Ads Spend:
+**Version 0.06.00** — Enterprise Features Complete
 
+### Core Platform
 - [x] Project scaffolding + PostgreSQL + migrations
 - [x] Google OAuth SSO + JWT sessions + role-based auth
 - [x] Cases module (CRUD, notes, tasks, status history, handoff workflow)
 - [x] Intended Parents module (CRUD, status workflow, archive/restore)
-- [x] Frontend UI (v0 design implementation with shadcn/ui)
-- [x] Frontend-Backend integration with React Query
+- [x] Frontend UI (shadcn/ui, responsive design, dark mode)
 - [x] Workflow automation + email foundation
-- [x] Case management enhancements (priority, activity log, bulk ops)
-- [x] In-App Notifications + Theme System (light/dark)
+- [x] In-App Notifications + Theme System
 - [x] Meta Lead Ads Integration + CAPI
-- [x] Ops Console + Manager Analytics
-- [x] AI Assistant Tab (ChatGPT-style layout, feature toggle)
-- [x] Meta Ads Spend Integration (spend endpoint, CPL calculation)
-- [x] Theme Toggle Animation (View Transitions API)
-- [ ] AI Chat Integration (Week 11)
-- [ ] Deployment + Hardening (Week 12)
+
+### Enterprise Features (v0.06.00)
+- [x] **Global Audit Trail** — Hash chain, tamper-evident logging
+- [x] **CSV Import** — Email-based duplicate detection
+- [x] **Org-Configurable Pipelines** — Custom stage labels, colors, order
+- [x] **In-App Version Control** — Encrypted snapshots, rollback support
+- [x] **AI Assistant** — BYOK keys, ChatGPT-style interface
+
+### Data Models (34 tables)
+`Organization`, `User`, `Membership`, `AuthIdentity`, `OrgInvite`, `Case`, `CaseStatusHistory`, `CaseActivityLog`, `Task`, `MetaLead`, `MetaPageMapping`, `Job`, `EmailTemplate`, `EmailLog`, `IntendedParent`, `IntendedParentStatusHistory`, `EntityNote`, `Notification`, `UserNotificationSettings`, `IntegrationHealth`, `IntegrationErrorRollup`, `SystemAlert`, `RequestMetricsRollup`, `AISettings`, `AIConversation`, `AIMessage`, `AIActionApproval`, `AIEntitySummary`, `AIUsageLog`, `UserIntegration`, `AuditLog`, `CaseImport`, `Pipeline`, `EntityVersion`
+
 
 ## Documentation
 
