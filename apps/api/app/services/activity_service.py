@@ -75,27 +75,8 @@ def log_info_edited(
     )
 
 
-def log_status_changed(
-    db: Session,
-    case_id: UUID,
-    organization_id: UUID,
-    actor_user_id: UUID,
-    from_status: str,
-    to_status: str,
-    reason: str | None = None,
-) -> CaseActivityLog:
-    """Log status change."""
-    details = {"from": from_status, "to": to_status}
-    if reason:
-        details["reason"] = reason
-    return log_activity(
-        db=db,
-        case_id=case_id,
-        organization_id=organization_id,
-        activity_type=CaseActivityType.STATUS_CHANGED,
-        actor_user_id=actor_user_id,
-        details=details,
-    )
+# NOTE: log_status_changed removed - status transitions are tracked in CaseStatusHistory (canonical source)
+# STATUS_CHANGED enum kept for backward compatibility with existing activity log entries
 
 
 def log_assigned(

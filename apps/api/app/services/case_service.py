@@ -227,17 +227,8 @@ def change_status(
     db.commit()
     db.refresh(case)
     
-    # Log to activity log
-    activity_service.log_status_changed(
-        db=db,
-        case_id=case.id,
-        organization_id=case.organization_id,
-        actor_user_id=user_id,
-        from_status=old_status,
-        to_status=new_status.value,
-        reason=reason,
-    )
-    db.commit()
+    # NOTE: Status change is recorded in CaseStatusHistory (canonical source)
+    # No duplicate log to CaseActivityLog needed
     
     # Send notifications
     from app.services import notification_service
