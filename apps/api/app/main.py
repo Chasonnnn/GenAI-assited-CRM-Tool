@@ -47,7 +47,7 @@ limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(
     title="CRM API",
     description="Multi-tenant CRM and case management API",
-    version="0.5.0",
+    version=settings.VERSION,
     docs_url="/docs" if settings.ENV == "dev" else None,
     redoc_url="/redoc" if settings.ENV == "dev" else None,
 )
@@ -145,4 +145,4 @@ def health():
     """
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
-    return {"status": "ok", "env": settings.ENV, "version": "0.5.0"}
+    return {"status": "ok", "env": settings.ENV, "version": settings.VERSION}

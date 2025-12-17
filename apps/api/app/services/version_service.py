@@ -99,12 +99,15 @@ def compute_audit_hash(
 
 
 def get_last_audit_hash(db: Session, org_id: UUID) -> str:
-    """Get the hash of the most recent audit log entry for an org."""
+    """Get the hash of the most recent audit log entry for an org.
+    
+    Uses created_at + id for deterministic ordering under concurrency.
+    """
     result = db.execute(
         select(AuditLog.entry_hash)
         .where(AuditLog.organization_id == org_id)
         .where(AuditLog.entry_hash.isnot(None))
-        .order_by(AuditLog.created_at.desc())
+        .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
         .limit(1)
     ).scalar()
     return result or GENESIS_HASH

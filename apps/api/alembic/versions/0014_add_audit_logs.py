@@ -30,7 +30,7 @@ def upgrade() -> None:
         sa.Column('event_type', sa.String(50), nullable=False),
         sa.Column('target_type', sa.String(50), nullable=True),
         sa.Column('target_id', postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column('details', postgresql.JSON(), nullable=True),
+        sa.Column('details', postgresql.JSONB(), nullable=True),
         sa.Column('ip_address', sa.String(45), nullable=True),
         sa.Column('user_agent', sa.String(500), nullable=True),
         sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),

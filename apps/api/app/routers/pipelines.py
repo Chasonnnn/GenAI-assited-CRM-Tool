@@ -207,6 +207,13 @@ def update_pipeline(
     if not pipeline:
         raise HTTPException(status_code=404, detail="Pipeline not found")
     
+    # Check optimistic locking for any update
+    if data.expected_version is not None:
+        try:
+            version_service.check_version(pipeline.current_version, data.expected_version)
+        except version_service.VersionConflictError as e:
+            raise HTTPException(status_code=409, detail=f"Version conflict: expected {e.expected}, got {e.actual}")
+    
     if data.stages is not None:
         stages = [s.model_dump() for s in data.stages]
         try:
@@ -215,17 +222,20 @@ def update_pipeline(
                 pipeline=pipeline,
                 stages=stages,
                 user_id=session.user_id,
-                expected_version=data.expected_version,
+                expected_version=None,  # Already checked above
                 comment=data.comment,
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
-        except version_service.VersionConflictError as e:
-            raise HTTPException(status_code=409, detail=f"Version conflict: expected {e.expected}, got {e.actual}")
     elif data.name is not None:
-        pipeline.name = data.name
-        db.commit()
-        db.refresh(pipeline)
+        # Name-only update also needs versioning
+        pipeline_service.update_pipeline_name(
+            db=db,
+            pipeline=pipeline,
+            name=data.name,
+            user_id=session.user_id,
+            comment=data.comment or "Renamed",
+        )
     
     return PipelineRead(
         id=pipeline.id,
