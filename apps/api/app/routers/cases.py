@@ -215,6 +215,228 @@ def list_cases(
     )
 
 
+# =============================================================================
+# CSV Import Endpoints
+# =============================================================================
+
+from fastapi import File, UploadFile, Request
+from pydantic import BaseModel
+from app.services import import_service
+
+
+class ImportPreviewResponse(BaseModel):
+    """Preview response for CSV import."""
+    total_rows: int
+    sample_rows: list[dict]
+    detected_columns: list[str]
+    unmapped_columns: list[str]
+    duplicate_emails_db: int
+    duplicate_emails_csv: int
+    validation_errors: int
+
+
+class ImportConfirmRequest(BaseModel):
+    """Request to confirm and execute import."""
+    import_id: UUID
+    dedupe_action: str = "skip"  # "skip" or "update" (future)
+
+
+class ImportStatusResponse(BaseModel):
+    """Status of an import job."""
+    id: UUID
+    filename: str
+    status: str
+    total_rows: int
+    imported_count: int
+    skipped_count: int
+    error_count: int
+    errors: list[dict] | None
+    created_at: str
+    completed_at: str | None
+
+
+@router.post("/import/preview", response_model=ImportPreviewResponse, dependencies=[Depends(require_csrf_header)])
+async def preview_import(
+    request: Request,
+    file: UploadFile = File(...),
+    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    db: Session = Depends(get_db),
+):
+    """
+    Preview CSV import without executing.
+    
+    Returns:
+    - Column mapping results
+    - Sample rows (first 5)
+    - Duplicate detection counts (DB + within CSV)
+    - Validation error count
+    
+    Requires: Manager+ role
+    """
+    if not file.filename or not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be a CSV")
+    
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:  # 10MB limit
+        raise HTTPException(status_code=400, detail="File too large (max 10MB)")
+    
+    preview = import_service.preview_import(db, session.org_id, content)
+    
+    # Create import job for later confirmation
+    import_job = import_service.create_import_job(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        filename=file.filename,
+        total_rows=preview.total_rows,
+    )
+    
+    return ImportPreviewResponse(
+        total_rows=preview.total_rows,
+        sample_rows=preview.sample_rows,
+        detected_columns=preview.detected_columns,
+        unmapped_columns=preview.unmapped_columns,
+        duplicate_emails_db=preview.duplicate_emails_db,
+        duplicate_emails_csv=preview.duplicate_emails_csv,
+        validation_errors=preview.validation_errors,
+    )
+
+
+@router.post("/import/confirm", response_model=ImportStatusResponse, dependencies=[Depends(require_csrf_header)])
+async def confirm_import(
+    request: Request,
+    file: UploadFile = File(...),
+    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    db: Session = Depends(get_db),
+):
+    """
+    Confirm and execute CSV import.
+    
+    For large files, consider scheduling as async job (future enhancement).
+    Currently executes synchronously.
+    
+    Requires: Manager+ role
+    """
+    if not file.filename or not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be a CSV")
+    
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:  # 10MB limit
+        raise HTTPException(status_code=400, detail="File too large (max 10MB)")
+    
+    # Create import job
+    import_job = import_service.create_import_job(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        filename=file.filename,
+        total_rows=0,  # Will be updated during execution
+    )
+    
+    # Execute import (synchronous for now, async via job queue for large files later)
+    import_job.status = "processing"
+    db.commit()
+    
+    # Audit log
+    from app.services import audit_service
+    audit_service.log_import_started(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        import_id=import_job.id,
+        filename=file.filename,
+        row_count=0,
+        request=request,
+    )
+    db.commit()
+    
+    result = import_service.execute_import(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        import_id=import_job.id,
+        file_content=content,
+    )
+    
+    # Audit log completion
+    audit_service.log_import_completed(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        import_id=import_job.id,
+        imported=result.imported,
+        skipped=result.skipped,
+        errors=len(result.errors),
+    )
+    db.commit()
+    
+    # Refresh to get updated counts
+    db.refresh(import_job)
+    
+    return ImportStatusResponse(
+        id=import_job.id,
+        filename=import_job.filename,
+        status=import_job.status,
+        total_rows=import_job.total_rows,
+        imported_count=import_job.imported_count,
+        skipped_count=import_job.skipped_count,
+        error_count=import_job.error_count,
+        errors=import_job.errors,
+        created_at=import_job.created_at.isoformat(),
+        completed_at=import_job.completed_at.isoformat() if import_job.completed_at else None,
+    )
+
+
+@router.get("/import/{import_id}", response_model=ImportStatusResponse)
+def get_import_status(
+    import_id: UUID,
+    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    db: Session = Depends(get_db),
+):
+    """Get status of an import job."""
+    import_job = import_service.get_import(db, session.org_id, import_id)
+    if not import_job:
+        raise HTTPException(status_code=404, detail="Import not found")
+    
+    return ImportStatusResponse(
+        id=import_job.id,
+        filename=import_job.filename,
+        status=import_job.status,
+        total_rows=import_job.total_rows,
+        imported_count=import_job.imported_count,
+        skipped_count=import_job.skipped_count,
+        error_count=import_job.error_count,
+        errors=import_job.errors,
+        created_at=import_job.created_at.isoformat(),
+        completed_at=import_job.completed_at.isoformat() if import_job.completed_at else None,
+    )
+
+
+@router.get("/import", response_model=list[ImportStatusResponse])
+def list_imports(
+    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    db: Session = Depends(get_db),
+):
+    """List recent imports for the organization."""
+    imports = import_service.list_imports(db, session.org_id)
+    
+    return [
+        ImportStatusResponse(
+            id=i.id,
+            filename=i.filename,
+            status=i.status,
+            total_rows=i.total_rows,
+            imported_count=i.imported_count,
+            skipped_count=i.skipped_count,
+            error_count=i.error_count,
+            errors=i.errors,
+            created_at=i.created_at.isoformat(),
+            completed_at=i.completed_at.isoformat() if i.completed_at else None,
+        )
+        for i in imports
+    ]
+
+
 # NOTE: /handoff-queue MUST come before /{case_id} routes to avoid routing conflict
 @router.get("/handoff-queue", response_model=CaseListResponse)
 def list_handoff_queue(
