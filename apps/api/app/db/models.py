@@ -1639,3 +1639,58 @@ class CaseImport(Base):
     # Relationships
     organization: Mapped["Organization"] = relationship()
     created_by: Mapped["User | None"] = relationship()
+
+
+# =============================================================================
+# Org-Configurable Pipelines (Display-Only v1)
+# =============================================================================
+
+class Pipeline(Base):
+    """
+    Organization pipeline configuration for case status display.
+    
+    v1 (Display-Only):
+    - Maps existing CaseStatus values to custom labels/colors/order
+    - Does NOT add new statuses (backend still uses CaseStatus enum)
+    - Frontend reads this for UI customization
+    
+    stages JSON format:
+    [
+        {"status": "new_unread", "label": "New Lead", "color": "#3B82F6", "order": 1, "visible": true},
+        {"status": "contacted", "label": "Reached Out", "color": "#10B981", "order": 2, "visible": true},
+        ...
+    ]
+    """
+    __tablename__ = "pipelines"
+    __table_args__ = (
+        Index("idx_pipelines_org", "organization_id"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    name: Mapped[str] = mapped_column(String(100), default="Default", nullable=False)
+    is_default: Mapped[bool] = mapped_column(default=True, nullable=False)
+    
+    # Stage configuration (JSON array of stage objects)
+    stages: Mapped[list] = mapped_column(JSONB, nullable=False)
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()

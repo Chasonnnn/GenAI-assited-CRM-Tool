@@ -118,6 +118,10 @@ app.include_router(integrations.router)
 from app.routers import audit
 app.include_router(audit.router)
 
+# Pipeline Configuration (Manager+)
+from app.routers import pipelines
+app.include_router(pipelines.router)
+
 # Dev router (ONLY mounted in dev mode)
 if settings.ENV == "dev":
     from app.routers import dev
