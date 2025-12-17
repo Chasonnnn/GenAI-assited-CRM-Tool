@@ -129,21 +129,20 @@ def list_cases(db, org_id, ...):
 Stage A: Intake Pipeline
 ├── new_unread (default)
 ├── contacted
-├── phone_screen_scheduled
-├── phone_screened
-├── pending_questionnaire
-├── questionnaire_received
-├── pending_records
-├── pending_approval
+├── qualified
+├── applied
+├── followup_scheduled
+├── application_submitted
+├── under_review
 ├── approved ────────────┐
-└── disqualified          │
-                          │
-Stage B: Post-Approval    │
-├── pending_match ◄───────┘
-├── matched
-├── pre_screening
-├── synced
-├── pregnant
+├── pending_handoff      │
+└── disqualified         │
+                         │
+Stage B: Post-Approval   │
+├── pending_match ◄──────┘
+├── meds_started
+├── exam_passed
+├── embryo_transferred
 └── delivered
 
 Pseudo-statuses (for history only):
