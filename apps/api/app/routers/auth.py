@@ -208,6 +208,7 @@ def get_me(
         org_name=org.name,
         org_slug=org.slug,
         role=session.role,
+        ai_enabled=org.ai_enabled if org else False,
     )
 
 

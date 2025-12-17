@@ -39,3 +39,4 @@ class MeResponse(BaseModel):
     org_name: str
     org_slug: str
     role: Role
+    ai_enabled: bool = False

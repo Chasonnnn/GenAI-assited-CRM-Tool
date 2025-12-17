@@ -51,9 +51,15 @@ export function DateRangePicker({
         to: customRange?.to,
     })
 
+    // Reset local range when opening calendar
+    const handleShowCalendar = () => {
+        setLocalRange({ from: undefined, to: undefined })
+        setShowCalendar(true)
+    }
+
     const handlePresetSelect = (newPreset: DateRangePreset) => {
         if (newPreset === 'custom') {
-            setShowCalendar(true)
+            handleShowCalendar()
         } else {
             onPresetChange(newPreset)
             setOpen(false)
@@ -62,16 +68,30 @@ export function DateRangePicker({
     }
 
     const handleRangeSelect = (range: DayPickerDateRange | undefined) => {
-        if (range) {
-            const newRange: DateRange = { from: range.from, to: range.to }
-            setLocalRange(newRange)
-            // When both dates are selected, apply the range
-            if (range.from && range.to) {
-                onCustomRangeChange?.(newRange)
-                onPresetChange('custom')
+        const newRange: DateRange = {
+            from: range?.from,
+            to: range?.to
+        }
+        setLocalRange(newRange)
+
+        // Only close when BOTH dates are selected
+        if (newRange.from && newRange.to) {
+            onCustomRangeChange?.(newRange)
+            onPresetChange('custom')
+            // Small delay so user can see the final selection
+            setTimeout(() => {
                 setOpen(false)
                 setShowCalendar(false)
-            }
+            }, 300)
+        }
+    }
+
+    const handleApply = () => {
+        if (localRange.from && localRange.to) {
+            onCustomRangeChange?.(localRange)
+            onPresetChange('custom')
+            setOpen(false)
+            setShowCalendar(false)
         }
     }
 
@@ -119,8 +139,17 @@ export function DateRangePicker({
                     </div>
                 ) : (
                     <div className="p-3">
-                        <div className="mb-2 flex items-center justify-between">
-                            <span className="text-sm font-medium">Select date range</span>
+                        <div className="mb-3 flex items-center justify-between">
+                            <div className="flex flex-col">
+                                <span className="text-sm font-medium">Select date range</span>
+                                {localRange.from && (
+                                    <span className="text-xs text-muted-foreground">
+                                        {localRange.from && format(localRange.from, 'MMM d, yyyy')}
+                                        {localRange.to && ` → ${format(localRange.to, 'MMM d, yyyy')}`}
+                                        {!localRange.to && ' → Select end date'}
+                                    </span>
+                                )}
+                            </div>
                             <Button
                                 variant="ghost"
                                 size="sm"
@@ -134,7 +163,23 @@ export function DateRangePicker({
                             selected={localRange}
                             onSelect={handleRangeSelect}
                             numberOfMonths={2}
+                            defaultMonth={localRange.from || new Date()}
+                            className="rounded-md border shadow-sm"
                         />
+                        <div className="mt-3 flex items-center justify-between border-t pt-3">
+                            <div className="text-xs text-muted-foreground">
+                                {localRange.from && localRange.to
+                                    ? 'Range selected! Click Apply or it will auto-apply.'
+                                    : 'Click start date, then end date'}
+                            </div>
+                            <Button
+                                size="sm"
+                                disabled={!localRange.from || !localRange.to}
+                                onClick={handleApply}
+                            >
+                                Apply
+                            </Button>
+                        </div>
                     </div>
                 )}
             </PopoverContent>

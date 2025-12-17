@@ -377,7 +377,65 @@ Meta Lead Ads fields are mapped to Case fields:
 | `FRONTEND_URL` | Frontend URL for redirects |
 | `DEV_SECRET` | Dev endpoint protection |
 | `META_VERIFY_TOKEN` | Meta webhook verification |
+| `META_AD_ACCOUNT_ID` | Meta Ad Account ID for spend data |
+| `META_SYSTEM_TOKEN` | System token with ads_read permission |
 
 ---
 
-*Last updated: 2025-12-13*
+## AI Assistant
+
+### Feature Toggle
+- `ai_enabled` boolean on `organizations` table (default: `False`)
+- Managers can enable/disable AI features for their org
+- Sidebar "AI Assistant" link only visible when `ai_enabled = true`
+
+### AI Assistant Page (`/ai-assistant`)
+- Left sidebar (scrollable):
+  - Quick Actions (pre-built prompts)
+  - Suggested Actions (context-aware suggestions)
+  - Past Conversations (chat history)
+- Right chat window (fixed height):
+  - Message history with user/assistant bubbles
+  - Input area fixed at bottom (ChatGPT-style)
+- Full viewport height: `h-[calc(100vh-4rem)]`
+
+---
+
+## Meta Ads Spend Integration
+
+### Backend API
+- `fetch_ad_account_insights()` in `meta_api.py`:
+  - Calls Meta Marketing API Insights endpoint
+  - Fetches: campaign_id, campaign_name, spend, impressions, reach, clicks, actions
+  - Returns mock data when `META_TEST_MODE=true`
+
+### Endpoint: `GET /analytics/meta/spend`
+- Returns `MetaSpendSummary`:
+  - `total_spend` (float)
+  - `total_impressions` (int)
+  - `total_leads` (int)
+  - `cost_per_lead` (float | null)
+  - `campaigns` (list of CampaignSpend)
+
+### Frontend
+- "Ad Spend" card in Reports dashboard
+- Shows total spend and CPL (cost per lead)
+
+---
+
+## Theme Toggle Animation
+
+### View Transitions API
+- Circle blur animation on theme toggle
+- Expands from top-left corner
+- Bidirectional: works for both light→dark and dark→light
+- CSS classes in `globals.css` for animation control
+
+### Font
+- Global font: Noto Sans (via `next/font/google`)
+- Variable: `--font-noto-sans`
+
+---
+
+*Last updated: 2025-12-16*
+

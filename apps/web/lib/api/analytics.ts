@@ -184,3 +184,32 @@ export async function getCasesByStateCompare(params: CompareParams = {}): Promis
     const res = await api.get<{ data: StateCount[] }>(`/analytics/cases/by-state/compare${query ? `?${query}` : ''}`);
     return res.data;
 }
+
+// Meta Spend types
+export interface CampaignSpend {
+    campaign_id: string;
+    campaign_name: string;
+    spend: number;
+    impressions: number;
+    reach: number;
+    clicks: number;
+    leads: number;
+    cost_per_lead: number | null;
+}
+
+export interface MetaSpendSummary {
+    total_spend: number;
+    total_impressions: number;
+    total_leads: number;
+    cost_per_lead: number | null;
+    campaigns: CampaignSpend[];
+}
+
+export async function getMetaSpend(params: DateRangeParams = {}): Promise<MetaSpendSummary> {
+    const searchParams = new URLSearchParams();
+    if (params.from_date) searchParams.set('from_date', params.from_date);
+    if (params.to_date) searchParams.set('to_date', params.to_date);
+
+    const query = searchParams.toString();
+    return api.get<MetaSpendSummary>(`/analytics/meta/spend${query ? `?${query}` : ''}`);
+}

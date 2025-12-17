@@ -365,6 +365,11 @@ def approve_action(
     if not conversation or conversation.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Conversation not found")
     
+    # Verify user owns this conversation or has manager role
+    is_manager = session.role in ('manager', 'case_manager', 'developer')
+    if conversation.user_id != session.user_id and not is_manager:
+        raise HTTPException(status_code=403, detail="Not authorized to approve this action")
+    
     # Check status
     if approval.status != "pending":
         raise HTTPException(
@@ -414,6 +419,11 @@ def reject_action(
     conversation = db.query(AIConversation).filter(AIConversation.id == message.conversation_id).first()
     if not conversation or conversation.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    # Verify user owns this conversation or has manager role
+    is_manager = session.role in ('manager', 'case_manager', 'developer')
+    if conversation.user_id != session.user_id and not is_manager:
+        raise HTTPException(status_code=403, detail="Not authorized to reject this action")
     
     # Check status
     if approval.status != "pending":

@@ -471,6 +471,35 @@ Deliverable
 ✓ Enterprise-grade integration health tracking and alerting system
 ✓ Manager analytics dashboard with real-time data
 
+Week 10+ — AI Assistant Tab + Meta Ads Spend + UI Refinements ✓ COMPLETE
+Backend
+✓ ai_enabled boolean field on Organization model (default False)
+✓ Updated /auth/me to include ai_enabled from org
+✓ GET /analytics/meta/spend endpoint:
+  ✓ fetch_ad_account_insights() in meta_api.py
+  ✓ CampaignSpend and MetaSpendSummary schemas
+  ✓ Mock data when META_TEST_MODE=true
+Frontend
+✓ AI Assistant page (/ai-assistant):
+  ✓ ChatGPT-style layout (fixed chat, scrollable sidebar)
+  ✓ Quick Actions, Suggested Actions, Past Conversations
+  ✓ Full viewport height: h-[calc(100vh-4rem)]
+✓ AI sidebar link conditional on user.ai_enabled
+✓ Ad Spend card in Reports (total spend, CPL)
+✓ Theme toggle animation (View Transitions API, circle blur from top-left)
+✓ Global font changed to Noto Sans
+✓ DateRangePicker UX improvements (stays open during selection)
+Known Limitations (Meta Spend - to fix in production):
+- META_AD_ACCOUNT_ID and META_SYSTEM_TOKEN not in Settings class (uses fallback)
+- META_TEST_MODE defaults True (override in prod .env)
+- Errors return zeros silently (should log/surface)
+- Numeric parsing may fail on empty strings
+- Only checks action_type="lead" (may miss leadgen variants)
+- No pagination handling for large campaign lists
+Deliverable
+✓ AI Assistant UI ready for backend chat integration
+✓ Meta spend data visible in Reports dashboard
+
 Week 11 — AI assistant v1 (safe + useful, BYOK)
 Backend
 - Org AI settings + key storage:
