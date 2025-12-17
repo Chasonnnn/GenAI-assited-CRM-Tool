@@ -79,7 +79,9 @@ def update_template(
     db: Session = Depends(get_db),
     session = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
 ):
-    """Update an email template (manager only)."""
+    """Update an email template (manager only). Creates version snapshot."""
+    from app.services import version_service
+    
     template = email_service.get_template(db, template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -93,13 +95,18 @@ def update_template(
                 detail=f"Template with name '{data.name}' already exists",
             )
     
-    updated = email_service.update_template(
-        db, template,
-        name=data.name,
-        subject=data.subject,
-        body=data.body,
-        is_active=data.is_active,
-    )
+    try:
+        updated = email_service.update_template(
+            db, template,
+            user_id=session.user_id,
+            name=data.name,
+            subject=data.subject,
+            body=data.body,
+            is_active=data.is_active,
+        )
+    except version_service.VersionConflictError as e:
+        raise HTTPException(status_code=409, detail=f"Version conflict: expected {e.expected}, got {e.actual}")
+    
     return updated
 
 
@@ -139,3 +146,75 @@ def send_email(
     
     email_log, job = result
     return email_log
+
+
+# =============================================================================
+# Version Control Endpoints (Developer-only)
+# =============================================================================
+
+from pydantic import BaseModel
+from fastapi import Query
+
+
+class TemplateVersionRead(BaseModel):
+    """Version history entry."""
+    id: UUID
+    version: int
+    created_by_user_id: UUID | None
+    comment: str | None
+    created_at: str
+
+
+class RollbackRequest(BaseModel):
+    """Rollback request."""
+    target_version: int
+
+
+@router.get("/{template_id}/versions", response_model=list[TemplateVersionRead])
+def get_template_versions(
+    template_id: UUID,
+    limit: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db),
+    session = Depends(require_roles([Role.DEVELOPER])),
+):
+    """Get version history for a template. Developer-only."""
+    template = email_service.get_template(db, template_id, session.org_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    versions = email_service.get_template_versions(db, session.org_id, template_id, limit)
+    return [
+        TemplateVersionRead(
+            id=v.id,
+            version=v.version,
+            created_by_user_id=v.created_by_user_id,
+            comment=v.comment,
+            created_at=v.created_at.isoformat(),
+        )
+        for v in versions
+    ]
+
+
+@router.post("/{template_id}/rollback", response_model=EmailTemplateRead, dependencies=[Depends(require_csrf_header)])
+def rollback_template(
+    template_id: UUID,
+    data: RollbackRequest,
+    db: Session = Depends(get_db),
+    session = Depends(require_roles([Role.DEVELOPER])),
+):
+    """Rollback template to a previous version. Developer-only."""
+    template = email_service.get_template(db, template_id, session.org_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    updated, error = email_service.rollback_template(
+        db=db,
+        template=template,
+        target_version=data.target_version,
+        user_id=session.user_id,
+    )
+    
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    
+    return updated

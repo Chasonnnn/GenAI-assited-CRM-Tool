@@ -766,6 +766,9 @@ class EmailTemplate(Base):
         nullable=False
     )
     
+    # Version control
+    current_version: Mapped[int] = mapped_column(default=1, nullable=False)
+    
     created_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"),
         nullable=False

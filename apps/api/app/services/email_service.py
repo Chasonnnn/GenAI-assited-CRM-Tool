@@ -1,7 +1,10 @@
-"""Email service - business logic for email templates and sending."""
+"""Email service - business logic for email templates and sending.
+
+v2: With version control for templates.
+"""
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -9,11 +12,23 @@ from sqlalchemy.orm import Session
 from app.db.models import EmailTemplate, EmailLog, Job
 from app.db.enums import EmailStatus, JobType
 from app.services.job_service import schedule_job
+from app.services import version_service
 
 
 # Variable pattern for template substitution: {{variable_name}}
 VARIABLE_PATTERN = re.compile(r"\{\{(\w+)\}\}")
 
+ENTITY_TYPE = "email_template"
+
+
+def _template_payload(template: EmailTemplate) -> dict:
+    """Extract versionable payload from template."""
+    return {
+        "name": template.name,
+        "subject": template.subject,
+        "body": template.body,
+        "is_active": template.is_active,
+    }
 
 def create_template(
     db: Session,
@@ -23,7 +38,7 @@ def create_template(
     subject: str,
     body: str,
 ) -> EmailTemplate:
-    """Create a new email template."""
+    """Create a new email template with initial version snapshot."""
     template = EmailTemplate(
         organization_id=org_id,
         created_by_user_id=user_id,
@@ -31,8 +46,22 @@ def create_template(
         subject=subject,
         body=body,
         is_active=True,
+        current_version=1,
     )
     db.add(template)
+    db.flush()
+    
+    # Create initial version snapshot
+    version_service.create_version(
+        db=db,
+        org_id=org_id,
+        entity_type=ENTITY_TYPE,
+        entity_id=template.id,
+        payload=_template_payload(template),
+        created_by_user_id=user_id,
+        comment="Created",
+    )
+    
     db.commit()
     db.refresh(template)
     return template
@@ -41,12 +70,24 @@ def create_template(
 def update_template(
     db: Session,
     template: EmailTemplate,
+    user_id: UUID,
     name: str | None = None,
     subject: str | None = None,
     body: str | None = None,
     is_active: bool | None = None,
+    expected_version: int | None = None,
+    comment: str | None = None,
 ) -> EmailTemplate:
-    """Update an email template."""
+    """
+    Update an email template with version control.
+    
+    Creates version snapshot on changes.
+    Supports optimistic locking via expected_version.
+    """
+    # Optimistic locking
+    if expected_version is not None:
+        version_service.check_version(template.current_version, expected_version)
+    
     if name is not None:
         template.name = name
     if subject is not None:
@@ -55,10 +96,78 @@ def update_template(
         template.body = body
     if is_active is not None:
         template.is_active = is_active
+    
+    # Increment version and snapshot
+    template.current_version += 1
+    template.updated_at = datetime.now(timezone.utc)
+    
+    version_service.create_version(
+        db=db,
+        org_id=template.organization_id,
+        entity_type=ENTITY_TYPE,
+        entity_id=template.id,
+        payload=_template_payload(template),
+        created_by_user_id=user_id,
+        comment=comment or "Updated",
+    )
+    
     db.commit()
     db.refresh(template)
     return template
 
+
+def get_template_versions(
+    db: Session,
+    org_id: UUID,
+    template_id: UUID,
+    limit: int = 50,
+) -> list:
+    """Get version history for a template."""
+    return version_service.get_version_history(
+        db=db,
+        org_id=org_id,
+        entity_type=ENTITY_TYPE,
+        entity_id=template_id,
+        limit=limit,
+    )
+
+
+def rollback_template(
+    db: Session,
+    template: EmailTemplate,
+    target_version: int,
+    user_id: UUID,
+) -> tuple[EmailTemplate | None, str | None]:
+    """
+    Rollback template to a previous version.
+    
+    Creates a NEW version with old payload.
+    Returns (updated_template, error).
+    """
+    new_version, error = version_service.rollback_to_version(
+        db=db,
+        org_id=template.organization_id,
+        entity_type=ENTITY_TYPE,
+        entity_id=template.id,
+        target_version=target_version,
+        user_id=user_id,
+    )
+    
+    if error:
+        return None, error
+    
+    # Apply rolled-back payload
+    payload = version_service.decrypt_payload(new_version.payload_encrypted)
+    template.name = payload.get("name", template.name)
+    template.subject = payload.get("subject", template.subject)
+    template.body = payload.get("body", template.body)
+    template.is_active = payload.get("is_active", template.is_active)
+    template.current_version = new_version.version
+    template.updated_at = datetime.now(timezone.utc)
+    
+    db.commit()
+    db.refresh(template)
+    return template, None
 
 def get_template(db: Session, template_id: UUID, org_id: UUID) -> EmailTemplate | None:
     """Get template by ID, scoped to org."""
