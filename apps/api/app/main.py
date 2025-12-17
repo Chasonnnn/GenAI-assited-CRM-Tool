@@ -122,6 +122,10 @@ app.include_router(audit.router)
 from app.routers import pipelines
 app.include_router(pipelines.router)
 
+# Admin Versions (Developer-only)
+from app.routers import admin_versions
+app.include_router(admin_versions.router)
+
 # Dev router (ONLY mounted in dev mode)
 if settings.ENV == "dev":
     from app.routers import dev
