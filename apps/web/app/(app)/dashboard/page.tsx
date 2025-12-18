@@ -15,13 +15,14 @@ import {
   LoaderIcon,
 } from "lucide-react"
 import { useState } from "react"
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis, Cell } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { useCaseStats } from "@/lib/hooks/use-cases"
 import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-tasks"
 import { useCasesTrend, useCasesByStatus } from "@/lib/hooks/use-analytics"
 import { useAuth } from "@/lib/auth-context"
 import type { TaskListItem } from "@/lib/types/task"
+import { STATUS_CONFIG, type CaseStatus } from "@/lib/types/case"
 
 // Format relative time
 function formatRelativeTime(dateString: string): string {
@@ -111,11 +112,36 @@ export default function DashboardPage() {
     cases: item.count,
   })) || []
 
-  // Transform status data for bar chart (StatusCount[] from API)
-  const chartStatusData = Array.isArray(statusData) ? statusData.map((item) => ({
-    status: item.status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-    count: item.count,
-  })) : []
+  // Transform status data for bar chart (StatusCount[] from API) with STATUS_CONFIG colors
+  const chartStatusData = Array.isArray(statusData) ? statusData.map((item) => {
+    const statusKey = item.status as CaseStatus
+    const config = STATUS_CONFIG[statusKey]
+    // Convert Tailwind bg-X-500 to hex for recharts
+    const colorMap: Record<string, string> = {
+      'bg-blue-500': '#3b82f6',
+      'bg-sky-500': '#0ea5e9',
+      'bg-lime-500': '#84cc16',
+      'bg-emerald-400': '#34d399',
+      'bg-cyan-500': '#06b6d4',
+      'bg-teal-500': '#14b8a6',
+      'bg-amber-500': '#f59e0b',
+      'bg-green-500': '#22c55e',
+      'bg-orange-500': '#f97316',
+      'bg-red-500': '#ef4444',
+      'bg-purple-500': '#a855f7',
+      'bg-violet-500': '#8b5cf6',
+      'bg-indigo-500': '#6366f1',
+      'bg-fuchsia-500': '#d946ef',
+      'bg-emerald-500': '#10b981',
+      'bg-gray-500': '#6b7280',
+      'bg-slate-500': '#64748b',
+    }
+    return {
+      status: config?.label || item.status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      count: item.count,
+      fill: colorMap[config?.color || 'bg-teal-500'] || '#14b8a6',
+    }
+  }) : []
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
@@ -355,11 +381,11 @@ export default function DashboardPage() {
                     cursor={false}
                     content={<ChartTooltipContent indicator="dashed" />}
                   />
-                  <Bar
-                    dataKey="count"
-                    fill="var(--color-count)"
-                    radius={4}
-                  />
+                  <Bar dataKey="count" radius={4}>
+                    {chartStatusData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ChartContainer>
             )}
@@ -368,7 +394,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Tasks & Activity Section */}
-      <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
+      <div className="grid gap-6 lg:grid-cols-2">
         {/* My Tasks Card */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">

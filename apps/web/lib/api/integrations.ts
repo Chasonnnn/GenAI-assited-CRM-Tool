@@ -35,7 +35,6 @@ export interface CreateMeetingRequest {
     start_time?: string // ISO format
     timezone?: string // IANA timezone name (e.g. America/Los_Angeles)
     duration?: number // minutes, default 30
-    create_task?: boolean // default true
     contact_name?: string
 }
 

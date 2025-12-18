@@ -28,6 +28,7 @@ def create_task(
         task_type=data.task_type.value,
         due_date=data.due_date,
         due_time=data.due_time,
+        duration_minutes=data.duration_minutes,
     )
     db.add(task)
     db.commit()
@@ -77,7 +78,7 @@ def update_task(
     new_assignee_id = update_data.get("assigned_to_user_id")
     
     # Fields that can be cleared (set to None)
-    clearable_fields = {"assigned_to_user_id", "due_date", "due_time", "description"}
+    clearable_fields = {"assigned_to_user_id", "due_date", "due_time", "description", "duration_minutes"}
     
     for field, value in update_data.items():
         # For clearable fields, allow None; for others, skip None

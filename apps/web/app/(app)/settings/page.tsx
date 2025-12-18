@@ -380,9 +380,12 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  <p className="text-xs text-muted-foreground">
-                    Account deletion is managed by your organization admin.
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">
+                      Account deletion is managed by your organization admin.
+                    </p>
+                    <p className="text-xs text-muted-foreground">v1.0.0</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>

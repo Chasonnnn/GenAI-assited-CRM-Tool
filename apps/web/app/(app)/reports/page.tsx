@@ -26,7 +26,7 @@ const casesOverviewConfig = {
 }
 
 const monthlyTrendsConfig = {
-    count: { label: "Cases", color: "hsl(var(--chart-1))" },
+    count: { label: "Cases", color: "#3b82f6" },
 }
 
 const casesByAssigneeConfig = {
@@ -35,12 +35,12 @@ const casesByAssigneeConfig = {
 
 // Color palette for charts
 const chartColors = [
-    "hsl(var(--chart-1))",
-    "hsl(var(--chart-2))",
-    "hsl(var(--chart-3))",
-    "hsl(var(--chart-4))",
-    "hsl(var(--chart-5))",
-    "hsl(var(--chart-6))",
+    "#3b82f6",
+    "#22c55e",
+    "#f59e0b",
+    "#a855f7",
+    "#06b6d4",
+    "#ef4444",
 ]
 
 export default function ReportsPage() {
@@ -349,7 +349,7 @@ export default function ReportsPage() {
                                         <Line
                                             type="monotone"
                                             dataKey="count"
-                                            stroke="hsl(var(--chart-1))"
+                                            stroke="#3b82f6"
                                             strokeWidth={2}
                                             dot={{ r: 4 }}
                                         />
