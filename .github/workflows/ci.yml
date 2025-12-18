@@ -54,7 +54,7 @@ jobs:
       
       - name: Run tests
         working-directory: apps/api
-        run: PYTHONPATH=. pytest tests/ -v --tb=short || true
+        run: PYTHONPATH=. pytest tests/ -v --tb=short
 
   frontend-tests:
     name: Frontend Tests
@@ -63,23 +63,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+      
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: apps/web/pnpm-lock.yaml
       
       - name: Install dependencies
         working-directory: apps/web
-        run: npm install
+        run: pnpm install
       
       - name: Run type check
         working-directory: apps/web
-        run: npm run build
-        continue-on-error: true
+        run: pnpm run build
       
       - name: Run tests
         working-directory: apps/web
-        run: npm test -- --passWithNoTests || true
+        run: pnpm test -- --passWithNoTests
+        continue-on-error: true
 
   lint:
     name: Lint
@@ -96,7 +103,11 @@ jobs:
       - name: Check Python syntax
         working-directory: apps/api
         run: python -m py_compile app/main.py
-        continue-on-error: true
+      
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
       
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -106,5 +117,5 @@ jobs:
       - name: Install and check TypeScript
         working-directory: apps/web
         run: |
-          npm install
-          npm run build || true
+          pnpm install
+          pnpm run build
