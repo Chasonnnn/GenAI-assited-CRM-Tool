@@ -473,5 +473,43 @@ Defined in `apps/api/app/core/config.py` as `Settings.VERSION`.
 
 ---
 
-*Last updated: 2025-12-17 (v0.06.00)*
+## Queue/Ownership System (v0.09.00)
+
+### Salesforce-Style Single-Owner Model
+Cases now have Salesforce-style ownership fields:
+- `owner_type`: `'user'` | `'queue'` | `NULL` (backward compat)
+- `owner_id`: UUID of owning user or queue
+
+### Queue Model
+```python
+class Queue(Base):
+    id: UUID
+    organization_id: UUID
+    name: str  # Unique per org
+    description: str | None
+    is_active: bool  # Soft delete via deactivation
+```
+
+### Ownership Operations
+| Operation | Description | Role Required |
+|-----------|-------------|---------------|
+| Claim | Transfer from queue to user | case_manager+ |
+| Release | Transfer from user to queue | case_manager+ |
+| Assign | Manager assigns to any queue | manager+ |
+
+### Atomic Claim
+- Uses `with_for_update()` for row-level locking
+- Returns 409 Conflict if already claimed
+- Logs to `CaseActivityLog`
+
+### Access Control (case_access.py)
+- **Manager/Developer**: Full access
+- **Queue-owned cases**: case_manager+ can access
+- **User-owned cases**: Owner, managers, or other case_managers can access
+- **Intake Specialists**: Can only access cases they own
+- **Backward compat**: Falls back to status-based logic if `owner_type` is NULL
+
+---
+
+*Last updated: 2025-12-18 (v0.09.00)*
 
