@@ -103,7 +103,16 @@ export function DateRangePicker({
     }
 
     return (
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover open={open} onOpenChange={(newOpen) => {
+            // When calendar is showing, only allow explicit closing (via Apply or timeout)
+            // Don't auto-close on internal clicks
+            if (!newOpen && showCalendar) {
+                // If closing while in calendar mode, only close if clicking outside
+                // The internal click handler will manage state
+                return
+            }
+            setOpen(newOpen)
+        }}>
             <PopoverTrigger
                 className={cn(
                     "inline-flex items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-normal hover:bg-accent hover:text-accent-foreground w-44",
