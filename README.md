@@ -27,30 +27,47 @@ AI is an **optional** capability designed to be safe, auditable, and tenant-conf
 
 ```
 ├── apps/
-│   ├── api/                 # FastAPI backend
+│   ├── api/                    # FastAPI backend (v0.06.00)
 │   │   ├── app/
-│   │   │   ├── core/        # Config, security, dependencies
-│   │   │   ├── db/          # Database models, session, enums
-│   │   │   ├── routers/     # API endpoints (auth, dev)
-│   │   │   ├── schemas/     # Pydantic DTOs (auth, user, org, invite)
-│   │   │   ├── services/    # Business logic (auth, user, org, google_oauth)
-│   │   │   ├── cli.py       # CLI commands (create-org, revoke-sessions)
-│   │   │   └── main.py      # FastAPI app entry
-│   │   ├── alembic/         # Database migrations
+│   │   │   ├── core/           # Config, security, dependencies
+│   │   │   ├── db/             # Models (34), enums, session
+│   │   │   ├── routers/        # API endpoints (19 modules)
+│   │   │   │   ├── auth, cases, tasks, notes, notifications
+│   │   │   │   ├── intended_parents, email_templates, pipelines
+│   │   │   │   ├── ai, analytics, audit, admin_versions
+│   │   │   │   ├── integrations, webhooks, ops, jobs
+│   │   │   │   └── dev, internal
+│   │   │   ├── schemas/        # Pydantic DTOs
+│   │   │   ├── services/       # Business logic (32 services)
+│   │   │   │   ├── auth, user, org, case, task, note
+│   │   │   │   ├── ai_*, email, pipeline, version
+│   │   │   │   ├── meta_*, import, audit, analytics
+│   │   │   │   └── notification, oauth, gmail, pii_anonymizer
+│   │   │   ├── utils/          # Helpers (normalization, pagination)
+│   │   │   ├── cli.py          # CLI commands
+│   │   │   └── main.py         # FastAPI app entry
+│   │   ├── alembic/            # Database migrations (19)
 │   │   └── requirements.txt
 │   │
-│   └── web/                 # Next.js frontend
+│   └── web/                    # Next.js frontend
 │       ├── app/
-│       │   ├── (app)/       # Authenticated app routes
-│       │   │   ├── dashboard/
-│       │   │   ├── leads/
-│       │   │   └── settings/
+│       │   ├── (app)/          # Authenticated routes
+│       │   │   ├── dashboard, cases, tasks, leads
+│       │   │   ├── intended-parents, reports, settings
+│       │   │   ├── ai-assistant, notifications, automation
+│       │   │   └── analytics, ops-console
+│       │   ├── login/          # Public login page
 │       │   └── layout.tsx
-│       └── components/
+│       ├── components/         # Shared UI components
+│       └── lib/                # API client, hooks, utils
 │
-├── docker-compose.yml       # PostgreSQL database
-└── agents.md               # Project specification & guidelines
+├── docs/                       # Documentation
+│   ├── agents.md               # Project spec & guidelines
+│   └── DESIGN.md               # Architecture decisions
+├── docker-compose.yml          # PostgreSQL database
+└── README.md
 ```
+
 
 ## Getting Started
 
