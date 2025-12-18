@@ -4,24 +4,38 @@ Handles per-user OAuth flows for Gmail, Zoom, etc.
 Each user connects their own accounts.
 """
 import logging
-import secrets
 import uuid
 from typing import Any
 
 import httpx
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import get_db, get_current_session, require_csrf_header
+from app.core.security import (
+    create_oauth_state_payload,
+    generate_oauth_nonce,
+    generate_oauth_state,
+    parse_oauth_state_payload,
+    verify_oauth_state,
+)
 from app.schemas.auth import UserSession
 from app.services import oauth_service
 
 router = APIRouter(prefix="/integrations", tags=["Integrations"])
 logger = logging.getLogger(__name__)
+
+OAUTH_STATE_MAX_AGE = 300  # 5 minutes
+OAUTH_STATE_COOKIE_PREFIX = "integration_oauth_state_"
+OAUTH_STATE_COOKIE_PATH = "/integrations"
+
+
+def _oauth_cookie_name(integration_type: str) -> str:
+    return f"{OAUTH_STATE_COOKIE_PREFIX}{integration_type}"
 
 
 # ============================================================================
@@ -39,25 +53,6 @@ class IntegrationStatus(BaseModel):
 class IntegrationListResponse(BaseModel):
     """List of user's integrations."""
     integrations: list[IntegrationStatus]
-
-
-# State storage for OAuth CSRF protection (in production, use Redis)
-_oauth_state_store: dict[str, dict] = {}
-
-
-def _generate_state(user_id: uuid.UUID, integration_type: str) -> str:
-    """Generate a random state token for OAuth CSRF protection."""
-    state = secrets.token_urlsafe(32)
-    _oauth_state_store[state] = {
-        "user_id": str(user_id),
-        "integration_type": integration_type,
-    }
-    return state
-
-
-def _validate_state(state: str) -> dict | None:
-    """Validate and consume a state token."""
-    return _oauth_state_store.pop(state, None)
 
 
 # ============================================================================
@@ -88,16 +83,39 @@ def list_integrations(
 @router.delete("/{integration_type}", dependencies=[Depends(require_csrf_header)])
 def disconnect_integration(
     integration_type: str,
+    request: Request,
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
 ) -> dict[str, Any]:
     """Disconnect an integration."""
+    from app.db.enums import AuditEventType
+    from app.services import audit_service
+
+    integration = oauth_service.get_user_integration(db, session.user_id, integration_type)
+    if not integration:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Integration '{integration_type}' not found",
+        )
+
     deleted = oauth_service.delete_integration(db, session.user_id, integration_type)
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Integration '{integration_type}' not found",
         )
+
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.INTEGRATION_DISCONNECTED,
+        actor_user_id=session.user_id,
+        target_type="user_integration",
+        target_id=integration.id,
+        details={"integration_type": integration_type},
+        request=request,
+    )
+    db.commit()
     return {"success": True, "message": f"{integration_type} disconnected"}
 
 
@@ -108,6 +126,7 @@ def disconnect_integration(
 @router.get("/gmail/connect")
 def gmail_connect(
     request: Request,
+    response: Response,
     session: UserSession = Depends(get_current_session),
 ) -> dict[str, str]:
     """Get Gmail OAuth authorization URL.
@@ -120,7 +139,21 @@ def gmail_connect(
             detail="Gmail integration not configured. Set GOOGLE_CLIENT_ID.",
         )
     
-    state = _generate_state(session.user_id, "gmail")
+    state = generate_oauth_state()
+    nonce = generate_oauth_nonce()
+    user_agent = request.headers.get("user-agent", "")
+    state_payload = create_oauth_state_payload(state, nonce, user_agent)
+
+    response.set_cookie(
+        key=_oauth_cookie_name("gmail"),
+        value=state_payload,
+        max_age=OAUTH_STATE_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+        secure=settings.cookie_secure,
+        path=OAUTH_STATE_COOKIE_PATH,
+    )
+
     redirect_uri = settings.GMAIL_REDIRECT_URI
     auth_url = oauth_service.get_gmail_auth_url(redirect_uri, state)
     
@@ -129,19 +162,33 @@ def gmail_connect(
 
 @router.get("/gmail/callback")
 async def gmail_callback(
+    request: Request,
     code: str,
     state: str,
     db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
 ) -> RedirectResponse:
     """Handle Gmail OAuth callback."""
-    # Validate state
-    state_data = _validate_state(state)
-    if not state_data:
-        return RedirectResponse(
-            f"{settings.FRONTEND_URL}/settings/integrations?error=invalid_state"
-        )
-    
-    user_id = uuid.UUID(state_data["user_id"])
+    cookie_name = _oauth_cookie_name("gmail")
+    error_response = RedirectResponse(
+        f"{settings.FRONTEND_URL}/settings/integrations?error=invalid_state",
+        status_code=302,
+    )
+    error_response.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
+
+    state_cookie = request.cookies.get(cookie_name)
+    if not state_cookie:
+        return error_response
+
+    try:
+        stored_payload = parse_oauth_state_payload(state_cookie)
+    except Exception:
+        return error_response
+
+    user_agent = request.headers.get("user-agent", "")
+    valid, _ = verify_oauth_state(stored_payload, state, user_agent)
+    if not valid:
+        return error_response
     
     try:
         # Exchange code for tokens
@@ -154,20 +201,44 @@ async def gmail_callback(
         # Save integration
         oauth_service.save_integration(
             db,
-            user_id,
+            session.user_id,
             "gmail",
             access_token=tokens["access_token"],
             refresh_token=tokens.get("refresh_token"),
             expires_in=tokens.get("expires_in"),
             account_email=user_info.get("email"),
         )
-        
-        return RedirectResponse(
-            f"{settings.FRONTEND_URL}/settings/integrations?success=gmail"
+
+        # Audit log (no secrets)
+        from app.db.enums import AuditEventType
+        from app.services import audit_service
+
+        integration = oauth_service.get_user_integration(db, session.user_id, "gmail")
+        audit_service.log_event(
+            db=db,
+            org_id=session.org_id,
+            event_type=AuditEventType.INTEGRATION_CONNECTED,
+            actor_user_id=session.user_id,
+            target_type="user_integration",
+            target_id=integration.id if integration else None,
+            details={
+                "integration_type": "gmail",
+                "account_email": audit_service.hash_email(user_info.get("email", "") or ""),
+            },
+            request=request,
         )
+        db.commit()
+        
+        success = RedirectResponse(
+            f"{settings.FRONTEND_URL}/settings/integrations?success=gmail",
+            status_code=302,
+        )
+        success.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
+        return success
     except Exception as e:
         return RedirectResponse(
-            f"{settings.FRONTEND_URL}/settings/integrations?error=gmail_failed"
+            f"{settings.FRONTEND_URL}/settings/integrations?error=gmail_failed",
+            status_code=302,
         )
 
 
@@ -178,6 +249,7 @@ async def gmail_callback(
 @router.get("/zoom/connect")
 def zoom_connect(
     request: Request,
+    response: Response,
     session: UserSession = Depends(get_current_session),
 ) -> dict[str, str]:
     """Get Zoom OAuth authorization URL."""
@@ -187,7 +259,21 @@ def zoom_connect(
             detail="Zoom integration not configured. Set ZOOM_CLIENT_ID.",
         )
     
-    state = _generate_state(session.user_id, "zoom")
+    state = generate_oauth_state()
+    nonce = generate_oauth_nonce()
+    user_agent = request.headers.get("user-agent", "")
+    state_payload = create_oauth_state_payload(state, nonce, user_agent)
+
+    response.set_cookie(
+        key=_oauth_cookie_name("zoom"),
+        value=state_payload,
+        max_age=OAUTH_STATE_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+        secure=settings.cookie_secure,
+        path=OAUTH_STATE_COOKIE_PATH,
+    )
+
     redirect_uri = settings.ZOOM_REDIRECT_URI
     auth_url = oauth_service.get_zoom_auth_url(redirect_uri, state)
     
@@ -196,19 +282,33 @@ def zoom_connect(
 
 @router.get("/zoom/callback")
 async def zoom_callback(
+    request: Request,
     code: str,
     state: str,
     db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
 ) -> RedirectResponse:
     """Handle Zoom OAuth callback."""
-    # Validate state
-    state_data = _validate_state(state)
-    if not state_data:
-        return RedirectResponse(
-            f"{settings.FRONTEND_URL}/settings/integrations?error=invalid_state"
-        )
-    
-    user_id = uuid.UUID(state_data["user_id"])
+    cookie_name = _oauth_cookie_name("zoom")
+    error_response = RedirectResponse(
+        f"{settings.FRONTEND_URL}/settings/integrations?error=invalid_state",
+        status_code=302,
+    )
+    error_response.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
+
+    state_cookie = request.cookies.get(cookie_name)
+    if not state_cookie:
+        return error_response
+
+    try:
+        stored_payload = parse_oauth_state_payload(state_cookie)
+    except Exception:
+        return error_response
+
+    user_agent = request.headers.get("user-agent", "")
+    valid, _ = verify_oauth_state(stored_payload, state, user_agent)
+    if not valid:
+        return error_response
     
     try:
         # Exchange code for tokens
@@ -221,20 +321,44 @@ async def zoom_callback(
         # Save integration
         oauth_service.save_integration(
             db,
-            user_id,
+            session.user_id,
             "zoom",
             access_token=tokens["access_token"],
             refresh_token=tokens.get("refresh_token"),
             expires_in=tokens.get("expires_in"),
             account_email=user_info.get("email"),
         )
-        
-        return RedirectResponse(
-            f"{settings.FRONTEND_URL}/settings/integrations?success=zoom"
+
+        # Audit log (no secrets)
+        from app.db.enums import AuditEventType
+        from app.services import audit_service
+
+        integration = oauth_service.get_user_integration(db, session.user_id, "zoom")
+        audit_service.log_event(
+            db=db,
+            org_id=session.org_id,
+            event_type=AuditEventType.INTEGRATION_CONNECTED,
+            actor_user_id=session.user_id,
+            target_type="user_integration",
+            target_id=integration.id if integration else None,
+            details={
+                "integration_type": "zoom",
+                "account_email": audit_service.hash_email(user_info.get("email", "") or ""),
+            },
+            request=request,
         )
+        db.commit()
+        
+        success = RedirectResponse(
+            f"{settings.FRONTEND_URL}/settings/integrations?success=zoom",
+            status_code=302,
+        )
+        success.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
+        return success
     except Exception as e:
         return RedirectResponse(
-            f"{settings.FRONTEND_URL}/settings/integrations?error=zoom_failed"
+            f"{settings.FRONTEND_URL}/settings/integrations?error=zoom_failed",
+            status_code=302,
         )
 
 
@@ -278,7 +402,9 @@ async def create_zoom_meeting(
     """
     from datetime import datetime as dt
     from app.db.enums import EntityType
+    from app.core.case_access import check_case_access
     from app.services import zoom_service
+    from app.services import case_service, ip_service
     
     # Parse entity type
     if request.entity_type == "case":
@@ -302,6 +428,17 @@ async def create_zoom_meeting(
                 detail="Invalid start_time format. Use ISO format (e.g., 2024-01-15T10:00:00).",
             )
     
+    # Validate entity exists and user has access (prevents cross-tenant/task leakage)
+    if entity_type == EntityType.CASE:
+        case = case_service.get_case(db, session.org_id, request.entity_id)
+        if not case:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+        check_case_access(case, session.role, session.user_id)
+    else:
+        ip = ip_service.get_intended_parent(db, request.entity_id, session.org_id)
+        if not ip:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intended parent not found")
+
     # Check user has Zoom connected
     if not zoom_service.check_user_has_zoom(db, session.user_id):
         raise HTTPException(
@@ -436,4 +573,3 @@ def send_zoom_meeting_invite(
         email_log_id=str(email_log_id),
         success=True,
     )
-
