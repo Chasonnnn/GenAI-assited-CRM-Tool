@@ -37,10 +37,9 @@ describe('IntegrationsPage', () => {
         render(<IntegrationsPage />)
 
         expect(screen.getByText('Integrations')).toBeInTheDocument()
-        expect(screen.getByText('Meta Leads')).toBeInTheDocument()
+        expect(screen.getByText('Meta Lead Ads')).toBeInTheDocument()
 
         fireEvent.click(screen.getByRole('button', { name: /refresh/i }))
         expect(mockRefetch).toHaveBeenCalled()
     })
 })
-
