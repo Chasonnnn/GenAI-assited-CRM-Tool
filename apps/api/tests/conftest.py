@@ -50,20 +50,27 @@ def db(db_engine) -> Generator:
     """
     Creates a database session for tests.
     """
-    from sqlalchemy.orm import Session
+    from sqlalchemy import event
     from app.db.session import SessionLocal
     
     connection = db_engine.connect()
     transaction = connection.begin()
     session = SessionLocal(bind=connection)
+
+    # Start a SAVEPOINT so application code can call session.commit()
+    # without committing the outer test transaction.
+    session.begin_nested()
+
+    @event.listens_for(session, "after_transaction_end")
+    def _restart_savepoint(session_, transaction_):  # type: ignore[no-redef]
+        parent = getattr(transaction_, "_parent", None)
+        if transaction_.nested and parent is not None and not parent.nested:
+            session_.begin_nested()
     
     yield session
     
     session.close()
-    try:
-        transaction.rollback()
-    except Exception:
-        pass
+    transaction.rollback()
     connection.close()
 
 
@@ -97,6 +104,8 @@ def test_user(db, test_org):
         id=uuid.uuid4(),
         email=f"test-{uuid.uuid4().hex[:8]}@test.com",
         display_name="Test User",
+        token_version=1,
+        is_active=True,
     )
     db.add(user)
     db.flush()

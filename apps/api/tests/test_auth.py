@@ -15,12 +15,9 @@ async def test_login_redirects_to_google(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_me_returns_user_info(client: AsyncClient):
-    """GET /auth/me should return user info (DEV_BYPASS_AUTH returns mock user)."""
+    """GET /auth/me should require authentication."""
     response = await client.get("/auth/me")
-    assert response.status_code == 200
-    data = response.json()
-    assert "email" in data
-    assert "user_id" in data
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio

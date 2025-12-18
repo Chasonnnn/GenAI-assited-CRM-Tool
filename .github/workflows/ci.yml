@@ -29,7 +29,9 @@ jobs:
     env:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/crm_test
       JWT_SECRET: test-secret-key-for-ci
-      META_ENCRYPTION_KEY: "test-encryption-key-32-bytes-ok"
+      # Fernet keys must be 32 url-safe base64-encoded bytes.
+      VERSION_ENCRYPTION_KEY: "_uKVT313or8juloqHLg9OtBNJv9LCBzEC6mJ1yG9S_E="
+      META_ENCRYPTION_KEY: "_uKVT313or8juloqHLg9OtBNJv9LCBzEC6mJ1yG9S_E="
       DEV_BYPASS_AUTH: "False"
       ENV: test
 
