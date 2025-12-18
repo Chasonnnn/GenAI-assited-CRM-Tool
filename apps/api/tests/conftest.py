@@ -13,18 +13,10 @@ from typing import AsyncGenerator, Generator
 from dataclasses import dataclass
 
 import pytest
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy.orm import Session
 
-# Ensure DEV_BYPASS_AUTH is disabled for tests
-os.environ["DEV_BYPASS_AUTH"] = "False"
-
-from app.main import app
-from app.db.session import engine, SessionLocal
-from app.core.deps import get_db, COOKIE_NAME
-from app.core.security import create_session_token
-from app.db.models import Organization, User, Membership
-from app.db.enums import Role
+# Set test environment variables BEFORE any app imports
+os.environ.setdefault("DEV_BYPASS_AUTH", "False")
+os.environ.setdefault("ENV", "test")
 
 
 # =============================================================================
@@ -43,50 +35,47 @@ def event_loop() -> Generator:
 
 
 # =============================================================================
-# Database Fixtures (Savepoint pattern)
+# Database Fixtures
 # =============================================================================
 
+@pytest.fixture(scope="session")
+def db_engine():
+    """Yields the SQLAlchemy engine."""
+    from app.db.session import engine
+    yield engine
+
+
 @pytest.fixture(scope="function")
-def db() -> Generator[Session, None, None]:
+def db(db_engine) -> Generator:
     """
-    Creates a database session with savepoint for test isolation.
+    Creates a database session for tests.
+    """
+    from sqlalchemy.orm import Session
+    from app.db.session import SessionLocal
     
-    Uses nested savepoints so that app code can call commit()
-    without ending the test transaction.
-    """
-    connection = engine.connect()
-    # Begin outer transaction that we'll rollback at end
+    connection = db_engine.connect()
     transaction = connection.begin()
-    
-    # Create session bound to this connection
     session = SessionLocal(bind=connection)
-    
-    # Start a SAVEPOINT
-    nested = connection.begin_nested()
-    
-    # Listen for commit() calls to restart the savepoint
-    @event.listens_for(session, "after_transaction_end")
-    def restart_savepoint(session, trans):
-        nonlocal nested
-        if trans.nested and not trans._parent.nested:
-            # Create new savepoint after each commit
-            nested = connection.begin_nested()
     
     yield session
     
     session.close()
-    # Rollback outer transaction - undoes all test changes
-    transaction.rollback()
+    try:
+        transaction.rollback()
+    except Exception:
+        pass
     connection.close()
 
 
-# Import event listener after to avoid circular import issues
-from sqlalchemy import event
-
+# =============================================================================
+# Entity Fixtures
+# =============================================================================
 
 @pytest.fixture(scope="function")
-def test_org(db: Session) -> Organization:
+def test_org(db):
     """Create a test organization."""
+    from app.db.models import Organization
+    
     org = Organization(
         id=uuid.uuid4(),
         name="Test Organization",
@@ -99,8 +88,11 @@ def test_org(db: Session) -> Organization:
 
 
 @pytest.fixture(scope="function")
-def test_user(db: Session, test_org: Organization) -> User:
+def test_user(db, test_org):
     """Create a test user with membership in test_org."""
+    from app.db.models import User, Membership
+    from app.db.enums import Role
+    
     user = User(
         id=uuid.uuid4(),
         email=f"test-{uuid.uuid4().hex[:8]}@test.com",
@@ -109,7 +101,6 @@ def test_user(db: Session, test_org: Organization) -> User:
     db.add(user)
     db.flush()
     
-    # Add membership as developer
     membership = Membership(
         id=uuid.uuid4(),
         user_id=user.id,
@@ -129,15 +120,19 @@ def test_user(db: Session, test_org: Organization) -> User:
 @dataclass
 class TestAuth:
     """Test authentication context."""
-    user: User
-    org: Organization
+    user: object
+    org: object
     token: str
-    cookie_name: str = COOKIE_NAME
+    cookie_name: str
 
 
 @pytest.fixture(scope="function")
-def test_auth(test_user: User, test_org: Organization) -> TestAuth:
+def test_auth(test_user, test_org):
     """Create JWT token for test user."""
+    from app.core.security import create_session_token
+    from app.core.deps import COOKIE_NAME
+    from app.db.enums import Role
+    
     token = create_session_token(
         user_id=test_user.id,
         org_id=test_org.id,
@@ -148,6 +143,7 @@ def test_auth(test_user: User, test_org: Organization) -> TestAuth:
         user=test_user,
         org=test_org,
         token=token,
+        cookie_name=COOKIE_NAME,
     )
 
 
@@ -156,10 +152,14 @@ def test_auth(test_user: User, test_org: Organization) -> TestAuth:
 # =============================================================================
 
 @pytest.fixture(scope="function")
-async def client(db: Session) -> AsyncGenerator[AsyncClient, None]:
+async def client(db) -> AsyncGenerator:
     """
     Create unauthenticated AsyncClient for testing public endpoints.
     """
+    from httpx import AsyncClient, ASGITransport
+    from app.main import app
+    from app.core.deps import get_db
+    
     def override_get_db():
         yield db
 
@@ -175,13 +175,14 @@ async def client(db: Session) -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest.fixture(scope="function")
-async def authed_client(
-    db: Session, 
-    test_auth: TestAuth
-) -> AsyncGenerator[AsyncClient, None]:
+async def authed_client(db, test_auth) -> AsyncGenerator:
     """
     Create authenticated AsyncClient with JWT cookie and CSRF header.
     """
+    from httpx import AsyncClient, ASGITransport
+    from app.main import app
+    from app.core.deps import get_db
+    
     def override_get_db():
         yield db
 
@@ -191,7 +192,7 @@ async def authed_client(
         transport=ASGITransport(app=app), 
         base_url="http://test",
         cookies={test_auth.cookie_name: test_auth.token},
-        headers={"X-Requested-With": "XMLHttpRequest"},  # CSRF header
+        headers={"X-Requested-With": "XMLHttpRequest"},
     ) as c:
         yield c
     
