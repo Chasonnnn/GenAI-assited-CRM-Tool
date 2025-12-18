@@ -33,6 +33,7 @@ export interface CreateMeetingRequest {
     entity_id: string
     topic: string
     start_time?: string // ISO format
+    timezone?: string // IANA timezone name (e.g. America/Los_Angeles)
     duration?: number // minutes, default 30
     create_task?: boolean // default true
     contact_name?: string
@@ -116,4 +117,3 @@ export interface SendZoomInviteResponse {
 export async function sendZoomInvite(data: SendZoomInviteRequest): Promise<SendZoomInviteResponse> {
     return api.post<SendZoomInviteResponse>('/integrations/zoom/send-invite', data)
 }
-
