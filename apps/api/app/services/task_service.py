@@ -193,7 +193,7 @@ def list_tasks(
         (tasks, total_count)
     """
     from datetime import date
-    from app.db.enums import CaseStatus, Role, OwnerType
+    from app.db.enums import Role, OwnerType
     from app.db.models import Case
     
     query = db.query(Task).filter(Task.organization_id == org_id)
@@ -201,19 +201,11 @@ def list_tasks(
     # Role-based case access filtering for intake specialists
     # Filter out tasks linked to cases they can't access
     if user_role == Role.INTAKE_SPECIALIST.value or user_role == Role.INTAKE_SPECIALIST:
-        case_manager_only_statuses = [s.value for s in CaseStatus.case_manager_only()]
-        
-        # Subquery: cases intake can access (owner-based OR status-based fallback)
+        # Subquery: cases intake can access (owner-based)
         if user_id:
-            # Intake can access:
-            # 1. Cases they own (owner_type=user, owner_id=user_id)
-            # 2. Cases with null owner_type and intake-visible status (backward compat)
             accessible_case_ids = db.query(Case.id).filter(
                 Case.organization_id == org_id,
-                or_(
-                    (Case.owner_type == OwnerType.USER.value) & (Case.owner_id == user_id),
-                    (Case.owner_type.is_(None)) & (~Case.status.in_(case_manager_only_statuses))
-                )
+                (Case.owner_type == OwnerType.USER.value) & (Case.owner_id == user_id),
             ).subquery()
             
             query = query.filter(
@@ -223,17 +215,8 @@ def list_tasks(
                 )
             )
         else:
-            # Fallback: status-based only
-            inaccessible_case_ids = db.query(Case.id).filter(
-                Case.organization_id == org_id,
-                Case.status.in_(case_manager_only_statuses)
-            ).subquery()
-            query = query.filter(
-                or_(
-                    Task.case_id.is_(None),
-                    ~Task.case_id.in_(inaccessible_case_ids)
-                )
-            )
+            # No user_id → tasks without a case only
+            query = query.filter(Task.case_id.is_(None))
     
     # Search filter (title or description)
     if q:

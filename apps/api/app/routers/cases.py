@@ -512,7 +512,7 @@ def get_case(
         raise HTTPException(status_code=404, detail="Case not found")
     
     # Access control: intake can't view case_manager_only statuses
-    check_case_access(case, session.role)
+    check_case_access(case, session.role, session.user_id)
     
     return _case_to_read(case, db)
 
@@ -534,7 +534,7 @@ def update_case(
         raise HTTPException(status_code=404, detail="Case not found")
     
     # Access control: intake can't access handed-off cases
-    check_case_access(case, session.role)
+    check_case_access(case, session.role, session.user_id)
     
     # Permission check: must be able to modify
     if not can_modify_case(case, str(session.user_id), session.role):
@@ -565,7 +565,7 @@ def change_status(
         raise HTTPException(status_code=404, detail="Case not found")
     
     # Access control: intake can't access handed-off cases
-    check_case_access(case, session.role)
+    check_case_access(case, session.role, session.user_id)
     
     if case.is_archived:
         raise HTTPException(status_code=400, detail="Cannot change status of archived case")
@@ -792,7 +792,7 @@ def get_case_activity(
         raise HTTPException(status_code=404, detail="Case not found")
     
     # Access control
-    check_case_access(case, session.role)
+    check_case_access(case, session.role, session.user_id)
     
     # Query activity log with pagination
     base_query = db.query(CaseActivityLog).filter(

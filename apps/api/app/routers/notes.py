@@ -53,7 +53,7 @@ def list_notes(
         raise HTTPException(status_code=404, detail="Case not found")
     
     # Access control: intake can't access handed-off cases
-    check_case_access(case, session.role)
+    check_case_access(case, session.role, session.user_id)
     
     notes = note_service.list_notes(db, session.org_id, "case", case_id)
     return [_note_to_read(n, db) for n in notes]
@@ -73,7 +73,7 @@ def create_note(
         raise HTTPException(status_code=404, detail="Case not found")
     
     # Access control: intake can't access handed-off cases
-    check_case_access(case, session.role)
+    check_case_access(case, session.role, session.user_id)
     
     note = note_service.create_note(
         db=db,
@@ -119,7 +119,7 @@ def delete_note(
     if note.entity_type == "case":
         case = case_service.get_case(db, session.org_id, note.entity_id)
         if case:
-            check_case_access(case, session.role)
+            check_case_access(case, session.role, session.user_id)
     
     # Permission: author or manager+
     if not is_owner_or_can_manage(session, note.author_id):

@@ -453,9 +453,19 @@ def assign_case(
 ) -> Case:
     """Assign case to a user (or unassign with None)."""
     from app.services import activity_service
+    from app.db.enums import OwnerType
+    from app.services import queue_service
     
     old_assignee = case.assigned_to_user_id
-    case.assigned_to_user_id = assignee_id
+    if assignee_id:
+        case.owner_type = OwnerType.USER.value
+        case.owner_id = assignee_id
+        case.assigned_to_user_id = assignee_id
+    else:
+        default_queue = queue_service.get_or_create_default_queue(db, case.organization_id)
+        case.owner_type = OwnerType.QUEUE.value
+        case.owner_id = default_queue.id
+        case.assigned_to_user_id = None
     db.commit()
     db.refresh(case)
     
