@@ -80,3 +80,30 @@ export function useSendEmail() {
         mutationFn: (data: EmailSendRequest) => sendEmail(data),
     })
 }
+
+// ============================================================================
+// Version History Hooks
+// ============================================================================
+
+import { getTemplateVersions, rollbackTemplate } from '@/lib/api/email-templates'
+
+export function useTemplateVersions(id: string | null) {
+    return useQuery({
+        queryKey: [...emailTemplateKeys.detail(id || ''), 'versions'] as const,
+        queryFn: () => getTemplateVersions(id!),
+        enabled: !!id,
+    })
+}
+
+export function useRollbackTemplate() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({ id, version }: { id: string; version: number }) =>
+            rollbackTemplate(id, version),
+        onSuccess: (_, { id }) => {
+            queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
+            queryClient.invalidateQueries({ queryKey: emailTemplateKeys.detail(id) })
+        },
+    })
+}

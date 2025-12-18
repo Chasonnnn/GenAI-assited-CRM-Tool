@@ -13,8 +13,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CameraIcon, CheckIcon, MonitorIcon, SmartphoneIcon, LoaderIcon, History, GitBranch } from "lucide-react"
 import { useNotificationSettings, useUpdateNotificationSettings } from "@/lib/hooks/use-notifications"
 import { usePipelines, usePipelineVersions, useRollbackPipeline } from "@/lib/hooks/use-pipelines"
+import { useEmailTemplates, useTemplateVersions, useRollbackTemplate } from "@/lib/hooks/use-email-templates"
 import { VersionHistoryModal, type VersionItem } from "@/components/version-history-modal"
 import { useAuth } from "@/lib/auth-context"
+import { Mail } from "lucide-react"
 // Notification Settings Card - wired to real API
 function NotificationsSettingsCard() {
   const { data: settings, isLoading } = useNotificationSettings()
@@ -212,6 +214,119 @@ function PipelinesSettingsCard() {
   )
 }
 
+// Email Templates Settings Card - with version history
+function EmailTemplatesSettingsCard() {
+  const { user } = useAuth()
+  const { data: templates, isLoading } = useEmailTemplates(false) // include inactive
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
+
+  const { data: versions, isLoading: versionsLoading } = useTemplateVersions(selectedTemplateId)
+  const rollbackMutation = useRollbackTemplate()
+
+  const selectedTemplate = templates?.find(t => t.id === selectedTemplateId)
+  const isDeveloper = user?.role === 'developer'
+
+  const handleOpenHistory = (templateId: string) => {
+    setSelectedTemplateId(templateId)
+    setHistoryOpen(true)
+  }
+
+  const handleRollback = (version: number) => {
+    if (!selectedTemplateId) return
+    rollbackMutation.mutate(
+      { id: selectedTemplateId, version },
+      {
+        onSuccess: () => {
+          setHistoryOpen(false)
+        },
+      }
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-12 flex items-center justify-center">
+          <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Email Templates</CardTitle>
+          <CardDescription>Manage your organization&apos;s email templates with version history</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {templates?.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No email templates configured
+            </div>
+          ) : (
+            templates?.map((template) => (
+              <div
+                key={template.id}
+                className="flex items-center justify-between rounded-lg border border-border p-4"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
+                    <Mail className="size-5 text-primary" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-medium">{template.name}</h3>
+                      {!template.is_active && (
+                        <Badge variant="secondary" className="text-xs">Inactive</Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {template.subject}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleOpenHistory(template.id)}
+                >
+                  <History className="h-4 w-4 mr-1" />
+                  History
+                </Button>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      {selectedTemplate && (
+        <VersionHistoryModal
+          open={historyOpen}
+          onOpenChange={setHistoryOpen}
+          title={selectedTemplate.name}
+          entityType="email_template"
+          versions={(versions || []).map(v => ({
+            id: v.id,
+            version: v.version,
+            payload: v.payload as Record<string, unknown>,
+            comment: v.comment,
+            created_by_user_id: v.created_by_user_id,
+            created_at: v.created_at,
+          }))}
+          currentVersion={1} // selectedTemplate doesn't have current_version in list type
+          isLoading={versionsLoading}
+          onRollback={handleRollback}
+          isRollingBack={rollbackMutation.isPending}
+          canRollback={isDeveloper}
+        />
+      )}
+    </>
+  )
+}
+
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("profile")
 
@@ -267,6 +382,13 @@ export default function SettingsPage() {
                 >
                   <GitBranch className="mr-2 h-4 w-4" />
                   Pipelines
+                </TabsTrigger>
+                <TabsTrigger
+                  value="email-templates"
+                  className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
+                >
+                  <Mail className="mr-2 h-4 w-4" />
+                  Email Templates
                 </TabsTrigger>
               </TabsList>
             </CardContent>
@@ -531,6 +653,11 @@ export default function SettingsPage() {
             {/* Pipelines Tab */}
             <TabsContent value="pipelines" className="mt-0">
               <PipelinesSettingsCard />
+            </TabsContent>
+
+            {/* Email Templates Tab */}
+            <TabsContent value="email-templates" className="mt-0">
+              <EmailTemplatesSettingsCard />
             </TabsContent>
           </div>
         </Tabs>
