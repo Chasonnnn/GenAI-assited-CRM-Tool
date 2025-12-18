@@ -70,6 +70,12 @@ vi.mock('@/lib/hooks/use-tasks', () => ({
     useUncompleteTask: () => ({ mutateAsync: mockUncompleteTask }),
 }))
 
+vi.mock('@/lib/hooks/use-ai', () => ({
+    useSummarizeCase: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useDraftEmail: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useAISettings: () => ({ data: { is_enabled: false } }),
+}))
+
 describe('CaseDetailPage', () => {
     beforeEach(() => {
         mockUseCase.mockReturnValue({
@@ -118,7 +124,7 @@ describe('CaseDetailPage', () => {
         mockPush.mockReset()
         mockClaimCase.mockReset()
         mockReleaseCase.mockReset()
-        ;(navigator.clipboard.writeText as any).mockClear?.()
+            ; (navigator.clipboard.writeText as any).mockClear?.()
     })
 
     it('renders case header and allows copying email', () => {
