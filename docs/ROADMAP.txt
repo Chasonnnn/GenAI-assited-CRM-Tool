@@ -279,24 +279,23 @@ Deliverable
 DEFERRED IMPROVEMENTS (Technical Debt / Future Enhancements)
 ═══════════════════════════════════════════════════════════════════════════════
 
-Metadata API for Picklists (Week 10-11)
-- Problem: Status/source/type enums are duplicated in backend enums.py and frontend types
-- Solution: Add /metadata/statuses, /metadata/task-types endpoints
-  - Frontend fetches allowed values on load, populates dropdowns dynamically
-  - Single source of truth, no manual sync needed
-- Enables: Admin-managed picklists, versioned taxonomy with migration scripts
+Metadata API for Picklists — ✓ COMPLETE (2025-12-18)
+- Added /metadata/statuses, /metadata/task-types, /metadata/sources, 
+  /metadata/roles, /metadata/intended-parent-statuses endpoints
+- All return {value, label} pairs for dropdown population
+- Single source of truth for all enum values
 
-Task Search (Week 10-11)
-- Problem: Backend /tasks endpoint has no search/filter by title/description
-- Solution: Add `q` query param to /tasks for server-side search
-  - Also add: due_before, due_after params for date filtering
-- Enables: Search UI in tasks page, better filtering for large task lists
+Task Search — ✓ COMPLETE (2025-12-18)
+- Added `q` query param to /tasks for title/description search (case-insensitive)
+- Added `due_before`, `due_after` params for date range filtering
+- Graceful handling of invalid date formats
 
-Case Inline Editing (Week 6+)
-- Problem: Case detail shows data but can't edit most fields inline
-- Solution: Inline editing for simple fields (name, email, phone)
-  - Modal for complex edits (demographics, eligibility)
-- Enables: Faster data entry without leaving the page
+Case Inline Editing — ✓ COMPLETE (2025-12-18)
+- Created InlineEditField component with click-to-edit, blur-to-save UX
+- Integrated into case detail for: name, email, phone, state
+- Validation support: email @ check, state 2-letter code
+- Kept modal for complex edits (demographics, eligibility)
+- Pattern: Notion/Linear/Salesforce hybrid approach
 
 ═══════════════════════════════════════════════════════════════════════════════
 
@@ -551,6 +550,35 @@ Deliverable
 ✓ CI/CD pipeline runs on push/PR to main/develop
 ✓ Version control for configurations with audit trail
 ✓ Real-time notification updates via WebSocket
+
+Week 11 — Continuation (2025-12-18)
+───────────────────────────────────
+Dashboard & Reports Chart Updates
+✓ Dashboard charts with v0 styling:
+  - Area chart: type="natural" for smooth curves
+  - Both charts: var(--color-XX) pattern, accessibilityLayer
+  - CartesianGrid, cursor={false} tooltips, radius={4}
+✓ Reports charts with computed CardFooter insights:
+  - Cases by Status: shows top status with count
+  - Cases Trend: computed trend percentage (up/down)
+  - Team Performance: shows top performer with case count
+  - AI placeholder: SparklesIcon when AI enabled
+Deferred Improvements — COMPLETED
+✓ Task Search:
+  - `q` param for title/description search (ilike)
+  - `due_before`, `due_after` date range filters
+✓ Metadata API:
+  - /metadata/statuses, /sources, /task-types, /roles, /intended-parent-statuses
+  - All return {value, label} pairs for dropdowns
+✓ Case Inline Editing (Hybrid):
+  - InlineEditField component with click-to-edit, blur-to-save
+  - Integrated for: name, email, phone, state
+  - Validation: email @ check, state 2-letter code
+  - Modal kept for complex fields (demographics, eligibility)
+Deliverable
+✓ Modern chart styling matching v0 design patterns
+✓ All 3 deferred improvements complete
+✓ Hybrid inline editing for faster case data entry
 
 Week 12 — AI assistant v1 (safe + useful, BYOK)
 Backend
