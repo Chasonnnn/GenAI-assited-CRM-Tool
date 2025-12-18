@@ -60,6 +60,8 @@ class AISettingsResponse(BaseModel):
     anonymize_pii: bool
     consent_accepted_at: str | None
     consent_required: bool
+    # Version control
+    current_version: int | None = None
 
 
 class AISettingsUpdate(BaseModel):
@@ -71,6 +73,7 @@ class AISettingsUpdate(BaseModel):
     context_notes_limit: int | None = Field(None, ge=1, le=20)
     conversation_history_limit: int | None = Field(None, ge=5, le=50)
     anonymize_pii: bool | None = None
+    expected_version: int | None = Field(None, description="Required for optimistic locking")
 
 
 class TestKeyRequest(BaseModel):
@@ -127,6 +130,7 @@ def get_settings(
         anonymize_pii=settings.anonymize_pii,
         consent_accepted_at=settings.consent_accepted_at.isoformat() if settings.consent_accepted_at else None,
         consent_required=ai_settings_service.is_consent_required(settings),
+        current_version=settings.current_version,
     )
 
 
@@ -137,18 +141,24 @@ def update_settings(
     session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
 ) -> AISettingsResponse:
     """Update AI settings for the organization. Creates version snapshot."""
-    settings = ai_settings_service.update_ai_settings(
-        db,
-        session.org_id,
-        session.user_id,
-        is_enabled=update.is_enabled,
-        provider=update.provider,
-        api_key=update.api_key,
-        model=update.model,
-        context_notes_limit=update.context_notes_limit,
-        conversation_history_limit=update.conversation_history_limit,
-        anonymize_pii=update.anonymize_pii,
-    )
+    from app.services import version_service
+    
+    try:
+        settings = ai_settings_service.update_ai_settings(
+            db,
+            session.org_id,
+            session.user_id,
+            is_enabled=update.is_enabled,
+            provider=update.provider,
+            api_key=update.api_key,
+            model=update.model,
+            context_notes_limit=update.context_notes_limit,
+            conversation_history_limit=update.conversation_history_limit,
+            anonymize_pii=update.anonymize_pii,
+            expected_version=update.expected_version,
+        )
+    except version_service.VersionConflictError as e:
+        raise HTTPException(status_code=409, detail=f"Version conflict: expected {e.expected}, got {e.actual}")
     
     return AISettingsResponse(
         is_enabled=settings.is_enabled,
@@ -160,6 +170,7 @@ def update_settings(
         anonymize_pii=settings.anonymize_pii,
         consent_accepted_at=settings.consent_accepted_at.isoformat() if settings.consent_accepted_at else None,
         consent_required=ai_settings_service.is_consent_required(settings),
+        current_version=settings.current_version,
     )
 
 

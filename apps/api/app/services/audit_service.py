@@ -34,24 +34,36 @@ def get_client_ip(request: Request | None) -> str | None:
     """
     Extract client IP from request.
     
-    In production (behind load balancer), trusts X-Forwarded-For.
-    In development, uses request.client.host directly.
+    Only trusts X-Forwarded-For when TRUST_PROXY_HEADERS=True (behind reverse proxy).
+    In development/direct connections, uses request.client.host.
     """
     if not request:
         return None
     
-    # In production, trust X-Forwarded-For (set by load balancer)
-    # Check settings or environment to determine if behind proxy
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        # X-Forwarded-For: client, proxy1, proxy2 - take first
-        return forwarded.split(",")[0].strip()
+    # Only trust X-Forwarded-For when explicitly configured (behind nginx/Cloudflare)
+    if settings.TRUST_PROXY_HEADERS:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            # X-Forwarded-For: client, proxy1, proxy2 - take first
+            return forwarded.split(",")[0].strip()
     
-    # Direct connection (development)
+    # Direct connection or TRUST_PROXY_HEADERS=False
     if request.client:
         return request.client.host
     
     return None
+
+
+def canonical_json(obj: dict | None) -> str:
+    """
+    Serialize object to canonical JSON for consistent hashing.
+    
+    Uses sorted keys, compact separators, and str() for non-JSON types.
+    This MUST be used consistently everywhere hashes are computed.
+    """
+    import json as json_module
+    return json_module.dumps(obj or {}, sort_keys=True, separators=(",", ":"), default=str)
+
 
 
 def get_user_agent(request: Request | None) -> str | None:
@@ -118,8 +130,8 @@ def log_event(
     db.add(entry)
     db.flush()  # Get ID and created_at
     
-    # Compute entry hash
-    details_json = json_module.dumps(details, sort_keys=True, default=str) if details else "{}"
+    # Compute entry hash using canonical JSON
+    details_json = canonical_json(details)
     entry_hash = version_service.compute_audit_hash(
         prev_hash=prev_hash,
         entry_id=str(entry.id),

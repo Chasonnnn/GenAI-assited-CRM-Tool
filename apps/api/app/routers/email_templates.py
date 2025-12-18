@@ -103,6 +103,7 @@ def update_template(
             subject=data.subject,
             body=data.body,
             is_active=data.is_active,
+            expected_version=data.expected_version,
         )
     except version_service.VersionConflictError as e:
         raise HTTPException(status_code=409, detail=f"Version conflict: expected {e.expected}, got {e.actual}")

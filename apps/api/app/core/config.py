@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     # Version Control Encryption (Fernet key for config snapshots)
     VERSION_ENCRYPTION_KEY: str = ""  # Falls back to META_ENCRYPTION_KEY if empty
     
+    # Proxy/Load Balancer Settings
+    # Set to True when running behind nginx/Cloudflare to trust X-Forwarded-For
+    TRUST_PROXY_HEADERS: bool = False
+
+    
     # Database
     DATABASE_URL: str
     
