@@ -134,6 +134,10 @@ app.include_router(metadata.router, prefix="/metadata", tags=["metadata"])
 from app.routers import websocket as ws_router
 app.include_router(ws_router.router)
 
+# Queue Management (Case Routing)
+from app.routers import queues
+app.include_router(queues.router, prefix="/queues", tags=["queues"])
+
 # Dev router (ONLY mounted in dev mode)
 if settings.ENV == "dev":
     from app.routers import dev
