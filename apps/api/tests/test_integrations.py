@@ -88,7 +88,6 @@ async def test_create_zoom_meeting_case_not_found_returns_404(authed_client: Asy
             "entity_id": str(uuid.uuid4()),
             "topic": "Test Meeting",
             "duration": 30,
-            "create_task": False,
         },
     )
     assert response.status_code == 404
@@ -104,7 +103,6 @@ async def test_create_zoom_meeting_intended_parent_not_found_returns_404(authed_
             "entity_id": str(uuid.uuid4()),
             "topic": "Test Meeting",
             "duration": 30,
-            "create_task": False,
         },
     )
     assert response.status_code == 404
@@ -167,7 +165,6 @@ async def test_create_zoom_meeting_returns_response_when_service_mocked(
             "entity_id": str(case.id),
             "topic": "Call with Test Case",
             "duration": 30,
-            "create_task": False,
         },
     )
     assert response.status_code == 200

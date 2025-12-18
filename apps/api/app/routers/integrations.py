@@ -378,7 +378,6 @@ class CreateMeetingRequest(BaseModel):
     start_time: str | None = None  # ISO format datetime
     timezone: str | None = None  # IANA timezone name (e.g. "America/Los_Angeles")
     duration: int = 30  # minutes
-    create_task: bool = True
     contact_name: str | None = None
 
 
@@ -403,7 +402,7 @@ async def create_zoom_meeting(
     Automatically:
     - Creates meeting via Zoom API
     - Adds note to the entity with meeting link
-    - Optionally creates a follow-up task
+    - Creates a meeting task
     """
     from datetime import datetime as dt
     from app.db.enums import EntityType
@@ -464,7 +463,6 @@ async def create_zoom_meeting(
             start_time=start_time,
             timezone_name=timezone_name,
             duration=request.duration,
-            create_task=request.create_task,
             contact_name=request.contact_name,
         )
         

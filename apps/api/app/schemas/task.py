@@ -17,6 +17,7 @@ class TaskCreate(BaseModel):
     assigned_to_user_id: UUID | None = None
     due_date: date | None = None
     due_time: time | None = None
+    duration_minutes: int | None = Field(None, ge=1, le=7 * 24 * 60)
 
 
 class TaskUpdate(BaseModel):
@@ -27,6 +28,7 @@ class TaskUpdate(BaseModel):
     assigned_to_user_id: UUID | None = None
     due_date: date | None = None
     due_time: time | None = None
+    duration_minutes: int | None = Field(None, ge=1, le=7 * 24 * 60)
 
 
 class TaskRead(BaseModel):
@@ -44,6 +46,7 @@ class TaskRead(BaseModel):
     task_type: TaskType
     due_date: date | None
     due_time: time | None
+    duration_minutes: int | None = None
     is_completed: bool
     completed_at: datetime | None
     completed_by_name: str | None = None
@@ -62,6 +65,8 @@ class TaskListItem(BaseModel):
     title: str
     task_type: TaskType
     due_date: date | None
+    due_time: time | None = None
+    duration_minutes: int | None = None
     is_completed: bool
     assigned_to_name: str | None = None
     created_at: datetime

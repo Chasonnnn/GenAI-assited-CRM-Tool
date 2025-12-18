@@ -596,6 +596,7 @@ class Task(Base):
     )
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     due_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_completed: Mapped[bool] = mapped_column(
         Boolean,
         server_default=text("FALSE"),

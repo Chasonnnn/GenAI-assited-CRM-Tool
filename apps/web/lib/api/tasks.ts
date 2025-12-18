@@ -21,6 +21,7 @@ export interface TaskListItem {
     created_by_name: string | null;
     due_date: string | null;
     due_time: string | null;
+    duration_minutes: number | null;
     is_completed: boolean;
     completed_at: string | null;
     completed_by_name: string | null;
@@ -62,6 +63,7 @@ export interface TaskCreatePayload {
     assigned_to_user_id?: string;
     due_date?: string;
     due_time?: string;
+    duration_minutes?: number;
 }
 
 // Update task payload

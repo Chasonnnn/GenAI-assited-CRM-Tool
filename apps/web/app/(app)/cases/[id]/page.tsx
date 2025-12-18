@@ -61,6 +61,21 @@ function formatDate(dateString: string): string {
     })
 }
 
+function formatTaskDueLabel(task: TaskListItem): string | null {
+    if (!task.due_date) return null
+    if (!task.due_time) return `Due: ${formatDate(task.due_date)}`
+
+    const start = new Date(`${task.due_date}T${task.due_time}`)
+    const dateLabel = start.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+    const startTime = start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+
+    if (!task.duration_minutes) return `Due: ${dateLabel} ${startTime}`
+
+    const end = new Date(start.getTime() + task.duration_minutes * 60_000)
+    const endTime = end.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+    return `Due: ${dateLabel} ${startTime}–${endTime}`
+}
+
 function toLocalIsoDateTime(date: Date): string {
     const pad = (n: number) => String(n).padStart(2, '0')
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:00`
@@ -164,7 +179,6 @@ export default function CaseDetailPage() {
     const [zoomTopic, setZoomTopic] = React.useState("")
     const [zoomDuration, setZoomDuration] = React.useState(30)
     const [zoomStartAt, setZoomStartAt] = React.useState<Date | undefined>(undefined)
-    const [zoomCreateTask, setZoomCreateTask] = React.useState(true)
     const [lastMeetingResult, setLastMeetingResult] = React.useState<{
         join_url: string
         meeting_id: number
@@ -357,7 +371,6 @@ export default function CaseDetailPage() {
                                 nextHour.setMinutes(0)
                                 nextHour.setHours(nextHour.getHours() + 1)
                                 setZoomStartAt(nextHour)
-                                setZoomCreateTask(true)
                                 setLastMeetingResult(null)
                                 setZoomDialogOpen(true)
                             }}
@@ -626,7 +639,7 @@ export default function CaseDetailPage() {
                                                 {task.due_date && (
                                                     <div className="flex items-center gap-2">
                                                         <Badge variant="secondary" className="text-xs">
-                                                            Due: {formatDate(task.due_date)}
+                                                            {formatTaskDueLabel(task)}
                                                         </Badge>
                                                     </div>
                                                 )}
@@ -894,14 +907,8 @@ export default function CaseDetailPage() {
                                 <option value={90}>1.5 hours</option>
                             </select>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <Checkbox
-                                id="zoom-create-task"
-                                checked={zoomCreateTask}
-                                onCheckedChange={(checked) => setZoomCreateTask(Boolean(checked))}
-                                disabled={!!lastMeetingResult}
-                            />
-                            <Label htmlFor="zoom-create-task">Create follow-up task</Label>
+                        <div className="text-xs text-muted-foreground">
+                            A meeting task is created automatically.
                         </div>
                     </div>
                     <DialogFooter>
@@ -956,7 +963,6 @@ export default function CaseDetailPage() {
                                             start_time: toLocalIsoDateTime(zoomStartAt),
                                             timezone: timezoneName,
                                             duration: zoomDuration,
-                                            create_task: zoomCreateTask,
                                             contact_name: caseData?.full_name,
                                         })
                                         setLastMeetingResult({

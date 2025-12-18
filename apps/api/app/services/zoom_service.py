@@ -5,7 +5,7 @@ Uses OAuth tokens stored per-user in UserIntegration table.
 """
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -13,7 +13,7 @@ import httpx
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.db.enums import EntityType
+from app.db.enums import EntityType, TaskType
 from app.db.models import EntityNote, Task
 from app.services import oauth_service
 
@@ -40,7 +40,7 @@ class ZoomMeeting(BaseModel):
 
 
 class CreateMeetingResult(BaseModel):
-    """Result of creating a Zoom meeting with note and optional task."""
+    """Result of creating a Zoom meeting with note and meeting task."""
     meeting: ZoomMeeting
     note_id: uuid.UUID | None = None
     task_id: uuid.UUID | None = None
@@ -159,10 +159,9 @@ async def schedule_zoom_meeting(
     start_time: datetime | None = None,
     timezone_name: str = "UTC",
     duration: int = 30,
-    create_task: bool = True,
     contact_name: str | None = None,
 ) -> CreateMeetingResult:
-    """Schedule a Zoom meeting and add note + optional task.
+    """Schedule a Zoom meeting and add note + meeting task.
     
     Args:
         db: Database session
@@ -173,7 +172,6 @@ async def schedule_zoom_meeting(
         topic: Meeting topic
         start_time: When meeting starts (None = instant)
         duration: Duration in minutes
-        create_task: Whether to create a follow-up task
         contact_name: Name of person meeting is with (for note)
         
     Returns:
@@ -195,7 +193,7 @@ async def schedule_zoom_meeting(
     from html import escape
     from app.services import note_service
 
-    display_dt: datetime | None = None
+    display_dt: datetime
     if start_time:
         if start_time.tzinfo is None:
             try:
@@ -207,8 +205,14 @@ async def schedule_zoom_meeting(
                 display_dt = start_time.astimezone(ZoneInfo(timezone_name))
             except Exception:
                 display_dt = start_time.astimezone(timezone.utc)
+    else:
+        try:
+            display_dt = datetime.now(ZoneInfo(timezone_name))
+        except Exception:
+            display_dt = datetime.now(timezone.utc)
 
-    time_str = display_dt.strftime("%B %d, %Y at %I:%M %p %Z") if display_dt else "Instant meeting"
+    end_dt = display_dt + timedelta(minutes=duration)
+    time_str = f"{display_dt.strftime('%B %d, %Y %I:%M %p %Z')} – {end_dt.strftime('%I:%M %p %Z')} ({duration} min)"
     join_url = escape(meeting.join_url)
     safe_topic = escape(topic)
 
@@ -249,29 +253,23 @@ async def schedule_zoom_meeting(
             content=note_content,
         )
     
-    # Create task if requested
-    task_id = None
-    if create_task and start_time:
-        task_dt = display_dt or start_time
-        if task_dt.tzinfo is not None:
-            local_task_dt = task_dt.astimezone(task_dt.tzinfo)
-        else:
-            local_task_dt = task_dt
-
-        task = Task(
-            organization_id=org_id,
-            title=f"Zoom Call: {topic}",
-            description=f"Join link: {meeting.join_url}",
-            due_date=local_task_dt.date(),
-            due_time=local_task_dt.time().replace(second=0, microsecond=0),
-            assigned_to_user_id=user_id,
-            created_by_user_id=user_id,
-            case_id=entity_id if entity_type == EntityType.CASE else None,
-            # Note: intended_parent_id would need to be added to Task model
-        )
-        db.add(task)
-        db.flush()
-        task_id = task.id
+    # Always create a meeting task aligned with the scheduled time + duration.
+    task = Task(
+        organization_id=org_id,
+        title=f"Zoom Meeting: {topic}",
+        description=f"{time_str}\nJoin link: {meeting.join_url}",
+        task_type=TaskType.MEETING.value,
+        due_date=display_dt.date(),
+        due_time=display_dt.time().replace(tzinfo=None, second=0, microsecond=0),
+        duration_minutes=duration,
+        assigned_to_user_id=user_id,
+        created_by_user_id=user_id,
+        case_id=entity_id if entity_type == EntityType.CASE else None,
+        # Note: intended_parent_id would need to be added to Task model
+    )
+    db.add(task)
+    db.flush()
+    task_id = task.id
     
     db.commit()
     db.refresh(note)
