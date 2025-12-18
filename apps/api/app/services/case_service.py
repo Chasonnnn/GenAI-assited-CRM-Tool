@@ -616,17 +616,23 @@ def list_cases(
     q: str | None = None,
     include_archived: bool = False,
     role_filter: str | None = None,
+    user_id: UUID | None = None,
+    owner_type: str | None = None,
+    queue_id: UUID | None = None,
 ):
     """
     List cases with filters and pagination.
     
     Args:
-        role_filter: If 'intake_specialist', excludes CASE_MANAGER_ONLY statuses
+        role_filter: User's role for visibility filtering
+        user_id: User's ID for owner-based visibility
+        owner_type: Filter by owner type ('user' or 'queue')
+        queue_id: Filter by specific queue (when owner_type='queue')
     
     Returns:
         (cases, total_count)
     """
-    from app.db.enums import Role
+    from app.db.enums import Role, OwnerType
     
     query = db.query(Case).filter(Case.organization_id == org_id)
     
@@ -634,10 +640,32 @@ def list_cases(
     if not include_archived:
         query = query.filter(Case.is_archived == False)
     
-    # Role-based visibility filter
-    if role_filter == Role.INTAKE_SPECIALIST:
-        # Intake can only see INTAKE_VISIBLE statuses (exclude CASE_MANAGER_ONLY)
-        query = query.filter(~Case.status.in_(CaseStatus.case_manager_only()))
+    # Owner-type filter
+    if owner_type:
+        query = query.filter(Case.owner_type == owner_type)
+    
+    # Queue filter (for viewing specific queue's cases)
+    if queue_id:
+        query = query.filter(Case.owner_id == queue_id)
+        query = query.filter(Case.owner_type == OwnerType.QUEUE.value)
+    
+    # Role-based visibility filter (dual: owner-based + status fallback)
+    if role_filter == Role.INTAKE_SPECIALIST.value or role_filter == Role.INTAKE_SPECIALIST:
+        # Intake specialists see:
+        # 1. Cases they own (owner_type=user, owner_id=user_id)
+        # 2. OR cases with null owner_type that are in INTAKE_VISIBLE statuses (backward compat)
+        if user_id:
+            query = query.filter(
+                or_(
+                    # Owner-based: cases they own
+                    (Case.owner_type == OwnerType.USER.value) & (Case.owner_id == user_id),
+                    # Backward compat: null owner_type + intake-visible status
+                    (Case.owner_type.is_(None)) & (~Case.status.in_(CaseStatus.case_manager_only()))
+                )
+            )
+        else:
+            # Fallback to status-based only
+            query = query.filter(~Case.status.in_(CaseStatus.case_manager_only()))
     
     # Status filter
     if status:

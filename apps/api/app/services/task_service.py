@@ -166,6 +166,7 @@ def list_tasks(
     db: Session,
     org_id: UUID,
     user_role: str | None = None,
+    user_id: UUID | None = None,
     page: int = 1,
     per_page: int = 20,
     q: str | None = None,
@@ -182,6 +183,7 @@ def list_tasks(
     
     Args:
         user_role: User's role - used to filter out tasks linked to inaccessible cases
+        user_id: User's ID - for owner-based case access filtering
         q: Search query - matches title or description (case-insensitive)
         due_before: Filter tasks with due_date <= this date (YYYY-MM-DD)
         due_after: Filter tasks with due_date >= this date (YYYY-MM-DD)
@@ -191,27 +193,47 @@ def list_tasks(
         (tasks, total_count)
     """
     from datetime import date
-    from app.db.enums import CaseStatus, Role
+    from app.db.enums import CaseStatus, Role, OwnerType
     from app.db.models import Case
     
     query = db.query(Task).filter(Task.organization_id == org_id)
     
     # Role-based case access filtering for intake specialists
-    # Filter out tasks linked to cases in CASE_MANAGER_ONLY statuses
+    # Filter out tasks linked to cases they can't access
     if user_role == Role.INTAKE_SPECIALIST.value or user_role == Role.INTAKE_SPECIALIST:
         case_manager_only_statuses = [s.value for s in CaseStatus.case_manager_only()]
-        # Subquery to get case IDs that intake can't access
-        inaccessible_case_ids = db.query(Case.id).filter(
-            Case.organization_id == org_id,
-            Case.status.in_(case_manager_only_statuses)
-        ).subquery()
-        # Exclude tasks linked to those cases
-        query = query.filter(
-            or_(
-                Task.case_id.is_(None),  # Tasks without case are always visible
-                ~Task.case_id.in_(inaccessible_case_ids)  # Exclude inaccessible cases
+        
+        # Subquery: cases intake can access (owner-based OR status-based fallback)
+        if user_id:
+            # Intake can access:
+            # 1. Cases they own (owner_type=user, owner_id=user_id)
+            # 2. Cases with null owner_type and intake-visible status (backward compat)
+            accessible_case_ids = db.query(Case.id).filter(
+                Case.organization_id == org_id,
+                or_(
+                    (Case.owner_type == OwnerType.USER.value) & (Case.owner_id == user_id),
+                    (Case.owner_type.is_(None)) & (~Case.status.in_(case_manager_only_statuses))
+                )
+            ).subquery()
+            
+            query = query.filter(
+                or_(
+                    Task.case_id.is_(None),  # Tasks without case always visible
+                    Task.case_id.in_(accessible_case_ids)
+                )
             )
-        )
+        else:
+            # Fallback: status-based only
+            inaccessible_case_ids = db.query(Case.id).filter(
+                Case.organization_id == org_id,
+                Case.status.in_(case_manager_only_statuses)
+            ).subquery()
+            query = query.filter(
+                or_(
+                    Task.case_id.is_(None),
+                    ~Task.case_id.in_(inaccessible_case_ids)
+                )
+            )
     
     # Search filter (title or description)
     if q:
