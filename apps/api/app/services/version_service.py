@@ -88,14 +88,42 @@ def compute_audit_hash(
     event_type: str,
     created_at: str,
     details_json: str,
+    # Additional immutable fields for tamper detection
+    actor_user_id: str = "",
+    target_type: str = "",
+    target_id: str = "",
+    ip_address: str = "",
+    user_agent: str = "",
+    request_id: str = "",
+    before_version_id: str = "",
+    after_version_id: str = "",
 ) -> str:
     """
     Compute hash for audit log entry.
     
-    Hash = SHA256(prev_hash + id + org_id + event_type + created_at + details_json)
+    Hash = SHA256(all immutable fields joined with |)
+    
+    Expanded coverage ensures tampering with ANY column is detectable.
+    v2 hash includes: actor, target, ip, user_agent, version links.
     """
-    data = f"{prev_hash}|{entry_id}|{org_id}|{event_type}|{created_at}|{details_json}"
+    data = "|".join([
+        prev_hash,
+        entry_id,
+        org_id,
+        event_type,
+        created_at,
+        details_json,
+        actor_user_id,
+        target_type,
+        target_id,
+        ip_address,
+        user_agent,
+        request_id,
+        before_version_id,
+        after_version_id,
+    ])
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
+
 
 
 def get_last_audit_hash(db: Session, org_id: UUID) -> str:
