@@ -114,6 +114,10 @@ class CaseRead(BaseModel):
     assigned_to_name: str | None = None
     created_by_user_id: UUID | None
     
+    # Ownership (Salesforce-style)
+    owner_type: str | None = None  # 'user' | 'queue' | None (backward compat)
+    owner_id: UUID | None = None
+    
     # Contact
     full_name: str
     email: str
