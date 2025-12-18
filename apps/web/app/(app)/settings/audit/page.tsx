@@ -73,7 +73,10 @@ export default function AuditLogPage() {
                             </div>
                             <div className="flex items-center gap-4">
                                 {/* Event Type Filter */}
-                                <Select value={eventTypeFilter} onValueChange={setEventTypeFilter}>
+                                <Select
+                                    value={eventTypeFilter}
+                                    onValueChange={(value) => setEventTypeFilter(value ?? "all")}
+                                >
                                     <SelectTrigger className="w-[200px]">
                                         <SelectValue placeholder="Filter by event type" />
                                     </SelectTrigger>
