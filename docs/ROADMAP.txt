@@ -691,3 +691,22 @@ Zoom Integration & UI Improvements (Week 11+) — v0.10.0 ✓
   - f3bc6a65a816_fix_queue_timestamp_types (TIMESTAMPTZ, indexes, JSONB)
 ✓ Tests: 26/26 passing
 
+AI Assistant v1 (Week 12) — COMPLETE ✓
+---------------------------------------
+✓ Backend:
+  ✓ BYOK API key storage (encrypted, write-only, masked display)
+  ✓ OpenAI and Gemini provider support
+  ✓ POST /ai/summarize-case - comprehensive case summary
+  ✓ POST /ai/draft-email - 5 types (follow_up, status_update, meeting_request, document_request, introduction)
+  ✓ POST /ai/analyze-dashboard - AI-powered insights for managers
+  ✓ Consent management (manager must accept before org can use AI)
+  ✓ AI usage logging and audit trail
+✓ Frontend:
+  ✓ AI tab on case detail page
+  ✓ Generate Summary with structured output (summary, activity, next steps, tasks)
+  ✓ Draft Email with 5-type selector and preview
+  ✓ Copy/Open in Email actions
+  ✓ AI Assistant dedicated page with full chat
+  ✓ Settings > AI for manager configuration
+✓ Tests: 26/26 passing
+
