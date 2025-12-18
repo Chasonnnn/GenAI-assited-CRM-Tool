@@ -29,6 +29,9 @@ import {
     TrashIcon,
     LoaderIcon,
     ArrowLeftIcon,
+    SparklesIcon,
+    MailIcon,
+    BrainIcon,
 } from "lucide-react"
 import { InlineEditField } from "@/components/inline-edit-field"
 import { useCase, useCaseActivity, useChangeStatus, useArchiveCase, useRestoreCase, useUpdateCase } from "@/lib/hooks/use-cases"
@@ -36,6 +39,8 @@ import { useQueues, useClaimCase, useReleaseCase } from "@/lib/hooks/use-queues"
 import { useNotes, useCreateNote, useDeleteNote } from "@/lib/hooks/use-notes"
 import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-tasks"
 import { useZoomStatus, useCreateZoomMeeting, useSendZoomInvite } from "@/lib/hooks/use-user-integrations"
+import { useSummarizeCase, useDraftEmail, useAISettings } from "@/lib/hooks/use-ai"
+import type { EmailType, SummarizeCaseResponse, DraftEmailResponse } from "@/lib/api/ai"
 import { STATUS_CONFIG, type CaseStatus } from "@/lib/types/case"
 import type { NoteRead } from "@/lib/types/note"
 import type { TaskListItem } from "@/lib/types/task"
@@ -185,6 +190,9 @@ export default function CaseDetailPage() {
         password: string | null
         start_time: string | null
     } | null>(null)
+    const [aiSummary, setAiSummary] = React.useState<SummarizeCaseResponse | null>(null)
+    const [aiDraftEmail, setAiDraftEmail] = React.useState<DraftEmailResponse | null>(null)
+    const [selectedEmailType, setSelectedEmailType] = React.useState<EmailType | null>(null)
 
     const timezoneName = React.useMemo(() => {
         try {
@@ -213,9 +221,12 @@ export default function CaseDetailPage() {
     const releaseCaseMutation = useReleaseCase()
     const createZoomMeetingMutation = useCreateZoomMeeting()
     const sendZoomInviteMutation = useSendZoomInvite()
+    const summarizeCaseMutation = useSummarizeCase()
+    const draftEmailMutation = useDraftEmail()
 
     // Check if user has Zoom connected
     const { data: zoomStatus } = useZoomStatus()
+    const { data: aiSettings } = useAISettings()
 
     // Fetch queues for release dialog
     const canManageQueue = user?.role && ['case_manager', 'manager', 'developer'].includes(user.role)
@@ -413,6 +424,10 @@ export default function CaseDetailPage() {
                         <TabsTrigger value="notes">Notes {notes && notes.length > 0 && `(${notes.length})`}</TabsTrigger>
                         <TabsTrigger value="tasks">Tasks {tasksData && tasksData.items.length > 0 && `(${tasksData.items.length})`}</TabsTrigger>
                         <TabsTrigger value="history">History</TabsTrigger>
+                        <TabsTrigger value="ai" className="gap-1">
+                            <SparklesIcon className="h-3 w-3" />
+                            AI
+                        </TabsTrigger>
                     </TabsList>
 
                     {/* OVERVIEW TAB */}
@@ -690,6 +705,176 @@ export default function CaseDetailPage() {
                                 )}
                             </CardContent>
                         </Card>
+                    </TabsContent>
+
+                    {/* AI TAB */}
+                    <TabsContent value="ai" className="space-y-4">
+                        {aiSettings && !aiSettings.is_enabled ? (
+                            <Card>
+                                <CardContent className="pt-6">
+                                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                                        <BrainIcon className="h-12 w-12 text-muted-foreground mb-4" />
+                                        <h3 className="text-lg font-medium">AI Assistant Not Enabled</h3>
+                                        <p className="text-sm text-muted-foreground mt-2 max-w-md">
+                                            Contact your manager to enable AI features and configure an API key in Settings.
+                                        </p>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        ) : (
+                            <div className="grid gap-4 md:grid-cols-2">
+                                {/* Summarize Case Card */}
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle className="flex items-center gap-2">
+                                            <SparklesIcon className="h-4 w-4" />
+                                            Case Summary
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-4">
+                                        <Button
+                                            onClick={async () => {
+                                                const result = await summarizeCaseMutation.mutateAsync(id)
+                                                setAiSummary(result)
+                                            }}
+                                            disabled={summarizeCaseMutation.isPending}
+                                            className="w-full"
+                                        >
+                                            {summarizeCaseMutation.isPending ? (
+                                                <><LoaderIcon className="h-4 w-4 mr-2 animate-spin" /> Generating...</>
+                                            ) : (
+                                                <><SparklesIcon className="h-4 w-4 mr-2" /> Generate Summary</>
+                                            )}
+                                        </Button>
+
+                                        {aiSummary && (
+                                            <div className="space-y-4 pt-4 border-t">
+                                                <div>
+                                                    <h4 className="text-sm font-medium mb-1">Summary</h4>
+                                                    <p className="text-sm text-muted-foreground">{aiSummary.summary}</p>
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-sm font-medium mb-1">Recent Activity</h4>
+                                                    <p className="text-sm text-muted-foreground">{aiSummary.recent_activity}</p>
+                                                </div>
+                                                {aiSummary.suggested_next_steps.length > 0 && (
+                                                    <div>
+                                                        <h4 className="text-sm font-medium mb-1">Suggested Next Steps</h4>
+                                                        <ul className="text-sm text-muted-foreground space-y-1">
+                                                            {aiSummary.suggested_next_steps.map((step, i) => (
+                                                                <li key={i} className="flex items-start gap-2">
+                                                                    <span className="text-primary">•</span>
+                                                                    {step}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                )}
+                                                {aiSummary.pending_tasks.length > 0 && (
+                                                    <div>
+                                                        <h4 className="text-sm font-medium mb-1">Pending Tasks</h4>
+                                                        <ul className="text-sm text-muted-foreground space-y-1">
+                                                            {aiSummary.pending_tasks.map((task) => (
+                                                                <li key={task.id} className="flex items-center gap-2">
+                                                                    <Badge variant="secondary" className="text-xs">
+                                                                        {task.due_date || 'No due date'}
+                                                                    </Badge>
+                                                                    {task.title}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
+
+                                {/* Draft Email Card */}
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle className="flex items-center gap-2">
+                                            <MailIcon className="h-4 w-4" />
+                                            Draft Email
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-4">
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {(['follow_up', 'status_update', 'meeting_request', 'document_request', 'introduction'] as EmailType[]).map((emailType) => (
+                                                <Button
+                                                    key={emailType}
+                                                    variant={selectedEmailType === emailType ? 'default' : 'outline'}
+                                                    size="sm"
+                                                    onClick={() => setSelectedEmailType(emailType)}
+                                                    className="capitalize text-xs"
+                                                >
+                                                    {emailType.replace(/_/g, ' ')}
+                                                </Button>
+                                            ))}
+                                        </div>
+
+                                        <Button
+                                            onClick={async () => {
+                                                if (!selectedEmailType) return
+                                                const result = await draftEmailMutation.mutateAsync({
+                                                    case_id: id,
+                                                    email_type: selectedEmailType,
+                                                })
+                                                setAiDraftEmail(result)
+                                            }}
+                                            disabled={!selectedEmailType || draftEmailMutation.isPending}
+                                            className="w-full"
+                                        >
+                                            {draftEmailMutation.isPending ? (
+                                                <><LoaderIcon className="h-4 w-4 mr-2 animate-spin" /> Drafting...</>
+                                            ) : (
+                                                <><MailIcon className="h-4 w-4 mr-2" /> Draft Email</>
+                                            )}
+                                        </Button>
+
+                                        {aiDraftEmail && (
+                                            <div className="space-y-3 pt-4 border-t">
+                                                <div>
+                                                    <h4 className="text-sm font-medium mb-1">To</h4>
+                                                    <p className="text-sm text-muted-foreground">
+                                                        {aiDraftEmail.recipient_name} &lt;{aiDraftEmail.recipient_email}&gt;
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-sm font-medium mb-1">Subject</h4>
+                                                    <p className="text-sm text-muted-foreground">{aiDraftEmail.subject}</p>
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-sm font-medium mb-1">Body</h4>
+                                                    <div className="text-sm text-muted-foreground bg-muted/50 rounded-md p-3 whitespace-pre-wrap max-h-64 overflow-y-auto">
+                                                        {aiDraftEmail.body}
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => {
+                                                            navigator.clipboard.writeText(`Subject: ${aiDraftEmail.subject}\n\n${aiDraftEmail.body}`)
+                                                        }}
+                                                    >
+                                                        <CopyIcon className="h-3 w-3 mr-1" /> Copy
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() => {
+                                                            window.open(`mailto:${aiDraftEmail.recipient_email}?subject=${encodeURIComponent(aiDraftEmail.subject)}&body=${encodeURIComponent(aiDraftEmail.body)}`)
+                                                        }}
+                                                    >
+                                                        <MailIcon className="h-3 w-3 mr-1" /> Open in Email
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            </div>
+                        )}
                     </TabsContent>
                 </Tabs>
             </div>

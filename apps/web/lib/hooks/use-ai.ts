@@ -122,3 +122,26 @@ export function useRejectAction() {
         },
     });
 }
+
+// ============================================================================
+// Focused AI Hooks (One-shot operations)
+// ============================================================================
+
+export function useSummarizeCase() {
+    return useMutation({
+        mutationFn: (caseId: string) => aiApi.summarizeCase(caseId),
+    });
+}
+
+export function useDraftEmail() {
+    return useMutation({
+        mutationFn: (request: aiApi.DraftEmailRequest) => aiApi.draftEmail(request),
+    });
+}
+
+export function useAnalyzeDashboard() {
+    return useMutation({
+        mutationFn: () => aiApi.analyzeDashboard(),
+    });
+}
+

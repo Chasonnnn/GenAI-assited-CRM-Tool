@@ -4,6 +4,7 @@ Endpoints for AI settings, chat, and actions.
 """
 import uuid
 from datetime import datetime
+from enum import Enum
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -586,3 +587,459 @@ def get_my_usage(
     from app.services import ai_usage_service
     
     return ai_usage_service.get_user_usage_summary(db, session.user_id, days)
+
+
+# ============================================================================
+# Focused AI Endpoints (One-shot operations, no conversation history)
+# ============================================================================
+
+class SummarizeCaseRequest(BaseModel):
+    """Request to summarize a case."""
+    case_id: uuid.UUID
+
+
+class SummarizeCaseResponse(BaseModel):
+    """Case summary response."""
+    case_number: str
+    full_name: str
+    summary: str
+    current_status: str
+    key_dates: dict[str, Any]
+    pending_tasks: list[dict[str, Any]]
+    recent_activity: str
+    suggested_next_steps: list[str]
+
+
+class EmailType(str, Enum):
+    """Types of emails that can be drafted."""
+    FOLLOW_UP = "follow_up"
+    STATUS_UPDATE = "status_update"
+    MEETING_REQUEST = "meeting_request"
+    DOCUMENT_REQUEST = "document_request"
+    INTRODUCTION = "introduction"
+
+
+class DraftEmailRequest(BaseModel):
+    """Request to draft an email."""
+    case_id: uuid.UUID
+    email_type: EmailType
+    additional_context: str | None = None
+
+
+class DraftEmailResponse(BaseModel):
+    """Draft email response."""
+    subject: str
+    body: str
+    recipient_email: str
+    recipient_name: str
+    email_type: str
+
+
+class AnalyzeDashboardResponse(BaseModel):
+    """Dashboard analytics response."""
+    insights: list[str]
+    case_volume_trend: str
+    bottlenecks: list[dict[str, Any]]
+    recommendations: list[str]
+    stats: dict[str, Any]
+
+
+# Email type prompts
+EMAIL_PROMPTS = {
+    EmailType.FOLLOW_UP: """Draft a professional follow-up email to check in with the applicant. 
+The tone should be warm and supportive. Ask how they're doing and if they have any questions.""",
+    
+    EmailType.STATUS_UPDATE: """Draft a status update email informing the applicant about their case progress.
+Be clear about current status, what's been completed, and what to expect next.""",
+    
+    EmailType.MEETING_REQUEST: """Draft an email requesting a meeting or phone call with the applicant.
+Suggest a few time options and explain what you'd like to discuss.""",
+    
+    EmailType.DOCUMENT_REQUEST: """Draft an email requesting missing or additional documents from the applicant.
+Be specific about what documents are needed and why they're important.""",
+    
+    EmailType.INTRODUCTION: """Draft an introduction email to share with intended parents about this surrogate candidate.
+Highlight key qualifications and background while being professional and respectful of privacy.""",
+}
+
+
+
+@router.post("/summarize-case", response_model=SummarizeCaseResponse, dependencies=[Depends(require_csrf_header)])
+@limiter.limit("30/minute")
+def summarize_case(
+    request: Request,
+    body: SummarizeCaseRequest,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+) -> SummarizeCaseResponse:
+    """Generate a comprehensive summary of a case using AI."""
+    from app.services import ai_settings_service
+    from app.services.ai_provider import ChatMessage, get_provider
+    
+    # Check AI is enabled and consent accepted
+    settings = ai_settings_service.get_ai_settings(db, session.org_id)
+    if not settings or not settings.is_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="AI is not enabled for this organization",
+        )
+    if ai_settings_service.is_consent_required(settings):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="AI consent not accepted",
+        )
+    
+    # Load case with context
+    case = db.query(Case).filter(
+        Case.id == body.case_id,
+        Case.organization_id == session.org_id
+    ).first()
+    if not case:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+    
+    # Load notes and tasks
+    from app.db.models import EntityNote, Task
+    notes = db.query(EntityNote).filter(
+        EntityNote.entity_type == "case",
+        EntityNote.entity_id == case.id
+    ).order_by(EntityNote.created_at.desc()).limit(10).all()
+    
+    tasks = db.query(Task).filter(
+        Task.case_id == case.id,
+        Task.is_completed == False
+    ).order_by(Task.due_date.asc()).limit(10).all()
+    
+    # Build context
+    notes_text = "\n".join([f"- [{n.created_at.strftime('%Y-%m-%d')}] {n.content[:200]}" for n in notes]) or "No notes yet"
+    tasks_text = "\n".join([f"- {t.title} (due: {t.due_date or 'not set'})" for t in tasks]) or "No pending tasks"
+    
+    context = f"""Case #{case.case_number}
+Name: {case.full_name}
+Email: {case.email}
+Status: {case.status}
+Created: {case.created_at.strftime('%Y-%m-%d')}
+
+Recent Notes:
+{notes_text}
+
+Pending Tasks:
+{tasks_text}"""
+
+    prompt = f"""Analyze this case and provide a comprehensive summary.
+
+{context}
+
+Respond in this exact JSON format:
+{{
+  "summary": "2-3 sentence overview of the case",
+  "recent_activity": "Brief description of recent activity",
+  "suggested_next_steps": ["step 1", "step 2", "step 3"]
+}}
+
+Be concise and professional. Focus on actionable insights."""
+
+    # Call AI
+    api_key = ai_settings_service.get_decrypted_key(settings)
+    if not api_key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="AI API key not configured")
+    
+    provider = get_provider(settings.provider, api_key, settings.model)
+    
+    import asyncio
+    response = asyncio.get_event_loop().run_until_complete(
+        provider.chat([
+            ChatMessage(role="system", content="You are a helpful CRM assistant for a surrogacy agency. Always respond with valid JSON."),
+            ChatMessage(role="user", content=prompt),
+        ], temperature=0.3)
+    )
+    
+    # Parse response
+    try:
+        import json
+        # Extract JSON from response
+        content = response.content.strip()
+        if content.startswith("```json"):
+            content = content[7:]
+        if content.startswith("```"):
+            content = content[3:]
+        if content.endswith("```"):
+            content = content[:-3]
+        parsed = json.loads(content.strip())
+    except json.JSONDecodeError:
+        parsed = {
+            "summary": response.content[:500],
+            "recent_activity": "See notes above",
+            "suggested_next_steps": ["Review case details", "Follow up with applicant"],
+        }
+    
+    # Build key dates
+    key_dates = {
+        "created": case.created_at.isoformat() if case.created_at else None,
+        "updated": case.updated_at.isoformat() if case.updated_at else None,
+    }
+    
+    # Build pending tasks list
+    pending_tasks = [
+        {"id": str(t.id), "title": t.title, "due_date": t.due_date.isoformat() if t.due_date else None}
+        for t in tasks
+    ]
+    
+    return SummarizeCaseResponse(
+        case_number=case.case_number,
+        full_name=case.full_name,
+        summary=parsed.get("summary", "Unable to generate summary"),
+        current_status=case.status,
+        key_dates=key_dates,
+        pending_tasks=pending_tasks,
+        recent_activity=parsed.get("recent_activity", "No recent activity"),
+        suggested_next_steps=parsed.get("suggested_next_steps", []),
+    )
+
+
+@router.post("/draft-email", response_model=DraftEmailResponse, dependencies=[Depends(require_csrf_header)])
+@limiter.limit("30/minute")
+def draft_email(
+    request: Request,
+    body: DraftEmailRequest,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+) -> DraftEmailResponse:
+    """Draft an email for a case using AI."""
+    from app.services import ai_settings_service
+    from app.services.ai_provider import ChatMessage, get_provider
+    
+    # Check AI is enabled
+    settings = ai_settings_service.get_ai_settings(db, session.org_id)
+    if not settings or not settings.is_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="AI is not enabled")
+    if ai_settings_service.is_consent_required(settings):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="AI consent not accepted")
+    
+    # Load case
+    case = db.query(Case).filter(
+        Case.id == body.case_id,
+        Case.organization_id == session.org_id
+    ).first()
+    if not case:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+    
+    # Get user name for signature
+    from app.db.models import User
+    user = db.query(User).filter(User.id == session.user_id).first()
+    sender_name = user.full_name if user else "Your Case Manager"
+    
+    # Build email prompt
+    email_instruction = EMAIL_PROMPTS[body.email_type]
+    additional = f"\nAdditional context: {body.additional_context}" if body.additional_context else ""
+    
+    prompt = f"""{email_instruction}
+
+Recipient: {case.full_name}
+Email: {case.email}
+Case Status: {case.status}
+{additional}
+
+Sender Name: {sender_name}
+
+Respond in this exact JSON format:
+{{
+  "subject": "Email subject line",
+  "body": "Full email body with greeting and signature using the sender name"
+}}
+
+Be professional, warm, and concise."""
+
+    # Call AI
+    api_key = ai_settings_service.get_decrypted_key(settings)
+    if not api_key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="AI API key not configured")
+    
+    provider = get_provider(settings.provider, api_key, settings.model)
+    
+    import asyncio
+    response = asyncio.get_event_loop().run_until_complete(
+        provider.chat([
+            ChatMessage(role="system", content="You are a professional email writer for a surrogacy agency. Always respond with valid JSON."),
+            ChatMessage(role="user", content=prompt),
+        ], temperature=0.5)
+    )
+    
+    # Parse response
+    try:
+        import json
+        content = response.content.strip()
+        if content.startswith("```json"):
+            content = content[7:]
+        if content.startswith("```"):
+            content = content[3:]
+        if content.endswith("```"):
+            content = content[:-3]
+        parsed = json.loads(content.strip())
+    except json.JSONDecodeError:
+        # Fallback
+        parsed = {
+            "subject": f"Following up on your application",
+            "body": response.content,
+        }
+    
+    return DraftEmailResponse(
+        subject=parsed.get("subject", "Following up"),
+        body=parsed.get("body", ""),
+        recipient_email=case.email,
+        recipient_name=case.full_name,
+        email_type=body.email_type.value,
+    )
+
+
+@router.post("/analyze-dashboard", response_model=AnalyzeDashboardResponse, dependencies=[Depends(require_csrf_header)])
+@limiter.limit("10/minute")
+def analyze_dashboard(
+    request: Request,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+) -> AnalyzeDashboardResponse:
+    """Analyze dashboard data and provide AI-powered insights."""
+    from app.services import ai_settings_service
+    from app.services.ai_provider import ChatMessage, get_provider
+    from datetime import timedelta
+    from sqlalchemy import func
+    
+    # Check AI is enabled
+    settings = ai_settings_service.get_ai_settings(db, session.org_id)
+    if not settings or not settings.is_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="AI is not enabled")
+    
+    # Gather dashboard stats
+    now = datetime.utcnow()
+    thirty_days_ago = now - timedelta(days=30)
+    seven_days_ago = now - timedelta(days=7)
+    
+    # Total cases
+    total_cases = db.query(func.count(Case.id)).filter(
+        Case.organization_id == session.org_id,
+        Case.is_archived == False
+    ).scalar() or 0
+    
+    # Cases by status
+    status_counts = db.query(Case.status, func.count(Case.id)).filter(
+        Case.organization_id == session.org_id,
+        Case.is_archived == False
+    ).group_by(Case.status).all()
+    
+    # New cases this week vs last week
+    cases_this_week = db.query(func.count(Case.id)).filter(
+        Case.organization_id == session.org_id,
+        Case.created_at >= seven_days_ago
+    ).scalar() or 0
+    
+    cases_last_week = db.query(func.count(Case.id)).filter(
+        Case.organization_id == session.org_id,
+        Case.created_at >= seven_days_ago - timedelta(days=7),
+        Case.created_at < seven_days_ago
+    ).scalar() or 0
+    
+    # Pending tasks
+    from app.db.models import Task
+    overdue_tasks = db.query(func.count(Task.id)).filter(
+        Task.organization_id == session.org_id,
+        Task.is_completed == False,
+        Task.due_date < now.date()
+    ).scalar() or 0
+    
+    # Build stats summary
+    status_summary = {s: c for s, c in status_counts}
+    
+    stats = {
+        "total_active_cases": total_cases,
+        "cases_this_week": cases_this_week,
+        "cases_last_week": cases_last_week,
+        "overdue_tasks": overdue_tasks,
+        "status_breakdown": status_summary,
+    }
+    
+    # Determine trend
+    if cases_this_week > cases_last_week:
+        trend = f"Increasing ({cases_this_week} this week vs {cases_last_week} last week)"
+    elif cases_this_week < cases_last_week:
+        trend = f"Decreasing ({cases_this_week} this week vs {cases_last_week} last week)"
+    else:
+        trend = f"Stable ({cases_this_week} cases this week)"
+    
+    # Identify bottlenecks
+    bottlenecks = []
+    for status_name, count in status_counts:
+        if count > total_cases * 0.3:  # More than 30% in one status
+            bottlenecks.append({
+                "status": status_name,
+                "count": count,
+                "percentage": round(count / total_cases * 100, 1) if total_cases > 0 else 0,
+            })
+    
+    # Call AI for insights
+    api_key = ai_settings_service.get_decrypted_key(settings)
+    if not api_key:
+        # Return basic analysis without AI
+        return AnalyzeDashboardResponse(
+            insights=[f"You have {total_cases} active cases"],
+            case_volume_trend=trend,
+            bottlenecks=bottlenecks,
+            recommendations=["Configure AI API key for detailed insights"],
+            stats=stats,
+        )
+    
+    prompt = f"""Analyze this CRM dashboard data for a surrogacy agency:
+
+Total Active Cases: {total_cases}
+Cases This Week: {cases_this_week}
+Cases Last Week: {cases_last_week}
+Overdue Tasks: {overdue_tasks}
+
+Status Breakdown: {status_summary}
+
+Provide actionable insights in this JSON format:
+{{
+  "insights": ["insight 1", "insight 2", "insight 3"],
+  "recommendations": ["recommendation 1", "recommendation 2", "recommendation 3"]
+}}
+
+Focus on:
+- Workflow efficiency
+- Potential issues to address
+- Opportunities for improvement
+- Staffing or process recommendations"""
+
+    provider = get_provider(settings.provider, api_key, settings.model)
+    
+    import asyncio
+    response = asyncio.get_event_loop().run_until_complete(
+        provider.chat([
+            ChatMessage(role="system", content="You are a CRM analytics expert for a surrogacy agency. Provide actionable business insights. Always respond with valid JSON."),
+            ChatMessage(role="user", content=prompt),
+        ], temperature=0.4)
+    )
+    
+    # Parse response
+    try:
+        import json
+        content = response.content.strip()
+        if content.startswith("```json"):
+            content = content[7:]
+        if content.startswith("```"):
+            content = content[3:]
+        if content.endswith("```"):
+            content = content[:-3]
+        parsed = json.loads(content.strip())
+    except json.JSONDecodeError:
+        parsed = {
+            "insights": [response.content[:200]],
+            "recommendations": ["Review case statuses regularly"],
+        }
+    
+    return AnalyzeDashboardResponse(
+        insights=parsed.get("insights", []),
+        case_volume_trend=trend,
+        bottlenecks=bottlenecks,
+        recommendations=parsed.get("recommendations", []),
+        stats=stats,
+    )
+
