@@ -10,10 +10,13 @@ import {
     getZoomStatus,
     disconnectIntegration,
     createZoomMeeting,
+    sendZoomInvite,
     type CreateMeetingRequest,
     type CreateMeetingResponse,
     type IntegrationStatus,
     type ZoomStatusResponse,
+    type SendZoomInviteRequest,
+    type SendZoomInviteResponse,
 } from '@/lib/api/integrations'
 
 // ============================================================================
@@ -109,5 +112,15 @@ export function useCreateZoomMeeting() {
     })
 }
 
+/**
+ * Send a Zoom meeting invite email.
+ */
+export function useSendZoomInvite() {
+    return useMutation({
+        mutationFn: (data: SendZoomInviteRequest) => sendZoomInvite(data),
+    })
+}
+
 // Re-export types for convenience
-export type { IntegrationStatus, ZoomStatusResponse, CreateMeetingRequest, CreateMeetingResponse }
+export type { IntegrationStatus, ZoomStatusResponse, CreateMeetingRequest, CreateMeetingResponse, SendZoomInviteRequest, SendZoomInviteResponse }
+

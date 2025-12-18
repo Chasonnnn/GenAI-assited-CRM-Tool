@@ -34,7 +34,7 @@ import { useCase, useCaseActivity, useChangeStatus, useArchiveCase, useRestoreCa
 import { useQueues, useClaimCase, useReleaseCase } from "@/lib/hooks/use-queues"
 import { useNotes, useCreateNote, useDeleteNote } from "@/lib/hooks/use-notes"
 import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-tasks"
-import { useZoomStatus, useCreateZoomMeeting } from "@/lib/hooks/use-user-integrations"
+import { useZoomStatus, useCreateZoomMeeting, useSendZoomInvite } from "@/lib/hooks/use-user-integrations"
 import { STATUS_CONFIG, type CaseStatus } from "@/lib/types/case"
 import type { NoteRead } from "@/lib/types/note"
 import type { TaskListItem } from "@/lib/types/task"
@@ -146,6 +146,11 @@ export default function CaseDetailPage() {
     const [zoomDialogOpen, setZoomDialogOpen] = React.useState(false)
     const [zoomTopic, setZoomTopic] = React.useState("")
     const [zoomDuration, setZoomDuration] = React.useState(30)
+    const [lastMeetingResult, setLastMeetingResult] = React.useState<{
+        join_url: string
+        meeting_id: number
+        password: string | null
+    } | null>(null)
 
     // Fetch data
     const { data: caseData, isLoading, error } = useCase(id)
@@ -165,6 +170,7 @@ export default function CaseDetailPage() {
     const claimCaseMutation = useClaimCase()
     const releaseCaseMutation = useReleaseCase()
     const createZoomMeetingMutation = useCreateZoomMeeting()
+    const sendZoomInviteMutation = useSendZoomInvite()
 
     // Check if user has Zoom connected
     const { data: zoomStatus } = useZoomStatus()
@@ -847,28 +853,68 @@ export default function CaseDetailPage() {
                         <Button variant="outline" onClick={() => setZoomDialogOpen(false)}>
                             Cancel
                         </Button>
-                        <Button
-                            onClick={async () => {
-                                try {
-                                    const result = await createZoomMeetingMutation.mutateAsync({
-                                        entity_type: 'case',
-                                        entity_id: id,
-                                        topic: zoomTopic,
-                                        duration: zoomDuration,
-                                        create_task: true, // Always create task
-                                        contact_name: caseData?.full_name,
-                                    })
-                                    setZoomDialogOpen(false)
-                                    // Optionally copy join link to clipboard
-                                    navigator.clipboard.writeText(result.join_url)
-                                } catch (err) {
-                                    // Error handled by react-query
-                                }
-                            }}
-                            disabled={!zoomTopic || createZoomMeetingMutation.isPending}
-                        >
-                            {createZoomMeetingMutation.isPending ? 'Creating...' : 'Create Meeting'}
-                        </Button>
+                        {lastMeetingResult ? (
+                            <>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(lastMeetingResult.join_url)
+                                    }}
+                                >
+                                    Copy Link
+                                </Button>
+                                <Button
+                                    onClick={async () => {
+                                        if (!caseData?.email) return
+                                        try {
+                                            await sendZoomInviteMutation.mutateAsync({
+                                                recipient_email: caseData.email,
+                                                meeting_id: lastMeetingResult.meeting_id,
+                                                join_url: lastMeetingResult.join_url,
+                                                topic: zoomTopic,
+                                                duration: zoomDuration,
+                                                password: lastMeetingResult.password || undefined,
+                                                contact_name: caseData.full_name || 'there',
+                                                case_id: id,
+                                            })
+                                            setZoomDialogOpen(false)
+                                            setLastMeetingResult(null)
+                                        } catch (err) {
+                                            // Error handled by react-query
+                                        }
+                                    }}
+                                    disabled={sendZoomInviteMutation.isPending || !caseData?.email}
+                                >
+                                    {sendZoomInviteMutation.isPending ? 'Sending...' : '📧 Send Invite'}
+                                </Button>
+                            </>
+                        ) : (
+                            <Button
+                                onClick={async () => {
+                                    try {
+                                        const result = await createZoomMeetingMutation.mutateAsync({
+                                            entity_type: 'case',
+                                            entity_id: id,
+                                            topic: zoomTopic,
+                                            duration: zoomDuration,
+                                            create_task: true,
+                                            contact_name: caseData?.full_name,
+                                        })
+                                        setLastMeetingResult({
+                                            join_url: result.join_url,
+                                            meeting_id: result.meeting_id,
+                                            password: result.password,
+                                        })
+                                        navigator.clipboard.writeText(result.join_url)
+                                    } catch (err) {
+                                        // Error handled by react-query
+                                    }
+                                }}
+                                disabled={!zoomTopic || createZoomMeetingMutation.isPending}
+                            >
+                                {createZoomMeetingMutation.isPending ? 'Creating...' : 'Create Meeting'}
+                            </Button>
+                        )}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

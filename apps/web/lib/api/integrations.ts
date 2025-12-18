@@ -92,3 +92,28 @@ export async function disconnectIntegration(integrationType: string): Promise<vo
 export async function createZoomMeeting(data: CreateMeetingRequest): Promise<CreateMeetingResponse> {
     return api.post<CreateMeetingResponse>('/integrations/zoom/meetings', data)
 }
+
+export interface SendZoomInviteRequest {
+    recipient_email: string
+    meeting_id: number
+    join_url: string
+    topic: string
+    start_time?: string
+    duration?: number
+    password?: string
+    contact_name: string
+    case_id?: string
+}
+
+export interface SendZoomInviteResponse {
+    email_log_id: string
+    success: boolean
+}
+
+/**
+ * Send a Zoom meeting invite email using the org's template.
+ */
+export async function sendZoomInvite(data: SendZoomInviteRequest): Promise<SendZoomInviteResponse> {
+    return api.post<SendZoomInviteResponse>('/integrations/zoom/send-invite', data)
+}
+

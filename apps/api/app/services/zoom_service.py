@@ -243,3 +243,108 @@ def check_user_has_zoom(db: Session, user_id: uuid.UUID) -> bool:
     """Check if user has connected Zoom."""
     integration = oauth_service.get_user_integration(db, user_id, "zoom")
     return integration is not None
+
+
+# ============================================================================
+# Email Invite Template
+# ============================================================================
+
+ZOOM_TEMPLATE_NAME = "Zoom Meeting Invite"
+
+DEFAULT_ZOOM_TEMPLATE_SUBJECT = "Meeting Scheduled: {{topic}}"
+DEFAULT_ZOOM_TEMPLATE_BODY = """Hi {{contact_name}},
+
+I've scheduled a Zoom meeting for us:
+
+📅 **{{topic}}**
+🕐 **Time:** {{meeting_time}}
+⏱️ **Duration:** {{duration}} minutes
+
+🔗 **Join the meeting:**
+{{meeting_link}}
+
+{% if password %}
+🔒 **Password:** {{password}}
+{% endif %}
+
+Looking forward to speaking with you!
+
+Best regards,
+{{host_name}}
+"""
+
+
+def get_or_create_zoom_template(
+    db: Session,
+    org_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> uuid.UUID:
+    """Get the Zoom meeting invite template, creating if it doesn't exist.
+    
+    Returns the template ID.
+    """
+    from app.services import email_service
+    
+    # Check if template exists
+    template = email_service.get_template_by_name(db, ZOOM_TEMPLATE_NAME, org_id)
+    if template:
+        return template.id
+    
+    # Create default template
+    template = email_service.create_template(
+        db=db,
+        org_id=org_id,
+        user_id=user_id,
+        name=ZOOM_TEMPLATE_NAME,
+        subject=DEFAULT_ZOOM_TEMPLATE_SUBJECT,
+        body=DEFAULT_ZOOM_TEMPLATE_BODY,
+    )
+    return template.id
+
+
+def send_meeting_invite(
+    db: Session,
+    org_id: uuid.UUID,
+    user_id: uuid.UUID,
+    recipient_email: str,
+    meeting: ZoomMeeting,
+    contact_name: str,
+    host_name: str,
+    case_id: uuid.UUID | None = None,
+) -> uuid.UUID | None:
+    """Send a Zoom meeting invite email using the org's template.
+    
+    Returns the email_log ID or None if template not found.
+    """
+    from app.services import email_service
+    
+    # Get or create template
+    template_id = get_or_create_zoom_template(db, org_id, user_id)
+    
+    # Build variables
+    time_str = meeting.start_time if meeting.start_time else "Instant meeting"
+    variables = {
+        "topic": meeting.topic,
+        "meeting_link": meeting.join_url,
+        "meeting_time": time_str,
+        "duration": str(meeting.duration),
+        "password": meeting.password or "",
+        "contact_name": contact_name,
+        "host_name": host_name,
+    }
+    
+    # Send via template
+    result = email_service.send_from_template(
+        db=db,
+        org_id=org_id,
+        template_id=template_id,
+        recipient_email=recipient_email,
+        variables=variables,
+        case_id=case_id,
+    )
+    
+    if result:
+        email_log, _ = result
+        return email_log.id
+    return None
+

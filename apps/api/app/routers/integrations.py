@@ -356,3 +356,84 @@ def zoom_connection_status(
         "account_email": integration.account_email if integration else None,
     }
 
+
+class SendMeetingInviteRequest(BaseModel):
+    """Request to send a Zoom meeting invite email."""
+    recipient_email: str
+    meeting_id: int
+    join_url: str
+    topic: str
+    start_time: str | None = None
+    duration: int = 30
+    password: str | None = None
+    contact_name: str
+    case_id: str | None = None
+
+
+class SendMeetingInviteResponse(BaseModel):
+    """Response from sending meeting invite."""
+    email_log_id: str
+    success: bool
+
+
+@router.post("/zoom/send-invite", response_model=SendMeetingInviteResponse, dependencies=[Depends(require_csrf_header)])
+def send_zoom_meeting_invite(
+    request: SendMeetingInviteRequest,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+) -> SendMeetingInviteResponse:
+    """Send a Zoom meeting invite email using the org's template.
+    
+    Uses the 'Zoom Meeting Invite' template (auto-created if missing).
+    """
+    from app.services import zoom_service
+    from app.db.models import User
+    
+    # Get host name for template
+    user = db.query(User).filter(User.id == session.user_id).first()
+    host_name = user.display_name if user else "Your Host"
+    
+    # Build meeting object for template
+    meeting = zoom_service.ZoomMeeting(
+        id=request.meeting_id,
+        uuid="",  # Not needed for email
+        topic=request.topic,
+        start_time=request.start_time,
+        duration=request.duration,
+        timezone="America/New_York",
+        join_url=request.join_url,
+        start_url="",  # Not needed for attendee
+        password=request.password,
+    )
+    
+    # Parse case_id
+    case_id = None
+    if request.case_id:
+        try:
+            case_id = uuid.UUID(request.case_id)
+        except ValueError:
+            pass
+    
+    # Send invite
+    email_log_id = zoom_service.send_meeting_invite(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        recipient_email=request.recipient_email,
+        meeting=meeting,
+        contact_name=request.contact_name,
+        host_name=host_name,
+        case_id=case_id,
+    )
+    
+    if not email_log_id:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send invite email",
+        )
+    
+    return SendMeetingInviteResponse(
+        email_log_id=str(email_log_id),
+        success=True,
+    )
+
