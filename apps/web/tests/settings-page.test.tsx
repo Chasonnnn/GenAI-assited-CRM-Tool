@@ -1,0 +1,140 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
+import SettingsPage from '../app/(app)/settings/page'
+
+const mockUpdateNotificationSettings = vi.fn()
+const mockRollbackPipeline = vi.fn()
+const mockRollbackTemplate = vi.fn()
+
+const versionModalSpy = vi.fn()
+
+vi.mock('@/components/version-history-modal', () => ({
+    VersionHistoryModal: (props: any) => {
+        versionModalSpy(props)
+        if (!props.open) return null
+        return (
+            <div data-testid="version-history-modal">
+                {props.entityType}:{props.title}
+            </div>
+        )
+    },
+}))
+
+vi.mock('@/lib/auth-context', () => ({
+    useAuth: () => ({ user: { role: 'developer' } }),
+}))
+
+vi.mock('@/lib/hooks/use-notifications', () => ({
+    useNotificationSettings: () => ({
+        data: {
+            case_assigned: true,
+            case_status_changed: true,
+            case_handoff: true,
+            task_assigned: true,
+        },
+        isLoading: false,
+    }),
+    useUpdateNotificationSettings: () => ({ mutate: mockUpdateNotificationSettings, isPending: false }),
+    useNotifications: () => ({ data: { items: [], unread_count: 0 }, isLoading: false }),
+    useUnreadCount: () => ({ data: { count: 0 }, isLoading: false }),
+    useMarkRead: () => ({ mutate: vi.fn(), isPending: false }),
+    useMarkAllRead: () => ({ mutate: vi.fn(), isPending: false }),
+}))
+
+vi.mock('@/lib/hooks/use-pipelines', () => ({
+    usePipelines: () => ({
+        data: [
+            {
+                id: 'p1',
+                name: 'Default Pipeline',
+                is_default: true,
+                stages: [{ status: 'new_unread', label: 'New', color: '#000' }],
+                current_version: 3,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            },
+        ],
+        isLoading: false,
+    }),
+    usePipelineVersions: (id: string | null) => ({
+        data: id
+            ? [
+                {
+                    id: 'pv1',
+                    version: 1,
+                    payload: { name: 'Default Pipeline', stages: [] },
+                    comment: 'init',
+                    created_by_user_id: null,
+                    created_at: new Date().toISOString(),
+                },
+            ]
+            : [],
+        isLoading: false,
+    }),
+    useRollbackPipeline: () => ({ mutate: mockRollbackPipeline, isPending: false }),
+}))
+
+vi.mock('@/lib/hooks/use-email-templates', () => ({
+    useEmailTemplates: () => ({
+        data: [
+            {
+                id: 't1',
+                name: 'Welcome',
+                subject: 'Hello',
+                is_active: true,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            },
+        ],
+        isLoading: false,
+    }),
+    useTemplateVersions: (id: string | null) => ({
+        data: id
+            ? [
+                {
+                    id: 'tv1',
+                    version: 1,
+                    payload: { name: 'Welcome', subject: 'Hello', body: 'Body', is_active: true },
+                    comment: null,
+                    created_by_user_id: null,
+                    created_at: new Date().toISOString(),
+                },
+            ]
+            : [],
+        isLoading: false,
+    }),
+    useRollbackTemplate: () => ({ mutate: mockRollbackTemplate, isPending: false }),
+}))
+
+describe('SettingsPage', () => {
+    beforeEach(() => {
+        mockUpdateNotificationSettings.mockReset()
+        mockRollbackPipeline.mockReset()
+        mockRollbackTemplate.mockReset()
+        versionModalSpy.mockClear()
+    })
+
+    it('can toggle notification preferences', () => {
+        render(<SettingsPage />)
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }))
+
+        expect(screen.getByText('In-App Notification Preferences')).toBeInTheDocument()
+
+        fireEvent.click(screen.getByLabelText('Case assigned to me'))
+
+        expect(mockUpdateNotificationSettings).toHaveBeenCalledWith({ case_assigned: false })
+    })
+
+    it('opens pipeline version history modal', () => {
+        render(<SettingsPage />)
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Pipelines' }))
+
+        expect(screen.getByText('Default Pipeline')).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: /history/i }))
+
+        expect(screen.getByTestId('version-history-modal')).toHaveTextContent('pipeline:Default Pipeline')
+    })
+})
+
