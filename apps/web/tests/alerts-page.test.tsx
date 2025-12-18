@@ -41,7 +41,7 @@ describe('AlertsPage', () => {
 
     it('renders an alert and can resolve it', () => {
         render(<AlertsPage />)
-        expect(screen.getByText('Alerts')).toBeInTheDocument()
+        expect(screen.getByText('System Alerts')).toBeInTheDocument()
 
         fireEvent.click(screen.getByRole('button', { name: /resolve/i }))
         expect(mockResolve).toHaveBeenCalledWith('a1')

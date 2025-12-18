@@ -168,10 +168,13 @@ def list_tasks(
     user_role: str | None = None,
     page: int = 1,
     per_page: int = 20,
+    q: str | None = None,
     assigned_to: UUID | None = None,
     case_id: UUID | None = None,
     is_completed: bool | None = None,
     task_type: TaskType | None = None,
+    due_before: str | None = None,
+    due_after: str | None = None,
     my_tasks_user_id: UUID | None = None,
 ):
     """
@@ -179,11 +182,15 @@ def list_tasks(
     
     Args:
         user_role: User's role - used to filter out tasks linked to inaccessible cases
+        q: Search query - matches title or description (case-insensitive)
+        due_before: Filter tasks with due_date <= this date (YYYY-MM-DD)
+        due_after: Filter tasks with due_date >= this date (YYYY-MM-DD)
         my_tasks_user_id: If set, returns tasks where user is creator OR assignee
     
     Returns:
         (tasks, total_count)
     """
+    from datetime import date
     from app.db.enums import CaseStatus, Role
     from app.db.models import Case
     
@@ -203,6 +210,16 @@ def list_tasks(
             or_(
                 Task.case_id.is_(None),  # Tasks without case are always visible
                 ~Task.case_id.in_(inaccessible_case_ids)  # Exclude inaccessible cases
+            )
+        )
+    
+    # Search filter (title or description)
+    if q:
+        search_pattern = f"%{q}%"
+        query = query.filter(
+            or_(
+                Task.title.ilike(search_pattern),
+                Task.description.ilike(search_pattern),
             )
         )
     
@@ -230,6 +247,21 @@ def list_tasks(
     # Type filter
     if task_type:
         query = query.filter(Task.task_type == task_type.value)
+    
+    # Due date filters
+    if due_before:
+        try:
+            before_date = date.fromisoformat(due_before)
+            query = query.filter(Task.due_date <= before_date)
+        except ValueError:
+            pass  # Invalid date format, skip filter
+    
+    if due_after:
+        try:
+            after_date = date.fromisoformat(due_after)
+            query = query.filter(Task.due_date >= after_date)
+        except ValueError:
+            pass  # Invalid date format, skip filter
     
     # Order: incomplete first by due date, then by created
     query = query.order_by(

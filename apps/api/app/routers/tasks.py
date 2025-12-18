@@ -113,10 +113,13 @@ def list_tasks(
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
+    q: str | None = Query(None, description="Search in title and description"),
     assigned_to: UUID | None = None,
     case_id: UUID | None = None,
     is_completed: bool | None = None,
     task_type: TaskType | None = None,
+    due_before: str | None = Query(None, description="Due date before (YYYY-MM-DD)"),
+    due_after: str | None = Query(None, description="Due date after (YYYY-MM-DD)"),
     my_tasks: bool = False,
 ):
     """
@@ -139,10 +142,13 @@ def list_tasks(
         user_role=session.role,
         page=page,
         per_page=per_page,
+        q=q,
         assigned_to=assigned_to,
         case_id=case_id,
         is_completed=is_completed,
         task_type=task_type,
+        due_before=due_before,
+        due_after=due_after,
         my_tasks_user_id=session.user_id if my_tasks else None,
     )
     
