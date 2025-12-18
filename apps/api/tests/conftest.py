@@ -17,6 +17,11 @@ import pytest
 # Set test environment variables BEFORE any app imports
 os.environ.setdefault("DEV_BYPASS_AUTH", "False")
 os.environ.setdefault("ENV", "test")
+os.environ.setdefault("FERNET_KEY", "_uKVT313or8juloqHLg9OtBNJv9LCBzEC6mJ1yG9S_E=")
+os.environ.setdefault("ZOOM_CLIENT_ID", "test-zoom-client-id")
+os.environ.setdefault("ZOOM_CLIENT_SECRET", "test-zoom-client-secret")
+os.environ.setdefault("GOOGLE_CLIENT_ID", "test-google-client-id")
+os.environ.setdefault("GOOGLE_CLIENT_SECRET", "test-google-client-secret")
 
 
 # =============================================================================

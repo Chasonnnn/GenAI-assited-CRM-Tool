@@ -5,7 +5,7 @@ Stores encrypted tokens per-user.
 """
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlencode
 
@@ -17,6 +17,17 @@ from app.core.config import settings
 from app.db.models import UserIntegration
 
 logger = logging.getLogger(__name__)
+
+def _now_utc() -> datetime:
+    """Timezone-aware UTC timestamp."""
+    return datetime.now(timezone.utc)
+
+
+def _is_expired(expires_at: datetime) -> bool:
+    """Return True if expires_at is in the past (treat naive datetimes as UTC)."""
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return expires_at <= _now_utc()
 
 
 # ============================================================================
@@ -80,7 +91,7 @@ def save_integration(
     
     token_expires_at = None
     if expires_in:
-        token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+        token_expires_at = _now_utc() + timedelta(seconds=expires_in)
     
     if integration:
         integration.access_token_encrypted = encrypt_token(access_token)
@@ -89,7 +100,7 @@ def save_integration(
         integration.token_expires_at = token_expires_at
         if account_email:
             integration.account_email = account_email
-        integration.updated_at = datetime.utcnow()
+        integration.updated_at = _now_utc()
     else:
         integration = UserIntegration(
             user_id=user_id,
@@ -123,7 +134,7 @@ def get_access_token(db: Session, user_id: uuid.UUID, integration_type: str) -> 
         return None
     
     # Check if token is expired and needs refresh
-    if integration.token_expires_at and integration.token_expires_at < datetime.utcnow():
+    if integration.token_expires_at and _is_expired(integration.token_expires_at):
         if integration.refresh_token_encrypted:
             # Try to refresh
             refreshed = refresh_token(db, integration, integration_type)
@@ -335,8 +346,8 @@ def refresh_token(db: Session, integration: UserIntegration, integration_type: s
         if "refresh_token" in result:
             integration.refresh_token_encrypted = encrypt_token(result["refresh_token"])
         if "expires_in" in result:
-            integration.token_expires_at = datetime.utcnow() + timedelta(seconds=result["expires_in"])
-        integration.updated_at = datetime.utcnow()
+            integration.token_expires_at = _now_utc() + timedelta(seconds=result["expires_in"])
+        integration.updated_at = _now_utc()
         db.commit()
         
         return True

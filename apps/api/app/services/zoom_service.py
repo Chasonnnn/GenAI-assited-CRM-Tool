@@ -5,15 +5,16 @@ Uses OAuth tokens stored per-user in UserIntegration table.
 """
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.enums import EntityType
-from app.db.models import EntityNote, Task, UserIntegration
+from app.db.models import EntityNote, Task
 from app.services import oauth_service
 
 logger = logging.getLogger(__name__)
@@ -54,7 +55,7 @@ async def create_zoom_meeting(
     topic: str,
     start_time: datetime | None = None,
     duration: int = 30,
-    timezone: str = "America/New_York",
+    timezone_name: str = "UTC",
 ) -> ZoomMeeting:
     """Create a Zoom meeting using the Zoom API.
     
@@ -73,7 +74,7 @@ async def create_zoom_meeting(
         "topic": topic,
         "type": 2 if start_time else 1,  # 1=instant, 2=scheduled
         "duration": duration,
-        "timezone": timezone,
+        "timezone": timezone_name,
         "settings": {
             "host_video": True,
             "participant_video": True,
@@ -85,7 +86,15 @@ async def create_zoom_meeting(
     }
     
     if start_time:
-        meeting_data["start_time"] = start_time.strftime("%Y-%m-%dT%H:%M:%S")
+        # Zoom expects RFC3339/ISO8601 datetime. If a naive datetime is provided,
+        # interpret it in the provided meeting timezone.
+        if start_time.tzinfo is None:
+            try:
+                start_time = start_time.replace(tzinfo=ZoneInfo(timezone_name))
+            except Exception:
+                start_time = start_time.replace(tzinfo=timezone.utc)
+        start_time_utc = start_time.astimezone(timezone.utc).replace(microsecond=0)
+        meeting_data["start_time"] = start_time_utc.isoformat().replace("+00:00", "Z")
     
     async with httpx.AsyncClient() as client:
         response = await client.post(
@@ -106,7 +115,7 @@ async def create_zoom_meeting(
         topic=data["topic"],
         start_time=data.get("start_time"),
         duration=data.get("duration", duration),
-        timezone=data.get("timezone", timezone),
+        timezone=data.get("timezone", timezone_name),
         join_url=data["join_url"],
         start_url=data["start_url"],
         password=data.get("password"),
@@ -120,29 +129,20 @@ async def create_zoom_meeting(
 def get_user_zoom_token(
     db: Session, 
     user_id: uuid.UUID,
-) -> str | None:
-    """Get and refresh user's Zoom access token if needed.
-    
-    Returns None if user hasn't connected Zoom.
+) -> str:
+    """Get user's Zoom access token, refreshing if expired.
+
+    Raises ValueError if Zoom isn't connected or token refresh fails.
     """
     integration = oauth_service.get_user_integration(db, user_id, "zoom")
     if not integration:
-        return None
-    
-    # Check if token needs refresh
-    if integration.token_expires_at and integration.token_expires_at < datetime.utcnow():
-        # Try to refresh
-        if integration.refresh_token_encrypted:
-            refresh_token = oauth_service.decrypt_token(integration.refresh_token_encrypted)
-            # Note: refresh happens in the oauth_service
-            new_tokens = oauth_service.auto_refresh_if_needed(
-                db, user_id, "zoom", integration
-            )
-            if new_tokens:
-                return oauth_service.decrypt_token(integration.access_token_encrypted)
-        return None
-    
-    return oauth_service.decrypt_token(integration.access_token_encrypted)
+        raise ValueError("Zoom not connected. Please connect in Settings → Integrations.")
+
+    access_token = oauth_service.get_access_token(db, user_id, "zoom")
+    if not access_token:
+        raise ValueError("Zoom token expired or invalid. Please reconnect in Settings → Integrations.")
+
+    return access_token
 
 
 async def schedule_zoom_meeting(
@@ -176,8 +176,6 @@ async def schedule_zoom_meeting(
     """
     # Get user's Zoom token
     access_token = get_user_zoom_token(db, user_id)
-    if not access_token:
-        raise ValueError("User has not connected Zoom. Please connect in Settings → Integrations.")
     
     # Create the Zoom meeting
     meeting = await create_zoom_meeting(
@@ -188,19 +186,26 @@ async def schedule_zoom_meeting(
     )
     
     # Build note content
+    from html import escape
+    from app.services import note_service
+
     time_str = start_time.strftime("%B %d, %Y at %I:%M %p") if start_time else "Instant meeting"
-    note_content = f"""📹 **Zoom Meeting Scheduled**
+    join_url = escape(meeting.join_url)
+    safe_topic = escape(topic)
 
-**Topic:** {topic}
-**Time:** {time_str}
-**Duration:** {duration} minutes
-
-**Join Link:** {meeting.join_url}
-"""
+    note_content = (
+        "<p>📹 <strong>Zoom Meeting Scheduled</strong></p>"
+        f"<p><strong>Topic:</strong> {safe_topic}<br/>"
+        f"<strong>Time:</strong> {escape(time_str)}<br/>"
+        f"<strong>Duration:</strong> {duration} minutes</p>"
+        f"<p><strong>Join Link:</strong> <a href=\"{join_url}\" target=\"_blank\">{join_url}</a></p>"
+    )
     if meeting.password:
-        note_content += f"**Password:** {meeting.password}\n"
+        note_content += f"<p><strong>Password:</strong> {escape(meeting.password)}</p>"
     if contact_name:
-        note_content += f"\n**With:** {contact_name}"
+        note_content += f"<p><strong>With:</strong> {escape(contact_name)}</p>"
+
+    note_content = note_service.sanitize_html(note_content)
     
     # Create note
     note = EntityNote(
@@ -211,6 +216,19 @@ async def schedule_zoom_meeting(
         author_id=user_id,
     )
     db.add(note)
+    db.flush()  # get note.id for activity log
+
+    # Log case activity (case only)
+    if entity_type == EntityType.CASE:
+        from app.services import activity_service
+        activity_service.log_note_added(
+            db=db,
+            case_id=entity_id,
+            organization_id=org_id,
+            actor_user_id=user_id,
+            note_id=note.id,
+            content=note_content,
+        )
     
     # Create task if requested
     task_id = None
@@ -347,4 +365,3 @@ def send_meeting_invite(
         email_log, _ = result
         return email_log.id
     return None
-
