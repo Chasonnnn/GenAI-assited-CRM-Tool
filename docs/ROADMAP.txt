@@ -643,15 +643,22 @@ Dependencies (2025-12-14) — COMPLETED
   with custom TypeScript interfaces compatible with recharts 3 API
 - Base UI components (combobox, pagination) fixed for render prop compatibility
 
-Queue/Ownership System (Week 14+)
-- Problem: Current access control ties visibility to status, which limits flexibility
-- Solution: Add ownership fields to Case model for enterprise-style routing:
-  - owner_role (intake_specialist, case_manager) — current owning role
-  - current_queue — assignment queue name for team-based routing
-  - stage_owner_id — current stage owner (vs original creator)
-- Enables:
-  - Ownership-based access control (independent of status)
-  - Assignment queues with auto-routing rules (like Salesforce Queue)
-  - Team-based views (like HubSpot "owner/team" + pipeline stage)
-  - Flexible handoff without overloading status meaning
-- Pattern: Salesforce/HubSpot/Zendesk enterprise CRM patterns
+Queue/Ownership System (Week 11) — COMPLETE ✓
+- Problem: Access control tied visibility to status, limiting flexibility
+- Solution: Salesforce-style single-owner model (owner_type + owner_id)
+✓ Backend:
+  - Queue model + OwnerType enum
+  - Migration 0023_add_queues_ownership with backfill
+  - queue_service.py (CRUD, atomic claim/release with row locking)
+  - queues.py router (7 endpoints: CRUD + claim/release/assign)
+  - case_access.py refactored for owner-based visibility
+  - list_cases/list_tasks updated with owner filtering
+  - CaseRead schema includes owner_type/owner_id
+✓ Frontend:
+  - use-queues.ts hooks (useQueues, useClaimCase, useReleaseCase, etc.)
+  - Queue filter dropdown on /cases (case_manager+ only)
+  - Claim/Release buttons on case detail page
+  - Release to Queue dialog with queue selection
+  - /settings/queues page for queue management (CRUD)
+✓ Tests: 17/17 passing
+

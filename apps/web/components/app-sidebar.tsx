@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -47,9 +47,6 @@ import {
     Zap,
     Bot,
     ChevronRightIcon,
-    FileText,
-    Mail,
-    GitBranch,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { NotificationBell } from "@/components/notification-bell"
@@ -98,13 +95,6 @@ const settingsNavigation = {
     title: "Settings",
     url: "/settings",
     icon: Settings,
-    items: [
-        { title: "General", url: "/settings" },
-        { title: "Notifications", url: "/settings/notifications" },
-        { title: "Pipelines", url: "/settings/pipelines" },
-        { title: "Email Templates", url: "/settings/email-templates" },
-        { title: "Audit Log", url: "/settings/audit" },
-    ],
 }
 
 interface AppSidebarProps {
@@ -113,7 +103,30 @@ interface AppSidebarProps {
 
 export function AppSidebar({ children }: AppSidebarProps) {
     const pathname = usePathname()
+    const searchParams = useSearchParams()
     const { user } = useAuth()
+    const isManager = user?.role && ['manager', 'developer'].includes(user.role)
+    const activeSettingsTab = searchParams.get("tab")
+
+    const settingsItems: Array<{ title: string; url: string; tab?: string | null }> = [
+        { title: "General", url: "/settings", tab: null },
+        { title: "Notifications", url: "/settings?tab=notifications", tab: "notifications" },
+        { title: "Pipelines", url: "/settings?tab=pipelines", tab: "pipelines" },
+        { title: "Email Templates", url: "/settings?tab=email-templates", tab: "email-templates" },
+        ...(isManager ? [{ title: "Queues", url: "/settings/queues" }] : []),
+        { title: "Audit Log", url: "/settings/audit" },
+        { title: "Integrations", url: "/settings/integrations" },
+        { title: "System Alerts", url: "/settings/alerts" },
+    ]
+
+    const isSettingsItemActive = (item: { url: string; tab?: string | null }) => {
+        if (item.tab !== undefined) {
+            if (pathname !== "/settings") return false
+            if (item.tab === null) return activeSettingsTab === null
+            return activeSettingsTab === item.tab
+        }
+        return pathname === item.url
+    }
 
     const initials = user?.display_name
         ?.split(" ")
@@ -230,11 +243,11 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                     />
                                     <CollapsibleContent>
                                         <SidebarMenuSub>
-                                            {settingsNavigation.items.map((subItem) => (
+                                            {settingsItems.map((subItem) => (
                                                 <SidebarMenuSubItem key={subItem.url}>
                                                     <SidebarMenuSubButton
                                                         href={subItem.url}
-                                                        isActive={pathname === subItem.url}
+                                                        isActive={isSettingsItemActive(subItem)}
                                                     >
                                                         <span>{subItem.title}</span>
                                                     </SidebarMenuSubButton>

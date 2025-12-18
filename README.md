@@ -27,27 +27,27 @@ AI is an **optional** capability designed to be safe, auditable, and tenant-conf
 
 ```
 ├── apps/
-│   ├── api/                    # FastAPI backend (v0.06.00)
+│   ├── api/                    # FastAPI backend (v0.09.00)
 │   │   ├── app/
-│   │   │   ├── core/           # Config, security, dependencies
-│   │   │   ├── db/             # Models (34), enums, session
-│   │   │   ├── routers/        # API endpoints (20 modules)
+│   │   │   ├── core/           # Config, security, dependencies, case_access
+│   │   │   ├── db/             # Models (35: +Queue), enums (+OwnerType), session
+│   │   │   ├── routers/        # API endpoints (21 modules: +queues)
 │   │   │   │   ├── auth, cases, tasks, notes, notifications
-│   │   │   │   ├── intended_parents, email_templates, pipelines
+│   │   │   │   ├── intended_parents, email_templates, pipelines, queues
 │   │   │   │   ├── ai, analytics, audit, admin_versions, metadata
 │   │   │   │   ├── integrations, webhooks, ops, jobs
 │   │   │   │   └── dev, internal, websocket
 │   │   │   ├── schemas/        # Pydantic DTOs
-│   │   │   ├── services/       # Business logic (32 services)
-│   │   │   │   ├── auth, user, org, case, task, note
+│   │   │   ├── services/       # Business logic (33 services: +queue_service)
+│   │   │   │   ├── auth, user, org, case, task, note, queue
 │   │   │   │   ├── ai_*, email, pipeline, version
 │   │   │   │   ├── meta_*, import, audit, analytics
 │   │   │   │   └── notification, oauth, gmail, pii_anonymizer
 │   │   │   ├── utils/          # Helpers (normalization, pagination)
 │   │   │   ├── cli.py          # CLI commands
 │   │   │   └── main.py         # FastAPI app entry
-│   │   ├── alembic/            # Database migrations (21)
-│   │   ├── tests/              # pytest test suite (14 tests)
+│   │   ├── alembic/            # Database migrations (23: +queues_ownership)
+│   │   ├── tests/              # pytest test suite (17 tests)
 │   │   └── requirements.txt
 │   │
 │   └── web/                    # Next.js frontend
@@ -55,14 +55,15 @@ AI is an **optional** capability designed to be safe, auditable, and tenant-conf
 │       │   ├── (app)/          # Authenticated routes
 │       │   │   ├── dashboard, cases, tasks, leads
 │       │   │   ├── intended-parents, reports, settings
-│       │   │   │   └── audit/  # Audit log viewer (managers)
+│       │   │   │   ├── audit/   # Audit log viewer (managers)
+│       │   │   │   └── queues/  # Queue management (managers)
 │       │   │   ├── ai-assistant, notifications, automation
 │       │   │   └── analytics, ops-console
 │       │   ├── login/          # Public login page
 │       │   └── layout.tsx
-│       ├── components/         # Shared UI components (incl. inline-edit-field)
+│       ├── components/         # Shared UI (inline-edit-field, etc.)
 │       ├── lib/                # API client, hooks, utils
-│       │   └── hooks/          # React Query + WebSocket hooks
+│       │   └── hooks/          # React Query hooks (+use-queues.ts)
 │       └── tests/              # Vitest test suite (3 tests)
 │
 ├── docs/                       # Documentation

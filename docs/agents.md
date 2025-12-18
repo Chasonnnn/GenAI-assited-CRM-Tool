@@ -550,6 +550,19 @@ Constraints:
   - Naive datetime comparison fixed in token-check
   - 'default' instead of NULL for upsert keys
 
+### Week 11 (2025-12-18): Queue/Ownership System ✓ COMPLETE
+- **Completed:**
+  - Queue model + OwnerType enum (Salesforce-style single-owner)
+  - Migration 0023: queues table, owner_type/owner_id on cases, backfill
+  - queue_service.py: CRUD, atomic claim/release with row locking
+  - queues.py router: 7 endpoints (CRUD + claim/release/assign)
+  - case_access.py refactored for owner-based visibility
+  - list_cases/list_tasks updated with owner filtering
+  - Frontend: use-queues.ts hooks, queue filter on /cases
+  - Case detail: Claim/Release buttons + Release dialog
+  - Settings: /settings/queues page for queue management
+- **Version:** 0.09.00
+
 ## 14) Decision Log (Update when choices change)
 
 - **ORM choice:** SQLAlchemy 2.0 with DeclarativeBase
@@ -570,4 +583,5 @@ Constraints:
 - **Notification dedupe (2025-12-15):** App-level dedupe with 1-hour window, DB constraint deferred until noisy
 - **Theme system (2025-12-15):** Stone base + Teal theme using next-themes, warm oklch colors
 - **Ops/alerts design (2025-12-16):** Fingerprint-based alert deduplication, hourly error rollups, 'default' for null integration keys
+- **Queue/Ownership (2025-12-18):** Salesforce-style single-owner model (owner_type + owner_id); atomic claim with row locking
 
