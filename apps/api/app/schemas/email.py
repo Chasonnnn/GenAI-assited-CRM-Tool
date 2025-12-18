@@ -23,6 +23,7 @@ class EmailTemplateUpdate(BaseModel):
     subject: str | None = Field(None, min_length=1, max_length=200)
     body: str | None = Field(None, min_length=1, max_length=50000)
     is_active: bool | None = None
+    expected_version: int | None = Field(None, description="Required for optimistic locking")
 
 
 class EmailTemplateRead(BaseModel):
@@ -36,6 +37,7 @@ class EmailTemplateRead(BaseModel):
     subject: str
     body: str
     is_active: bool
+    current_version: int  # For optimistic locking
     created_at: datetime
     updated_at: datetime
 
