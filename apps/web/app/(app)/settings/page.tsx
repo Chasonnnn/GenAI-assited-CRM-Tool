@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { CameraIcon, CheckIcon, MonitorIcon, SmartphoneIcon, LoaderIcon, History, GitBranch } from "lucide-react"
+import { CameraIcon, CheckIcon, MonitorIcon, SmartphoneIcon, LoaderIcon, History, GitBranch, FileText } from "lucide-react"
 import { useNotificationSettings, useUpdateNotificationSettings } from "@/lib/hooks/use-notifications"
 import { usePipelines, usePipelineVersions, useRollbackPipeline } from "@/lib/hooks/use-pipelines"
 import { useEmailTemplates, useTemplateVersions, useRollbackTemplate } from "@/lib/hooks/use-email-templates"
@@ -390,6 +390,15 @@ export default function SettingsPage() {
                   <Mail className="mr-2 h-4 w-4" />
                   Email Templates
                 </TabsTrigger>
+                <a href="/settings/audit" className="w-full">
+                  <TabsTrigger
+                    value="audit"
+                    className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary w-full"
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    Audit Log
+                  </TabsTrigger>
+                </a>
               </TabsList>
             </CardContent>
           </Card>
