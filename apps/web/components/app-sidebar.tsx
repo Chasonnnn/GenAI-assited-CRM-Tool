@@ -212,31 +212,32 @@ export function AppSidebar({ children }: AppSidebarProps) {
                             )}
                             {/* Settings with sub-menu */}
                             <Collapsible
-                                defaultOpen={pathname?.startsWith("/settings")}
+                                open={pathname?.startsWith("/settings") || undefined}
                                 className="group/collapsible"
                             >
                                 <SidebarMenuItem>
-                                    <CollapsibleTrigger>
-                                        <SidebarMenuButton
-                                            isActive={pathname?.startsWith("/settings")}
-                                            tooltip={settingsNavigation.title}
-                                        >
-                                            <settingsNavigation.icon />
-                                            <span>{settingsNavigation.title}</span>
-                                            <ChevronRightIcon className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                                        </SidebarMenuButton>
-                                    </CollapsibleTrigger>
+                                    <CollapsibleTrigger
+                                        render={
+                                            <SidebarMenuButton
+                                                isActive={pathname?.startsWith("/settings")}
+                                                tooltip={settingsNavigation.title}
+                                            >
+                                                <settingsNavigation.icon />
+                                                <span>{settingsNavigation.title}</span>
+                                                <ChevronRightIcon className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                                            </SidebarMenuButton>
+                                        }
+                                    />
                                     <CollapsibleContent>
                                         <SidebarMenuSub>
                                             {settingsNavigation.items.map((subItem) => (
                                                 <SidebarMenuSubItem key={subItem.url}>
-                                                    <Link href={subItem.url}>
-                                                        <SidebarMenuSubButton
-                                                            isActive={pathname === subItem.url}
-                                                        >
-                                                            <span>{subItem.title}</span>
-                                                        </SidebarMenuSubButton>
-                                                    </Link>
+                                                    <SidebarMenuSubButton
+                                                        href={subItem.url}
+                                                        isActive={pathname === subItem.url}
+                                                    >
+                                                        <span>{subItem.title}</span>
+                                                    </SidebarMenuSubButton>
                                                 </SidebarMenuSubItem>
                                             ))}
                                         </SidebarMenuSub>
