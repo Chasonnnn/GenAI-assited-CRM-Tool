@@ -1,6 +1,6 @@
 # Surrogacy CRM Platform
 
-**Version:** 0.07.00 | **Format:** a.bc.de (major.feature.patch)
+**Version:** 0.08.00 | **Format:** a.bc.de (major.feature.patch)
 
 A modern, multi-tenant CRM and case management platform built for surrogacy agencies. Features lead pipeline management, intended parent profiles, case workflow tracking, AI-assisted insights, and enterprise audit/versioning.
 
@@ -31,12 +31,12 @@ AI is an **optional** capability designed to be safe, auditable, and tenant-conf
 │   │   ├── app/
 │   │   │   ├── core/           # Config, security, dependencies
 │   │   │   ├── db/             # Models (34), enums, session
-│   │   │   ├── routers/        # API endpoints (19 modules)
+│   │   │   ├── routers/        # API endpoints (20 modules)
 │   │   │   │   ├── auth, cases, tasks, notes, notifications
 │   │   │   │   ├── intended_parents, email_templates, pipelines
-│   │   │   │   ├── ai, analytics, audit, admin_versions
+│   │   │   │   ├── ai, analytics, audit, admin_versions, metadata
 │   │   │   │   ├── integrations, webhooks, ops, jobs
-│   │   │   │   └── dev, internal
+│   │   │   │   └── dev, internal, websocket
 │   │   │   ├── schemas/        # Pydantic DTOs
 │   │   │   ├── services/       # Business logic (32 services)
 │   │   │   │   ├── auth, user, org, case, task, note
@@ -60,7 +60,7 @@ AI is an **optional** capability designed to be safe, auditable, and tenant-conf
 │       │   │   └── analytics, ops-console
 │       │   ├── login/          # Public login page
 │       │   └── layout.tsx
-│       ├── components/         # Shared UI components
+│       ├── components/         # Shared UI components (incl. inline-edit-field)
 │       ├── lib/                # API client, hooks, utils
 │       │   └── hooks/          # React Query + WebSocket hooks
 │       └── tests/              # Vitest test suite (3 tests)
