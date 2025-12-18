@@ -52,6 +52,10 @@ jobs:
       - name: Run migrations
         working-directory: apps/api
         run: alembic upgrade head
+
+      - name: Verify models have migrations
+        working-directory: apps/api
+        run: alembic check
       
       - name: Run tests
         working-directory: apps/api
