@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,14 +10,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { CameraIcon, CheckIcon, MonitorIcon, SmartphoneIcon, LoaderIcon, History, GitBranch, FileText } from "lucide-react"
+import { CameraIcon, MonitorIcon, SmartphoneIcon, LoaderIcon, History, GitBranch, Mail } from "lucide-react"
 import { useNotificationSettings, useUpdateNotificationSettings } from "@/lib/hooks/use-notifications"
 import { usePipelines, usePipelineVersions, useRollbackPipeline } from "@/lib/hooks/use-pipelines"
 import { useEmailTemplates, useTemplateVersions, useRollbackTemplate } from "@/lib/hooks/use-email-templates"
-import { VersionHistoryModal, type VersionItem } from "@/components/version-history-modal"
+import { VersionHistoryModal } from "@/components/version-history-modal"
 import { useAuth } from "@/lib/auth-context"
-import { Mail } from "lucide-react"
 // Notification Settings Card - wired to real API
 function NotificationsSettingsCard() {
   const { data: settings, isLoading } = useNotificationSettings()
@@ -329,49 +327,22 @@ function EmailTemplatesSettingsCard() {
 }
 
 export default function SettingsPage() {
-  const { user } = useAuth()
-  const router = useRouter()
   const searchParams = useSearchParams()
 
-  const canManageQueues = user?.role && ['manager', 'developer'].includes(user.role)
+  const { user } = useAuth()
+  const activeTab = (() => {
+    const tab = searchParams?.get("tab")
+    if (tab === "notifications" || tab === "pipelines" || tab === "email-templates") return tab
+    return "general"
+  })()
 
-  const validTabs = new Set([
-    "profile",
-    "organization",
-    "notifications",
-    "integrations",
-    "security",
-    "pipelines",
-    "email-templates",
-  ])
-
-  const normalizeTab = (tab: string | null) => (tab && validTabs.has(tab) ? tab : "profile")
-
-  const tabParam = searchParams.get("tab")
-  const [activeTab, setActiveTab] = useState(() => normalizeTab(tabParam))
-
-  useEffect(() => {
-    setActiveTab((current) => {
-      const normalized = normalizeTab(tabParam)
-      return current === normalized ? current : normalized
-    })
-  }, [tabParam])
-
-  const handleTabChange = (value: string) => {
-    if (!validTabs.has(value)) return
-
-    setActiveTab(value)
-
-    const nextParams = new URLSearchParams(searchParams.toString())
-    if (value === "profile") {
-      nextParams.delete("tab")
-    } else {
-      nextParams.set("tab", value)
-    }
-
-    const query = nextParams.toString()
-    router.replace(query ? `/settings?${query}` : "/settings")
-  }
+  const initials =
+    user?.display_name
+      ?.split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2) || "??"
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -384,345 +355,159 @@ export default function SettingsPage() {
 
       {/* Main Content */}
       <div className="flex-1 p-6">
-        <Tabs value={activeTab} onValueChange={handleTabChange} className="flex flex-col gap-6 lg:flex-row">
-          {/* Left Sidebar - Tabs Menu */}
-          <Card className="h-fit lg:w-64">
-            <CardContent className="p-2">
-              <TabsList className="flex w-full flex-col items-stretch gap-1 bg-transparent">
-                <TabsTrigger
-                  value="profile"
-                  className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
-                >
-                  Profile
-                </TabsTrigger>
-                <TabsTrigger
-                  value="organization"
-                  className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
-                >
-                  Organization
-                </TabsTrigger>
-                <TabsTrigger
-                  value="notifications"
-                  className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
-                >
-                  Notifications
-                </TabsTrigger>
-                <TabsTrigger
-                  value="integrations"
-                  className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
-                >
-                  Integrations
-                </TabsTrigger>
-                <TabsTrigger
-                  value="security"
-                  className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
-                >
-                  Security
-                </TabsTrigger>
-                <TabsTrigger
-                  value="pipelines"
-                  className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
-                >
-                  <GitBranch className="mr-2 h-4 w-4" />
-                  Pipelines
-                </TabsTrigger>
-                <TabsTrigger
-                  value="email-templates"
-                  className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
-                >
-                  <Mail className="mr-2 h-4 w-4" />
-                  Email Templates
-                </TabsTrigger>
-                {canManageQueues && (
-                  <a href="/settings/queues" className="w-full">
-                    <TabsTrigger
-                      value="queues"
-                      className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary w-full"
-                    >
-                      Queue Management
-                    </TabsTrigger>
-                  </a>
-                )}
-                <a href="/settings/audit" className="w-full">
-                  <TabsTrigger
-                    value="audit"
-                    className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary w-full"
-                  >
-                    <FileText className="mr-2 h-4 w-4" />
-                    Audit Log
-                  </TabsTrigger>
-                </a>
-              </TabsList>
-            </CardContent>
-          </Card>
-
-          {/* Right Content Area */}
-          <div className="flex-1">
-            {/* Profile Tab */}
-            <TabsContent value="profile" className="mt-0">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Profile Settings</CardTitle>
-                  <CardDescription>Manage your personal information and preferences</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Avatar Upload */}
+        {activeTab === "general" && (
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>General</CardTitle>
+                <CardDescription>Profile, organization, and access settings</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-10">
+                {/* Profile */}
+                <div className="space-y-6">
                   <div className="flex items-center gap-4">
                     <div className="relative">
                       <Avatar className="size-20">
                         <AvatarImage src="/avatars/user.jpg" />
-                        <AvatarFallback>JD</AvatarFallback>
+                        <AvatarFallback>{initials}</AvatarFallback>
                       </Avatar>
-                      <button className="absolute bottom-0 right-0 flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90">
+                      <button
+                        type="button"
+                        className="absolute bottom-0 right-0 flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+                      >
                         <CameraIcon className="size-4" />
                       </button>
                     </div>
                     <div>
-                      <h3 className="font-medium">Profile Picture</h3>
-                      <p className="text-sm text-muted-foreground">Upload a new avatar</p>
+                      <h3 className="font-medium">Profile</h3>
+                      <p className="text-sm text-muted-foreground">Managed via Google SSO</p>
                     </div>
                   </div>
 
-                  {/* Full Name */}
-                  <div className="space-y-2">
-                    <Label htmlFor="fullName">Full Name</Label>
-                    <Input id="fullName" defaultValue="John Doe" />
-                  </div>
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="fullName">Full Name</Label>
+                      <Input id="fullName" defaultValue={user?.display_name || ""} />
+                    </div>
 
-                  {/* Email (disabled) */}
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input id="email" type="email" defaultValue="john.doe@example.com" disabled />
-                    <p className="text-xs text-muted-foreground">Email cannot be changed</p>
-                  </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Email</Label>
+                      <Input id="email" type="email" defaultValue={user?.email || ""} disabled />
+                      <p className="text-xs text-muted-foreground">Email is managed by SSO</p>
+                    </div>
 
-                  {/* Phone */}
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Phone</Label>
-                    <Input id="phone" type="tel" defaultValue="+1 (555) 123-4567" />
-                  </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="phone">Phone</Label>
+                      <Input id="phone" type="tel" placeholder="-" />
+                    </div>
 
-                  {/* Role */}
-                  <div className="space-y-2">
-                    <Label>Role</Label>
-                    <div>
-                      <Badge className="bg-primary/10 text-primary border-primary/20">Admin</Badge>
+                    <div className="space-y-2">
+                      <Label>Role</Label>
+                      <div>
+                        <Badge className="bg-primary/10 text-primary border-primary/20">
+                          {user?.role || "unknown"}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
 
                   <Button>Save Changes</Button>
-                </CardContent>
-              </Card>
-            </TabsContent>
+                </div>
 
-            {/* Organization Tab */}
-            <TabsContent value="organization" className="mt-0">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Organization Settings</CardTitle>
-                  <CardDescription>Manage your organization details</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Organization Name */}
-                  <div className="space-y-2">
-                    <Label htmlFor="orgName">Organization Name</Label>
-                    <Input id="orgName" defaultValue="Surrogacy Solutions Inc." />
+                <div className="border-t border-border" />
+
+                {/* Organization */}
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="font-medium">Organization</h3>
+                    <p className="text-sm text-muted-foreground">Organization-wide defaults</p>
                   </div>
 
-                  {/* Address */}
-                  <div className="space-y-2">
-                    <Label htmlFor="address">Address</Label>
-                    <Textarea
-                      id="address"
-                      rows={3}
-                      defaultValue="123 Main Street&#10;Suite 100&#10;San Francisco, CA 94105"
-                    />
-                  </div>
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="orgName">Organization Name</Label>
+                      <Input id="orgName" defaultValue={user?.org_name || ""} />
+                    </div>
 
-                  {/* Phone */}
-                  <div className="space-y-2">
-                    <Label htmlFor="orgPhone">Phone</Label>
-                    <Input id="orgPhone" type="tel" defaultValue="+1 (555) 987-6543" />
-                  </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="address">Address</Label>
+                      <Textarea id="address" rows={3} placeholder="-" />
+                    </div>
 
-                  {/* Email */}
-                  <div className="space-y-2">
-                    <Label htmlFor="orgEmail">Email</Label>
-                    <Input id="orgEmail" type="email" defaultValue="info@surrogacysolutions.com" />
-                  </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="orgPhone">Phone</Label>
+                      <Input id="orgPhone" type="tel" placeholder="-" />
+                    </div>
 
-                  {/* Logo Upload */}
-                  <div className="space-y-2">
-                    <Label>Organization Logo</Label>
-                    <div className="flex items-center gap-4">
-                      <div className="flex size-16 items-center justify-center rounded-lg border border-border bg-muted">
-                        <span className="text-xs text-muted-foreground">Logo</span>
-                      </div>
-                      <Button variant="outline">Upload Logo</Button>
+                    <div className="space-y-2">
+                      <Label htmlFor="orgEmail">Email</Label>
+                      <Input id="orgEmail" type="email" placeholder="-" />
                     </div>
                   </div>
 
                   <Button>Save Changes</Button>
-                </CardContent>
-              </Card>
-            </TabsContent>
+                </div>
 
-            {/* Notifications Tab */}
-            <TabsContent value="notifications" className="mt-0">
-              <NotificationsSettingsCard />
-            </TabsContent>
+                <div className="border-t border-border" />
 
-            {/* Integrations Tab */}
-            <TabsContent value="integrations" className="mt-0">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Integrations</CardTitle>
-                  <CardDescription>Manage your third-party integrations</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between rounded-lg border border-border p-4">
-                    <div className="flex items-center gap-4">
-                      <div className="flex size-12 items-center justify-center rounded-lg bg-blue-500/10">
-                        <span className="text-2xl">📘</span>
-                      </div>
-                      <div>
-                        <h3 className="font-medium">Meta Leads</h3>
-                        <div className="flex items-center gap-2">
-                          <Badge className="bg-green-500/10 text-green-500 border-green-500/20">
-                            <CheckIcon className="mr-1 size-3" />
-                            Connected
-                          </Badge>
-                        </div>
-                      </div>
-                    </div>
-                    <Button variant="outline">Disconnect</Button>
+                {/* Access */}
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="font-medium">Access</h3>
+                    <p className="text-sm text-muted-foreground">2FA and session controls</p>
                   </div>
 
                   <div className="flex items-center justify-between rounded-lg border border-border p-4">
-                    <div className="flex items-center gap-4">
-                      <div className="flex size-12 items-center justify-center rounded-lg bg-red-500/10">
-                        <span className="text-2xl">📅</span>
-                      </div>
-                      <div>
-                        <h3 className="font-medium">Google Calendar</h3>
-                        <Badge variant="secondary" className="text-muted-foreground">
-                          Not connected
-                        </Badge>
-                      </div>
+                    <div className="space-y-0.5">
+                      <Label htmlFor="twoFactor">Two-factor authentication</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Managed by Google Workspace + Duo
+                      </p>
                     </div>
-                    <Button>Connect</Button>
+                    <Switch id="twoFactor" checked disabled />
                   </div>
 
-                  <div className="flex items-center justify-between rounded-lg border border-border p-4">
-                    <div className="flex items-center gap-4">
-                      <div className="flex size-12 items-center justify-center rounded-lg bg-purple-500/10">
-                        <span className="text-2xl">💬</span>
-                      </div>
-                      <div>
-                        <h3 className="font-medium">Slack</h3>
-                        <Badge variant="secondary" className="text-muted-foreground">
-                          Not connected
-                        </Badge>
-                      </div>
-                    </div>
-                    <Button>Connect</Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Security Tab */}
-            <TabsContent value="security" className="mt-0">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Security Settings</CardTitle>
-                  <CardDescription>Manage your account security and active sessions</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-4">
-                    <h3 className="font-medium">Change Password</h3>
-                    <div className="space-y-2">
-                      <Label htmlFor="currentPassword">Current Password</Label>
-                      <Input id="currentPassword" type="password" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="newPassword">New Password</Label>
-                      <Input id="newPassword" type="password" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                      <Input id="confirmPassword" type="password" />
-                    </div>
-                    <Button>Update Password</Button>
-                  </div>
-
-                  <div className="border-t border-border pt-6">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label htmlFor="twoFactor">Two-factor authentication</Label>
-                        <p className="text-sm text-muted-foreground">Add an extra layer of security</p>
-                      </div>
-                      <Switch id="twoFactor" />
-                    </div>
-                  </div>
-
-                  <div className="border-t border-border pt-6">
-                    <h3 className="mb-4 font-medium">Active Sessions</h3>
-                    <div className="space-y-3">
-                      <div className="flex items-start justify-between rounded-lg border border-border p-4">
-                        <div className="flex gap-3">
-                          <MonitorIcon className="mt-0.5 size-5 text-muted-foreground" />
-                          <div>
-                            <p className="font-medium">Chrome on MacBook Pro</p>
-                            <p className="text-sm text-muted-foreground">San Francisco, CA • Last active now</p>
-                          </div>
+                  <div className="space-y-3">
+                    <h4 className="font-medium">Active Sessions</h4>
+                    <div className="flex items-start justify-between rounded-lg border border-border p-4">
+                      <div className="flex gap-3">
+                        <MonitorIcon className="mt-0.5 size-5 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium">Current session</p>
+                          <p className="text-sm text-muted-foreground">This device</p>
                         </div>
-                        <Badge className="bg-green-500/10 text-green-500 border-green-500/20">Current</Badge>
                       </div>
+                      <Badge className="bg-green-500/10 text-green-500 border-green-500/20">Current</Badge>
+                    </div>
 
-                      <div className="flex items-start justify-between rounded-lg border border-border p-4">
-                        <div className="flex gap-3">
-                          <SmartphoneIcon className="mt-0.5 size-5 text-muted-foreground" />
-                          <div>
-                            <p className="font-medium">Safari on iPhone 14</p>
-                            <p className="text-sm text-muted-foreground">
-                              San Francisco, CA • Last active 2 hours ago
-                            </p>
-                          </div>
+                    <div className="flex items-start justify-between rounded-lg border border-border p-4">
+                      <div className="flex gap-3">
+                        <SmartphoneIcon className="mt-0.5 size-5 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium">Other session</p>
+                          <p className="text-sm text-muted-foreground">—</p>
                         </div>
-                        <Button variant="ghost" size="sm">
-                          Revoke
-                        </Button>
                       </div>
+                      <Button variant="ghost" size="sm" disabled>
+                        Revoke
+                      </Button>
                     </div>
                   </div>
 
-                  <div className="border-t border-border pt-6">
-                    <div className="space-y-4">
-                      <div>
-                        <h3 className="font-medium text-destructive">Delete Account</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Permanently delete your account and all associated data
-                        </p>
-                      </div>
-                      <Button variant="destructive">Delete Account</Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Pipelines Tab */}
-            <TabsContent value="pipelines" className="mt-0">
-              <PipelinesSettingsCard />
-            </TabsContent>
-
-            {/* Email Templates Tab */}
-            <TabsContent value="email-templates" className="mt-0">
-              <EmailTemplatesSettingsCard />
-            </TabsContent>
+                  <p className="text-xs text-muted-foreground">
+                    Account deletion is managed by your organization admin.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </Tabs>
+        )}
+
+        {activeTab === "notifications" && <NotificationsSettingsCard />}
+
+        {activeTab === "pipelines" && <PipelinesSettingsCard />}
+
+        {activeTab === "email-templates" && <EmailTemplatesSettingsCard />}
       </div>
     </div>
   )

@@ -1,0 +1,113 @@
+/**
+ * React Query hooks for user integrations (Zoom, Gmail, etc.)
+ */
+
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+    listUserIntegrations,
+    getZoomConnectUrl,
+    getGmailConnectUrl,
+    getZoomStatus,
+    disconnectIntegration,
+    createZoomMeeting,
+    type CreateMeetingRequest,
+    type CreateMeetingResponse,
+    type IntegrationStatus,
+    type ZoomStatusResponse,
+} from '@/lib/api/integrations'
+
+// ============================================================================
+// Query Keys
+// ============================================================================
+
+export const integrationKeys = {
+    all: ['user-integrations'] as const,
+    list: () => [...integrationKeys.all, 'list'] as const,
+    zoomStatus: () => [...integrationKeys.all, 'zoom-status'] as const,
+}
+
+// ============================================================================
+// Hooks
+// ============================================================================
+
+/**
+ * Get list of user's connected integrations.
+ */
+export function useUserIntegrations() {
+    return useQuery({
+        queryKey: integrationKeys.list(),
+        queryFn: async () => {
+            const response = await listUserIntegrations()
+            return response.integrations
+        },
+    })
+}
+
+/**
+ * Get Zoom connection status for current user.
+ */
+export function useZoomStatus() {
+    return useQuery({
+        queryKey: integrationKeys.zoomStatus(),
+        queryFn: getZoomStatus,
+    })
+}
+
+/**
+ * Connect Zoom - returns auth URL and redirects user.
+ */
+export function useConnectZoom() {
+    return useMutation({
+        mutationFn: async () => {
+            const { auth_url } = await getZoomConnectUrl()
+            // Redirect user to Zoom OAuth
+            window.location.href = auth_url
+        },
+    })
+}
+
+/**
+ * Connect Gmail - returns auth URL and redirects user.
+ */
+export function useConnectGmail() {
+    return useMutation({
+        mutationFn: async () => {
+            const { auth_url } = await getGmailConnectUrl()
+            // Redirect user to Gmail OAuth
+            window.location.href = auth_url
+        },
+    })
+}
+
+/**
+ * Disconnect an integration.
+ */
+export function useDisconnectIntegration() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: disconnectIntegration,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: integrationKeys.all })
+        },
+    })
+}
+
+/**
+ * Create a Zoom meeting.
+ */
+export function useCreateZoomMeeting() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (data: CreateMeetingRequest) => createZoomMeeting(data),
+        onSuccess: () => {
+            // Invalidate notes/tasks for the entity
+            queryClient.invalidateQueries({ queryKey: ['notes'] })
+            queryClient.invalidateQueries({ queryKey: ['tasks'] })
+        },
+    })
+}
+
+// Re-export types for convenience
+export type { IntegrationStatus, ZoomStatusResponse, CreateMeetingRequest, CreateMeetingResponse }

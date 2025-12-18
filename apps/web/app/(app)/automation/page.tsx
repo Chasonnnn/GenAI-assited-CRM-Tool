@@ -1,14 +1,15 @@
 "use client"
 
 import { useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useSearchParams } from "next/navigation"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
 import {
     Dialog,
     DialogContent,
@@ -16,7 +17,6 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
 } from "@/components/ui/dialog"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -97,7 +97,10 @@ const automations = [
 ]
 
 export default function AutomationPage() {
-    const [activeTab, setActiveTab] = useState("workflows")
+    const searchParams = useSearchParams()
+    const tabParam = searchParams?.get("tab")
+    const activeTab = tabParam === "email-templates" ? "email-templates" : "workflows"
+
     const [enabledStates, setEnabledStates] = useState<Record<number, boolean>>(
         automations.reduce(
             (acc, auto) => {
@@ -222,13 +225,7 @@ export default function AutomationPage() {
 
             {/* Main Content */}
             <div className="flex-1 p-6">
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                    {/* Sub-tabs */}
-                    <TabsList>
-                        <TabsTrigger value="workflows">Workflows</TabsTrigger>
-                        <TabsTrigger value="email-templates">Email Templates</TabsTrigger>
-                    </TabsList>
-
+                <Tabs value={activeTab} className="space-y-6">
                     {/* Workflows Tab */}
                     <TabsContent value="workflows" className="space-y-4">
                         {automations.map((automation) => {

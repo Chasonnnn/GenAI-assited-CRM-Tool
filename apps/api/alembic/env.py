@@ -1,7 +1,6 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, inspect, pool, text
 
 from alembic import context
 
@@ -31,6 +30,43 @@ target_metadata = Base.metadata
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
+
+ALEMBIC_VERSION_TABLE = "alembic_version"
+ALEMBIC_VERSION_COL_LEN = 128
+
+
+def _ensure_alembic_version_table(connection) -> None:
+    inspector = inspect(connection)
+    existing_tables = set(inspector.get_table_names())
+
+    if ALEMBIC_VERSION_TABLE not in existing_tables:
+        connection.execute(
+            text(
+                f"""
+                CREATE TABLE {ALEMBIC_VERSION_TABLE} (
+                    version_num VARCHAR({ALEMBIC_VERSION_COL_LEN}) NOT NULL,
+                    CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
+                )
+                """
+            )
+        )
+        return
+
+    columns = inspector.get_columns(ALEMBIC_VERSION_TABLE)
+    for column in columns:
+        if column.get("name") != "version_num":
+            continue
+
+        col_type = column.get("type")
+        current_len = getattr(col_type, "length", None)
+        if current_len is not None and current_len < ALEMBIC_VERSION_COL_LEN:
+            connection.execute(
+                text(
+                    f"ALTER TABLE {ALEMBIC_VERSION_TABLE} "
+                    f"ALTER COLUMN version_num TYPE VARCHAR({ALEMBIC_VERSION_COL_LEN})"
+                )
+            )
+        break
 
 
 def run_migrations_offline() -> None:
@@ -71,6 +107,9 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        with connection.begin():
+            _ensure_alembic_version_table(connection)
+
         context.configure(
             connection=connection, target_metadata=target_metadata
         )

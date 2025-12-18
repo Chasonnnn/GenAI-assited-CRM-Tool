@@ -3,10 +3,11 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import SettingsPage from '../app/(app)/settings/page'
 
 const mockReplace = vi.fn()
+let mockSearchParams = new URLSearchParams()
 
 vi.mock('next/navigation', () => ({
     useRouter: () => ({ replace: mockReplace }),
-    useSearchParams: () => new URLSearchParams(),
+    useSearchParams: () => mockSearchParams,
 }))
 
 const mockUpdateNotificationSettings = vi.fn()
@@ -119,12 +120,12 @@ describe('SettingsPage', () => {
         mockRollbackPipeline.mockReset()
         mockRollbackTemplate.mockReset()
         versionModalSpy.mockClear()
+        mockSearchParams = new URLSearchParams()
     })
 
     it('can toggle notification preferences', () => {
+        mockSearchParams = new URLSearchParams('tab=notifications')
         render(<SettingsPage />)
-
-        fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }))
 
         expect(screen.getByText('In-App Notification Preferences')).toBeInTheDocument()
 
@@ -134,9 +135,8 @@ describe('SettingsPage', () => {
     })
 
     it('opens pipeline version history modal', () => {
+        mockSearchParams = new URLSearchParams('tab=pipelines')
         render(<SettingsPage />)
-
-        fireEvent.click(screen.getByRole('tab', { name: 'Pipelines' }))
 
         expect(screen.getByText('Default Pipeline')).toBeInTheDocument()
         fireEvent.click(screen.getByRole('button', { name: /history/i }))

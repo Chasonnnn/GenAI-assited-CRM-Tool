@@ -14,8 +14,13 @@ import {
     FacebookIcon,
     ServerIcon,
     ZapIcon,
+    VideoIcon,
+    MailIcon,
+    LinkIcon,
+    UnlinkIcon,
 } from "lucide-react"
 import { useIntegrationHealth } from "@/lib/hooks/use-ops"
+import { useUserIntegrations, useConnectZoom, useConnectGmail, useDisconnectIntegration } from "@/lib/hooks/use-user-integrations"
 import { formatDistanceToNow } from "date-fns"
 
 const statusConfig = {
@@ -50,6 +55,13 @@ const integrationTypeConfig: Record<string, { icon: typeof FacebookIcon; label: 
 
 export default function IntegrationsPage() {
     const { data: healthData, isLoading, refetch, isFetching } = useIntegrationHealth()
+    const { data: userIntegrations, isLoading: isLoadingUser } = useUserIntegrations()
+    const connectZoom = useConnectZoom()
+    const connectGmail = useConnectGmail()
+    const disconnectIntegration = useDisconnectIntegration()
+
+    const zoomIntegration = userIntegrations?.find(i => i.integration_type === 'zoom')
+    const gmailIntegration = userIntegrations?.find(i => i.integration_type === 'gmail')
 
     return (
         <div className="flex min-h-screen flex-col">
@@ -66,6 +78,121 @@ export default function IntegrationsPage() {
 
             {/* Main Content */}
             <div className="flex-1 space-y-6 p-6">
+
+                {/* Personal Integrations */}
+                <div>
+                    <h2 className="mb-4 text-lg font-semibold">Personal Integrations</h2>
+                    <p className="mb-4 text-sm text-muted-foreground">Connect your personal accounts to enable features like Zoom meetings and email sending.</p>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        {/* Zoom */}
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex size-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900">
+                                        <VideoIcon className="size-5 text-blue-600 dark:text-blue-400" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-base">Zoom</CardTitle>
+                                        <CardDescription className="text-xs">Video meetings</CardDescription>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                {zoomIntegration ? (
+                                    <div className="space-y-3">
+                                        <div className="flex items-center gap-2">
+                                            <Badge variant="default" className="bg-green-600">
+                                                <CheckCircleIcon className="mr-1 size-3" />
+                                                Connected
+                                            </Badge>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">{zoomIntegration.account_email}</p>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="w-full"
+                                            onClick={() => disconnectIntegration.mutate('zoom')}
+                                            disabled={disconnectIntegration.isPending}
+                                        >
+                                            <UnlinkIcon className="mr-2 size-3" />
+                                            Disconnect
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <Button
+                                        className="w-full"
+                                        onClick={() => connectZoom.mutate()}
+                                        disabled={connectZoom.isPending}
+                                    >
+                                        {connectZoom.isPending ? (
+                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                        ) : (
+                                            <LinkIcon className="mr-2 size-4" />
+                                        )}
+                                        Connect Zoom
+                                    </Button>
+                                )}
+                            </CardContent>
+                        </Card>
+
+                        {/* Gmail */}
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex size-10 items-center justify-center rounded-lg bg-red-100 dark:bg-red-900">
+                                        <MailIcon className="size-5 text-red-600 dark:text-red-400" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-base">Gmail</CardTitle>
+                                        <CardDescription className="text-xs">Email sending</CardDescription>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                {gmailIntegration ? (
+                                    <div className="space-y-3">
+                                        <div className="flex items-center gap-2">
+                                            <Badge variant="default" className="bg-green-600">
+                                                <CheckCircleIcon className="mr-1 size-3" />
+                                                Connected
+                                            </Badge>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">{gmailIntegration.account_email}</p>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="w-full"
+                                            onClick={() => disconnectIntegration.mutate('gmail')}
+                                            disabled={disconnectIntegration.isPending}
+                                        >
+                                            <UnlinkIcon className="mr-2 size-3" />
+                                            Disconnect
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <Button
+                                        className="w-full"
+                                        onClick={() => connectGmail.mutate()}
+                                        disabled={connectGmail.isPending}
+                                    >
+                                        {connectGmail.isPending ? (
+                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                        ) : (
+                                            <LinkIcon className="mr-2 size-4" />
+                                        )}
+                                        Connect Gmail
+                                    </Button>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
+
+                {/* Divider */}
+                <div className="border-t pt-6">
+                    <h2 className="mb-4 text-lg font-semibold">System Integrations</h2>
+                    <p className="mb-4 text-sm text-muted-foreground">Organization-level integrations managed by administrators.</p>
+                </div>
                 {isLoading ? (
                     <div className="flex items-center justify-center py-12">
                         <Loader2Icon className="size-8 animate-spin text-muted-foreground" />

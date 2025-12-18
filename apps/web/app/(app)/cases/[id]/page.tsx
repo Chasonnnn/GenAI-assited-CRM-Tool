@@ -34,6 +34,7 @@ import { useCase, useCaseActivity, useChangeStatus, useArchiveCase, useRestoreCa
 import { useQueues, useClaimCase, useReleaseCase } from "@/lib/hooks/use-queues"
 import { useNotes, useCreateNote, useDeleteNote } from "@/lib/hooks/use-notes"
 import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-tasks"
+import { useZoomStatus, useCreateZoomMeeting } from "@/lib/hooks/use-user-integrations"
 import { STATUS_CONFIG, type CaseStatus } from "@/lib/types/case"
 import type { NoteRead } from "@/lib/types/note"
 import type { TaskListItem } from "@/lib/types/task"
@@ -142,6 +143,10 @@ export default function CaseDetailPage() {
     const [editDialogOpen, setEditDialogOpen] = React.useState(false)
     const [releaseDialogOpen, setReleaseDialogOpen] = React.useState(false)
     const [selectedQueueId, setSelectedQueueId] = React.useState<string>("")
+    const [zoomDialogOpen, setZoomDialogOpen] = React.useState(false)
+    const [zoomTopic, setZoomTopic] = React.useState("")
+    const [zoomDuration, setZoomDuration] = React.useState(30)
+    const [zoomCreateTask, setZoomCreateTask] = React.useState(true)
 
     // Fetch data
     const { data: caseData, isLoading, error } = useCase(id)
@@ -160,6 +165,10 @@ export default function CaseDetailPage() {
     const updateCaseMutation = useUpdateCase()
     const claimCaseMutation = useClaimCase()
     const releaseCaseMutation = useReleaseCase()
+    const createZoomMeetingMutation = useCreateZoomMeeting()
+
+    // Check if user has Zoom connected
+    const { data: zoomStatus } = useZoomStatus()
 
     // Fetch queues for release dialog
     const canManageQueue = user?.role && ['case_manager', 'manager', 'developer'].includes(user.role)
@@ -300,6 +309,21 @@ export default function CaseDetailPage() {
                             disabled={caseData.is_archived}
                         >
                             Release to Queue
+                        </Button>
+                    )}
+
+                    {/* Schedule Zoom button (when Zoom connected) */}
+                    {zoomStatus?.connected && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                                setZoomTopic(`Call with ${caseData.full_name}`)
+                                setZoomDialogOpen(true)
+                            }}
+                            disabled={caseData.is_archived}
+                        >
+                            📹 Schedule Zoom
                         </Button>
                     )}
 
@@ -782,6 +806,77 @@ export default function CaseDetailPage() {
                             disabled={!selectedQueueId || releaseCaseMutation.isPending}
                         >
                             {releaseCaseMutation.isPending ? 'Releasing...' : 'Release'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Schedule Zoom Dialog */}
+            <Dialog open={zoomDialogOpen} onOpenChange={setZoomDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>📹 Schedule Zoom Meeting</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div>
+                            <Label htmlFor="zoom-topic">Topic</Label>
+                            <Input
+                                id="zoom-topic"
+                                value={zoomTopic}
+                                onChange={(e) => setZoomTopic(e.target.value)}
+                                placeholder="Meeting topic"
+                                className="mt-2"
+                            />
+                        </div>
+                        <div>
+                            <Label htmlFor="zoom-duration">Duration (minutes)</Label>
+                            <select
+                                id="zoom-duration"
+                                value={zoomDuration}
+                                onChange={(e) => setZoomDuration(Number(e.target.value))}
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 mt-2"
+                            >
+                                <option value={15}>15 minutes</option>
+                                <option value={30}>30 minutes</option>
+                                <option value={45}>45 minutes</option>
+                                <option value={60}>1 hour</option>
+                                <option value={90}>1.5 hours</option>
+                            </select>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Checkbox
+                                id="zoom-task"
+                                checked={zoomCreateTask}
+                                onCheckedChange={(checked) => setZoomCreateTask(checked === true)}
+                            />
+                            <Label htmlFor="zoom-task">Create follow-up task</Label>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setZoomDialogOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={async () => {
+                                try {
+                                    const result = await createZoomMeetingMutation.mutateAsync({
+                                        entity_type: 'case',
+                                        entity_id: id,
+                                        topic: zoomTopic,
+                                        duration: zoomDuration,
+                                        create_task: zoomCreateTask,
+                                        contact_name: caseData?.full_name,
+                                    })
+                                    setZoomDialogOpen(false)
+                                    // Optionally copy join link to clipboard
+                                    navigator.clipboard.writeText(result.join_url)
+                                } catch (err) {
+                                    // Error handled by react-query
+                                }
+                            }}
+                            disabled={!zoomTopic || createZoomMeetingMutation.isPending}
+                        >
+                            {createZoomMeetingMutation.isPending ? 'Creating...' : 'Create Meeting'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { CalendarIcon, ChevronDownIcon } from "lucide-react"
-import { format } from "date-fns"
+import { format, isSameDay } from "date-fns"
 import type { DateRange as DayPickerDateRange } from "react-day-picker"
 
 import { Button } from "@/components/ui/button"
@@ -72,6 +72,21 @@ export function DateRangePicker({
             from: range?.from,
             to: range?.to
         }
+
+        // `react-day-picker` returns `{from: date, to: date}` on the first click when `min` is 0.
+        // Treat that first click as selecting only the start date so users can pick an end date
+        // without the popover closing.
+        if (
+            !localRange.from &&
+            !localRange.to &&
+            newRange.from &&
+            newRange.to &&
+            isSameDay(newRange.from, newRange.to)
+        ) {
+            setLocalRange({ from: newRange.from, to: undefined })
+            return
+        }
+
         setLocalRange(newRange)
 
         // Only close when BOTH dates are selected
@@ -103,15 +118,25 @@ export function DateRangePicker({
     }
 
     return (
-        <Popover open={open} onOpenChange={(newOpen) => {
-            // When calendar is showing, only allow explicit closing (via Apply or timeout)
-            // Don't auto-close on internal clicks
+        <Popover open={open} onOpenChange={(newOpen, eventDetails) => {
+            // When the calendar is open, ignore Base UI's "focus-out" closes while the user is picking a range,
+            // but still allow explicit dismiss actions like clicking outside, pressing Escape, or toggling trigger.
             if (!newOpen && showCalendar) {
-                // If closing while in calendar mode, only close if clicking outside
-                // The internal click handler will manage state
+                const reason = eventDetails.reason
+                const allowClose =
+                    reason === "outside-press" ||
+                    reason === "escape-key" ||
+                    reason === "trigger-press"
+
+                if (allowClose) {
+                    setOpen(false)
+                    setShowCalendar(false)
+                }
                 return
             }
+
             setOpen(newOpen)
+            if (!newOpen) setShowCalendar(false)
         }}>
             <PopoverTrigger
                 className={cn(

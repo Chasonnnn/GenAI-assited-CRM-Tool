@@ -3,9 +3,12 @@
 Handles per-user OAuth flows for Gmail, Zoom, etc.
 Each user connects their own accounts.
 """
+import logging
 import secrets
 import uuid
 from typing import Any
+
+import httpx
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
@@ -18,6 +21,7 @@ from app.schemas.auth import UserSession
 from app.services import oauth_service
 
 router = APIRouter(prefix="/integrations", tags=["Integrations"])
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -232,3 +236,123 @@ async def zoom_callback(
         return RedirectResponse(
             f"{settings.FRONTEND_URL}/settings/integrations?error=zoom_failed"
         )
+
+
+# ============================================================================
+# Zoom Meetings
+# ============================================================================
+
+class CreateMeetingRequest(BaseModel):
+    """Request to create a Zoom meeting."""
+    entity_type: str  # "case" or "intended_parent"
+    entity_id: uuid.UUID
+    topic: str
+    start_time: str | None = None  # ISO format datetime
+    duration: int = 30  # minutes
+    create_task: bool = True
+    contact_name: str | None = None
+
+
+class CreateMeetingResponse(BaseModel):
+    """Response from creating a Zoom meeting."""
+    join_url: str
+    start_url: str
+    meeting_id: int
+    password: str | None = None
+    note_id: str | None = None
+    task_id: str | None = None
+
+
+@router.post("/zoom/meetings", response_model=CreateMeetingResponse, dependencies=[Depends(require_csrf_header)])
+async def create_zoom_meeting(
+    request: CreateMeetingRequest,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+) -> CreateMeetingResponse:
+    """Create a Zoom meeting for a case or intended parent.
+    
+    Automatically:
+    - Creates meeting via Zoom API
+    - Adds note to the entity with meeting link
+    - Optionally creates a follow-up task
+    """
+    from datetime import datetime as dt
+    from app.db.enums import EntityType
+    from app.services import zoom_service
+    
+    # Parse entity type
+    if request.entity_type == "case":
+        entity_type = EntityType.CASE
+    elif request.entity_type == "intended_parent":
+        entity_type = EntityType.INTENDED_PARENT
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid entity_type: {request.entity_type}. Must be 'case' or 'intended_parent'.",
+        )
+    
+    # Parse start time
+    start_time = None
+    if request.start_time:
+        try:
+            start_time = dt.fromisoformat(request.start_time.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid start_time format. Use ISO format (e.g., 2024-01-15T10:00:00).",
+            )
+    
+    # Check user has Zoom connected
+    if not zoom_service.check_user_has_zoom(db, session.user_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Zoom not connected. Please connect Zoom in Settings → Integrations.",
+        )
+    
+    try:
+        result = await zoom_service.schedule_zoom_meeting(
+            db=db,
+            user_id=session.user_id,
+            org_id=session.org_id,
+            entity_type=entity_type,
+            entity_id=request.entity_id,
+            topic=request.topic,
+            start_time=start_time,
+            duration=request.duration,
+            create_task=request.create_task,
+            contact_name=request.contact_name,
+        )
+        
+        return CreateMeetingResponse(
+            join_url=result.meeting.join_url,
+            start_url=result.meeting.start_url,
+            meeting_id=result.meeting.id,
+            password=result.meeting.password,
+            note_id=str(result.note_id) if result.note_id else None,
+            task_id=str(result.task_id) if result.task_id else None,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Zoom API error: {e.response.text}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Zoom API error. Please try again or reconnect Zoom.",
+        )
+
+
+@router.get("/zoom/status")
+def zoom_connection_status(
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+) -> dict[str, Any]:
+    """Check if current user has Zoom connected."""
+    from app.services import zoom_service
+    
+    integration = oauth_service.get_user_integration(db, session.user_id, "zoom")
+    
+    return {
+        "connected": integration is not None,
+        "account_email": integration.account_email if integration else None,
+    }
+

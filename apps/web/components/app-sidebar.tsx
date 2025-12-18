@@ -78,11 +78,6 @@ const navigation = [
         url: "/reports",
         icon: BarChart3,
     },
-    {
-        title: "Automation",
-        url: "/automation",
-        icon: Zap,
-    },
 ]
 
 const aiNavigation = {
@@ -97,6 +92,12 @@ const settingsNavigation = {
     icon: Settings,
 }
 
+const automationNavigation = {
+    title: "Automation",
+    url: "/automation",
+    icon: Zap,
+}
+
 interface AppSidebarProps {
     children: React.ReactNode
 }
@@ -107,16 +108,22 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const { user } = useAuth()
     const isManager = user?.role && ['manager', 'developer'].includes(user.role)
     const activeSettingsTab = searchParams.get("tab")
+    const activeAutomationTab = searchParams.get("tab")
 
     const settingsItems: Array<{ title: string; url: string; tab?: string | null }> = [
         { title: "General", url: "/settings", tab: null },
         { title: "Notifications", url: "/settings?tab=notifications", tab: "notifications" },
         { title: "Pipelines", url: "/settings?tab=pipelines", tab: "pipelines" },
         { title: "Email Templates", url: "/settings?tab=email-templates", tab: "email-templates" },
-        ...(isManager ? [{ title: "Queues", url: "/settings/queues" }] : []),
+        ...(isManager ? [{ title: "Queue Management", url: "/settings/queues" }] : []),
         { title: "Audit Log", url: "/settings/audit" },
         { title: "Integrations", url: "/settings/integrations" },
         { title: "System Alerts", url: "/settings/alerts" },
+    ]
+
+    const automationItems: Array<{ title: string; url: string; tab?: string | null }> = [
+        { title: "Workflows", url: "/automation", tab: null },
+        { title: "Email Templates", url: "/automation?tab=email-templates", tab: "email-templates" },
     ]
 
     const isSettingsItemActive = (item: { url: string; tab?: string | null }) => {
@@ -124,6 +131,15 @@ export function AppSidebar({ children }: AppSidebarProps) {
             if (pathname !== "/settings") return false
             if (item.tab === null) return activeSettingsTab === null
             return activeSettingsTab === item.tab
+        }
+        return pathname === item.url
+    }
+
+    const isAutomationItemActive = (item: { url: string; tab?: string | null }) => {
+        if (item.tab !== undefined) {
+            if (pathname !== "/automation") return false
+            if (item.tab === null) return activeAutomationTab === null
+            return activeAutomationTab === item.tab
         }
         return pathname === item.url
     }
@@ -209,6 +225,40 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                     </Link>
                                 </SidebarMenuItem>
                             ))}
+                            {/* Automation with sub-menu */}
+                            <Collapsible
+                                open={pathname?.startsWith("/automation") || undefined}
+                                className="group/collapsible"
+                            >
+                                <SidebarMenuItem>
+                                    <CollapsibleTrigger
+                                        render={
+                                            <SidebarMenuButton
+                                                isActive={pathname?.startsWith("/automation")}
+                                                tooltip={automationNavigation.title}
+                                            >
+                                                <automationNavigation.icon />
+                                                <span>{automationNavigation.title}</span>
+                                                <ChevronRightIcon className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                                            </SidebarMenuButton>
+                                        }
+                                    />
+                                    <CollapsibleContent>
+                                        <SidebarMenuSub>
+                                            {automationItems.map((subItem) => (
+                                                <SidebarMenuSubItem key={subItem.url}>
+                                                    <SidebarMenuSubButton
+                                                        href={subItem.url}
+                                                        isActive={isAutomationItemActive(subItem)}
+                                                    >
+                                                        <span>{subItem.title}</span>
+                                                    </SidebarMenuSubButton>
+                                                </SidebarMenuSubItem>
+                                            ))}
+                                        </SidebarMenuSub>
+                                    </CollapsibleContent>
+                                </SidebarMenuItem>
+                            </Collapsible>
                             {/* AI Assistant - only shown if enabled for org */}
                             {user?.ai_enabled && (
                                 <SidebarMenuItem>
