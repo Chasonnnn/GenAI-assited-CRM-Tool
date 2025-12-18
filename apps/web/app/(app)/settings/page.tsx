@@ -10,9 +10,11 @@ import { Switch } from "@/components/ui/switch"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { CameraIcon, CheckIcon, MonitorIcon, SmartphoneIcon, LoaderIcon } from "lucide-react"
+import { CameraIcon, CheckIcon, MonitorIcon, SmartphoneIcon, LoaderIcon, History, GitBranch } from "lucide-react"
 import { useNotificationSettings, useUpdateNotificationSettings } from "@/lib/hooks/use-notifications"
-
+import { usePipelines, usePipelineVersions, useRollbackPipeline } from "@/lib/hooks/use-pipelines"
+import { VersionHistoryModal, type VersionItem } from "@/components/version-history-modal"
+import { useAuth } from "@/lib/auth-context"
 // Notification Settings Card - wired to real API
 function NotificationsSettingsCard() {
   const { data: settings, isLoading } = useNotificationSettings()
@@ -97,6 +99,119 @@ function NotificationsSettingsCard() {
   )
 }
 
+// Pipelines Settings Card - with version history
+function PipelinesSettingsCard() {
+  const { user } = useAuth()
+  const { data: pipelines, isLoading } = usePipelines()
+  const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
+
+  const { data: versions, isLoading: versionsLoading } = usePipelineVersions(selectedPipelineId)
+  const rollbackMutation = useRollbackPipeline()
+
+  const selectedPipeline = pipelines?.find(p => p.id === selectedPipelineId)
+  const isDeveloper = user?.role === 'developer'
+
+  const handleOpenHistory = (pipelineId: string) => {
+    setSelectedPipelineId(pipelineId)
+    setHistoryOpen(true)
+  }
+
+  const handleRollback = (version: number) => {
+    if (!selectedPipelineId) return
+    rollbackMutation.mutate(
+      { id: selectedPipelineId, version },
+      {
+        onSuccess: () => {
+          setHistoryOpen(false)
+        },
+      }
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-12 flex items-center justify-center">
+          <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Case Pipelines</CardTitle>
+          <CardDescription>Manage your organization&apos;s case status pipelines</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {pipelines?.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No pipelines configured
+            </div>
+          ) : (
+            pipelines?.map((pipeline) => (
+              <div
+                key={pipeline.id}
+                className="flex items-center justify-between rounded-lg border border-border p-4"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
+                    <GitBranch className="size-5 text-primary" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-medium">{pipeline.name}</h3>
+                      {pipeline.is_default && (
+                        <Badge variant="secondary" className="text-xs">Default</Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {pipeline.stages.length} stages · v{pipeline.current_version}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleOpenHistory(pipeline.id)}
+                >
+                  <History className="h-4 w-4 mr-1" />
+                  History
+                </Button>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      {selectedPipeline && (
+        <VersionHistoryModal
+          open={historyOpen}
+          onOpenChange={setHistoryOpen}
+          title={selectedPipeline.name}
+          entityType="pipeline"
+          versions={(versions || []).map(v => ({
+            id: v.id,
+            version: v.version,
+            payload: v.payload as Record<string, unknown>,
+            comment: v.comment,
+            created_by_user_id: v.created_by_user_id,
+            created_at: v.created_at,
+          }))}
+          currentVersion={selectedPipeline.current_version}
+          isLoading={versionsLoading}
+          onRollback={handleRollback}
+          isRollingBack={rollbackMutation.isPending}
+          canRollback={isDeveloper}
+        />
+      )}
+    </>
+  )
+}
+
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("profile")
 
@@ -145,6 +260,13 @@ export default function SettingsPage() {
                   className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
                 >
                   Security
+                </TabsTrigger>
+                <TabsTrigger
+                  value="pipelines"
+                  className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
+                >
+                  <GitBranch className="mr-2 h-4 w-4" />
+                  Pipelines
                 </TabsTrigger>
               </TabsList>
             </CardContent>
@@ -404,6 +526,11 @@ export default function SettingsPage() {
                   </div>
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            {/* Pipelines Tab */}
+            <TabsContent value="pipelines" className="mt-0">
+              <PipelinesSettingsCard />
             </TabsContent>
           </div>
         </Tabs>
