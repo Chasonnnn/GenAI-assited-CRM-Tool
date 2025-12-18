@@ -1,6 +1,6 @@
 # Surrogacy CRM Platform
 
-**Version:** 0.06.09 | **Format:** a.bc.de (major.feature.patch)
+**Version:** 0.07.00 | **Format:** a.bc.de (major.feature.patch)
 
 A modern, multi-tenant CRM and case management platform built for surrogacy agencies. Features lead pipeline management, intended parent profiles, case workflow tracking, AI-assisted insights, and enterprise audit/versioning.
 
@@ -55,12 +55,15 @@ AI is an **optional** capability designed to be safe, auditable, and tenant-conf
 │       │   ├── (app)/          # Authenticated routes
 │       │   │   ├── dashboard, cases, tasks, leads
 │       │   │   ├── intended-parents, reports, settings
+│       │   │   │   └── audit/  # Audit log viewer (managers)
 │       │   │   ├── ai-assistant, notifications, automation
 │       │   │   └── analytics, ops-console
 │       │   ├── login/          # Public login page
 │       │   └── layout.tsx
 │       ├── components/         # Shared UI components
-│       └── lib/                # API client, hooks, utils
+│       ├── lib/                # API client, hooks, utils
+│       │   └── hooks/          # React Query + WebSocket hooks
+│       └── tests/              # Vitest test suite (3 tests)
 │
 ├── docs/                       # Documentation
 │   ├── agents.md               # Project spec & guidelines
