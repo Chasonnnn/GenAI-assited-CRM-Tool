@@ -46,8 +46,8 @@ AI is an **optional** capability designed to be safe, auditable, and tenant-conf
 │   │   │   ├── utils/          # Helpers (normalization, pagination)
 │   │   │   ├── cli.py          # CLI commands
 │   │   │   └── main.py         # FastAPI app entry
-│   │   ├── alembic/            # Database migrations (26: +zoom, +queue_timestamps)
-│   │   ├── tests/              # pytest test suite (17 tests)
+│   │   ├── alembic/            # Database migrations (27: +ai_focused_endpoints)
+│   │   ├── tests/              # pytest test suite (26 tests)
 │   │   └── requirements.txt
 │   │
 │   └── web/                    # Next.js frontend
@@ -64,7 +64,7 @@ AI is an **optional** capability designed to be safe, auditable, and tenant-conf
 │       ├── components/         # Shared UI (inline-edit-field, etc.)
 │       ├── lib/                # API client, hooks, utils
 │       │   └── hooks/          # React Query hooks (+use-queues.ts)
-│       └── tests/              # Vitest test suite (3 tests)
+│       └── tests/              # Vitest test suite (30 tests)
 │
 ├── docs/                       # Documentation
 │   ├── agents.md               # Project spec & guidelines
@@ -252,7 +252,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ## Current Status
 
-**Version 0.06.00** — Enterprise Features Complete
+**Version 0.10.00** — AI Assistant v1 Complete
 
 ### Core Platform
 - [x] Project scaffolding + PostgreSQL + migrations
@@ -264,14 +264,16 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 - [x] In-App Notifications + Theme System
 - [x] Meta Lead Ads Integration + CAPI
 
-### Enterprise Features (v0.06.00)
+### Enterprise Features (v0.10.00)
 - [x] **Global Audit Trail** — Hash chain, tamper-evident logging
 - [x] **CSV Import** — Email-based duplicate detection
 - [x] **Org-Configurable Pipelines** — Custom stage labels, colors, order
 - [x] **In-App Version Control** — Encrypted snapshots, rollback support
-- [x] **AI Assistant** — BYOK keys, ChatGPT-style interface
+- [x] **Queue/Ownership System** — Salesforce-style claim/release workflow
+- [x] **Zoom Integration** — OAuth, meeting creation, email invites
+- [x] **AI Assistant v1** — BYOK, summarize-case, draft-email, analyze-dashboard
 
-### Data Models (34 tables)
+### Data Models (35 tables)
 `Organization`, `User`, `Membership`, `AuthIdentity`, `OrgInvite`, `Case`, `CaseStatusHistory`, `CaseActivityLog`, `Task`, `MetaLead`, `MetaPageMapping`, `Job`, `EmailTemplate`, `EmailLog`, `IntendedParent`, `IntendedParentStatusHistory`, `EntityNote`, `Notification`, `UserNotificationSettings`, `IntegrationHealth`, `IntegrationErrorRollup`, `SystemAlert`, `RequestMetricsRollup`, `AISettings`, `AIConversation`, `AIMessage`, `AIActionApproval`, `AIEntitySummary`, `AIUsageLog`, `UserIntegration`, `AuditLog`, `CaseImport`, `Pipeline`, `EntityVersion`
 
 
