@@ -5,6 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -25,6 +26,9 @@ import {
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
+    SidebarMenuSub,
+    SidebarMenuSubButton,
+    SidebarMenuSubItem,
     SidebarProvider,
     SidebarRail,
     SidebarTrigger,
@@ -42,6 +46,10 @@ import {
     Bell,
     Zap,
     Bot,
+    ChevronRightIcon,
+    FileText,
+    Mail,
+    GitBranch,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { NotificationBell } from "@/components/notification-bell"
@@ -90,6 +98,13 @@ const settingsNavigation = {
     title: "Settings",
     url: "/settings",
     icon: Settings,
+    items: [
+        { title: "General", url: "/settings" },
+        { title: "Notifications", url: "/settings/notifications" },
+        { title: "Pipelines", url: "/settings/pipelines" },
+        { title: "Email Templates", url: "/settings/email-templates" },
+        { title: "Audit Log", url: "/settings/audit" },
+    ],
 }
 
 interface AppSidebarProps {
@@ -195,18 +210,39 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                     </Link>
                                 </SidebarMenuItem>
                             )}
-                            {/* Settings */}
-                            <SidebarMenuItem>
-                                <Link href={settingsNavigation.url}>
-                                    <SidebarMenuButton
-                                        isActive={pathname === settingsNavigation.url || pathname?.startsWith(settingsNavigation.url + "/")}
-                                        tooltip={settingsNavigation.title}
-                                    >
-                                        <settingsNavigation.icon />
-                                        <span>{settingsNavigation.title}</span>
-                                    </SidebarMenuButton>
-                                </Link>
-                            </SidebarMenuItem>
+                            {/* Settings with sub-menu */}
+                            <Collapsible
+                                defaultOpen={pathname?.startsWith("/settings")}
+                                className="group/collapsible"
+                            >
+                                <SidebarMenuItem>
+                                    <CollapsibleTrigger>
+                                        <SidebarMenuButton
+                                            isActive={pathname?.startsWith("/settings")}
+                                            tooltip={settingsNavigation.title}
+                                        >
+                                            <settingsNavigation.icon />
+                                            <span>{settingsNavigation.title}</span>
+                                            <ChevronRightIcon className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                                        </SidebarMenuButton>
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent>
+                                        <SidebarMenuSub>
+                                            {settingsNavigation.items.map((subItem) => (
+                                                <SidebarMenuSubItem key={subItem.url}>
+                                                    <Link href={subItem.url}>
+                                                        <SidebarMenuSubButton
+                                                            isActive={pathname === subItem.url}
+                                                        >
+                                                            <span>{subItem.title}</span>
+                                                        </SidebarMenuSubButton>
+                                                    </Link>
+                                                </SidebarMenuSubItem>
+                                            ))}
+                                        </SidebarMenuSub>
+                                    </CollapsibleContent>
+                                </SidebarMenuItem>
+                            </Collapsible>
                         </SidebarMenu>
                     </SidebarGroup>
                 </SidebarContent>
