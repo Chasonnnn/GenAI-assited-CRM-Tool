@@ -1,5 +1,5 @@
 Surrogacy CRM Platform — 12-Week Roadmap (AI-ready, Multi-tenant, OSS-ready)
-Last updated: 2025-12-17
+Last updated: 2025-12-18
 
 Assumptions (important)
 - Multi-tenant via shared DB + shared schema, with `organization_id` on all domain rows.
@@ -661,4 +661,33 @@ Queue/Ownership System (Week 11) — COMPLETE ✓
   - Release to Queue dialog with queue selection
   - /settings/queues page for queue management (CRUD)
 ✓ Tests: 17/17 passing
+
+Zoom Integration & UI Improvements (Week 11+) — v0.10.0 ✓
+----------------------------------------------------------
+✓ Backend:
+  - Zoom OAuth integration (connect/disconnect per user)
+  - Create Zoom meetings from case detail (POST /integrations/zoom/meeting)
+  - Timezone-aware meeting scheduling (ISO 8601 + IANA tz)
+  - Auto-create follow-up task with due_date/due_time from meeting
+  - Zoom meeting notes added to case activity log (HTML formatted)
+  - Email invite endpoint (POST /integrations/zoom/send-invite)
+  - Auto-seed "Zoom Meeting Invite" email template per org
+  - OAuth CSRF protection with secure httponly cookies
+  - Audit logging for integration connect/disconnect events
+  - Activity service refactor (queue_service uses activity_service.log_activity)
+  - New CaseActivityType enums: CASE_CLAIMED, CASE_RELEASED, CASE_ASSIGNED_TO_QUEUE
+✓ Frontend:
+  - Date-time picker component (apps/web/components/ui/date-time-picker.tsx)
+  - Zoom meeting dialog on case detail (topic, when, duration)
+  - Send Invite button after meeting creation
+  - Timezone display in meeting dialog
+  - Dashboard: STATUS_CONFIG colors for Cases by Status chart
+  - Dashboard: Equal width grid for My Tasks / Status Breakdown
+  - Settings: Version number (v0.10.0) displayed in General tab
+  - Sidebar: Stable IDs for tooltips (hydration fix with useId)
+  - Reports: Vibrant hex color palette for charts
+✓ Migrations:
+  - 0025_add_task_duration_minutes (task.duration_minutes)
+  - f3bc6a65a816_fix_queue_timestamp_types (TIMESTAMPTZ, indexes, JSONB)
+✓ Tests: 26/26 passing
 

@@ -1,6 +1,6 @@
 # Surrogacy CRM Platform
 
-**Version:** 0.09.00 | **Format:** a.bc.de (major.feature.patch)
+**Version:** 0.10.00 | **Format:** a.bc.de (major.feature.patch)
 
 A modern, multi-tenant CRM and case management platform built for surrogacy agencies. Features lead pipeline management, intended parent profiles, case workflow tracking, AI-assisted insights, and enterprise audit/versioning.
 
@@ -27,7 +27,7 @@ AI is an **optional** capability designed to be safe, auditable, and tenant-conf
 
 ```
 ├── apps/
-│   ├── api/                    # FastAPI backend (v0.09.00)
+│   ├── api/                    # FastAPI backend (v0.10.00)
 │   │   ├── app/
 │   │   │   ├── core/           # Config, security, dependencies, case_access
 │   │   │   ├── db/             # Models (35: +Queue), enums (+OwnerType), session
@@ -46,7 +46,7 @@ AI is an **optional** capability designed to be safe, auditable, and tenant-conf
 │   │   │   ├── utils/          # Helpers (normalization, pagination)
 │   │   │   ├── cli.py          # CLI commands
 │   │   │   └── main.py         # FastAPI app entry
-│   │   ├── alembic/            # Database migrations (23: +queues_ownership)
+│   │   ├── alembic/            # Database migrations (26: +zoom, +queue_timestamps)
 │   │   ├── tests/              # pytest test suite (17 tests)
 │   │   └── requirements.txt
 │   │
