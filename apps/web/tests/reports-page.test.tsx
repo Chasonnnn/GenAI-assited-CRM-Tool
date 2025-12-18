@@ -2,6 +2,10 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import ReportsPage from '../app/(app)/reports/page'
 
+vi.mock('@/lib/auth-context', () => ({
+    useAuth: () => ({ user: { ai_enabled: true } }),
+}))
+
 vi.mock('recharts', () => ({
     Bar: ({ children }: any) => <div>{children}</div>,
     BarChart: ({ children }: any) => <div>{children}</div>,
@@ -38,7 +42,7 @@ vi.mock('@/lib/hooks/use-analytics', () => ({
     useAnalyticsSummary: () => ({ data: { total_cases: 42, new_this_period: 5, qualified_rate: 10 }, isLoading: false }),
     useCasesByStatus: () => ({ data: [{ status: 'new_unread', count: 1 }], isLoading: false }),
     useCasesByAssignee: () => ({ data: [{ user_email: 'alice@example.com', count: 2 }], isLoading: false }),
-    useCasesTrend: () => ({ data: [{ month: '2025-01', count: 1 }], isLoading: false }),
+    useCasesTrend: () => ({ data: [{ date: '2025-01-01', count: 1 }], isLoading: false }),
     useMetaPerformance: () => ({ data: { conversion_rate: 20, leads_converted: 2, leads_received: 10 }, isLoading: false }),
     useMetaSpend: () => ({ data: { total_spend: 1000, cost_per_lead: 12.34 }, isLoading: false }),
     useFunnelCompare: () => ({ data: null, isLoading: false }),
@@ -54,4 +58,3 @@ describe('ReportsPage', () => {
         expect(screen.getByText('$1,000')).toBeInTheDocument()
     })
 })
-

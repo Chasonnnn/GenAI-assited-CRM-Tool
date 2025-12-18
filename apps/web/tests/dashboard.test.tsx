@@ -8,10 +8,32 @@ vi.mock('next/link', () => ({
     ),
 }))
 
+vi.mock('@/lib/auth-context', () => ({
+    useAuth: () => ({ user: { display_name: 'Test Manager', ai_enabled: true } }),
+}))
+
+vi.mock('recharts', () => ({
+    Area: ({ children }: any) => <div>{children}</div>,
+    AreaChart: ({ children }: any) => <div>{children}</div>,
+    Bar: ({ children }: any) => <div>{children}</div>,
+    BarChart: ({ children }: any) => <div>{children}</div>,
+    CartesianGrid: () => <div />,
+    XAxis: () => <div />,
+    YAxis: () => <div />,
+}))
+
+vi.mock('@/components/ui/chart', () => ({
+    ChartContainer: ({ children }: any) => <div>{children}</div>,
+    ChartTooltip: ({ children }: any) => <div>{children}</div>,
+    ChartTooltipContent: () => <div />,
+}))
+
 const mockUseCaseStats = vi.fn()
 const mockUseTasks = vi.fn()
 const mockCompleteTask = vi.fn()
 const mockUncompleteTask = vi.fn()
+const mockUseCasesTrend = vi.fn()
+const mockUseCasesByStatus = vi.fn()
 
 vi.mock('@/lib/hooks/use-cases', () => ({
     useCaseStats: () => mockUseCaseStats(),
@@ -21,6 +43,11 @@ vi.mock('@/lib/hooks/use-tasks', () => ({
     useTasks: (params: unknown) => mockUseTasks(params),
     useCompleteTask: () => ({ mutateAsync: mockCompleteTask }),
     useUncompleteTask: () => ({ mutateAsync: mockUncompleteTask }),
+}))
+
+vi.mock('@/lib/hooks/use-analytics', () => ({
+    useCasesTrend: (params: unknown) => mockUseCasesTrend(params),
+    useCasesByStatus: () => mockUseCasesByStatus(),
 }))
 
 describe('DashboardPage', () => {
@@ -52,6 +79,9 @@ describe('DashboardPage', () => {
             isLoading: false,
         })
 
+        mockUseCasesTrend.mockReturnValue({ data: [], isLoading: false })
+        mockUseCasesByStatus.mockReturnValue({ data: [], isLoading: false })
+
         mockCompleteTask.mockReset()
         mockUncompleteTask.mockReset()
     })
@@ -59,7 +89,7 @@ describe('DashboardPage', () => {
     it('renders stats and allows completing a task', () => {
         render(<DashboardPage />)
 
-        expect(screen.getByText('Total Cases')).toBeInTheDocument()
+        expect(screen.getByText('Active Cases')).toBeInTheDocument()
         expect(screen.getByText('10')).toBeInTheDocument()
         expect(screen.getByText('Call lead')).toBeInTheDocument()
 
@@ -67,4 +97,3 @@ describe('DashboardPage', () => {
         expect(mockCompleteTask).toHaveBeenCalledWith('t1')
     })
 })
-

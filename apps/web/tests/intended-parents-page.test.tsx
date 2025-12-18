@@ -8,6 +8,10 @@ vi.mock('next/link', () => ({
     ),
 }))
 
+vi.mock('@/components/ui/date-range-picker', () => ({
+    DateRangePicker: () => <div data-testid="date-range-picker" />,
+}))
+
 const mockUseIntendedParents = vi.fn()
 
 vi.mock('@/lib/hooks/use-intended-parents', () => ({
@@ -52,4 +56,3 @@ describe('IntendedParentsPage', () => {
         expect(screen.getByText('bob@example.com')).toBeInTheDocument()
     })
 })
-
