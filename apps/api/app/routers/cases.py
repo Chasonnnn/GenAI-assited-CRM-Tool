@@ -57,6 +57,8 @@ def _case_to_read(case, db: Session) -> CaseRead:
         assigned_to_user_id=case.assigned_to_user_id,
         assigned_to_name=assigned_to_name,
         created_by_user_id=case.created_by_user_id,
+        owner_type=case.owner_type,
+        owner_id=case.owner_id,
         full_name=case.full_name,
         email=case.email,
         phone=case.phone,

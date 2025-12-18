@@ -31,12 +31,14 @@ import {
 } from "lucide-react"
 import { InlineEditField } from "@/components/inline-edit-field"
 import { useCase, useCaseActivity, useChangeStatus, useArchiveCase, useRestoreCase, useUpdateCase } from "@/lib/hooks/use-cases"
+import { useQueues, useClaimCase, useReleaseCase } from "@/lib/hooks/use-queues"
 import { useNotes, useCreateNote, useDeleteNote } from "@/lib/hooks/use-notes"
 import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-tasks"
 import { STATUS_CONFIG, type CaseStatus } from "@/lib/types/case"
 import type { NoteRead } from "@/lib/types/note"
 import type { TaskListItem } from "@/lib/types/task"
 import type { CaseStatusHistory } from "@/lib/api/cases"
+import { useAuth } from "@/lib/auth-context"
 
 // Format date for display
 function formatDateTime(dateString: string): string {
@@ -135,8 +137,11 @@ export default function CaseDetailPage() {
     const params = useParams()
     const id = params.id as string
     const router = useRouter()
+    const { user } = useAuth()
     const [copiedEmail, setCopiedEmail] = React.useState(false)
     const [editDialogOpen, setEditDialogOpen] = React.useState(false)
+    const [releaseDialogOpen, setReleaseDialogOpen] = React.useState(false)
+    const [selectedQueueId, setSelectedQueueId] = React.useState<string>("")
 
     // Fetch data
     const { data: caseData, isLoading, error } = useCase(id)
@@ -153,6 +158,12 @@ export default function CaseDetailPage() {
     const completeTaskMutation = useCompleteTask()
     const uncompleteTaskMutation = useUncompleteTask()
     const updateCaseMutation = useUpdateCase()
+    const claimCaseMutation = useClaimCase()
+    const releaseCaseMutation = useReleaseCase()
+
+    // Fetch queues for release dialog
+    const canManageQueue = user?.role && ['case_manager', 'manager', 'developer'].includes(user.role)
+    const { data: queues } = useQueues()
 
     const copyEmail = () => {
         if (!caseData) return
@@ -191,6 +202,21 @@ export default function CaseDetailPage() {
             await completeTaskMutation.mutateAsync(taskId)
         }
     }
+
+    const handleClaimCase = async () => {
+        await claimCaseMutation.mutateAsync(id)
+    }
+
+    const handleReleaseCase = async () => {
+        if (!selectedQueueId) return
+        await releaseCaseMutation.mutateAsync({ caseId: id, queueId: selectedQueueId })
+        setReleaseDialogOpen(false)
+        setSelectedQueueId("")
+    }
+
+    // Check if case is in a queue (can be claimed)
+    const isInQueue = caseData?.owner_type === 'queue'
+    const isOwnedByUser = caseData?.owner_type === 'user'
 
     if (isLoading) {
         return (
@@ -254,6 +280,29 @@ export default function CaseDetailPage() {
                             })}
                         </DropdownMenuContent>
                     </DropdownMenu>
+
+                    {/* Claim/Release buttons (case_manager+ only) */}
+                    {canManageQueue && isInQueue && (
+                        <Button
+                            variant="default"
+                            size="sm"
+                            onClick={handleClaimCase}
+                            disabled={claimCaseMutation.isPending || caseData.is_archived}
+                        >
+                            {claimCaseMutation.isPending ? 'Claiming...' : 'Claim Case'}
+                        </Button>
+                    )}
+                    {canManageQueue && isOwnedByUser && queues && queues.length > 0 && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setReleaseDialogOpen(true)}
+                            disabled={caseData.is_archived}
+                        >
+                            Release to Queue
+                        </Button>
+                    )}
+
                     <Button variant="outline" size="sm">
                         Assign
                     </Button>
@@ -701,6 +750,40 @@ export default function CaseDetailPage() {
                             </Button>
                         </DialogFooter>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Release to Queue Dialog */}
+            <Dialog open={releaseDialogOpen} onOpenChange={setReleaseDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Release to Queue</DialogTitle>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <Label htmlFor="queue-select">Select Queue</Label>
+                        <select
+                            id="queue-select"
+                            value={selectedQueueId}
+                            onChange={(e) => setSelectedQueueId(e.target.value)}
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 mt-2"
+                        >
+                            <option value="">Select a queue...</option>
+                            {queues?.map((q) => (
+                                <option key={q.id} value={q.id}>{q.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setReleaseDialogOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={handleReleaseCase}
+                            disabled={!selectedQueueId || releaseCaseMutation.isPending}
+                        >
+                            {releaseCaseMutation.isPending ? 'Releasing...' : 'Release'}
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>
