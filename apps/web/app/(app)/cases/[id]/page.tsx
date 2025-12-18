@@ -29,6 +29,7 @@ import {
     LoaderIcon,
     ArrowLeftIcon,
 } from "lucide-react"
+import { InlineEditField } from "@/components/inline-edit-field"
 import { useCase, useCaseActivity, useChangeStatus, useArchiveCase, useRestoreCase, useUpdateCase } from "@/lib/hooks/use-cases"
 import { useNotes, useCreateNote, useDeleteNote } from "@/lib/hooks/use-notes"
 import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-tasks"
@@ -298,22 +299,57 @@ export default function CaseDetailPage() {
                                     </CardHeader>
                                     <CardContent className="space-y-3">
                                         <div>
-                                            <div className="text-2xl font-semibold">{caseData.full_name}</div>
+                                            <span className="text-sm text-muted-foreground">Name:</span>
+                                            <InlineEditField
+                                                value={caseData.full_name}
+                                                onSave={async (value) => {
+                                                    await updateCaseMutation.mutateAsync({ caseId: id, data: { full_name: value } })
+                                                }}
+                                                placeholder="Enter name"
+                                                className="text-2xl font-semibold"
+                                                displayClassName="-mx-0"
+                                                label="Full name"
+                                            />
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <span className="text-sm text-muted-foreground">Email:</span>
-                                            <span className="text-sm">{caseData.email}</span>
+                                            <InlineEditField
+                                                value={caseData.email}
+                                                onSave={async (value) => {
+                                                    await updateCaseMutation.mutateAsync({ caseId: id, data: { email: value } })
+                                                }}
+                                                type="email"
+                                                placeholder="Enter email"
+                                                validate={(v) => !v.includes('@') ? 'Invalid email' : null}
+                                                label="Email"
+                                            />
                                             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={copyEmail}>
                                                 {copiedEmail ? <CheckIcon className="h-3 w-3" /> : <CopyIcon className="h-3 w-3" />}
                                             </Button>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <span className="text-sm text-muted-foreground">Phone:</span>
-                                            <span className="text-sm">{caseData.phone || '-'}</span>
+                                            <InlineEditField
+                                                value={caseData.phone ?? undefined}
+                                                onSave={async (value) => {
+                                                    await updateCaseMutation.mutateAsync({ caseId: id, data: { phone: value || null } })
+                                                }}
+                                                type="tel"
+                                                placeholder="-"
+                                                label="Phone"
+                                            />
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <span className="text-sm text-muted-foreground">State:</span>
-                                            <span className="text-sm">{caseData.state || '-'}</span>
+                                            <InlineEditField
+                                                value={caseData.state ?? undefined}
+                                                onSave={async (value) => {
+                                                    await updateCaseMutation.mutateAsync({ caseId: id, data: { state: value || null } })
+                                                }}
+                                                placeholder="-"
+                                                validate={(v) => v && v.length !== 2 ? 'Use 2-letter code (e.g., CA, TX)' : null}
+                                                label="State"
+                                            />
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <span className="text-sm text-muted-foreground">Source:</span>
