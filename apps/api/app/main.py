@@ -126,6 +126,10 @@ app.include_router(pipelines.router)
 from app.routers import admin_versions
 app.include_router(admin_versions.router)
 
+# WebSocket for real-time notifications
+from app.routers import websocket as ws_router
+app.include_router(ws_router.router)
+
 # Dev router (ONLY mounted in dev mode)
 if settings.ENV == "dev":
     from app.routers import dev
