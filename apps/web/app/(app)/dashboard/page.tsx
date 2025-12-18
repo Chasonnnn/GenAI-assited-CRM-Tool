@@ -3,18 +3,24 @@
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Input } from "@/components/ui/input"
 import {
   FolderIcon,
   CheckSquareIcon,
-  ClockIcon,
-  PlusIcon,
+  UsersIcon,
+  TrendingUpIcon,
+  TrendingDownIcon,
+  ArrowUpIcon,
   LoaderIcon,
 } from "lucide-react"
+import { useState } from "react"
+import { Area, AreaChart, Bar, BarChart, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { useCaseStats } from "@/lib/hooks/use-cases"
 import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-tasks"
+import { useCasesTrend, useCasesByStatus } from "@/lib/hooks/use-analytics"
+import { useAuth } from "@/lib/auth-context"
 import type { TaskListItem } from "@/lib/types/task"
 
 // Format relative time
@@ -64,9 +70,18 @@ function getDueBadge(dueDate: string | null, isCompleted: boolean): { label: str
   return { label: 'Upcoming', variant: 'secondary' }
 }
 
+// Get user's first name
+function getFirstName(displayName: string | undefined): string {
+  if (!displayName) return 'there'
+  return displayName.split(' ')[0]
+}
+
 export default function DashboardPage() {
+  const { user } = useAuth()
   const { data: stats, isLoading: statsLoading } = useCaseStats()
   const { data: tasksData, isLoading: tasksLoading } = useTasks({ my_tasks: true, is_completed: false, per_page: 5 })
+  const { data: trendData, isLoading: trendLoading } = useCasesTrend({ period: 'day' })
+  const { data: statusData, isLoading: statusLoading } = useCasesByStatus()
   const completeTask = useCompleteTask()
   const uncompleteTask = useUncompleteTask()
 
@@ -80,69 +95,273 @@ export default function DashboardPage() {
 
   // Count overdue tasks
   const overdueCount = tasksData?.items.filter((t: TaskListItem) => !t.is_completed && isOverdue(t.due_date)).length || 0
+  const pendingTasksCount = tasksData?.items.length || 0
+
+  // Current date for header
+  const currentDate = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  })
+
+  // Transform trend data for chart
+  const chartTrendData = trendData?.map((item: { date: string; count: number }) => ({
+    date: new Date(item.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    cases: item.count,
+  })) || []
+
+  // Transform status data for bar chart (StatusCount[] from API)
+  const chartStatusData = Array.isArray(statusData) ? statusData.map((item) => ({
+    status: item.status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+    count: item.count,
+  })) : []
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+    <div className="flex flex-1 flex-col gap-6 p-6">
+      {/* Welcome Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Welcome back, {getFirstName(user?.display_name)}</h1>
+          <p className="text-sm text-muted-foreground">{currentDate}</p>
+        </div>
+      </div>
+
+      {/* Stats Cards - 4 columns */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        {/* Active Cases */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Cases</CardTitle>
-            <FolderIcon className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Active Cases</CardTitle>
+              <div className="flex items-center gap-1 text-xs font-medium text-green-600">
+                <TrendingUpIcon className="h-3 w-3" />
+                +{stats?.this_week || 0}
+              </div>
+            </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             {statsLoading ? (
               <LoaderIcon className="h-6 w-6 animate-spin text-muted-foreground" />
             ) : (
               <>
-                <div className="text-2xl font-bold">{stats?.total || 0}</div>
-                <p className="text-xs text-muted-foreground">{stats?.this_week || 0} new this week</p>
+                <div className="text-3xl font-bold">{stats?.total || 0}</div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1 text-sm font-medium">
+                    {(stats?.this_week || 0) > 0 ? 'Growing this week' : 'Steady volume'}
+                    <ArrowUpIcon className="h-3 w-3" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">{stats?.this_week || 0} new this week</p>
+                </div>
               </>
             )}
           </CardContent>
         </Card>
 
+        {/* Pending Tasks */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Tasks</CardTitle>
-            <CheckSquareIcon className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Pending Tasks</CardTitle>
+              {overdueCount > 0 ? (
+                <div className="flex items-center gap-1 text-xs font-medium text-red-600">
+                  <TrendingDownIcon className="h-3 w-3" />
+                  {overdueCount} overdue
+                </div>
+              ) : (
+                <div className="flex items-center gap-1 text-xs font-medium text-green-600">
+                  <TrendingUpIcon className="h-3 w-3" />
+                  On track
+                </div>
+              )}
+            </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             {statsLoading ? (
               <LoaderIcon className="h-6 w-6 animate-spin text-muted-foreground" />
             ) : (
               <>
-                <div className="text-2xl font-bold">{stats?.pending_tasks || 0}</div>
-                {overdueCount > 0 ? (
-                  <p className="text-xs text-destructive">{overdueCount} overdue</p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">All on track</p>
-                )}
+                <div className="text-3xl font-bold">{stats?.pending_tasks || 0}</div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1 text-sm font-medium">
+                    {overdueCount > 0 ? 'Needs attention' : 'All tasks on schedule'}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {overdueCount > 0 ? `${overdueCount} overdue tasks` : 'No overdue tasks'}
+                  </p>
+                </div>
               </>
             )}
           </CardContent>
         </Card>
 
+        {/* New Leads (30 days) */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Cases This Month</CardTitle>
-            <ClockIcon className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-muted-foreground">New Leads (30d)</CardTitle>
+              <div className="flex items-center gap-1 text-xs font-medium text-green-600">
+                <TrendingUpIcon className="h-3 w-3" />
+                +{stats?.this_month || 0}
+              </div>
+            </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             {statsLoading ? (
               <LoaderIcon className="h-6 w-6 animate-spin text-muted-foreground" />
             ) : (
               <>
-                <div className="text-2xl font-bold">{stats?.this_month || 0}</div>
-                <p className="text-xs text-muted-foreground">Last 30 days</p>
+                <div className="text-3xl font-bold">{stats?.this_month || 0}</div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1 text-sm font-medium">
+                    Monthly intake volume
+                    <UsersIcon className="h-3 w-3" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Last 30 days</p>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* My Tasks */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-muted-foreground">My Tasks</CardTitle>
+              <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                <CheckSquareIcon className="h-3 w-3" />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {tasksLoading ? (
+              <LoaderIcon className="h-6 w-6 animate-spin text-muted-foreground" />
+            ) : (
+              <>
+                <div className="text-3xl font-bold">{pendingTasksCount}</div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1 text-sm font-medium">
+                    {pendingTasksCount === 0 ? 'All caught up!' : 'Tasks assigned to you'}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    <Link href="/tasks" className="hover:underline">View all tasks →</Link>
+                  </p>
+                </div>
               </>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Tasks & Activity */}
-      <div className="grid gap-4 md:grid-cols-[1.6fr_1fr]">
+      {/* Charts Section - Two horizontal */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Cases Trend Chart */}
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg">Cases Trend</CardTitle>
+            <CardDescription className="text-sm">New cases over the last 30 days</CardDescription>
+          </CardHeader>
+          <CardContent className="pb-4">
+            {trendLoading ? (
+              <div className="flex items-center justify-center h-[280px]">
+                <LoaderIcon className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : chartTrendData.length === 0 ? (
+              <div className="flex items-center justify-center h-[280px] text-muted-foreground">
+                No data available
+              </div>
+            ) : (
+              <ChartContainer
+                config={{
+                  cases: {
+                    label: "Cases",
+                    color: "hsl(var(--chart-1))",
+                  },
+                }}
+                className="h-[280px] w-full"
+              >
+                <AreaChart data={chartTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorCases" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0.05} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis
+                    dataKey="date"
+                    stroke="hsl(var(--muted-foreground))"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis hide />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Area
+                    type="monotone"
+                    dataKey="cases"
+                    stroke="hsl(var(--chart-1))"
+                    strokeWidth={2}
+                    fillOpacity={1}
+                    fill="url(#colorCases)"
+                  />
+                </AreaChart>
+              </ChartContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Cases by Status Chart */}
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg">Cases by Status</CardTitle>
+            <CardDescription className="text-sm">Current pipeline distribution</CardDescription>
+          </CardHeader>
+          <CardContent className="pb-4">
+            {statusLoading ? (
+              <div className="flex items-center justify-center h-[280px]">
+                <LoaderIcon className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : chartStatusData.length === 0 ? (
+              <div className="flex items-center justify-center h-[280px] text-muted-foreground">
+                No data available
+              </div>
+            ) : (
+              <ChartContainer
+                config={{
+                  count: {
+                    label: "Cases",
+                    color: "hsl(var(--chart-2))",
+                  },
+                }}
+                className="h-[280px] w-full"
+              >
+                <BarChart data={chartStatusData} layout="vertical" margin={{ top: 10, right: 10, left: 80, bottom: 0 }}>
+                  <XAxis type="number" hide />
+                  <YAxis
+                    type="category"
+                    dataKey="status"
+                    stroke="hsl(var(--muted-foreground))"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                    width={75}
+                  />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Bar
+                    dataKey="count"
+                    fill="hsl(var(--chart-2))"
+                    radius={[0, 4, 4, 0]}
+                  />
+                </BarChart>
+              </ChartContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Tasks & Activity Section */}
+      <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         {/* My Tasks Card */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
@@ -161,7 +380,7 @@ export default function DashboardPage() {
             ) : tasksData?.items.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">No pending tasks</p>
             ) : (
-              tasksData?.items.map((task) => {
+              tasksData?.items.map((task: TaskListItem) => {
                 const dueBadge = getDueBadge(task.due_date, task.is_completed)
                 return (
                   <div key={task.id} className="flex items-start gap-3">
@@ -201,20 +420,13 @@ export default function DashboardPage() {
                 )
               })
             )}
-
-            <div className="flex items-center gap-2 pt-2">
-              <Input placeholder="Add a task..." className="flex-1" disabled />
-              <Button size="icon" variant="ghost" disabled>
-                <PlusIcon className="h-4 w-4" />
-              </Button>
-            </div>
           </CardContent>
         </Card>
 
-        {/* Status Breakdown Card */}
+        {/* Cases by Status Breakdown */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Cases by Status</CardTitle>
+            <CardTitle>Status Breakdown</CardTitle>
             <Link href="/cases">
               <Button variant="link" className="h-auto p-0 text-sm">
                 View All

@@ -107,13 +107,13 @@
 }
 
 .dark {
-  /* Stone base + Teal theme (dark mode) - warmer, more visible Stone tones */
-  --background: oklch(0.18 0.02 60);
-  /* Warm dark stone */
+  /* Stone base + Teal theme (dark mode) - aligned with sidebar color */
+  --background: oklch(0.20 0.025 55);
+  /* Matches sidebar for consistency */
   --foreground: oklch(0.95 0.01 70);
   /* Warm light stone */
-  --card: oklch(0.22 0.025 55);
-  /* Warm stone card */
+  --card: oklch(0.24 0.025 55);
+  /* Slightly lighter than background */
   --card-foreground: oklch(0.95 0.01 70);
   --popover: oklch(0.22 0.025 55);
   --popover-foreground: oklch(0.95 0.01 70);
