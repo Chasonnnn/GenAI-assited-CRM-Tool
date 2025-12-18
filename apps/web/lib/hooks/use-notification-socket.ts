@@ -48,8 +48,8 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
 
     const wsRef = useRef<WebSocket | null>(null)
     const reconnectAttempts = useRef(0)
-    const reconnectTimeout = useRef<ReturnType<typeof setTimeout>>()
-    const pingInterval = useRef<ReturnType<typeof setInterval>>()
+    const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const pingInterval = useRef<ReturnType<typeof setInterval> | null>(null)
 
     const connect = useCallback(() => {
         if (!user || !enabled) return
@@ -101,7 +101,10 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
 
             ws.onclose = () => {
                 setIsConnected(false)
-                clearInterval(pingInterval.current)
+                if (pingInterval.current) {
+                    clearInterval(pingInterval.current)
+                    pingInterval.current = null
+                }
 
                 // Attempt reconnect with exponential backoff
                 if (reconnectAttempts.current < maxReconnectAttempts) {
@@ -127,8 +130,14 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
         connect()
 
         return () => {
-            clearTimeout(reconnectTimeout.current)
-            clearInterval(pingInterval.current)
+            if (reconnectTimeout.current) {
+                clearTimeout(reconnectTimeout.current)
+                reconnectTimeout.current = null
+            }
+            if (pingInterval.current) {
+                clearInterval(pingInterval.current)
+                pingInterval.current = null
+            }
             if (wsRef.current) {
                 wsRef.current.close()
             }
