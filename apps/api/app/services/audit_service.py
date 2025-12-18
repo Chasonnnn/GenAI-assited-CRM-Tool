@@ -130,7 +130,7 @@ def log_event(
     db.add(entry)
     db.flush()  # Get ID and created_at
     
-    # Compute entry hash using canonical JSON
+    # Compute entry hash using canonical JSON and ALL immutable fields
     details_json = canonical_json(details)
     entry_hash = version_service.compute_audit_hash(
         prev_hash=prev_hash,
@@ -139,6 +139,14 @@ def log_event(
         event_type=event_type.value,
         created_at=str(entry.created_at),
         details_json=details_json,
+        actor_user_id=str(actor_user_id) if actor_user_id else "",
+        target_type=target_type or "",
+        target_id=str(target_id) if target_id else "",
+        ip_address=entry.ip_address or "",
+        user_agent=entry.user_agent or "",
+        request_id=str(request_id) if request_id else "",
+        before_version_id=str(before_version_id) if before_version_id else "",
+        after_version_id=str(after_version_id) if after_version_id else "",
     )
     entry.entry_hash = entry_hash
     
