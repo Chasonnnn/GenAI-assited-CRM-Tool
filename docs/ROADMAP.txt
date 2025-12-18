@@ -580,24 +580,25 @@ Deliverable
 ✓ All 3 deferred improvements complete
 ✓ Hybrid inline editing for faster case data entry
 
-Week 12 — AI assistant v1 (safe + useful, BYOK)/Hardening + deployment + open-source readiness
-Backend
-- Org AI settings + key storage:
-  - store provider key encrypted at rest; write-only; masked display; manager-only updates
-  - org policy toggles (enabled, allowed features)
-- Endpoints (org + role scoped):
-  - `/ai/summarize-lead`
-  - `/ai/draft-email`
-  - `/ai/analyze-dashboard`
-- AI audit logging (prompt template version, model, redaction, latency/cost metadata)
-Frontend
-- “AI” panel on lead/case detail:
-  - summary
-  - suggested next steps
-  - draft email button (user must edit/approve)
-- Manager toggle to enable AI + set key
+Week 12 — AI assistant v1 (safe + useful, BYOK)/Hardening + deployment + open-source readiness ✓ COMPLETE
+Backend ✓
+✓ Org AI settings + key storage:
+  ✓ store provider key encrypted at rest; write-only; masked display; manager-only updates
+  ✓ org policy toggles (enabled, allowed features)
+✓ Endpoints (org + role scoped):
+  ✓ `/ai/summarize-case` - comprehensive case summary with next steps
+  ✓ `/ai/draft-email` - 5 types (follow_up, status_update, meeting_request, document_request, introduction)
+  ✓ `/ai/analyze-dashboard` - AI-powered insights for managers
+✓ AI audit logging (prompt template version, model, redaction, latency/cost metadata)
+Frontend ✓
+✓ "AI" tab on case detail page:
+  ✓ Generate Summary with structured output
+  ✓ Draft Email with 5-type selector
+  ✓ Copy/Open in Email actions
+✓ Manager toggle to enable AI + set key (Settings > AI)
+✓ AI Assistant dedicated page with full chat interface
 Deliverable
-- AI saves time without auto-sending anything; org turns it on once for the team
+✓ AI saves time without auto-sending anything; org turns it on once for the team
 Hardening
 - Add indexes (organization_id + status + created_at + assigned_to)
 - Rate limiting on auth and webhooks
@@ -689,24 +690,4 @@ Zoom Integration & UI Improvements (Week 11+) — v0.10.0 ✓
 ✓ Migrations:
   - 0025_add_task_duration_minutes (task.duration_minutes)
   - f3bc6a65a816_fix_queue_timestamp_types (TIMESTAMPTZ, indexes, JSONB)
-✓ Tests: 26/26 passing
-
-AI Assistant v1 (Week 12) — COMPLETE ✓
----------------------------------------
-✓ Backend:
-  ✓ BYOK API key storage (encrypted, write-only, masked display)
-  ✓ OpenAI and Gemini provider support
-  ✓ POST /ai/summarize-case - comprehensive case summary
-  ✓ POST /ai/draft-email - 5 types (follow_up, status_update, meeting_request, document_request, introduction)
-  ✓ POST /ai/analyze-dashboard - AI-powered insights for managers
-  ✓ Consent management (manager must accept before org can use AI)
-  ✓ AI usage logging and audit trail
-✓ Frontend:
-  ✓ AI tab on case detail page
-  ✓ Generate Summary with structured output (summary, activity, next steps, tasks)
-  ✓ Draft Email with 5-type selector and preview
-  ✓ Copy/Open in Email actions
-  ✓ AI Assistant dedicated page with full chat
-  ✓ Settings > AI for manager configuration
-✓ Tests: 26/26 passing
-
+✓ Tests: 30/30 passing (26 backend + 30 frontend)
