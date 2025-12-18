@@ -9,8 +9,22 @@ vi.mock('next/navigation', () => ({
     useRouter: () => ({ push: mockPush }),
 }))
 
+vi.mock('@/lib/auth-context', () => ({
+    useAuth: () => ({ user: { role: 'developer' } }),
+}))
+
 vi.mock('@/components/rich-text-editor', () => ({
     RichTextEditor: () => <div data-testid="rich-text-editor" />,
+}))
+
+const mockUseQueues = vi.fn()
+const mockClaimCase = vi.fn()
+const mockReleaseCase = vi.fn()
+
+vi.mock('@/lib/hooks/use-queues', () => ({
+    useQueues: () => mockUseQueues(),
+    useClaimCase: () => ({ mutateAsync: mockClaimCase, isPending: false }),
+    useReleaseCase: () => ({ mutateAsync: mockReleaseCase, isPending: false }),
 }))
 
 const mockUseCase = vi.fn()
@@ -63,6 +77,8 @@ describe('CaseDetailPage', () => {
                 assigned_to_name: null,
                 is_priority: false,
                 is_archived: false,
+                owner_type: 'user',
+                owner_id: 'u1',
                 age: null,
                 bmi: null,
                 created_at: new Date().toISOString(),
@@ -89,8 +105,11 @@ describe('CaseDetailPage', () => {
         mockUseCaseActivity.mockReturnValue({ data: { items: [] } })
         mockUseNotes.mockReturnValue({ data: [] })
         mockUseTasks.mockReturnValue({ data: { items: [] } })
+        mockUseQueues.mockReturnValue({ data: [] })
 
         mockPush.mockReset()
+        mockClaimCase.mockReset()
+        mockReleaseCase.mockReset()
         ;(navigator.clipboard.writeText as any).mockClear?.()
     })
 
@@ -108,5 +127,49 @@ describe('CaseDetailPage', () => {
         fireEvent.click(copyButton!)
         expect(navigator.clipboard.writeText).toHaveBeenCalledWith('jane@example.com')
     })
-})
 
+    it('shows Claim Case for queue-owned cases', () => {
+        mockUseCase.mockReturnValueOnce({
+            data: {
+                id: 'c1',
+                case_number: '12345',
+                full_name: 'Jane Applicant',
+                status: 'new_unread',
+                source: 'manual',
+                email: 'jane@example.com',
+                phone: null,
+                state: null,
+                assigned_to_name: null,
+                is_priority: false,
+                is_archived: false,
+                owner_type: 'queue',
+                owner_id: 'q1',
+                age: null,
+                bmi: null,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                assigned_to_user_id: null,
+                created_by_user_id: null,
+                date_of_birth: null,
+                race: null,
+                height_ft: null,
+                weight_lb: null,
+                is_age_eligible: null,
+                is_citizen_or_pr: null,
+                has_child: null,
+                is_non_smoker: null,
+                has_surrogate_experience: null,
+                num_deliveries: null,
+                num_csections: null,
+                archived_at: null,
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<CaseDetailPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Claim Case' }))
+        expect(mockClaimCase).toHaveBeenCalledWith('c1')
+    })
+})

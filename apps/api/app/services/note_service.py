@@ -82,13 +82,3 @@ def delete_note(db: Session, note: EntityNote) -> None:
     db.delete(note)
     db.commit()
 
-
-# =============================================================================
-# Aliases for backward compatibility (call the same functions)
-# These can be removed once all callers are updated
-# =============================================================================
-
-create_entity_note = create_note
-list_entity_notes = list_notes
-get_entity_note = get_note
-delete_entity_note = delete_note

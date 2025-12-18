@@ -273,7 +273,7 @@ def list_notes(
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
     
-    return note_service.list_entity_notes(db, session.org_id, EntityType.INTENDED_PARENT, ip_id)
+    return note_service.list_notes(db, session.org_id, EntityType.INTENDED_PARENT, ip_id)
 
 
 @router.post("/{ip_id}/notes", response_model=EntityNoteRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_csrf_header)])
@@ -288,8 +288,8 @@ def create_note(
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
     
-    note = note_service.create_entity_note(
-        db,
+    note = note_service.create_note(
+        db=db,
         org_id=session.org_id,
         entity_type=EntityType.INTENDED_PARENT,
         entity_id=ip_id,
@@ -316,7 +316,7 @@ def delete_note(
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
     
-    note = note_service.get_entity_note(db, note_id, session.org_id)
+    note = note_service.get_note(db, note_id, session.org_id)
     if not note or note.entity_id != ip_id:
         raise HTTPException(status_code=404, detail="Note not found")
     
@@ -324,4 +324,4 @@ def delete_note(
     if note.author_id != session.user_id and session.role not in (Role.MANAGER, Role.DEVELOPER):
         raise HTTPException(status_code=403, detail="Not authorized to delete this note")
     
-    note_service.delete_entity_note(db, note)
+    note_service.delete_note(db, note)
