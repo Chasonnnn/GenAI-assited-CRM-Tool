@@ -184,7 +184,7 @@ def list_cases(
     q: str | None = Query(None, max_length=100),
     include_archived: bool = False,
     queue_id: UUID | None = None,
-    owner_type: str | None = Query(None, regex="^(user|queue)$"),
+    owner_type: str | None = Query(None, pattern="^(user|queue)$"),
 ):
     """
     List cases with filters and pagination.
