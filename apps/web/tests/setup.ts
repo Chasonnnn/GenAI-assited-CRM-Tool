@@ -51,3 +51,14 @@ Object.defineProperty(navigator, 'clipboard', {
         writeText: vi.fn(),
     },
 })
+
+// JSDOM doesn't implement scrollIntoView (used in AI Assistant).
+if (!Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = vi.fn()
+}
+
+// Base UI ScrollArea uses getAnimations() for smooth updates.
+if (!Element.prototype.getAnimations) {
+    // @ts-expect-error - minimal Web Animations API polyfill for tests
+    Element.prototype.getAnimations = () => []
+}

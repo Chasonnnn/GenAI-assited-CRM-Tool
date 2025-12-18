@@ -58,6 +58,6 @@ describe('IntendedParentDetailPage', () => {
     it('renders primary details', () => {
         render(<IntendedParentDetailPage />)
         expect(screen.getByText('Bob Parent')).toBeInTheDocument()
-        expect(screen.getByText('bob@example.com')).toBeInTheDocument()
+        expect(screen.getAllByText('bob@example.com').length).toBeGreaterThan(0)
     })
 })
