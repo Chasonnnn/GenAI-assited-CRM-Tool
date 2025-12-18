@@ -90,8 +90,7 @@ jobs:
       
       - name: Run tests
         working-directory: apps/web
-        run: pnpm test -- --passWithNoTests
-        continue-on-error: true
+        run: pnpm test
 
   lint:
     name: Lint
