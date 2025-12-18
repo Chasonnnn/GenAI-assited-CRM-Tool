@@ -21,6 +21,7 @@ import {
     useMarkRead,
     useMarkAllRead,
 } from "@/lib/hooks/use-notifications"
+import { useNotificationSocket } from "@/lib/hooks/use-notification-socket"
 import type { Notification } from "@/lib/api/notifications"
 
 export function NotificationBell() {
@@ -30,7 +31,11 @@ export function NotificationBell() {
     const markRead = useMarkRead()
     const markAllRead = useMarkAllRead()
 
-    const unreadCount = countData?.count ?? 0
+    // Real-time WebSocket connection
+    const { isConnected, unreadCount: wsUnreadCount } = useNotificationSocket()
+
+    // Prefer WebSocket count when connected, fall back to polling
+    const unreadCount = wsUnreadCount ?? countData?.count ?? 0
     const notifications = notificationsData?.items ?? []
 
     const handleNotificationClick = (notification: Notification) => {
