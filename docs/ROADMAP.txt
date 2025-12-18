@@ -1,5 +1,5 @@
 Surrogacy CRM Platform — 12-Week Roadmap (AI-ready, Multi-tenant, OSS-ready)
-Last updated: 2025-12-16
+Last updated: 2025-12-17
 
 Assumptions (important)
 - Multi-tenant via shared DB + shared schema, with `organization_id` on all domain rows.
@@ -501,7 +501,41 @@ Deliverable
 ✓ AI Assistant UI ready for backend chat integration
 ✓ Meta spend data visible in Reports dashboard
 
-Week 11 — AI assistant v1 (safe + useful, BYOK)
+Week 11 — Testing Infrastructure + CI/CD + Versioning ✓ COMPLETE
+Backend Testing
+✓ pytest.ini with DEV_BYPASS_AUTH=False for auth testing
+✓ conftest.py with:
+  ✓ JWT token minting via create_session_token()
+  ✓ Savepoint DB fixture pattern (rollback on test end)
+  ✓ test_org, test_user, test_auth fixtures
+  ✓ client (unauthenticated) and authed_client (with JWT cookie + CSRF)
+✓ Test files:
+  ✓ test_audit.py - 6 unit tests (hash determinism, canonical JSON)
+  ✓ test_auth.py - 3 tests (login redirect, /me endpoint)
+  ✓ test_health.py - 1 health check test
+  ✓ test_pipelines.py - 4 tests (list, create 201, conflict 409)
+✓ 13 passed, 1 xfailed (DB isolation issue on version increment)
+CI/CD Pipeline
+✓ .github/workflows/ci.yml with:
+  ✓ backend-tests job (Postgres service, migrations, pytest)
+  ✓ frontend-tests job (npm install, build, test)
+  ✓ lint job (Python + TypeScript syntax checks)
+Frontend Testing
+✓ Vitest + React Testing Library configured
+✓ vitest.config.ts with jsdom environment
+✓ tests/setup.ts with jest-dom matchers
+✓ tests/cases.test.tsx sample test
+Versioning System Enhancements
+✓ Version History UI (frontend) for Pipelines and Email Templates
+✓ VersionHistoryModal component with payload preview and rollback
+✓ Organization settings versioning (current_version field)
+✓ Alembic migration 0021_org_integration_versioning.py
+Deliverable
+✓ Complete testing infrastructure with 14 backend tests
+✓ CI/CD pipeline runs on push/PR to main/develop
+✓ Version control for configurations with audit trail
+
+Week 12 — AI assistant v1 (safe + useful, BYOK)
 Backend
 - Org AI settings + key storage:
   - store provider key encrypted at rest; write-only; masked display; manager-only updates
