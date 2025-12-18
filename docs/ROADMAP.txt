@@ -580,7 +580,7 @@ Deliverable
 ✓ All 3 deferred improvements complete
 ✓ Hybrid inline editing for faster case data entry
 
-Week 12 — AI assistant v1 (safe + useful, BYOK)
+Week 12 — AI assistant v1 (safe + useful, BYOK)/Hardening + deployment + open-source readiness
 Backend
 - Org AI settings + key storage:
   - store provider key encrypted at rest; write-only; masked display; manager-only updates
@@ -598,8 +598,6 @@ Frontend
 - Manager toggle to enable AI + set key
 Deliverable
 - AI saves time without auto-sending anything; org turns it on once for the team
-
-Week 12 — Hardening + deployment + open-source readiness
 Hardening
 - Add indexes (organization_id + status + created_at + assigned_to)
 - Rate limiting on auth and webhooks
