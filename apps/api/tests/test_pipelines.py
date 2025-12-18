@@ -17,9 +17,9 @@ async def test_create_pipeline(authed_client: AsyncClient):
     payload = {
         "name": "Test Pipeline",
         "stages": [
-            {"status": "new", "label": "New", "color": "#3B82F6", "order": 1},
-            {"status": "in_progress", "label": "In Progress", "color": "#F59E0B", "order": 2},
-            {"status": "done", "label": "Done", "color": "#10B981", "order": 3},
+            {"status": "new_unread", "label": "New", "color": "#3B82F6", "order": 1},
+            {"status": "contacted", "label": "Contacted", "color": "#F59E0B", "order": 2},
+            {"status": "delivered", "label": "Delivered", "color": "#10B981", "order": 3},
         ]
     }
     response = await authed_client.post("/settings/pipelines", json=payload)
@@ -30,7 +30,6 @@ async def test_create_pipeline(authed_client: AsyncClient):
     assert len(data["stages"]) == 3
 
 
-@pytest.mark.xfail(reason="DB isolation issue - pipeline state not preserved between create/update")
 @pytest.mark.asyncio
 async def test_update_pipeline_increments_version(authed_client: AsyncClient):
     """Updating a pipeline should increment current_version."""
@@ -38,7 +37,7 @@ async def test_update_pipeline_increments_version(authed_client: AsyncClient):
     create_payload = {
         "name": "Version Test Pipeline",
         "stages": [
-            {"status": "open", "label": "Open", "color": "#3B82F6", "order": 1},
+            {"status": "new_unread", "label": "New", "color": "#3B82F6", "order": 1},
         ]
     }
     create_resp = await authed_client.post("/settings/pipelines", json=create_payload)
@@ -50,8 +49,8 @@ async def test_update_pipeline_increments_version(authed_client: AsyncClient):
     update_payload = {
         "name": "Version Test Pipeline Updated",
         "stages": [
-            {"status": "open", "label": "Open", "color": "#3B82F6", "order": 1},
-            {"status": "closed", "label": "Closed", "color": "#EF4444", "order": 2},
+            {"status": "new_unread", "label": "New", "color": "#3B82F6", "order": 1},
+            {"status": "contacted", "label": "Contacted", "color": "#EF4444", "order": 2},
         ],
         "expected_version": initial_version,
     }
@@ -69,7 +68,7 @@ async def test_update_pipeline_version_conflict(authed_client: AsyncClient):
     create_payload = {
         "name": "Conflict Test Pipeline",
         "stages": [
-            {"status": "open", "label": "Open", "color": "#3B82F6", "order": 1},
+            {"status": "new_unread", "label": "New", "color": "#3B82F6", "order": 1},
         ]
     }
     create_resp = await authed_client.post("/settings/pipelines", json=create_payload)
