@@ -1,11 +1,11 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ChevronDownIcon, TrendingUpIcon, UsersIcon, CheckCircle2Icon, ClockIcon, Loader2Icon, AlertCircleIcon, FacebookIcon, DollarSignIcon } from "lucide-react"
+import { ChevronDownIcon, TrendingUpIcon, TrendingDownIcon, SparklesIcon, UsersIcon, CheckCircle2Icon, Loader2Icon, AlertCircleIcon, FacebookIcon, DollarSignIcon } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Line, LineChart, Pie, PieChart } from "recharts"
 import {
     ChartContainer,
@@ -18,6 +18,7 @@ import { useAnalyticsSummary, useCasesByStatus, useCasesByAssignee, useCasesTren
 import { FunnelChart } from "@/components/charts/funnel-chart"
 import { USMapChart } from "@/components/charts/us-map-chart"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
+import { useAuth } from "@/lib/auth-context"
 
 // Chart configs
 const casesOverviewConfig = {
@@ -43,6 +44,9 @@ const chartColors = [
 ]
 
 export default function ReportsPage() {
+    const { user } = useAuth()
+    const aiEnabled = user?.ai_enabled ?? false
+
     const [dateRange, setDateRange] = useState<DateRangePreset>('all')
     const [customRange, setCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
         from: undefined,
@@ -125,6 +129,30 @@ export default function ReportsPage() {
         date: item.date,
         count: item.count,
     }))
+
+    // Compute trend statistics from real data
+    const computeTrendPercentage = useMemo(() => {
+        if (!trend || trend.length < 2) return null
+        const midpoint = Math.floor(trend.length / 2)
+        const firstHalf = trend.slice(0, midpoint).reduce((sum, d) => sum + d.count, 0)
+        const secondHalf = trend.slice(midpoint).reduce((sum, d) => sum + d.count, 0)
+        if (firstHalf === 0) return secondHalf > 0 ? 100 : 0
+        return Math.round(((secondHalf - firstHalf) / firstHalf) * 100)
+    }, [trend])
+
+    const topStatus = useMemo(() => {
+        if (!statusChartData.length) return null
+        return statusChartData.reduce((max, item) => item.count > max.count ? item : max, statusChartData[0])
+    }, [statusChartData])
+
+    const topPerformer = useMemo(() => {
+        if (!assigneeChartData.length) return null
+        return assigneeChartData.reduce((max, item) => item.count > max.count ? item : max, assigneeChartData[0])
+    }, [assigneeChartData])
+
+    const totalCasesInPeriod = useMemo(() => {
+        return trendChartData.reduce((sum, d) => sum + d.count, 0)
+    }, [trendChartData])
 
     return (
         <div className="flex min-h-screen flex-col">
@@ -290,7 +318,15 @@ export default function ReportsPage() {
                                 </div>
                             )}
                         </CardContent>
-                        <CardFooter className="text-sm text-muted-foreground">Current distribution</CardFooter>
+                        <CardFooter className="flex-col items-start gap-2">
+                            <div className="flex gap-2 leading-none font-medium">
+                                {aiEnabled && <SparklesIcon className="size-4 text-primary" />}
+                                {topStatus ? `${topStatus.status}: ${topStatus.count} cases` : 'No data yet'}
+                            </div>
+                            <div className="text-muted-foreground leading-none">
+                                {aiEnabled ? 'AI insight coming soon' : 'Current distribution by status'}
+                            </div>
+                        </CardFooter>
                     </Card>
 
                     {/* Cases Trend */}
@@ -325,7 +361,22 @@ export default function ReportsPage() {
                                 </div>
                             )}
                         </CardContent>
-                        <CardFooter className="text-sm text-muted-foreground">Last 30 days</CardFooter>
+                        <CardFooter className="flex-col items-start gap-2">
+                            <div className="flex gap-2 leading-none font-medium">
+                                {aiEnabled && <SparklesIcon className="size-4 text-primary" />}
+                                {computeTrendPercentage !== null ? (
+                                    <>
+                                        {computeTrendPercentage >= 0 ? 'Trending up' : 'Trending down'} by {Math.abs(computeTrendPercentage)}%
+                                        {computeTrendPercentage >= 0 ? <TrendingUpIcon className="size-4" /> : <TrendingDownIcon className="size-4" />}
+                                    </>
+                                ) : (
+                                    `${totalCasesInPeriod} cases in period`
+                                )}
+                            </div>
+                            <div className="text-muted-foreground leading-none">
+                                {aiEnabled ? 'AI insight coming soon' : `${trendChartData.length} data points`}
+                            </div>
+                        </CardFooter>
                     </Card>
 
                     {/* Team Performance */}
@@ -354,7 +405,16 @@ export default function ReportsPage() {
                                 </div>
                             )}
                         </CardContent>
-                        <CardFooter className="text-sm text-muted-foreground">Cases per assignee</CardFooter>
+                        <CardFooter className="flex-col items-start gap-2">
+                            <div className="flex gap-2 leading-none font-medium">
+                                {aiEnabled && <SparklesIcon className="size-4 text-primary" />}
+                                {topPerformer ? `Top: ${topPerformer.member} (${topPerformer.count} cases)` : 'No assignments yet'}
+                                {topPerformer && <TrendingUpIcon className="size-4" />}
+                            </div>
+                            <div className="text-muted-foreground leading-none">
+                                {aiEnabled ? 'AI insight coming soon' : `${assigneeChartData.length} team members`}
+                            </div>
+                        </CardFooter>
                     </Card>
 
                     {/* Meta Performance */}
