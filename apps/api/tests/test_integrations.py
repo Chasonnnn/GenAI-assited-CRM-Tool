@@ -2,6 +2,7 @@
 
 import json
 import uuid
+from http.cookies import SimpleCookie
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -21,9 +22,14 @@ async def test_zoom_connect_sets_state_cookie_and_returns_auth_url(authed_client
     assert "state" in qs
     state = qs["state"][0]
 
-    cookie_value = authed_client.cookies.get("integration_oauth_state_zoom")
+    # httpx stores the cookie value with RFC6265 escapes (e.g. \054 for commas),
+    # so parse from the response Set-Cookie header to get the unescaped JSON.
+    cookie = SimpleCookie()
+    for header in response.headers.get_list("set-cookie"):
+        cookie.load(header)
+    cookie_value = cookie.get("integration_oauth_state_zoom")
     assert cookie_value
-    payload = json.loads(cookie_value)
+    payload = json.loads(cookie_value.value)
     assert payload["state"] == state
     assert "ua_hash" in payload
 

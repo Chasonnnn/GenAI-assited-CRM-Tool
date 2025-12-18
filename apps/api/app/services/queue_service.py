@@ -5,8 +5,10 @@ from sqlalchemy import select, and_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
-from app.db.models import Queue, Case, CaseActivityLog
+from app.db.models import Queue, Case
+from app.db.enums import CaseActivityType
 from app.db.enums import OwnerType
+from app.services import activity_service
 
 
 class QueueServiceError(Exception):
@@ -211,14 +213,17 @@ def claim_case(
     case.assigned_to_user_id = claimer_user_id
     
     # Log activity
-    activity = CaseActivityLog(
+    activity_service.log_activity(
+        db=db,
         case_id=case_id,
+        organization_id=org_id,
+        activity_type=CaseActivityType.CASE_CLAIMED,
         actor_user_id=claimer_user_id,
-        action="claim",
-        changes={"from_queue_id": str(old_queue_id), "to_user_id": str(claimer_user_id)},
+        details={
+            "from_queue_id": str(old_queue_id) if old_queue_id else None,
+            "to_user_id": str(claimer_user_id),
+        },
     )
-    db.add(activity)
-    db.flush()
     
     return case
 
@@ -261,14 +266,17 @@ def release_case(
     case.assigned_to_user_id = None
     
     # Log activity
-    activity = CaseActivityLog(
+    activity_service.log_activity(
+        db=db,
         case_id=case_id,
+        organization_id=org_id,
+        activity_type=CaseActivityType.CASE_RELEASED,
         actor_user_id=releaser_user_id,
-        action="release",
-        changes={"from_user_id": str(old_owner_id), "to_queue_id": str(queue_id)},
+        details={
+            "from_user_id": str(old_owner_id) if old_owner_id else None,
+            "to_queue_id": str(queue_id),
+        },
     )
-    db.add(activity)
-    db.flush()
     
     return case
 
@@ -307,17 +315,17 @@ def assign_to_queue(
     case.assigned_to_user_id = None
     
     # Log activity
-    activity = CaseActivityLog(
+    activity_service.log_activity(
+        db=db,
         case_id=case_id,
+        organization_id=org_id,
+        activity_type=CaseActivityType.CASE_ASSIGNED_TO_QUEUE,
         actor_user_id=assigner_user_id,
-        action="assign_to_queue",
-        changes={
+        details={
             "from_owner_type": old_owner_type,
             "from_owner_id": str(old_owner_id) if old_owner_id else None,
             "to_queue_id": str(queue_id),
         },
     )
-    db.add(activity)
-    db.flush()
     
     return case
