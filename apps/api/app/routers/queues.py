@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_db, get_current_session, UserSession
+from app.core.deps import get_db, get_current_session
+from app.schemas.auth import UserSession
 from app.db.enums import Role
 from app.services import queue_service
 from app.services.queue_service import (
