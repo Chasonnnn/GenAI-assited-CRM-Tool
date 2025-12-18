@@ -15,7 +15,7 @@ from app.db.base import Base
 from app.db.enums import (
     DEFAULT_CASE_SOURCE, DEFAULT_CASE_STATUS, DEFAULT_JOB_STATUS, DEFAULT_EMAIL_STATUS,
     DEFAULT_IP_STATUS, CaseSource, CaseStatus, TaskType, JobType, JobStatus, EmailStatus,
-    IntendedParentStatus, EntityType
+    IntendedParentStatus, EntityType, OwnerType
 )
 
 
@@ -239,6 +239,54 @@ class OrgInvite(Base):
 
 
 # =============================================================================
+# Queue/Ownership Models
+# =============================================================================
+
+class Queue(Base):
+    """
+    Work queues for case routing and assignment.
+    
+    Salesforce-style: cases can be owned by a queue or a user.
+    When claimed, ownership transfers from queue to user.
+    """
+    __tablename__ = "queues"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "name", name="uq_queue_name"),
+        Index("idx_queues_org_active", "organization_id", "is_active"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("TRUE"),
+        nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        onupdate=datetime.now,
+        nullable=False
+    )
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+
+
+# =============================================================================
 # Case Management Models
 # =============================================================================
 
@@ -248,6 +296,12 @@ class Case(Base):
     
     Includes soft-delete (is_archived) for data safety.
     Hard delete requires is_archived=true and manager+ role.
+    
+    Ownership model (Salesforce-style):
+    - owner_type: "user" or "queue"
+    - owner_id: UUID of user or queue
+    - When in queue, any case_manager+ can claim
+    - Claiming sets owner_type="user", owner_id=claimer
     """
     __tablename__ = "cases"
     __table_args__ = (
@@ -279,6 +333,8 @@ class Case(Base):
             "organization_id", "meta_form_id",
             postgresql_where=text("meta_form_id IS NOT NULL")
         ),
+        # Ownership indexes
+        Index("idx_cases_org_owner", "organization_id", "owner_type", "owner_id"),
     )
     
     id: Mapped[uuid.UUID] = mapped_column(
@@ -314,6 +370,19 @@ class Case(Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True
     )
+    
+    # Ownership (Salesforce-style single owner model)
+    # owner_type="user" + owner_id=user_id, or owner_type="queue" + owner_id=queue_id
+    # Nullable during migration; will be NOT NULL after backfill
+    owner_type: Mapped[str | None] = mapped_column(
+        String(10),
+        nullable=True  # Will be NOT NULL after migration backfill
+    )
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True  # Will be NOT NULL after migration backfill
+    )
+    
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),

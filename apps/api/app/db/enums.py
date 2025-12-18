@@ -183,6 +183,12 @@ class EntityType(str, Enum):
     INTENDED_PARENT = "intended_parent"
 
 
+class OwnerType(str, Enum):
+    """Owner type for cases - Salesforce-style single owner model."""
+    USER = "user"
+    QUEUE = "queue"
+
+
 # =============================================================================
 # Centralized Defaults (keep models, services, migrations in sync)
 # =============================================================================

@@ -63,8 +63,27 @@ export interface CaseCreatePayload {
     is_priority?: boolean;
 }
 
-// Update case payload (all optional)
-export type CaseUpdatePayload = Partial<CaseCreatePayload>;
+// Update case payload (partial; mirrors backend CaseUpdate schema)
+// - Omitted fields are not changed
+// - `null` clears the value for nullable fields (phone/state/demographics/eligibility)
+export interface CaseUpdatePayload {
+    full_name?: string;
+    email?: string;
+    phone?: string | null;
+    state?: string | null;
+    date_of_birth?: string | null;
+    race?: string | null;
+    height_ft?: number | null;
+    weight_lb?: number | null;
+    is_age_eligible?: boolean | null;
+    is_citizen_or_pr?: boolean | null;
+    has_child?: boolean | null;
+    is_non_smoker?: boolean | null;
+    has_surrogate_experience?: boolean | null;
+    num_deliveries?: number | null;
+    num_csections?: number | null;
+    is_priority?: boolean;
+}
 
 // Status change payload
 export interface CaseStatusChangePayload {
