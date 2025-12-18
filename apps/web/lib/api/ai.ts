@@ -139,3 +139,65 @@ export async function approveAction(approvalId: string): Promise<ActionApprovalR
 export async function rejectAction(approvalId: string): Promise<ActionApprovalResult> {
     return api.post<ActionApprovalResult>(`/ai/actions/${approvalId}/reject`);
 }
+
+// ============================================================================
+// Focused AI Endpoints (One-shot operations)
+// ============================================================================
+
+export type EmailType = 'follow_up' | 'status_update' | 'meeting_request' | 'document_request' | 'introduction';
+
+export interface SummarizeCaseRequest {
+    case_id: string;
+}
+
+export interface SummarizeCaseResponse {
+    case_number: string;
+    full_name: string;
+    summary: string;
+    current_status: string;
+    key_dates: Record<string, string | null>;
+    pending_tasks: Array<{ id: string; title: string; due_date: string | null }>;
+    recent_activity: string;
+    suggested_next_steps: string[];
+}
+
+export interface DraftEmailRequest {
+    case_id: string;
+    email_type: EmailType;
+    additional_context?: string;
+}
+
+export interface DraftEmailResponse {
+    subject: string;
+    body: string;
+    recipient_email: string;
+    recipient_name: string;
+    email_type: string;
+}
+
+export interface AnalyzeDashboardResponse {
+    insights: string[];
+    case_volume_trend: string;
+    bottlenecks: Array<{ status: string; count: number; percentage: number }>;
+    recommendations: string[];
+    stats: {
+        total_active_cases: number;
+        cases_this_week: number;
+        cases_last_week: number;
+        overdue_tasks: number;
+        status_breakdown: Record<string, number>;
+    };
+}
+
+export async function summarizeCase(caseId: string): Promise<SummarizeCaseResponse> {
+    return api.post<SummarizeCaseResponse>('/ai/summarize-case', { case_id: caseId });
+}
+
+export async function draftEmail(request: DraftEmailRequest): Promise<DraftEmailResponse> {
+    return api.post<DraftEmailResponse>('/ai/draft-email', request);
+}
+
+export async function analyzeDashboard(): Promise<AnalyzeDashboardResponse> {
+    return api.post<AnalyzeDashboardResponse>('/ai/analyze-dashboard');
+}
+
