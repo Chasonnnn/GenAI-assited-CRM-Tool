@@ -16,9 +16,6 @@ COOKIE_NAME = "crm_session"
 CSRF_HEADER = "X-Requested-With"
 CSRF_HEADER_VALUE = "XMLHttpRequest"
 
-# TEMPORARY: Set to True to bypass auth for testing
-DEV_BYPASS_AUTH = True
-
 
 def get_db() -> Generator[Session, None, None]:
     """
@@ -53,7 +50,7 @@ def get_current_user(
     from app.db.models import User
     
     # DEV BYPASS: Return mock user for testing
-    if DEV_BYPASS_AUTH:
+    if settings.DEV_BYPASS_AUTH:
         mock_user = db.query(User).filter(User.email == "manager@test.com").first()
         if mock_user:
             return mock_user

@@ -13,7 +13,7 @@ jobs:
     
     services:
       postgres:
-        image: postgres:15
+        image: postgres:16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -49,10 +49,6 @@ jobs:
           pip install -r requirements.txt
           pip install -r test-requirements.txt
       
-      - name: Create CITEXT extension
-        run: |
-          PGPASSWORD=postgres psql -h localhost -U postgres -d crm_test -c "CREATE EXTENSION IF NOT EXISTS citext;"
-      
       - name: Run migrations
         working-directory: apps/api
         run: alembic upgrade head
@@ -71,12 +67,12 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v2
         with:
-          version: 8
+          version: 10.25.0
       
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'pnpm'
           cache-dependency-path: apps/web/pnpm-lock.yaml
       
@@ -112,12 +108,12 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v2
         with:
-          version: 8
+          version: 10.25.0
       
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
       
       - name: Install and check TypeScript
         working-directory: apps/web

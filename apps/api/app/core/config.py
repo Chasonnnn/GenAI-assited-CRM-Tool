@@ -46,7 +46,8 @@ class Settings(BaseSettings):
     
     # Dev-only
     DEV_SECRET: str = "change-me"
-    
+    DEV_BYPASS_AUTH: bool = False
+
     # Meta Lead Ads webhook
     META_VERIFY_TOKEN: str = ""
     
