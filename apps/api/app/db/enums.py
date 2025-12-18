@@ -102,6 +102,9 @@ class CaseActivityType(str, Enum):
     STATUS_CHANGED = "status_changed"
     ASSIGNED = "assigned"
     UNASSIGNED = "unassigned"
+    CASE_ASSIGNED_TO_QUEUE = "case_assigned_to_queue"
+    CASE_CLAIMED = "case_claimed"
+    CASE_RELEASED = "case_released"
     PRIORITY_CHANGED = "priority_changed"
     ARCHIVED = "archived"
     RESTORED = "restored"
@@ -332,4 +335,3 @@ class AuditEventType(str, Enum):
     USER_INVITED = "user_invited"
     USER_ROLE_CHANGED = "user_role_changed"
     USER_DEACTIVATED = "user_deactivated"
-

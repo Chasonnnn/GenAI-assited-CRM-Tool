@@ -181,7 +181,7 @@ async def client(db) -> AsyncGenerator:
     
     async with AsyncClient(
         transport=ASGITransport(app=app), 
-        base_url="http://test"
+        base_url="https://test"
     ) as c:
         yield c
     
@@ -204,7 +204,7 @@ async def authed_client(db, test_auth) -> AsyncGenerator:
     
     async with AsyncClient(
         transport=ASGITransport(app=app), 
-        base_url="http://test",
+        base_url="https://test",
         cookies={test_auth.cookie_name: test_auth.token},
         headers={"X-Requested-With": "XMLHttpRequest"},
     ) as c:
