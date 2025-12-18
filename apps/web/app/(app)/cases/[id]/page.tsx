@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { DateTimePicker } from "@/components/ui/date-time-picker"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -57,6 +58,22 @@ function formatDate(dateString: string): string {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
+    })
+}
+
+function toLocalIsoDateTime(date: Date): string {
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:00`
+}
+
+function formatMeetingTimeForInvite(date: Date): string {
+    return date.toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZoneName: 'short',
     })
 }
 
@@ -146,11 +163,22 @@ export default function CaseDetailPage() {
     const [zoomDialogOpen, setZoomDialogOpen] = React.useState(false)
     const [zoomTopic, setZoomTopic] = React.useState("")
     const [zoomDuration, setZoomDuration] = React.useState(30)
+    const [zoomStartAt, setZoomStartAt] = React.useState<Date | undefined>(undefined)
+    const [zoomCreateTask, setZoomCreateTask] = React.useState(true)
     const [lastMeetingResult, setLastMeetingResult] = React.useState<{
         join_url: string
         meeting_id: number
         password: string | null
+        start_time: string | null
     } | null>(null)
+
+    const timezoneName = React.useMemo(() => {
+        try {
+            return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+        } catch {
+            return 'UTC'
+        }
+    }, [])
 
     // Fetch data
     const { data: caseData, isLoading, error } = useCase(id)
@@ -324,6 +352,13 @@ export default function CaseDetailPage() {
                             size="sm"
                             onClick={() => {
                                 setZoomTopic(`Call with ${caseData.full_name}`)
+                                const nextHour = new Date()
+                                nextHour.setSeconds(0, 0)
+                                nextHour.setMinutes(0)
+                                nextHour.setHours(nextHour.getHours() + 1)
+                                setZoomStartAt(nextHour)
+                                setZoomCreateTask(true)
+                                setLastMeetingResult(null)
                                 setZoomDialogOpen(true)
                             }}
                             disabled={caseData.is_archived}
@@ -831,7 +866,17 @@ export default function CaseDetailPage() {
                                 onChange={(e) => setZoomTopic(e.target.value)}
                                 placeholder="Meeting topic"
                                 className="mt-2"
+                                disabled={!!lastMeetingResult}
                             />
+                        </div>
+                        <div>
+                            <Label>When</Label>
+                            <div className="mt-2">
+                                <DateTimePicker value={zoomStartAt} onChange={setZoomStartAt} disabled={!!lastMeetingResult} />
+                            </div>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                                Timezone: {timezoneName}
+                            </div>
                         </div>
                         <div>
                             <Label htmlFor="zoom-duration">Duration (minutes)</Label>
@@ -840,6 +885,7 @@ export default function CaseDetailPage() {
                                 value={zoomDuration}
                                 onChange={(e) => setZoomDuration(Number(e.target.value))}
                                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 mt-2"
+                                disabled={!!lastMeetingResult}
                             >
                                 <option value={15}>15 minutes</option>
                                 <option value={30}>30 minutes</option>
@@ -847,6 +893,15 @@ export default function CaseDetailPage() {
                                 <option value={60}>1 hour</option>
                                 <option value={90}>1.5 hours</option>
                             </select>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Checkbox
+                                id="zoom-create-task"
+                                checked={zoomCreateTask}
+                                onCheckedChange={(checked) => setZoomCreateTask(Boolean(checked))}
+                                disabled={!!lastMeetingResult}
+                            />
+                            <Label htmlFor="zoom-create-task">Create follow-up task</Label>
                         </div>
                     </div>
                     <DialogFooter>
@@ -872,6 +927,7 @@ export default function CaseDetailPage() {
                                                 meeting_id: lastMeetingResult.meeting_id,
                                                 join_url: lastMeetingResult.join_url,
                                                 topic: zoomTopic,
+                                                start_time: lastMeetingResult.start_time || undefined,
                                                 duration: zoomDuration,
                                                 password: lastMeetingResult.password || undefined,
                                                 contact_name: caseData.full_name || 'there',
@@ -891,26 +947,30 @@ export default function CaseDetailPage() {
                         ) : (
                             <Button
                                 onClick={async () => {
+                                    if (!zoomStartAt) return
                                     try {
                                         const result = await createZoomMeetingMutation.mutateAsync({
                                             entity_type: 'case',
                                             entity_id: id,
                                             topic: zoomTopic,
+                                            start_time: toLocalIsoDateTime(zoomStartAt),
+                                            timezone: timezoneName,
                                             duration: zoomDuration,
-                                            create_task: true,
+                                            create_task: zoomCreateTask,
                                             contact_name: caseData?.full_name,
                                         })
                                         setLastMeetingResult({
                                             join_url: result.join_url,
                                             meeting_id: result.meeting_id,
                                             password: result.password,
+                                            start_time: formatMeetingTimeForInvite(zoomStartAt),
                                         })
                                         navigator.clipboard.writeText(result.join_url)
                                     } catch (err) {
                                         // Error handled by react-query
                                     }
                                 }}
-                                disabled={!zoomTopic || createZoomMeetingMutation.isPending}
+                                disabled={!zoomTopic || !zoomStartAt || createZoomMeetingMutation.isPending}
                             >
                                 {createZoomMeetingMutation.isPending ? 'Creating...' : 'Create Meeting'}
                             </Button>

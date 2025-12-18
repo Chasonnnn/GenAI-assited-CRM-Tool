@@ -86,15 +86,19 @@ async def create_zoom_meeting(
     }
     
     if start_time:
-        # Zoom expects RFC3339/ISO8601 datetime. If a naive datetime is provided,
-        # interpret it in the provided meeting timezone.
+        # Zoom supports local time + separate timezone. Prefer sending local time without
+        # an offset so Zoom displays it in the provided timezone.
+        try:
+            tz = ZoneInfo(timezone_name)
+        except Exception:
+            tz = timezone.utc
+
         if start_time.tzinfo is None:
-            try:
-                start_time = start_time.replace(tzinfo=ZoneInfo(timezone_name))
-            except Exception:
-                start_time = start_time.replace(tzinfo=timezone.utc)
-        start_time_utc = start_time.astimezone(timezone.utc).replace(microsecond=0)
-        meeting_data["start_time"] = start_time_utc.isoformat().replace("+00:00", "Z")
+            local_dt = start_time.replace(tzinfo=tz)
+        else:
+            local_dt = start_time.astimezone(tz)
+
+        meeting_data["start_time"] = local_dt.replace(tzinfo=None, microsecond=0).isoformat()
     
     async with httpx.AsyncClient() as client:
         response = await client.post(
@@ -153,6 +157,7 @@ async def schedule_zoom_meeting(
     entity_id: uuid.UUID,
     topic: str,
     start_time: datetime | None = None,
+    timezone_name: str = "UTC",
     duration: int = 30,
     create_task: bool = True,
     contact_name: str | None = None,
@@ -183,13 +188,27 @@ async def schedule_zoom_meeting(
         topic=topic,
         start_time=start_time,
         duration=duration,
+        timezone_name=timezone_name,
     )
     
     # Build note content
     from html import escape
     from app.services import note_service
 
-    time_str = start_time.strftime("%B %d, %Y at %I:%M %p") if start_time else "Instant meeting"
+    display_dt: datetime | None = None
+    if start_time:
+        if start_time.tzinfo is None:
+            try:
+                display_dt = start_time.replace(tzinfo=ZoneInfo(timezone_name))
+            except Exception:
+                display_dt = start_time.replace(tzinfo=timezone.utc)
+        else:
+            try:
+                display_dt = start_time.astimezone(ZoneInfo(timezone_name))
+            except Exception:
+                display_dt = start_time.astimezone(timezone.utc)
+
+    time_str = display_dt.strftime("%B %d, %Y at %I:%M %p %Z") if display_dt else "Instant meeting"
     join_url = escape(meeting.join_url)
     safe_topic = escape(topic)
 
@@ -233,11 +252,18 @@ async def schedule_zoom_meeting(
     # Create task if requested
     task_id = None
     if create_task and start_time:
+        task_dt = display_dt or start_time
+        if task_dt.tzinfo is not None:
+            local_task_dt = task_dt.astimezone(task_dt.tzinfo)
+        else:
+            local_task_dt = task_dt
+
         task = Task(
             organization_id=org_id,
             title=f"Zoom Call: {topic}",
             description=f"Join link: {meeting.join_url}",
-            due_date=start_time.date(),
+            due_date=local_task_dt.date(),
+            due_time=local_task_dt.time().replace(second=0, microsecond=0),
             assigned_to_user_id=user_id,
             created_by_user_id=user_id,
             case_id=entity_id if entity_type == EntityType.CASE else None,

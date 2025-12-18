@@ -148,10 +148,19 @@ JWT_EXPIRES_HOURS=4
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:8000/auth/google/callback
+# Encryption (required for OAuth tokens + versioned config snapshots)
+FERNET_KEY=generate-with-python-cryptography-fernet
+VERSION_ENCRYPTION_KEY=generate-with-python-cryptography-fernet
+META_ENCRYPTION_KEY=optional-fallback-if-VERSION_ENCRYPTION_KEY-empty
 ALLOWED_EMAIL_DOMAINS=
 CORS_ORIGINS=http://localhost:3000
 FRONTEND_URL=http://localhost:3000
 DEV_SECRET=local-dev-secret-change-me
+# Integrations (per-user OAuth)
+ZOOM_CLIENT_ID=
+ZOOM_CLIENT_SECRET=
+ZOOM_REDIRECT_URI=http://localhost:8000/integrations/zoom/callback
+GMAIL_REDIRECT_URI=http://localhost:8000/integrations/gmail/callback
 # Optional AI (example; exact wiring may evolve):
 # AI_ENABLED=false
 # AI_PROVIDER=openai

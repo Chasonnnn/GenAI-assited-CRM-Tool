@@ -236,10 +236,12 @@ async def gmail_callback(
         success.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
         return success
     except Exception as e:
-        return RedirectResponse(
+        error = RedirectResponse(
             f"{settings.FRONTEND_URL}/settings/integrations?error=gmail_failed",
             status_code=302,
         )
+        error.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
+        return error
 
 
 # ============================================================================
@@ -356,10 +358,12 @@ async def zoom_callback(
         success.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
         return success
     except Exception as e:
-        return RedirectResponse(
+        error = RedirectResponse(
             f"{settings.FRONTEND_URL}/settings/integrations?error=zoom_failed",
             status_code=302,
         )
+        error.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
+        return error
 
 
 # ============================================================================
@@ -372,6 +376,7 @@ class CreateMeetingRequest(BaseModel):
     entity_id: uuid.UUID
     topic: str
     start_time: str | None = None  # ISO format datetime
+    timezone: str | None = None  # IANA timezone name (e.g. "America/Los_Angeles")
     duration: int = 30  # minutes
     create_task: bool = True
     contact_name: str | None = None
@@ -427,6 +432,8 @@ async def create_zoom_meeting(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid start_time format. Use ISO format (e.g., 2024-01-15T10:00:00).",
             )
+
+    timezone_name = request.timezone or "UTC"
     
     # Validate entity exists and user has access (prevents cross-tenant/task leakage)
     if entity_type == EntityType.CASE:
@@ -455,6 +462,7 @@ async def create_zoom_meeting(
             entity_id=request.entity_id,
             topic=request.topic,
             start_time=start_time,
+            timezone_name=timezone_name,
             duration=request.duration,
             create_task=request.create_task,
             contact_name=request.contact_name,
