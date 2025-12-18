@@ -183,13 +183,17 @@ def list_cases(
     assigned_to: UUID | None = None,
     q: str | None = Query(None, max_length=100),
     include_archived: bool = False,
+    queue_id: UUID | None = None,
+    owner_type: str | None = Query(None, regex="^(user|queue)$"),
 ):
     """
     List cases with filters and pagination.
     
     - Default excludes archived cases
     - Search (q) searches name, email, phone, case_number
-    - Intake specialists only see Stage A statuses
+    - Intake specialists only see their owned cases
+    - queue_id: Filter by cases in a specific queue
+    - owner_type: Filter by owner type ('user' or 'queue')
     """
     cases, total = case_service.list_cases(
         db=db,
@@ -201,7 +205,10 @@ def list_cases(
         assigned_to=assigned_to,
         q=q,
         include_archived=include_archived,
-        role_filter=session.role,  # Filter by user role
+        role_filter=session.role,
+        user_id=session.user_id,
+        owner_type=owner_type,
+        queue_id=queue_id,
     )
     
     pages = (total + per_page - 1) // per_page if per_page > 0 else 0

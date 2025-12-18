@@ -20,6 +20,8 @@ export interface CaseListParams {
     assigned_to?: string;
     q?: string;
     include_archived?: boolean;
+    queue_id?: string;  // Filter by queue (when owner_type='queue')
+    owner_type?: 'user' | 'queue';  // Filter by owner type
 }
 
 // Stats response from /cases/stats
@@ -103,9 +105,6 @@ export function getCaseStats(): Promise<CaseStats> {
     return api.get<CaseStats>('/cases/stats');
 }
 
-/**
- * List cases with filters and pagination.
- */
 export function getCases(params: CaseListParams = {}): Promise<CaseListResponse> {
     const searchParams = new URLSearchParams();
 
@@ -116,6 +115,8 @@ export function getCases(params: CaseListParams = {}): Promise<CaseListResponse>
     if (params.assigned_to) searchParams.set('assigned_to', params.assigned_to);
     if (params.q) searchParams.set('q', params.q);
     if (params.include_archived) searchParams.set('include_archived', 'true');
+    if (params.queue_id) searchParams.set('queue_id', params.queue_id);
+    if (params.owner_type) searchParams.set('owner_type', params.owner_type);
 
     const query = searchParams.toString();
     return api.get<CaseListResponse>(`/cases${query ? `?${query}` : ''}`);
