@@ -12,8 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Checkbox } from "@/components/ui/checkbox"
-import { PlusIcon, MoreVerticalIcon, SearchIcon, XIcon, LoaderIcon, CheckIcon, ArchiveIcon, UserPlusIcon } from "lucide-react"
+import { PlusIcon, MoreVerticalIcon, SearchIcon, XIcon, LoaderIcon, CheckIcon, ArchiveIcon, UserPlusIcon, UsersIcon } from "lucide-react"
 import { useCases, useArchiveCase, useRestoreCase, useUpdateCase, useAssignees, useBulkAssign, useBulkArchive } from "@/lib/hooks/use-cases"
+import { useQueues } from "@/lib/hooks/use-queues"
 import { useAuth } from "@/lib/auth-context"
 import { STATUS_CONFIG, type CaseStatus, type CaseSource } from "@/lib/types/case"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
@@ -116,6 +117,7 @@ function FloatingActionBar({
 export default function CasesPage() {
     const [statusFilter, setStatusFilter] = useState<CaseStatus | "all">("all")
     const [sourceFilter, setSourceFilter] = useState<CaseSource | "all">("all")
+    const [queueFilter, setQueueFilter] = useState<string>("all")  // Queue filter
     const [dateRange, setDateRange] = useState<DateRangePreset>('all')
     const [customRange, setCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
         from: undefined,
@@ -126,6 +128,11 @@ export default function CasesPage() {
     const [page, setPage] = useState(1)
     const [selectedCases, setSelectedCases] = useState<Set<string>>(new Set())
     const perPage = 20
+    const { user } = useAuth()
+
+    // Fetch queues for filter dropdown (case_manager+ only)
+    const canSeeQueues = user?.role && ['case_manager', 'manager', 'developer'].includes(user.role)
+    const { data: queues } = useQueues()
 
     // Debounce search input
     useEffect(() => {
@@ -136,31 +143,29 @@ export default function CasesPage() {
     // Reset page when filters change
     useEffect(() => {
         setPage(1)
-    }, [statusFilter, sourceFilter, debouncedSearch])
+    }, [statusFilter, sourceFilter, queueFilter, debouncedSearch])
 
-    // Fetch cases with filters
-    // Note: Role-based visibility is handled by the backend
-    // - Intake specialists only see pre-handoff statuses  
-    // - Case managers see all cases including pending_handoff
     const { data, isLoading, error } = useCases({
         page,
         per_page: perPage,
         status: statusFilter === "all" ? undefined : statusFilter,
         source: sourceFilter === "all" ? undefined : sourceFilter,
         q: debouncedSearch || undefined,
+        queue_id: queueFilter !== "all" ? queueFilter : undefined,
     })
 
     const archiveMutation = useArchiveCase()
     const restoreMutation = useRestoreCase()
     const updateMutation = useUpdateCase()
 
-    const hasActiveFilters = statusFilter !== "all" || sourceFilter !== "all" || searchQuery !== ""
+    const hasActiveFilters = statusFilter !== "all" || sourceFilter !== "all" || queueFilter !== "all" || searchQuery !== ""
 
     const resetFilters = useCallback(() => {
         setStatusFilter("all")
         setSourceFilter("all")
+        setQueueFilter("all")
         setSearchQuery("")
-        setSelectedCases(new Set()) // Clear selection on filter reset
+        setSelectedCases(new Set())
     }, [])
 
     // Multi-select handlers
@@ -256,6 +261,22 @@ export default function CasesPage() {
                         customRange={customRange}
                         onCustomRangeChange={setCustomRange}
                     />
+
+                    {/* Queue Filter (case_manager+ only) */}
+                    {canSeeQueues && queues && queues.length > 0 && (
+                        <Select value={queueFilter} onValueChange={(value) => setQueueFilter(value || "all")}>
+                            <SelectTrigger className="w-[180px]">
+                                <UsersIcon className="h-4 w-4 mr-2" />
+                                <SelectValue placeholder="All Queues" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Queues</SelectItem>
+                                {queues.map((q) => (
+                                    <SelectItem key={q.id} value={q.id}>{q.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
 
                     <div className="relative ml-auto w-full max-w-sm">
                         <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
