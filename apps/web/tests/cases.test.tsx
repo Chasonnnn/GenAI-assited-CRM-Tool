@@ -21,6 +21,7 @@ const mockUseUpdateCase = vi.fn()
 const mockUseAssignees = vi.fn()
 const mockUseBulkAssign = vi.fn()
 const mockUseBulkArchive = vi.fn()
+const mockUseQueues = vi.fn()
 
 vi.mock('@/lib/hooks/use-cases', () => ({
     useCases: () => mockUseCases(),
@@ -30,6 +31,10 @@ vi.mock('@/lib/hooks/use-cases', () => ({
     useAssignees: () => mockUseAssignees(),
     useBulkAssign: () => mockUseBulkAssign(),
     useBulkArchive: () => mockUseBulkArchive(),
+}))
+
+vi.mock('@/lib/hooks/use-queues', () => ({
+    useQueues: (...args: any[]) => mockUseQueues(...args),
 }))
 
 // Mock Auth
@@ -55,6 +60,7 @@ describe('CasesPage', () => {
         mockUseAssignees.mockReturnValue({ data: [] })
         mockUseBulkAssign.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseBulkArchive.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+        mockUseQueues.mockReturnValue({ data: [] })
     })
 
     it('renders loading state', () => {

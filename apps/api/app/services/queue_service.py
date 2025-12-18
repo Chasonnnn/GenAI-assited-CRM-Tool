@@ -207,7 +207,7 @@ def claim_case(
     # Transfer ownership to user
     case.owner_type = OwnerType.USER.value
     case.owner_id = claimer_user_id
-    # Also update assigned_to for backward compatibility during migration
+    # Keep assigned_to in sync for downstream UI/reporting
     case.assigned_to_user_id = claimer_user_id
     
     # Log activity
