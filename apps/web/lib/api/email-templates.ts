@@ -13,6 +13,7 @@ export interface EmailTemplate {
     subject: string
     body: string
     is_active: boolean
+    current_version: number
     created_at: string
     updated_at: string
 }
@@ -37,6 +38,7 @@ export interface EmailTemplateUpdate {
     subject?: string
     body?: string
     is_active?: boolean
+    expected_version?: number
 }
 
 export interface EmailSendRequest {
@@ -59,6 +61,20 @@ export interface EmailLog {
     status: string
     sent_at: string | null
     error: string | null
+    created_at: string
+}
+
+export interface EmailTemplateVersion {
+    id: string
+    version: number
+    payload: {
+        name: string
+        subject: string
+        body: string
+        is_active: boolean
+    }
+    comment: string | null
+    created_by_user_id: string | null
     created_at: string
 }
 
@@ -85,4 +101,17 @@ export async function deleteTemplate(id: string): Promise<void> {
 
 export async function sendEmail(data: EmailSendRequest): Promise<EmailLog> {
     return api.post<EmailLog>('/email-templates/send', data)
+}
+
+// ============================================================================
+// Version History API
+// ============================================================================
+
+export async function getTemplateVersions(id: string): Promise<EmailTemplateVersion[]> {
+    const response = await api.get<{ versions: EmailTemplateVersion[] }>(`/email-templates/${id}/versions`)
+    return response.versions
+}
+
+export async function rollbackTemplate(id: string, version: number): Promise<EmailTemplate> {
+    return api.post<EmailTemplate>(`/email-templates/${id}/rollback`, { target_version: version })
 }
