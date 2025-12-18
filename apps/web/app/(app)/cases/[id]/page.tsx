@@ -146,7 +146,6 @@ export default function CaseDetailPage() {
     const [zoomDialogOpen, setZoomDialogOpen] = React.useState(false)
     const [zoomTopic, setZoomTopic] = React.useState("")
     const [zoomDuration, setZoomDuration] = React.useState(30)
-    const [zoomCreateTask, setZoomCreateTask] = React.useState(true)
 
     // Fetch data
     const { data: caseData, isLoading, error } = useCase(id)
@@ -843,14 +842,6 @@ export default function CaseDetailPage() {
                                 <option value={90}>1.5 hours</option>
                             </select>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <Checkbox
-                                id="zoom-task"
-                                checked={zoomCreateTask}
-                                onCheckedChange={(checked) => setZoomCreateTask(checked === true)}
-                            />
-                            <Label htmlFor="zoom-task">Create follow-up task</Label>
-                        </div>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setZoomDialogOpen(false)}>
@@ -864,7 +855,7 @@ export default function CaseDetailPage() {
                                         entity_id: id,
                                         topic: zoomTopic,
                                         duration: zoomDuration,
-                                        create_task: zoomCreateTask,
+                                        create_task: true, // Always create task
                                         contact_name: caseData?.full_name,
                                     })
                                     setZoomDialogOpen(false)

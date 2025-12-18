@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import CaseDetailPage from '../app/(app)/cases/[id]/page'
 
 const mockPush = vi.fn()
+const mockCreateZoomMeeting = vi.fn()
 
 vi.mock('next/navigation', () => ({
     useParams: () => ({ id: 'c1' }),
@@ -15,6 +16,11 @@ vi.mock('@/lib/auth-context', () => ({
 
 vi.mock('@/components/rich-text-editor', () => ({
     RichTextEditor: () => <div data-testid="rich-text-editor" />,
+}))
+
+vi.mock('@/lib/hooks/use-user-integrations', () => ({
+    useZoomStatus: () => ({ data: { connected: false, account_email: null } }),
+    useCreateZoomMeeting: () => ({ mutateAsync: mockCreateZoomMeeting, isPending: false }),
 }))
 
 const mockUseQueues = vi.fn()
