@@ -53,6 +53,12 @@ class Organization(Base):
         server_default=text("false"),
         nullable=False
     )
+    # Version control
+    current_version: Mapped[int] = mapped_column(
+        default=1,
+        server_default=text("1"),
+        nullable=False
+    )
     
     # Relationships
     memberships: Mapped[list["Membership"]] = relationship(
@@ -1514,6 +1520,12 @@ class UserIntegration(Base):
     account_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    # Version control
+    current_version: Mapped[int] = mapped_column(
+        default=1,
+        server_default=text("1"),
+        nullable=False
+    )
     
     # Relationships
     user: Mapped["User"] = relationship()
