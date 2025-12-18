@@ -130,6 +130,9 @@ class Membership(Base):
     Constraint: UNIQUE(user_id) enforces ONE organization per user.
     """
     __tablename__ = "memberships"
+    __table_args__ = (
+        Index("idx_memberships_org_id", "organization_id"),
+    )
     
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), 
@@ -165,6 +168,7 @@ class AuthIdentity(Base):
     __tablename__ = "auth_identities"
     __table_args__ = (
         UniqueConstraint("provider", "provider_subject", name="uq_auth_identity"),
+        Index("idx_auth_identities_user_id", "user_id"),
     )
     
     id: Mapped[uuid.UUID] = mapped_column(
@@ -203,6 +207,7 @@ class OrgInvite(Base):
             unique=True, 
             postgresql_where=text("accepted_at IS NULL")
         ),
+        Index("idx_org_invites_org_id", "organization_id"),
     )
     
     id: Mapped[uuid.UUID] = mapped_column(
@@ -263,6 +268,16 @@ class Case(Base):
             "idx_cases_org_active",
             "organization_id",
             postgresql_where=text("is_archived = FALSE")
+        ),
+        Index(
+            "idx_cases_meta_ad",
+            "organization_id", "meta_ad_id",
+            postgresql_where=text("meta_ad_id IS NOT NULL")
+        ),
+        Index(
+            "idx_cases_meta_form",
+            "organization_id", "meta_form_id",
+            postgresql_where=text("meta_form_id IS NOT NULL")
         ),
     )
     
@@ -559,6 +574,7 @@ class MetaLead(Base):
     __tablename__ = "meta_leads"
     __table_args__ = (
         UniqueConstraint("organization_id", "meta_lead_id", name="uq_meta_lead"),
+        Index("idx_meta_leads_status", "organization_id", "status"),
         Index(
             "idx_meta_unconverted",
             "organization_id",
@@ -689,6 +705,12 @@ class Job(Base):
     __table_args__ = (
         Index("idx_jobs_pending", "status", "run_at", postgresql_where=text("status = 'pending'")),
         Index("idx_jobs_org", "organization_id", "created_at"),
+        Index(
+            "uq_job_idempotency",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
     )
     
     id: Mapped[uuid.UUID] = mapped_column(
