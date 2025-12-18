@@ -4,9 +4,19 @@ import IntegrationsPage from '../app/(app)/settings/integrations/page'
 
 const mockRefetch = vi.fn()
 const mockUseIntegrationHealth = vi.fn()
+const mockConnectZoom = vi.fn()
+const mockConnectGmail = vi.fn()
+const mockDisconnectIntegration = vi.fn()
 
 vi.mock('@/lib/hooks/use-ops', () => ({
     useIntegrationHealth: () => mockUseIntegrationHealth(),
+}))
+
+vi.mock('@/lib/hooks/use-user-integrations', () => ({
+    useUserIntegrations: () => ({ data: [], isLoading: false }),
+    useConnectZoom: () => ({ mutate: mockConnectZoom, isPending: false }),
+    useConnectGmail: () => ({ mutate: mockConnectGmail, isPending: false }),
+    useDisconnectIntegration: () => ({ mutate: mockDisconnectIntegration, isPending: false }),
 }))
 
 describe('IntegrationsPage', () => {
@@ -31,6 +41,9 @@ describe('IntegrationsPage', () => {
         })
 
         mockRefetch.mockReset()
+        mockConnectZoom.mockReset()
+        mockConnectGmail.mockReset()
+        mockDisconnectIntegration.mockReset()
     })
 
     it('renders integration health and can refresh', () => {
