@@ -373,15 +373,8 @@ class Case(Base):
     
     # Ownership (Salesforce-style single owner model)
     # owner_type="user" + owner_id=user_id, or owner_type="queue" + owner_id=queue_id
-    # Nullable during migration; will be NOT NULL after backfill
-    owner_type: Mapped[str | None] = mapped_column(
-        String(10),
-        nullable=True  # Will be NOT NULL after migration backfill
-    )
-    owner_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        nullable=True  # Will be NOT NULL after migration backfill
-    )
+    owner_type: Mapped[str] = mapped_column(String(10), nullable=False)
+    owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

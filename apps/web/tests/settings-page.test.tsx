@@ -2,6 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import SettingsPage from '../app/(app)/settings/page'
 
+const mockReplace = vi.fn()
+
+vi.mock('next/navigation', () => ({
+    useRouter: () => ({ replace: mockReplace }),
+    useSearchParams: () => new URLSearchParams(),
+}))
+
 const mockUpdateNotificationSettings = vi.fn()
 const mockRollbackPipeline = vi.fn()
 const mockRollbackTemplate = vi.fn()
@@ -137,4 +144,3 @@ describe('SettingsPage', () => {
         expect(screen.getByTestId('version-history-modal')).toHaveTextContent('pipeline:Default Pipeline')
     })
 })
-

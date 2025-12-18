@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from app.db.models import Queue, Case, CaseActivityLog
-from app.db.enums import OwnerType, Role
+from app.db.enums import OwnerType
 
 
 class QueueServiceError(Exception):
@@ -37,6 +37,9 @@ class CaseNotInQueueError(QueueServiceError):
 class DuplicateQueueNameError(QueueServiceError):
     """Queue name already exists in org."""
     pass
+
+
+DEFAULT_QUEUE_NAME = "Unassigned"
 
 
 # =============================================================================
@@ -121,6 +124,49 @@ def delete_queue(db: Session, org_id: UUID, queue_id: UUID) -> None:
         raise QueueNotFoundError(f"Queue {queue_id} not found")
     queue.is_active = False
     db.flush()
+
+
+def get_or_create_default_queue(db: Session, org_id: UUID) -> Queue:
+    """
+    Get the system default queue for an org, creating it if missing.
+
+    This is used for system-created/unassigned cases so every case always has an owner.
+    """
+    queue = db.execute(
+        select(Queue).where(
+            and_(
+                Queue.organization_id == org_id,
+                Queue.name == DEFAULT_QUEUE_NAME,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if queue:
+        if not queue.is_active:
+            queue.is_active = True
+            db.flush()
+        return queue
+
+    try:
+        return create_queue(
+            db=db,
+            org_id=org_id,
+            name=DEFAULT_QUEUE_NAME,
+            description="System default queue",
+        )
+    except DuplicateQueueNameError:
+        # Race condition: another transaction created it
+        queue = db.execute(
+            select(Queue).where(
+                and_(
+                    Queue.organization_id == org_id,
+                    Queue.name == DEFAULT_QUEUE_NAME,
+                )
+            )
+        ).scalar_one_or_none()
+        if queue:
+            return queue
+        raise
 
 
 # =============================================================================

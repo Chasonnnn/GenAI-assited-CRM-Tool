@@ -50,11 +50,26 @@ def create_case(
     Phone and state are validated in schema layer.
     """
     from app.services import activity_service
+    from app.db.enums import OwnerType
+    from app.services import queue_service
+
+    if user_id:
+        owner_type = OwnerType.USER.value
+        owner_id = user_id
+        assigned_to_user_id = user_id
+    else:
+        default_queue = queue_service.get_or_create_default_queue(db, org_id)
+        owner_type = OwnerType.QUEUE.value
+        owner_id = default_queue.id
+        assigned_to_user_id = None
     
     case = Case(
         case_number=generate_case_number(db, org_id),
         organization_id=org_id,
         created_by_user_id=user_id,
+        owner_type=owner_type,
+        owner_id=owner_id,
+        assigned_to_user_id=assigned_to_user_id,
         status=CaseStatus.NEW_UNREAD.value,
         source=data.source.value,
         full_name=normalize_name(data.full_name),
@@ -649,23 +664,16 @@ def list_cases(
         query = query.filter(Case.owner_id == queue_id)
         query = query.filter(Case.owner_type == OwnerType.QUEUE.value)
     
-    # Role-based visibility filter (dual: owner-based + status fallback)
+    # Role-based visibility filter (ownership-based)
     if role_filter == Role.INTAKE_SPECIALIST.value or role_filter == Role.INTAKE_SPECIALIST:
-        # Intake specialists see:
-        # 1. Cases they own (owner_type=user, owner_id=user_id)
-        # 2. OR cases with null owner_type that are in INTAKE_VISIBLE statuses (backward compat)
+        # Intake specialists only see their owned cases.
         if user_id:
             query = query.filter(
-                or_(
-                    # Owner-based: cases they own
-                    (Case.owner_type == OwnerType.USER.value) & (Case.owner_id == user_id),
-                    # Backward compat: null owner_type + intake-visible status
-                    (Case.owner_type.is_(None)) & (~Case.status.in_(CaseStatus.case_manager_only()))
-                )
+                (Case.owner_type == OwnerType.USER.value) & (Case.owner_id == user_id)
             )
         else:
-            # Fallback to status-based only
-            query = query.filter(~Case.status.in_(CaseStatus.case_manager_only()))
+            # No user_id → no owned cases
+            query = query.filter(Case.id.is_(None))
     
     # Status filter
     if status:
