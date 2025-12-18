@@ -126,6 +126,10 @@ app.include_router(pipelines.router)
 from app.routers import admin_versions
 app.include_router(admin_versions.router)
 
+# Metadata API (Picklists - any authenticated user)
+from app.routers import metadata
+app.include_router(metadata.router, prefix="/metadata", tags=["metadata"])
+
 # WebSocket for real-time notifications
 from app.routers import websocket as ws_router
 app.include_router(ws_router.router)
