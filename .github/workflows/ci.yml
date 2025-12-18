@@ -47,10 +47,13 @@ jobs:
           pip install -r requirements.txt
           pip install -r test-requirements.txt
       
+      - name: Create CITEXT extension
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d crm_test -c "CREATE EXTENSION IF NOT EXISTS citext;"
+      
       - name: Run migrations
         working-directory: apps/api
         run: alembic upgrade head
-        continue-on-error: true
       
       - name: Run tests
         working-directory: apps/api
