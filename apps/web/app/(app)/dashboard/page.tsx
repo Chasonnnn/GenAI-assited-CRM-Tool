@@ -15,7 +15,7 @@ import {
   LoaderIcon,
 } from "lucide-react"
 import { useState } from "react"
-import { Area, AreaChart, Bar, BarChart, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { useCaseStats } from "@/lib/hooks/use-cases"
 import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-tasks"
@@ -276,34 +276,34 @@ export default function DashboardPage() {
                 config={{
                   cases: {
                     label: "Cases",
-                    color: "hsl(var(--chart-1))",
+                    color: "var(--chart-1)",
                   },
                 }}
                 className="h-[280px] w-full"
               >
-                <AreaChart data={chartTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorCases" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0.05} />
-                    </linearGradient>
-                  </defs>
+                <AreaChart
+                  accessibilityLayer
+                  data={chartTrendData}
+                  margin={{ left: 12, right: 12 }}
+                >
+                  <CartesianGrid vertical={false} />
                   <XAxis
                     dataKey="date"
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={12}
                     tickLine={false}
                     axisLine={false}
+                    tickMargin={8}
                   />
-                  <YAxis hide />
-                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <ChartTooltip
+                    cursor={false}
+                    content={<ChartTooltipContent indicator="line" />}
+                  />
                   <Area
-                    type="monotone"
                     dataKey="cases"
-                    stroke="hsl(var(--chart-1))"
+                    type="natural"
+                    fill="var(--color-cases)"
+                    fillOpacity={0.4}
+                    stroke="var(--color-cases)"
                     strokeWidth={2}
-                    fillOpacity={1}
-                    fill="url(#colorCases)"
                   />
                 </AreaChart>
               </ChartContainer>
@@ -331,27 +331,34 @@ export default function DashboardPage() {
                 config={{
                   count: {
                     label: "Cases",
-                    color: "hsl(var(--chart-2))",
+                    color: "var(--chart-2)",
                   },
                 }}
                 className="h-[280px] w-full"
               >
-                <BarChart data={chartStatusData} layout="vertical" margin={{ top: 10, right: 10, left: 80, bottom: 0 }}>
-                  <XAxis type="number" hide />
+                <BarChart
+                  accessibilityLayer
+                  data={chartStatusData}
+                  layout="vertical"
+                  margin={{ left: 80, right: 12 }}
+                >
+                  <CartesianGrid horizontal={false} />
+                  <XAxis type="number" tickLine={false} axisLine={false} />
                   <YAxis
                     type="category"
                     dataKey="status"
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={12}
                     tickLine={false}
                     axisLine={false}
                     width={75}
                   />
-                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <ChartTooltip
+                    cursor={false}
+                    content={<ChartTooltipContent indicator="dashed" />}
+                  />
                   <Bar
                     dataKey="count"
-                    fill="hsl(var(--chart-2))"
-                    radius={[0, 4, 4, 0]}
+                    fill="var(--color-count)"
+                    radius={4}
                   />
                 </BarChart>
               </ChartContainer>
