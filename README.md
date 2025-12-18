@@ -1,6 +1,6 @@
 # Surrogacy CRM Platform
 
-**Version:** 0.06.07 | **Format:** a.bc.de (major.feature.patch)
+**Version:** 0.06.08 | **Format:** a.bc.de (major.feature.patch)
 
 A modern, multi-tenant CRM and case management platform built for surrogacy agencies. Features lead pipeline management, intended parent profiles, case workflow tracking, AI-assisted insights, and enterprise audit/versioning.
 
