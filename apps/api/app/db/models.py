@@ -673,7 +673,7 @@ class MetaLead(Base):
     )
     converted_case_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("cases.id", ondelete="SET NULL"),
+        ForeignKey("cases.id", ondelete="SET NULL", use_alter=True),
         nullable=True
     )
     conversion_error: Mapped[str | None] = mapped_column(Text, nullable=True)
