@@ -9,6 +9,8 @@ export interface PipelineStage {
     status: string;
     label: string;
     color: string;
+    order: number;
+    visible: boolean;
 }
 
 export interface Pipeline {

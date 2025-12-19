@@ -134,13 +134,5 @@ describe('SettingsPage', () => {
         expect(mockUpdateNotificationSettings).toHaveBeenCalledWith({ case_assigned: false })
     })
 
-    it('opens pipeline version history modal', () => {
-        mockSearchParams = new URLSearchParams('tab=pipelines')
-        render(<SettingsPage />)
-
-        expect(screen.getByText('Default Pipeline')).toBeInTheDocument()
-        fireEvent.click(screen.getByRole('button', { name: /history/i }))
-
-        expect(screen.getByTestId('version-history-modal')).toHaveTextContent('pipeline:Default Pipeline')
-    })
+    // Note: Pipeline version history test removed - pipelines moved to dedicated /settings/pipelines page
 })
