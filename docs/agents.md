@@ -365,6 +365,18 @@ While coding:
 - Do not introduce new libraries unless necessary.
 - Do not refactor unrelated code in feature PRs.
 - Preserve multi-tenant and permission rules.
+- **CRITICAL - Zero Tolerance for Warnings/Bugs:**
+  - When you encounter ANY warnings, bugs, or issues during development, **FIX THEM IMMEDIATELY**
+  - **DO NOT** leave them for later or add TODO comments
+  - **DO NOT** proceed to the next task until all warnings are resolved
+  - Examples of issues to fix immediately:
+    - ❌ Build warnings (TypeScript errors, lint errors, deprecations)
+    - ❌ Test failures
+    - ❌ Runtime warnings (React hooks, Next.js warnings, etc.)
+    - ❌ Performance issues (N+1 queries, memory leaks)
+    - ❌ Security vulnerabilities
+    - ❌ Configuration warnings (Turbopack, dependencies, etc.)
+  - Rationale: Leaving warnings creates technical debt that compounds over time, makes debugging harder, and can cause production issues.
 
 Before finishing:
 - Run formatting + lint + tests.
