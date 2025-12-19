@@ -28,8 +28,8 @@ def create_csv_content(rows: list[dict]) -> bytes:
 async def test_preview_import_success(authed_client: AsyncClient, test_org):
     """Test CSV preview with valid data."""
     csv_data = create_csv_content([
-        {"full_name": "John Doe", "email": "[email protected]", "phone": "5551234567"},
-        {"full_name": "Jane Smith", "email": "[email protected]", "phone": "5559876543"},
+        {"full_name": "John Doe", "email": "john@test.com", "phone": "5551234567"},
+        {"full_name": "Jane Smith", "email": "jane@test.com", "phone": "5559876543"},
     ])
     
     response = await authed_client.post(
@@ -68,8 +68,8 @@ async def test_preview_import_detects_duplicates_in_db(authed_client: AsyncClien
     
     # Upload CSV with duplicate email
     csv_data = create_csv_content([
-        {"full_name": "John Doe", "email": "[email protected]"},
-        {"full_name": "Jane Smith", "email": "[email protected]"},
+        {"full_name": "John Doe", "email": "john@test.com"},
+        {"full_name": "Jane Smith", "email": "jane@test.com"},
     ])
     
     response = await authed_client.post(
@@ -86,9 +86,9 @@ async def test_preview_import_detects_duplicates_in_db(authed_client: AsyncClien
 async def test_preview_import_detects_duplicates_in_csv(authed_client: AsyncClient):
     """Test preview detects duplicate emails within CSV."""
     csv_data = create_csv_content([
-        {"full_name": "John Doe", "email": "[email protected]"},
-        {"full_name": "John Duplicate", "email": "[email protected]"},
-        {"full_name": "Jane Smith", "email": "[email protected]"},
+        {"full_name": "John Doe", "email": "john@test.com"},
+        {"full_name": "John Duplicate", "email": "duplicate@test.com"},
+        {"full_name": "Jane Smith", "email": "jane@test.com"},
     ])
     
     response = await authed_client.post(
@@ -105,7 +105,7 @@ async def test_preview_import_detects_duplicates_in_csv(authed_client: AsyncClie
 async def test_preview_import_detects_unmapped_columns(authed_client: AsyncClient):
     """Test preview identifies unmapped columns."""
     csv_data = create_csv_content([
-        {"full_name": "John Doe", "email": "[email protected]", "unknown_field": "value"},
+        {"full_name": "John Doe", "email": "john@test.com", "unknown_field": "value"},
     ])
     
     response = await authed_client.post(
@@ -133,7 +133,7 @@ async def test_preview_import_rejects_non_csv(authed_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_preview_import_without_auth_fails(client: AsyncClient):
     """Test unauthenticated preview request fails."""
-    csv_data = create_csv_content([{"email": "[email protected]"}])
+    csv_data = create_csv_content([{"email": "alice@test.com"}])
     
     response = await client.post(
         "/cases/import/preview",
@@ -150,8 +150,8 @@ async def test_execute_import_success(authed_client: AsyncClient, db, test_org):
     from app.db.models import Case, CaseImport
     
     csv_data = create_csv_content([
-        {"full_name": "Alice Johnson", "email": "[email protected]", "phone": "5551111111"},
-        {"full_name": "Bob Wilson", "email": "[email protected]", "phone": "5552222222"},
+        {"full_name": "Alice Johnson", "email": "alice@test.com", "phone": "5551111111"},
+        {"full_name": "Bob Wilson", "email": "bob@test.com", "phone": "5552222222"},
     ])
     
     response = await authed_client.post(
@@ -164,13 +164,32 @@ async def test_execute_import_success(authed_client: AsyncClient, db, test_org):
     assert "import_id" in data
     assert "message" in data
     
+    # Refresh session to see committed data
+    db.expire_all()
+    
+    # DEBUG: Check import record for errors
+    import_record_debug = db.query(CaseImport).filter(
+        CaseImport.id == uuid.UUID(data["import_id"])
+    ).first()
+    if import_record_debug:
+        print(f"\n🔍 DEBUG Import Record:")
+        print(f"  Status: {import_record_debug.status}")
+        print(f"  Imported: {import_record_debug.imported_count}")
+        print(f"  Skipped: {import_record_debug.skipped_count}")
+        print(f"  Errors: {import_record_debug.error_count}")
+        if import_record_debug.errors:
+            print(f"  Error details:")
+            for err in import_record_debug.errors:
+                print(f"    Row {err.get('row', '?')}: {err.get('errors', err)}")
+    
     # Verify cases created
     cases = db.query(Case).filter(Case.organization_id == test_org.id).all()
+    print(f"🔍 DEBUG: Found {len(cases)} cases in database")
     assert len(cases) == 2
     
     emails = {c.email for c in cases}
-    assert "[email protected]" in emails
-    assert "[email protected]" in emails
+    assert "alice@test.com" in emails
+    assert "alice@test.com" in emails
     
     # Verify import record created
     import_record = db.query(CaseImport).filter(
@@ -213,10 +232,10 @@ async def test_execute_import_skips_duplicates(authed_client: AsyncClient, db, t
     # Should only create the new case
     cases = db.query(Case).filter(
         Case.organization_id == test_org.id,
-        Case.email != "[email protected]"
+        Case.email != "alice@test.com"
     ).all()
     assert len(cases) == 1
-    assert cases[0].email == "[email protected]"
+    assert cases[0].email == "alice@test.com"
 
 
 @pytest.mark.asyncio
@@ -225,7 +244,7 @@ async def test_execute_import_handles_validation_errors(authed_client: AsyncClie
     from app.db.models import CaseImport
     
     csv_data = create_csv_content([
-        {"full_name": "Valid User", "email": "[email protected]"},
+        {"full_name": "Valid User", "email": "alice@test.com"},
         {"full_name": "", "email": "invalid-email"},  # Invalid
     ])
     
@@ -367,7 +386,7 @@ async def test_imports_org_isolation(authed_client: AsyncClient, db, test_user):
 @pytest.mark.asyncio
 async def test_execute_import_requires_csrf(authed_client: AsyncClient):
     """Test import execution requires CSRF header."""
-    csv_data = create_csv_content([{"email": "[email protected]"}])
+    csv_data = create_csv_content([{"email": "alice@test.com"}])
     
     # Remove CSRF header (create new client without it)
     from httpx import AsyncClient, ASGITransport
