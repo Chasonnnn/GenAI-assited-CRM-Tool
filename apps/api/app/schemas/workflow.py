@@ -22,10 +22,21 @@ from app.db.enums import (
 # =============================================================================
 
 ALLOWED_CONDITION_FIELDS = {
-    "status", "source", "is_priority", "state",
-    "owner_type", "owner_id", "email", "phone",
-    "age", "bmi", "has_child", "is_citizen_or_pr",
-    "is_non_smoker", "has_surrogate_experience",
+    # Basic fields
+    "status", "source", "is_priority", "state", "created_at",
+    # Owner fields  
+    "owner_type", "owner_id",
+    # Contact fields
+    "email", "phone", "full_name",
+    # Demographics
+    "age", "bmi", "date_of_birth", "race",
+    # Eligibility flags
+    "has_child", "is_citizen_or_pr", "is_non_smoker",
+    "has_surrogate_experience", "is_age_eligible",
+    # Physical measurements
+    "height_ft", "weight_lb", "num_deliveries", "num_csections",
+    # Meta tracking
+    "meta_lead_id", "meta_ad_id", "meta_form_id",
 }
 
 ALLOWED_UPDATE_FIELDS = {
