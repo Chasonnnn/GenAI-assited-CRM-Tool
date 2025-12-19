@@ -163,3 +163,20 @@ export function useMetaSpend(params: DateRangeParams = {}) {
     });
 }
 
+interface ActivityFeedParams {
+    limit?: number;
+    offset?: number;
+    activity_type?: string;
+    user_id?: string;
+}
+
+/**
+ * Fetch org-wide activity feed.
+ */
+export function useActivityFeed(params: ActivityFeedParams = {}) {
+    return useQuery({
+        queryKey: [...analyticsKeys.all, 'activity-feed', params] as const,
+        queryFn: () => analyticsApi.getActivityFeed(params),
+        staleTime: 30 * 1000, // 30 seconds - activity feeds need fresher data
+    });
+}

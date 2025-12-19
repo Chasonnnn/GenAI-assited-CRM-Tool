@@ -558,3 +558,96 @@ def get_cases_by_state_compare(
         ad_id
     )
     return {"data": data}
+
+
+# =============================================================================
+# Activity Feed
+# =============================================================================
+
+class ActivityFeedItem(BaseModel):
+    """Single activity item for feed."""
+    id: str
+    activity_type: str
+    case_id: str
+    case_number: str | None
+    case_name: str | None
+    actor_name: str | None
+    details: dict | None
+    created_at: str
+
+
+class ActivityFeedResponse(BaseModel):
+    """Activity feed response."""
+    items: list[ActivityFeedItem]
+    has_more: bool
+
+
+@router.get("/activity-feed", response_model=ActivityFeedResponse)
+def get_activity_feed(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    activity_type: Optional[str] = Query(None, description="Filter by activity type"),
+    user_id: Optional[str] = Query(None, description="Filter by actor user ID"),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> ActivityFeedResponse:
+    """
+    Get org-wide activity feed.
+    
+    Returns recent activities across all cases in the organization.
+    Useful for managers to see what's happening across the team.
+    """
+    from app.db.models import CaseActivityLog, Case, User
+    from sqlalchemy import desc
+    
+    # Build query
+    query = db.query(
+        CaseActivityLog,
+        Case.case_number,
+        Case.full_name.label("case_name"),
+        User.display_name.label("actor_name"),
+    ).join(
+        Case, CaseActivityLog.case_id == Case.id
+    ).outerjoin(
+        User, CaseActivityLog.actor_user_id == User.id
+    ).filter(
+        CaseActivityLog.organization_id == session.org_id
+    )
+    
+    # Apply filters
+    if activity_type:
+        query = query.filter(CaseActivityLog.activity_type == activity_type)
+    
+    if user_id:
+        from uuid import UUID as PyUUID
+        try:
+            query = query.filter(CaseActivityLog.actor_user_id == PyUUID(user_id))
+        except ValueError:
+            pass  # Invalid UUID, ignore filter
+    
+    # Order and paginate
+    query = query.order_by(desc(CaseActivityLog.created_at))
+    total_query = query  # For has_more check
+    query = query.offset(offset).limit(limit + 1)  # +1 to check has_more
+    
+    results = query.all()
+    has_more = len(results) > limit
+    items = results[:limit]
+    
+    return ActivityFeedResponse(
+        items=[
+            ActivityFeedItem(
+                id=str(row.CaseActivityLog.id),
+                activity_type=row.CaseActivityLog.activity_type,
+                case_id=str(row.CaseActivityLog.case_id),
+                case_number=row.case_number,
+                case_name=row.case_name,
+                actor_name=row.actor_name,
+                details=row.CaseActivityLog.details,
+                created_at=row.CaseActivityLog.created_at.isoformat(),
+            )
+            for row in items
+        ],
+        has_more=has_more,
+    )
+
