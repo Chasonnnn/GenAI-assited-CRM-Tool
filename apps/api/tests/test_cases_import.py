@@ -68,7 +68,7 @@ async def test_preview_import_detects_duplicates_in_db(authed_client: AsyncClien
     
     # Upload CSV with duplicate email
     csv_data = create_csv_content([
-        {"full_name": "John Doe", "email": "john@test.com"},
+        {"full_name": "John Doe", "email": "existing@test.com"},
         {"full_name": "Jane Smith", "email": "jane@test.com"},
     ])
     
@@ -87,7 +87,7 @@ async def test_preview_import_detects_duplicates_in_csv(authed_client: AsyncClie
     """Test preview detects duplicate emails within CSV."""
     csv_data = create_csv_content([
         {"full_name": "John Doe", "email": "john@test.com"},
-        {"full_name": "John Duplicate", "email": "duplicate@test.com"},
+        {"full_name": "John Duplicate", "email": "john@test.com"},
         {"full_name": "Jane Smith", "email": "jane@test.com"},
     ])
     
