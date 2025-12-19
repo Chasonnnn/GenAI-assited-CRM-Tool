@@ -21,7 +21,8 @@ class IntendedParentCreate(BaseModel):
     state: str | None = Field(None, max_length=100)
     budget: Decimal | None = Field(None, ge=0, le=9999999999.99)
     notes_internal: str | None = Field(None, max_length=10000)
-    assigned_to_user_id: UUID | None = None
+    owner_type: str | None = None  # "user" or "queue"
+    owner_id: UUID | None = None
 
     @field_validator("phone", mode="before")
     @classmethod
@@ -42,7 +43,8 @@ class IntendedParentUpdate(BaseModel):
     state: str | None = Field(None, max_length=100)
     budget: Decimal | None = Field(None, ge=0, le=9999999999.99)
     notes_internal: str | None = Field(None, max_length=10000)
-    assigned_to_user_id: UUID | None = None
+    owner_type: str | None = None
+    owner_id: UUID | None = None
 
     @field_validator("phone", mode="before")
     @classmethod
@@ -78,7 +80,9 @@ class IntendedParentRead(BaseModel):
     budget: Decimal | None
     notes_internal: str | None
     status: str
-    assigned_to_user_id: UUID | None
+    owner_type: str | None
+    owner_id: UUID | None
+    owner_name: str | None = None  # Resolved from user/queue
     is_archived: bool
     archived_at: datetime | None
     last_activity: datetime
@@ -97,7 +101,9 @@ class IntendedParentListItem(BaseModel):
     state: str | None
     budget: Decimal | None
     status: str
-    assigned_to_user_id: UUID | None
+    owner_type: str | None
+    owner_id: UUID | None
+    owner_name: str | None = None
     is_archived: bool
     last_activity: datetime
     created_at: datetime
@@ -123,3 +129,4 @@ class IntendedParentStats(BaseModel):
     """IP counts by status."""
     total: int
     by_status: dict[str, int]
+

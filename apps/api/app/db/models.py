@@ -941,6 +941,7 @@ class IntendedParent(Base):
     __table_args__ = (
         Index("idx_ip_org_status", "organization_id", "status"),
         Index("idx_ip_org_created", "organization_id", "created_at"),
+        Index("idx_ip_org_owner", "organization_id", "owner_type", "owner_id"),
         # Partial unique index: unique email per org for non-archived records
         Index(
             "uq_ip_email_active",
@@ -981,9 +982,14 @@ class IntendedParent(Base):
         server_default=text(f"'{DEFAULT_IP_STATUS.value}'"),
         nullable=False
     )
-    assigned_to_user_id: Mapped[uuid.UUID | None] = mapped_column(
+    
+    # Owner model (user or queue)
+    owner_type: Mapped[str | None] = mapped_column(
+        String(10),
+        nullable=True
+    )
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True
     )
     
@@ -1014,7 +1020,6 @@ class IntendedParent(Base):
     
     # Relationships
     organization: Mapped["Organization"] = relationship()
-    assigned_to: Mapped["User | None"] = relationship()
     status_history: Mapped[list["IntendedParentStatusHistory"]] = relationship(
         back_populates="intended_parent",
         cascade="all, delete-orphan"

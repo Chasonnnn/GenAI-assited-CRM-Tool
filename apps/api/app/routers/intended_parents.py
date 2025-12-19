@@ -34,7 +34,7 @@ def list_intended_parents(
     budget_min: Decimal | None = None,
     budget_max: Decimal | None = None,
     q: str | None = Query(None, description="Search name/email/phone"),
-    assigned_to: UUID | None = None,
+    owner_id: UUID | None = None,
     include_archived: bool = False,
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
@@ -50,7 +50,7 @@ def list_intended_parents(
         budget_min=budget_min,
         budget_max=budget_max,
         q=q,
-        assigned_to=assigned_to,
+        owner_id=owner_id,
         include_archived=include_archived,
         page=page,
         per_page=per_page,
@@ -103,7 +103,8 @@ def create_intended_parent(
         state=data.state,
         budget=data.budget,
         notes_internal=data.notes_internal,
-        assigned_to_user_id=data.assigned_to_user_id,
+        owner_type=data.owner_type,
+        owner_id=data.owner_id,
     )
     return ip
 
@@ -152,7 +153,8 @@ def update_intended_parent(
         state=data.state,
         budget=data.budget,
         notes_internal=data.notes_internal,
-        assigned_to_user_id=data.assigned_to_user_id,
+        owner_type=data.owner_type,
+        owner_id=data.owner_id,
     )
     return updated
 

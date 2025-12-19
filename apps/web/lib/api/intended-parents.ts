@@ -24,7 +24,7 @@ export interface IntendedParentFilters {
     budget_min?: number
     budget_max?: number
     q?: string
-    assigned_to?: string
+    owner_id?: string
     include_archived?: boolean
     page?: number
     per_page?: number
@@ -43,7 +43,7 @@ export async function listIntendedParents(
     if (filters.budget_min !== undefined) params.set('budget_min', String(filters.budget_min))
     if (filters.budget_max !== undefined) params.set('budget_max', String(filters.budget_max))
     if (filters.q) params.set('q', filters.q)
-    if (filters.assigned_to) params.set('assigned_to', filters.assigned_to)
+    if (filters.owner_id) params.set('owner_id', filters.owner_id)
     if (filters.include_archived) params.set('include_archived', 'true')
     if (filters.page) params.set('page', String(filters.page))
     if (filters.per_page) params.set('per_page', String(filters.per_page))
