@@ -246,3 +246,27 @@ def log_note_deleted(
             "preview": content_preview[:200] if content_preview else "",
         },
     )
+
+
+def log_email_sent(
+    db: Session,
+    case_id: UUID,
+    organization_id: UUID,
+    actor_user_id: UUID,
+    email_log_id: UUID,
+    subject: str,
+    provider: str,
+) -> CaseActivityLog:
+    """Log email sent to case contact."""
+    return log_activity(
+        db=db,
+        case_id=case_id,
+        organization_id=organization_id,
+        activity_type=CaseActivityType.EMAIL_SENT,
+        actor_user_id=actor_user_id,
+        details={
+            "email_log_id": str(email_log_id),
+            "subject": subject,
+            "provider": provider,
+        },
+    )

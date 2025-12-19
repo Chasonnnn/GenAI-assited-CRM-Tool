@@ -113,6 +113,7 @@ class CaseActivityType(str, Enum):
     HANDOFF_DENIED = "handoff_denied"
     NOTE_ADDED = "note_added"
     NOTE_DELETED = "note_deleted"
+    EMAIL_SENT = "email_sent"  # Email sent to case contact
 
 
 class NotificationType(str, Enum):

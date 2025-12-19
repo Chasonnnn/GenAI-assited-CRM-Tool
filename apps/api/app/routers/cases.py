@@ -529,6 +529,209 @@ def get_case(
     return _case_to_read(case, db)
 
 
+# =============================================================================
+# Email Sending
+# =============================================================================
+
+class SendEmailRequest(BaseModel):
+    """Request to send email to case contact."""
+    template_id: UUID
+    provider: str = "auto"  # "gmail", "resend", or "auto" (gmail first, then resend)
+    
+class SendEmailResponse(BaseModel):
+    """Response after sending email."""
+    success: bool
+    email_log_id: UUID | None = None
+    message_id: str | None = None
+    provider_used: str | None = None
+    error: str | None = None
+
+
+@router.post("/{case_id}/send-email", response_model=SendEmailResponse, dependencies=[Depends(require_csrf_header)])
+async def send_case_email(
+    case_id: UUID,
+    data: SendEmailRequest,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """
+    Send email to case contact using template.
+    
+    Provider options:
+    - "auto": Try Gmail first (if connected), fall back to Resend
+    - "gmail": Use user's connected Gmail (fails if not connected)
+    - "resend": Use Resend API (fails if not configured)
+    
+    The email is logged and linked to the case activity.
+    """
+    from app.services import email_service, gmail_service, oauth_service, activity_service
+    from datetime import datetime
+    import os
+    
+    # Get case
+    case = case_service.get_case(db, session.org_id, case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    
+    # Access control
+    check_case_access(case, session.role, session.user_id)
+    
+    if not case.email:
+        raise HTTPException(status_code=400, detail="Case has no email address")
+    
+    # Get template
+    template = email_service.get_template(db, data.template_id, session.org_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Email template not found")
+    
+    # Prepare variables for template rendering
+    variables = {
+        "full_name": case.full_name or "",
+        "case_number": case.case_number or "",
+        "status": case.status.value if hasattr(case.status, 'value') else str(case.status) if case.status else "",
+        "email": case.email or "",
+        "phone": case.phone or "",
+        "state": case.state or "",
+    }
+    
+    # Render template
+    subject, body = email_service.render_template(template.subject, template.body, variables)
+    
+    # Determine provider
+    provider = data.provider
+    gmail_connected = oauth_service.get_user_integration(db, session.user_id, "gmail") is not None
+    resend_configured = bool(os.getenv("RESEND_API_KEY"))
+    
+    use_gmail = False
+    use_resend = False
+    
+    if provider == "gmail":
+        if not gmail_connected:
+            return SendEmailResponse(
+                success=False,
+                error="Gmail not connected. Connect Gmail in Settings > Integrations."
+            )
+        use_gmail = True
+    elif provider == "resend":
+        if not resend_configured:
+            return SendEmailResponse(
+                success=False,
+                error="Resend not configured. Contact administrator."
+            )
+        use_resend = True
+    else:  # auto
+        if gmail_connected:
+            use_gmail = True
+        elif resend_configured:
+            use_resend = True
+        else:
+            return SendEmailResponse(
+                success=False,
+                error="No email provider available. Connect Gmail in Settings."
+            )
+    
+    # Create email log first
+    from app.db.models import EmailLog
+    from app.db.enums import EmailStatus
+    
+    email_log = EmailLog(
+        organization_id=session.org_id,
+        template_id=data.template_id,
+        case_id=case_id,
+        recipient_email=case.email,
+        subject=subject,
+        body=body,
+        status=EmailStatus.PENDING.value,
+    )
+    db.add(email_log)
+    db.commit()
+    db.refresh(email_log)
+    
+    # Send email
+    if use_gmail:
+        result = await gmail_service.send_email(
+            db=db,
+            user_id=str(session.user_id),
+            to=case.email,
+            subject=subject,
+            body=body,
+            html=True,  # Templates are typically HTML
+        )
+        
+        if result.get("success"):
+            email_log.status = EmailStatus.SENT.value
+            email_log.sent_at = datetime.utcnow()
+            email_log.external_id = result.get("message_id")
+            db.commit()
+            
+            # Log activity
+            activity_service.log_email_sent(
+                db=db,
+                case_id=case_id,
+                organization_id=session.org_id,
+                actor_user_id=session.user_id,
+                email_log_id=email_log.id,
+                subject=subject,
+                provider="gmail",
+            )
+            
+            return SendEmailResponse(
+                success=True,
+                email_log_id=email_log.id,
+                message_id=result.get("message_id"),
+                provider_used="gmail",
+            )
+        else:
+            email_log.status = EmailStatus.FAILED.value
+            email_log.error = result.get("error")
+            db.commit()
+            
+            return SendEmailResponse(
+                success=False,
+                email_log_id=email_log.id,
+                error=result.get("error"),
+            )
+    
+    elif use_resend:
+        # Queue via existing email service (uses job queue)
+        try:
+            result = email_service.send_email(
+                db=db,
+                org_id=session.org_id,
+                template_id=data.template_id,
+                recipient_email=case.email,
+                subject=subject,
+                body=body,
+                case_id=case_id,
+            )
+            
+            if result:
+                log, job = result
+                
+                # Log activity
+                activity_service.log_email_sent(
+                    db=db,
+                    case_id=case_id,
+                    organization_id=session.org_id,
+                    actor_user_id=session.user_id,
+                    email_log_id=log.id,
+                    subject=subject,
+                    provider="resend",
+                )
+                
+                return SendEmailResponse(
+                    success=True,
+                    email_log_id=log.id,
+                    provider_used="resend",
+                )
+            else:
+                return SendEmailResponse(success=False, error="Failed to queue email")
+        except Exception as e:
+            return SendEmailResponse(success=False, error=str(e))
+    
+    return SendEmailResponse(success=False, error="No provider selected")
+
+
 @router.patch("/{case_id}", response_model=CaseRead, dependencies=[Depends(require_csrf_header)])
 def update_case(
     case_id: UUID,
