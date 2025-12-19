@@ -244,6 +244,21 @@ async def gmail_callback(
         return error
 
 
+@router.get("/gmail/status")
+def gmail_connection_status(
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+) -> dict[str, Any]:
+    """Check if current user has Gmail connected."""
+    integration = oauth_service.get_user_integration(db, session.user_id, "gmail")
+    
+    return {
+        "connected": integration is not None,
+        "account_email": integration.account_email if integration else None,
+        "expires_at": integration.token_expires_at.isoformat() if integration and integration.token_expires_at else None,
+    }
+
+
 # ============================================================================
 # Zoom OAuth
 # ============================================================================
