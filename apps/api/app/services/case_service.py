@@ -515,6 +515,17 @@ def assign_case(
         )
     db.commit()
     
+    # Trigger case_assigned workflow
+    from app.services import workflow_triggers
+    workflow_triggers.trigger_case_assigned(
+        db=db,
+        case=case,
+        old_owner_id=old_owner_id,
+        new_owner_id=case.owner_id,
+        old_owner_type=old_owner_type,
+        new_owner_type=case.owner_type,
+    )
+    
     return case
 
 
