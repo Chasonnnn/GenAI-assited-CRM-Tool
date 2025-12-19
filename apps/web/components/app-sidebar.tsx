@@ -113,7 +113,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const settingsItems: Array<{ title: string; url: string; tab?: string | null }> = [
         { title: "General", url: "/settings", tab: null },
         { title: "Notifications", url: "/settings?tab=notifications", tab: "notifications" },
-        { title: "Pipelines", url: "/settings?tab=pipelines", tab: "pipelines" },
+        { title: "Pipelines", url: "/settings/pipelines" },
         ...(isManager ? [{ title: "Queue Management", url: "/settings/queues" }] : []),
         { title: "Audit Log", url: "/settings/audit" },
         { title: "Integrations", url: "/settings/integrations" },
