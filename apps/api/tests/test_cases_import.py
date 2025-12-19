@@ -53,21 +53,18 @@ async def test_preview_import_success(authed_client: AsyncClient, test_org):
 @pytest.mark.asyncio
 async def test_preview_import_detects_duplicates_in_db(authed_client: AsyncClient, db, test_org, test_user):
     """Test preview detects existing cases in database."""
-    from app.db.models import Case
-    from app.db.enums import CaseSource, CaseStatus
+    from app.services import case_service
+    from app.schemas.case import CaseCreate
+    from app.db.enums import CaseSource
     
-    # Create existing case
-    existing_case = Case(
-        organization_id=test_org.id,
-        case_number=1,
-        email="[email protected]",
+    # Create existing case using service
+    case_data = CaseCreate(
         full_name="Existing User",
-        source=CaseSource.IMPORT.value,
-      status=CaseStatus.NEW_UNREAD.value,
-        created_by_user_id=test_user.id,
+        email="existing@test.com",
+        source=CaseSource.IMPORT,
     )
-    db.add(existing_case)
-    db.flush()
+    case_service.create_case(db, test_org.id, test_user.id, case_data)
+    
     
     # Upload CSV with duplicate email
     csv_data = create_csv_content([
