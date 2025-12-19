@@ -502,7 +502,7 @@ async def process_workflow_sweep(db, job) -> None:
         orgs = [db.query(Organization).filter(Organization.id == UUID(org_id)).first()]
         orgs = [o for o in orgs if o]
     else:
-        orgs = db.query(Organization).filter(Organization.is_active == True).all()
+        orgs = db.query(Organization).all()
     
     logger.info(f"Starting workflow sweep: type={sweep_type}, orgs={len(orgs)}")
     

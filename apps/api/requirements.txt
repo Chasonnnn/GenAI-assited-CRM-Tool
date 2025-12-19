@@ -49,3 +49,6 @@ slowapi>=0.1.9
 
 # Error tracking (optional)
 sentry-sdk[fastapi]>=1.40.0
+
+# Timezone support
+pytz>=2024.1

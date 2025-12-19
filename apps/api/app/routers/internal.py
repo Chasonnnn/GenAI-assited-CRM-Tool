@@ -162,8 +162,8 @@ def workflow_sweep(
     orgs_processed = 0
     
     with SessionLocal() as db:
-        # Get all active organizations
-        orgs = db.query(Organization).filter(Organization.is_active == True).all()
+        # Get all organizations
+        orgs = db.query(Organization).all()
         
         for org in orgs:
             # Schedule a sweep job for each org

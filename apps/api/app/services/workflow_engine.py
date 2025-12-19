@@ -631,12 +631,25 @@ class WorkflowEngine:
         """Add a note to the case."""
         content = action.get("content", "")
         
+        # Determine author (prefer owner, fall back to creator)
+        author_id = None
+        if entity.owner_type == OwnerType.USER.value and entity.owner_id:
+            author_id = entity.owner_id
+        elif entity.created_by_user_id:
+            author_id = entity.created_by_user_id
+        
+        if not author_id:
+            return {
+                "success": False,
+                "error": "No user available to author note",
+            }
+        
         note = EntityNote(
             organization_id=entity.organization_id,
             entity_type=EntityType.CASE.value,
             entity_id=entity.id,
             content=content,
-            created_by_user_id=None,  # System-generated
+            author_id=author_id,
         )
         db.add(note)
         db.commit()
