@@ -115,6 +115,7 @@ class CaseActivityType(str, Enum):
     NOTE_DELETED = "note_deleted"
     EMAIL_SENT = "email_sent"  # Email sent to case contact
     MATCH_PROPOSED = "match_proposed"  # New match proposed
+    MATCH_REVIEWING = "match_reviewing"  # Match entered review
     MATCH_ACCEPTED = "match_accepted"  # Match accepted
     MATCH_REJECTED = "match_rejected"  # Match rejected
     MATCH_CANCELLED = "match_cancelled"  # Match cancelled/withdrawn
