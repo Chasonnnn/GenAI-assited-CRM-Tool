@@ -93,6 +93,9 @@ app.include_router(cases.router, prefix="/cases", tags=["cases"])
 app.include_router(notes.router, tags=["notes"])  # Mixed paths: /cases/{id}/notes and /notes/{id}
 app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 
+from app.routers import cases_import
+app.include_router(cases_import.router)  # Already has /cases/import prefix
+
 # Intended Parents module
 app.include_router(intended_parents.router, prefix="/intended-parents", tags=["intended-parents"])
 
@@ -136,7 +139,10 @@ app.include_router(pipelines.router)
 
 # Automation Workflows (Manager+)
 from app.routers import workflows
-app.include_router(workflows.router)
+app.include_router(workflows.router, prefix="/workflows", tags=["workflows"])
+
+from app.routers import admin_meta
+app.include_router(admin_meta.router)  # Already has prefix in router definition
 
 # Admin Versions (Developer-only)
 from app.routers import admin_versions
