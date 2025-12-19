@@ -188,25 +188,22 @@ async def test_execute_import_success(authed_client: AsyncClient, db, test_org):
 async def test_execute_import_skips_duplicates(authed_client: AsyncClient, db, test_org, test_user):
     """Test import skips duplicate emails."""
     from app.db.models import Case
-    from app.db.enums import CaseSource, CaseStatus
+    from app.services import case_service
+    from app.schemas.case import CaseCreate
+    from app.db.enums import CaseSource
     
-    # Create existing case
-    existing = Case(
-        organization_id=test_org.id,
-        case_number=1,
-        email="[email protected]",
+    # Create existing case using service
+    case_data = CaseCreate(
         full_name="Existing",
-        source=CaseSource.IMPORT.value,
-        status=CaseStatus.NEW_UNREAD.value,
-        created_by_user_id=test_user.id,
+        email="existing@test.com",
+        source=CaseSource.IMPORT,
     )
-    db.add(existing)
-    db.flush()
+    case_service.create_case(db, test_org.id, test_user.id, case_data)
     
     # Import with duplicate
     csv_data = create_csv_content([
-        {"full_name": "Duplicate", "email": "[email protected]"},
-        {"full_name": "New User", "email": "[email protected]"},
+        {"full_name": "Duplicate", "email": "existing@test.com"},
+        {"full_name": "New User", "email": "newuser@test.com"},
     ])
     
     response = await authed_client.post(
