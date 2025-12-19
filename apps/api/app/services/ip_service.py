@@ -24,7 +24,7 @@ def list_intended_parents(
     budget_min: Decimal | None = None,
     budget_max: Decimal | None = None,
     q: str | None = None,
-    assigned_to: UUID | None = None,
+    owner_id: UUID | None = None,
     include_archived: bool = False,
     page: int = 1,
     per_page: int = 20,
@@ -65,9 +65,9 @@ def list_intended_parents(
             )
         )
     
-    # Assigned to filter
-    if assigned_to:
-        query = query.filter(IntendedParent.assigned_to_user_id == assigned_to)
+    # Owner filter
+    if owner_id:
+        query = query.filter(IntendedParent.owner_id == owner_id)
     
     # Get total count before pagination
     total = query.count()
@@ -99,7 +99,8 @@ def create_intended_parent(
     state: str | None = None,
     budget: Decimal | None = None,
     notes_internal: str | None = None,
-    assigned_to_user_id: UUID | None = None,
+    owner_type: str | None = None,
+    owner_id: UUID | None = None,
 ) -> IntendedParent:
     """Create a new intended parent and record initial status."""
     ip = IntendedParent(
@@ -110,7 +111,8 @@ def create_intended_parent(
         state=state,
         budget=budget,
         notes_internal=notes_internal,
-        assigned_to_user_id=assigned_to_user_id,
+        owner_type=owner_type,
+        owner_id=owner_id,
     )
     db.add(ip)
     db.flush()
@@ -140,7 +142,8 @@ def update_intended_parent(
     state: str | None = None,
     budget: Decimal | None = None,
     notes_internal: str | None = None,
-    assigned_to_user_id: UUID | None = None,
+    owner_type: str | None = None,
+    owner_id: UUID | None = None,
 ) -> IntendedParent:
     """Update intended parent fields and bump last_activity."""
     if full_name is not None:
@@ -155,8 +158,10 @@ def update_intended_parent(
         ip.budget = budget
     if notes_internal is not None:
         ip.notes_internal = notes_internal
-    if assigned_to_user_id is not None:
-        ip.assigned_to_user_id = assigned_to_user_id
+    if owner_type is not None:
+        ip.owner_type = owner_type
+    if owner_id is not None:
+        ip.owner_id = owner_id
     
     ip.last_activity = datetime.utcnow()
     ip.updated_at = datetime.utcnow()

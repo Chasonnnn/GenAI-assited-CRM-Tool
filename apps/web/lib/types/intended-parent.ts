@@ -14,7 +14,9 @@ export interface IntendedParent {
     budget: number | null
     notes_internal: string | null
     status: IntendedParentStatus
-    assigned_to_user_id: string | null
+    owner_type: 'user' | 'queue' | null
+    owner_id: string | null
+    owner_name: string | null
     is_archived: boolean
     archived_at: string | null
     last_activity: string
@@ -30,7 +32,9 @@ export interface IntendedParentListItem {
     state: string | null
     budget: number | null
     status: IntendedParentStatus
-    assigned_to_user_id: string | null
+    owner_type: 'user' | 'queue' | null
+    owner_id: string | null
+    owner_name: string | null
     is_archived: boolean
     last_activity: string
     created_at: string
@@ -43,7 +47,8 @@ export interface IntendedParentCreate {
     state?: string | null
     budget?: number | null
     notes_internal?: string | null
-    assigned_to_user_id?: string | null
+    owner_type?: 'user' | 'queue' | null
+    owner_id?: string | null
 }
 
 export interface IntendedParentUpdate {
@@ -53,7 +58,8 @@ export interface IntendedParentUpdate {
     state?: string | null
     budget?: number | null
     notes_internal?: string | null
-    assigned_to_user_id?: string | null
+    owner_type?: 'user' | 'queue' | null
+    owner_id?: string | null
 }
 
 export interface IntendedParentStatusUpdate {
@@ -103,3 +109,4 @@ export interface EntityNoteListItem {
 export interface EntityNoteCreate {
     content: string
 }
+
