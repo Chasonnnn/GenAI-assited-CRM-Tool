@@ -8,6 +8,7 @@ import {
     getZoomConnectUrl,
     getGmailConnectUrl,
     getZoomStatus,
+    getZoomMeetings,
     disconnectIntegration,
     createZoomMeeting,
     sendZoomInvite,
@@ -15,6 +16,7 @@ import {
     type CreateMeetingResponse,
     type IntegrationStatus,
     type ZoomStatusResponse,
+    type ZoomMeetingRead,
     type SendZoomInviteRequest,
     type SendZoomInviteResponse,
 } from '@/lib/api/integrations'
@@ -27,6 +29,7 @@ export const integrationKeys = {
     all: ['user-integrations'] as const,
     list: () => [...integrationKeys.all, 'list'] as const,
     zoomStatus: () => [...integrationKeys.all, 'zoom-status'] as const,
+    zoomMeetings: (params?: { limit?: number }) => [...integrationKeys.all, 'zoom-meetings', params] as const,
 }
 
 // ============================================================================
@@ -53,6 +56,17 @@ export function useZoomStatus() {
     return useQuery({
         queryKey: integrationKeys.zoomStatus(),
         queryFn: getZoomStatus,
+    })
+}
+
+/**
+ * Get list of user's Zoom meetings.
+ */
+export function useZoomMeetings(params: { limit?: number } = {}) {
+    return useQuery({
+        queryKey: integrationKeys.zoomMeetings(params),
+        queryFn: () => getZoomMeetings(params),
+        staleTime: 60 * 1000, // 1 minute
     })
 }
 
@@ -105,9 +119,10 @@ export function useCreateZoomMeeting() {
     return useMutation({
         mutationFn: (data: CreateMeetingRequest) => createZoomMeeting(data),
         onSuccess: () => {
-            // Invalidate notes/tasks for the entity
+            // Invalidate notes/tasks and meetings list
             queryClient.invalidateQueries({ queryKey: ['notes'] })
             queryClient.invalidateQueries({ queryKey: ['tasks'] })
+            queryClient.invalidateQueries({ queryKey: integrationKeys.zoomMeetings() })
         },
     })
 }
@@ -122,5 +137,4 @@ export function useSendZoomInvite() {
 }
 
 // Re-export types for convenience
-export type { IntegrationStatus, ZoomStatusResponse, CreateMeetingRequest, CreateMeetingResponse, SendZoomInviteRequest, SendZoomInviteResponse }
-
+export type { IntegrationStatus, ZoomStatusResponse, ZoomMeetingRead, CreateMeetingRequest, CreateMeetingResponse, SendZoomInviteRequest, SendZoomInviteResponse }

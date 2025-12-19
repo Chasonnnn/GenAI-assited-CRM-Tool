@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.enums import EntityType, TaskType, OwnerType
-from app.db.models import EntityNote, Task
+from app.db.models import EntityNote, Task, ZoomMeeting as ZoomMeetingModel
 from app.services import oauth_service
 
 logger = logging.getLogger(__name__)
@@ -272,6 +272,23 @@ async def schedule_zoom_meeting(
     db.flush()
     task_id = task.id
     
+    # Save meeting to zoom_meetings table for history
+    zoom_meeting_record = ZoomMeetingModel(
+        organization_id=org_id,
+        user_id=user_id,
+        case_id=entity_id if entity_type == EntityType.CASE else None,
+        intended_parent_id=entity_id if entity_type == EntityType.INTENDED_PARENT else None,
+        zoom_meeting_id=str(meeting.id),
+        topic=meeting.topic,
+        start_time=start_time,
+        duration=duration,
+        timezone=timezone_name,
+        join_url=meeting.join_url,
+        start_url=meeting.start_url,
+        password=meeting.password,
+    )
+    db.add(zoom_meeting_record)
+    
     db.commit()
     db.refresh(note)
     
@@ -306,9 +323,7 @@ I've scheduled a Zoom meeting for us:
 🔗 **Join the meeting:**
 {{meeting_link}}
 
-{% if password %}
-🔒 **Password:** {{password}}
-{% endif %}
+{{password_line}}
 
 Looking forward to speaking with you!
 
@@ -366,12 +381,14 @@ def send_meeting_invite(
     
     # Build variables
     time_str = meeting.start_time if meeting.start_time else "Instant meeting"
+    password_line = f"🔒 **Password:** {meeting.password}" if meeting.password else ""
     variables = {
         "topic": meeting.topic,
         "meeting_link": meeting.join_url,
         "meeting_time": time_str,
         "duration": str(meeting.duration),
         "password": meeting.password or "",
+        "password_line": password_line,
         "contact_name": contact_name,
         "host_name": host_name,
     }
