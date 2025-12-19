@@ -149,6 +149,7 @@ class JobType(str, Enum):
     META_CAPI_EVENT = "meta_capi_event"
     WORKFLOW_SWEEP = "workflow_sweep"
     WORKFLOW_EMAIL = "workflow_email"
+    CSV_IMPORT = "csv_import"  # Background CSV imports for large files
 
 
 class JobStatus(str, Enum):

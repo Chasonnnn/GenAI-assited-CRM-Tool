@@ -181,6 +181,9 @@ async def process_job(db, job) -> None:
     elif job.job_type == JobType.WORKFLOW_SWEEP.value:
         await process_workflow_sweep(db, job)
         
+    elif job.job_type == JobType.CSV_IMPORT.value:
+        await process_csv_import(db, job)
+        
     else:
         raise Exception(f"Unknown job type: {job.job_type}")
 
@@ -547,6 +550,68 @@ async def process_workflow_email(db, job) -> None:
     email_service.mark_email_sent(db, email_log)
     
     logger.info(f"Workflow email sent to {recipient_email} for case {case_id}")
+
+
+async def process_csv_import(db, job) -> None:
+    """
+    Process CSV import job in background.
+    
+    Payload:
+        - import_id: UUID of the CaseImport record
+        - file_content_base64: Base64-encoded CSV content
+        - dedupe_action: "skip" (default) or other action
+    """
+    from app.services import import_service
+    from app.db.models import CaseImport
+    import base64
+    
+    payload = job.payload or {}
+    import_id = payload.get("import_id")
+    file_content_b64 = payload.get("file_content_base64")
+    dedupe_action = payload.get("dedupe_action", "skip")
+    
+    if not import_id or not file_content_b64:
+        raise Exception("Missing import_id or file_content_base64 in payload")
+    
+    # Decode file content
+    try:
+        file_content = base64.b64decode(file_content_b64)
+    except Exception as e:
+        raise Exception(f"Failed to decode file content: {e}")
+    
+    # Get import record
+    import_record = db.query(CaseImport).filter(
+        CaseImport.id == UUID(import_id)
+    ).first()
+    
+    if not import_record:
+        raise Exception(f"Import record {import_id} not found")
+    
+    # Update status to running
+    import_record.status = "running"
+    db.commit()
+    
+    logger.info(f"Starting CSV import job: {import_id}, rows={import_record.total_rows}")
+    
+    try:
+        # Execute the import
+        import_service.execute_import(
+            db=db,
+            org_id=job.organization_id,
+            user_id=import_record.created_by_user_id,
+            import_id=import_record.id,
+            file_content=file_content,
+            dedupe_action=dedupe_action,
+        )
+        logger.info(f"CSV import completed: {import_id}")
+    except Exception as e:
+        # Update import status to failed
+        import_record.status = "failed"
+        import_record.errors = import_record.errors or []
+        import_record.errors.append({"message": str(e)})
+        db.commit()
+        logger.error(f"CSV import failed: {import_id} - {e}")
+        raise
 
 
 async def process_workflow_sweep(db, job) -> None:

@@ -146,8 +146,9 @@ async def test_preview_import_without_auth_fails(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_execute_import_success(authed_client: AsyncClient, db, test_org):
-    """Test successful CSV import execution."""
-    from app.db.models import Case, CaseImport
+    """Test successful CSV import execution queues background job."""
+    from app.db.models import CaseImport, Job
+    from app.db.enums import JobType
     
     csv_data = create_csv_content([
         {"full_name": "Alice Johnson", "email": "alice@test.com", "phone": "5551111111"},
@@ -159,38 +160,39 @@ async def test_execute_import_success(authed_client: AsyncClient, db, test_org):
         files={"file": ("import.csv", io.BytesIO(csv_data), "text/csv")},
     )
     
-    assert response.status_code == 200
+    assert response.status_code == 202
     data = response.json()
     assert "import_id" in data
     assert "message" in data
+    assert "queued" in data["message"].lower()  # Async message
     
     # Refresh session to see committed data
     db.expire_all()
     
-    # Verify cases created
-    cases = db.query(Case).filter(Case.organization_id == test_org.id).all()
-    assert len(cases) == 2
-    
-    emails = {c.email for c in cases}
-    assert "alice@test.com" in emails
-    assert "bob@test.com" in emails
-    
-    # Verify import record created
+    # Verify import record created with pending status
     import_record = db.query(CaseImport).filter(
         CaseImport.id == uuid.UUID(data["import_id"])
     ).first()
     assert import_record is not None
-    assert import_record.status == "completed"
-    assert import_record.imported_count == 2
+    assert import_record.status == "pending"
+    assert import_record.total_rows == 2
+    
+    # Verify background job was queued
+    job = db.query(Job).filter(
+        Job.organization_id == test_org.id,
+        Job.job_type == JobType.CSV_IMPORT.value,
+    ).first()
+    assert job is not None
+    assert job.payload["import_id"] == str(import_record.id)
 
 
 @pytest.mark.asyncio
 async def test_execute_import_skips_duplicates(authed_client: AsyncClient, db, test_org, test_user):
-    """Test import skips duplicate emails."""
-    from app.db.models import Case
+    """Test import queues job that will skip duplicate emails when processed."""
+    from app.db.models import Case, CaseImport, Job
     from app.services import case_service
     from app.schemas.case import CaseCreate
-    from app.db.enums import CaseSource
+    from app.db.enums import CaseSource, JobType
     
     # Create existing case using service
     case_data = CaseCreate(
@@ -211,16 +213,29 @@ async def test_execute_import_skips_duplicates(authed_client: AsyncClient, db, t
         files={"file": ("import.csv", io.BytesIO(csv_data), "text/csv")},
     )
     
-    assert response.status_code == 200
+    assert response.status_code == 202
+    data = response.json()
     
-    # Should only create the new case
-    cases = db.query(Case).filter(
-        Case.organization_id == test_org.id
-    ).all()
-    assert len(cases) == 2  # existing + newuser
-    emails = {c.email for c in cases}
-    assert "existing@test.com" in emails
-    assert "newuser@test.com" in emails
+    db.expire_all()
+    
+    # Verify import record created  
+    import_record = db.query(CaseImport).filter(
+        CaseImport.id == uuid.UUID(data["import_id"])
+    ).first()
+    assert import_record is not None
+    assert import_record.status == "pending"
+    assert import_record.total_rows == 2
+    
+    # Verify job queued with dedupe action
+    job = db.query(Job).filter(
+        Job.organization_id == test_org.id,
+        Job.job_type == JobType.CSV_IMPORT.value,
+    ).order_by(Job.created_at.desc()).first()
+    assert job is not None
+    assert job.payload["dedupe_action"] == "skip"
+
+
+
 async def test_execute_import_handles_validation_errors(authed_client: AsyncClient, db):
     """Test import handles rows with validation errors."""
     from app.db.models import CaseImport
@@ -235,7 +250,7 @@ async def test_execute_import_handles_validation_errors(authed_client: AsyncClie
         files={"file": ("import.csv", io.BytesIO(csv_data), "text/csv")},
     )
     
-    assert response.status_code == 200
+    assert response.status_code == 202
     import_id = response.json()["import_id"]
     
     # Check import record
@@ -406,5 +421,5 @@ async def test_execute_import_empty_csv(authed_client: AsyncClient):
         files={"file": ("empty.csv", io.BytesIO(csv_data), "text/csv")},
     )
     
-    assert response.status_code == 200
+    assert response.status_code == 202
     # Should complete with 0 imports
