@@ -241,32 +241,19 @@ These are fully functional end-to-end:
 
 ## 5. NOT STARTED — ❌
 
-### 5.1 User Theme Customization ❌
-- 4-5 preset color themes
-- Theme selector in settings
-
-**Effort:** Small (2-3 days)
-
-### 5.2 SMS/Telephony Integration ❌
-- No Twilio or other SMS provider
-- No click-to-call
-- No call logging
-
-**Effort:** Large (2-3 weeks)
-
-### 5.3 Matching System ❌
+### 5.1 Matching System ❌
 - No surrogate → intended parent matching
 - No compatibility scoring
 
 **Effort:** Large (2-3 weeks)
 
-### 5.4 Compliance/HIPAA Features ❌
+### 5.2 Compliance/HIPAA Features ❌
 - No audit export
 - No data retention policies
 
 **Effort:** Medium (1 week)
 
-### 5.5 Dashboard Calendar ❌
+### 5.3 Dashboard Calendar ❌
 - No calendar component
 - No upcoming meetings/tasks view
 
@@ -274,7 +261,24 @@ These are fully functional end-to-end:
 
 ---
 
-## 6. PRIORITY RECOMMENDATIONS
+## 6. DEFERRED — 🔮 Future Consideration
+
+### 6.1 User Theme Customization 🔮
+- 4-5 preset color themes
+- Theme selector in settings
+
+**Status:** Postponed (cosmetic, not business-critical)
+
+### 6.2 SMS/Telephony Integration 🔮
+- Twilio or other SMS provider
+- Click-to-call
+- Call logging
+
+**Status:** Postponed (large effort, evaluate business need first)
+
+---
+
+## 7. PRIORITY RECOMMENDATIONS
 
 ### ✅ Recently Completed (Phase 3)
 1. ~~Email Sending from Cases~~ ✅
@@ -290,14 +294,11 @@ These are fully functional end-to-end:
 
 ### Medium Term
 9. **Pipeline UI** — Replace hardcoded statuses
-10. **SMS Integration** — Communication expansion
-
-### Long Term
-11. **Matching System** — Core business differentiator
+10. **Matching System** — Core business differentiator
 
 ---
 
-## 7. TEST COVERAGE
+## 8. TEST COVERAGE
 
 | Component | Tests | Status |
 |-----------|-------|--------|
