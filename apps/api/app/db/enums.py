@@ -117,6 +117,7 @@ class CaseActivityType(str, Enum):
     MATCH_PROPOSED = "match_proposed"  # New match proposed
     MATCH_ACCEPTED = "match_accepted"  # Match accepted
     MATCH_REJECTED = "match_rejected"  # Match rejected
+    MATCH_CANCELLED = "match_cancelled"  # Match cancelled/withdrawn
 
 
 class MatchStatus(str, Enum):
