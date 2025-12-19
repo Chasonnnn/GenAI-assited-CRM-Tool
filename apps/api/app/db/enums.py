@@ -114,6 +114,23 @@ class CaseActivityType(str, Enum):
     NOTE_ADDED = "note_added"
     NOTE_DELETED = "note_deleted"
     EMAIL_SENT = "email_sent"  # Email sent to case contact
+    MATCH_PROPOSED = "match_proposed"  # New match proposed
+    MATCH_ACCEPTED = "match_accepted"  # Match accepted
+    MATCH_REJECTED = "match_rejected"  # Match rejected
+
+
+class MatchStatus(str, Enum):
+    """
+    Status of a match between surrogate (Case) and intended parent.
+    
+    Workflow: proposed → reviewing → accepted/rejected
+    A cancelled status marks withdrawn proposals.
+    """
+    PROPOSED = "proposed"  # Initial match proposal
+    REVIEWING = "reviewing"  # Under review by coordinator
+    ACCEPTED = "accepted"  # Match finalized
+    REJECTED = "rejected"  # Match declined with reason
+    CANCELLED = "cancelled"  # Proposal withdrawn
 
 
 class NotificationType(str, Enum):

@@ -2165,3 +2165,98 @@ class ZoomMeeting(Base):
     user: Mapped["User"] = relationship()
     case: Mapped["Case"] = relationship()
     intended_parent: Mapped["IntendedParent"] = relationship()
+
+
+# =============================================================================
+# Matching
+# =============================================================================
+
+class Match(Base):
+    """
+    Proposed match between a surrogate (Case) and intended parent.
+    
+    Tracks the matching workflow from proposal through acceptance/rejection.
+    Only one accepted match is allowed per case.
+    """
+    __tablename__ = "matches"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "case_id", "intended_parent_id",
+            name="uq_match_org_case_ip"
+        ),
+        Index("ix_matches_case_id", "case_id"),
+        Index("ix_matches_ip_id", "intended_parent_id"),
+        Index("ix_matches_status", "status"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    case_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cases.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    intended_parent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("intended_parents.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # Status workflow: proposed → reviewing → accepted/rejected/cancelled
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="proposed"
+    )
+    compatibility_score: Mapped[Decimal | None] = mapped_column(
+        Numeric(5, 2),  # 0.00 to 100.00
+        nullable=True
+    )
+    
+    # Who proposed and when
+    proposed_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    proposed_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Review details
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    
+    # Notes and rejection reason
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    case: Mapped["Case"] = relationship()
+    intended_parent: Mapped["IntendedParent"] = relationship()
+    proposed_by: Mapped["User"] = relationship(foreign_keys=[proposed_by_user_id])
+    reviewed_by: Mapped["User"] = relationship(foreign_keys=[reviewed_by_user_id])
+
