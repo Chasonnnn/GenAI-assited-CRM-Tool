@@ -40,6 +40,7 @@ import { useNotes, useCreateNote, useDeleteNote } from "@/lib/hooks/use-notes"
 import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-tasks"
 import { useZoomStatus, useCreateZoomMeeting, useSendZoomInvite } from "@/lib/hooks/use-user-integrations"
 import { useSummarizeCase, useDraftEmail, useAISettings } from "@/lib/hooks/use-ai"
+import { EmailComposeDialog } from "@/components/email/EmailComposeDialog"
 import type { EmailType, SummarizeCaseResponse, DraftEmailResponse } from "@/lib/api/ai"
 import { STATUS_CONFIG, type CaseStatus } from "@/lib/types/case"
 import type { NoteRead } from "@/lib/types/note"
@@ -193,6 +194,7 @@ export default function CaseDetailPage() {
     const [aiSummary, setAiSummary] = React.useState<SummarizeCaseResponse | null>(null)
     const [aiDraftEmail, setAiDraftEmail] = React.useState<DraftEmailResponse | null>(null)
     const [selectedEmailType, setSelectedEmailType] = React.useState<EmailType | null>(null)
+    const [emailDialogOpen, setEmailDialogOpen] = React.useState(false)
 
     const timezoneName = React.useMemo(() => {
         try {
@@ -347,6 +349,18 @@ export default function CaseDetailPage() {
                             })}
                         </DropdownMenuContent>
                     </DropdownMenu>
+
+                    {/* Send Email Button */}
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setEmailDialogOpen(true)}
+                        disabled={caseData.is_archived || !caseData.email}
+                        className="gap-2"
+                    >
+                        <MailIcon className="size-4" />
+                        Send Email
+                    </Button>
 
                     {/* Claim/Release buttons (case_manager+ only) */}
                     {canManageQueue && isInQueue && (
