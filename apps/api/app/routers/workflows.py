@@ -61,7 +61,7 @@ def get_workflow_stats(
     return workflow_service.get_workflow_stats(db, session.org_id)
 
 
-@router.post("", response_model=WorkflowRead)
+@router.post("", response_model=WorkflowRead, dependencies=[Depends(require_csrf_header)])
 def create_workflow(
     data: WorkflowCreate,
     db: Session = Depends(get_db),
@@ -93,7 +93,7 @@ def get_workflow(
     return _workflow_to_read(db, workflow)
 
 
-@router.patch("/{workflow_id}", response_model=WorkflowRead)
+@router.patch("/{workflow_id}", response_model=WorkflowRead, dependencies=[Depends(require_csrf_header)])
 def update_workflow(
     workflow_id: UUID,
     data: WorkflowUpdate,
@@ -117,7 +117,7 @@ def update_workflow(
         raise HTTPException(status_code=422, detail=str(e))
 
 
-@router.delete("/{workflow_id}")
+@router.delete("/{workflow_id}", dependencies=[Depends(require_csrf_header)])
 def delete_workflow(
     workflow_id: UUID,
     db: Session = Depends(get_db),
@@ -132,7 +132,7 @@ def delete_workflow(
     return {"message": "Workflow deleted"}
 
 
-@router.post("/{workflow_id}/toggle", response_model=WorkflowRead)
+@router.post("/{workflow_id}/toggle", response_model=WorkflowRead, dependencies=[Depends(require_csrf_header)])
 def toggle_workflow(
     workflow_id: UUID,
     db: Session = Depends(get_db),
@@ -147,7 +147,7 @@ def toggle_workflow(
     return _workflow_to_read(db, workflow)
 
 
-@router.post("/{workflow_id}/duplicate", response_model=WorkflowRead)
+@router.post("/{workflow_id}/duplicate", response_model=WorkflowRead, dependencies=[Depends(require_csrf_header)])
 def duplicate_workflow(
     workflow_id: UUID,
     db: Session = Depends(get_db),
@@ -166,7 +166,7 @@ def duplicate_workflow(
 # Workflow Testing (Dry Run)
 # =============================================================================
 
-@router.post("/{workflow_id}/test", response_model=WorkflowTestResponse)
+@router.post("/{workflow_id}/test", response_model=WorkflowTestResponse, dependencies=[Depends(require_csrf_header)])
 def test_workflow(
     workflow_id: UUID,
     request: WorkflowTestRequest,
@@ -294,7 +294,7 @@ def get_my_preferences(
     return result
 
 
-@router.patch("/me/preferences/{workflow_id}", response_model=UserWorkflowPreferenceRead)
+@router.patch("/me/preferences/{workflow_id}", response_model=UserWorkflowPreferenceRead, dependencies=[Depends(require_csrf_header)])
 def update_my_preference(
     workflow_id: UUID,
     data: UserWorkflowPreferenceUpdate,
