@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "analyze": "ANALYZE=true next build"
+    "analyze": "next experimental-analyze"
   },
   "dependencies": {
     "@base-ui/react": "^1.0.0",
