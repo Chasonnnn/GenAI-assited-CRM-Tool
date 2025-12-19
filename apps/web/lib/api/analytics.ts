@@ -213,3 +213,38 @@ export async function getMetaSpend(params: DateRangeParams = {}): Promise<MetaSp
     const query = searchParams.toString();
     return api.get<MetaSpendSummary>(`/analytics/meta/spend${query ? `?${query}` : ''}`);
 }
+
+// Activity Feed types
+export interface ActivityFeedItem {
+    id: string;
+    activity_type: string;
+    case_id: string;
+    case_number: string | null;
+    case_name: string | null;
+    actor_name: string | null;
+    details: Record<string, unknown> | null;
+    created_at: string;
+}
+
+export interface ActivityFeedResponse {
+    items: ActivityFeedItem[];
+    has_more: boolean;
+}
+
+export interface ActivityFeedParams {
+    limit?: number;
+    offset?: number;
+    activity_type?: string;
+    user_id?: string;
+}
+
+export async function getActivityFeed(params: ActivityFeedParams = {}): Promise<ActivityFeedResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.limit) searchParams.set('limit', params.limit.toString());
+    if (params.offset) searchParams.set('offset', params.offset.toString());
+    if (params.activity_type) searchParams.set('activity_type', params.activity_type);
+    if (params.user_id) searchParams.set('user_id', params.user_id);
+
+    const query = searchParams.toString();
+    return api.get<ActivityFeedResponse>(`/analytics/activity-feed${query ? `?${query}` : ''}`);
+}
