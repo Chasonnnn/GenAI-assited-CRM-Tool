@@ -6,32 +6,20 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
     GripVerticalIcon,
-    PlusIcon,
-    TrashIcon,
     SaveIcon,
     Loader2Icon,
     HistoryIcon,
     RotateCcwIcon,
-    CheckIcon
+    CheckIcon,
+    InfoIcon
 } from "lucide-react"
 import { usePipelines, usePipeline, useUpdatePipeline, usePipelineVersions, useRollbackPipeline } from "@/lib/hooks/use-pipelines"
-import type { PipelineStage, Pipeline, PipelineVersion } from "@/lib/api/pipelines"
+import type { PipelineStage } from "@/lib/api/pipelines"
 import { formatDistanceToNow } from "date-fns"
-
-// Color presets for stages
-const COLOR_PRESETS = [
-    "#3b82f6", // blue
-    "#22c55e", // green
-    "#f59e0b", // amber
-    "#ef4444", // red
-    "#8b5cf6", // violet
-    "#06b6d4", // cyan
-    "#ec4899", // pink
-    "#64748b", // slate
-]
+import { useAuth } from "@/lib/auth-context"
 
 function StageEditor({
     stages,
@@ -67,21 +55,6 @@ function StageEditor({
         onChange(newStages)
     }
 
-    const removeStage = (index: number) => {
-        onChange(stages.filter((_, i) => i !== index))
-    }
-
-    const addStage = () => {
-        onChange([
-            ...stages,
-            {
-                status: `new_stage_${stages.length + 1}`,
-                label: "New Stage",
-                color: COLOR_PRESETS[stages.length % COLOR_PRESETS.length]
-            }
-        ])
-    }
-
     return (
         <div className="space-y-4">
             <div className="space-y-2">
@@ -115,49 +88,54 @@ function StageEditor({
                             />
                             <Input
                                 value={stage.status}
-                                onChange={(e) => updateStage(index, "status", e.target.value)}
-                                placeholder="Status key"
-                                className="h-9 font-mono text-sm"
+                                readOnly
+                                disabled
+                                className="h-9 font-mono text-sm bg-muted"
+                                title="Status key is read-only"
                             />
                         </div>
 
                         <Badge variant="outline" className="tabular-nums">
                             #{index + 1}
                         </Badge>
-
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeStage(index)}
-                            className="text-muted-foreground hover:text-destructive"
-                        >
-                            <TrashIcon className="size-4" />
-                        </Button>
                     </div>
                 ))}
             </div>
 
-            <Button variant="outline" onClick={addStage} className="w-full">
-                <PlusIcon className="size-4 mr-2" />
-                Add Stage
-            </Button>
+            <Alert>
+                <InfoIcon className="size-4" />
+                <AlertDescription>
+                    Drag stages to reorder. Edit labels and colors. Status keys are read-only.
+                </AlertDescription>
+            </Alert>
         </div>
     )
 }
 
 function VersionHistory({
     pipelineId,
-    onRollback
+    onRollback,
+    canRollback
 }: {
     pipelineId: string
     onRollback: (version: number) => void
+    canRollback: boolean
 }) {
-    const { data: versions, isLoading } = usePipelineVersions(pipelineId)
+    const { data: versions, isLoading, isError } = usePipelineVersions(pipelineId)
 
     if (isLoading) {
         return (
             <div className="flex items-center justify-center py-8">
                 <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
+            </div>
+        )
+    }
+
+    // Handle 403 gracefully for non-developers
+    if (isError) {
+        return (
+            <div className="text-center py-8 text-sm text-muted-foreground">
+                Version history requires Developer role
             </div>
         )
     }
@@ -189,7 +167,7 @@ function VersionHistory({
                                 </span>
                             )}
                         </div>
-                        {index > 0 && (
+                        {index > 0 && canRollback && (
                             <Button
                                 variant="ghost"
                                 size="sm"
@@ -214,6 +192,9 @@ function VersionHistory({
 }
 
 export default function PipelinesSettingsPage() {
+    const { user } = useAuth()
+    const isDeveloper = user?.role === "developer"
+
     const { data: pipelines, isLoading: pipelinesLoading } = usePipelines()
     const defaultPipeline = pipelines?.find(p => p.is_default)
     const { data: pipeline, isLoading: pipelineLoading } = usePipeline(defaultPipeline?.id || null)
@@ -223,7 +204,6 @@ export default function PipelinesSettingsPage() {
 
     const [editedStages, setEditedStages] = useState<PipelineStage[] | null>(null)
     const [comment, setComment] = useState("")
-    const [showHistory, setShowHistory] = useState(false)
 
     const isLoading = pipelinesLoading || pipelineLoading
     const currentStages = editedStages ?? pipeline?.stages ?? []
@@ -364,6 +344,7 @@ export default function PipelinesSettingsPage() {
                                 <VersionHistory
                                     pipelineId={pipeline.id}
                                     onRollback={handleRollback}
+                                    canRollback={isDeveloper}
                                 />
                             )}
                         </CardContent>
