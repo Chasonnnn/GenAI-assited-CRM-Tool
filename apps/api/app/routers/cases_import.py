@@ -130,7 +130,7 @@ async def preview_csv_import(
 @router.post(
     "/execute",
     response_model=ImportExecuteResponse,
-    status_code=status.HTTP_200_OK,  # Sync operation, not 202
+    status_code=status.HTTP_202_ACCEPTED,  # Async - queued for background processing
     dependencies=[Depends(require_csrf_header)],
 )
 async def execute_csv_import(
@@ -139,10 +139,15 @@ async def execute_csv_import(
     db: Session = Depends(get_db),
 ):
     """
-    Execute CSV import.
+    Execute CSV import asynchronously.
     
-    Returns import ID for tracking progress.
+    Queues import for background processing and returns immediately.
+    Use GET /cases/import/{id} to check status.
     """
+    import base64
+    from app.db.enums import JobType
+    from app.services import job_service
+    
     # Read file
     content = await file.read()
     
@@ -163,7 +168,7 @@ async def execute_csv_import(
             detail=f"Failed to parse CSV: {str(e)}"
         )
     
-    # Create import record
+    # Create import record with pending status
     import_record = import_service.create_import_job(
         db=db,
         org_id=session.org_id,
@@ -172,30 +177,21 @@ async def execute_csv_import(
         total_rows=total_rows,
     )
     
-    # Execute import synchronously
-    # For large files (>1000 rows), consider moving to background job
-    try:
-        import_service.execute_import(
-            db=db,
-            org_id=session.org_id,
-            user_id=session.user_id,
-            import_id=import_record.id,
-            file_content=content,
-            dedupe_action="skip",
-        )
-    except Exception as e:
-        # Update import status to failed
-        import_record.status = "failed"
-        import_record.errors = [{"message": str(e)}]
-        db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Import failed: {str(e)}"
-        )
+    # Queue background job for processing
+    job_service.schedule_job(
+        db=db,
+        org_id=session.org_id,
+        job_type=JobType.CSV_IMPORT,
+        payload={
+            "import_id": str(import_record.id),
+            "file_content_base64": base64.b64encode(content).decode("utf-8"),
+            "dedupe_action": "skip",
+        },
+    )
     
     return ImportExecuteResponse(
         import_id=import_record.id,
-        message=f"Import completed. Check import history for details."
+        message=f"Import queued for processing. {total_rows} rows will be processed in background."
     )
 
 
