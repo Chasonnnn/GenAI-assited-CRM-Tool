@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import and_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header, require_roles
@@ -278,6 +279,8 @@ def get_match(
     session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
 ) -> MatchRead:
     """Get match details. Auto-transitions to 'reviewing' on first view by non-proposer."""
+    from app.services import activity_service
+    
     match = db.query(Match).filter(
         Match.id == match_id,
         Match.organization_id == session.org_id,
@@ -291,7 +294,23 @@ def get_match(
         and match.proposed_by_user_id != session.user_id
     ):
         match.status = MatchStatus.REVIEWING.value
+        match.reviewed_by_user_id = session.user_id
+        match.reviewed_at = datetime.now(timezone.utc)
         match.updated_at = datetime.now(timezone.utc)
+        
+        # Log review start
+        activity_service.log_case_activity(
+            db=db,
+            case_id=match.case_id,
+            organization_id=session.org_id,
+            activity_type=CaseActivityType.MATCH_REVIEWING,
+            actor_user_id=session.user_id,
+            details={
+                "match_id": str(match.id),
+                "intended_parent_id": str(match.intended_parent_id),
+            }
+        )
+        
         db.commit()
         db.refresh(match)
     
@@ -363,7 +382,15 @@ def accept_match(
         }
     )
     
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This case already has an accepted match (concurrent accept detected)"
+        )
+    
     db.refresh(match)
     
     return _match_to_read(match, db, str(session.org_id))
