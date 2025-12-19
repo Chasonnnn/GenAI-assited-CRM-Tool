@@ -1,8 +1,8 @@
-# Feature Completeness Evaluation — Honest Assessment
+# Feature Completeness Evaluation — Current State
 
 **Last Updated:** 2025-12-19  
 **Purpose:** Identify features that need development to be fully functional  
-**Test Coverage:** ✅ **100% (85/85 tests passing)** - Frontend: 30/30, Backend: 55/55
+**Test Coverage:** ✅ **89/89 tests passing** - Frontend: 30/30, Backend: 59/59
 
 ---
 
@@ -17,6 +17,21 @@
 
 ---
 
+## Phase 3 Completion Summary (2025-12-19)
+
+All Phase 3 items have been completed:
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Email Sending from Cases | ✅ Complete | `/cases/{id}/send-email` endpoint |
+| Gmail OAuth Integration | ✅ Complete | Connect/disconnect/status in Settings |
+| Automation Engine | ✅ Complete | 8 triggers, 6 actions, wired to services |
+| Activity Feed | ✅ Complete | Org-wide feed for managers |
+| Task Reminders | ✅ Complete | Due/overdue sweeps in worker |
+| Async CSV Import | ✅ Complete | Job queue for large files |
+
+---
+
 ## 1. CORE FEATURES — ✅ Complete
 
 These are fully functional end-to-end:
@@ -25,7 +40,7 @@ These are fully functional end-to-end:
 - CRUD operations (create, read, update, delete)
 - Status workflow with 12+ stages
 - Status history timeline
-- Activity logging (12 activity types)
+- Activity logging (13 activity types including EMAIL_SENT)
 - Notes with rich text (TipTap editor)
 - Tasks attached to cases
 - Inline editing for name, email, phone, state
@@ -34,6 +49,7 @@ These are fully functional end-to-end:
 - Priority marking
 - Handoff workflow (intake → case_manager)
 - Queue/ownership system (claim/release)
+- **Send Email from case detail** ✅
 
 ### Intended Parents Module ✅
 - CRUD operations
@@ -47,8 +63,9 @@ These are fully functional end-to-end:
 - Complete/uncomplete toggle
 - Due date/time with duration
 - Filtering by assignee, case, completion
-- Search by title/description (q param)
-- Date range filtering (due_before/due_after)
+- Search by title/description
+- Date range filtering
+- **Task due/overdue sweeps** ✅
 
 ### Dashboard ✅
 - Stats cards (real API data)
@@ -60,8 +77,9 @@ These are fully functional end-to-end:
 - Cases by status breakdown
 - Cases trend over time
 - Team performance by assignee
-- Meta Leads performance (if configured)
-- Summary stats (total, new, qualified rate)
+- Meta Leads performance
+- Summary stats
+- **Activity Feed (managers)** ✅
 
 ### Authentication ✅
 - Google OAuth SSO
@@ -71,10 +89,10 @@ These are fully functional end-to-end:
 - Session management
 
 ### In-App Notifications ✅
-- Real-time notifications (WebSocket + polling)
+- Real-time notifications
 - 6 notification types
-- Dedupe logic (1-hour window)
-- Per-user notification preferences
+- Dedupe logic
+- Per-user preferences
 - Mark read/all read
 
 ### Audit Trail ✅
@@ -85,317 +103,209 @@ These are fully functional end-to-end:
 ### AI Assistant ✅
 - BYOK key storage (encrypted)
 - OpenAI and Gemini providers
-- Chat interface with conversation history
-- Summarize case endpoint
-- Draft email endpoint (5 types)
-- Analyze dashboard endpoint (managers)
-- Action approval workflow
+- Chat interface
+- Summarize case
+- Draft email (5 types)
+- Analyze dashboard
 
 ### CSV Import ✅
 - Upload CSV with drag-drop UI
-- Real-time preview with validation
+- Preview with validation
 - Column mapping auto-detection
-- Duplicate detection (DB + CSV)
-- Import progress tracking
+- Duplicate detection
+- **Async processing via job queue** ✅
 - Import history with error details
-- **Test Coverage:** 7 comprehensive tests (preview, execution, duplicates, validation)
 
 ### Meta Leads Admin ✅
 - Add/update/delete page tokens (UI)
 - Token encryption at rest
-- Status monitoring (active/expired)
-- Expiry tracking with badges
-- Manager+ access control
-- **Test Coverage:** 15 comprehensive tests (CRUD, validation, permissions, encryption)
+- Status monitoring
+- Expiry tracking
 
 ---
 
-## 2. PARTIAL FEATURES — ⚠️ Need Work
+## 2. COMMUNICATION FEATURES — ✅ Complete
 
-### 2.1 Automation Workflows ⚠️
-**Status:** Frontend UI exists with MOCK data
-**Backend:** No automation engine exists
+### 2.1 Email Sending System ✅ **COMPLETE**
+**Status:** Fully functional
 
-**What exists:**
-- Frontend page with 6 hardcoded sample workflows (line 48-97 in `automation/page.tsx`)
-- Toggle switches that update local state only
-- "Create Workflow" button does nothing
+**Features:**
+- `POST /cases/{id}/send-email` endpoint ✅
+- Template variable rendering (`{{full_name}}`, `{{case_number}}`, etc.) ✅
+- Gmail OAuth integration (per-user) ✅
+- Resend fallback provider ✅
+- EmailLog for audit trail ✅
+- EMAIL_SENT activity type ✅
 
-**What's missing:**
-- No `automations` or `workflows` table in database
-- No workflow execution engine
-- No trigger system (status changes, time-based, etc.)
-- No actions (send email, create task, assign, etc.)
-- No conditions/rules logic
-
-**Effort to complete:** Large (2-3 weeks)
+**Template Variables:** See `docs/email-template-variables.md`
 
 ---
 
-### 2.2 Email Sending System ⚠️
-**Status:** Backend scaffolded, not production-ready
+### 2.2 Gmail Integration ✅ **COMPLETE**
+**Status:** Fully functional with UI
 
-**What exists:**
-- `EmailTemplate` model with versioning ✅
-- `EmailLog` model for tracking ✅
-- Template CRUD with frontend UI ✅
-- `send_email()` function that queues jobs
-- Worker has `SEND_EMAIL` job handler
-
-**What's missing:**
-1. **No email provider configured by default**
-   - Requires `RESEND_API_KEY` env var
-   - Worker runs in "dry run" mode without it (logs but doesn't send)
-2. **Gmail integration not connected to templates**
-   - `gmail_service.py` exists and can send via user's Gmail
-   - But it's not integrated with EmailTemplate system
-   - No UI to send emails from case detail page
-3. **No "Send Email" button in case UI**
-   - Templates exist but no way to use them on a case
-
-**Effort to complete:** Medium (1 week)
+**Features:**
+- OAuth connect/disconnect in Settings → Integrations ✅
+- `GET /integrations/gmail/status` endpoint ✅
+- `gmail_service.send_email()` for sending ✅
+- Per-user integration (sends as the connected user) ✅
 
 ---
 
 ### 2.3 Meta Lead Ads Integration ✅ **COMPLETE**
 **Status:** Fully functional with admin UI
 
-**What exists:**
-- Webhook endpoint with HMAC verification ✅
-- Worker processes META_LEAD_FETCH jobs ✅
-- Auto-converts leads to cases ✅
+**Features:**
+- Webhook with HMAC verification ✅
+- Auto-creates cases from leads ✅
 - CAPI feedback for conversions ✅
-- Campaign tracking (meta_ad_id, meta_form_id) ✅
-- **Admin UI at `/settings/integrations/meta`** ✅
-- Add/update/delete page tokens via UI ✅
-- Token encryption at rest ✅
-- Status monitoring and expiry tracking ✅
-
-**Configuration required:**
-- META_VERIFY_TOKEN
-- META_APP_SECRET
-- META_ENCRYPTION_KEY
-- Page access tokens (add via UI)
-
-**Note:** Meta spend data requires AD_ACCOUNT_ID
+- Admin UI for page tokens ✅
 
 ---
 
-### 2.4 Zoom Integration ⚠️
+## 3. AUTOMATION ENGINE — ✅ Complete
+
+### 3.1 Workflow Engine ✅ **COMPLETE**
+**Status:** Fully functional
+
+**Triggers:**
+- `case_created` - When a new case is created
+- `status_changed` - When case status changes
+- `case_assigned` - When case is assigned
+- `case_updated` - When case fields change
+- `task_due` - When task is about to be due
+- `task_overdue` - When task is overdue
+- `scheduled` - Cron-based triggers
+- `inactivity` - Cases with no recent activity
+
+**Actions:**
+- `send_email` - Send templated email
+- `create_task` - Create a follow-up task
+- `assign_case` - Assign to user or queue
+- `send_notification` - In-app notification
+- `update_field` - Update case fields
+- `add_note` - Add note to case
+
+**Integration:**
+- Triggers wired to `case_service.py`
+- Worker runs `WORKFLOW_SWEEP` for scheduled/inactivity
+- UI uses real API (no mock data)
+
+---
+
+### 3.2 Activity Feed ✅ **COMPLETE**
+**Status:** Fully functional
+
+**Features:**
+- `GET /analytics/activity-feed` endpoint ✅
+- Org-wide activity stream ✅
+- Filter by activity type, user ✅
+- Manager+ access only ✅
+- `useActivityFeed()` React hook ✅
+
+---
+
+## 4. PARTIAL FEATURES — ⚠️ Need Work
+
+### 4.1 Zoom Integration ⚠️
 **Status:** Backend complete, frontend minimal
 
 **What exists:**
 - OAuth connect/disconnect ✅
-- Create meeting from case detail ✅
-- Send invite via email template ✅
-- Auto-create follow-up task ✅
+- Create meeting from case ✅
+- Send invite email ✅
 
 **What's missing:**
-1. **Settings page only shows connect button**
-   - No management of connected accounts
-   - No meeting history view
-2. **Requires Zoom App credentials**
-   - ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET
+- Settings page only shows connect button
+- No meeting history view
 
-**Effort to complete:** Small (1-2 days)
+**Effort:** Small (1-2 days)
 
 ---
 
-### 2.5 Gmail Integration ⚠️
-**Status:** Backend exists, not exposed in UI
-
-**What exists:**
-- OAuth connect/disconnect backend ✅
-- `gmail_service.send_email()` function ✅
-
-**What's missing:**
-1. **No frontend connect button**
-   - Integrations page doesn't show Gmail option
-2. **Not integrated with email templates**
-   - Can't send template emails via Gmail
-3. **No email compose UI**
-
-**Effort to complete:** Medium (3-5 days)
-
----
-
-### 2.6 CSV Import ✅ **COMPLETE**
-**Status:** Fully functional with UI
-
-**What exists:**
-- `import_service.py` with full import logic ✅
-- Duplicate detection by email (DB + CSV) ✅
-- Preview before commit ✅
-- `CaseImport` model for tracking ✅
-- **Upload UI at `/settings/import`** ✅
-- Drag-drop file upload ✅
-- Real-time preview with validation ✅
-- Column mapping detection ✅
-- Import progress feedback ✅
-- Import history table ✅
-- Error reporting with details ✅
-- Access from cases page "Import CSV" button ✅
-
-**Features:**
-- Auto-detection of common CSV columns
-- Validation with error highlighting
-- Duplicate skip with count display
-- Comprehensive import history
-
----
-
-### 2.7 Pipelines (Custom Stages) ⚠️
+### 4.2 Pipelines (Custom Stages) ⚠️
 **Status:** Backend complete, frontend minimal
 
 **What exists:**
 - `Pipeline` model with versioning ✅
 - CRUD endpoints ✅
 - Version history with rollback ✅
-- Default pipeline on org create ✅
 
 **What's missing:**
-1. **No frontend UI to manage pipelines**
-   - API exists but no `/settings/pipelines` page
-2. **Cases don't use pipeline stages yet**
-   - Still using hardcoded CaseStatus enum
+- No frontend UI to manage pipelines
+- Cases still use hardcoded CaseStatus enum
 
-**Effort to complete:** Large (1-2 weeks to migrate)
+**Effort:** Large (1-2 weeks to migrate)
 
 ---
 
-## 3. SCAFFOLDED FEATURES — 🔧 Mock/Placeholder
+## 5. NOT STARTED — ❌
 
-### 3.1 Worker Job Types 🔧
-The worker handles these job types:
-
-| Job Type | Status |
-|----------|--------|
-| `SEND_EMAIL` | ⚠️ Works with RESEND_API_KEY |
-| `META_LEAD_FETCH` | ✅ Complete |
-| `META_CAPI_EVENT` | ✅ Complete |
-| `REMINDER` | 🔧 Placeholder - just logs |
-| `WEBHOOK_RETRY` | 🔧 Placeholder - just logs |
-| `NOTIFICATION` | 🔧 Placeholder - just logs |
-
-**What's missing:**
-- Reminder job should create notifications/emails for follow-ups
-- Task due/overdue daily sweep (documented in job_service.py TODO)
-
-**Effort:** Small (2-3 days per job type)
-
----
-
-### 3.2 Dashboard Calendar 🔧
-**What exists:**
-- ROADMAP mentions "Home (calendar + quick actions)"
-
-**What's missing:**
-- No calendar component in dashboard
-- No upcoming meetings/tasks calendar view
-
-**Effort:** Medium (3-5 days)
-
----
-
-### 3.3 Activity Feed 🔧
-**What exists:**
-- Case activity log works ✅
-- ROADMAP mentions global "Activity" tab
-
-**What's missing:**
-- No org-wide activity feed page
-- No cross-case activity view
-
-**Effort:** Small (1-2 days)
-
----
-
-## 4. NOT STARTED — ❌
-
-### 4.1 User Theme Customization ❌
-**ROADMAP Week 13**
+### 5.1 User Theme Customization ❌
 - 4-5 preset color themes
-- Light/Dark mode (exists via next-themes)
 - Theme selector in settings
-- Sync across devices
 
 **Effort:** Small (2-3 days)
 
----
-
-### 4.2 SMS/Telephony Integration ❌
+### 5.2 SMS/Telephony Integration ❌
 - No Twilio or other SMS provider
 - No click-to-call
 - No call logging
 
 **Effort:** Large (2-3 weeks)
 
----
-
-### 4.3 Matching System ❌
+### 5.3 Matching System ❌
 - No surrogate → intended parent matching
 - No compatibility scoring
-- No match proposals
 
-**Effort:** Large (2-3 weeks) — core business feature
+**Effort:** Large (2-3 weeks)
 
----
-
-### 4.4 Compliance/HIPAA Features ❌
+### 5.4 Compliance/HIPAA Features ❌
 - No audit export
 - No data retention policies
-- No consent tracking beyond AI
 
 **Effort:** Medium (1 week)
 
+### 5.5 Dashboard Calendar ❌
+- No calendar component
+- No upcoming meetings/tasks view
+
+**Effort:** Medium (3-5 days)
+
 ---
 
-## 5. PRIORITY RECOMMENDATIONS
+## 6. PRIORITY RECOMMENDATIONS
 
-### ✅ Recently Completed
-1. ~~**CSV Import UI**~~ — DONE (Phase 2B)
-2. ~~**Meta Leads admin UI**~~ — DONE (Phase 2B)
-3. ~~**Add "Send Email" to case detail**~~ — DONE (Phase 2A)
-4. ~~**Configure email provider (Resend)**~~ — DONE (Phase 2A)
-5. ~~**Finish Gmail integration UI**~~ — DONE (Phase 2A)
+### ✅ Recently Completed (Phase 3)
+1. ~~Email Sending from Cases~~ ✅
+2. ~~Gmail OAuth Integration UI~~ ✅
+3. ~~Automation Engine~~ ✅
+4. ~~Activity Feed~~ ✅
+5. ~~Task Reminders~~ ✅
+6. ~~Async CSV Import~~ ✅
 
-### Immediate (Next Sprint)
-6. **Task Reminders (due today/overdue)** — High value, low effort
+### Next Sprint
+7. **Zoom Settings Enhancement** — Show connected accounts, meeting history
+8. **Dashboard Calendar** — Upcoming tasks/meetings view
 
-### Medium Term (Next Month)
-7. **Automation Engine MVP** — Start with simple rules
-8. **Pipeline UI** — Replace hardcoded statuses
-9. **Calendar view** — Manager request
+### Medium Term
+9. **Pipeline UI** — Replace hardcoded statuses
+10. **SMS Integration** — Communication expansion
 
 ### Long Term
-10. **Matching System** — Core business differentiator
-11. **SMS Integration** — Communication expansion
+11. **Matching System** — Core business differentiator
 
 ---
 
-## 6. FILES REFERENCE
+## 7. TEST COVERAGE
 
-### Backend (Key Services)
-```
-apps/api/app/services/
-├── email_service.py      # Template rendering, send_email queues job
-├── gmail_service.py      # Gmail API sending (not connected to UI)
-├── job_service.py        # Background job scheduling
-└── worker.py             # Job processing with TODOs
-```
-
-### Frontend (Incomplete Pages)
-```
-apps/web/app/(app)/
-├── automation/           # Mock workflow data
-├── settings/
-│   ├── integrations/
-│   │   └── meta/         # ✅ NOW EXISTS - Meta page token management
-│   ├── import/           # ✅ NOW EXISTS - CSV import UI
-│   └── pipelines/        # Does not exist
-```
+| Component | Tests | Status |
+|-----------|-------|--------|
+| Backend | 59 | ✅ All passing |
+| Frontend | 30 | ✅ All passing |
+| **Total** | **89** | ✅ **100%** |
 
 ---
 
-**Total Effort Estimate (all gaps):** 8-12 weeks of focused development
-**MVP Improvements (top 6):** 2-3 weeks
+**Total Effort Estimate (remaining gaps):** 4-6 weeks  
+**MVP Improvements (top 3):** 1 week
