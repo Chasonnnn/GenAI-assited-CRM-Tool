@@ -90,10 +90,17 @@ class MatchUpdateNotesRequest(BaseModel):
 # Helper Functions
 # =============================================================================
 
-def _match_to_read(match: Match, db: Session) -> MatchRead:
-    """Convert Match model to MatchRead schema with lookups."""
-    case = db.query(Case).filter(Case.id == match.case_id).first()
-    ip = db.query(IntendedParent).filter(IntendedParent.id == match.intended_parent_id).first()
+def _match_to_read(match: Match, db: Session, org_id: str | None = None) -> MatchRead:
+    """Convert Match model to MatchRead schema with org-scoped lookups."""
+    # Org-scoped lookups for defense in depth
+    case_filter = [Case.id == match.case_id]
+    ip_filter = [IntendedParent.id == match.intended_parent_id]
+    if org_id:
+        case_filter.append(Case.organization_id == org_id)
+        ip_filter.append(IntendedParent.organization_id == org_id)
+    
+    case = db.query(Case).filter(*case_filter).first()
+    ip = db.query(IntendedParent).filter(*ip_filter).first()
     
     return MatchRead(
         id=str(match.id),
@@ -216,7 +223,7 @@ def create_match(
     db.commit()
     db.refresh(match)
     
-    return _match_to_read(match, db)
+    return _match_to_read(match, db, str(session.org_id))
 
 
 @router.get("/", response_model=MatchListResponse)
@@ -246,12 +253,18 @@ def list_matches(
     total = query.count()
     matches = query.order_by(Match.proposed_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
     
-    # Batch load cases and IPs
+    # Batch load cases and IPs (org-scoped)
     case_ids = {m.case_id for m in matches}
     ip_ids = {m.intended_parent_id for m in matches}
     
-    cases = {c.id: c for c in db.query(Case).filter(Case.id.in_(case_ids)).all()} if case_ids else {}
-    ips = {i.id: i for i in db.query(IntendedParent).filter(IntendedParent.id.in_(ip_ids)).all()} if ip_ids else {}
+    cases = {c.id: c for c in db.query(Case).filter(
+        Case.organization_id == session.org_id,
+        Case.id.in_(case_ids)
+    ).all()} if case_ids else {}
+    ips = {i.id: i for i in db.query(IntendedParent).filter(
+        IntendedParent.organization_id == session.org_id,
+        IntendedParent.id.in_(ip_ids)
+    ).all()} if ip_ids else {}
     
     items = [_match_to_list_item(m, cases.get(m.case_id), ips.get(m.intended_parent_id)) for m in matches]
     
@@ -264,7 +277,7 @@ def get_match(
     db: Session = Depends(get_db),
     session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
 ) -> MatchRead:
-    """Get match details."""
+    """Get match details. Auto-transitions to 'reviewing' on first view by non-proposer."""
     match = db.query(Match).filter(
         Match.id == match_id,
         Match.organization_id == session.org_id,
@@ -272,7 +285,17 @@ def get_match(
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
     
-    return _match_to_read(match, db)
+    # Auto-transition to reviewing on first view by someone other than proposer
+    if (
+        match.status == MatchStatus.PROPOSED.value
+        and match.proposed_by_user_id != session.user_id
+    ):
+        match.status = MatchStatus.REVIEWING.value
+        match.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(match)
+    
+    return _match_to_read(match, db, str(session.org_id))
 
 
 @router.put("/{match_id}/accept", response_model=MatchRead, dependencies=[Depends(require_csrf_header)])
@@ -343,7 +366,7 @@ def accept_match(
     db.commit()
     db.refresh(match)
     
-    return _match_to_read(match, db)
+    return _match_to_read(match, db, str(session.org_id))
 
 
 @router.put("/{match_id}/reject", response_model=MatchRead, dependencies=[Depends(require_csrf_header)])
@@ -399,7 +422,7 @@ def reject_match(
     db.commit()
     db.refresh(match)
     
-    return _match_to_read(match, db)
+    return _match_to_read(match, db, str(session.org_id))
 
 
 @router.delete("/{match_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_csrf_header)])
@@ -430,6 +453,20 @@ def cancel_match(
     match.status = MatchStatus.CANCELLED.value
     match.updated_at = datetime.now(timezone.utc)
     
+    # Log activity
+    from app.services import activity_service
+    activity_service.log_case_activity(
+        db=db,
+        case_id=match.case_id,
+        organization_id=session.org_id,
+        activity_type=CaseActivityType.MATCH_CANCELLED,
+        actor_user_id=session.user_id,
+        details={
+            "match_id": str(match.id),
+            "intended_parent_id": str(match.intended_parent_id),
+        }
+    )
+    
     db.commit()
 
 
@@ -454,4 +491,4 @@ def update_match_notes(
     db.commit()
     db.refresh(match)
     
-    return _match_to_read(match, db)
+    return _match_to_read(match, db, str(session.org_id))
