@@ -139,7 +139,7 @@ export function EmailComposeDialog({
                     {/* Template Selector */}
                     <div className="grid gap-2">
                         <Label htmlFor="template">Email Template</Label>
-                        <Select value={selectedTemplate} onValueChange={setSelectedTemplate} disabled={templatesLoading}>
+                        <Select value={selectedTemplate} onValueChange={(value) => setSelectedTemplate(value || "")} disabled={templatesLoading}>
                             <SelectTrigger id="template">
                                 <SelectValue placeholder={templatesLoading ? "Loading templates..." : "Select a template..."} />
                             </SelectTrigger>
