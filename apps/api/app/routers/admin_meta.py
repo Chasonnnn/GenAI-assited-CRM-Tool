@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_roles
+from app.core.deps import get_db, require_csrf_header, require_roles
 from app.core.encryption import encrypt_token, is_encryption_configured
 from app.db.enums import Role
 from app.db.models import MetaPageMapping
@@ -48,8 +48,9 @@ class MetaPageRead(BaseModel):
     page_name: str | None
     token_expires_at: datetime | None
     is_active: bool
-    last_sync_at: datetime | None = None
+    last_success_at: datetime | None = None  # From model's last_success_at
     last_error: str | None = None
+    last_error_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -80,6 +81,7 @@ def list_meta_pages(
 @router.post("", response_model=MetaPageRead, status_code=status.HTTP_201_CREATED)
 def create_meta_page(
     data: MetaPageCreate,
+    _csrf: None = Depends(require_csrf_header),
     session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
     db: Session = Depends(get_db),
 ):
@@ -130,6 +132,7 @@ def create_meta_page(
 def update_meta_page(
     page_id: str,
     data: MetaPageUpdate,
+    _csrf: None = Depends(require_csrf_header),
     session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
     db: Session = Depends(get_db),
 ):
@@ -173,6 +176,7 @@ def update_meta_page(
 @router.delete("/{page_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_meta_page(
     page_id: str,
+    _csrf: None = Depends(require_csrf_header),
     session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
     db: Session = Depends(get_db),
 ):

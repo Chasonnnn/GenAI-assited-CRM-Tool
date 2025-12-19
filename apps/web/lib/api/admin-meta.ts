@@ -12,8 +12,9 @@ export interface MetaPage {
     page_name: string | null
     token_expires_at: string | null
     is_active: boolean
-    last_sync_at: string | null
+    last_success_at: string | null
     last_error: string | null
+    last_error_at: string | null
     created_at: string
     updated_at: string
 }

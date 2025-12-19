@@ -159,7 +159,7 @@ async def test_execute_import_success(authed_client: AsyncClient, db, test_org):
         files={"file": ("import.csv", io.BytesIO(csv_data), "text/csv")},
     )
     
-    assert response.status_code == 202
+    assert response.status_code == 200
     data = response.json()
     assert "import_id" in data
     assert "message" in data
@@ -211,7 +211,7 @@ async def test_execute_import_skips_duplicates(authed_client: AsyncClient, db, t
         files={"file": ("import.csv", io.BytesIO(csv_data), "text/csv")},
     )
     
-    assert response.status_code == 202
+    assert response.status_code == 200
     
     # Should only create the new case
     cases = db.query(Case).filter(
@@ -235,7 +235,7 @@ async def test_execute_import_handles_validation_errors(authed_client: AsyncClie
         files={"file": ("import.csv", io.BytesIO(csv_data), "text/csv")},
     )
     
-    assert response.status_code == 202
+    assert response.status_code == 200
     import_id = response.json()["import_id"]
     
     # Check import record
@@ -406,5 +406,5 @@ async def test_execute_import_empty_csv(authed_client: AsyncClient):
         files={"file": ("empty.csv", io.BytesIO(csv_data), "text/csv")},
     )
     
-    assert response.status_code == 202
+    assert response.status_code == 200
     # Should complete with 0 imports

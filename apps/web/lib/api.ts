@@ -23,9 +23,12 @@ interface RequestOptions extends Omit<RequestInit, 'body'> {
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
     const { body, headers: customHeaders, ...rest } = options;
 
+    // Check if body is FormData - don't set Content-Type (browser sets multipart boundary)
+    const isFormData = body instanceof FormData;
+
     const headers: HeadersInit = {
-        'Content-Type': 'application/json',
         'X-Requested-With': 'XMLHttpRequest', // CSRF header
+        ...(!isFormData && { 'Content-Type': 'application/json' }),
         ...customHeaders,
     };
 
@@ -36,20 +39,13 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     };
 
     if (body !== undefined) {
-        config.body = JSON.stringify(body);
+        // Don't JSON.stringify FormData - pass it directly
+        config.body = isFormData ? (body as FormData) : JSON.stringify(body);
     }
 
     const response = await fetch(`${API_BASE}${path}`, config);
 
     if (!response.ok) {
-        // Handle auth errors - don't auto-redirect for now
-        // if (response.status === 401) {
-        //     // Optionally redirect to login
-        //     if (typeof window !== 'undefined') {
-        //         window.location.href = '/login';
-        //     }
-        // }
-
         let message: string | undefined;
         try {
             const err = await response.json();
@@ -85,6 +81,13 @@ export const api = {
 
     delete: <T>(path: string, options?: RequestOptions) =>
         request<T>(path, { method: 'DELETE', ...options }),
+
+    /**
+     * Upload files via FormData.
+     * Automatically handles multipart encoding.
+     */
+    upload: <T>(path: string, formData: FormData, options?: Omit<RequestOptions, 'body'>) =>
+        request<T>(path, { method: 'POST', body: formData, ...options }),
 };
 
 export default api;
