@@ -76,6 +76,11 @@ vi.mock('@/lib/hooks/use-ai', () => ({
     useAISettings: () => ({ data: { is_enabled: false } }),
 }))
 
+vi.mock('@/lib/hooks/use-email-templates', () => ({
+    useEmailTemplates: () => ({ data: [], isLoading: false }),
+    useSendEmail: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}))
+
 describe('CaseDetailPage', () => {
     beforeEach(() => {
         mockUseCase.mockReturnValue({

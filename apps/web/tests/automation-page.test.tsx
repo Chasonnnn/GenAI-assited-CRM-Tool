@@ -2,6 +2,13 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import AutomationPage from '../app/(app)/automation/page'
 
+// Mock Next.js navigation
+vi.mock('next/navigation', () => ({
+    useSearchParams: () => ({
+        get: vi.fn(() => null),
+    }),
+}))
+
 vi.mock('@/lib/hooks/use-email-templates', () => ({
     useEmailTemplates: () => ({ data: [], isLoading: false }),
     useCreateEmailTemplate: () => ({ mutateAsync: vi.fn(), isPending: false }),
