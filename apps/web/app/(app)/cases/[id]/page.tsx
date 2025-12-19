@@ -1183,6 +1183,20 @@ export default function CaseDetailPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Email Compose Dialog */}
+            <EmailComposeDialog
+                open={emailDialogOpen}
+                onOpenChange={setEmailDialogOpen}
+                caseData={{
+                    id: caseData.id,
+                    email: caseData.email,
+                    full_name: caseData.full_name,
+                    case_number: caseData.case_number,
+                    status: caseData.status,
+                    state: caseData.state,
+                }}
+            />
         </div>
     )
 }
