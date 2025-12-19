@@ -662,32 +662,9 @@ class WorkflowEngine:
     
     def _resolve_email_variables(self, db: Session, case: Case) -> dict:
         """Resolve email template variables from case context."""
-        from app.db.models import Organization
-        
-        org = db.query(Organization).filter(Organization.id == case.organization_id).first()
-        
-        # Get owner name
-        owner_name = ""
-        if case.owner_type == OwnerType.USER.value and case.owner_id:
-            owner = db.query(User).filter(User.id == case.owner_id).first()
-            owner_name = owner.display_name if owner else ""
-        elif case.owner_type == OwnerType.QUEUE.value and case.owner_id:
-            queue = db.query(Queue).filter(Queue.id == case.owner_id).first()
-            owner_name = queue.name if queue else ""
-        
-        # Build status label
-        status_labels = {s.value: s.value.replace("_", " ").title() for s in CaseStatus}
-        
-        return {
-            "case.full_name": case.full_name or "",
-            "case.email": case.email or "",
-            "case.phone": case.phone or "",
-            "case.case_number": case.case_number or "",
-            "case.status": status_labels.get(case.status, case.status),
-            "case.state": case.state or "",
-            "case.owner_name": owner_name,
-            "org.name": org.name if org else "",
-        }
+        from app.services import email_service
+
+        return email_service.build_case_template_variables(db, case)
 
 
 # Singleton instance

@@ -863,7 +863,7 @@ export default function AutomationPage() {
                                 className="mt-1.5 min-h-[200px]"
                             />
                             <p className="mt-1 text-xs text-muted-foreground">
-                                Available variables: {"{{case.full_name}}"}, {"{{case.email}}"}, {"{{case.status}}"}, {"{{org.name}}"}
+                                Available variables: {"{{full_name}}"}, {"{{email}}"}, {"{{status}}"}, {"{{org_name}}"}
                             </p>
                         </div>
                     </div>

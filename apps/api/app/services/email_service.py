@@ -9,7 +9,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.db.models import EmailTemplate, EmailLog, Job
+from app.db.models import EmailTemplate, EmailLog, Job, Case
 from app.db.enums import EmailStatus, JobType
 from app.services.job_service import schedule_job
 from app.services import version_service
@@ -225,6 +225,36 @@ def render_template(
     rendered_subject = VARIABLE_PATTERN.sub(replace_var, subject)
     rendered_body = VARIABLE_PATTERN.sub(replace_var, body)
     return rendered_subject, rendered_body
+
+
+def build_case_template_variables(db: Session, case: Case) -> dict[str, str]:
+    """Build flat template variables for a case context."""
+    from app.db.enums import CaseStatus, OwnerType
+    from app.db.models import Organization, Queue, User
+
+    org = db.query(Organization).filter(Organization.id == case.organization_id).first()
+
+    owner_name = ""
+    if case.owner_type == OwnerType.USER.value and case.owner_id:
+        owner = db.query(User).filter(User.id == case.owner_id).first()
+        owner_name = owner.display_name if owner else ""
+    elif case.owner_type == OwnerType.QUEUE.value and case.owner_id:
+        queue = db.query(Queue).filter(Queue.id == case.owner_id).first()
+        owner_name = queue.name if queue else ""
+
+    status_labels = {s.value: s.value.replace("_", " ").title() for s in CaseStatus}
+    status_value = case.status.value if hasattr(case.status, "value") else case.status
+
+    return {
+        "full_name": case.full_name or "",
+        "email": case.email or "",
+        "phone": case.phone or "",
+        "case_number": case.case_number or "",
+        "status": status_labels.get(status_value, str(status_value) if status_value else ""),
+        "state": case.state or "",
+        "owner_name": owner_name,
+        "org_name": org.name if org else "",
+    }
 
 
 def send_email(
