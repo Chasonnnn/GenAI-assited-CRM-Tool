@@ -189,9 +189,9 @@ export default function MetaLeadsAdminPage() {
                                                     )}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {page.last_sync_at ? (
+                                                    {page.last_success_at ? (
                                                         <span className="text-sm text-muted-foreground">
-                                                            {formatDistanceToNow(new Date(page.last_sync_at), { addSuffix: true })}
+                                                            {formatDistanceToNow(new Date(page.last_success_at), { addSuffix: true })}
                                                         </span>
                                                     ) : (
                                                         <span className="text-muted-foreground">Never</span>

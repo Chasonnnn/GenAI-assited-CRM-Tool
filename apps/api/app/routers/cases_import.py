@@ -130,7 +130,7 @@ async def preview_csv_import(
 @router.post(
     "/execute",
     response_model=ImportExecuteResponse,
-    status_code=status.HTTP_202_ACCEPTED,
+    status_code=status.HTTP_200_OK,  # Sync operation, not 202
     dependencies=[Depends(require_csrf_header)],
 )
 async def execute_csv_import(
@@ -172,8 +172,8 @@ async def execute_csv_import(
         total_rows=total_rows,
     )
     
-    # Execute import synchronously for now
-    # TODO: Move to background job queue for large files
+    # Execute import synchronously
+    # For large files (>1000 rows), consider moving to background job
     try:
         import_service.execute_import(
             db=db,

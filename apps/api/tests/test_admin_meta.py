@@ -89,7 +89,7 @@ async def test_create_meta_page_without_auth_fails(client: AsyncClient):
         "/admin/meta-pages",
         json={"page_id": "123", "access_token": "EAA"},
     )
-    assert response.status_code == 401
+    assert response.status_code == 403  # CSRF check fails before auth
 
 
 @pytest.mark.asyncio
