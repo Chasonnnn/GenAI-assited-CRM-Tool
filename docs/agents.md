@@ -365,11 +365,42 @@ While coding:
 - Do not introduce new libraries unless necessary.
 - Do not refactor unrelated code in feature PRs.
 - Preserve multi-tenant and permission rules.
-- **CRITICAL - Zero Tolerance for Warnings/Bugs:**
-  - When you encounter ANY warnings, bugs, or issues during development, **FIX THEM IMMEDIATELY**
-  - **DO NOT** leave them for later or add TODO comments
-  - **DO NOT** proceed to the next task until all warnings are resolved
-  - Examples of issues to fix immediately:
+- **CRITICAL - Zero-tolerance for warnings and bugs**
+
+This project follows a **zero-tolerance rule** for warnings, bugs, and issues:
+- Fix all warnings immediately when they appear
+- Do not leave TODO comments or incomplete implementations
+- Test thoroughly before committing
+- Follow the "no backward compatibility" rule (clean, modern implementations)
+
+### **Production-quality over minimal viable**
+
+**Critical principle:** Build **fully functional, polished, production-ready** features, not minimal viable products.
+
+When implementing features:
+- ✅ Complete UI/UX with proper error handling, loading states, validation
+- ✅ Comprehensive feedback (success/error messages, progress indicators)
+- ✅ Edge case handling (empty states, network errors, validation)
+- ✅ Accessibility and usability (keyboard nav, screen readers, intuitive flow)
+- ✅ Visual polish (consistent styling, smooth transitions, professional appearance)
+
+**Avoid:**
+- ❌ "Basic" or "minimal" implementations
+- ❌ Missing error states or loading indicators
+- ❌ Placeholder text instead of real functionality
+- ❌ "TODO: Add feature X later" comments
+
+**Example:** When building a CSV import UI:
+- Not just: "Upload button + file picker"
+- But: Upload with drag-drop, preview table, column validation, progress bar, error reporting, duplicate highlighting, import history, downloadable error reports
+
+This is a **production CRM tool**, not a prototype. Every feature should be complete, polished, and ready for real use.
+
+---
+
+## 12) Deployment Notes (Target)
+
+- Examples of issues to fix immediately:
     - ❌ Build warnings (TypeScript errors, lint errors, deprecations)
     - ❌ Test failures
     - ❌ Runtime warnings (React hooks, Next.js warnings, etc.)
