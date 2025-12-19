@@ -18,6 +18,9 @@ vi.mock('@/lib/hooks/use-email-templates', () => ({
 
 vi.mock('@/lib/hooks/use-workflows', () => ({
     useWorkflows: () => ({ data: [], isLoading: false }),
+    useWorkflowStats: () => ({ data: { total: 0, enabled: 0, disabled: 0 }, isLoading: false }),
+    useWorkflowOptions: () => ({ data: { triggerOptions: [], actionOptions: [], conditionFields: [] }, isLoading: false }),
+    useWorkflowExecutions: () => ({ data: { items: [], total: 0, page: 1, pages: 1 }, isLoading: false }),
     useCreateWorkflow: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useUpdateWorkflow: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useDeleteWorkflow: () => ({ mutateAsync: vi.fn(), isPending: false }),
