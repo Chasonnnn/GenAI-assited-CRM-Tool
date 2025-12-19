@@ -167,29 +167,13 @@ async def test_execute_import_success(authed_client: AsyncClient, db, test_org):
     # Refresh session to see committed data
     db.expire_all()
     
-    # DEBUG: Check import record for errors
-    import_record_debug = db.query(CaseImport).filter(
-        CaseImport.id == uuid.UUID(data["import_id"])
-    ).first()
-    if import_record_debug:
-        print(f"\n🔍 DEBUG Import Record:")
-        print(f"  Status: {import_record_debug.status}")
-        print(f"  Imported: {import_record_debug.imported_count}")
-        print(f"  Skipped: {import_record_debug.skipped_count}")
-        print(f"  Errors: {import_record_debug.error_count}")
-        if import_record_debug.errors:
-            print(f"  Error details:")
-            for err in import_record_debug.errors:
-                print(f"    Row {err.get('row', '?')}: {err.get('errors', err)}")
-    
     # Verify cases created
     cases = db.query(Case).filter(Case.organization_id == test_org.id).all()
-    print(f"🔍 DEBUG: Found {len(cases)} cases in database")
     assert len(cases) == 2
     
     emails = {c.email for c in cases}
     assert "alice@test.com" in emails
-    assert "alice@test.com" in emails
+    assert "bob@test.com" in emails
     
     # Verify import record created
     import_record = db.query(CaseImport).filter(
