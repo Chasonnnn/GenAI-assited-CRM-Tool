@@ -44,6 +44,7 @@ import {
 } from "lucide-react"
 import {
     useWorkflows,
+    useWorkflow,
     useWorkflowStats,
     useWorkflowOptions,
     useWorkflowExecutions,
@@ -109,6 +110,7 @@ export default function AutomationPage() {
     const [showCreateModal, setShowCreateModal] = useState(false)
     const [showHistoryPanel, setShowHistoryPanel] = useState(false)
     const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null)
+    const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null)
     const [wizardStep, setWizardStep] = useState(1)
 
     // Form state
@@ -134,6 +136,7 @@ export default function AutomationPage() {
     const { data: executions } = useWorkflowExecutions(selectedWorkflowId || "", { limit: 20 })
 
     const createWorkflow = useCreateWorkflow()
+    const updateWorkflow = useUpdateWorkflow()
     const toggleWorkflow = useToggleWorkflow()
     const duplicateWorkflow = useDuplicateWorkflow()
     const deleteWorkflow = useDeleteWorkflow()
@@ -172,9 +175,31 @@ export default function AutomationPage() {
         setConditions([])
         setActions([])
         setShowCreateModal(false)
+        setEditingWorkflowId(null)
     }
 
-    const handleCreateWorkflow = () => {
+    const handleEdit = async (workflowId: string) => {
+        setEditingWorkflowId(workflowId)
+        setShowCreateModal(true)
+        setWizardStep(1)
+        // The full workflow data will be fetched by useWorkflow hook
+    }
+
+    // Fetch full workflow when editing
+    const { data: editingWorkflow } = useWorkflow(editingWorkflowId || "")
+
+    // Populate form when editing workflow data is loaded
+    if (editingWorkflow && editingWorkflowId && workflowName === "" && showCreateModal) {
+        setWorkflowName(editingWorkflow.name)
+        setWorkflowDescription(editingWorkflow.description || "")
+        setTriggerType(editingWorkflow.trigger_type)
+        setTriggerConfig(editingWorkflow.trigger_config || {})
+        setConditions(editingWorkflow.conditions || [])
+        setConditionLogic((editingWorkflow.condition_logic || "AND") as "AND" | "OR")
+        setActions(editingWorkflow.actions || [])
+    }
+
+    const handleSaveWorkflow = () => {
         if (!workflowName || !triggerType || actions.length === 0) return
 
         const data: WorkflowCreate = {
@@ -188,9 +213,15 @@ export default function AutomationPage() {
             is_enabled: true,
         }
 
-        createWorkflow.mutate(data, {
-            onSuccess: () => resetWizard(),
-        })
+        if (editingWorkflowId) {
+            updateWorkflow.mutate({ id: editingWorkflowId, data }, {
+                onSuccess: () => resetWizard(),
+            })
+        } else {
+            createWorkflow.mutate(data, {
+                onSuccess: () => resetWizard(),
+            })
+        }
     }
 
     const addCondition = () => {
@@ -409,7 +440,7 @@ export default function AutomationPage() {
                                                             </Button>
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent align="end">
-                                                            <DropdownMenuItem>Edit</DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => handleEdit(workflow.id)}>Edit</DropdownMenuItem>
                                                             <DropdownMenuItem onClick={() => handleDuplicate(workflow.id)}>
                                                                 Duplicate
                                                             </DropdownMenuItem>
@@ -475,7 +506,7 @@ export default function AutomationPage() {
             <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
                 <DialogContent className="max-w-2xl">
                     <DialogHeader>
-                        <DialogTitle>Create Workflow</DialogTitle>
+                        <DialogTitle>{editingWorkflowId ? "Edit Workflow" : "Create Workflow"}</DialogTitle>
                         <DialogDescription>Step {wizardStep} of 4</DialogDescription>
                     </DialogHeader>
 
@@ -758,14 +789,14 @@ export default function AutomationPage() {
                             </Button>
                         ) : (
                             <Button
-                                onClick={handleCreateWorkflow}
+                                onClick={handleSaveWorkflow}
                                 className="bg-teal-500 hover:bg-teal-600"
-                                disabled={!workflowName || !triggerType || actions.length === 0 || createWorkflow.isPending}
+                                disabled={!workflowName || !triggerType || actions.length === 0 || createWorkflow.isPending || updateWorkflow.isPending}
                             >
-                                {createWorkflow.isPending ? (
+                                {(createWorkflow.isPending || updateWorkflow.isPending) ? (
                                     <LoaderIcon className="mr-2 size-4 animate-spin" />
                                 ) : null}
-                                Create Workflow
+                                {editingWorkflowId ? "Save Changes" : "Create Workflow"}
                             </Button>
                         )}
                     </DialogFooter>
