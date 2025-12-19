@@ -209,6 +209,31 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 | `/cases/assignees` | GET | Get org members for assignment dropdown |
 | `/cases/bulk-assign` | POST | Bulk assign cases (case_manager+ only) |
 
+### Email Templates
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/email-templates` | GET | List templates |
+| `/email-templates` | POST | Create template (manager+ only) |
+| `/email-templates/{id}` | GET, PATCH, DELETE | Template CRUD |
+| `/email-templates/{id}/versions` | GET | List version history |
+| `/cases/{id}/send-email` | POST | Send email to case using template |
+
+### CSV Import
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/cases/import/preview` | POST | Upload CSV and preview data with validation |
+| `/cases/import/execute` | POST | Execute CSV import |
+| `/cases/import` | GET | List import history |
+| `/cases/import/{id}` | GET | Get import details with errors |
+
+### Meta Leads Admin
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/admin/meta-pages` | GET | List configured Meta pages |
+| `/admin/meta-pages` | POST | Add page token (encrypted) |
+| `/admin/meta-pages/{page_id}` | PUT | Update page configuration |
+| `/admin/meta-pages/{page_id}` | DELETE | Remove page |
+
 ### Tasks
 | Endpoint | Method | Description |
 |----------|--------|-------------|

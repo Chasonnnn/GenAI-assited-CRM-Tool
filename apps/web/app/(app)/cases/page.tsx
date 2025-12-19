@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Checkbox } from "@/components/ui/checkbox"
-import { PlusIcon, MoreVerticalIcon, SearchIcon, XIcon, LoaderIcon, CheckIcon, ArchiveIcon, UserPlusIcon, UsersIcon } from "lucide-react"
+import { PlusIcon, MoreVerticalIcon, SearchIcon, XIcon, LoaderIcon, CheckIcon, ArchiveIcon, UserPlusIcon, UsersIcon, UploadIcon } from "lucide-react"
 import { useCases, useArchiveCase, useRestoreCase, useUpdateCase, useAssignees, useBulkAssign, useBulkArchive } from "@/lib/hooks/use-cases"
 import { useQueues } from "@/lib/hooks/use-queues"
 import { useAuth } from "@/lib/auth-context"
@@ -239,7 +239,12 @@ export default function CasesPage() {
                             {data?.total ?? 0} total cases
                         </p>
                     </div>
-                    {/* New Case button removed - route /cases/new doesn't exist */}
+                    <Link href="/settings/import">
+                        <Button>
+                            <UploadIcon className="mr-2 size-4" />
+                            Import CSV
+                        </Button>
+                    </Link>
                 </div>
 
                 {/* Filters Row */}

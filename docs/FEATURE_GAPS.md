@@ -90,6 +90,21 @@ These are fully functional end-to-end:
 - Analyze dashboard endpoint (managers)
 - Action approval workflow
 
+### CSV Import ✅
+- Upload CSV with drag-drop UI
+- Real-time preview with validation
+- Column mapping auto-detection
+- Duplicate detection (DB + CSV)
+- Import progress tracking
+- Import history with error details
+
+### Meta Leads Admin ✅
+- Add/update/delete page tokens (UI)
+- Token encryption at rest
+- Status monitoring (active/expired)
+- Expiry tracking with badges
+- Manager+ access control
+
 ---
 
 ## 2. PARTIAL FEATURES — ⚠️ Need Work
@@ -139,8 +154,8 @@ These are fully functional end-to-end:
 
 ---
 
-### 2.3 Meta Lead Ads Integration ⚠️
-**Status:** Backend complete, requires Meta configuration
+### 2.3 Meta Lead Ads Integration ✅ **COMPLETE**
+**Status:** Fully functional with admin UI
 
 **What exists:**
 - Webhook endpoint with HMAC verification ✅
@@ -148,19 +163,18 @@ These are fully functional end-to-end:
 - Auto-converts leads to cases ✅
 - CAPI feedback for conversions ✅
 - Campaign tracking (meta_ad_id, meta_form_id) ✅
+- **Admin UI at `/settings/integrations/meta`** ✅
+- Add/update/delete page tokens via UI ✅
+- Token encryption at rest ✅
+- Status monitoring and expiry tracking ✅
 
-**What's missing:**
-1. **No admin UI to configure Meta pages**
-   - Must use CLI: `python -m app.cli update-meta-page-token`
-   - No `/settings/integrations/meta` page
-2. **Requires real Meta App credentials**
-   - META_VERIFY_TOKEN
-   - META_APP_SECRET
-   - Page access tokens (encrypted in DB)
-3. **No Meta spend data without AD_ACCOUNT_ID**
-   - Reports page shows Ad Spend card but empty without config
+**Configuration required:**
+- META_VERIFY_TOKEN
+- META_APP_SECRET
+- META_ENCRYPTION_KEY
+- Page access tokens (add via UI)
 
-**Effort to complete:** Small (2-3 days)
+**Note:** Meta spend data requires AD_ACCOUNT_ID
 
 ---
 
@@ -202,21 +216,28 @@ These are fully functional end-to-end:
 
 ---
 
-### 2.6 CSV Import ⚠️
-**Status:** Backend exists, no frontend
+### 2.6 CSV Import ✅ **COMPLETE**
+**Status:** Fully functional with UI
 
 **What exists:**
-- `import_service.py` with `import_cases_from_csv()`
-- Duplicate detection by email
-- Preview before commit
-- `CaseImport` model for tracking
+- `import_service.py` with full import logic ✅
+- Duplicate detection by email (DB + CSV) ✅
+- Preview before commit ✅
+- `CaseImport` model for tracking ✅
+- **Upload UI at `/settings/import`** ✅
+- Drag-drop file upload ✅
+- Real-time preview with validation ✅
+- Column mapping detection ✅
+- Import progress feedback ✅
+- Import history table ✅
+- Error reporting with details ✅
+- Access from cases page "Import CSV" button ✅
 
-**What's missing:**
-1. **No upload UI in frontend**
-   - Settings page mentions Import but no actual page
-2. **No progress/error feedback UI**
-
-**Effort to complete:** Medium (3-5 days)
+**Features:**
+- Auto-detection of common CSV columns
+- Validation with error highlighting
+- Duplicate skip with count display
+- Comprehensive import history
 
 ---
 
@@ -328,14 +349,14 @@ The worker handles these job types:
 
 ## 5. PRIORITY RECOMMENDATIONS
 
-### Immediate (This Sprint)
-1. **Add "Send Email" to case detail** — Most requested
-2. **Configure email provider (Resend)** — Enables all email features
-3. **Finish Gmail integration UI** — Users already see Zoom, expect Gmail
+### ✅ Recently Completed
+1. ~~**CSV Import UI**~~ — DONE (Phase 2B)
+2. ~~**Meta Leads admin UI**~~ — DONE (Phase 2B)
+3. ~~**Add "Send Email" to case detail**~~ — DONE (Phase 2A)
+4. ~~**Configure email provider (Resend)**~~ — DONE (Phase 2A)
+5. ~~**Finish Gmail integration UI**~~ — DONE (Phase 2A)
 
-### Short Term (Next 2 Weeks)
-4. **CSV Import UI** — Common onboarding need
-5. **Meta Leads admin UI** — Currently requires CLI
+### Immediate (Next Sprint)
 6. **Task Reminders (due today/overdue)** — High value, low effort
 
 ### Medium Term (Next Month)
@@ -365,9 +386,10 @@ apps/api/app/services/
 apps/web/app/(app)/
 ├── automation/           # Mock workflow data
 ├── settings/
-│   ├── integrations/     # Missing Gmail, partial Meta
-│   ├── pipelines/        # Does not exist
-│   └── import/           # Does not exist
+│   ├── integrations/
+│   │   └── meta/         # ✅ NOW EXISTS - Meta page token management
+│   ├── import/           # ✅ NOW EXISTS - CSV import UI
+│   └── pipelines/        # Does not exist
 ```
 
 ---
