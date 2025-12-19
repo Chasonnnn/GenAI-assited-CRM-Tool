@@ -161,6 +161,10 @@ ZOOM_CLIENT_ID=
 ZOOM_CLIENT_SECRET=
 ZOOM_REDIRECT_URI=http://localhost:8000/integrations/zoom/callback
 GMAIL_REDIRECT_URI=http://localhost:8000/integrations/gmail/callback
+# Email Provider (Resend)
+RESEND_API_KEY=re_your_api_key_here  # Get from https://resend.com/api-keys
+# Redis (optional, for distributed rate limiting across workers)
+REDIS_URL=redis://localhost:6379/0
 # Optional AI (example; exact wiring may evolve):
 # AI_ENABLED=false
 # AI_PROVIDER=openai
