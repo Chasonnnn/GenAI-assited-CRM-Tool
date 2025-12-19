@@ -441,19 +441,20 @@ class Case(Base):
     
     # Owner relationships for eager loading (fixes N+1 query)
     # These use custom join conditions since owner_id can point to either User or Queue
+    # Using selectin loading to avoid LEFT OUTER JOIN conflicts with FOR UPDATE
     owner_user: Mapped["User | None"] = relationship(
         "User",
         foreign_keys=[owner_id],
         primaryjoin="and_(Case.owner_id==User.id, Case.owner_type=='user')",
         viewonly=True,
-        lazy="joined"
+        lazy="selectin"
     )
     owner_queue: Mapped["Queue | None"] = relationship(
         "Queue",
         foreign_keys=[owner_id],
         primaryjoin="and_(Case.owner_id==Queue.id, Case.owner_type=='queue')",
         viewonly=True,
-        lazy="joined"
+        lazy="selectin"
     )
     
     # Notes use EntityNote with entity_type='case' - no direct relationship
