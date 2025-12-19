@@ -438,6 +438,24 @@ class Case(Base):
     organization: Mapped["Organization"] = relationship(back_populates="cases")
     created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
     archived_by: Mapped["User | None"] = relationship(foreign_keys=[archived_by_user_id])
+    
+    # Owner relationships for eager loading (fixes N+1 query)
+    # These use custom join conditions since owner_id can point to either User or Queue
+    owner_user: Mapped["User | None"] = relationship(
+        "User",
+        foreign_keys=[owner_id],
+        primaryjoin="and_(Case.owner_id==User.id, Case.owner_type=='user')",
+        viewonly=True,
+        lazy="joined"
+    )
+    owner_queue: Mapped["Queue | None"] = relationship(
+        "Queue",
+        foreign_keys=[owner_id],
+        primaryjoin="and_(Case.owner_id==Queue.id, Case.owner_type=='queue')",
+        viewonly=True,
+        lazy="joined"
+    )
+    
     # Notes use EntityNote with entity_type='case' - no direct relationship
     status_history: Mapped[list["CaseStatusHistory"]] = relationship(
         back_populates="case",

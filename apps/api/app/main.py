@@ -1,5 +1,6 @@
 """FastAPI application entry point."""
 import logging
+import os
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,7 +39,18 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-limiter = Limiter(key_func=get_remote_address)
+# Configure rate limiter with Redis for multi-worker support
+# Falls back to in-memory if Redis is not available (dev mode)
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+try:
+    limiter = Limiter(
+        key_func=get_remote_address,
+        storage_uri=REDIS_URL,  # Shared across all workers
+    )
+except Exception as e:
+    logging.warning(f"Failed to connect to Redis for rate limiting, using in-memory storage: {e}")
+    limiter = Limiter(key_func=get_remote_address)  # Fallback to in-memory
+
 
 # ============================================================================
 # FastAPI App

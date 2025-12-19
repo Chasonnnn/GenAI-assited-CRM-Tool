@@ -22,6 +22,8 @@ export interface CaseListParams {
     include_archived?: boolean;
     queue_id?: string;  // Filter by queue (when owner_type='queue')
     owner_type?: 'user' | 'queue';  // Filter by owner type
+    created_from?: string;  // ISO date string
+    created_to?: string;    // ISO date string
 }
 
 // Stats response from /cases/stats
@@ -118,6 +120,8 @@ export function getCases(params: CaseListParams = {}): Promise<CaseListResponse>
     if (params.include_archived) searchParams.set('include_archived', 'true');
     if (params.queue_id) searchParams.set('queue_id', params.queue_id);
     if (params.owner_type) searchParams.set('owner_type', params.owner_type);
+    if (params.created_from) searchParams.set('created_from', params.created_from);
+    if (params.created_to) searchParams.set('created_to', params.created_to);
 
     const query = searchParams.toString();
     return api.get<CaseListResponse>(`/cases${query ? `?${query}` : ''}`);

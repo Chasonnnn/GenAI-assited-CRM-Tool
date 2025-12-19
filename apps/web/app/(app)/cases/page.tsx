@@ -144,7 +144,29 @@ export default function CasesPage() {
     // Reset page when filters change
     useEffect(() => {
         setPage(1)
-    }, [statusFilter, sourceFilter, queueFilter, debouncedSearch])
+    }, [statusFilter, sourceFilter, queueFilter, debouncedSearch, dateRange, customRange])
+
+    // Convert date range to ISO strings
+    const getDateRangeParams = () => {
+        if (dateRange === 'all') return {}
+        if (dateRange === 'custom' && customRange.from) {
+            return {
+                created_from: customRange.from.toISOString(),
+                created_to: customRange.to?.toISOString(),
+            }
+        }
+        // For presets, calculate dates
+        const now = new Date()
+        let from: Date | undefined
+        if (dateRange === 'today') {
+            from = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+        } else if (dateRange === 'week') {
+            from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        } else if (dateRange === 'month') {
+            from = new Date(now.getFullYear(), now.getMonth(), 1)
+        }
+        return from ? { created_from: from.toISOString() } : {}
+    }
 
     const { data, isLoading, error } = useCases({
         page,
@@ -153,6 +175,7 @@ export default function CasesPage() {
         source: sourceFilter === "all" ? undefined : sourceFilter,
         q: debouncedSearch || undefined,
         queue_id: queueFilter !== "all" ? queueFilter : undefined,
+        ...getDateRangeParams(),
     })
 
     const archiveMutation = useArchiveCase()

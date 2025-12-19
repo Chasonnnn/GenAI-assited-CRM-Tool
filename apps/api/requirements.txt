@@ -52,3 +52,6 @@ sentry-sdk[fastapi]>=1.40.0
 
 # Timezone support
 pytz>=2024.1
+
+# Rate limiting (distributed storage for multi-worker setups)
+redis>=5.0.0

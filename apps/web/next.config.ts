@@ -6,7 +6,9 @@ const withBundleAnalyzer = bundleAnalyzer({
 });
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  turbopack: {
+    root: __dirname,  // Explicitly set root to silence multi-lockfile warning
+  },
 };
 
 export default withBundleAnalyzer(nextConfig);

@@ -669,6 +669,8 @@ def list_cases(
     user_id: UUID | None = None,
     owner_type: str | None = None,
     queue_id: UUID | None = None,
+    created_from: str | None = None,  # ISO date string
+    created_to: str | None = None,    # ISO date string
 ):
     """
     List cases with filters and pagination.
@@ -678,11 +680,14 @@ def list_cases(
         user_id: User's ID for owner-based visibility
         owner_type: Filter by owner type ('user' or 'queue')
         queue_id: Filter by specific queue (when owner_type='queue')
+        created_from: Filter by creation date from (ISO format YYYY-MM-DD)
+        created_to: Filter by creation date to (ISO format YYYY-MM-DD)
     
     Returns:
         (cases, total_count)
     """
     from app.db.enums import Role, OwnerType
+    from datetime import datetime
     
     query = db.query(Case).filter(Case.organization_id == org_id)
     
@@ -724,6 +729,21 @@ def list_cases(
             Case.owner_type == OwnerType.USER.value,
             Case.owner_id == owner_id,
         )
+    
+    # Date range filter
+    if created_from:
+        try:
+            from_date = datetime.fromisoformat(created_from.replace('Z', '+00:00'))
+            query = query.filter(Case.created_at >= from_date)
+        except (ValueError, AttributeError):
+            pass  # Ignore invalid date format
+    
+    if created_to:
+        try:
+            to_date = datetime.fromisoformat(created_to.replace('Z', '+00:00'))
+            query = query.filter(Case.created_at <= to_date)
+        except (ValueError, AttributeError):
+            pass  # Ignore invalid date format
     
     # Search (name, email, phone)
     if q:
