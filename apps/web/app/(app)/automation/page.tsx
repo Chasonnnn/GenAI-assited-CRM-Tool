@@ -53,8 +53,9 @@ import {
     useDeleteWorkflow,
     useToggleWorkflow,
     useDuplicateWorkflow,
+    useTestWorkflow,
 } from "@/lib/hooks/use-workflows"
-import type { WorkflowListItem, Condition, ActionConfig, WorkflowCreate } from "@/lib/api/workflows"
+import type { WorkflowListItem, Condition, ActionConfig, WorkflowCreate, WorkflowTestResponse } from "@/lib/api/workflows"
 import {
     useEmailTemplates,
     useCreateEmailTemplate,
@@ -113,6 +114,12 @@ export default function AutomationPage() {
     const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null)
     const [wizardStep, setWizardStep] = useState(1)
 
+    // Test workflow state
+    const [showTestModal, setShowTestModal] = useState(false)
+    const [testWorkflowId, setTestWorkflowId] = useState<string | null>(null)
+    const [testCaseId, setTestCaseId] = useState("")
+    const [testResult, setTestResult] = useState<WorkflowTestResponse | null>(null)
+
     // Form state
     const [workflowName, setWorkflowName] = useState("")
     const [workflowDescription, setWorkflowDescription] = useState("")
@@ -140,6 +147,7 @@ export default function AutomationPage() {
     const toggleWorkflow = useToggleWorkflow()
     const duplicateWorkflow = useDuplicateWorkflow()
     const deleteWorkflow = useDeleteWorkflow()
+    const testWorkflowMutation = useTestWorkflow()
 
     // Email template hooks
     const { data: emailTemplates, isLoading: templatesLoading } = useEmailTemplates()
@@ -164,6 +172,21 @@ export default function AutomationPage() {
     const handleViewHistory = (id: string) => {
         setSelectedWorkflowId(id)
         setShowHistoryPanel(true)
+    }
+
+    const handleTest = (id: string) => {
+        setTestWorkflowId(id)
+        setTestCaseId("")
+        setTestResult(null)
+        setShowTestModal(true)
+    }
+
+    const handleRunTest = () => {
+        if (!testWorkflowId || !testCaseId) return
+        testWorkflowMutation.mutate(
+            { id: testWorkflowId, entityId: testCaseId },
+            { onSuccess: (result) => setTestResult(result) }
+        )
     }
 
     const resetWizard = () => {
@@ -446,6 +469,9 @@ export default function AutomationPage() {
                                                             </DropdownMenuItem>
                                                             <DropdownMenuItem onClick={() => handleViewHistory(workflow.id)}>
                                                                 View History
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => handleTest(workflow.id)}>
+                                                                Test Workflow
                                                             </DropdownMenuItem>
                                                             <DropdownMenuItem
                                                                 className="text-destructive"
@@ -924,6 +950,90 @@ export default function AutomationPage() {
                     </ScrollArea>
                 </SheetContent>
             </Sheet>
+
+            {/* Test Workflow Dialog */}
+            <Dialog open={showTestModal} onOpenChange={setShowTestModal}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>Test Workflow</DialogTitle>
+                        <DialogDescription>
+                            Enter a case ID to test this workflow against (dry run - no changes will be made)
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Case ID</Label>
+                            <Input
+                                placeholder="Enter case UUID..."
+                                value={testCaseId}
+                                onChange={(e) => setTestCaseId(e.target.value)}
+                            />
+                        </div>
+
+                        {testResult && (
+                            <div className="space-y-3 rounded-lg border p-4">
+                                <div className="flex items-center gap-2">
+                                    {testResult.conditions_matched ? (
+                                        <CheckCircle2Icon className="size-5 text-emerald-500" />
+                                    ) : (
+                                        <XIcon className="size-5 text-red-500" />
+                                    )}
+                                    <span className="font-medium">
+                                        {testResult.conditions_matched ? "Conditions Match" : "Conditions Not Met"}
+                                    </span>
+                                </div>
+
+                                {testResult.conditions_evaluated.length > 0 && (
+                                    <div className="space-y-2">
+                                        <p className="text-sm font-medium">Condition Results:</p>
+                                        {testResult.conditions_evaluated.map((cond, i) => (
+                                            <div key={i} className="flex items-center justify-between rounded bg-muted/50 px-3 py-2 text-sm">
+                                                <span>{cond.field} {cond.operator} {String(cond.expected)}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-muted-foreground">Actual: {cond.actual}</span>
+                                                    {cond.result ? (
+                                                        <CheckCircle2Icon className="size-4 text-emerald-500" />
+                                                    ) : (
+                                                        <XIcon className="size-4 text-red-500" />
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {testResult.conditions_matched && testResult.actions_preview.length > 0 && (
+                                    <div className="space-y-2">
+                                        <p className="text-sm font-medium">Actions that would run:</p>
+                                        {testResult.actions_preview.map((action, i) => (
+                                            <div key={i} className="rounded bg-muted/50 px-3 py-2 text-sm">
+                                                <span className="font-medium">{action.action_type}:</span> {action.description}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowTestModal(false)}>
+                            Close
+                        </Button>
+                        <Button
+                            onClick={handleRunTest}
+                            disabled={!testCaseId || testWorkflowMutation.isPending}
+                            className="bg-teal-500 hover:bg-teal-600"
+                        >
+                            {testWorkflowMutation.isPending ? (
+                                <LoaderIcon className="mr-2 size-4 animate-spin" />
+                            ) : null}
+                            Run Test
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
