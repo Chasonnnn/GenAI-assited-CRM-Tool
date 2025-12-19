@@ -2099,3 +2099,69 @@ class UserWorkflowPreference(Base):
     # Relationships
     user: Mapped["User"] = relationship()
     workflow: Mapped["AutomationWorkflow"] = relationship(back_populates="user_preferences")
+
+
+# =============================================================================
+# Zoom Meetings
+# =============================================================================
+
+class ZoomMeeting(Base):
+    """
+    Zoom meetings created via the app.
+    
+    Tracks meetings scheduled for cases or intended parents,
+    storing Zoom's meeting details for history and management.
+    """
+    __tablename__ = "zoom_meetings"
+    __table_args__ = (
+        Index("ix_zoom_meetings_user_id", "user_id"),
+        Index("ix_zoom_meetings_case_id", "case_id"),
+        Index("ix_zoom_meetings_org_created", "organization_id", "created_at"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True  # Allow null if user deleted
+    )
+    case_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cases.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    intended_parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("intended_parents.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    
+    # Zoom meeting details
+    zoom_meeting_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    topic: Mapped[str] = mapped_column(String(255), nullable=False)
+    start_time: Mapped[datetime | None] = mapped_column(nullable=True)
+    duration: Mapped[int] = mapped_column(default=30, nullable=False)  # minutes
+    timezone: Mapped[str] = mapped_column(String(100), default="UTC", nullable=False)
+    join_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    start_url: Mapped[str] = mapped_column(Text, nullable=False)  # Can be very long
+    password: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    user: Mapped["User"] = relationship()
+    case: Mapped["Case"] = relationship()
+    intended_parent: Mapped["IntendedParent"] = relationship()

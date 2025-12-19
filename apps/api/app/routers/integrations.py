@@ -512,7 +512,53 @@ def zoom_connection_status(
     return {
         "connected": integration is not None,
         "account_email": integration.account_email if integration else None,
+        "connected_at": integration.created_at.isoformat() if integration and integration.created_at else None,
+        "token_expires_at": integration.token_expires_at.isoformat() if integration and integration.token_expires_at else None,
     }
+
+
+class ZoomMeetingRead(BaseModel):
+    """Zoom meeting response for list."""
+    id: str
+    topic: str
+    start_time: str | None
+    duration: int
+    join_url: str
+    case_id: str | None
+    intended_parent_id: str | None
+    created_at: str
+
+
+@router.get("/zoom/meetings")
+def list_zoom_meetings(
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+) -> list[ZoomMeetingRead]:
+    """List user's recently created Zoom meetings."""
+    from app.db.models import ZoomMeeting as ZoomMeetingModel
+    
+    meetings = (
+        db.query(ZoomMeetingModel)
+        .filter(ZoomMeetingModel.user_id == session.user_id)
+        .order_by(ZoomMeetingModel.created_at.desc())
+        .limit(min(limit, 50))
+        .all()
+    )
+    
+    return [
+        ZoomMeetingRead(
+            id=str(m.id),
+            topic=m.topic,
+            start_time=m.start_time.isoformat() if m.start_time else None,
+            duration=m.duration,
+            join_url=m.join_url,
+            case_id=str(m.case_id) if m.case_id else None,
+            intended_parent_id=str(m.intended_parent_id) if m.intended_parent_id else None,
+            created_at=m.created_at.isoformat(),
+        )
+        for m in meetings
+    ]
 
 
 class SendMeetingInviteRequest(BaseModel):

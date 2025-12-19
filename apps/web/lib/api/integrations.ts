@@ -26,6 +26,19 @@ export interface ZoomConnectResponse {
 export interface ZoomStatusResponse {
     connected: boolean
     account_email: string | null
+    connected_at: string | null
+    token_expires_at: string | null
+}
+
+export interface ZoomMeetingRead {
+    id: string
+    topic: string
+    start_time: string | null
+    duration: number
+    join_url: string
+    case_id: string | null
+    intended_parent_id: string | null
+    created_at: string
 }
 
 export interface CreateMeetingRequest {
@@ -80,6 +93,16 @@ export async function getZoomStatus(): Promise<ZoomStatusResponse> {
 }
 
 /**
+ * Get list of user's Zoom meetings.
+ */
+export async function getZoomMeetings(params: { limit?: number } = {}): Promise<ZoomMeetingRead[]> {
+    const searchParams = new URLSearchParams()
+    if (params.limit) searchParams.set('limit', params.limit.toString())
+    const query = searchParams.toString()
+    return api.get<ZoomMeetingRead[]>(`/integrations/zoom/meetings${query ? `?${query}` : ''}`)
+}
+
+/**
  * Disconnect an integration.
  */
 export async function disconnectIntegration(integrationType: string): Promise<void> {
@@ -116,3 +139,4 @@ export interface SendZoomInviteResponse {
 export async function sendZoomInvite(data: SendZoomInviteRequest): Promise<SendZoomInviteResponse> {
     return api.post<SendZoomInviteResponse>('/integrations/zoom/send-invite', data)
 }
+
