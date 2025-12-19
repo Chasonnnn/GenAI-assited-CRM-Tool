@@ -87,13 +87,12 @@ def _case_to_list_item(case, db: Session) -> CaseListItem:
     """Convert Case model to CaseListItem schema."""
     from datetime import date
     
+    # Use preloaded relationships instead of separate queries (fixes N+1)
     owner_name = None
-    if case.owner_type == OwnerType.USER.value:
-        user = db.query(User).filter(User.id == case.owner_id).first()
-        owner_name = user.display_name if user else None
-    elif case.owner_type == OwnerType.QUEUE.value:
-        queue = db.query(Queue).filter(Queue.id == case.owner_id).first()
-        owner_name = queue.name if queue else None
+    if case.owner_type == OwnerType.USER.value and case.owner_user:
+        owner_name = case.owner_user.display_name
+    elif case.owner_type == OwnerType.QUEUE.value and case.owner_queue:
+        owner_name = case.owner_queue.name
     
     # Calculate age from date_of_birth
     age = None
@@ -194,6 +193,8 @@ def list_cases(
     include_archived: bool = False,
     queue_id: UUID | None = None,
     owner_type: str | None = Query(None, pattern="^(user|queue)$"),
+    created_from: str | None = Query(None, description="Filter by creation date from (ISO format)"),
+    created_to: str | None = Query(None, description="Filter by creation date to (ISO format)"),
 ):
     """
     List cases with filters and pagination.
@@ -204,6 +205,7 @@ def list_cases(
     - queue_id: Filter by cases in a specific queue
     - owner_type: Filter by owner type ('user' or 'queue')
     - owner_id: Filter by owner ID (when owner_type='user')
+    - created_from/created_to: ISO date strings for date range filtering
     """
     cases, total = case_service.list_cases(
         db=db,
@@ -219,6 +221,8 @@ def list_cases(
         user_id=session.user_id,
         owner_type=owner_type,
         queue_id=queue_id,
+        created_from=created_from,
+        created_to=created_to,
     )
     
     pages = (total + per_page - 1) // per_page if per_page > 0 else 0

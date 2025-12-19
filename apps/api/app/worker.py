@@ -90,9 +90,37 @@ async def process_job(db, job) -> None:
         email_service.mark_email_sent(db, email_log)
         
     elif job.job_type == JobType.REMINDER.value:
-        # Placeholder for reminder logic
+        # Process reminder - create notification and/or send email
         logger.info(f"Processing reminder: {job.payload}")
-        # TODO: Implement reminder logic (e.g., create notification, send email)
+        payload = job.payload or {}
+        
+        # Create in-app notification if user_id provided
+        if payload.get("user_id") and payload.get("message"):
+            from app.db.models import Notification
+            notification = Notification(
+                organization_id=job.organization_id,
+                user_id=payload["user_id"],
+                title=payload.get("title", "Reminder"),
+                message=payload["message"],
+                notification_type=payload.get("type", "task_due"),
+                entity_type=payload.get("entity_type"),
+                entity_id=payload.get("entity_id"),
+            )
+            db.add(notification)
+            db.commit()
+            
+        # Optionally send reminder email
+        if payload.get("send_email") and payload.get("user_id"):
+            from app.db.models import User
+            user = db.query(User).filter(User.id == payload["user_id"]).first()
+            if user and user.email:
+                email_service.send_reminder_email(
+                    db=db,
+                    org_id=job.organization_id,
+                    to_email=user.email,
+                    subject=payload.get("title", "Reminder"),
+                    message=payload["message"],
+                )
         
     elif job.job_type == JobType.WEBHOOK_RETRY.value:
         # Placeholder for webhook retry logic
@@ -100,9 +128,24 @@ async def process_job(db, job) -> None:
         # TODO: Implement webhook retry logic
         
     elif job.job_type == JobType.NOTIFICATION.value:
-        # Placeholder for notification logic
+        # Process notification - create in-app notification record
         logger.info(f"Processing notification: {job.payload}")
-        # TODO: Implement notification logic
+        payload = job.payload or {}
+        
+        if payload.get("user_id") and payload.get("message"):
+            from app.db.models import Notification
+            notification = Notification(
+                organization_id=job.organization_id,
+                user_id=payload["user_id"],
+                title=payload.get("title", "Notification"),
+                message=payload["message"],
+                notification_type=payload.get("type", "general"),
+                entity_type=payload.get("entity_type"),
+                entity_id=payload.get("entity_id"),
+            )
+            db.add(notification)
+            db.commit()
+            logger.info(f"Created notification for user {payload['user_id']}")
         
     elif job.job_type == JobType.META_LEAD_FETCH.value:
         await process_meta_lead_fetch(db, job)
