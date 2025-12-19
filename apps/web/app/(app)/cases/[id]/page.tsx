@@ -1194,7 +1194,7 @@ export default function CaseDetailPage() {
                     full_name: caseData.full_name,
                     case_number: caseData.case_number,
                     status: caseData.status,
-                    state: caseData.state,
+                    state: caseData.state || undefined,
                 }}
             />
         </div>
