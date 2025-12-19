@@ -927,6 +927,7 @@ class EmailLog(Base):
     recipient_email: Mapped[str] = mapped_column(String(255), nullable=False)
     subject: Mapped[str] = mapped_column(String(200), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(
         String(20),
         server_default=text(f"'{DEFAULT_EMAIL_STATUS.value}'"),
@@ -2098,4 +2099,3 @@ class UserWorkflowPreference(Base):
     # Relationships
     user: Mapped["User"] = relationship()
     workflow: Mapped["AutomationWorkflow"] = relationship(back_populates="user_preferences")
-

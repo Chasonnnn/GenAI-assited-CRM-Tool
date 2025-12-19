@@ -133,6 +133,26 @@ export function useAssignCase() {
 }
 
 /**
+ * Send an email to a case contact using a template.
+ */
+export function useSendCaseEmail() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({ caseId, data }: { caseId: string; data: casesApi.CaseSendEmailPayload }) => {
+            const result = await casesApi.sendCaseEmail(caseId, data);
+            if (!result.success) {
+                throw new Error(result.error || "Failed to send email");
+            }
+            return result;
+        },
+        onSuccess: (_, { caseId }) => {
+            queryClient.invalidateQueries({ queryKey: [...caseKeys.detail(caseId), 'activity'] });
+        },
+    });
+}
+
+/**
  * Archive a case.
  */
 export function useArchiveCase() {

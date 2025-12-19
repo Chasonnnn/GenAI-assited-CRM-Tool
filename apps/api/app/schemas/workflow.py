@@ -44,9 +44,9 @@ ALLOWED_UPDATE_FIELDS = {
 }
 
 ALLOWED_EMAIL_VARIABLES = {
-    "case.full_name", "case.email", "case.phone",
-    "case.case_number", "case.status", "case.state",
-    "case.owner_name", "org.name", "user.display_name",
+    "full_name", "email", "phone",
+    "case_number", "status", "state",
+    "owner_name", "org_name",
 }
 
 

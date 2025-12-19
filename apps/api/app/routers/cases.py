@@ -536,6 +536,8 @@ def get_case(
 class SendEmailRequest(BaseModel):
     """Request to send email to case contact."""
     template_id: UUID
+    subject: str | None = None
+    body: str | None = None
     provider: str = "auto"  # "gmail", "resend", or "auto" (gmail first, then resend)
     
 class SendEmailResponse(BaseModel):
@@ -585,17 +587,12 @@ async def send_case_email(
         raise HTTPException(status_code=404, detail="Email template not found")
     
     # Prepare variables for template rendering
-    variables = {
-        "full_name": case.full_name or "",
-        "case_number": case.case_number or "",
-        "status": case.status.value if hasattr(case.status, 'value') else str(case.status) if case.status else "",
-        "email": case.email or "",
-        "phone": case.phone or "",
-        "state": case.state or "",
-    }
-    
-    # Render template
-    subject, body = email_service.render_template(template.subject, template.body, variables)
+    variables = email_service.build_case_template_variables(db, case)
+
+    # Render template (allow UI overrides)
+    subject_template = data.subject if data.subject is not None else template.subject
+    body_template = data.body if data.body is not None else template.body
+    subject, body = email_service.render_template(subject_template, body_template, variables)
     
     # Determine provider
     provider = data.provider
@@ -630,25 +627,25 @@ async def send_case_email(
                 error="No email provider available. Connect Gmail in Settings."
             )
     
-    # Create email log first
-    from app.db.models import EmailLog
-    from app.db.enums import EmailStatus
-    
-    email_log = EmailLog(
-        organization_id=session.org_id,
-        template_id=data.template_id,
-        case_id=case_id,
-        recipient_email=case.email,
-        subject=subject,
-        body=body,
-        status=EmailStatus.PENDING.value,
-    )
-    db.add(email_log)
-    db.commit()
-    db.refresh(email_log)
-    
     # Send email
     if use_gmail:
+        # Create email log for direct Gmail send
+        from app.db.models import EmailLog
+        from app.db.enums import EmailStatus
+
+        email_log = EmailLog(
+            organization_id=session.org_id,
+            template_id=data.template_id,
+            case_id=case_id,
+            recipient_email=case.email,
+            subject=subject,
+            body=body,
+            status=EmailStatus.PENDING.value,
+        )
+        db.add(email_log)
+        db.commit()
+        db.refresh(email_log)
+
         result = await gmail_service.send_email(
             db=db,
             user_id=str(session.user_id),

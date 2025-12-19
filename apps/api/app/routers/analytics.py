@@ -588,7 +588,7 @@ def get_activity_feed(
     offset: int = Query(0, ge=0),
     activity_type: Optional[str] = Query(None, description="Filter by activity type"),
     user_id: Optional[str] = Query(None, description="Filter by actor user ID"),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
     db: Session = Depends(get_db),
 ) -> ActivityFeedResponse:
     """
@@ -650,4 +650,3 @@ def get_activity_feed(
         ],
         has_more=has_more,
     )
-

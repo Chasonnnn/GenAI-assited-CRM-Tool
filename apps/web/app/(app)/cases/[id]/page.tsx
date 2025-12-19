@@ -1195,6 +1195,7 @@ export default function CaseDetailPage() {
                     case_number: caseData.case_number,
                     status: caseData.status,
                     state: caseData.state || undefined,
+                    phone: caseData.phone || undefined,
                 }}
             />
         </div>

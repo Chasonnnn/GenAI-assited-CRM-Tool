@@ -101,6 +101,21 @@ export interface CaseAssignPayload {
     owner_id: string;
 }
 
+export interface CaseSendEmailPayload {
+    template_id: string;
+    subject?: string;
+    body?: string;
+    provider?: 'auto' | 'gmail' | 'resend';
+}
+
+export interface CaseSendEmailResponse {
+    success: boolean;
+    email_log_id?: string | null;
+    message_id?: string | null;
+    provider_used?: string | null;
+    error?: string | null;
+}
+
 /**
  * Get case statistics for dashboard.
  */
@@ -160,6 +175,13 @@ export function changeCaseStatus(caseId: string, data: CaseStatusChangePayload):
  */
 export function assignCase(caseId: string, data: CaseAssignPayload): Promise<CaseRead> {
     return api.patch<CaseRead>(`/cases/${caseId}/assign`, data);
+}
+
+/**
+ * Send an email to a case contact using a template.
+ */
+export function sendCaseEmail(caseId: string, data: CaseSendEmailPayload): Promise<CaseSendEmailResponse> {
+    return api.post<CaseSendEmailResponse>(`/cases/${caseId}/send-email`, data);
 }
 
 /**

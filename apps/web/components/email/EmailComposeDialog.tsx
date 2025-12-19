@@ -21,7 +21,8 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { EyeIcon, EyeOffIcon, SendIcon, Loader2Icon } from "lucide-react"
-import { useEmailTemplates, useEmailTemplate, useSendEmail } from "@/lib/hooks/use-email-templates"
+import { useEmailTemplates, useEmailTemplate } from "@/lib/hooks/use-email-templates"
+import { useSendCaseEmail } from "@/lib/hooks/use-cases"
 
 interface EmailComposeDialogProps {
     open: boolean
@@ -33,6 +34,7 @@ interface EmailComposeDialogProps {
         case_number: string
         status: string
         state?: string
+        phone?: string
     }
     onSuccess?: () => void
 }
@@ -52,7 +54,7 @@ export function EmailComposeDialog({
     const { data: templates = [], isLoading: templatesLoading } = useEmailTemplates(true)
     // Fetch full template when one is selected
     const { data: fullTemplate } = useEmailTemplate(selectedTemplate || null)
-    const sendEmailMutation = useSendEmail()
+    const sendEmailMutation = useSendCaseEmail()
 
     // Update subject and body when full template loads
     React.useEffect(() => {
@@ -75,14 +77,11 @@ export function EmailComposeDialog({
     const handleSend = async () => {
         try {
             await sendEmailMutation.mutateAsync({
-                template_id: selectedTemplate,
-                recipient_email: caseData.email,
-                case_id: caseData.id,
-                variables: {
-                    "case.full_name": caseData.full_name,
-                    "case.case_number": caseData.case_number,
-                    "case.status": caseData.status,
-                    "case.state": caseData.state || "",
+                caseId: caseData.id,
+                data: {
+                    template_id: selectedTemplate,
+                    subject,
+                    body,
                 },
             })
             onSuccess?.()
@@ -99,10 +98,14 @@ export function EmailComposeDialog({
     // Replace variables with case data for preview
     const renderPreview = (text: string) => {
         return text
-            .replace(/\{\{case\.full_name\}\}/g, caseData.full_name)
-            .replace(/\{\{case\.case_number\}\}/g, caseData.case_number)
-            .replace(/\{\{case\.status\}\}/g, caseData.status)
-            .replace(/\{\{case\.state\}\}/g, caseData.state || "")
+            .replace(/\{\{full_name\}\}/g, caseData.full_name)
+            .replace(/\{\{case_number\}\}/g, caseData.case_number)
+            .replace(/\{\{status\}\}/g, caseData.status)
+            .replace(/\{\{state\}\}/g, caseData.state || "")
+            .replace(/\{\{email\}\}/g, caseData.email)
+            .replace(/\{\{phone\}\}/g, caseData.phone || "")
+            .replace(/\{\{owner_name\}\}/g, "")
+            .replace(/\{\{org_name\}\}/g, "")
     }
 
     // Highlight variables in edit mode
@@ -121,10 +124,14 @@ export function EmailComposeDialog({
     }
 
     const availableVariables = [
-        "{{case.full_name}}",
-        "{{case.case_number}}",
-        "{{case.status}}",
-        "{{case.state}}",
+        "{{full_name}}",
+        "{{email}}",
+        "{{phone}}",
+        "{{case_number}}",
+        "{{status}}",
+        "{{state}}",
+        "{{owner_name}}",
+        "{{org_name}}",
     ]
 
     return (
@@ -237,7 +244,9 @@ export function EmailComposeDialog({
                     {/* Error Message */}
                     {sendEmailMutation.isError && (
                         <div className="bg-destructive/10 text-destructive px-4 py-3 rounded-lg text-sm">
-                            Failed to send email. Please try again.
+                            {sendEmailMutation.error instanceof Error
+                                ? sendEmailMutation.error.message
+                                : "Failed to send email. Please try again."}
                         </div>
                     )}
 

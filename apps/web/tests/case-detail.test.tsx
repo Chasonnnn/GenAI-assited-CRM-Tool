@@ -56,6 +56,7 @@ vi.mock('@/lib/hooks/use-cases', () => ({
     useArchiveCase: () => ({ mutateAsync: mockArchive }),
     useRestoreCase: () => ({ mutateAsync: mockRestore }),
     useUpdateCase: () => ({ mutateAsync: mockUpdateCase }),
+    useSendCaseEmail: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 vi.mock('@/lib/hooks/use-notes', () => ({
