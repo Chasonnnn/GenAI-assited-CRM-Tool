@@ -18,11 +18,21 @@ def create_task(
     data: TaskCreate,
 ) -> Task:
     """Create a new task."""
+    # Determine owner - default to creator if not provided
+    owner_type = data.owner_type or "user"
+    if owner_type == "queue":
+        owner_id = data.owner_id
+        if not owner_id:
+            raise ValueError("owner_id is required when owner_type is 'queue'")
+    else:
+        owner_id = data.owner_id or user_id
+    
     task = Task(
         organization_id=org_id,
         created_by_user_id=user_id,
         case_id=data.case_id,
-        assigned_to_user_id=data.assigned_to_user_id,
+        owner_type=owner_type,
+        owner_id=owner_id,
         title=data.title,
         description=data.description,
         task_type=data.task_type.value,
@@ -34,8 +44,8 @@ def create_task(
     db.commit()
     db.refresh(task)
     
-    # Notify assignee (if different from creator)
-    if data.assigned_to_user_id and data.assigned_to_user_id != user_id:
+    # Notify assignee (if assigned to user different from creator)
+    if owner_type == "user" and owner_id != user_id:
         from app.services import notification_service
         from app.db.models import User, Case
         actor = db.query(User).filter(User.id == user_id).first()
@@ -49,7 +59,7 @@ def create_task(
             task_id=task.id,
             task_title=task.title,
             org_id=org_id,
-            assignee_id=data.assigned_to_user_id,
+            assignee_id=owner_id,
             actor_name=actor_name,
             case_number=case_number,
         )
@@ -73,12 +83,20 @@ def update_task(
     """
     update_data = data.model_dump(exclude_unset=True)
     
-    # Track assignee for notification
-    old_assignee_id = task.assigned_to_user_id
-    new_assignee_id = update_data.get("assigned_to_user_id")
+    # Track owner for notification
+    old_owner_type = task.owner_type
+    old_owner_id = task.owner_id
+
+    if "owner_type" in update_data or "owner_id" in update_data:
+        owner_type = update_data.get("owner_type", task.owner_type)
+        owner_id = update_data.get("owner_id", task.owner_id)
+        if not owner_type or not owner_id:
+            raise ValueError("owner_type and owner_id must both be provided")
+        update_data["owner_type"] = owner_type
+        update_data["owner_id"] = owner_id
     
     # Fields that can be cleared (set to None)
-    clearable_fields = {"assigned_to_user_id", "due_date", "due_time", "description", "duration_minutes"}
+    clearable_fields = {"due_date", "due_time", "description", "duration_minutes"}
     
     for field, value in update_data.items():
         # For clearable fields, allow None; for others, skip None
@@ -94,10 +112,10 @@ def update_task(
     # Notify new assignee if reassigned (and not self-assign)
     if (
         actor_user_id
-        and "assigned_to_user_id" in update_data
-        and new_assignee_id
-        and new_assignee_id != old_assignee_id
-        and new_assignee_id != actor_user_id
+        and (update_data.get("owner_type") or update_data.get("owner_id"))
+        and update_data.get("owner_type") == "user"
+        and update_data.get("owner_id") != old_owner_id
+        and update_data.get("owner_id") != actor_user_id
     ):
         from app.services import notification_service
         from app.db.models import User, Case
@@ -114,7 +132,7 @@ def update_task(
             task_id=task.id,
             task_title=task.title,
             org_id=task.organization_id,
-            assignee_id=new_assignee_id,
+            assignee_id=update_data.get("owner_id"),
             actor_name=actor_name,
             case_number=case_number,
         )
@@ -171,7 +189,7 @@ def list_tasks(
     page: int = 1,
     per_page: int = 20,
     q: str | None = None,
-    assigned_to: UUID | None = None,
+    owner_id: UUID | None = None,
     case_id: UUID | None = None,
     is_completed: bool | None = None,
     task_type: TaskType | None = None,
@@ -188,7 +206,7 @@ def list_tasks(
         q: Search query - matches title or description (case-insensitive)
         due_before: Filter tasks with due_date <= this date (YYYY-MM-DD)
         due_after: Filter tasks with due_date >= this date (YYYY-MM-DD)
-        my_tasks_user_id: If set, returns tasks where user is creator OR assignee
+        my_tasks_user_id: If set, returns tasks where user is creator OR owner (user)
     
     Returns:
         (tasks, total_count)
@@ -229,18 +247,21 @@ def list_tasks(
             )
         )
     
-    # My tasks (creator or assignee)
+    # My tasks (creator or owner)
     if my_tasks_user_id:
         query = query.filter(
             or_(
                 Task.created_by_user_id == my_tasks_user_id,
-                Task.assigned_to_user_id == my_tasks_user_id,
+                (Task.owner_type == OwnerType.USER.value) & (Task.owner_id == my_tasks_user_id),
             )
         )
     
-    # Assigned filter
-    if assigned_to:
-        query = query.filter(Task.assigned_to_user_id == assigned_to)
+    # Owner filter (user-owned only)
+    if owner_id:
+        query = query.filter(
+            Task.owner_type == OwnerType.USER.value,
+            Task.owner_id == owner_id,
+        )
     
     # Case filter
     if case_id:

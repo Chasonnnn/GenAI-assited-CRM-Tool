@@ -146,6 +146,8 @@ class JobType(str, Enum):
     NOTIFICATION = "notification"
     META_LEAD_FETCH = "meta_lead_fetch"
     META_CAPI_EVENT = "meta_capi_event"
+    WORKFLOW_SWEEP = "workflow_sweep"
+    WORKFLOW_EMAIL = "workflow_email"
 
 
 class JobStatus(str, Enum):
@@ -252,6 +254,61 @@ class AlertStatus(str, Enum):
     ACKNOWLEDGED = "acknowledged"
     RESOLVED = "resolved"
     SNOOZED = "snoozed"
+
+
+# =============================================================================
+# Automation Workflows
+# =============================================================================
+
+class WorkflowTriggerType(str, Enum):
+    """Events that can trigger a workflow."""
+    CASE_CREATED = "case_created"
+    STATUS_CHANGED = "status_changed"
+    CASE_ASSIGNED = "case_assigned"
+    CASE_UPDATED = "case_updated"
+    TASK_DUE = "task_due"
+    TASK_OVERDUE = "task_overdue"
+    SCHEDULED = "scheduled"
+    INACTIVITY = "inactivity"
+
+
+class WorkflowActionType(str, Enum):
+    """Actions a workflow can execute."""
+    SEND_EMAIL = "send_email"
+    CREATE_TASK = "create_task"
+    ASSIGN_CASE = "assign_case"
+    SEND_NOTIFICATION = "send_notification"
+    UPDATE_FIELD = "update_field"
+    ADD_NOTE = "add_note"
+
+
+class WorkflowConditionOperator(str, Enum):
+    """Operators for workflow conditions."""
+    EQUALS = "equals"
+    NOT_EQUALS = "not_equals"
+    CONTAINS = "contains"
+    NOT_CONTAINS = "not_contains"
+    IS_EMPTY = "is_empty"
+    IS_NOT_EMPTY = "is_not_empty"
+    GREATER_THAN = "greater_than"
+    LESS_THAN = "less_than"
+    IN = "in"
+    NOT_IN = "not_in"
+
+
+class WorkflowExecutionStatus(str, Enum):
+    """Execution result status."""
+    SUCCESS = "success"
+    PARTIAL = "partial"  # some actions succeeded
+    FAILED = "failed"
+    SKIPPED = "skipped"  # conditions not met
+
+
+class WorkflowEventSource(str, Enum):
+    """Source that triggered a workflow event."""
+    USER = "user"
+    SYSTEM = "system"
+    WORKFLOW = "workflow"
 
 
 # =============================================================================

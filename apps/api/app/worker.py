@@ -110,6 +110,12 @@ async def process_job(db, job) -> None:
     elif job.job_type == JobType.META_CAPI_EVENT.value:
         await process_meta_capi_event(db, job)
         
+    elif job.job_type == JobType.WORKFLOW_EMAIL.value:
+        await process_workflow_email(db, job)
+        
+    elif job.job_type == JobType.WORKFLOW_SWEEP.value:
+        await process_workflow_sweep(db, job)
+        
     else:
         raise Exception(f"Unknown job type: {job.job_type}")
 
@@ -417,6 +423,110 @@ async def worker_loop() -> None:
                 logger.error(f"Error in worker loop: {e}")
         
         await asyncio.sleep(POLL_INTERVAL_SECONDS)
+
+
+# =============================================================================
+# Workflow Job Handlers
+# =============================================================================
+
+async def process_workflow_email(db, job) -> None:
+    """
+    Process a WORKFLOW_EMAIL job - send email triggered by workflow action.
+    
+    Payload:
+        - template_id: UUID of email template
+        - case_id: UUID of case (for variable resolution)
+        - recipient_email: Target email address
+        - variables: Dict of resolved template variables
+    """
+    from app.db.models import EmailTemplate, Case, EmailLog
+    from app.services import email_service
+    
+    template_id = job.payload.get("template_id")
+    case_id = job.payload.get("case_id")
+    recipient_email = job.payload.get("recipient_email")
+    variables = job.payload.get("variables", {})
+    
+    if not template_id or not recipient_email:
+        raise Exception("Missing template_id or recipient_email in workflow email job")
+    
+    # Get template
+    template = db.query(EmailTemplate).filter(EmailTemplate.id == UUID(template_id)).first()
+    if not template:
+        raise Exception(f"Email template {template_id} not found")
+    
+    # Resolve subject and body with variables
+    subject = template.subject
+    body = template.body
+    for key, value in variables.items():
+        placeholder = "{{" + key + "}}"
+        subject = subject.replace(placeholder, str(value) if value else "")
+        body = body.replace(placeholder, str(value) if value else "")
+    
+    # Create email log
+    email_log = EmailLog(
+        organization_id=job.organization_id,
+        job_id=job.id,
+        template_id=template.id,
+        case_id=UUID(case_id) if case_id else None,
+        recipient_email=recipient_email,
+        subject=subject,
+        body=body,
+        status="pending",
+    )
+    db.add(email_log)
+    db.commit()
+    
+    # Send email
+    await send_email_async(email_log)
+    email_service.mark_email_sent(db, email_log)
+    
+    logger.info(f"Workflow email sent to {recipient_email} for case {case_id}")
+
+
+async def process_workflow_sweep(db, job) -> None:
+    """
+    Process a WORKFLOW_SWEEP job - daily sweep for scheduled and inactivity workflows.
+    
+    Payload:
+        - org_id: Organization to sweep (optional, sweeps all if not provided)
+        - sweep_type: 'scheduled', 'inactivity', 'task_due', 'task_overdue', or 'all'
+    """
+    from app.services import workflow_triggers
+    from app.db.models import Organization
+    
+    sweep_type = job.payload.get("sweep_type", "all")
+    org_id = job.payload.get("org_id")
+    
+    if org_id:
+        orgs = [db.query(Organization).filter(Organization.id == UUID(org_id)).first()]
+        orgs = [o for o in orgs if o]
+    else:
+        orgs = db.query(Organization).filter(Organization.is_active == True).all()
+    
+    logger.info(f"Starting workflow sweep: type={sweep_type}, orgs={len(orgs)}")
+    
+    for org in orgs:
+        try:
+            if sweep_type in ("all", "scheduled"):
+                workflow_triggers.trigger_scheduled_workflows(db, org.id)
+            
+            if sweep_type in ("all", "inactivity"):
+                workflow_triggers.trigger_inactivity_workflows(db, org.id)
+            
+            if sweep_type in ("all", "task_due"):
+                workflow_triggers.trigger_task_due_sweep(db, org.id)
+            
+            if sweep_type in ("all", "task_overdue"):
+                workflow_triggers.trigger_task_overdue_sweep(db, org.id)
+            
+            db.commit()
+            logger.info(f"Workflow sweep complete for org {org.id}")
+        except Exception as e:
+            logger.error(f"Workflow sweep failed for org {org.id}: {e}")
+            db.rollback()
+    
+    logger.info(f"Workflow sweep finished for {len(orgs)} organizations")
 
 
 def main() -> None:

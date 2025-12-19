@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from app.db.enums import CaseSource, CaseStatus
+from app.db.enums import CaseSource, CaseStatus, OwnerType
 from app.utils.normalization import normalize_phone, normalize_state
 
 
@@ -98,7 +98,8 @@ class CaseUpdate(BaseModel):
 class BulkAssign(BaseModel):
     """Request schema for bulk case assignment."""
     case_ids: list[UUID] = Field(..., min_length=1, max_length=100)
-    assigned_to_user_id: UUID | None = None  # None = unassign
+    owner_type: OwnerType
+    owner_id: UUID
 
 
 class CaseRead(BaseModel):
@@ -109,14 +110,11 @@ class CaseRead(BaseModel):
     source: CaseSource
     is_priority: bool
     
-    # Assignment
-    assigned_to_user_id: UUID | None
-    assigned_to_name: str | None = None
-    created_by_user_id: UUID | None
-    
     # Ownership (Salesforce-style)
     owner_type: str  # 'user' | 'queue'
     owner_id: UUID
+    owner_name: str | None = None
+    created_by_user_id: UUID | None
     
     # Contact
     full_name: str
@@ -160,7 +158,9 @@ class CaseListItem(BaseModel):
     email: str
     phone: str | None
     state: str | None
-    assigned_to_name: str | None = None
+    owner_type: str | None = None
+    owner_id: UUID | None = None
+    owner_name: str | None = None
     is_priority: bool
     is_archived: bool
     # Calculated fields for table display
@@ -187,8 +187,9 @@ class CaseStatusChange(BaseModel):
 
 
 class CaseAssign(BaseModel):
-    """Request to assign case to a user."""
-    user_id: UUID | None  # None to unassign
+    """Request to assign case to a user or queue."""
+    owner_type: OwnerType
+    owner_id: UUID
 
 
 class CaseStatusHistoryRead(BaseModel):

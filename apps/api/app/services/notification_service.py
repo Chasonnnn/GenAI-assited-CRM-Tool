@@ -11,7 +11,7 @@ from uuid import UUID
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.db.enums import NotificationType, Role
+from app.db.enums import NotificationType, Role, OwnerType
 from app.db.models import (
     Notification,
     UserNotificationSettings,
@@ -270,9 +270,9 @@ def notify_case_status_changed(
     """Notify assignee and creator when case status changes."""
     recipients = set()
     
-    # Add assignee
-    if case.assigned_to_user_id and case.assigned_to_user_id != actor_id:
-        recipients.add(case.assigned_to_user_id)
+    # Add owner if owned by user
+    if case.owner_type == OwnerType.USER.value and case.owner_id and case.owner_id != actor_id:
+        recipients.add(case.owner_id)
     
     # Add creator (if different from assignee and actor)
     if case.created_by_user_id and case.created_by_user_id != actor_id:

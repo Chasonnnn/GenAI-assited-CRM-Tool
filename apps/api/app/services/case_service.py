@@ -56,12 +56,10 @@ def create_case(
     if user_id:
         owner_type = OwnerType.USER.value
         owner_id = user_id
-        assigned_to_user_id = user_id
     else:
         default_queue = queue_service.get_or_create_default_queue(db, org_id)
         owner_type = OwnerType.QUEUE.value
         owner_id = default_queue.id
-        assigned_to_user_id = None
     
     case = Case(
         case_number=generate_case_number(db, org_id),
@@ -69,7 +67,6 @@ def create_case(
         created_by_user_id=user_id,
         owner_type=owner_type,
         owner_id=owner_id,
-        assigned_to_user_id=assigned_to_user_id,
         status=CaseStatus.NEW_UNREAD.value,
         source=data.source.value,
         full_name=normalize_name(data.full_name),
@@ -102,6 +99,10 @@ def create_case(
             actor_user_id=user_id,
         )
         db.commit()
+    
+    # Trigger workflows for case creation
+    from app.services import workflow_triggers
+    workflow_triggers.trigger_case_created(db, case)
     
     return case
 
@@ -267,6 +268,10 @@ def change_status(
     # Meta CAPI: Send lead quality signal for Meta-sourced cases
     # Uses requested_status (before auto-transition) so 'approved' triggers CAPI
     _maybe_send_capi_event(db, case, old_status, requested_status)
+    
+    # Trigger workflows for status change
+    from app.services import workflow_triggers
+    workflow_triggers.trigger_status_changed(db, case, old_status, new_status.value)
     
     return case
 
@@ -448,56 +453,65 @@ def deny_handoff(
 def assign_case(
     db: Session,
     case: Case,
-    assignee_id: UUID | None,
+    owner_type: "OwnerType",
+    owner_id: UUID,
     user_id: UUID,
 ) -> Case:
-    """Assign case to a user (or unassign with None)."""
+    """Assign case to a user or queue."""
     from app.services import activity_service
     from app.db.enums import OwnerType
     from app.services import queue_service
     
-    old_assignee = case.assigned_to_user_id
-    if assignee_id:
+    old_owner_type = case.owner_type
+    old_owner_id = case.owner_id
+
+    if owner_type == OwnerType.USER:
         case.owner_type = OwnerType.USER.value
-        case.owner_id = assignee_id
-        case.assigned_to_user_id = assignee_id
+        case.owner_id = owner_id
+        assignee_id = owner_id
+    elif owner_type == OwnerType.QUEUE:
+        case = queue_service.assign_to_queue(
+            db=db,
+            org_id=case.organization_id,
+            case_id=case.id,
+            queue_id=owner_id,
+            assigner_user_id=user_id,
+        )
+        assignee_id = None
     else:
-        default_queue = queue_service.get_or_create_default_queue(db, case.organization_id)
-        case.owner_type = OwnerType.QUEUE.value
-        case.owner_id = default_queue.id
-        case.assigned_to_user_id = None
+        raise ValueError("Invalid owner_type")
     db.commit()
     db.refresh(case)
     
     # Log activity
-    if assignee_id:
+    if case.owner_type == OwnerType.USER.value:
         activity_service.log_assigned(
             db=db,
             case_id=case.id,
             organization_id=case.organization_id,
             actor_user_id=user_id,
-            to_user_id=assignee_id,
-            from_user_id=old_assignee,  # Capture previous assignee for reassignment tracking
+            to_user_id=case.owner_id,
+            from_user_id=old_owner_id if old_owner_type == OwnerType.USER.value else None,
         )
         
         # Send notification to assignee (if not self-assign)
-        if assignee_id != user_id:
+        if case.owner_id != user_id:
             from app.services import notification_service
             actor = db.query(User).filter(User.id == user_id).first()
             actor_name = actor.display_name if actor else "Someone"
             notification_service.notify_case_assigned(
                 db=db,
                 case=case,
-                assignee_id=assignee_id,
+                assignee_id=case.owner_id,
                 actor_name=actor_name,
             )
-    elif old_assignee:
+    elif old_owner_type == OwnerType.USER.value and old_owner_id:
         activity_service.log_unassigned(
             db=db,
             case_id=case.id,
             organization_id=case.organization_id,
             actor_user_id=user_id,
-            from_user_id=old_assignee,
+            from_user_id=old_owner_id,
         )
     db.commit()
     
@@ -637,7 +651,7 @@ def list_cases(
     per_page: int = 20,
     status: CaseStatus | None = None,
     source: CaseSource | None = None,
-    assigned_to: UUID | None = None,
+    owner_id: UUID | None = None,
     q: str | None = None,
     include_archived: bool = False,
     role_filter: str | None = None,
@@ -694,8 +708,11 @@ def list_cases(
         query = query.filter(Case.source == source.value)
     
     # Assigned filter
-    if assigned_to:
-        query = query.filter(Case.assigned_to_user_id == assigned_to)
+    if owner_id:
+        query = query.filter(
+            Case.owner_type == OwnerType.USER.value,
+            Case.owner_id == owner_id,
+        )
     
     # Search (name, email, phone)
     if q:

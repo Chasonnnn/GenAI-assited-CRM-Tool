@@ -691,3 +691,38 @@ Zoom Integration & UI Improvements (Week 11+) — v0.10.0 ✓
   - 0025_add_task_duration_minutes (task.duration_minutes)
   - f3bc6a65a816_fix_queue_timestamp_types (TIMESTAMPTZ, indexes, JSONB)
 ✓ Tests: 30/30 passing (26 backend + 30 frontend)
+
+Automation Workflows & Unified Owner Model (Week 12) — v0.11.0 ✓
+-----------------------------------------------------------------
+✓ Backend:
+  - Automation workflow engine with 8 trigger types:
+    - case_created, status_changed, case_assigned, case_updated
+    - scheduled (cron), inactivity, task_due, task_overdue
+  - 6 action types: send_email, create_task, assign_case, 
+    send_notification, update_field, add_note
+  - Loop protection (event_id + depth limit + source tracking)
+  - Dedupe for sweep-based triggers (unique index on workflow+entity+period)
+  - Per-user opt-out preferences (user_workflow_preferences table)
+  - workflow_service.py (CRUD), workflow_engine.py (execution)
+  - workflow_triggers.py (hooks into case_service)
+  - workflows.py router (12 endpoints)
+  - Worker handlers (WORKFLOW_EMAIL, WORKFLOW_SWEEP jobs)
+  - Cron endpoint (/internal/scheduled/workflow-sweep)
+  - Unified owner_type/owner_id model for Cases AND Tasks
+  - Removed legacy assigned_to_user_id from both models
+✓ Frontend:
+  - Automation page (/automation) with:
+    - Stats cards (total, enabled, success rate, executions 24h)
+    - Workflow list with toggle/duplicate/delete/history actions
+    - 4-step workflow creation wizard (Trigger → Conditions → Actions → Review)
+    - Execution history panel with timeline
+  - lib/api/workflows.ts (TypeScript API client)
+  - lib/hooks/use-workflows.ts (React Query hooks)
+  - Updated case/task types to use owner_type/owner_id
+  - Updated bulk assign UI to support queues
+✓ Migrations:
+  - 0027_automation_workflows (workflow tables)
+  - 0028_remove_assigned_to_user_id (cases cleanup)
+  - 0029_task_owner_model (tasks owner model)
+✓ Tests: 26/26 passing
+

@@ -11,7 +11,7 @@ from sqlalchemy import func, case as sql_case, and_, extract
 from sqlalchemy.orm import Session
 
 from app.db.models import Case, CaseStatusHistory
-from app.db.enums import CaseStatus, CaseSource
+from app.db.enums import CaseStatus, CaseSource, OwnerType
 
 
 # ============================================================================
@@ -24,7 +24,7 @@ def get_cases_trend(
     start_date: date | None = None,
     end_date: date | None = None,
     source: str | None = None,
-    assigned_to_user_id: uuid.UUID | None = None,
+    owner_id: uuid.UUID | None = None,
     group_by: str = "day",  # day, week, month
 ) -> list[dict[str, Any]]:
     """Get new cases created over time."""
@@ -43,8 +43,11 @@ def get_cases_trend(
     
     if source:
         query = query.filter(Case.source == source)
-    if assigned_to_user_id:
-        query = query.filter(Case.assigned_to_user_id == assigned_to_user_id)
+    if owner_id:
+        query = query.filter(
+            Case.owner_type == OwnerType.USER.value,
+            Case.owner_id == owner_id,
+        )
     
     # Group by time period
     if group_by == "week":
@@ -66,8 +69,11 @@ def get_cases_trend(
     
     if source:
         results = results.filter(Case.source == source)
-    if assigned_to_user_id:
-        results = results.filter(Case.assigned_to_user_id == assigned_to_user_id)
+    if owner_id:
+        results = results.filter(
+            Case.owner_type == OwnerType.USER.value,
+            Case.owner_id == owner_id,
+        )
     
     results = results.group_by(date_trunc).order_by(date_trunc).all()
     
@@ -222,7 +228,7 @@ def get_cases_by_source(
 
 
 # ============================================================================
-# Cases by User (Assignee)
+# Cases by User (Owner)
 # ============================================================================
 
 def get_cases_by_user(
@@ -231,17 +237,18 @@ def get_cases_by_user(
     start_date: date | None = None,
     end_date: date | None = None,
 ) -> list[dict[str, Any]]:
-    """Get case count by assigned user."""
+    """Get case count by owner (user-owned cases only)."""
     from app.db.models import User
     
     query = db.query(
-        Case.assigned_to_user_id,
+        Case.owner_id,
         User.full_name,
         func.count(Case.id).label("count"),
     ).outerjoin(
-        User, Case.assigned_to_user_id == User.id
+        User, Case.owner_id == User.id
     ).filter(
         Case.organization_id == organization_id,
+        Case.owner_type == OwnerType.USER.value,
         Case.is_archived == False,
     )
     
@@ -251,12 +258,12 @@ def get_cases_by_user(
         query = query.filter(func.date(Case.created_at) <= end_date)
     
     results = query.group_by(
-        Case.assigned_to_user_id, User.full_name
+        Case.owner_id, User.full_name
     ).order_by(func.count(Case.id).desc()).all()
     
     return [
         {
-            "user_id": str(r.assigned_to_user_id) if r.assigned_to_user_id else None,
+            "user_id": str(r.owner_id) if r.owner_id else None,
             "user_name": r.full_name or "Unassigned",
             "count": r.count,
         }
@@ -482,4 +489,3 @@ def get_cases_by_state_with_filter(
         {"state": r.state, "count": r.count}
         for r in results
     ]
-
