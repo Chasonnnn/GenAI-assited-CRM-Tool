@@ -78,6 +78,7 @@ vi.mock('@/lib/hooks/use-ai', () => ({
 
 vi.mock('@/lib/hooks/use-email-templates', () => ({
     useEmailTemplates: () => ({ data: [], isLoading: false }),
+    useEmailTemplate: () => ({ data: null, isLoading: false }),  // singular for detail
     useSendEmail: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
