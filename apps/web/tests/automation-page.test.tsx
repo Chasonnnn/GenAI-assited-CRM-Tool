@@ -16,6 +16,14 @@ vi.mock('@/lib/hooks/use-email-templates', () => ({
     useDeleteEmailTemplate: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
+vi.mock('@/lib/hooks/use-workflows', () => ({
+    useWorkflows: () => ({ data: [], isLoading: false }),
+    useCreateWorkflow: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useUpdateWorkflow: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useDeleteWorkflow: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useToggleWorkflow: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}))
+
 describe('AutomationPage', () => {
     it('renders', () => {
         render(<AutomationPage />)
