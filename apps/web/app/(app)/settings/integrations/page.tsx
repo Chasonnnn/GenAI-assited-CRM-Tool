@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -185,10 +186,33 @@ export default function IntegrationsPage() {
                                 )}
                             </CardContent>
                         </Card>
+
+                        {/* Meta Leads Admin */}
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex size-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900">
+                                        <FacebookIcon className="size-5 text-blue-600 dark:text-blue-400" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-base">Meta Leads Admin</CardTitle>
+                                        <CardDescription className="text-xs">Manage Facebook/Instagram page tokens</CardDescription>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                <Link href="/settings/integrations/meta">
+                                    <Button variant="outline" className="w-full">
+                                        <KeyIcon className="mr-2 size-4" />
+                                        Manage Page Tokens
+                                    </Button>
+                                </Link>
+                            </CardContent>
+                        </Card>
                     </div>
                 </div>
 
-                {/* Divider */}
+                {/* System Integrations Section */}
                 <div className="border-t pt-6">
                     <h2 className="mb-4 text-lg font-semibold">System Integrations</h2>
                     <p className="mb-4 text-sm text-muted-foreground">Organization-level integrations managed by administrators.</p>
