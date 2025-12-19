@@ -58,9 +58,6 @@ class ImportHistoryItem(BaseModel):
     created_at: str
     completed_at: str | None
 
-    class Config:
-        from_attributes = True
-
 
 class ImportDetailResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -75,9 +72,6 @@ class ImportDetailResponse(BaseModel):
     errors: list[dict] | None
     created_at: str
     completed_at: str | None
-
-    class Config:
-        from_attributes = True
 
 
 # =============================================================================
