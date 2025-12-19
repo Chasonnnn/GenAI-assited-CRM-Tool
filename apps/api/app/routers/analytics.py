@@ -138,11 +138,28 @@ def get_analytics_summary(
     ).count()
     qualified_rate = (qualified_count / total_cases * 100) if total_cases > 0 else 0.0
     
+    # Average time to qualified (hours) from status history
+    avg_hours_result = db.execute(
+        text("""
+            SELECT AVG(EXTRACT(EPOCH FROM (csh.changed_at - c.created_at)) / 3600) as avg_hours
+            FROM cases c
+            JOIN case_status_history csh ON c.id = csh.case_id
+            WHERE c.organization_id = :org_id
+              AND c.is_archived = false
+              AND csh.to_status = 'qualified'
+              AND csh.changed_at >= :start
+              AND csh.changed_at < :end
+        """),
+        {"org_id": org_id, "start": start, "end": end}
+    )
+    avg_hours_row = avg_hours_result.fetchone()
+    avg_time_to_qualified_hours = round(avg_hours_row[0], 1) if avg_hours_row and avg_hours_row[0] else None
+    
     return AnalyticsSummary(
         total_cases=total_cases,
         new_this_period=new_this_period,
         qualified_rate=round(qualified_rate, 1),
-        avg_time_to_qualified_hours=None,  # TODO: Compute from status history
+        avg_time_to_qualified_hours=avg_time_to_qualified_hours,
     )
 
 
