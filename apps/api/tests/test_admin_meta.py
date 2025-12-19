@@ -286,9 +286,10 @@ async def test_meta_pages_org_isolation(authed_client: AsyncClient, db, client):
 @pytest.mark.asyncio
 async def test_create_meta_page_without_encryption_key_fails(authed_client: AsyncClient, monkeypatch):
     """Test creation fails gracefully when encryption not configured."""
-    from app.core import encryption
+    from app.routers import admin_meta
     
-    monkeypatch.setattr(encryption, "is_encryption_configured", lambda: False)
+    # Monkeypatch in the router module where function is imported
+    monkeypatch.setattr(admin_meta, "is_encryption_configured", lambda: False)
     
     response = await authed_client.post(
         "/admin/meta-pages",
