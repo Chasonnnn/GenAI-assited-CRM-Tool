@@ -1,27 +1,81 @@
 "use client"
 
+import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
-import { CheckIcon, XIcon, MapPinIcon, CakeIcon, HeartIcon, HomeIcon, BabyIcon, ArrowLeftIcon } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import { CheckIcon, XIcon, MapPinIcon, CakeIcon, HeartIcon, ArrowLeftIcon, Loader2Icon } from "lucide-react"
 import Link from "next/link"
+import { useMatch, useAcceptMatch, useRejectMatch } from "@/lib/hooks/use-matches"
+import { formatDistanceToNow } from "date-fns"
+
+const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+    proposed: { label: "Proposed", color: "bg-blue-100 text-blue-700" },
+    reviewing: { label: "Reviewing", color: "bg-amber-100 text-amber-700" },
+    accepted: { label: "Accepted", color: "bg-green-100 text-green-700" },
+    rejected: { label: "Rejected", color: "bg-red-100 text-red-700" },
+    cancelled: { label: "Cancelled", color: "bg-gray-100 text-gray-700" },
+}
 
 export default function MatchReviewPage({ params }: { params: { id: string } }) {
-    // Sample match data
-    const compatibilityScore = 92
+    const router = useRouter()
+    const { data: match, isLoading, isError } = useMatch(params.id)
+    const acceptMatch = useAcceptMatch()
+    const rejectMatch = useRejectMatch()
 
-    const matchCriteria = [
-        { label: "State Preference", match: true, details: "Both located in California" },
-        { label: "Age Range", match: true, details: "Surrogate age 28 within preferred range" },
-        { label: "Previous Experience", match: true, details: "Surrogate has 1 prior successful journey" },
-        { label: "Medical History", match: true, details: "All health screenings passed" },
-        { label: "Availability Timeline", match: true, details: "Ready to begin within 2 months" },
-        { label: "Communication Style", match: true, details: "Both prefer frequent updates" },
-        { label: "Openness Level", match: false, details: "IPs prefer closed arrangement, surrogate prefers semi-open" },
-        { label: "Compensation Agreement", match: true, details: "Within expected range" },
-    ]
+    const [notes, setNotes] = useState("")
+    const [rejectReason, setRejectReason] = useState("")
+    const [showRejectDialog, setShowRejectDialog] = useState(false)
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-1 items-center justify-center p-6">
+                <Loader2Icon className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        )
+    }
+
+    if (isError || !match) {
+        return (
+            <div className="flex flex-1 flex-col items-center justify-center p-6 gap-4">
+                <p className="text-muted-foreground">Match not found</p>
+                <Button variant="outline" onClick={() => router.push("/matches")}>
+                    Back to Matches
+                </Button>
+            </div>
+        )
+    }
+
+    const statusConfig = STATUS_CONFIG[match.status] || STATUS_CONFIG.proposed
+    const canTakeAction = match.status === "proposed" || match.status === "reviewing"
+    const compatibilityScore = match.compatibility_score ?? 0
+
+    const handleAccept = async () => {
+        try {
+            await acceptMatch.mutateAsync({ matchId: params.id, data: { notes: notes || undefined } })
+            router.push("/matches")
+        } catch (e) {
+            console.error("Failed to accept match", e)
+        }
+    }
+
+    const handleReject = async () => {
+        if (!rejectReason.trim()) return
+        try {
+            await rejectMatch.mutateAsync({
+                matchId: params.id,
+                data: { rejection_reason: rejectReason, notes: notes || undefined }
+            })
+            setShowRejectDialog(false)
+            router.push("/matches")
+        } catch (e) {
+            console.error("Failed to reject match", e)
+        }
+    }
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-6">
@@ -32,9 +86,16 @@ export default function MatchReviewPage({ params }: { params: { id: string } }) 
                         <ArrowLeftIcon className="h-5 w-5" />
                     </Button>
                 </Link>
-                <div>
-                    <h1 className="text-2xl font-bold">Match Review</h1>
-                    <p className="text-sm text-muted-foreground">Proposed Match #{params.id}</p>
+                <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                        <h1 className="text-2xl font-bold">Match Review</h1>
+                        <Badge variant="outline" className={statusConfig.color}>
+                            {statusConfig.label}
+                        </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                        Proposed {formatDistanceToNow(new Date(match.proposed_at), { addSuffix: true })}
+                    </p>
                 </div>
             </div>
 
@@ -48,44 +109,19 @@ export default function MatchReviewPage({ params }: { params: { id: string } }) 
                     <CardContent className="space-y-4">
                         <div className="flex items-start gap-4">
                             <Avatar className="h-12 w-12">
-                                <AvatarFallback className="text-lg">SJ</AvatarFallback>
+                                <AvatarFallback className="text-lg">
+                                    {(match.case_name || "?")[0].toUpperCase()}
+                                </AvatarFallback>
                             </Avatar>
                             <div className="flex-1 space-y-1">
-                                <h3 className="text-xl font-semibold">Sarah Johnson</h3>
-                                <Badge className="bg-teal-500 hover:bg-teal-500/80">Active</Badge>
+                                <h3 className="text-xl font-semibold">{match.case_name || "Unknown"}</h3>
+                                {match.case_number && (
+                                    <Badge variant="outline">{match.case_number}</Badge>
+                                )}
                             </div>
                         </div>
-
-                        <div className="space-y-3 pt-2">
-                            <div className="flex items-center gap-2 text-sm">
-                                <MapPinIcon className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-muted-foreground">Location:</span>
-                                <span className="font-medium">San Diego, CA</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm">
-                                <CakeIcon className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-muted-foreground">Age:</span>
-                                <span className="font-medium">28 years old</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm">
-                                <BabyIcon className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-muted-foreground">Experience:</span>
-                                <span className="font-medium">1 successful journey</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm">
-                                <HomeIcon className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-muted-foreground">Family:</span>
-                                <span className="font-medium">Married, 2 children</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm">
-                                <HeartIcon className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-muted-foreground">Openness:</span>
-                                <span className="font-medium">Semi-open arrangement</span>
-                            </div>
-                        </div>
-
                         <div className="pt-2">
-                            <Link href="/cases/42">
+                            <Link href={`/cases/${match.case_id}`}>
                                 <Button variant="outline" size="sm" className="w-full bg-transparent">
                                     View Full Profile
                                 </Button>
@@ -102,44 +138,16 @@ export default function MatchReviewPage({ params }: { params: { id: string } }) 
                     <CardContent className="space-y-4">
                         <div className="flex items-start gap-4">
                             <Avatar className="h-12 w-12">
-                                <AvatarFallback className="text-lg">MC</AvatarFallback>
+                                <AvatarFallback className="text-lg">
+                                    {(match.ip_name || "?")[0].toUpperCase()}
+                                </AvatarFallback>
                             </Avatar>
                             <div className="flex-1 space-y-1">
-                                <h3 className="text-xl font-semibold">Michael & Claire Thompson</h3>
-                                <Badge className="bg-blue-500 hover:bg-blue-500/80">Active</Badge>
+                                <h3 className="text-xl font-semibold">{match.ip_name || "Unknown"}</h3>
                             </div>
                         </div>
-
-                        <div className="space-y-3 pt-2">
-                            <div className="flex items-center gap-2 text-sm">
-                                <MapPinIcon className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-muted-foreground">Location:</span>
-                                <span className="font-medium">Los Angeles, CA</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm">
-                                <CakeIcon className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-muted-foreground">Ages:</span>
-                                <span className="font-medium">35 & 33 years old</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm">
-                                <BabyIcon className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-muted-foreground">Experience:</span>
-                                <span className="font-medium">First-time IPs</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm">
-                                <HomeIcon className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-muted-foreground">Family:</span>
-                                <span className="font-medium">Married couple</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm">
-                                <HeartIcon className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-muted-foreground">Openness:</span>
-                                <span className="font-medium">Closed arrangement</span>
-                            </div>
-                        </div>
-
                         <div className="pt-2">
-                            <Link href="/intended-parents/12">
+                            <Link href={`/intended-parents/${match.intended_parent_id}`}>
                                 <Button variant="outline" size="sm" className="w-full bg-transparent">
                                     View Full Profile
                                 </Button>
@@ -150,87 +158,46 @@ export default function MatchReviewPage({ params }: { params: { id: string } }) 
             </div>
 
             {/* Compatibility Section */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Compatibility Analysis</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                    {/* Circular Progress Score */}
-                    <div className="flex flex-col items-center justify-center py-6">
-                        <div className="relative flex h-32 w-32 items-center justify-center">
-                            <svg className="h-32 w-32 -rotate-90 transform">
-                                <circle
-                                    cx="64"
-                                    cy="64"
-                                    r="56"
-                                    stroke="currentColor"
-                                    strokeWidth="8"
-                                    fill="none"
-                                    className="text-muted"
-                                />
-                                <circle
-                                    cx="64"
-                                    cy="64"
-                                    r="56"
-                                    stroke="currentColor"
-                                    strokeWidth="8"
-                                    fill="none"
-                                    strokeDasharray={`${2 * Math.PI * 56}`}
-                                    strokeDashoffset={`${2 * Math.PI * 56 * (1 - compatibilityScore / 100)}`}
-                                    className="text-teal-500 transition-all duration-1000"
-                                    strokeLinecap="round"
-                                />
-                            </svg>
-                            <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                <span className="text-3xl font-bold">{compatibilityScore}%</span>
-                                <span className="text-xs text-muted-foreground">Match Score</span>
+            {compatibilityScore > 0 && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Compatibility Score</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex flex-col items-center justify-center py-6">
+                            <div className="relative flex h-32 w-32 items-center justify-center">
+                                <svg className="h-32 w-32 -rotate-90 transform">
+                                    <circle
+                                        cx="64"
+                                        cy="64"
+                                        r="56"
+                                        stroke="currentColor"
+                                        strokeWidth="8"
+                                        fill="none"
+                                        className="text-muted"
+                                    />
+                                    <circle
+                                        cx="64"
+                                        cy="64"
+                                        r="56"
+                                        stroke="currentColor"
+                                        strokeWidth="8"
+                                        fill="none"
+                                        strokeDasharray={`${2 * Math.PI * 56}`}
+                                        strokeDashoffset={`${2 * Math.PI * 56 * (1 - compatibilityScore / 100)}`}
+                                        className="text-teal-500 transition-all duration-1000"
+                                        strokeLinecap="round"
+                                    />
+                                </svg>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                    <span className="text-3xl font-bold">{compatibilityScore.toFixed(0)}%</span>
+                                    <span className="text-xs text-muted-foreground">Match Score</span>
+                                </div>
                             </div>
                         </div>
-                        <p className="mt-4 text-center text-sm text-muted-foreground">
-                            This is an excellent match with strong compatibility across most criteria
-                        </p>
-                    </div>
-
-                    {/* Match Criteria Checklist */}
-                    <div className="space-y-3">
-                        <h3 className="font-semibold">Match Criteria</h3>
-                        <div className="space-y-2">
-                            {matchCriteria.map((criterion, index) => (
-                                <div
-                                    key={index}
-                                    className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50"
-                                >
-                                    <div
-                                        className={`mt-0.5 flex h-5 w-5 items-center justify-center rounded-full ${criterion.match ? "bg-green-500/10" : "bg-red-500/10"
-                                            }`}
-                                    >
-                                        {criterion.match ? (
-                                            <CheckIcon className="h-3 w-3 text-green-600" />
-                                        ) : (
-                                            <XIcon className="h-3 w-3 text-red-600" />
-                                        )}
-                                    </div>
-                                    <div className="flex-1 space-y-1">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm font-medium">{criterion.label}</span>
-                                            {criterion.match ? (
-                                                <Badge variant="secondary" className="bg-green-500/10 text-green-700 hover:bg-green-500/20">
-                                                    Match
-                                                </Badge>
-                                            ) : (
-                                                <Badge variant="secondary" className="bg-red-500/10 text-red-700 hover:bg-red-500/20">
-                                                    Mismatch
-                                                </Badge>
-                                            )}
-                                        </div>
-                                        <p className="text-xs text-muted-foreground">{criterion.details}</p>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Notes Section */}
             <Card>
@@ -238,30 +205,85 @@ export default function MatchReviewPage({ params }: { params: { id: string } }) 
                     <CardTitle>Coordinator Notes</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <Textarea
-                        placeholder="Add notes about this match, including any concerns or recommendations..."
-                        className="min-h-32"
-                        defaultValue="The openness preference difference may require discussion. Both parties are open to communication, so this can likely be addressed in the initial meeting. Overall, this appears to be a very strong match."
-                    />
-                    <p className="text-xs text-muted-foreground">
-                        These notes will be visible to the matching team and can be referenced during the review process.
-                    </p>
+                    {match.notes && (
+                        <div className="rounded-lg bg-muted/50 p-4">
+                            <p className="text-sm whitespace-pre-wrap">{match.notes}</p>
+                        </div>
+                    )}
+                    {canTakeAction && (
+                        <Textarea
+                            placeholder="Add notes about this match..."
+                            className="min-h-24"
+                            value={notes}
+                            onChange={(e) => setNotes(e.target.value)}
+                        />
+                    )}
+                    {match.rejection_reason && (
+                        <div className="rounded-lg bg-red-50 dark:bg-red-950 p-4 border border-red-200 dark:border-red-800">
+                            <p className="text-sm font-medium text-red-700 dark:text-red-300 mb-1">Rejection Reason</p>
+                            <p className="text-sm text-red-600 dark:text-red-400">{match.rejection_reason}</p>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
 
             {/* Action Buttons */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-                <Button variant="outline" className="sm:order-1 bg-transparent">
-                    Reject Match
-                </Button>
-                <Button variant="outline" className="sm:order-2 bg-transparent">
-                    Request Changes
-                </Button>
-                <Button className="bg-teal-500 hover:bg-teal-600 sm:order-3">
-                    <CheckIcon className="mr-2 h-4 w-4" />
-                    Accept Match
-                </Button>
-            </div>
+            {canTakeAction && (
+                <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                    <Button
+                        variant="outline"
+                        className="bg-transparent"
+                        onClick={() => setShowRejectDialog(true)}
+                        disabled={rejectMatch.isPending}
+                    >
+                        <XIcon className="mr-2 h-4 w-4" />
+                        Reject Match
+                    </Button>
+                    <Button
+                        className="bg-teal-500 hover:bg-teal-600"
+                        onClick={handleAccept}
+                        disabled={acceptMatch.isPending}
+                    >
+                        {acceptMatch.isPending ? (
+                            <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                            <CheckIcon className="mr-2 h-4 w-4" />
+                        )}
+                        Accept Match
+                    </Button>
+                </div>
+            )}
+
+            {/* Reject Dialog */}
+            <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Reject Match</DialogTitle>
+                        <DialogDescription>
+                            Please provide a reason for rejecting this match.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <Textarea
+                        placeholder="Reason for rejection..."
+                        value={rejectReason}
+                        onChange={(e) => setRejectReason(e.target.value)}
+                        className="min-h-24"
+                    />
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowRejectDialog(false)}>
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={handleReject}
+                            disabled={!rejectReason.trim() || rejectMatch.isPending}
+                        >
+                            {rejectMatch.isPending && <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />}
+                            Reject Match
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
