@@ -4,6 +4,8 @@
 **Purpose:** Identify features that need development to be fully functional  
 **Test Coverage:** ✅ **89/89 tests passing** - Frontend: 30/30, Backend: 59/59
 
+> **Phase 4 Complete:** Zoom Settings, Dashboard Upcoming Widget, Matching System, Pipeline UI (rename/reorder mode)
+
 ---
 
 ## Legend
@@ -207,45 +209,48 @@ These are fully functional end-to-end:
 
 ## 4. PARTIAL FEATURES — ⚠️ Need Work
 
-### 4.1 Zoom Integration ⚠️
-**Status:** Backend complete, frontend minimal
+### 4.1 Zoom Integration ✅ **COMPLETE**
+**Status:** Fully functional with settings UI
 
-**What exists:**
+**Features:**
 - OAuth connect/disconnect ✅
 - Create meeting from case ✅
 - Send invite email ✅
-
-**What's missing:**
-- Settings page only shows connect button
-- No meeting history view
-
-**Effort:** Small (1-2 days)
+- Settings page with connection status ✅
+- Meeting history table ✅
 
 ---
 
 ### 4.2 Pipelines (Custom Stages) ⚠️
-**Status:** Backend complete, frontend minimal
+**Status:** Backend complete, frontend in rename/reorder mode
 
 **What exists:**
 - `Pipeline` model with versioning ✅
 - CRUD endpoints ✅
 - Version history with rollback ✅
+- Settings page with reorder/color editing ✅
 
 **What's missing:**
-- No frontend UI to manage pipelines
+- Cannot add/remove stages (requires Phase 2 model)
 - Cases still use hardcoded CaseStatus enum
 
-**Effort:** Large (1-2 weeks to migrate)
+**Effort:** Large (1-2 weeks for Phase 2 migration)
 
 ---
 
 ## 5. NOT STARTED — ❌
 
-### 5.1 Matching System ❌
-- No surrogate → intended parent matching
-- No compatibility scoring
+### 5.1 Matching System ✅ **COMPLETE**
+**Status:** Fully functional
 
-**Effort:** Large (2-3 weeks)
+**Features:**
+- Match model with unique constraint ✅
+- Full CRUD + accept/reject flow ✅
+- Auto-transition to reviewing ✅
+- Activity logging (proposed/accepted/rejected/cancelled) ✅
+- ProposeMatchDialog component ✅
+- List page with status tabs ✅
+- Detail page with accept/reject actions ✅
 
 ### 5.2 Compliance/HIPAA Features ❌
 - No audit export
@@ -253,11 +258,14 @@ These are fully functional end-to-end:
 
 **Effort:** Medium (1 week)
 
-### 5.3 Dashboard Calendar ❌
-- No calendar component
-- No upcoming meetings/tasks view
+### 5.3 Dashboard Upcoming Widget ✅ **COMPLETE**
+**Status:** Fully functional
 
-**Effort:** Medium (3-5 days)
+**Features:**
+- GET /dashboard/upcoming endpoint ✅
+- Tasks + meetings for next 7 days ✅
+- Overdue/Today/Tomorrow/This Week grouping ✅
+- Widget component with real data ✅
 
 ---
 
@@ -280,21 +288,19 @@ These are fully functional end-to-end:
 
 ## 7. PRIORITY RECOMMENDATIONS
 
-### ✅ Recently Completed (Phase 3)
-1. ~~Email Sending from Cases~~ ✅
-2. ~~Gmail OAuth Integration UI~~ ✅
-3. ~~Automation Engine~~ ✅
-4. ~~Activity Feed~~ ✅
-5. ~~Task Reminders~~ ✅
-6. ~~Async CSV Import~~ ✅
+### ✅ Recently Completed (Phase 4)
+1. ~~Zoom Settings Enhancement~~ ✅
+2. ~~Dashboard Upcoming Widget~~ ✅
+3. ~~Matching System~~ ✅
+4. ~~Pipeline UI (rename/reorder mode)~~ ✅
 
 ### Next Sprint
-7. **Zoom Settings Enhancement** — Show connected accounts, meeting history
-8. **Dashboard Calendar** — Upcoming tasks/meetings view
+5. **Pipeline Phase 2** — Full stage CRUD with case migration
+6. **Compliance/HIPAA** — Audit export, data retention
 
 ### Medium Term
-9. **Pipeline UI** — Replace hardcoded statuses
-10. **Matching System** — Core business differentiator
+7. **User Theme Customization** — Preset color themes
+8. **SMS/Telephony** — Twilio integration
 
 ---
 
