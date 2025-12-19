@@ -123,9 +123,31 @@ async def process_job(db, job) -> None:
                 )
         
     elif job.job_type == JobType.WEBHOOK_RETRY.value:
-        # Placeholder for webhook retry logic
+        # Retry failed webhook delivery
         logger.info(f"Processing webhook retry: {job.payload}")
-        # TODO: Implement webhook retry logic
+        payload = job.payload or {}
+        
+        # Extract webhook details
+        webhook_url = payload.get("url")
+        webhook_data = payload.get("data")
+        webhook_headers = payload.get("headers", {})
+        
+        if webhook_url and webhook_data:
+            import httpx
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        webhook_url,
+                        json=webhook_data,
+                        headers=webhook_headers
+                    )
+                    response.raise_for_status()
+                    logger.info(f"Webhook retry successful: {webhook_url}")
+            except Exception as e:
+                logger.error(f"Webhook retry failed: {webhook_url} - {str(e)}")
+                raise  # Will trigger job retry mechanism
+        else:
+            logger.warning(f"Invalid webhook retry payload: missing url or data")
         
     elif job.job_type == JobType.NOTIFICATION.value:
         # Process notification - create in-app notification record
