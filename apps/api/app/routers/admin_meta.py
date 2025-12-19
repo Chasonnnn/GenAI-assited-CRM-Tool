@@ -48,8 +48,8 @@ class MetaPageRead(BaseModel):
     page_name: str | None
     token_expires_at: datetime | None
     is_active: bool
-    last_sync_at: datetime | None
-    last_error: str | None
+    last_sync_at: datetime | None = None
+    last_error: str | None = None
     created_at: datetime
     updated_at: datetime
 

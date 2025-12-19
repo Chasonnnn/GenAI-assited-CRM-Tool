@@ -93,6 +93,7 @@ class CaseSource(str, Enum):
     META = "meta"
     WEBSITE = "website"
     REFERRAL = "referral"
+    IMPORT = "import"  # CSV bulk import
 
 
 class CaseActivityType(str, Enum):
