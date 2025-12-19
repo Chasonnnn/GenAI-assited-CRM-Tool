@@ -79,13 +79,9 @@ def get_upcoming(
     # Filter: user's tasks (assignee or owner)
     task_filters = [
         Task.organization_id == session.org_id,
-        Task.completed_at.is_(None),  # Not completed
-        or_(
-            # User is owner
-            and_(Task.owner_type == OwnerType.USER.value, Task.owner_id == session.user_id),
-            # User is assignee
-            Task.assignee_id == session.user_id,
-        ),
+        Task.is_completed == False,  # Not completed
+        # User-owned tasks only (owner model)
+        and_(Task.owner_type == OwnerType.USER.value, Task.owner_id == session.user_id),
     ]
     
     # Date filters
@@ -111,7 +107,10 @@ def get_upcoming(
     # Build case lookup for numbers
     case_ids = {t.case_id for t in tasks if t.case_id}
     cases = {} if not case_ids else {
-        c.id: c for c in db.query(Case).filter(Case.id.in_(case_ids)).all()
+        c.id: c for c in db.query(Case).filter(
+            Case.organization_id == session.org_id,
+            Case.id.in_(case_ids)
+        ).all()
     }
     
     task_items = []
@@ -134,17 +133,13 @@ def get_upcoming(
     # Fetch Zoom Meetings
     # -------------------------------------------------------------------------
     meeting_filters = [
+        ZoomMeeting.organization_id == session.org_id,
         ZoomMeeting.user_id == session.user_id,
         ZoomMeeting.start_time.isnot(None),  # Only scheduled meetings
+        # Future meetings within range (or recent past)
+        ZoomMeeting.start_time >= now - timedelta(hours=1),
+        ZoomMeeting.start_time <= now + timedelta(days=days),
     ]
-    
-    # Future meetings only (or recent past)
-    meeting_filters.append(
-        or_(
-            ZoomMeeting.start_time >= now - timedelta(hours=1),  # Started recently
-            ZoomMeeting.start_time <= now + timedelta(days=days),  # Within range
-        )
-    )
     
     meetings = (
         db.query(ZoomMeeting)
@@ -157,7 +152,10 @@ def get_upcoming(
     # Build case lookup for meeting cases
     meeting_case_ids = {m.case_id for m in meetings if m.case_id}
     meeting_cases = {} if not meeting_case_ids else {
-        c.id: c for c in db.query(Case).filter(Case.id.in_(meeting_case_ids)).all()
+        c.id: c for c in db.query(Case).filter(
+            Case.organization_id == session.org_id,
+            Case.id.in_(meeting_case_ids)
+        ).all()
     }
     
     meeting_items = []

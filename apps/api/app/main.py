@@ -153,6 +153,10 @@ app.include_router(audit.router)
 from app.routers import pipelines
 app.include_router(pipelines.router)
 
+# Matches (Surrogate ↔ Intended Parent pairing)
+from app.routers import matches
+app.include_router(matches.router)
+
 # Automation Workflows (Manager+)
 from app.routers import workflows
 app.include_router(workflows.router, prefix="/workflows", tags=["workflows"])

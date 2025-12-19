@@ -188,6 +188,15 @@ async def schedule_zoom_meeting(
         duration=duration,
         timezone_name=timezone_name,
     )
+
+    meeting_start_time = None
+    if meeting.start_time:
+        try:
+            meeting_start_time = datetime.fromisoformat(
+                meeting.start_time.replace("Z", "+00:00")
+            )
+        except ValueError:
+            meeting_start_time = start_time
     
     # Build note content
     from html import escape
@@ -280,9 +289,9 @@ async def schedule_zoom_meeting(
         intended_parent_id=entity_id if entity_type == EntityType.INTENDED_PARENT else None,
         zoom_meeting_id=str(meeting.id),
         topic=meeting.topic,
-        start_time=start_time,
+        start_time=meeting_start_time,
         duration=duration,
-        timezone=timezone_name,
+        timezone=meeting.timezone or timezone_name,
         join_url=meeting.join_url,
         start_url=meeting.start_url,
         password=meeting.password,

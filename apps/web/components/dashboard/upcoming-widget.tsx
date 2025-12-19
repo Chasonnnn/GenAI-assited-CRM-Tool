@@ -9,13 +9,14 @@ import { useUpcoming, type UpcomingTask, type UpcomingMeeting } from "@/lib/hook
 type UpcomingItem = (UpcomingTask & { type: 'task' }) | (UpcomingMeeting & { type: 'meeting' })
 
 function groupItemsByDate(tasks: UpcomingTask[], meetings: UpcomingMeeting[]) {
+    const toLocalDateKey = (date: Date) => date.toLocaleDateString('en-CA')
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    const todayStr = today.toISOString().split('T')[0]
+    const todayStr = toLocalDateKey(today)
 
     const tomorrow = new Date(today)
     tomorrow.setDate(tomorrow.getDate() + 1)
-    const tomorrowStr = tomorrow.toISOString().split('T')[0]
+    const tomorrowStr = toLocalDateKey(tomorrow)
 
     // Combine and mark with type
     const allItems: UpcomingItem[] = [

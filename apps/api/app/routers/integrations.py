@@ -540,7 +540,10 @@ def list_zoom_meetings(
     
     meetings = (
         db.query(ZoomMeetingModel)
-        .filter(ZoomMeetingModel.user_id == session.user_id)
+        .filter(
+            ZoomMeetingModel.organization_id == session.org_id,
+            ZoomMeetingModel.user_id == session.user_id,
+        )
         .order_by(ZoomMeetingModel.created_at.desc())
         .limit(min(limit, 50))
         .all()
