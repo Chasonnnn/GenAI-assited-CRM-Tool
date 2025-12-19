@@ -17,7 +17,6 @@ async def test_case_create_sets_owner_fields(authed_client, test_auth):
     data = resp.json()
     assert data["owner_type"] == "user"
     assert data["owner_id"] == str(test_auth.user.id)
-    assert data["assigned_to_user_id"] == str(test_auth.user.id)
 
 
 def test_system_case_defaults_to_unassigned_queue(db, test_org):
@@ -37,7 +36,6 @@ def test_system_case_defaults_to_unassigned_queue(db, test_org):
     default_queue = queue_service.get_or_create_default_queue(db, test_org.id)
     assert case.owner_type == "queue"
     assert case.owner_id == default_queue.id
-    assert case.assigned_to_user_id is None
 
 
 @pytest.mark.asyncio
@@ -68,7 +66,6 @@ async def test_queue_assign_claim_release_flow(authed_client):
     data = after_assign.json()
     assert data["owner_type"] == "queue"
     assert data["owner_id"] == queue_a["id"]
-    assert data["assigned_to_user_id"] is None
 
     # Claim from queue
     claim = await authed_client.post(f"/queues/cases/{case_id}/claim")
@@ -78,7 +75,7 @@ async def test_queue_assign_claim_release_flow(authed_client):
     assert after_claim.status_code == 200, after_claim.text
     data = after_claim.json()
     assert data["owner_type"] == "user"
-    assert data["assigned_to_user_id"] is not None
+    assert data["owner_id"] is not None
 
     # Release to queue B
     release = await authed_client.post(f"/queues/cases/{case_id}/release", json={"queue_id": queue_b["id"]})
@@ -89,5 +86,3 @@ async def test_queue_assign_claim_release_flow(authed_client):
     data = after_release.json()
     assert data["owner_type"] == "queue"
     assert data["owner_id"] == queue_b["id"]
-    assert data["assigned_to_user_id"] is None
-

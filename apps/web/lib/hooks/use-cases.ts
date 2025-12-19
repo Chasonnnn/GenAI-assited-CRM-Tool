@@ -116,8 +116,15 @@ export function useAssignCase() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ caseId, userId }: { caseId: string; userId: string | null }) =>
-            casesApi.assignCase(caseId, userId),
+        mutationFn: ({
+            caseId,
+            owner_type,
+            owner_id,
+        }: {
+            caseId: string;
+            owner_type: 'user' | 'queue';
+            owner_id: string;
+        }) => casesApi.assignCase(caseId, { owner_type, owner_id }),
         onSuccess: (updatedCase) => {
             queryClient.setQueryData(caseKeys.detail(updatedCase.id), updatedCase);
             queryClient.invalidateQueries({ queryKey: caseKeys.lists() });

@@ -12,8 +12,8 @@ from app.core.deps import (
     is_owner_or_can_manage,
     require_csrf_header,
 )
-from app.db.enums import TaskType, ROLES_CAN_ARCHIVE
-from app.db.models import Case, User
+from app.db.enums import TaskType, ROLES_CAN_ARCHIVE, OwnerType
+from app.db.models import Case, User, Queue
 from app.schemas.auth import UserSession
 from app.schemas.task import (
     TaskCreate,
@@ -30,10 +30,13 @@ router = APIRouter()
 
 def _task_to_read(task, db: Session) -> TaskRead:
     """Convert Task model to TaskRead schema."""
-    assigned_to_name = None
-    if task.assigned_to_user_id:
-        user = db.query(User).filter(User.id == task.assigned_to_user_id).first()
-        assigned_to_name = user.display_name if user else None
+    owner_name = None
+    if task.owner_type == OwnerType.USER.value:
+        user = db.query(User).filter(User.id == task.owner_id).first()
+        owner_name = user.display_name if user else None
+    elif task.owner_type == OwnerType.QUEUE.value:
+        queue = db.query(Queue).filter(Queue.id == task.owner_id).first()
+        owner_name = queue.name if queue else None
     
     created_by_name = None
     if task.created_by_user_id:
@@ -54,8 +57,9 @@ def _task_to_read(task, db: Session) -> TaskRead:
         id=task.id,
         case_id=task.case_id,
         case_number=case_number,
-        assigned_to_user_id=task.assigned_to_user_id,
-        assigned_to_name=assigned_to_name,
+        owner_type=task.owner_type,
+        owner_id=task.owner_id,
+        owner_name=owner_name,
         created_by_user_id=task.created_by_user_id,
         created_by_name=created_by_name,
         title=task.title,
@@ -74,10 +78,13 @@ def _task_to_read(task, db: Session) -> TaskRead:
 
 def _task_to_list_item(task, db: Session) -> TaskListItem:
     """Convert Task model to TaskListItem schema."""
-    assigned_to_name = None
-    if task.assigned_to_user_id:
-        user = db.query(User).filter(User.id == task.assigned_to_user_id).first()
-        assigned_to_name = user.display_name if user else None
+    owner_name = None
+    if task.owner_type == OwnerType.USER.value:
+        user = db.query(User).filter(User.id == task.owner_id).first()
+        owner_name = user.display_name if user else None
+    elif task.owner_type == OwnerType.QUEUE.value:
+        queue = db.query(Queue).filter(Queue.id == task.owner_id).first()
+        owner_name = queue.name if queue else None
     
     case_number = None
     if task.case_id:
@@ -90,11 +97,13 @@ def _task_to_list_item(task, db: Session) -> TaskListItem:
         case_number=case_number,
         title=task.title,
         task_type=TaskType(task.task_type),
+        owner_type=task.owner_type,
+        owner_id=task.owner_id,
+        owner_name=owner_name,
         due_date=task.due_date,
         due_time=task.due_time,
         duration_minutes=task.duration_minutes,
         is_completed=task.is_completed,
-        assigned_to_name=assigned_to_name,
         created_at=task.created_at,
     )
 
@@ -117,7 +126,7 @@ def list_tasks(
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
     q: str | None = Query(None, description="Search in title and description"),
-    assigned_to: UUID | None = None,
+    owner_id: UUID | None = None,
     case_id: UUID | None = None,
     is_completed: bool | None = None,
     task_type: TaskType | None = None,
@@ -128,7 +137,7 @@ def list_tasks(
     """
     List tasks.
     
-    - my_tasks=true: Filter to tasks created by or assigned to current user
+    - my_tasks=true: Filter to tasks created by or owned by current user
     - If case_id is specified, role-based access is checked
     """
     # If filtering by case_id, check access first
@@ -146,7 +155,7 @@ def list_tasks(
         page=page,
         per_page=per_page,
         q=q,
-        assigned_to=assigned_to,
+        owner_id=owner_id,
         case_id=case_id,
         is_completed=is_completed,
         task_type=task_type,
@@ -185,14 +194,24 @@ def create_task(
         # Access control: intake can't access handed-off cases
         check_case_access(case, session.role, session.user_id)
     
-    # Verify assignee belongs to org if specified
-    if data.assigned_to_user_id:
+    # Verify owner belongs to org if specified
+    if data.owner_type == OwnerType.USER.value:
         membership = db.query(Membership).filter(
-            Membership.user_id == data.assigned_to_user_id,
+            Membership.user_id == data.owner_id,
             Membership.organization_id == session.org_id,
         ).first()
         if not membership:
-            raise HTTPException(status_code=400, detail="Assigned user not found in organization")
+            raise HTTPException(status_code=400, detail="Owner user not found in organization")
+    elif data.owner_type == OwnerType.QUEUE.value:
+        queue = db.query(Queue).filter(
+            Queue.id == data.owner_id,
+            Queue.organization_id == session.org_id,
+            Queue.is_active == True,
+        ).first()
+        if not queue:
+            raise HTTPException(status_code=400, detail="Queue not found or inactive")
+    elif data.owner_type is not None:
+        raise HTTPException(status_code=400, detail="Invalid owner_type")
     
     task = task_service.create_task(
         db=db,
@@ -230,7 +249,7 @@ def update_task(
     """
     Update task.
     
-    Requires: creator, assignee, or manager+
+    Requires: creator, owner, or manager+
     """
     from app.db.models import Membership
     
@@ -241,22 +260,33 @@ def update_task(
     # Access control: check case access if task is linked to a case
     _check_task_case_access(task, session, db)
     
-    # Permission: creator, assignee, or manager+
+    # Permission: creator, owner, or manager+
     if not is_owner_or_assignee_or_manager(
-        session, task.created_by_user_id, task.assigned_to_user_id
+        session, task.created_by_user_id, task.owner_type, task.owner_id
     ):
         raise HTTPException(status_code=403, detail="Not authorized to update this task")
     
-    # Verify new assignee belongs to org if changing assignment
-    if "assigned_to_user_id" in data.model_dump(exclude_unset=True):
-        new_assignee = data.assigned_to_user_id
-        if new_assignee is not None:
+    update_fields = data.model_dump(exclude_unset=True)
+    if "owner_type" in update_fields or "owner_id" in update_fields:
+        owner_type = update_fields.get("owner_type", task.owner_type)
+        owner_id = update_fields.get("owner_id", task.owner_id)
+        if owner_type == OwnerType.USER.value:
             membership = db.query(Membership).filter(
-                Membership.user_id == new_assignee,
+                Membership.user_id == owner_id,
                 Membership.organization_id == session.org_id,
             ).first()
             if not membership:
-                raise HTTPException(status_code=400, detail="Assigned user not found in organization")
+                raise HTTPException(status_code=400, detail="Owner user not found in organization")
+        elif owner_type == OwnerType.QUEUE.value:
+            queue = db.query(Queue).filter(
+                Queue.id == owner_id,
+                Queue.organization_id == session.org_id,
+                Queue.is_active == True,
+            ).first()
+            if not queue:
+                raise HTTPException(status_code=400, detail="Queue not found or inactive")
+        else:
+            raise HTTPException(status_code=400, detail="Invalid owner_type")
     
     task = task_service.update_task(db, task, data, actor_user_id=session.user_id)
     return _task_to_read(task, db)
@@ -271,7 +301,7 @@ def complete_task(
     """
     Mark task as completed.
     
-    Requires: creator, assignee, or manager+
+    Requires: creator, owner, or manager+
     """
     task = task_service.get_task(db, task_id, session.org_id)
     if not task:
@@ -281,7 +311,7 @@ def complete_task(
     _check_task_case_access(task, session, db)
     
     if not is_owner_or_assignee_or_manager(
-        session, task.created_by_user_id, task.assigned_to_user_id
+        session, task.created_by_user_id, task.owner_type, task.owner_id
     ):
         raise HTTPException(status_code=403, detail="Not authorized")
     
@@ -304,7 +334,7 @@ def uncomplete_task(
     _check_task_case_access(task, session, db)
     
     if not is_owner_or_assignee_or_manager(
-        session, task.created_by_user_id, task.assigned_to_user_id
+        session, task.created_by_user_id, task.owner_type, task.owner_id
     ):
         raise HTTPException(status_code=403, detail="Not authorized")
     

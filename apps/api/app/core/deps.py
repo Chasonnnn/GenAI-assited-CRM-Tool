@@ -227,12 +227,14 @@ def is_owner_or_can_manage(session, created_by_user_id: UUID) -> bool:
 def is_owner_or_assignee_or_manager(
     session, 
     created_by_user_id: UUID | None,
-    assigned_to_user_id: UUID | None
+    owner_type: str | None,
+    owner_id: UUID | None,
 ) -> bool:
-    """Check if user is creator, assignee, or manager+. For tasks."""
-    from app.db.enums import ROLES_CAN_ARCHIVE
+    """Check if user is creator, owner (user), or manager+. For tasks."""
+    from app.db.enums import ROLES_CAN_ARCHIVE, OwnerType
+    is_owner = owner_type == OwnerType.USER.value and owner_id == session.user_id
     return (
         session.user_id == created_by_user_id or
-        session.user_id == assigned_to_user_id or
+        is_owner or
         session.role in ROLES_CAN_ARCHIVE
     )

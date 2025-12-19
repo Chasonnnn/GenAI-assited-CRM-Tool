@@ -17,8 +17,8 @@ from app.core.deps import (
     require_csrf_header,
     require_roles,
 )
-from app.db.enums import CaseSource, CaseStatus, Role, ROLES_CAN_ARCHIVE
-from app.db.models import User
+from app.db.enums import CaseSource, CaseStatus, Role, ROLES_CAN_ARCHIVE, OwnerType
+from app.db.models import User, Queue
 from app.schemas.auth import UserSession
 from app.schemas.case import (
     CaseAssign,
@@ -43,10 +43,13 @@ router = APIRouter()
 
 def _case_to_read(case, db: Session) -> CaseRead:
     """Convert Case model to CaseRead schema with joined user names."""
-    assigned_to_name = None
-    if case.assigned_to_user_id:
-        user = db.query(User).filter(User.id == case.assigned_to_user_id).first()
-        assigned_to_name = user.display_name if user else None
+    owner_name = None
+    if case.owner_type == OwnerType.USER.value:
+        user = db.query(User).filter(User.id == case.owner_id).first()
+        owner_name = user.display_name if user else None
+    elif case.owner_type == OwnerType.QUEUE.value:
+        queue = db.query(Queue).filter(Queue.id == case.owner_id).first()
+        owner_name = queue.name if queue else None
     
     return CaseRead(
         id=case.id,
@@ -54,11 +57,10 @@ def _case_to_read(case, db: Session) -> CaseRead:
         status=CaseStatus(case.status),
         source=CaseSource(case.source),
         is_priority=case.is_priority,
-        assigned_to_user_id=case.assigned_to_user_id,
-        assigned_to_name=assigned_to_name,
-        created_by_user_id=case.created_by_user_id,
         owner_type=case.owner_type,
         owner_id=case.owner_id,
+        owner_name=owner_name,
+        created_by_user_id=case.created_by_user_id,
         full_name=case.full_name,
         email=case.email,
         phone=case.phone,
@@ -85,10 +87,13 @@ def _case_to_list_item(case, db: Session) -> CaseListItem:
     """Convert Case model to CaseListItem schema."""
     from datetime import date
     
-    assigned_to_name = None
-    if case.assigned_to_user_id:
-        user = db.query(User).filter(User.id == case.assigned_to_user_id).first()
-        assigned_to_name = user.display_name if user else None
+    owner_name = None
+    if case.owner_type == OwnerType.USER.value:
+        user = db.query(User).filter(User.id == case.owner_id).first()
+        owner_name = user.display_name if user else None
+    elif case.owner_type == OwnerType.QUEUE.value:
+        queue = db.query(Queue).filter(Queue.id == case.owner_id).first()
+        owner_name = queue.name if queue else None
     
     # Calculate age from date_of_birth
     age = None
@@ -114,7 +119,9 @@ def _case_to_list_item(case, db: Session) -> CaseListItem:
         email=case.email,
         phone=case.phone,
         state=case.state,
-        assigned_to_name=assigned_to_name,
+        owner_type=case.owner_type,
+        owner_id=case.owner_id,
+        owner_name=owner_name,
         is_priority=case.is_priority,
         is_archived=case.is_archived,
         age=age,
@@ -182,7 +189,7 @@ def list_cases(
     per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
     status: CaseStatus | None = None,
     source: CaseSource | None = None,
-    assigned_to: UUID | None = None,
+    owner_id: UUID | None = None,
     q: str | None = Query(None, max_length=100),
     include_archived: bool = False,
     queue_id: UUID | None = None,
@@ -196,6 +203,7 @@ def list_cases(
     - Intake specialists only see their owned cases
     - queue_id: Filter by cases in a specific queue
     - owner_type: Filter by owner type ('user' or 'queue')
+    - owner_id: Filter by owner ID (when owner_type='user')
     """
     cases, total = case_service.list_cases(
         db=db,
@@ -204,7 +212,7 @@ def list_cases(
         per_page=per_page,
         status=status,
         source=source,
-        assigned_to=assigned_to,
+        owner_id=owner_id,
         q=q,
         include_archived=include_archived,
         role_filter=session.role,
@@ -592,7 +600,7 @@ def assign_case(
     db: Session = Depends(get_db),
 ):
     """
-    Assign case to a user (or unassign with null).
+    Assign case to a user or queue.
     
     Requires: manager+ role
     """
@@ -603,17 +611,23 @@ def assign_case(
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     
-    # Verify assignee exists and is in same org
-    if data.user_id:
+    if data.owner_type == OwnerType.USER:
         from app.db.models import Membership
         membership = db.query(Membership).filter(
-            Membership.user_id == data.user_id,
+            Membership.user_id == data.owner_id,
             Membership.organization_id == session.org_id,
         ).first()
         if not membership:
             raise HTTPException(status_code=400, detail="User not found in organization")
+    elif data.owner_type == OwnerType.QUEUE:
+        from app.services import queue_service
+        queue = queue_service.get_queue(db, session.org_id, data.owner_id)
+        if not queue or not queue.is_active:
+            raise HTTPException(status_code=400, detail="Queue not found or inactive")
+    else:
+        raise HTTPException(status_code=400, detail="Invalid owner_type")
     
-    case = case_service.assign_case(db, case, data.user_id, session.user_id)
+    case = case_service.assign_case(db, case, data.owner_type, data.owner_id, session.user_id)
     return _case_to_read(case, db)
 
 
@@ -624,7 +638,7 @@ def bulk_assign_cases(
     db: Session = Depends(get_db),
 ):
     """
-    Bulk assign multiple cases to a user.
+    Bulk assign multiple cases to a user or queue.
     
     Requires: case_manager, manager, or developer role
     """
@@ -635,15 +649,21 @@ def bulk_assign_cases(
     if session.role not in allowed_roles:
         raise HTTPException(status_code=403, detail="Only case managers and above can bulk assign cases")
     
-    # Verify assignee exists and is in same org (if assigning, not unassigning)
-    if data.assigned_to_user_id:
+    if data.owner_type == OwnerType.USER:
         from app.db.models import Membership
         membership = db.query(Membership).filter(
-            Membership.user_id == data.assigned_to_user_id,
+            Membership.user_id == data.owner_id,
             Membership.organization_id == session.org_id,
         ).first()
         if not membership:
             raise HTTPException(status_code=400, detail="User not found in organization")
+    elif data.owner_type == OwnerType.QUEUE:
+        from app.services import queue_service
+        queue = queue_service.get_queue(db, session.org_id, data.owner_id)
+        if not queue or not queue.is_active:
+            raise HTTPException(status_code=400, detail="Queue not found or inactive")
+    else:
+        raise HTTPException(status_code=400, detail="Invalid owner_type")
     
     # Process each case
     results = {"assigned": 0, "failed": []}
@@ -654,7 +674,7 @@ def bulk_assign_cases(
             continue
         
         try:
-            case_service.assign_case(db, case, data.assigned_to_user_id, session.user_id)
+            case_service.assign_case(db, case, data.owner_type, data.owner_id, session.user_id)
             results["assigned"] += 1
         except Exception as e:
             results["failed"].append({"case_id": str(case_id), "reason": str(e)})

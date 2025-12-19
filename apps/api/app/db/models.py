@@ -316,7 +316,7 @@ class Case(Base):
         ),
         # Query optimization indexes
         Index("idx_cases_org_status", "organization_id", "status"),
-        Index("idx_cases_org_assigned", "organization_id", "assigned_to_user_id"),
+        Index("idx_cases_org_owner", "organization_id", "owner_type", "owner_id"),
         Index("idx_cases_org_created", "organization_id", "created_at"),
         Index(
             "idx_cases_org_active",
@@ -364,11 +364,6 @@ class Case(Base):
         Boolean,
         server_default=text("FALSE"),
         nullable=False
-    )
-    assigned_to_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=True
     )
     
     # Ownership (Salesforce-style single owner model)
@@ -441,7 +436,6 @@ class Case(Base):
     
     # Relationships
     organization: Mapped["Organization"] = relationship(back_populates="cases")
-    assigned_to: Mapped["User | None"] = relationship(foreign_keys=[assigned_to_user_id])
     created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
     archived_by: Mapped["User | None"] = relationship(foreign_keys=[archived_by_user_id])
     # Notes use EntityNote with entity_type='case' - no direct relationship
@@ -553,7 +547,7 @@ class Task(Base):
     """
     __tablename__ = "tasks"
     __table_args__ = (
-        Index("idx_tasks_org_assigned", "organization_id", "assigned_to_user_id", "is_completed"),
+        Index("idx_tasks_org_owner", "organization_id", "owner_type", "owner_id", "is_completed"),
         Index(
             "idx_tasks_due",
             "organization_id", "due_date",
@@ -576,16 +570,16 @@ class Task(Base):
         ForeignKey("cases.id", ondelete="CASCADE"),
         nullable=True
     )
-    assigned_to_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=True
-    )
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False
     )
+    
+    # Ownership (Salesforce-style single owner model)
+    # owner_type="user" + owner_id=user_id, or owner_type="queue" + owner_id=queue_id
+    owner_type: Mapped[str] = mapped_column(String(10), nullable=False)
+    owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -621,7 +615,6 @@ class Task(Base):
     
     # Relationships
     case: Mapped["Case | None"] = relationship()
-    assigned_to: Mapped["User | None"] = relationship(foreign_keys=[assigned_to_user_id])
     created_by: Mapped["User"] = relationship(foreign_keys=[created_by_user_id])
     completed_by: Mapped["User | None"] = relationship(foreign_keys=[completed_by_user_id])
 
@@ -1897,3 +1890,188 @@ class EntityVersion(Base):
     # Relationships
     organization: Mapped["Organization"] = relationship()
     created_by: Mapped["User | None"] = relationship()
+
+
+# =============================================================================
+# Automation Workflows
+# =============================================================================
+
+class AutomationWorkflow(Base):
+    """
+    Automation workflow definition.
+    
+    Workflows are triggered by events (case created, status changed, etc.)
+    and execute actions (send email, create task, etc.) when conditions match.
+    """
+    __tablename__ = "automation_workflows"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "name", name="uq_workflow_name"),
+        Index("idx_wf_org_enabled", "organization_id", "is_enabled"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # Metadata
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    icon: Mapped[str] = mapped_column(String(50), default="workflow")
+    schema_version: Mapped[int] = mapped_column(default=1)
+    
+    # Trigger
+    trigger_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    trigger_config: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    
+    # Conditions
+    conditions: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
+    condition_logic: Mapped[str] = mapped_column(String(10), default="AND")
+    
+    # Actions
+    actions: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
+    
+    # State
+    is_enabled: Mapped[bool] = mapped_column(default=True)
+    run_count: Mapped[int] = mapped_column(default=0)
+    last_run_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    # Audit
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True
+    )
+    updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
+    updated_by: Mapped["User | None"] = relationship(foreign_keys=[updated_by_user_id])
+    executions: Mapped[list["WorkflowExecution"]] = relationship(
+        back_populates="workflow",
+        cascade="all, delete-orphan"
+    )
+    user_preferences: Mapped[list["UserWorkflowPreference"]] = relationship(
+        back_populates="workflow",
+        cascade="all, delete-orphan"
+    )
+
+
+class WorkflowExecution(Base):
+    """
+    Audit log of workflow executions.
+    
+    Every time a workflow runs (or is skipped due to conditions),
+    an execution record is created for debugging and analytics.
+    """
+    __tablename__ = "workflow_executions"
+    __table_args__ = (
+        Index("idx_exec_workflow", "workflow_id", "executed_at"),
+        Index("idx_exec_event", "event_id"),
+        Index("idx_exec_entity", "entity_type", "entity_id"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    workflow_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("automation_workflows.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # Loop protection
+    event_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    depth: Mapped[int] = mapped_column(default=0)
+    event_source: Mapped[str] = mapped_column(String(20), nullable=False)
+    
+    # Context
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    trigger_event: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    
+    # Dedupe (for scheduled/sweep triggers)
+    dedupe_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    
+    # Execution
+    matched_conditions: Mapped[bool] = mapped_column(default=True)
+    actions_executed: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
+    
+    # Result
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(nullable=True)
+    
+    executed_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    workflow: Mapped["AutomationWorkflow"] = relationship(back_populates="executions")
+
+
+class UserWorkflowPreference(Base):
+    """
+    Per-user workflow opt-out preferences.
+    
+    Allows individual users to opt out of specific workflows
+    (e.g., disable notification workflows they don't want).
+    """
+    __tablename__ = "user_workflow_preferences"
+    __table_args__ = (
+        UniqueConstraint("user_id", "workflow_id", name="uq_user_workflow"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    workflow_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("automation_workflows.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    is_opted_out: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    user: Mapped["User"] = relationship()
+    workflow: Mapped["AutomationWorkflow"] = relationship(back_populates="user_preferences")
+

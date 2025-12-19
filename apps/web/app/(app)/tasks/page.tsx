@@ -153,16 +153,16 @@ export default function TasksPage() {
                         </Link>
                     )}
                 </div>
-                {task.assigned_to_name && (
+                {task.owner_name && (
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger>
                                 <Avatar className="size-8">
-                                    <AvatarFallback>{getInitials(task.assigned_to_name)}</AvatarFallback>
+                                    <AvatarFallback>{getInitials(task.owner_name)}</AvatarFallback>
                                 </Avatar>
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p>{task.assigned_to_name}</p>
+                                <p>{task.owner_name}</p>
                             </TooltipContent>
                         </Tooltip>
                     </TooltipProvider>

@@ -1,0 +1,329 @@
+"""Pydantic schemas for Automation Workflows."""
+
+from datetime import datetime
+from typing import Any, Literal
+from uuid import UUID
+
+from pydantic import BaseModel, Field, field_validator
+
+from app.db.enums import (
+    WorkflowTriggerType,
+    WorkflowActionType,
+    WorkflowConditionOperator,
+    WorkflowExecutionStatus,
+    WorkflowEventSource,
+    CaseStatus,
+    OwnerType,
+)
+
+
+# =============================================================================
+# Field Registry (Whitelist for conditions and updates)
+# =============================================================================
+
+ALLOWED_CONDITION_FIELDS = {
+    "status", "source", "is_priority", "state",
+    "owner_type", "owner_id", "email", "phone",
+    "age", "bmi", "has_child", "is_citizen_or_pr",
+    "is_non_smoker", "has_surrogate_experience",
+}
+
+ALLOWED_UPDATE_FIELDS = {
+    "status", "is_priority", "owner_type", "owner_id",
+}
+
+ALLOWED_EMAIL_VARIABLES = {
+    "case.full_name", "case.email", "case.phone",
+    "case.case_number", "case.status", "case.state",
+    "case.owner_name", "org.name", "user.display_name",
+}
+
+
+# =============================================================================
+# Condition Schemas
+# =============================================================================
+
+class Condition(BaseModel):
+    """A single condition to evaluate."""
+    field: str
+    operator: WorkflowConditionOperator
+    value: Any = None
+    
+    @field_validator("field")
+    @classmethod
+    def validate_field(cls, v: str) -> str:
+        if v not in ALLOWED_CONDITION_FIELDS:
+            raise ValueError(f"Field '{v}' is not allowed. Allowed: {ALLOWED_CONDITION_FIELDS}")
+        return v
+
+
+# =============================================================================
+# Trigger Config Schemas
+# =============================================================================
+
+class StatusChangeTriggerConfig(BaseModel):
+    """Config for status_changed trigger."""
+    from_status: CaseStatus | None = None
+    to_status: CaseStatus
+
+
+class ScheduledTriggerConfig(BaseModel):
+    """Config for scheduled trigger."""
+    cron: str = Field(description="Cron expression, e.g., '0 9 * * 1' for Mon 9am")
+    timezone: str = Field(default="America/New_York", description="IANA timezone")
+
+
+class TaskDueTriggerConfig(BaseModel):
+    """Config for task_due trigger."""
+    hours_before: int = Field(ge=1, le=168, default=24)
+
+
+class InactivityTriggerConfig(BaseModel):
+    """Config for inactivity trigger."""
+    days: int = Field(ge=1, le=90, default=7)
+
+
+class CaseUpdatedTriggerConfig(BaseModel):
+    """Config for case_updated trigger."""
+    fields: list[str] = Field(min_length=1)
+    
+    @field_validator("fields")
+    @classmethod
+    def validate_fields(cls, v: list[str]) -> list[str]:
+        for field in v:
+            if field not in ALLOWED_CONDITION_FIELDS:
+                raise ValueError(f"Field '{field}' is not allowed")
+        return v
+
+
+class CaseAssignedTriggerConfig(BaseModel):
+    """Config for case_assigned trigger."""
+    to_user_id: UUID | None = None  # Optional: only trigger for specific user
+
+
+# =============================================================================
+# Action Config Schemas
+# =============================================================================
+
+class SendEmailActionConfig(BaseModel):
+    """Config for send_email action."""
+    action_type: Literal["send_email"] = "send_email"
+    template_id: UUID
+
+
+class CreateTaskActionConfig(BaseModel):
+    """Config for create_task action."""
+    action_type: Literal["create_task"] = "create_task"
+    title: str = Field(max_length=200)
+    description: str | None = None
+    due_days: int = Field(ge=0, le=365, default=1)
+    assignee: Literal["owner", "creator", "manager"] | UUID = "owner"
+
+
+class AssignCaseActionConfig(BaseModel):
+    """Config for assign_case action."""
+    action_type: Literal["assign_case"] = "assign_case"
+    owner_type: OwnerType
+    owner_id: UUID
+
+
+class SendNotificationActionConfig(BaseModel):
+    """Config for send_notification action."""
+    action_type: Literal["send_notification"] = "send_notification"
+    title: str = Field(max_length=100)
+    body: str | None = None
+    recipients: Literal["owner", "creator", "all_managers"] | list[UUID] = "owner"
+
+
+class UpdateFieldActionConfig(BaseModel):
+    """Config for update_field action."""
+    action_type: Literal["update_field"] = "update_field"
+    field: str
+    value: Any
+    
+    @field_validator("field")
+    @classmethod
+    def validate_field(cls, v: str) -> str:
+        if v not in ALLOWED_UPDATE_FIELDS:
+            raise ValueError(f"Field '{v}' is not allowed for update. Allowed: {ALLOWED_UPDATE_FIELDS}")
+        return v
+
+
+class AddNoteActionConfig(BaseModel):
+    """Config for add_note action."""
+    action_type: Literal["add_note"] = "add_note"
+    content: str = Field(min_length=1, max_length=4000)
+
+
+# Union of all action configs
+ActionConfig = (
+    SendEmailActionConfig |
+    CreateTaskActionConfig |
+    AssignCaseActionConfig |
+    SendNotificationActionConfig |
+    UpdateFieldActionConfig |
+    AddNoteActionConfig
+)
+
+
+# =============================================================================
+# Workflow CRUD Schemas
+# =============================================================================
+
+class WorkflowCreate(BaseModel):
+    """Schema for creating a workflow."""
+    name: str = Field(max_length=100)
+    description: str | None = None
+    icon: str = Field(default="workflow", max_length=50)
+    trigger_type: WorkflowTriggerType
+    trigger_config: dict = Field(default_factory=dict)
+    conditions: list[Condition] = Field(default_factory=list)
+    condition_logic: Literal["AND", "OR"] = "AND"
+    actions: list[dict] = Field(min_length=1)  # Validated per action_type
+    is_enabled: bool = True
+
+
+class WorkflowUpdate(BaseModel):
+    """Schema for updating a workflow."""
+    name: str | None = Field(default=None, max_length=100)
+    description: str | None = None
+    icon: str | None = Field(default=None, max_length=50)
+    trigger_type: WorkflowTriggerType | None = None
+    trigger_config: dict | None = None
+    conditions: list[Condition] | None = None
+    condition_logic: Literal["AND", "OR"] | None = None
+    actions: list[dict] | None = None
+    is_enabled: bool | None = None
+
+
+class WorkflowRead(BaseModel):
+    """Schema for reading a workflow."""
+    id: UUID
+    name: str
+    description: str | None
+    icon: str
+    schema_version: int
+    trigger_type: str
+    trigger_config: dict
+    conditions: list[dict]
+    condition_logic: str
+    actions: list[dict]
+    is_enabled: bool
+    run_count: int
+    last_run_at: datetime | None
+    last_error: str | None
+    created_by_name: str | None = None
+    updated_by_name: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    
+    model_config = {"from_attributes": True}
+
+
+class WorkflowListItem(BaseModel):
+    """Schema for workflow list item."""
+    id: UUID
+    name: str
+    description: str | None
+    icon: str
+    trigger_type: str
+    is_enabled: bool
+    run_count: int
+    last_run_at: datetime | None
+    last_error: str | None
+    created_at: datetime
+    
+    model_config = {"from_attributes": True}
+
+
+# =============================================================================
+# Execution Schemas
+# =============================================================================
+
+class ExecutionRead(BaseModel):
+    """Schema for reading a workflow execution."""
+    id: UUID
+    workflow_id: UUID
+    event_id: UUID
+    depth: int
+    event_source: str
+    entity_type: str
+    entity_id: UUID
+    trigger_event: dict
+    matched_conditions: bool
+    actions_executed: list[dict]
+    status: str
+    error_message: str | None
+    duration_ms: int | None
+    executed_at: datetime
+    
+    model_config = {"from_attributes": True}
+
+
+class ExecutionListResponse(BaseModel):
+    """Response for listing executions."""
+    items: list[ExecutionRead]
+    total: int
+
+
+# =============================================================================
+# Stats and Options Schemas
+# =============================================================================
+
+class WorkflowStats(BaseModel):
+    """Statistics for workflows dashboard."""
+    total_workflows: int
+    enabled_workflows: int
+    total_executions_24h: int
+    success_rate_24h: float
+    by_trigger_type: dict[str, int]
+
+
+class WorkflowOptions(BaseModel):
+    """Available options for workflow builder UI."""
+    trigger_types: list[dict]  # {value, label, description}
+    action_types: list[dict]
+    condition_operators: list[dict]
+    condition_fields: list[str]
+    update_fields: list[str]
+    email_variables: list[str]
+    email_templates: list[dict]  # {id, name}
+    users: list[dict]  # {id, display_name}
+    queues: list[dict]  # {id, name}
+    statuses: list[dict]  # {value, label}
+
+
+# =============================================================================
+# User Preference Schemas
+# =============================================================================
+
+class UserWorkflowPreferenceRead(BaseModel):
+    """Schema for reading user workflow preference."""
+    id: UUID
+    workflow_id: UUID
+    workflow_name: str
+    is_opted_out: bool
+    
+    model_config = {"from_attributes": True}
+
+
+class UserWorkflowPreferenceUpdate(BaseModel):
+    """Schema for updating user workflow preference."""
+    is_opted_out: bool
+
+
+# =============================================================================
+# Test/Dry Run Schemas
+# =============================================================================
+
+class WorkflowTestRequest(BaseModel):
+    """Request to test a workflow (dry run)."""
+    entity_id: UUID
+
+
+class WorkflowTestResponse(BaseModel):
+    """Response from testing a workflow."""
+    would_trigger: bool
+    conditions_matched: bool
+    conditions_evaluated: list[dict]  # {field, operator, value, result}
+    actions_preview: list[dict]  # {action_type, description}

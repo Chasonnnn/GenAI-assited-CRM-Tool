@@ -34,7 +34,9 @@ describe('TasksPage', () => {
                             due_date: null,
                             case_id: 'c1',
                             case_number: '12345',
-                            assigned_to_name: 'Jane Doe',
+                            owner_type: 'user',
+                            owner_id: 'u1',
+                            owner_name: 'Jane Doe',
                         },
                     ],
                 },
@@ -57,4 +59,3 @@ describe('TasksPage', () => {
         expect(mockCompleteTask).toHaveBeenCalledWith('t1')
     })
 })
-

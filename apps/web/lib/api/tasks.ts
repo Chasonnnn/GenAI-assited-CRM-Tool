@@ -15,8 +15,9 @@ export interface TaskListItem {
     task_type: TaskType;
     case_id: string | null;
     case_number: string | null;
-    assigned_to_user_id: string | null;
-    assigned_to_name: string | null;
+    owner_type: 'user' | 'queue';
+    owner_id: string;
+    owner_name: string | null;
     created_by_user_id: string;
     created_by_name: string | null;
     due_date: string | null;
@@ -47,7 +48,7 @@ export interface TaskListResponse {
 export interface TaskListParams {
     page?: number;
     per_page?: number;
-    assigned_to?: string;
+    owner_id?: string;
     case_id?: string;
     is_completed?: boolean;
     task_type?: TaskType;
@@ -60,7 +61,8 @@ export interface TaskCreatePayload {
     description?: string;
     task_type?: TaskType;
     case_id?: string;
-    assigned_to_user_id?: string;
+    owner_type?: 'user' | 'queue';
+    owner_id?: string;
     due_date?: string;
     due_time?: string;
     duration_minutes?: number;
@@ -77,7 +79,7 @@ export function getTasks(params: TaskListParams = {}): Promise<TaskListResponse>
 
     if (params.page) searchParams.set('page', String(params.page));
     if (params.per_page) searchParams.set('per_page', String(params.per_page));
-    if (params.assigned_to) searchParams.set('assigned_to', params.assigned_to);
+    if (params.owner_id) searchParams.set('owner_id', params.owner_id);
     if (params.case_id) searchParams.set('case_id', params.case_id);
     if (params.is_completed !== undefined) searchParams.set('is_completed', String(params.is_completed));
     if (params.task_type) searchParams.set('task_type', params.task_type);

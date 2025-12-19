@@ -59,7 +59,6 @@ async def test_ai_chat_returns_approval_id_per_action(db, authed_client: AsyncCl
         organization_id=test_auth.org.id,
         owner_type="user",
         owner_id=test_auth.user.id,
-        assigned_to_user_id=test_auth.user.id,
         full_name="Test Case",
         email=f"case-{uuid.uuid4().hex[:8]}@test.com",
     )

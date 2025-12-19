@@ -17,7 +17,7 @@ export interface CaseListParams {
     per_page?: number;
     status?: CaseStatus;
     source?: CaseSource;
-    assigned_to?: string;
+    owner_id?: string;
     q?: string;
     include_archived?: boolean;
     queue_id?: string;  // Filter by queue (when owner_type='queue')
@@ -95,7 +95,8 @@ export interface CaseStatusChangePayload {
 
 // Assign case payload
 export interface CaseAssignPayload {
-    user_id: string | null;
+    owner_type: 'user' | 'queue';
+    owner_id: string;
 }
 
 /**
@@ -112,7 +113,7 @@ export function getCases(params: CaseListParams = {}): Promise<CaseListResponse>
     if (params.per_page) searchParams.set('per_page', String(params.per_page));
     if (params.status) searchParams.set('status', params.status);
     if (params.source) searchParams.set('source', params.source);
-    if (params.assigned_to) searchParams.set('assigned_to', params.assigned_to);
+    if (params.owner_id) searchParams.set('owner_id', params.owner_id);
     if (params.q) searchParams.set('q', params.q);
     if (params.include_archived) searchParams.set('include_archived', 'true');
     if (params.queue_id) searchParams.set('queue_id', params.queue_id);
@@ -153,8 +154,8 @@ export function changeCaseStatus(caseId: string, data: CaseStatusChangePayload):
 /**
  * Assign case to a user (or unassign with null).
  */
-export function assignCase(caseId: string, userId: string | null): Promise<CaseRead> {
-    return api.patch<CaseRead>(`/cases/${caseId}/assign`, { user_id: userId });
+export function assignCase(caseId: string, data: CaseAssignPayload): Promise<CaseRead> {
+    return api.patch<CaseRead>(`/cases/${caseId}/assign`, data);
 }
 
 /**
@@ -239,7 +240,8 @@ export function getAssignees(): Promise<Assignee[]> {
 
 export interface BulkAssignPayload {
     case_ids: string[];
-    assigned_to_user_id: string | null;
+    owner_type: 'user' | 'queue';
+    owner_id: string;
 }
 
 export interface BulkAssignResult {

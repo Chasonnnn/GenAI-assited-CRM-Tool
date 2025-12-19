@@ -209,8 +209,6 @@ def claim_case(
     # Transfer ownership to user
     case.owner_type = OwnerType.USER.value
     case.owner_id = claimer_user_id
-    # Keep assigned_to in sync for downstream UI/reporting
-    case.assigned_to_user_id = claimer_user_id
     
     # Log activity
     activity_service.log_activity(
@@ -262,8 +260,6 @@ def release_case(
     # Transfer ownership to queue
     case.owner_type = OwnerType.QUEUE.value
     case.owner_id = queue_id
-    # Clear assigned_to since it's in a queue now
-    case.assigned_to_user_id = None
     
     # Log activity
     activity_service.log_activity(
@@ -312,7 +308,6 @@ def assign_to_queue(
     # Assign to queue
     case.owner_type = OwnerType.QUEUE.value
     case.owner_id = queue_id
-    case.assigned_to_user_id = None
     
     # Log activity
     activity_service.log_activity(

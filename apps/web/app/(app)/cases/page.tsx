@@ -61,7 +61,8 @@ function FloatingActionBar({
     const handleAssign = async (userId: string) => {
         await bulkAssignMutation.mutateAsync({
             case_ids: selectedCaseIds,
-            assigned_to_user_id: userId,
+            owner_type: 'user',
+            owner_id: userId,
         })
         onClear()
     }
@@ -403,18 +404,18 @@ export default function CasesPage() {
                                                     <Badge variant="secondary" className="capitalize">{caseItem.source}</Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    {caseItem.assigned_to_name ? (
+                                                    {caseItem.owner_name ? (
                                                         <TooltipProvider>
                                                             <Tooltip>
                                                                 <TooltipTrigger>
                                                                     <Avatar className="h-7 w-7">
                                                                         <AvatarFallback className="text-xs">
-                                                                            {getInitials(caseItem.assigned_to_name)}
+                                                                            {getInitials(caseItem.owner_name)}
                                                                         </AvatarFallback>
                                                                     </Avatar>
                                                                 </TooltipTrigger>
                                                                 <TooltipContent>
-                                                                    {caseItem.assigned_to_name}
+                                                                    {caseItem.owner_name}
                                                                 </TooltipContent>
                                                             </Tooltip>
                                                         </TooltipProvider>

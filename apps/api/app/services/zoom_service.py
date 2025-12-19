@@ -13,7 +13,7 @@ import httpx
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.db.enums import EntityType, TaskType
+from app.db.enums import EntityType, TaskType, OwnerType
 from app.db.models import EntityNote, Task
 from app.services import oauth_service
 
@@ -262,7 +262,8 @@ async def schedule_zoom_meeting(
         due_date=display_dt.date(),
         due_time=display_dt.time().replace(tzinfo=None, second=0, microsecond=0),
         duration_minutes=duration,
-        assigned_to_user_id=user_id,
+        owner_type=OwnerType.USER.value,
+        owner_id=user_id,
         created_by_user_id=user_id,
         case_id=entity_id if entity_type == EntityType.CASE else None,
         # Note: intended_parent_id would need to be added to Task model

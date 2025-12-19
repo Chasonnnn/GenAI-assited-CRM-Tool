@@ -132,3 +132,56 @@ def check_meta_tokens(x_internal_secret: str = Header(...)):
         expired=expired,
         alerts_created=alerts_created,
     )
+
+
+class WorkflowSweepResponse(BaseModel):
+    orgs_processed: int
+    workflows_triggered: int
+
+
+@router.post("/workflow-sweep", response_model=WorkflowSweepResponse)
+def workflow_sweep(
+    x_internal_secret: str = Header(...),
+    sweep_type: str = "all",
+):
+    """
+    Daily sweep for workflow automation triggers.
+    
+    Called by external cron (typically daily).
+    Processes: scheduled, inactivity, task_due, task_overdue workflows.
+    
+    Args:
+        sweep_type: 'all', 'scheduled', 'inactivity', 'task_due', 'task_overdue'
+    """
+    verify_internal_secret(x_internal_secret)
+    
+    from app.db.enums import JobType
+    from app.db.models import Organization, Job
+    from app.services import job_service
+    
+    orgs_processed = 0
+    
+    with SessionLocal() as db:
+        # Get all active organizations
+        orgs = db.query(Organization).filter(Organization.is_active == True).all()
+        
+        for org in orgs:
+            # Schedule a sweep job for each org
+            job_service.schedule_job(
+                db=db,
+                job_type=JobType.WORKFLOW_SWEEP,
+                org_id=org.id,
+                payload={
+                    "org_id": str(org.id),
+                    "sweep_type": sweep_type,
+                },
+            )
+            orgs_processed += 1
+        
+        db.commit()
+    
+    return WorkflowSweepResponse(
+        orgs_processed=orgs_processed,
+        workflows_triggered=0,  # Actual count happens in worker
+    )
+

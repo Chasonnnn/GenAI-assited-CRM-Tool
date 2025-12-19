@@ -174,17 +174,18 @@ def get_cases_by_assignee(
     session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
     db: Session = Depends(get_db),
 ):
-    """Get case counts grouped by assigned user."""
+    """Get case counts grouped by owner (user-owned cases only)."""
     org_id = session.org_id
     
     result = db.execute(
         text("""
-            SELECT c.assigned_to_user_id, u.email, COUNT(*) as count
+            SELECT c.owner_id, u.email, COUNT(*) as count
             FROM cases c
-            LEFT JOIN users u ON c.assigned_to_user_id = u.id
+            LEFT JOIN users u ON c.owner_id = u.id
             WHERE c.organization_id = :org_id
+              AND c.owner_type = 'user'
               AND c.is_archived = false
-            GROUP BY c.assigned_to_user_id, u.email
+            GROUP BY c.owner_id, u.email
             ORDER BY count DESC
         """),
         {"org_id": org_id}

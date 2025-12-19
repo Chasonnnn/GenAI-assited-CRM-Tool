@@ -52,7 +52,9 @@ export interface CaseListItem {
     email: string;
     phone: string | null;
     state: string | null;
-    assigned_to_name: string | null;
+    owner_type: 'user' | 'queue' | null;
+    owner_id: string | null;
+    owner_name: string | null;
     is_priority: boolean;
     is_archived: boolean;
     age: number | null;  // Calculated from date_of_birth
@@ -62,10 +64,7 @@ export interface CaseListItem {
 
 // Full case detail
 export interface CaseRead extends CaseListItem {
-    assigned_to_user_id: string | null;
     created_by_user_id: string | null;
-    owner_type: 'user' | 'queue' | null;  // Salesforce-style ownership
-    owner_id: string | null;               // User ID or Queue ID
     date_of_birth: string | null;
     race: string | null;
     height_ft: number | null;
