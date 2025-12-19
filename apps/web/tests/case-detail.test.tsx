@@ -83,6 +83,14 @@ vi.mock('@/lib/hooks/use-email-templates', () => ({
     useSendEmail: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
+vi.mock('@/lib/hooks/use-intended-parents', () => ({
+    useIntendedParents: () => ({ data: { items: [] }, isLoading: false }),
+}))
+
+vi.mock('@/lib/hooks/use-matches', () => ({
+    useCreateMatch: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}))
+
 describe('CaseDetailPage', () => {
     beforeEach(() => {
         mockUseCase.mockReturnValue({
