@@ -41,7 +41,14 @@ function StageEditor({
         const newStages = [...stages]
         const [removed] = newStages.splice(dragIndex, 1)
         newStages.splice(targetIndex, 0, removed)
-        onChange(newStages)
+
+        // Recompute order field based on new positions (1-indexed)
+        const reorderedStages = newStages.map((stage, i) => ({
+            ...stage,
+            order: i + 1
+        }))
+
+        onChange(reorderedStages)
         setDragIndex(targetIndex)
     }
 
