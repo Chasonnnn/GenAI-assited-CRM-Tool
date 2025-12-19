@@ -49,23 +49,23 @@ export interface PipelineVersionsResponse {
 // ============================================================================
 
 export async function listPipelines(): Promise<Pipeline[]> {
-    return api.get<Pipeline[]>('/pipelines');
+    return api.get<Pipeline[]>('/settings/pipelines');
 }
 
 export async function getPipeline(id: string): Promise<Pipeline> {
-    return api.get<Pipeline>(`/pipelines/${id}`);
+    return api.get<Pipeline>(`/settings/pipelines/${id}`);
 }
 
 export async function createPipeline(name: string, stages?: PipelineStage[]): Promise<Pipeline> {
-    return api.post<Pipeline>('/pipelines', { name, stages });
+    return api.post<Pipeline>('/settings/pipelines', { name, stages });
 }
 
 export async function updatePipeline(id: string, data: PipelineUpdate): Promise<Pipeline> {
-    return api.patch<Pipeline>(`/pipelines/${id}`, data);
+    return api.patch<Pipeline>(`/settings/pipelines/${id}`, data);
 }
 
 export async function deletePipeline(id: string): Promise<void> {
-    return api.delete(`/pipelines/${id}`);
+    return api.delete(`/settings/pipelines/${id}`);
 }
 
 // ============================================================================
@@ -73,10 +73,10 @@ export async function deletePipeline(id: string): Promise<void> {
 // ============================================================================
 
 export async function getPipelineVersions(id: string): Promise<PipelineVersion[]> {
-    const response = await api.get<PipelineVersionsResponse>(`/pipelines/${id}/versions`);
+    const response = await api.get<PipelineVersionsResponse>(`/settings/pipelines/${id}/versions`);
     return response.versions;
 }
 
 export async function rollbackPipeline(id: string, version: number): Promise<Pipeline> {
-    return api.post<Pipeline>(`/pipelines/${id}/rollback`, { target_version: version });
+    return api.post<Pipeline>(`/settings/pipelines/${id}/rollback`, { target_version: version });
 }
