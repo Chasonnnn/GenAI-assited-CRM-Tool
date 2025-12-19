@@ -726,3 +726,34 @@ Automation Workflows & Unified Owner Model (Week 12) — v0.11.0 ✓
   - 0029_task_owner_model (tasks owner model)
 ✓ Tests: 26/26 passing
 
+Bug Fixes & Polish (Week 12) — v0.11.1 ✓
+-----------------------------------------
+✓ Bug Fixes:
+  - EntityNote: Use author_id (required field) instead of created_by_user_id
+  - Organization: Remove is_active filter (field doesn't exist)
+  - Dependencies: Add pytz>=2024.1 to requirements.txt
+  - Triggers: Add trigger_case_assigned to case_service.assign_case()
+✓ Edit Workflow UI:
+  - Wire up Edit button with handleEdit function
+  - Fetch full workflow data via useWorkflow hook
+  - Populate form from existing workflow configuration
+  - Dialog title and button toggle for edit/create mode
+✓ Test Workflow Feature:
+  - Test Workflow dialog with case ID input
+  - Display condition evaluation results (pass/fail per condition)
+  - Show action preview for matching workflows
+  - Add Test Workflow menu item to workflow dropdown
+✓ IntendedParent Owner Model:
+  - Migrate from assigned_to_user_id to owner_type/owner_id pattern
+  - Add idx_ip_org_owner index for query performance
+  - Update schemas, router, service with new owner fields
+  - Update frontend types and API client
+  - Migration 0030_ip_owner_model
+✓ Next.js 16.1 Upgrade:
+  - Turbopack File System Caching (enabled by default, faster dev builds)
+  - Bundle Analyzer available (experimental, `npx @next/bundle-analyzer`)
+  - Debugging with `next dev --inspect`
+  - Transitive external dependencies handled automatically
+✓ Version: Settings page now shows v0.11.1
+✓ Tests: 26/26 passing
+

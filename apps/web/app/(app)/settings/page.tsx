@@ -384,7 +384,7 @@ export default function SettingsPage() {
                     <p className="text-xs text-muted-foreground">
                       Account deletion is managed by your organization admin.
                     </p>
-                    <p className="text-xs text-muted-foreground">v0.11.0</p>
+                    <p className="text-xs text-muted-foreground">v0.11.1</p>
                   </div>
                 </div>
               </CardContent>
