@@ -137,6 +137,10 @@ app.include_router(ops.router)
 from app.routers import ai
 app.include_router(ai.router)
 
+# Dashboard widgets
+from app.routers import dashboard
+app.include_router(dashboard.router)
+
 # User Integrations (Gmail, Zoom OAuth)
 from app.routers import integrations
 app.include_router(integrations.router)

@@ -2,120 +2,86 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { CheckSquareIcon, VideoIcon, CalendarIcon, ArrowRightIcon } from "lucide-react"
+import { CheckSquareIcon, VideoIcon, CalendarIcon, ArrowRightIcon, Loader2Icon } from "lucide-react"
 import Link from "next/link"
+import { useUpcoming, type UpcomingTask, type UpcomingMeeting } from "@/lib/hooks/use-dashboard"
 
-interface UpcomingItem {
-    id: string
-    type: "task" | "meeting"
-    title: string
-    time?: string // undefined means "All Day"
-    caseId: string
-    caseName: string
-    date: Date
-    isOverdue?: boolean
-}
+type UpcomingItem = (UpcomingTask & { type: 'task' }) | (UpcomingMeeting & { type: 'meeting' })
 
-// Sample data - replace with real data in production
-const upcomingItems: UpcomingItem[] = [
-    {
-        id: "1",
-        type: "task",
-        title: "Submit medical records",
-        time: "09:00 AM",
-        caseId: "C-2024-001",
-        caseName: "Sarah & Michael Johnson",
-        date: new Date(),
-        isOverdue: false,
-    },
-    {
-        id: "2",
-        type: "meeting",
-        title: "Initial consultation call",
-        time: "02:00 PM",
-        caseId: "C-2024-003",
-        caseName: "Emily Rodriguez",
-        date: new Date(),
-        isOverdue: false,
-    },
-    {
-        id: "3",
-        type: "task",
-        title: "Review contract amendments",
-        caseId: "C-2024-002",
-        caseName: "David & Laura Chen",
-        date: new Date(Date.now() + 86400000), // Tomorrow
-        isOverdue: false,
-    },
-    {
-        id: "4",
-        type: "meeting",
-        title: "Agency coordination meeting",
-        time: "10:00 AM",
-        caseId: "C-2024-005",
-        caseName: "Robert Smith",
-        date: new Date(Date.now() + 86400000), // Tomorrow
-        isOverdue: false,
-    },
-    {
-        id: "5",
-        type: "task",
-        title: "Background check follow-up",
-        time: "11:30 AM",
-        caseId: "C-2024-004",
-        caseName: "Jessica Williams",
-        date: new Date(Date.now() + 172800000), // 2 days from now
-        isOverdue: false,
-    },
-    {
-        id: "6",
-        type: "task",
-        title: "Insurance verification",
-        caseId: "C-2024-006",
-        caseName: "Marcus & Lisa Taylor",
-        date: new Date(Date.now() - 86400000), // Yesterday (overdue)
-        isOverdue: true,
-    },
-]
-
-function groupItemsByDate(items: UpcomingItem[]) {
+function groupItemsByDate(tasks: UpcomingTask[], meetings: UpcomingMeeting[]) {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
+    const todayStr = today.toISOString().split('T')[0]
 
     const tomorrow = new Date(today)
     tomorrow.setDate(tomorrow.getDate() + 1)
+    const tomorrowStr = tomorrow.toISOString().split('T')[0]
 
-    const endOfWeek = new Date(today)
-    endOfWeek.setDate(endOfWeek.getDate() + 7)
+    // Combine and mark with type
+    const allItems: UpcomingItem[] = [
+        ...tasks.map(t => ({ ...t, type: 'task' as const })),
+        ...meetings.map(m => ({ ...m, type: 'meeting' as const })),
+    ]
 
-    const todayItems = items.filter((item) => {
-        const itemDate = new Date(item.date)
-        itemDate.setHours(0, 0, 0, 0)
-        return itemDate.getTime() === today.getTime() && !item.isOverdue
-    })
+    const overdueItems = allItems.filter((item) =>
+        item.type === 'task' && item.is_overdue
+    )
 
-    const tomorrowItems = items.filter((item) => {
-        const itemDate = new Date(item.date)
-        itemDate.setHours(0, 0, 0, 0)
-        return itemDate.getTime() === tomorrow.getTime()
-    })
+    const todayItems = allItems.filter((item) =>
+        item.date === todayStr && !item.is_overdue
+    )
 
-    const thisWeekItems = items.filter((item) => {
-        const itemDate = new Date(item.date)
-        itemDate.setHours(0, 0, 0, 0)
-        return itemDate > tomorrow && itemDate < endOfWeek
-    })
+    const tomorrowItems = allItems.filter((item) =>
+        item.date === tomorrowStr
+    )
 
-    const overdueItems = items.filter((item) => item.isOverdue)
+    const thisWeekItems = allItems.filter((item) =>
+        item.date > tomorrowStr && !item.is_overdue
+    )
 
     return { todayItems, tomorrowItems, thisWeekItems, overdueItems }
 }
 
 export function UpcomingThisWeekWidget() {
-    const { todayItems, tomorrowItems, thisWeekItems, overdueItems } = groupItemsByDate(upcomingItems)
-    const allItems = [...overdueItems, ...todayItems, ...tomorrowItems, ...thisWeekItems].slice(0, 10)
+    const { data, isLoading, isError } = useUpcoming({ days: 7, include_overdue: true })
 
-    const hasItems = allItems.length > 0
+    if (isLoading) {
+        return (
+            <Card>
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">Upcoming This Week</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex items-center justify-center py-12">
+                        <Loader2Icon className="h-8 w-8 animate-spin text-muted-foreground" />
+                    </div>
+                </CardContent>
+            </Card>
+        )
+    }
+
+    if (isError || !data) {
+        return (
+            <Card>
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">Upcoming This Week</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                        <CalendarIcon className="h-12 w-12 text-muted-foreground/50 mb-3" />
+                        <p className="text-sm text-muted-foreground">Unable to load upcoming items</p>
+                    </div>
+                </CardContent>
+            </Card>
+        )
+    }
+
+    const { todayItems, tomorrowItems, thisWeekItems, overdueItems } = groupItemsByDate(
+        data.tasks,
+        data.meetings
+    )
+
+    const hasItems = overdueItems.length > 0 || todayItems.length > 0 || tomorrowItems.length > 0 || thisWeekItems.length > 0
 
     return (
         <Card>
@@ -193,6 +159,16 @@ export function UpcomingThisWeekWidget() {
 function UpcomingItemRow({ item }: { item: UpcomingItem }) {
     const Icon = item.type === "task" ? CheckSquareIcon : VideoIcon
 
+    // Format time for display
+    const formatTime = (time: string | null) => {
+        if (!time) return "All Day"
+        const [hours, minutes] = time.split(':')
+        const hour = parseInt(hours, 10)
+        const ampm = hour >= 12 ? 'PM' : 'AM'
+        const displayHour = hour % 12 || 12
+        return `${displayHour}:${minutes} ${ampm}`
+    }
+
     return (
         <div className="flex items-start gap-3 rounded-lg border border-border bg-card/50 p-3 hover:bg-accent/50 transition-colors">
             <div className="flex-shrink-0 mt-0.5">
@@ -202,7 +178,7 @@ function UpcomingItemRow({ item }: { item: UpcomingItem }) {
             <div className="flex-1 min-w-0 space-y-1">
                 <div className="flex items-start justify-between gap-2">
                     <p className="text-sm font-medium leading-tight">{item.title}</p>
-                    {item.isOverdue && (
+                    {item.is_overdue && (
                         <Badge variant="destructive" className="flex-shrink-0 text-[10px] h-4 px-1.5">
                             Overdue
                         </Badge>
@@ -210,14 +186,18 @@ function UpcomingItemRow({ item }: { item: UpcomingItem }) {
                 </div>
 
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    {item.time ? <span className="font-medium">{item.time}</span> : <span className="font-medium">All Day</span>}
-                    <span className="text-muted-foreground/60">•</span>
-                    <Link
-                        href={`/cases/${item.caseId}`}
-                        className="text-teal-600 hover:text-teal-700 hover:underline transition-colors"
-                    >
-                        {item.caseId}
-                    </Link>
+                    <span className="font-medium">{formatTime(item.time)}</span>
+                    {item.case_id && (
+                        <>
+                            <span className="text-muted-foreground/60">•</span>
+                            <Link
+                                href={`/cases/${item.case_id}`}
+                                className="text-teal-600 hover:text-teal-700 hover:underline transition-colors"
+                            >
+                                {item.case_number || 'View Case'}
+                            </Link>
+                        </>
+                    )}
                 </div>
             </div>
         </div>
