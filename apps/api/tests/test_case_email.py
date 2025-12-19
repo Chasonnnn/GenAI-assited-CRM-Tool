@@ -51,12 +51,6 @@ async def test_send_email_template_not_found(authed_client: AsyncClient, db, tes
     assert "template" in response.json()["detail"].lower()
 
 
-@pytest.mark.skip(reason="Email is required in CaseCreate - cases always have email")
-@pytest.mark.asyncio
-async def test_send_email_case_has_no_email(authed_client: AsyncClient, db, test_org, test_user):
-    """Test send email to case without email address fails."""
-    pass  # Email is required in CaseCreate, so this scenario is impossible
-
 
 @pytest.mark.asyncio
 async def test_send_email_no_provider_returns_error(authed_client: AsyncClient, db, test_org, test_user, monkeypatch):
