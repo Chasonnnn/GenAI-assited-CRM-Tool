@@ -231,8 +231,6 @@ async def test_execute_import_skips_duplicates(authed_client: AsyncClient, db, t
     
     # Should only create the new case
     cases = db.query(Case).filter(
-        Case.organization_id == test_org.id,
-    cases = db.query(Case).filter(
         Case.organization_id == test_org.id
     ).all()
     assert len(cases) == 2  # existing + newuser
