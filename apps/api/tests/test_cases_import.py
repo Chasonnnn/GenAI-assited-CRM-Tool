@@ -232,13 +232,13 @@ async def test_execute_import_skips_duplicates(authed_client: AsyncClient, db, t
     # Should only create the new case
     cases = db.query(Case).filter(
         Case.organization_id == test_org.id,
-        Case.email != "alice@test.com"
+    cases = db.query(Case).filter(
+        Case.organization_id == test_org.id
     ).all()
-    assert len(cases) == 1
-    assert cases[0].email == "alice@test.com"
-
-
-@pytest.mark.asyncio
+    assert len(cases) == 2  # existing + newuser
+    emails = {c.email for c in cases}
+    assert "existing@test.com" in emails
+    assert "newuser@test.com" in emails
 async def test_execute_import_handles_validation_errors(authed_client: AsyncClient, db):
     """Test import handles rows with validation errors."""
     from app.db.models import CaseImport
