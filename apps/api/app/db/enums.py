@@ -170,6 +170,8 @@ class JobType(str, Enum):
     WORKFLOW_SWEEP = "workflow_sweep"
     WORKFLOW_EMAIL = "workflow_email"
     CSV_IMPORT = "csv_import"  # Background CSV imports for large files
+    EXPORT_GENERATION = "export_generation"
+    DATA_PURGE = "data_purge"
 
 
 class JobStatus(str, Enum):
@@ -400,6 +402,15 @@ class AuditEventType(str, Enum):
     DATA_EXPORT_ANALYTICS = "data_export_analytics"
     DATA_IMPORT_STARTED = "data_import_started"
     DATA_IMPORT_COMPLETED = "data_import_completed"
+
+    # Compliance operations
+    COMPLIANCE_EXPORT_REQUESTED = "compliance_export_requested"
+    COMPLIANCE_EXPORT_DOWNLOADED = "compliance_export_downloaded"
+    COMPLIANCE_LEGAL_HOLD_CREATED = "compliance_legal_hold_created"
+    COMPLIANCE_LEGAL_HOLD_RELEASED = "compliance_legal_hold_released"
+    COMPLIANCE_RETENTION_UPDATED = "compliance_retention_updated"
+    COMPLIANCE_PURGE_PREVIEWED = "compliance_purge_previewed"
+    COMPLIANCE_PURGE_EXECUTED = "compliance_purge_executed"
     
     # AI actions
     AI_ACTION_APPROVED = "ai_action_approved"

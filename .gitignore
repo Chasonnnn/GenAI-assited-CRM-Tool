@@ -15,6 +15,7 @@ venv/
 dist/
 build/
 *.egg-info/
+.exports/
 
 # IDE
 .idea/

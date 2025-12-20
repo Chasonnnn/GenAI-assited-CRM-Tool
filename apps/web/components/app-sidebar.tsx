@@ -116,6 +116,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
         { title: "Pipelines", url: "/settings/pipelines" },
         ...(isManager ? [{ title: "Queue Management", url: "/settings/queues" }] : []),
         { title: "Audit Log", url: "/settings/audit" },
+        ...(isManager ? [{ title: "Compliance", url: "/settings/compliance" }] : []),
         { title: "Integrations", url: "/settings/integrations" },
         { title: "System Alerts", url: "/settings/alerts" },
     ]

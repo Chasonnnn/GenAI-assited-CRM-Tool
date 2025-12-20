@@ -434,6 +434,166 @@ def log_data_export(
     )
 
 
+def log_compliance_export_requested(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    export_job_id: UUID,
+    export_type: str,
+    record_count: int,
+    redact_mode: str,
+    file_format: str,
+    request: Request | None = None,
+) -> AuditLog:
+    """Log compliance export request."""
+    return log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.COMPLIANCE_EXPORT_REQUESTED,
+        actor_user_id=user_id,
+        target_type="export_job",
+        target_id=export_job_id,
+        details={
+            "export_type": export_type,
+            "record_count": record_count,
+            "redact_mode": redact_mode,
+            "format": file_format,
+        },
+        request=request,
+    )
+
+
+def log_compliance_export_downloaded(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    export_job_id: UUID,
+    request: Request | None = None,
+) -> AuditLog:
+    """Log compliance export download."""
+    return log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.COMPLIANCE_EXPORT_DOWNLOADED,
+        actor_user_id=user_id,
+        target_type="export_job",
+        target_id=export_job_id,
+        request=request,
+    )
+
+
+def log_compliance_legal_hold_created(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    hold_id: UUID,
+    entity_type: str | None,
+    entity_id: UUID | None,
+    reason: str,
+    request: Request | None = None,
+) -> AuditLog:
+    """Log legal hold creation."""
+    return log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.COMPLIANCE_LEGAL_HOLD_CREATED,
+        actor_user_id=user_id,
+        target_type="legal_hold",
+        target_id=hold_id,
+        details={"entity_type": entity_type, "entity_id": str(entity_id) if entity_id else None, "reason": reason},
+        request=request,
+    )
+
+
+def log_compliance_legal_hold_released(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    hold_id: UUID,
+    entity_type: str | None,
+    entity_id: UUID | None,
+    request: Request | None = None,
+) -> AuditLog:
+    """Log legal hold release."""
+    return log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.COMPLIANCE_LEGAL_HOLD_RELEASED,
+        actor_user_id=user_id,
+        target_type="legal_hold",
+        target_id=hold_id,
+        details={"entity_type": entity_type, "entity_id": str(entity_id) if entity_id else None},
+        request=request,
+    )
+
+
+def log_compliance_retention_updated(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    policy_id: UUID,
+    entity_type: str,
+    retention_days: int,
+    is_active: bool,
+    request: Request | None = None,
+) -> AuditLog:
+    """Log retention policy changes."""
+    return log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.COMPLIANCE_RETENTION_UPDATED,
+        actor_user_id=user_id,
+        target_type="retention_policy",
+        target_id=policy_id,
+        details={
+            "entity_type": entity_type,
+            "retention_days": retention_days,
+            "is_active": is_active,
+        },
+        request=request,
+    )
+
+
+def log_compliance_purge_previewed(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    results: list[dict[str, int]],
+    request: Request | None = None,
+) -> AuditLog:
+    """Log purge preview."""
+    return log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.COMPLIANCE_PURGE_PREVIEWED,
+        actor_user_id=user_id,
+        details={"results": results},
+        request=request,
+    )
+
+
+def log_compliance_purge_executed(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID | None,
+    results: list[object],
+    request: Request | None = None,
+) -> AuditLog:
+    """Log purge execution."""
+    formatted = [
+        {"entity_type": result.entity_type, "count": result.count}
+        for result in results
+    ]
+    return log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.COMPLIANCE_PURGE_EXECUTED,
+        actor_user_id=user_id,
+        details={"results": formatted},
+        request=request,
+    )
+
+
 def log_import_started(
     db: Session,
     org_id: UUID,

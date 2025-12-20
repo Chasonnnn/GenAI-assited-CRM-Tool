@@ -149,6 +149,10 @@ app.include_router(integrations.router)
 from app.routers import audit
 app.include_router(audit.router)
 
+# Compliance (Retention, Legal Holds)
+from app.routers import compliance
+app.include_router(compliance.router)
+
 # Pipeline Configuration (Manager+)
 from app.routers import pipelines
 app.include_router(pipelines.router)

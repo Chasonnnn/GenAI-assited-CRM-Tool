@@ -1,16 +1,22 @@
 """Audit router - API endpoints for viewing audit logs."""
 
+import os
+
 from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import get_db, require_roles
 from app.db.enums import AuditEventType, Role, ROLES_CAN_VIEW_AUDIT
 from app.db.models import AuditLog, User
+from app.schemas.compliance import ExportJobCreate, ExportJobListResponse, ExportJobRead
+from app.services import audit_service, compliance_service
 from app.schemas.auth import UserSession
 
 router = APIRouter(prefix="/audit", tags=["Audit"])
@@ -121,3 +127,151 @@ def list_event_types(
 ) -> list[str]:
     """List available audit event types for filtering."""
     return [e.value for e in AuditEventType]
+
+
+@router.get("/exports", response_model=ExportJobListResponse)
+def list_audit_exports(
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_roles(list(ROLES_CAN_VIEW_AUDIT))),
+) -> ExportJobListResponse:
+    """List recent audit exports for the organization."""
+    jobs = compliance_service.list_export_jobs(db, session.org_id, limit=limit)
+    items = []
+    for job in jobs:
+        download_url = (
+            f"/audit/exports/{job.id}/download"
+            if job.status == compliance_service.EXPORT_STATUS_COMPLETED
+            else None
+        )
+        items.append(
+            ExportJobRead(
+                id=job.id,
+                status=job.status,
+                export_type=job.export_type,
+                format=job.format,
+                redact_mode=job.redact_mode,
+                date_range_start=job.date_range_start,
+                date_range_end=job.date_range_end,
+                record_count=job.record_count,
+                error_message=job.error_message,
+                created_at=job.created_at,
+                completed_at=job.completed_at,
+                download_url=download_url,
+            )
+        )
+    return ExportJobListResponse(items=items)
+
+
+@router.post("/exports", response_model=ExportJobRead)
+def create_audit_export(
+    payload: ExportJobCreate,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_roles(list(ROLES_CAN_VIEW_AUDIT))),
+) -> ExportJobRead:
+    """Request an async audit export job."""
+    if payload.redact_mode == "full":
+        if session.role != Role.DEVELOPER:
+            raise HTTPException(status_code=403, detail="Full exports require Developer role")
+        if not payload.acknowledgment or not payload.acknowledgment.strip():
+            raise HTTPException(status_code=400, detail="Acknowledgment required for full exports")
+    try:
+        job = compliance_service.create_export_job(
+            db=db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+            export_type="audit",
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+            file_format=payload.format,
+            redact_mode=payload.redact_mode,
+            acknowledgment=payload.acknowledgment,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return ExportJobRead(
+        id=job.id,
+        status=job.status,
+        export_type=job.export_type,
+        format=job.format,
+        redact_mode=job.redact_mode,
+        date_range_start=job.date_range_start,
+        date_range_end=job.date_range_end,
+        record_count=job.record_count,
+        error_message=job.error_message,
+        created_at=job.created_at,
+        completed_at=job.completed_at,
+        download_url=None,
+    )
+
+
+@router.get("/exports/{export_id}", response_model=ExportJobRead)
+def get_audit_export(
+    export_id: UUID,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_roles(list(ROLES_CAN_VIEW_AUDIT))),
+) -> ExportJobRead:
+    """Get audit export job status."""
+    job = compliance_service.get_export_job(db, session.org_id, export_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Export job not found")
+    if job.redact_mode == "full" and session.role != Role.DEVELOPER:
+        raise HTTPException(status_code=403, detail="Full exports require Developer role")
+    download_url = (
+        f"/audit/exports/{job.id}/download"
+        if job.status == compliance_service.EXPORT_STATUS_COMPLETED
+        else None
+    )
+    return ExportJobRead(
+        id=job.id,
+        status=job.status,
+        export_type=job.export_type,
+        format=job.format,
+        redact_mode=job.redact_mode,
+        date_range_start=job.date_range_start,
+        date_range_end=job.date_range_end,
+        record_count=job.record_count,
+        error_message=job.error_message,
+        created_at=job.created_at,
+        completed_at=job.completed_at,
+        download_url=download_url,
+    )
+
+
+@router.get("/exports/{export_id}/download")
+def download_audit_export(
+    export_id: UUID,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_roles(list(ROLES_CAN_VIEW_AUDIT))),
+):
+    """Download an export file via signed URL or local file."""
+    job = compliance_service.get_export_job(db, session.org_id, export_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Export job not found")
+    if job.status != compliance_service.EXPORT_STATUS_COMPLETED or not job.file_path:
+        raise HTTPException(status_code=409, detail="Export not ready")
+    if job.redact_mode == "full" and session.role != Role.DEVELOPER:
+        raise HTTPException(status_code=403, detail="Full exports require Developer role")
+
+    audit_service.log_compliance_export_downloaded(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        export_job_id=job.id,
+    )
+
+    if settings.EXPORT_STORAGE_BACKEND == "s3":
+        url = compliance_service.generate_s3_download_url(job.file_path)
+        return RedirectResponse(url=url)
+
+    file_path = compliance_service.resolve_local_export_path(job.file_path)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Export file not found")
+
+    filename = f"audit_export_{job.id}.{job.format}"
+    return FileResponse(
+        path=file_path,
+        media_type="text/csv" if job.format == "csv" else "application/json",
+        filename=filename,
+    )

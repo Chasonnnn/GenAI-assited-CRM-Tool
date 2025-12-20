@@ -1721,6 +1721,162 @@ class AuditLog(Base):
     actor: Mapped["User | None"] = relationship()
 
 
+# =============================================================================
+# Compliance
+# =============================================================================
+
+class ExportJob(Base):
+    """
+    Asynchronous export job for compliance/audit data.
+    
+    Files are stored in external storage (S3 or local dev) and accessed via
+    short-lived signed URLs generated on demand.
+    """
+    __tablename__ = "export_jobs"
+    __table_args__ = (
+        Index("idx_export_jobs_org_created", "organization_id", "created_at"),
+        Index("idx_export_jobs_org_status", "organization_id", "status"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    
+    status: Mapped[str] = mapped_column(String(20), nullable=False)  # pending, processing, completed, failed
+    export_type: Mapped[str] = mapped_column(String(30), nullable=False)  # audit, cases, analytics
+    format: Mapped[str] = mapped_column(String(10), nullable=False)  # csv, json
+    redact_mode: Mapped[str] = mapped_column(String(10), nullable=False)  # redacted, full
+    
+    date_range_start: Mapped[datetime] = mapped_column(nullable=False)
+    date_range_end: Mapped[datetime] = mapped_column(nullable=False)
+    
+    record_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    file_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    acknowledgment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    created_by: Mapped["User | None"] = relationship()
+
+
+class LegalHold(Base):
+    """
+    Legal hold to block data purges.
+    
+    If entity_type/entity_id are NULL, the hold is org-wide.
+    """
+    __tablename__ = "legal_holds"
+    __table_args__ = (
+        Index("idx_legal_holds_org_active", "organization_id", "released_at"),
+        Index("idx_legal_holds_entity_active", "organization_id", "entity_type", "entity_id", "released_at"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    entity_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    entity_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    released_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    released_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
+    released_by: Mapped["User | None"] = relationship(foreign_keys=[released_by_user_id])
+
+
+class DataRetentionPolicy(Base):
+    """
+    Data retention policy by entity type (audit logs are archive-only).
+    
+    retention_days=0 means "keep forever".
+    """
+    __tablename__ = "data_retention_policies"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "entity_type", name="uq_retention_policy_org_entity"),
+        Index("idx_retention_policy_org_active", "organization_id", "is_active"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    retention_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("TRUE"),
+        nullable=False
+    )
+    
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        onupdate=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    created_by: Mapped["User | None"] = relationship()
+
+
 
 # =============================================================================
 # CSV Import
@@ -2259,4 +2415,3 @@ class Match(Base):
     intended_parent: Mapped["IntendedParent"] = relationship()
     proposed_by: Mapped["User"] = relationship(foreign_keys=[proposed_by_user_id])
     reviewed_by: Mapped["User"] = relationship(foreign_keys=[reviewed_by_user_id])
-
