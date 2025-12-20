@@ -122,15 +122,18 @@ def get_analytics_summary(
         Case.created_at < end,
     ).count()
     
-    # Qualified rate (qualified stage and later, fallback to post_approval/terminal)
+    # Qualified rate = cases that passed full qualification review (Approved or later)
+    # This excludes: Applied, Under Review - those are still being reviewed
+    # Includes: Approved, Pending Match, Meds Started, etc. (post_approval + terminal stages)
     pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
     stages = pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
-    qualified_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "qualified")
-    if qualified_stage:
+    approved_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "approved")
+    if approved_stage:
         qualified_stage_ids = [
-            s.id for s in stages if s.order >= qualified_stage.order and s.is_active
+            s.id for s in stages if s.order >= approved_stage.order and s.is_active
         ]
     else:
+        # Fallback: only post_approval and terminal stages count as qualified
         qualified_stage_ids = [
             s.id for s in stages if s.stage_type in ("post_approval", "terminal") and s.is_active
         ]
@@ -266,7 +269,12 @@ def get_meta_performance(
     session: UserSession = Depends(require_permission("view_reports")),
     db: Session = Depends(get_db),
 ):
-    """Get Meta Lead Ads performance metrics."""
+    """
+    Get Meta Lead Ads performance metrics.
+    
+    Conversion = Lead was converted to a case AND case was contacted.
+    This measures actual engagement, not just case creation.
+    """
     start, end = parse_date_range(from_date, to_date)
     org_id = session.org_id
     
@@ -277,26 +285,35 @@ def get_meta_performance(
         MetaLead.received_at < end,
     ).count()
     
-    # Leads converted to cases
-    leads_converted = db.query(MetaLead).filter(
-        MetaLead.organization_id == org_id,
-        MetaLead.received_at >= start,
-        MetaLead.received_at < end,
-        MetaLead.is_converted == True,
-    ).count()
+    # Leads contacted = converted to case AND case has been contacted
+    # Join with Case to check last_contacted_at
+    leads_converted = db.execute(
+        text("""
+            SELECT COUNT(*) 
+            FROM meta_leads ml
+            JOIN cases c ON ml.converted_case_id = c.id
+            WHERE ml.organization_id = :org_id
+              AND ml.received_at >= :start
+              AND ml.received_at < :end
+              AND ml.is_converted = true
+              AND c.last_contacted_at IS NOT NULL
+        """),
+        {"org_id": org_id, "start": start, "end": end}
+    ).scalar() or 0
     
     conversion_rate = (leads_converted / leads_received * 100) if leads_received > 0 else 0.0
     
-    # Avg time to convert (in hours)
+    # Avg time to contact (in hours) - from lead received to case first contacted
     result = db.execute(
         text("""
-            SELECT AVG(EXTRACT(EPOCH FROM (converted_at - received_at)) / 3600) as avg_hours
-            FROM meta_leads
-            WHERE organization_id = :org_id
-              AND received_at >= :start
-              AND received_at < :end
-              AND is_converted = true
-              AND converted_at IS NOT NULL
+            SELECT AVG(EXTRACT(EPOCH FROM (c.last_contacted_at - ml.received_at)) / 3600) as avg_hours
+            FROM meta_leads ml
+            JOIN cases c ON ml.converted_case_id = c.id
+            WHERE ml.organization_id = :org_id
+              AND ml.received_at >= :start
+              AND ml.received_at < :end
+              AND ml.is_converted = true
+              AND c.last_contacted_at IS NOT NULL
         """),
         {"org_id": org_id, "start": start, "end": end}
     )
