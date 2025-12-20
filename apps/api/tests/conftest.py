@@ -101,6 +101,40 @@ def test_org(db):
 
 
 @pytest.fixture(scope="function")
+def default_stage(db, test_org):
+    """Create a default pipeline and stage for the test organization.
+    
+    Required since Case.stage_id is NOT NULL after Pipeline Phase 2.
+    """
+    from app.db.models import Pipeline, PipelineStage
+    
+    pipeline = Pipeline(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name="Test Pipeline",
+        is_default=True,
+        current_version=1,
+    )
+    db.add(pipeline)
+    db.flush()
+    
+    stage = PipelineStage(
+        id=uuid.uuid4(),
+        pipeline_id=pipeline.id,
+        slug="new_unread",
+        label="New Unread",
+        color="#3B82F6",
+        stage_type="intake",
+        order=1,
+        is_active=True,
+    )
+    db.add(stage)
+    db.flush()
+    
+    return stage
+
+
+@pytest.fixture(scope="function")
 def test_user(db, test_org):
     """Create a test user with membership in test_org."""
     from app.db.models import User, Membership

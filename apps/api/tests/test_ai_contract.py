@@ -52,11 +52,13 @@ async def test_ai_consent_accept_contract(db, authed_client: AsyncClient, test_a
 
 
 @pytest.mark.asyncio
-async def test_ai_chat_returns_approval_id_per_action(db, authed_client: AsyncClient, test_auth, monkeypatch):
+async def test_ai_chat_returns_approval_id_per_action(db, authed_client: AsyncClient, test_auth, default_stage, monkeypatch):
     # Minimal case required by /ai/chat contract
     case = Case(
         case_number=f"C{uuid.uuid4().hex[:9]}",
         organization_id=test_auth.org.id,
+        stage_id=default_stage.id,
+        status_label=default_stage.label,
         owner_type="user",
         owner_id=test_auth.user.id,
         full_name="Test Case",

@@ -203,8 +203,9 @@ def test_export_empty_result(db, test_org, test_user, export_settings):
 
 def test_specific_entity_legal_hold_blocks_related(db, test_org, test_user):
     """Legal hold on specific case blocks purge for that case only."""
-    from app.db.models import Case
+    from app.db.models import Case, Pipeline, PipelineStage
     from app.db.enums import CaseStatus
+    import uuid
 
     # Create retention policy for archived cases
     compliance_service.upsert_retention_policy(
@@ -215,11 +216,37 @@ def test_specific_entity_legal_hold_blocks_related(db, test_org, test_user):
         retention_days=1,
         is_active=True,
     )
+    
+    # Create default pipeline and stage for test org (required for Case.stage_id NOT NULL)
+    pipeline = Pipeline(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name="Test Pipeline",
+        is_default=True,
+        current_version=1,
+    )
+    db.add(pipeline)
+    db.flush()
+    
+    stage = PipelineStage(
+        id=uuid.uuid4(),
+        pipeline_id=pipeline.id,
+        slug="new_unread",
+        label="New Unread",
+        color="#3B82F6",
+        stage_type="intake",
+        order=1,
+        is_active=True,
+    )
+    db.add(stage)
+    db.flush()
 
     # Create two old archived cases
     case1 = Case(
         organization_id=test_org.id,
         case_number="TEST-001",
+        stage_id=stage.id,
+        status_label=stage.label,
         full_name="Case One",
         email="case1@test.com",
         source="manual",
@@ -231,6 +258,8 @@ def test_specific_entity_legal_hold_blocks_related(db, test_org, test_user):
     case2 = Case(
         organization_id=test_org.id,
         case_number="TEST-002",
+        stage_id=stage.id,
+        status_label=stage.label,
         full_name="Case Two",
         email="case2@test.com",
         source="manual",

@@ -117,7 +117,7 @@ async def test_create_zoom_meeting_intended_parent_not_found_returns_404(authed_
 
 @pytest.mark.asyncio
 async def test_create_zoom_meeting_returns_response_when_service_mocked(
-    authed_client: AsyncClient, db, test_auth, monkeypatch
+    authed_client: AsyncClient, db, test_auth, default_stage, monkeypatch
 ):
     from app.db.enums import OwnerType
     from app.db.models import Case, UserIntegration
@@ -127,6 +127,8 @@ async def test_create_zoom_meeting_returns_response_when_service_mocked(
     case = Case(
         case_number="00001",
         organization_id=test_auth.org.id,
+        stage_id=default_stage.id,
+        status_label=default_stage.label,
         owner_type=OwnerType.USER.value,
         owner_id=test_auth.user.id,
         full_name="Test Case",
