@@ -263,11 +263,10 @@ def test_missing_permission_returns_false(db, org_a, manager_user):
 # =============================================================================
 
 def test_developer_only_permission_cannot_be_granted_to_non_developer(db, org_a, intake_user, developer_user):
-    """Developer-only permissions (when enforced) should not be grantable to non-developers via overrides.
+    """Developer-only permissions cannot be granted to non-developers via overrides.
     
-    Note: This test documents expected behavior. Currently grants are allowed but
-    get_effective_permissions doesn't block developer_only - this is a feature gap.
-    For now, we test that the override is created but check_permission behavior.
+    Even if an override is created in the database, get_effective_permissions
+    filters out developer_only permissions for non-developer roles.
     """
     # Use a real developer-only permission
     # 'manage_roles' is marked developer_only=True in the registry
@@ -281,14 +280,11 @@ def test_developer_only_permission_cannot_be_granted_to_non_developer(db, org_a,
     db.add(override)
     db.flush()
     
-    # Current implementation: override is created but developer_only check is NOT enforced yet
-    # This test documents the current behavior - grants work even for developer_only
-    # When enforcement is added, change assertion to False
+    # Developer-only permissions are filtered out for non-developers
     result = permission_service.check_permission(
         db, org_a.id, intake_user.id, Role.INTAKE_SPECIALIST.value, "manage_roles"
     )
-    # TODO: When developer_only enforcement is implemented, this should be False
-    assert result is True, "Currently developer_only is not enforced (feature gap)"
+    assert result is False, "Developer-only permission should be denied for non-developers even with override"
 
 
 # =============================================================================

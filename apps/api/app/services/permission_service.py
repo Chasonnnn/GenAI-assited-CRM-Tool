@@ -41,6 +41,7 @@ def get_effective_permissions(
     
     Resolution: role_defaults + grants - revokes
     Developer role always gets all permissions.
+    Developer-only permissions are filtered out for non-developers.
     """
     # Developer always has everything
     if role == "developer":
@@ -74,6 +75,13 @@ def get_effective_permissions(
             effective.add(override.permission)
         elif override.override_type == "revoke":
             effective.discard(override.permission)
+    
+    # Enforcement: Developer-only permissions cannot be granted to non-developers
+    # This is the final filter to ensure security even if override was created
+    effective = {
+        p for p in effective 
+        if not is_developer_only(p)
+    }
     
     return effective
 
