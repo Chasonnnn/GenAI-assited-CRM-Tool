@@ -251,19 +251,26 @@ export default function ReportsPage() {
 
                     <Card className="animate-in fade-in-50 duration-500 delay-300">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Contact Rate</CardTitle>
+                            <CardTitle className="text-sm font-medium">Meta Funnel</CardTitle>
                             <FacebookIcon className="size-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
                             {metaLoading ? (
                                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                             ) : (
-                                <>
-                                    <div className="text-2xl font-bold">{metaPerf?.conversion_rate ?? 0}%</div>
-                                    <p className="text-xs text-muted-foreground">
-                                        {metaPerf?.leads_converted ?? 0} contacted / {metaPerf?.leads_received ?? 0} leads
+                                <div className="space-y-1">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs text-muted-foreground">Qualified</span>
+                                        <span className="text-sm font-semibold">{metaPerf?.qualification_rate ?? 0}%</span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs text-muted-foreground">Converted</span>
+                                        <span className="text-sm font-semibold text-green-600">{metaPerf?.conversion_rate ?? 0}%</span>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground pt-1">
+                                        {metaPerf?.leads_received ?? 0} leads received
                                     </p>
-                                </>
+                                </div>
                             )}
                         </CardContent>
                     </Card>
@@ -432,30 +439,35 @@ export default function ReportsPage() {
                                 </div>
                             ) : (
                                 <div className="grid h-[300px] grid-rows-2 gap-4 p-4">
-                                    <div className="flex items-center justify-between rounded-lg border p-4">
+                                    <div className="grid grid-cols-4 gap-4 rounded-lg border p-4">
                                         <div>
                                             <p className="text-sm text-muted-foreground">Leads Received</p>
                                             <p className="text-3xl font-bold">{metaPerf?.leads_received ?? 0}</p>
                                         </div>
                                         <div>
-                                            <p className="text-sm text-muted-foreground">Leads Contacted</p>
-                                            <p className="text-3xl font-bold text-green-600">{metaPerf?.leads_converted ?? 0}</p>
+                                            <p className="text-sm text-muted-foreground">Qualified</p>
+                                            <p className="text-3xl font-bold text-blue-600">{metaPerf?.leads_qualified ?? 0}</p>
+                                            <p className="text-xs text-muted-foreground">{metaPerf?.qualification_rate ?? 0}%</p>
                                         </div>
                                         <div>
-                                            <p className="text-sm text-muted-foreground">Contact Rate</p>
-                                            <p className="text-3xl font-bold text-blue-600">{metaPerf?.conversion_rate ?? 0}%</p>
+                                            <p className="text-sm text-muted-foreground">Converted</p>
+                                            <p className="text-3xl font-bold text-green-600">{metaPerf?.leads_converted ?? 0}</p>
+                                            <p className="text-xs text-muted-foreground">{metaPerf?.conversion_rate ?? 0}%</p>
                                         </div>
-                                    </div>
-                                    <div className="flex items-center justify-center rounded-lg bg-muted/50 p-4">
-                                        <div className="text-center">
-                                            <p className="text-sm text-muted-foreground">Avg Time to Contact</p>
-                                            <p className="text-4xl font-bold">
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">Avg Time to Approve</p>
+                                            <p className="text-3xl font-bold">
                                                 {metaPerf?.avg_time_to_convert_hours
                                                     ? `${metaPerf.avg_time_to_convert_hours}h`
                                                     : '—'
                                                 }
                                             </p>
                                         </div>
+                                    </div>
+                                    <div className="flex items-center justify-center rounded-lg bg-muted/50 p-4">
+                                        <p className="text-sm text-muted-foreground">
+                                            Qualified = reached &quot;Qualified&quot; stage or later • Converted = reached &quot;Approved&quot; stage
+                                        </p>
                                     </div>
                                 </div>
                             )}

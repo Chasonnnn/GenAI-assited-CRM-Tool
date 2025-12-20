@@ -50,7 +50,9 @@ class TrendPoint(BaseModel):
 
 class MetaPerformance(BaseModel):
     leads_received: int
+    leads_qualified: int
     leads_converted: int
+    qualification_rate: float
     conversion_rate: float
     avg_time_to_convert_hours: Optional[float]
 
@@ -122,15 +124,14 @@ def get_analytics_summary(
         Case.created_at < end,
     ).count()
     
-    # Qualified rate = cases that passed full qualification review (Approved or later)
-    # This excludes: Applied, Under Review - those are still being reviewed
-    # Includes: Approved, Pending Match, Meds Started, etc. (post_approval + terminal stages)
+    # Qualified rate = cases at "qualified" stage or later
+    # This includes: Qualified, Applied, Under Review, Approved, etc.
     pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
     stages = pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
-    approved_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "approved")
-    if approved_stage:
+    qualified_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "qualified")
+    if qualified_stage:
         qualified_stage_ids = [
-            s.id for s in stages if s.order >= approved_stage.order and s.is_active
+            s.id for s in stages if s.order >= qualified_stage.order and s.is_active
         ]
     else:
         # Fallback: only post_approval and terminal stages count as qualified
@@ -273,10 +274,31 @@ def get_meta_performance(
     Get Meta Lead Ads performance metrics.
     
     Conversion = Lead was converted to a case AND case was contacted.
-    This measures actual engagement, not just case creation.
+    Conversion = Lead's case reached the "Approved" stage.
     """
     start, end = parse_date_range(from_date, to_date)
     org_id = session.org_id
+    
+    # Get pipeline stages
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
+    stages = pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
+    
+    # Get qualified and approved stage IDs
+    qualified_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "qualified")
+    approved_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "approved")
+    
+    # Build stage ID lists
+    qualified_or_later_ids = []
+    approved_or_later_ids = []
+    
+    if qualified_stage:
+        qualified_or_later_ids = [
+            s.id for s in stages if s.order >= qualified_stage.order and s.is_active
+        ]
+    if approved_stage:
+        approved_or_later_ids = [
+            s.id for s in stages if s.order >= approved_stage.order and s.is_active
+        ]
     
     # Total leads received
     leads_received = db.query(MetaLead).filter(
@@ -285,44 +307,67 @@ def get_meta_performance(
         MetaLead.received_at < end,
     ).count()
     
-    # Leads contacted = converted to case AND case has been contacted
-    # Join with Case to check last_contacted_at
-    leads_converted = db.execute(
-        text("""
-            SELECT COUNT(*) 
-            FROM meta_leads ml
-            JOIN cases c ON ml.converted_case_id = c.id
-            WHERE ml.organization_id = :org_id
-              AND ml.received_at >= :start
-              AND ml.received_at < :end
-              AND ml.is_converted = true
-              AND c.last_contacted_at IS NOT NULL
-        """),
-        {"org_id": org_id, "start": start, "end": end}
-    ).scalar() or 0
+    # Leads qualified = case reached "Qualified" stage or later
+    leads_qualified = 0
+    if qualified_or_later_ids:
+        leads_qualified = db.execute(
+            text("""
+                SELECT COUNT(*) 
+                FROM meta_leads ml
+                JOIN cases c ON ml.converted_case_id = c.id
+                WHERE ml.organization_id = :org_id
+                  AND ml.received_at >= :start
+                  AND ml.received_at < :end
+                  AND ml.is_converted = true
+                  AND c.stage_id = ANY(:stage_ids)
+            """),
+            {"org_id": org_id, "start": start, "end": end, "stage_ids": qualified_or_later_ids}
+        ).scalar() or 0
     
+    # Leads converted = case reached "Approved" stage or later
+    leads_converted = 0
+    if approved_or_later_ids:
+        leads_converted = db.execute(
+            text("""
+                SELECT COUNT(*) 
+                FROM meta_leads ml
+                JOIN cases c ON ml.converted_case_id = c.id
+                WHERE ml.organization_id = :org_id
+                  AND ml.received_at >= :start
+                  AND ml.received_at < :end
+                  AND ml.is_converted = true
+                  AND c.stage_id = ANY(:stage_ids)
+            """),
+            {"org_id": org_id, "start": start, "end": end, "stage_ids": approved_or_later_ids}
+        ).scalar() or 0
+    
+    qualification_rate = (leads_qualified / leads_received * 100) if leads_received > 0 else 0.0
     conversion_rate = (leads_converted / leads_received * 100) if leads_received > 0 else 0.0
     
-    # Avg time to contact (in hours) - from lead received to case first contacted
-    result = db.execute(
-        text("""
-            SELECT AVG(EXTRACT(EPOCH FROM (c.last_contacted_at - ml.received_at)) / 3600) as avg_hours
-            FROM meta_leads ml
-            JOIN cases c ON ml.converted_case_id = c.id
-            WHERE ml.organization_id = :org_id
-              AND ml.received_at >= :start
-              AND ml.received_at < :end
-              AND ml.is_converted = true
-              AND c.last_contacted_at IS NOT NULL
-        """),
-        {"org_id": org_id, "start": start, "end": end}
-    )
-    row = result.fetchone()
+    # Avg time to convert (in hours) - from lead received to case reaching approved
+    result = None
+    if approved_stage:
+        result = db.execute(
+            text("""
+                SELECT AVG(EXTRACT(EPOCH FROM (csh.changed_at - ml.received_at)) / 3600) as avg_hours
+                FROM meta_leads ml
+                JOIN cases c ON ml.converted_case_id = c.id
+                JOIN case_status_history csh ON c.id = csh.case_id AND csh.to_stage_id = :approved_stage_id
+                WHERE ml.organization_id = :org_id
+                  AND ml.received_at >= :start
+                  AND ml.received_at < :end
+                  AND ml.is_converted = true
+            """),
+            {"org_id": org_id, "start": start, "end": end, "approved_stage_id": approved_stage.id}
+        )
+    row = result.fetchone() if result else None
     avg_hours = round(row[0], 1) if row and row[0] else None
     
     return MetaPerformance(
         leads_received=leads_received,
+        leads_qualified=leads_qualified,
         leads_converted=leads_converted,
+        qualification_rate=round(qualification_rate, 1),
         conversion_rate=round(conversion_rate, 1),
         avg_time_to_convert_hours=avg_hours,
     )
