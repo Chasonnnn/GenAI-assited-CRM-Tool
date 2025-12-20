@@ -1,8 +1,8 @@
 # Surrogacy CRM Platform
 
-**Version:** 0.11.00 | **Format:** a.bc.de (major.feature.patch)
+**Version:** 0.12.00 | **Format:** a.bc.de (major.feature.patch)
 
-A modern, multi-tenant CRM and case management platform built for surrogacy agencies. Features lead pipeline management, intended parent profiles, case workflow tracking, AI-assisted insights, and enterprise audit/versioning.
+A modern, multi-tenant CRM and case management platform built for surrogacy agencies. Features lead pipeline management with **customizable stages**, intended parent profiles, case workflow tracking, AI-assisted insights, and enterprise audit/versioning.
 
 ## Tech Stack
 
@@ -27,11 +27,11 @@ AI is an **optional** capability designed to be safe, auditable, and tenant-conf
 
 ```
 ├── apps/
-│   ├── api/                    # FastAPI backend (v0.10.00)
+│   ├── api/                    # FastAPI backend (v0.12.00)
 │   │   ├── app/
 │   │   │   ├── core/           # Config, security, dependencies, case_access
-│   │   │   ├── db/             # Models (35: +Queue), enums (+OwnerType), session
-│   │   │   ├── routers/        # API endpoints (21 modules: +queues)
+│   │   │   ├── db/             # Models (36: +PipelineStage), enums, session
+│   │   │   ├── routers/        # API endpoints (21 modules + stage CRUD)
 │   │   │   │   ├── auth, cases, tasks, notes, notifications
 │   │   │   │   ├── intended_parents, email_templates, pipelines, queues
 │   │   │   │   ├── ai, analytics, audit, admin_versions, metadata
@@ -46,8 +46,8 @@ AI is an **optional** capability designed to be safe, auditable, and tenant-conf
 │   │   │   ├── utils/          # Helpers (normalization, pagination)
 │   │   │   ├── cli.py          # CLI commands
 │   │   │   └── main.py         # FastAPI app entry
-│   │   ├── alembic/            # Database migrations (27: +ai_focused_endpoints)
-│   │   ├── tests/              # pytest test suite (26 tests)
+│   │   ├── alembic/            # Database migrations (37: +pipeline_stages, +cutover)
+│   │   ├── tests/              # pytest test suite (65 tests)
 │   │   └── requirements.txt
 │   │
 │   └── web/                    # Next.js frontend
