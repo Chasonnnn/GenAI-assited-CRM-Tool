@@ -102,6 +102,9 @@ class User(Base):
         server_default=text("true"), 
         nullable=False
     )
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"), 
         nullable=False
