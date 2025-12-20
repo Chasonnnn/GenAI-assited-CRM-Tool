@@ -139,6 +139,19 @@ def set_user_override(
     if not is_valid_permission(permission):
         raise ValueError(f"Invalid permission: {permission}")
     
+    # Block granting developer_only permissions to non-developers
+    # These permissions should ONLY ever be held by Developer role
+    if override_type == "grant" and is_developer_only(permission):
+        from app.db.models import Membership
+        target_membership = db.query(Membership).filter(
+            Membership.organization_id == org_id,
+            Membership.user_id == target_user_id,
+        ).first()
+        if target_membership and target_membership.role != "developer":
+            raise ValueError(
+                f"Permission '{permission}' is developer-only and cannot be granted to non-developers"
+            )
+    
     # Self-modification prevention
     if target_user_id == actor_user_id:
         raise ValueError("Cannot modify your own permissions")

@@ -13,6 +13,7 @@ import {
     getRoles,
     getRoleDetail,
     updateRolePermissions,
+    bulkUpdateRoles,
     type MemberUpdate,
 } from "@/lib/api/permissions"
 
@@ -107,6 +108,18 @@ export function useUpdateRolePermissions() {
         onSuccess: (_, { role }) => {
             queryClient.invalidateQueries({ queryKey: KEYS.role(role) })
             queryClient.invalidateQueries({ queryKey: KEYS.roles })
+        },
+    })
+}
+
+export function useBulkUpdateRoles() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({ memberIds, role }: { memberIds: string[]; role: string }) =>
+            bulkUpdateRoles(memberIds, role),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: KEYS.members })
         },
     })
 }

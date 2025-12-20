@@ -109,3 +109,16 @@ export async function updateRolePermissions(
 ): Promise<RoleDetail> {
     return api.patch<RoleDetail>(`/settings/permissions/roles/${role}`, { permissions })
 }
+
+export async function bulkUpdateRoles(
+    memberIds: string[],
+    role: string
+): Promise<{ success: number; failed: number }> {
+    // Update members in parallel
+    const results = await Promise.allSettled(
+        memberIds.map(id => api.patch(`/settings/permissions/members/${id}`, { role }))
+    )
+    const success = results.filter(r => r.status === "fulfilled").length
+    const failed = results.filter(r => r.status === "rejected").length
+    return { success, failed }
+}
