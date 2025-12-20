@@ -251,7 +251,7 @@ export default function ReportsPage() {
 
                     <Card className="animate-in fade-in-50 duration-500 delay-300">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Meta Conversion</CardTitle>
+                            <CardTitle className="text-sm font-medium">Contact Rate</CardTitle>
                             <FacebookIcon className="size-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
@@ -261,7 +261,7 @@ export default function ReportsPage() {
                                 <>
                                     <div className="text-2xl font-bold">{metaPerf?.conversion_rate ?? 0}%</div>
                                     <p className="text-xs text-muted-foreground">
-                                        {metaPerf?.leads_converted ?? 0} / {metaPerf?.leads_received ?? 0} leads
+                                        {metaPerf?.leads_converted ?? 0} contacted / {metaPerf?.leads_received ?? 0} leads
                                     </p>
                                 </>
                             )}
@@ -438,17 +438,17 @@ export default function ReportsPage() {
                                             <p className="text-3xl font-bold">{metaPerf?.leads_received ?? 0}</p>
                                         </div>
                                         <div>
-                                            <p className="text-sm text-muted-foreground">Leads Converted</p>
+                                            <p className="text-sm text-muted-foreground">Leads Contacted</p>
                                             <p className="text-3xl font-bold text-green-600">{metaPerf?.leads_converted ?? 0}</p>
                                         </div>
                                         <div>
-                                            <p className="text-sm text-muted-foreground">Conversion Rate</p>
+                                            <p className="text-sm text-muted-foreground">Contact Rate</p>
                                             <p className="text-3xl font-bold text-blue-600">{metaPerf?.conversion_rate ?? 0}%</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center justify-center rounded-lg bg-muted/50 p-4">
                                         <div className="text-center">
-                                            <p className="text-sm text-muted-foreground">Avg Time to Convert</p>
+                                            <p className="text-sm text-muted-foreground">Avg Time to Contact</p>
                                             <p className="text-4xl font-bold">
                                                 {metaPerf?.avg_time_to_convert_hours
                                                     ? `${metaPerf.avg_time_to_convert_hours}h`
