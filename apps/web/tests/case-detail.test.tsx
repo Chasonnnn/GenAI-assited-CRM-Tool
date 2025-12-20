@@ -77,6 +77,18 @@ vi.mock('@/lib/hooks/use-ai', () => ({
     useAISettings: () => ({ data: { is_enabled: false } }),
 }))
 
+vi.mock('@/lib/hooks/use-pipelines', () => ({
+    useDefaultPipeline: () => ({
+        data: {
+            id: 'p1',
+            stages: [
+                { id: 's1', slug: 'new_unread', label: 'New Unread', color: '#3b82f6', stage_type: 'intake', is_active: true },
+            ],
+        },
+        isLoading: false,
+    }),
+}))
+
 vi.mock('@/lib/hooks/use-email-templates', () => ({
     useEmailTemplates: () => ({ data: [], isLoading: false }),
     useEmailTemplate: () => ({ data: null, isLoading: false }),  // singular for detail

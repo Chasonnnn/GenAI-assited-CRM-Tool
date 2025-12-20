@@ -50,6 +50,18 @@ vi.mock('@/lib/hooks/use-analytics', () => ({
     useCasesByStatus: () => mockUseCasesByStatus(),
 }))
 
+vi.mock('@/lib/hooks/use-pipelines', () => ({
+    useDefaultPipeline: () => ({
+        data: {
+            id: 'p1',
+            stages: [
+                { id: 's1', slug: 'new_unread', label: 'New Unread', color: '#3b82f6', stage_type: 'intake', is_active: true },
+            ],
+        },
+        isLoading: false,
+    }),
+}))
+
 describe('DashboardPage', () => {
     beforeEach(() => {
         mockUseCaseStats.mockReturnValue({

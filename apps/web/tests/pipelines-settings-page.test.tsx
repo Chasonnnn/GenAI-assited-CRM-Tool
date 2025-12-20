@@ -8,6 +8,8 @@ const mockUsePipeline = vi.fn()
 const mockUsePipelineVersions = vi.fn()
 const mockUpdatePipeline = vi.fn()
 const mockRollbackPipeline = vi.fn()
+const mockUpdateStage = vi.fn()
+const mockReorderStages = vi.fn()
 
 vi.mock('@/lib/auth-context', () => ({
     useAuth: () => mockUseAuth(),
@@ -19,6 +21,8 @@ vi.mock('@/lib/hooks/use-pipelines', () => ({
     usePipelineVersions: (id: string | null) => mockUsePipelineVersions(id),
     useUpdatePipeline: () => ({ mutateAsync: mockUpdatePipeline, isPending: false }),
     useRollbackPipeline: () => ({ mutateAsync: mockRollbackPipeline, isPending: false }),
+    useUpdateStage: () => ({ mutateAsync: mockUpdateStage, isPending: false }),
+    useReorderStages: () => ({ mutateAsync: mockReorderStages, isPending: false }),
 }))
 
 const pipelineFixture = {
@@ -27,18 +31,22 @@ const pipelineFixture = {
     is_default: true,
     stages: [
         {
-            status: 'new_unread',
+            id: 's1',
+            slug: 'new_unread',
             label: 'New Unread',
             color: '#3b82f6',
             order: 1,
-            visible: true,
+            stage_type: 'intake',
+            is_active: true,
         },
         {
-            status: 'contacted',
+            id: 's2',
+            slug: 'contacted',
             label: 'Contacted',
             color: '#06b6d4',
             order: 2,
-            visible: true,
+            stage_type: 'intake',
+            is_active: true,
         },
     ],
     current_version: 2,
