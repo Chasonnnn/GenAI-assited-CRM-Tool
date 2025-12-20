@@ -155,3 +155,146 @@ def test_legal_hold_blocks_purge_preview(db, test_org, test_user):
 
     results = compliance_service.preview_purge(db, test_org.id)
     assert results == []
+
+
+def test_export_empty_result(db, test_org, test_user, tmp_path):
+    """Export when no logs match the date range returns empty file."""
+    settings.EXPORT_STORAGE_BACKEND = "local"
+    settings.EXPORT_LOCAL_DIR = str(tmp_path)
+    settings.EXPORT_MAX_RECORDS = 1000
+
+    # Use a date range far in the past where no logs exist
+    start_date = datetime(2000, 1, 1)
+    end_date = datetime(2000, 1, 2)
+
+    job = compliance_service.create_export_job(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        export_type="audit",
+        start_date=start_date,
+        end_date=end_date,
+        file_format="csv",
+        redact_mode="redacted",
+        acknowledgment=None,
+    )
+
+    compliance_service.process_export_job(db, job.id)
+
+    file_path = compliance_service.resolve_local_export_path(job.file_path)
+    assert os.path.exists(file_path)
+
+    with open(file_path, newline="", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        rows = list(reader)
+
+    # Only header, no data rows
+    assert len(rows) <= 1
+    assert job.record_count == 0
+
+
+def test_specific_entity_legal_hold_blocks_related(db, test_org, test_user):
+    """Legal hold on specific case blocks purge for that case only."""
+    from app.db.models import Case
+    from app.db.enums import CaseStatus
+
+    # Create retention policy for archived cases
+    compliance_service.upsert_retention_policy(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        entity_type="cases",
+        retention_days=1,
+        is_active=True,
+    )
+
+    # Create two old archived cases
+    case1 = Case(
+        organization_id=test_org.id,
+        case_number="TEST-001",
+        full_name="Case One",
+        email="case1@test.com",
+        status=CaseStatus.DISQUALIFIED.value,
+        source="manual",
+        created_by_user_id=test_user.id,
+        owner_type="user",
+        owner_id=test_user.id,
+        archived_at=datetime.utcnow() - timedelta(days=30),
+    )
+    case2 = Case(
+        organization_id=test_org.id,
+        case_number="TEST-002",
+        full_name="Case Two",
+        email="case2@test.com",
+        status=CaseStatus.DISQUALIFIED.value,
+        source="manual",
+        created_by_user_id=test_user.id,
+        owner_type="user",
+        owner_id=test_user.id,
+        archived_at=datetime.utcnow() - timedelta(days=30),
+    )
+    db.add_all([case1, case2])
+    db.commit()
+    db.refresh(case1)
+    db.refresh(case2)
+
+    # Create legal hold on case1 only
+    compliance_service.create_legal_hold(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        entity_type="case",
+        entity_id=case1.id,
+        reason="Litigation hold",
+    )
+
+    # Preview should show 1 case (case2 is purgeable, case1 is protected)
+    results = compliance_service.preview_purge(db, test_org.id)
+    case_result = next((r for r in results if r.entity_type == "cases"), None)
+    assert case_result is not None
+    assert case_result.count == 1  # Only case2
+
+
+def test_rate_limit_exceeded(db, test_org, test_user, tmp_path):
+    """Export rate limit returns error when exceeded."""
+    import pytest
+
+    settings.EXPORT_STORAGE_BACKEND = "local"
+    settings.EXPORT_LOCAL_DIR = str(tmp_path)
+    settings.EXPORT_MAX_RECORDS = 1000
+    original_limit = settings.EXPORT_RATE_LIMIT_PER_HOUR
+    settings.EXPORT_RATE_LIMIT_PER_HOUR = 1
+
+    try:
+        start_date = datetime.utcnow() - timedelta(days=1)
+        end_date = datetime.utcnow() + timedelta(days=1)
+
+        # First export should succeed
+        job1 = compliance_service.create_export_job(
+            db=db,
+            org_id=test_org.id,
+            user_id=test_user.id,
+            export_type="audit",
+            start_date=start_date,
+            end_date=end_date,
+            file_format="csv",
+            redact_mode="redacted",
+            acknowledgment=None,
+        )
+        assert job1 is not None
+
+        # Second export should fail due to rate limit
+        with pytest.raises(ValueError, match="rate limit"):
+            compliance_service.create_export_job(
+                db=db,
+                org_id=test_org.id,
+                user_id=test_user.id,
+                export_type="audit",
+                start_date=start_date,
+                end_date=end_date,
+                file_format="csv",
+                redact_mode="redacted",
+                acknowledgment=None,
+            )
+    finally:
+        settings.EXPORT_RATE_LIMIT_PER_HOUR = original_limit

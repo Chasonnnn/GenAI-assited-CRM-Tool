@@ -214,6 +214,16 @@ export default function AuditLogPage() {
                             </div>
                         )}
 
+                        {redactMode === "redacted" && (
+                            <div className="max-w-xl rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/30 p-3">
+                                <p className="text-sm text-amber-800 dark:text-amber-200">
+                                    <strong>⚠️ Best-Effort Redaction:</strong> Redacted exports apply automated
+                                    pattern matching for PHI (emails, phones, SSNs, etc.). Free-text fields may
+                                    contain PHI not detected by automated redaction. Review exports before sharing.
+                                </p>
+                            </div>
+                        )}
+
                         {exportJobs?.items?.length ? (
                             <div className="border rounded-lg">
                                 <div className="flex items-center justify-between px-4 py-2 border-b">
