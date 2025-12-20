@@ -1,6 +1,6 @@
 # Surrogacy CRM Platform
 
-**Version:** 0.12.00 | **Format:** a.bc.de (major.feature.patch)
+**Version:** 0.12.01 | **Format:** a.bc.de (major.feature.patch)
 
 A modern, multi-tenant CRM and case management platform built for surrogacy agencies. Features lead pipeline management with **customizable stages**, intended parent profiles, case workflow tracking, AI-assisted insights, and enterprise audit/versioning.
 
@@ -8,7 +8,7 @@ A modern, multi-tenant CRM and case management platform built for surrogacy agen
 
 | Layer | Technology |
 |-------|------------|
-| **Frontend** | Next.js 16.0.10, React 19.2.3, TypeScript 5.9, Tailwind CSS 4.1, shadcn/ui, Zod 4 |
+| **Frontend** | Next.js 16.1, React 19, TypeScript 5.9, Tailwind CSS 4.1, Base UI, shadcn/ui-inspired components |
 | **Backend** | FastAPI, Pydantic v2, SQLAlchemy 2.0 |
 | **Database** | PostgreSQL 16 (via Docker) |
 | **Migrations** | Alembic |
@@ -281,19 +281,19 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ## Current Status
 
-**Version 0.10.00** — AI Assistant v1 Complete
+**Version 0.12.01** — Base UI Migration + Analytics Improvements
 
 ### Core Platform
 - [x] Project scaffolding + PostgreSQL + migrations
 - [x] Google OAuth SSO + JWT sessions + role-based auth
 - [x] Cases module (CRUD, notes, tasks, status history, handoff workflow)
 - [x] Intended Parents module (CRUD, status workflow, archive/restore)
-- [x] Frontend UI (shadcn/ui, responsive design, dark mode)
+- [x] Frontend UI (Base UI components, responsive design, dark mode)
 - [x] Workflow automation + email foundation
 - [x] In-App Notifications + Theme System
 - [x] Meta Lead Ads Integration + CAPI
 
-### Enterprise Features (v0.10.00)
+### Enterprise Features (v0.12.00+)
 - [x] **Global Audit Trail** — Hash chain, tamper-evident logging
 - [x] **CSV Import** — Email-based duplicate detection
 - [x] **Org-Configurable Pipelines** — Custom stage labels, colors, order
@@ -301,9 +301,17 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 - [x] **Queue/Ownership System** — Salesforce-style claim/release workflow
 - [x] **Zoom Integration** — OAuth, meeting creation, email invites
 - [x] **AI Assistant v1** — BYOK, summarize-case, draft-email, analyze-dashboard
+- [x] **Analytics Dashboard** — Pie charts, funnel visualization, US map
 
-### Data Models (35 tables)
-`Organization`, `User`, `Membership`, `AuthIdentity`, `OrgInvite`, `Case`, `CaseStatusHistory`, `CaseActivityLog`, `Task`, `MetaLead`, `MetaPageMapping`, `Job`, `EmailTemplate`, `EmailLog`, `IntendedParent`, `IntendedParentStatusHistory`, `EntityNote`, `Notification`, `UserNotificationSettings`, `IntegrationHealth`, `IntegrationErrorRollup`, `SystemAlert`, `RequestMetricsRollup`, `AISettings`, `AIConversation`, `AIMessage`, `AIActionApproval`, `AIEntitySummary`, `AIUsageLog`, `UserIntegration`, `AuditLog`, `CaseImport`, `Pipeline`, `EntityVersion`
+### Recent Changes (v0.12.01)
+- Migrated from Radix UI to Base UI for all components
+- Fixed hydration mismatches with dynamic imports
+- Improved Meta analytics: separate Qualified vs Converted rates
+- Meta Performance now shows pie chart with days-to-convert insight
+- Renamed "manager" role to "admin" throughout
+
+### Data Models (36 tables)
+`Organization`, `User`, `Membership`, `AuthIdentity`, `OrgInvite`, `Case`, `CaseStatusHistory`, `CaseActivityLog`, `Task`, `MetaLead`, `MetaPageMapping`, `Job`, `EmailTemplate`, `EmailLog`, `IntendedParent`, `IntendedParentStatusHistory`, `EntityNote`, `Notification`, `UserNotificationSettings`, `IntegrationHealth`, `IntegrationErrorRollup`, `SystemAlert`, `RequestMetricsRollup`, `AISettings`, `AIConversation`, `AIMessage`, `AIActionApproval`, `AIEntitySummary`, `AIUsageLog`, `UserIntegration`, `AuditLog`, `CaseImport`, `Pipeline`, `PipelineStage`, `EntityVersion`, `RolePermission`
 
 
 ## Documentation
