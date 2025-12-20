@@ -12,8 +12,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import get_db, require_roles
-from app.db.enums import AuditEventType, Role, ROLES_CAN_VIEW_AUDIT
+from app.core.deps import get_db, require_permission
+from app.db.enums import AuditEventType, Role
 from app.db.models import AuditLog, User
 from app.schemas.compliance import ExportJobCreate, ExportJobListResponse, ExportJobRead
 from app.services import audit_service, compliance_service
@@ -62,7 +62,7 @@ def list_audit_logs(
     start_date: datetime | None = Query(None, description="Filter events after this date"),
     end_date: datetime | None = Query(None, description="Filter events before this date"),
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles(list(ROLES_CAN_VIEW_AUDIT))),
+    session: UserSession = Depends(require_permission("view_audit_log")),
 ) -> AuditLogListResponse:
     """
     List audit log entries for the organization.
@@ -123,7 +123,7 @@ def list_audit_logs(
 
 @router.get("/event-types")
 def list_event_types(
-    session: UserSession = Depends(require_roles(list(ROLES_CAN_VIEW_AUDIT))),
+    session: UserSession = Depends(require_permission("view_audit_log")),
 ) -> list[str]:
     """List available audit event types for filtering."""
     return [e.value for e in AuditEventType]
@@ -133,7 +133,7 @@ def list_event_types(
 def list_audit_exports(
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles(list(ROLES_CAN_VIEW_AUDIT))),
+    session: UserSession = Depends(require_permission("export_data")),
 ) -> ExportJobListResponse:
     """List recent audit exports for the organization."""
     jobs = compliance_service.list_export_jobs(db, session.org_id, limit=limit)
@@ -167,7 +167,7 @@ def list_audit_exports(
 def create_audit_export(
     payload: ExportJobCreate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles(list(ROLES_CAN_VIEW_AUDIT))),
+    session: UserSession = Depends(require_permission("export_data")),
 ) -> ExportJobRead:
     """Request an async audit export job."""
     if payload.redact_mode == "full":
@@ -210,7 +210,7 @@ def create_audit_export(
 def get_audit_export(
     export_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles(list(ROLES_CAN_VIEW_AUDIT))),
+    session: UserSession = Depends(require_permission("export_data")),
 ) -> ExportJobRead:
     """Get audit export job status."""
     job = compliance_service.get_export_job(db, session.org_id, export_id)
@@ -243,7 +243,7 @@ def get_audit_export(
 def download_audit_export(
     export_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles(list(ROLES_CAN_VIEW_AUDIT))),
+    session: UserSession = Depends(require_permission("export_data")),
 ):
     """Download an export file via signed URL or local file."""
     job = compliance_service.get_export_job(db, session.org_id, export_id)
