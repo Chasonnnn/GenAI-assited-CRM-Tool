@@ -11,9 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_csrf_header, require_roles
+from app.core.deps import get_db, require_csrf_header, require_permission
 from app.core.encryption import encrypt_token, is_encryption_configured
-from app.db.enums import Role
+
 from app.db.models import MetaPageMapping
 from app.schemas.auth import UserSession
 
@@ -67,7 +67,7 @@ class MetaPageTestResponse(BaseModel):
 
 @router.get("", response_model=list[MetaPageRead])
 def list_meta_pages(
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_meta_leads")),
     db: Session = Depends(get_db),
 ):
     """List all Meta page mappings for the organization."""
@@ -82,7 +82,7 @@ def list_meta_pages(
 def create_meta_page(
     data: MetaPageCreate,
     _csrf: None = Depends(require_csrf_header),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_meta_leads")),
     db: Session = Depends(get_db),
 ):
     """
@@ -133,7 +133,7 @@ def update_meta_page(
     page_id: str,
     data: MetaPageUpdate,
     _csrf: None = Depends(require_csrf_header),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_meta_leads")),
     db: Session = Depends(get_db),
 ):
     """Update existing Meta page mapping."""
@@ -177,7 +177,7 @@ def update_meta_page(
 def delete_meta_page(
     page_id: str,
     _csrf: None = Depends(require_csrf_header),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_meta_leads")),
     db: Session = Depends(get_db),
 ):
     """

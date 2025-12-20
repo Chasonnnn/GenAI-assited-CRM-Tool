@@ -5,8 +5,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_session, require_roles, require_csrf_header
-from app.db.enums import Role
+from app.core.deps import get_db, get_current_session, require_permission, require_csrf_header
+
 from app.schemas.email import (
     EmailTemplateCreate,
     EmailTemplateUpdate,
@@ -24,7 +24,7 @@ router = APIRouter(tags=["Email Templates"])
 def list_templates(
     active_only: bool = True,
     db: Session = Depends(get_db),
-    session = Depends(get_current_session),
+    session = Depends(require_permission("view_email_templates")),
 ):
     """List email templates for the organization."""
     templates = email_service.list_templates(
@@ -37,7 +37,7 @@ def list_templates(
 def create_template(
     data: EmailTemplateCreate,
     db: Session = Depends(get_db),
-    session = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session = Depends(require_permission("manage_email_templates")),
 ):
     """Create a new email template (manager only)."""
     # Check for duplicate name
@@ -63,7 +63,7 @@ def create_template(
 def get_template(
     template_id: UUID,
     db: Session = Depends(get_db),
-    session = Depends(get_current_session),
+    session = Depends(require_permission("view_email_templates")),
 ):
     """Get an email template by ID."""
     template = email_service.get_template(db, template_id, session.org_id)
@@ -77,7 +77,7 @@ def update_template(
     template_id: UUID,
     data: EmailTemplateUpdate,
     db: Session = Depends(get_db),
-    session = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session = Depends(require_permission("manage_email_templates")),
 ):
     """Update an email template (manager only). Creates version snapshot."""
     from app.services import version_service
@@ -115,7 +115,7 @@ def update_template(
 def delete_template(
     template_id: UUID,
     db: Session = Depends(get_db),
-    session = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session = Depends(require_permission("manage_email_templates")),
 ):
     """Soft delete (deactivate) an email template (manager only)."""
     template = email_service.get_template(db, template_id, session.org_id)
@@ -129,7 +129,7 @@ def delete_template(
 def send_email(
     data: EmailSendRequest,
     db: Session = Depends(get_db),
-    session = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session = Depends(require_permission("manage_email_templates")),
 ):
     """Send an email using a template (queues for async sending). Manager only."""
     result = email_service.send_from_template(
@@ -176,7 +176,7 @@ def get_template_versions(
     template_id: UUID,
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
-    session = Depends(require_roles([Role.DEVELOPER])),
+    session = Depends(require_permission("manage_email_templates")),
 ):
     """Get version history for a template. Developer-only."""
     template = email_service.get_template(db, template_id, session.org_id)
@@ -201,7 +201,7 @@ def rollback_template(
     template_id: UUID,
     data: RollbackRequest,
     db: Session = Depends(get_db),
-    session = Depends(require_roles([Role.DEVELOPER])),
+    session = Depends(require_permission("manage_email_templates")),
 ):
     """Rollback template to a previous version. Developer-only."""
     template = email_service.get_template(db, template_id, session.org_id)
