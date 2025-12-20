@@ -10,7 +10,7 @@ v2.1: PipelineStage CRUD
 - Immutable slug/stage_type
 - Soft-delete with migration
 
-Each stage maps to a CaseStatus enum with custom label, color, and order.
+Stages are stored as PipelineStage rows with immutable slugs.
 """
 
 from datetime import datetime, timezone
@@ -18,7 +18,6 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.db.enums import CaseStatus
 from app.db.models import Pipeline, PipelineStage, Case
 from app.services import version_service
 
@@ -26,54 +25,75 @@ from app.services import version_service
 # Default stage colors (matching typical CRM conventions)
 DEFAULT_COLORS = {
     # Stage A: Intake Pipeline (blues/greens)
-    CaseStatus.NEW_UNREAD: "#3B82F6",  # Blue
-    CaseStatus.CONTACTED: "#06B6D4",  # Cyan
-    CaseStatus.QUALIFIED: "#10B981",  # Green
-    CaseStatus.APPLIED: "#84CC16",  # Lime
-    CaseStatus.FOLLOWUP_SCHEDULED: "#A855F7",  # Purple
-    CaseStatus.APPLICATION_SUBMITTED: "#8B5CF6",  # Violet
-    CaseStatus.UNDER_REVIEW: "#F59E0B",  # Amber
-    CaseStatus.APPROVED: "#22C55E",  # Green
-    CaseStatus.PENDING_HANDOFF: "#F97316",  # Orange
-    CaseStatus.DISQUALIFIED: "#EF4444",  # Red
+    "new_unread": "#3B82F6",  # Blue
+    "contacted": "#06B6D4",  # Cyan
+    "qualified": "#10B981",  # Green
+    "applied": "#84CC16",  # Lime
+    "followup_scheduled": "#A855F7",  # Purple
+    "application_submitted": "#8B5CF6",  # Violet
+    "under_review": "#F59E0B",  # Amber
+    "approved": "#22C55E",  # Green
+    "pending_handoff": "#F97316",  # Orange
+    "disqualified": "#EF4444",  # Red
     # Stage B: Post-Approval (darker shades)
-    CaseStatus.PENDING_MATCH: "#0EA5E9",  # Sky
-    CaseStatus.MEDS_STARTED: "#14B8A6",  # Teal
-    CaseStatus.EXAM_PASSED: "#059669",  # Emerald
-    CaseStatus.EMBRYO_TRANSFERRED: "#0D9488",  # Teal
-    CaseStatus.DELIVERED: "#16A34A",  # Green (success)
-    # Pseudo-statuses
-    CaseStatus.ARCHIVED: "#6B7280",  # Gray
-    CaseStatus.RESTORED: "#9CA3AF",  # Gray light
+    "pending_match": "#0EA5E9",  # Sky
+    "meds_started": "#14B8A6",  # Teal
+    "exam_passed": "#059669",  # Emerald
+    "embryo_transferred": "#0D9488",  # Teal
+    "delivered": "#16A34A",  # Green (success)
 }
 
 ENTITY_TYPE = "pipeline"
 
 
-def get_default_stages() -> list[dict]:
-    """
-    Generate default pipeline stages from CaseStatus enum.
-    
-    Returns a list of stage configs matching all CaseStatus values.
-    """
+STAGE_TYPE_MAP = {
+    "new_unread": "intake",
+    "contacted": "intake",
+    "qualified": "intake",
+    "applied": "intake",
+    "followup_scheduled": "intake",
+    "application_submitted": "intake",
+    "under_review": "intake",
+    "approved": "intake",
+    "pending_handoff": "intake",
+    "pending_match": "post_approval",
+    "meds_started": "post_approval",
+    "exam_passed": "post_approval",
+    "embryo_transferred": "post_approval",
+    "disqualified": "terminal",
+    "delivered": "terminal",
+}
+
+DEFAULT_STAGE_ORDER = [
+    "new_unread",
+    "contacted",
+    "qualified",
+    "applied",
+    "followup_scheduled",
+    "application_submitted",
+    "under_review",
+    "approved",
+    "pending_handoff",
+    "pending_match",
+    "meds_started",
+    "exam_passed",
+    "embryo_transferred",
+    "disqualified",
+    "delivered",
+]
+
+
+def get_default_stage_defs() -> list[dict]:
+    """Generate default pipeline stage definitions."""
     stages = []
-    order = 1
-    
-    # Generate from enum (order follows enum definition)
-    for status in CaseStatus:
-        # Skip pseudo-statuses for default display
-        if status in (CaseStatus.ARCHIVED, CaseStatus.RESTORED):
-            continue
-        
+    for order, slug in enumerate(DEFAULT_STAGE_ORDER, start=1):
         stages.append({
-            "status": status.value,
-            "label": status.value.replace("_", " ").title(),  # "new_unread" -> "New Unread"
-            "color": DEFAULT_COLORS.get(status, "#6B7280"),
+            "slug": slug,
+            "label": slug.replace("_", " ").title(),
+            "color": DEFAULT_COLORS.get(slug, "#6B7280"),
             "order": order,
-            "visible": True,
+            "stage_type": STAGE_TYPE_MAP.get(slug, "intake"),
         })
-        order += 1
-    
     return stages
 
 
@@ -82,7 +102,17 @@ def _pipeline_payload(pipeline: Pipeline) -> dict:
     return {
         "name": pipeline.name,
         "is_default": pipeline.is_default,
-        "stages": pipeline.stages,
+        "stages": [
+            {
+                "slug": stage.slug,
+                "label": stage.label,
+                "color": stage.color,
+                "order": stage.order,
+                "stage_type": stage.stage_type,
+                "is_active": stage.is_active,
+            }
+            for stage in pipeline.stages
+        ],
     }
 
 
@@ -107,10 +137,25 @@ def get_or_create_default_pipeline(
             organization_id=org_id,
             name="Default",
             is_default=True,
-            stages=get_default_stages(),
             current_version=1,
         )
         db.add(pipeline)
+        db.flush()
+
+        # Create default stage rows
+        stage_defs = get_default_stage_defs()
+        db.add_all([
+            PipelineStage(
+                pipeline_id=pipeline.id,
+                slug=stage["slug"],
+                label=stage["label"],
+                color=stage["color"],
+                order=stage["order"],
+                stage_type=stage["stage_type"],
+                is_active=True,
+            )
+            for stage in stage_defs
+        ])
         db.flush()
         
         # Create initial version snapshot
@@ -242,10 +287,24 @@ def create_pipeline(
         organization_id=org_id,
         name=name,
         is_default=False,
-        stages=stages or get_default_stages(),
         current_version=1,
     )
     db.add(pipeline)
+    db.flush()
+
+    stage_defs = stages or get_default_stage_defs()
+    db.add_all([
+        PipelineStage(
+            pipeline_id=pipeline.id,
+            slug=stage["slug"],
+            label=stage["label"],
+            color=stage["color"],
+            order=stage.get("order", i + 1),
+            stage_type=stage.get("stage_type", "intake"),
+            is_active=stage.get("is_active", True),
+        )
+        for i, stage in enumerate(stage_defs)
+    ])
     db.flush()
     
     # Create initial version snapshot
