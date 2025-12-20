@@ -60,9 +60,9 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
         }
 
         // Determine WebSocket URL
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-        const host = process.env.NEXT_PUBLIC_API_URL?.replace(/^https?:\/\//, '') || window.location.host
-        const wsUrl = `${protocol}//${host}/ws/notifications`
+        // In dev: API is on port 8000, frontend on 3000
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+        const wsUrl = apiUrl.replace(/^http/, 'ws') + '/ws/notifications'
 
         try {
             const ws = new WebSocket(wsUrl)
@@ -117,8 +117,11 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
                 }
             }
 
-            ws.onerror = (error) => {
-                console.error('[WS] Error:', error)
+            ws.onerror = () => {
+                // Only log on first attempt to avoid console spam
+                if (reconnectAttempts.current === 0) {
+                    console.warn('[WS] Connection failed - notifications will use polling fallback')
+                }
             }
         } catch (e) {
             console.error('[WS] Failed to create WebSocket:', e)
