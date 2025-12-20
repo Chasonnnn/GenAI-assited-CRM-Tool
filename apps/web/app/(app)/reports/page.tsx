@@ -438,41 +438,55 @@ export default function ReportsPage() {
                                     <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
                                 </div>
                             ) : (
-                                <div className="grid h-[300px] grid-rows-2 gap-4 p-4">
-                                    <div className="grid grid-cols-4 gap-4 rounded-lg border p-4">
-                                        <div>
-                                            <p className="text-sm text-muted-foreground">Leads Received</p>
-                                            <p className="text-3xl font-bold">{metaPerf?.leads_received ?? 0}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-sm text-muted-foreground">Qualified</p>
-                                            <p className="text-3xl font-bold text-blue-600">{metaPerf?.leads_qualified ?? 0}</p>
-                                            <p className="text-xs text-muted-foreground">{metaPerf?.qualification_rate ?? 0}%</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-sm text-muted-foreground">Converted</p>
-                                            <p className="text-3xl font-bold text-green-600">{metaPerf?.leads_converted ?? 0}</p>
-                                            <p className="text-xs text-muted-foreground">{metaPerf?.conversion_rate ?? 0}%</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-sm text-muted-foreground">Avg Time to Approve</p>
-                                            <p className="text-3xl font-bold">
-                                                {metaPerf?.avg_time_to_convert_hours
-                                                    ? `${metaPerf.avg_time_to_convert_hours}h`
-                                                    : '—'
-                                                }
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center justify-center rounded-lg bg-muted/50 p-4">
-                                        <p className="text-sm text-muted-foreground">
-                                            Qualified = reached &quot;Qualified&quot; stage or later • Converted = reached &quot;Approved&quot; stage
-                                        </p>
-                                    </div>
-                                </div>
+                                <ChartContainer config={{
+                                    notQualified: { label: "Not Qualified", color: "#94a3b8" },
+                                    qualified: { label: "Qualified Only", color: "#3b82f6" },
+                                    converted: { label: "Converted", color: "#22c55e" },
+                                }} className="h-[300px] w-full">
+                                    <PieChart>
+                                        <ChartTooltip content={<ChartTooltipContent />} />
+                                        <Pie
+                                            data={[
+                                                {
+                                                    name: "Not Qualified",
+                                                    value: Math.max(0, (metaPerf?.leads_received ?? 0) - (metaPerf?.leads_qualified ?? 0)),
+                                                    fill: "#94a3b8"
+                                                },
+                                                {
+                                                    name: "Qualified Only",
+                                                    value: Math.max(0, (metaPerf?.leads_qualified ?? 0) - (metaPerf?.leads_converted ?? 0)),
+                                                    fill: "#3b82f6"
+                                                },
+                                                {
+                                                    name: "Converted",
+                                                    value: metaPerf?.leads_converted ?? 0,
+                                                    fill: "#22c55e"
+                                                },
+                                            ]}
+                                            dataKey="value"
+                                            nameKey="name"
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={60}
+                                            outerRadius={100}
+                                            label={({ name, value }) => value > 0 ? `${name}: ${value}` : ''}
+                                        />
+                                        <ChartLegend content={<ChartLegendContent />} />
+                                    </PieChart>
+                                </ChartContainer>
                             )}
                         </CardContent>
-                        <CardFooter className="text-sm text-muted-foreground">Last 30 days</CardFooter>
+                        <CardFooter className="flex-col items-start gap-2">
+                            <div className="flex gap-2 leading-none font-medium">
+                                {metaPerf?.avg_time_to_convert_hours
+                                    ? `Avg ${Math.round(metaPerf.avg_time_to_convert_hours / 24)} days to convert`
+                                    : 'No conversion data yet'
+                                }
+                            </div>
+                            <div className="text-muted-foreground leading-none">
+                                {metaPerf?.leads_received ?? 0} leads received • {metaPerf?.conversion_rate ?? 0}% conversion rate
+                            </div>
+                        </CardFooter>
                     </Card>
                 </div>
 
