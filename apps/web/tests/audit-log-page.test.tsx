@@ -15,7 +15,7 @@ vi.mock('@/lib/hooks/use-audit', () => ({
 }))
 
 vi.mock('@/lib/auth-context', () => ({
-    useAuth: () => ({ user: { role: 'manager' } }),
+    useAuth: () => ({ user: { role: 'admin' } }),
 }))
 
 describe('AuditLogPage', () => {

@@ -106,7 +106,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const { user } = useAuth()
-    const isManager = user?.role && ['manager', 'developer'].includes(user.role)
+    const isManager = user?.role && ['admin', 'developer'].includes(user.role)
     const isDeveloper = user?.role === 'developer'
     const activeSettingsTab = searchParams.get("tab")
     const activeAutomationTab = searchParams.get("tab")

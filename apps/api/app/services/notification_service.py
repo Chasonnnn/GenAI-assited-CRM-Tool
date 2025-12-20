@@ -304,7 +304,7 @@ def notify_case_handoff_ready(
     # Get all case_manager+ in org
     managers = db.query(Membership).filter(
         Membership.organization_id == case.organization_id,
-        Membership.role.in_([Role.CASE_MANAGER, Role.MANAGER, Role.DEVELOPER]),
+        Membership.role.in_([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER]),
     ).all()
     
     for membership in managers:

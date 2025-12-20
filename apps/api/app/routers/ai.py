@@ -116,7 +116,7 @@ class ChatResponseModel(BaseModel):
 @router.get("/settings", response_model=AISettingsResponse)
 def get_settings(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> AISettingsResponse:
     """Get AI settings for the organization."""
     settings = ai_settings_service.get_or_create_ai_settings(db, session.org_id, session.user_id)
@@ -139,7 +139,7 @@ def get_settings(
 def update_settings(
     update: AISettingsUpdate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> AISettingsResponse:
     """Update AI settings for the organization. Creates version snapshot."""
     from app.services import version_service
@@ -179,7 +179,7 @@ def update_settings(
 @router.post("/settings/test", response_model=TestKeyResponse, dependencies=[Depends(require_csrf_header)])
 async def test_api_key(
     request: TestKeyRequest,
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> TestKeyResponse:
     """Test if an API key is valid."""
     valid = await ai_settings_service.test_api_key(request.provider, request.api_key)
@@ -193,7 +193,7 @@ async def test_api_key(
 @router.get("/consent", response_model=ConsentResponse)
 def get_consent(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> ConsentResponse:
     """Get consent text and status."""
     settings = ai_settings_service.get_or_create_ai_settings(db, session.org_id, session.user_id)
@@ -208,7 +208,7 @@ def get_consent(
 @router.post("/consent/accept", dependencies=[Depends(require_csrf_header)])
 def accept_consent(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> dict[str, Any]:
     """Accept the AI data processing consent."""
     settings = ai_settings_service.accept_consent(db, session.org_id, session.user_id)
@@ -385,7 +385,7 @@ def approve_action(
         raise HTTPException(status_code=404, detail="Conversation not found")
     
     # Verify user owns this conversation or has manager role
-    is_manager = session.role in (Role.MANAGER, Role.CASE_MANAGER, Role.DEVELOPER)
+    is_manager = session.role in (Role.ADMIN, Role.CASE_MANAGER, Role.DEVELOPER)
     if conversation.user_id != session.user_id and not is_manager:
         raise HTTPException(status_code=403, detail="Not authorized to approve this action")
     
@@ -450,7 +450,7 @@ def reject_action(
         raise HTTPException(status_code=404, detail="Conversation not found")
     
     # Verify user owns this conversation or has manager role
-    is_manager = session.role in (Role.MANAGER, Role.CASE_MANAGER, Role.DEVELOPER)
+    is_manager = session.role in (Role.ADMIN, Role.CASE_MANAGER, Role.DEVELOPER)
     if conversation.user_id != session.user_id and not is_manager:
         raise HTTPException(status_code=403, detail="Not authorized to reject this action")
     
@@ -532,7 +532,7 @@ def get_pending_actions(
 def get_usage_summary(
     days: int = 30,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> dict[str, Any]:
     """Get organization usage summary."""
     from app.services import ai_usage_service
@@ -544,7 +544,7 @@ def get_usage_summary(
 def get_usage_by_model(
     days: int = 30,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> dict[str, Any]:
     """Get usage breakdown by AI model."""
     from app.services import ai_usage_service
@@ -556,7 +556,7 @@ def get_usage_by_model(
 def get_daily_usage(
     days: int = 30,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> dict[str, Any]:
     """Get daily usage breakdown."""
     from app.services import ai_usage_service
@@ -569,7 +569,7 @@ def get_top_users(
     days: int = 30,
     limit: int = 10,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> dict[str, Any]:
     """Get top users by AI usage."""
     from app.services import ai_usage_service
@@ -896,7 +896,7 @@ Be professional, warm, and concise."""
 def analyze_dashboard(
     request: Request,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> AnalyzeDashboardResponse:
     """Analyze dashboard data and provide AI-powered insights."""
     from app.services import ai_settings_service

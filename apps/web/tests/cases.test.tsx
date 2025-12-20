@@ -39,7 +39,7 @@ vi.mock('@/lib/hooks/use-queues', () => ({
 
 // Mock Auth
 vi.mock('@/lib/auth-context', () => ({
-    useAuth: () => ({ user: { role: 'manager' } }),
+    useAuth: () => ({ user: { role: 'admin' } }),
 }))
 
 // Mock UI components that might cause issues in JSDOM or are complex

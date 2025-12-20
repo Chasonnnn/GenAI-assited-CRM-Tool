@@ -39,7 +39,7 @@ import { formatDistanceToNow, format } from "date-fns"
 const ROLE_LABELS: Record<string, string> = {
     intake_specialist: "Intake Specialist",
     case_manager: "Case Manager",
-    manager: "Manager",
+    admin: "Admin",
     developer: "Developer",
 }
 
@@ -347,7 +347,7 @@ export default function MemberDetailPage() {
                             <SelectContent>
                                 <SelectItem value="intake_specialist">Intake Specialist</SelectItem>
                                 <SelectItem value="case_manager">Case Manager</SelectItem>
-                                <SelectItem value="manager">Manager</SelectItem>
+                                <SelectItem value="admin">Admin</SelectItem>
                                 {isDeveloper && (
                                     <SelectItem value="developer">Developer</SelectItem>
                                 )}

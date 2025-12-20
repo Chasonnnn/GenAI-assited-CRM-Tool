@@ -59,7 +59,7 @@ def create_org(name: str, slug: str, admin_email: str):
         invite = OrgInvite(
             organization_id=org.id,
             email=admin_email.lower(),
-            role=Role.MANAGER.value,
+            role=Role.ADMIN.value,
             expires_at=None,  # Never expires
             invited_by_user_id=None,  # CLI bootstrap has no inviter
         )

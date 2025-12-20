@@ -85,7 +85,7 @@ class ImportDetailResponse(BaseModel):
 )
 async def preview_csv_import(
     file: UploadFile = File(..., description="CSV file to preview"),
-    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])),
     db: Session = Depends(get_db),
 ):
     """
@@ -135,7 +135,7 @@ async def preview_csv_import(
 )
 async def execute_csv_import(
     file: UploadFile = File(..., description="CSV file to import"),
-    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])),
     db: Session = Depends(get_db),
 ):
     """
@@ -197,7 +197,7 @@ async def execute_csv_import(
 
 @router.get("", response_model=list[ImportHistoryItem])
 def list_imports(
-    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])),
     db: Session = Depends(get_db),
 ):
     """List recent imports for the organization."""
@@ -226,7 +226,7 @@ def list_imports(
 @router.get("/{import_id}", response_model=ImportDetailResponse)
 def get_import_details(
     import_id: UUID,
-    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])),
     db: Session = Depends(get_db),
 ):
     """Get detailed import information including errors."""

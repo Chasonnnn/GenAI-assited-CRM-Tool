@@ -28,7 +28,7 @@ const MOCK_USER: User = {
     org_id: 'd1f370ab-1680-46b3-a37d-7cff639e4a47',
     org_name: 'Test Organization',
     org_slug: 'test-org',
-    role: 'manager',
+    role: 'admin',
     ai_enabled: true, // Enable AI for testing
 };
 

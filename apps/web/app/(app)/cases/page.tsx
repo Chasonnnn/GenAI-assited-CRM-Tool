@@ -57,7 +57,7 @@ function FloatingActionBar({
     const bulkAssignMutation = useBulkAssign()
     const bulkArchiveMutation = useBulkArchive()
 
-    const canAssign = user?.role && ['case_manager', 'manager', 'developer'].includes(user.role)
+    const canAssign = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
 
     const handleAssign = async (userId: string) => {
         await bulkAssignMutation.mutateAsync({
@@ -133,7 +133,7 @@ export default function CasesPage() {
     const { user } = useAuth()
 
     // Fetch queues for filter dropdown (case_manager+ only)
-    const canSeeQueues = user?.role && ['case_manager', 'manager', 'developer'].includes(user.role)
+    const canSeeQueues = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
     const { data: queues } = useQueues()
     const { data: defaultPipeline } = useDefaultPipeline()
     const stageOptions = defaultPipeline?.stages || []

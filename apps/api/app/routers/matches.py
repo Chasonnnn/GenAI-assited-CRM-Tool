@@ -146,7 +146,7 @@ def _match_to_list_item(match: Match, case: Case | None, ip: IntendedParent | No
 def create_match(
     data: MatchCreate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> MatchRead:
     """
     Propose a new match between a surrogate (case) and intended parent.
@@ -235,7 +235,7 @@ def list_matches(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> MatchListResponse:
     """
     List matches with optional filters.
@@ -276,7 +276,7 @@ def list_matches(
 def get_match(
     match_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> MatchRead:
     """Get match details. Auto-transitions to 'reviewing' on first view by non-proposer."""
     from app.services import activity_service
@@ -322,7 +322,7 @@ def accept_match(
     match_id: UUID,
     data: MatchAcceptRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> MatchRead:
     """
     Accept a match.
@@ -401,7 +401,7 @@ def reject_match(
     match_id: UUID,
     data: MatchRejectRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> MatchRead:
     """
     Reject a match with reason.
@@ -456,7 +456,7 @@ def reject_match(
 def cancel_match(
     match_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> None:
     """
     Cancel a proposed match.
@@ -502,7 +502,7 @@ def update_match_notes(
     match_id: UUID,
     data: MatchUpdateNotesRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> MatchRead:
     """Update match notes. Requires: Manager+ role."""
     match = db.query(Match).filter(

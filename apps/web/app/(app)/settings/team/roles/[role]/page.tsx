@@ -17,7 +17,7 @@ import type { RolePermission } from "@/lib/api/permissions"
 const ROLE_LABELS: Record<string, string> = {
     intake_specialist: "Intake Specialist",
     case_manager: "Case Manager",
-    manager: "Manager",
+    admin: "Admin",
     developer: "Developer",
 }
 
