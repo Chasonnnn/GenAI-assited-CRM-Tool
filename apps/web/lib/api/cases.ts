@@ -7,7 +7,6 @@ import type {
     CaseListItem,
     CaseListResponse,
     CaseRead,
-    CaseStatus,
     CaseSource,
 } from '../types/case';
 
@@ -15,7 +14,7 @@ import type {
 export interface CaseListParams {
     page?: number;
     per_page?: number;
-    status?: CaseStatus;
+    stage_id?: string;
     source?: CaseSource;
     owner_id?: string;
     q?: string;
@@ -38,8 +37,10 @@ export interface CaseStats {
 // Status history entry
 export interface CaseStatusHistory {
     id: string;
-    from_status: string;
-    to_status: string;
+    from_stage_id: string | null;
+    to_stage_id: string | null;
+    from_label_snapshot: string | null;
+    to_label_snapshot: string | null;
     changed_by_user_id: string | null;
     changed_by_name: string | null;
     reason: string | null;
@@ -91,7 +92,7 @@ export interface CaseUpdatePayload {
 
 // Status change payload
 export interface CaseStatusChangePayload {
-    status: CaseStatus;
+    stage_id: string;
     reason?: string;
 }
 
@@ -128,7 +129,7 @@ export function getCases(params: CaseListParams = {}): Promise<CaseListResponse>
 
     if (params.page) searchParams.set('page', String(params.page));
     if (params.per_page) searchParams.set('per_page', String(params.per_page));
-    if (params.status) searchParams.set('status', params.status);
+    if (params.stage_id) searchParams.set('stage_id', params.stage_id);
     if (params.source) searchParams.set('source', params.source);
     if (params.owner_id) searchParams.set('owner_id', params.owner_id);
     if (params.q) searchParams.set('q', params.q);

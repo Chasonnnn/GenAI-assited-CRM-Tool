@@ -14,15 +14,15 @@ import {
   ArrowUpIcon,
   LoaderIcon,
 } from "lucide-react"
-import { useState } from "react"
+import { useMemo } from "react"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis, Cell } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { useCaseStats } from "@/lib/hooks/use-cases"
 import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-tasks"
 import { useCasesTrend, useCasesByStatus } from "@/lib/hooks/use-analytics"
+import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useAuth } from "@/lib/auth-context"
 import type { TaskListItem } from "@/lib/types/task"
-import { STATUS_CONFIG, type CaseStatus } from "@/lib/types/case"
 
 // Format relative time
 function formatRelativeTime(dateString: string): string {
@@ -83,6 +83,7 @@ export default function DashboardPage() {
   const { data: tasksData, isLoading: tasksLoading } = useTasks({ my_tasks: true, is_completed: false, per_page: 5 })
   const { data: trendData, isLoading: trendLoading } = useCasesTrend({ period: 'day' })
   const { data: statusData, isLoading: statusLoading } = useCasesByStatus()
+  const { data: defaultPipeline } = useDefaultPipeline()
   const completeTask = useCompleteTask()
   const uncompleteTask = useUncompleteTask()
 
@@ -112,34 +113,18 @@ export default function DashboardPage() {
     cases: item.count,
   })) || []
 
-  // Transform status data for bar chart (StatusCount[] from API) with STATUS_CONFIG colors
+  const stageByLabel = useMemo(() => {
+    const stages = defaultPipeline?.stages || []
+    return new Map(stages.map(stage => [stage.label, stage]))
+  }, [defaultPipeline])
+
+  // Transform status data for bar chart (StatusCount[] from API) with stage colors
   const chartStatusData = Array.isArray(statusData) ? statusData.map((item) => {
-    const statusKey = item.status as CaseStatus
-    const config = STATUS_CONFIG[statusKey]
-    // Convert Tailwind bg-X-500 to hex for recharts
-    const colorMap: Record<string, string> = {
-      'bg-blue-500': '#3b82f6',
-      'bg-sky-500': '#0ea5e9',
-      'bg-lime-500': '#84cc16',
-      'bg-emerald-400': '#34d399',
-      'bg-cyan-500': '#06b6d4',
-      'bg-teal-500': '#14b8a6',
-      'bg-amber-500': '#f59e0b',
-      'bg-green-500': '#22c55e',
-      'bg-orange-500': '#f97316',
-      'bg-red-500': '#ef4444',
-      'bg-purple-500': '#a855f7',
-      'bg-violet-500': '#8b5cf6',
-      'bg-indigo-500': '#6366f1',
-      'bg-fuchsia-500': '#d946ef',
-      'bg-emerald-500': '#10b981',
-      'bg-gray-500': '#6b7280',
-      'bg-slate-500': '#64748b',
-    }
+    const stage = stageByLabel.get(item.status)
     return {
-      status: config?.label || item.status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      status: stage?.label || item.status,
       count: item.count,
-      fill: colorMap[config?.color || 'bg-teal-500'] || '#14b8a6',
+      fill: stage?.color || '#6b7280',
     }
   }) : []
 

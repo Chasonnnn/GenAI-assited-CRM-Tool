@@ -7,7 +7,7 @@ Create Date: 2025-12-20
 This migration:
 1. Creates pipeline_stages table
 2. Migrates JSON stages to pipeline_stages rows
-3. Adds Case.pipeline_id, stage_id, status_label
+3. Adds Case.stage_id, status_label
 4. Adds CaseStatusHistory.from/to_stage_id + label snapshots
 5. Maps old Case.status to stage_id
 """
@@ -65,10 +65,8 @@ def upgrade() -> None:
     op.create_index('idx_stage_pipeline_active', 'pipeline_stages', ['pipeline_id', 'is_active'])
 
     # 2. Add new columns to cases
-    op.add_column('cases', sa.Column('pipeline_id', postgresql.UUID(as_uuid=True), nullable=True))
     op.add_column('cases', sa.Column('stage_id', postgresql.UUID(as_uuid=True), nullable=True))
     op.add_column('cases', sa.Column('status_label', sa.String(100), nullable=True))
-    op.create_foreign_key('fk_cases_pipeline', 'cases', 'pipelines', ['pipeline_id'], ['id'], ondelete='SET NULL')
     op.create_foreign_key('fk_cases_stage', 'cases', 'pipeline_stages', ['stage_id'], ['id'], ondelete='SET NULL')
     op.create_index('idx_cases_stage', 'cases', ['stage_id'])
 
@@ -124,7 +122,6 @@ def upgrade() -> None:
     conn.execute(sa.text("""
         UPDATE cases
         SET 
-            pipeline_id = p.id,
             stage_id = ps.id,
             status_label = ps.label
         FROM pipelines p, pipeline_stages ps
@@ -138,7 +135,6 @@ def upgrade() -> None:
     conn.execute(sa.text("""
         UPDATE cases
         SET 
-            pipeline_id = p.id,
             stage_id = ps.id,
             status_label = ps.label
         FROM pipelines p, pipeline_stages ps
@@ -157,7 +153,8 @@ def upgrade() -> None:
             from_label_snapshot = COALESCE(ps.label, case_status_history.from_status)
         FROM cases c, pipelines p, pipeline_stages ps
         WHERE c.id = case_status_history.case_id
-          AND p.id = c.pipeline_id
+          AND p.organization_id = c.organization_id
+          AND p.is_default = TRUE
           AND ps.pipeline_id = p.id 
           AND ps.slug = case_status_history.from_status
     """))
@@ -170,7 +167,8 @@ def upgrade() -> None:
             to_label_snapshot = COALESCE(ps.label, case_status_history.to_status)
         FROM cases c, pipelines p, pipeline_stages ps
         WHERE c.id = case_status_history.case_id
-          AND p.id = c.pipeline_id
+          AND p.organization_id = c.organization_id
+          AND p.is_default = TRUE
           AND ps.pipeline_id = p.id 
           AND ps.slug = case_status_history.to_status
     """))
@@ -192,10 +190,8 @@ def downgrade() -> None:
     
     op.drop_index('idx_cases_stage', 'cases')
     op.drop_constraint('fk_cases_stage', 'cases', type_='foreignkey')
-    op.drop_constraint('fk_cases_pipeline', 'cases', type_='foreignkey')
     op.drop_column('cases', 'status_label')
     op.drop_column('cases', 'stage_id')
-    op.drop_column('cases', 'pipeline_id')
     op.alter_column('cases', 'status', nullable=False)
     
     op.alter_column('pipelines', 'stages', nullable=False)

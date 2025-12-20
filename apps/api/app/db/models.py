@@ -350,11 +350,6 @@ class Case(Base):
     )
     
     # Workflow (v2: pipeline stages)
-    pipeline_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("pipelines.id", ondelete="SET NULL"),
-        nullable=False
-    )
     stage_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("pipeline_stages.id", ondelete="SET NULL"),
@@ -445,7 +440,6 @@ class Case(Base):
     organization: Mapped["Organization"] = relationship(back_populates="cases")
     created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
     archived_by: Mapped["User | None"] = relationship(foreign_keys=[archived_by_user_id])
-    pipeline: Mapped["Pipeline"] = relationship(foreign_keys=[pipeline_id])
     stage: Mapped["PipelineStage"] = relationship(foreign_keys=[stage_id])
     
     # Owner relationships for eager loading (fixes N+1 query)
@@ -2071,7 +2065,7 @@ class PipelineStage(Base):
     )
     
     # Relationships
-    pipeline: Mapped["Pipeline"] = relationship(back_populates="stage_rows")
+    pipeline: Mapped["Pipeline"] = relationship(back_populates="stages")
 
 
 # =============================================================================

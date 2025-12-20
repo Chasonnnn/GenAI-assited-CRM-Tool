@@ -17,12 +17,14 @@ async def test_create_pipeline(authed_client: AsyncClient):
     payload = {
         "name": "Test Pipeline",
         "stages": [
-            {"status": "new_unread", "label": "New", "color": "#3B82F6", "order": 1},
-            {"status": "contacted", "label": "Contacted", "color": "#F59E0B", "order": 2},
-            {"status": "delivered", "label": "Delivered", "color": "#10B981", "order": 3},
+            {"slug": "new_unread", "label": "New", "color": "#3B82F6", "stage_type": "intake", "order": 1},
+            {"slug": "contacted", "label": "Contacted", "color": "#F59E0B", "stage_type": "intake", "order": 2},
+            {"slug": "delivered", "label": "Delivered", "color": "#10B981", "stage_type": "terminal", "order": 3},
         ]
     }
     response = await authed_client.post("/settings/pipelines", json=payload)
+    if response.status_code != 201:
+        print(f"Create response: {response.status_code} - {response.text}")
     assert response.status_code == 201
     data = response.json()
     assert data["name"] == "Test Pipeline"
@@ -37,21 +39,19 @@ async def test_update_pipeline_increments_version(authed_client: AsyncClient):
     create_payload = {
         "name": "Version Test Pipeline",
         "stages": [
-            {"status": "new_unread", "label": "New", "color": "#3B82F6", "order": 1},
+            {"slug": "new_unread", "label": "New", "color": "#3B82F6", "stage_type": "intake", "order": 1},
         ]
     }
     create_resp = await authed_client.post("/settings/pipelines", json=create_payload)
+    if create_resp.status_code != 201:
+        print(f"Create response: {create_resp.status_code} - {create_resp.text}")
     assert create_resp.status_code == 201
     pipeline_id = create_resp.json()["id"]
     initial_version = create_resp.json()["current_version"]
     
-    # Update
+    # Update name only (stages unchanged)
     update_payload = {
         "name": "Version Test Pipeline Updated",
-        "stages": [
-            {"status": "new_unread", "label": "New", "color": "#3B82F6", "order": 1},
-            {"status": "contacted", "label": "Contacted", "color": "#EF4444", "order": 2},
-        ],
         "expected_version": initial_version,
     }
     update_resp = await authed_client.patch(f"/settings/pipelines/{pipeline_id}", json=update_payload)
@@ -68,10 +68,12 @@ async def test_update_pipeline_version_conflict(authed_client: AsyncClient):
     create_payload = {
         "name": "Conflict Test Pipeline",
         "stages": [
-            {"status": "new_unread", "label": "New", "color": "#3B82F6", "order": 1},
+            {"slug": "new_unread", "label": "New", "color": "#3B82F6", "stage_type": "intake", "order": 1},
         ]
     }
     create_resp = await authed_client.post("/settings/pipelines", json=create_payload)
+    if create_resp.status_code != 201:
+        print(f"Create response: {create_resp.status_code} - {create_resp.text}")
     assert create_resp.status_code == 201
     pipeline_id = create_resp.json()["id"]
     

@@ -17,7 +17,7 @@ from app.core.deps import (
     require_csrf_header,
     require_roles,
 )
-from app.db.enums import CaseSource, CaseStatus, Role, ROLES_CAN_ARCHIVE, OwnerType
+from app.db.enums import CaseSource, Role, ROLES_CAN_ARCHIVE, OwnerType
 from app.db.models import User, Queue
 from app.schemas.auth import UserSession
 from app.schemas.case import (
@@ -54,7 +54,8 @@ def _case_to_read(case, db: Session) -> CaseRead:
     return CaseRead(
         id=case.id,
         case_number=case.case_number,
-        status=CaseStatus(case.status),
+        stage_id=case.stage_id,
+        status_label=case.status_label,
         source=CaseSource(case.source),
         is_priority=case.is_priority,
         owner_type=case.owner_type,
@@ -112,7 +113,8 @@ def _case_to_list_item(case, db: Session) -> CaseListItem:
     return CaseListItem(
         id=case.id,
         case_number=case.case_number,
-        status=CaseStatus(case.status),
+        stage_id=case.stage_id,
+        status_label=case.status_label,
         source=CaseSource(case.source),
         full_name=case.full_name,
         email=case.email,
@@ -186,7 +188,7 @@ def list_cases(
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
-    status: CaseStatus | None = None,
+    stage_id: UUID | None = None,
     source: CaseSource | None = None,
     owner_id: UUID | None = None,
     q: str | None = Query(None, max_length=100),
@@ -212,7 +214,7 @@ def list_cases(
         org_id=session.org_id,
         page=page,
         per_page=per_page,
-        status=status,
+        stage_id=stage_id,
         source=source,
         owner_id=owner_id,
         q=q,
@@ -771,7 +773,7 @@ def change_status(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Change case status (records history, respects access control)."""
+    """Change case stage (records history, respects access control)."""
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
@@ -786,7 +788,7 @@ def change_status(
         case = case_service.change_status(
             db=db,
             case=case,
-            new_status=data.status,
+            new_stage_id=data.stage_id,
             user_id=session.user_id,
             user_role=session.role,
             reason=data.reason,
@@ -984,8 +986,10 @@ def get_case_history(
         
         result.append(CaseStatusHistoryRead(
             id=h.id,
-            from_status=h.from_status,
-            to_status=h.to_status,
+            from_stage_id=h.from_stage_id,
+            to_stage_id=h.to_stage_id,
+            from_label_snapshot=h.from_label_snapshot,
+            to_label_snapshot=h.to_label_snapshot,
             changed_by_user_id=h.changed_by_user_id,
             changed_by_name=changed_by_name,
             reason=h.reason,

@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.db.enums import CaseStatus, CaseSource
+from app.db.enums import CaseSource
 from app.db.models import Case, CaseStatusHistory, User
 from app.schemas.case import CaseCreate, CaseUpdate
 from app.utils.normalization import normalize_email, normalize_name
@@ -52,6 +52,7 @@ def create_case(
     from app.services import activity_service
     from app.db.enums import OwnerType
     from app.services import queue_service
+    from app.services import pipeline_service
 
     if user_id:
         owner_type = OwnerType.USER.value
@@ -61,13 +62,19 @@ def create_case(
         owner_type = OwnerType.QUEUE.value
         owner_id = default_queue.id
     
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id, user_id)
+    default_stage = pipeline_service.get_default_stage(db, pipeline.id)
+    if not default_stage:
+        raise ValueError("Default pipeline has no active stages")
+
     case = Case(
         case_number=generate_case_number(db, org_id),
         organization_id=org_id,
         created_by_user_id=user_id,
         owner_type=owner_type,
         owner_id=owner_id,
-        status=CaseStatus.NEW_UNREAD.value,
+        stage_id=default_stage.id,
+        status_label=default_stage.label,
         source=data.source.value,
         full_name=normalize_name(data.full_name),
         email=normalize_email(data.email),
@@ -194,48 +201,59 @@ def update_case(
 def change_status(
     db: Session,
     case: Case,
-    new_status: CaseStatus,
-    user_id: UUID,
-    user_role: "Role",  # Import at runtime to avoid circular
+    new_stage_id: UUID,
+    user_id: UUID | None,
+    user_role: "Role | None",  # Import at runtime to avoid circular
     reason: str | None = None,
 ) -> Case:
     """
-    Change case status and record history.
+    Change case stage and record history.
     
-    No-op if status unchanged.
+    No-op if stage unchanged.
     
-    Transition guard: Intake specialists cannot set CASE_MANAGER_ONLY statuses.
+    Transition guard: Intake specialists cannot set post_approval stages.
     Returns:
         Case object or raises error if transition not allowed
     """
     from app.db.enums import Role
-    from app.services import activity_service
+    from app.services import pipeline_service
     
-    old_status = case.status
+    old_stage_id = case.stage_id
+    old_label = case.status_label
+    old_stage = pipeline_service.get_stage_by_id(db, old_stage_id) if old_stage_id else None
+    old_slug = old_stage.slug if old_stage else None
+    case_pipeline_id = old_stage.pipeline_id if old_stage else None
+    if not case_pipeline_id:
+        case_pipeline_id = pipeline_service.get_or_create_default_pipeline(
+            db,
+            case.organization_id,
+        ).id
     
-    # Capture requested status for CAPI (no auto-transition anymore)
-    requested_status = new_status.value
-    
-    # NOTE: Auto-transition from approved → pending_handoff was REMOVED
-    # Intake specialists should manually set 'pending_handoff' when ready to submit to case manager
+    new_stage = pipeline_service.get_stage_by_id(db, new_stage_id)
+    if not new_stage or not new_stage.is_active:
+        raise ValueError("Invalid or inactive stage")
+    if new_stage.pipeline_id != case_pipeline_id:
+        raise ValueError("Stage does not belong to case pipeline")
     
     # Transition guard: Intake cannot set CASE_MANAGER_ONLY statuses
-    if user_role == Role.INTAKE_SPECIALIST:
-        if new_status.value in CaseStatus.case_manager_only():
-            raise ValueError(f"Intake specialists cannot set status to {new_status.value}")
+    if user_role == Role.INTAKE_SPECIALIST and new_stage.stage_type == "post_approval":
+        raise ValueError(f"Intake specialists cannot set stage to {new_stage.slug}")
     
     # No-op if same status
-    if old_status == new_status.value:
+    if old_stage_id == new_stage.id:
         return case
     
-    case.status = new_status.value
+    case.stage_id = new_stage.id
+    case.status_label = new_stage.label
     
-    # Record history (legacy table)
+    # Record history
     history = CaseStatusHistory(
         case_id=case.id,
         organization_id=case.organization_id,
-        from_status=old_status,
-        to_status=new_status.value,
+        from_stage_id=old_stage_id,
+        to_stage_id=new_stage.id,
+        from_label_snapshot=old_label,
+        to_label_snapshot=new_stage.label,
         changed_by_user_id=user_id,
         reason=reason,
     )
@@ -255,23 +273,23 @@ def change_status(
     notification_service.notify_case_status_changed(
         db=db,
         case=case,
-        from_status=old_status,
-        to_status=new_status.value,
-        actor_id=user_id,
+        from_status=old_label,
+        to_status=new_stage.label,
+        actor_id=user_id or case.created_by_user_id or case.owner_id,
         actor_name=actor_name,
     )
     
     # If transitioning to pending_handoff, notify all case_manager+
-    if new_status == CaseStatus.PENDING_HANDOFF:
+    if new_stage.slug == "pending_handoff":
         notification_service.notify_case_handoff_ready(db=db, case=case)
     
     # Meta CAPI: Send lead quality signal for Meta-sourced cases
     # Uses requested_status (before auto-transition) so 'approved' triggers CAPI
-    _maybe_send_capi_event(db, case, old_status, requested_status)
+    _maybe_send_capi_event(db, case, old_slug or "", new_stage.slug)
     
     # Trigger workflows for status change
     from app.services import workflow_triggers
-    workflow_triggers.trigger_status_changed(db, case, old_status, new_status.value)
+    workflow_triggers.trigger_status_changed(db, case, old_stage_id, new_stage.id, old_slug, new_stage.slug)
     
     return case
 
@@ -350,17 +368,30 @@ def accept_handoff(
     """
     from app.services import activity_service
     
-    if case.status != CaseStatus.PENDING_HANDOFF.value:
-        return None, f"Case is not pending handoff (current: {case.status})"
+    from app.services import pipeline_service
+    current_stage = pipeline_service.get_stage_by_id(db, case.stage_id)
+    pipeline_id = current_stage.pipeline_id if current_stage else None
+    if not pipeline_id:
+        pipeline_id = pipeline_service.get_or_create_default_pipeline(db, case.organization_id).id
+    handoff_stage = pipeline_service.get_stage_by_slug(db, pipeline_id, "pending_handoff")
+    target_stage = pipeline_service.get_stage_by_slug(db, pipeline_id, "pending_match")
+    if not handoff_stage or not target_stage:
+        return None, "Required handoff stages are not configured"
+    if case.stage_id != handoff_stage.id:
+        return None, f"Case is not pending handoff (current: {case.status_label})"
     
-    old_status = case.status
-    case.status = CaseStatus.PENDING_MATCH.value
+    old_stage_id = case.stage_id
+    old_label = case.status_label
+    case.stage_id = target_stage.id
+    case.status_label = target_stage.label
     
     history = CaseStatusHistory(
         case_id=case.id,
         organization_id=case.organization_id,
-        from_status=old_status,
-        to_status=CaseStatus.PENDING_MATCH.value,
+        from_stage_id=old_stage_id,
+        to_stage_id=target_stage.id,
+        from_label_snapshot=old_label,
+        to_label_snapshot=target_stage.label,
         changed_by_user_id=user_id,
         reason="Handoff accepted by case manager",
     )
@@ -408,17 +439,30 @@ def deny_handoff(
     """
     from app.services import activity_service
     
-    if case.status != CaseStatus.PENDING_HANDOFF.value:
-        return None, f"Case is not pending handoff (current: {case.status})"
+    from app.services import pipeline_service
+    current_stage = pipeline_service.get_stage_by_id(db, case.stage_id)
+    pipeline_id = current_stage.pipeline_id if current_stage else None
+    if not pipeline_id:
+        pipeline_id = pipeline_service.get_or_create_default_pipeline(db, case.organization_id).id
+    handoff_stage = pipeline_service.get_stage_by_slug(db, pipeline_id, "pending_handoff")
+    target_stage = pipeline_service.get_stage_by_slug(db, pipeline_id, "under_review")
+    if not handoff_stage or not target_stage:
+        return None, "Required handoff stages are not configured"
+    if case.stage_id != handoff_stage.id:
+        return None, f"Case is not pending handoff (current: {case.status_label})"
     
-    old_status = case.status
-    case.status = CaseStatus.UNDER_REVIEW.value
+    old_stage_id = case.stage_id
+    old_label = case.status_label
+    case.stage_id = target_stage.id
+    case.status_label = target_stage.label
     
     history = CaseStatusHistory(
         case_id=case.id,
         organization_id=case.organization_id,
-        from_status=old_status,
-        to_status=CaseStatus.UNDER_REVIEW.value,
+        from_stage_id=old_stage_id,
+        to_stage_id=target_stage.id,
+        from_label_snapshot=old_label,
+        to_label_snapshot=target_stage.label,
         changed_by_user_id=user_id,
         reason=reason or "Handoff denied by case manager",
     )
@@ -534,14 +578,12 @@ def archive_case(
     case: Case,
     user_id: UUID,
 ) -> Case:
-    """Soft-delete a case (set is_archived and status=ARCHIVED)."""
+    """Soft-delete a case (set is_archived)."""
     from app.services import activity_service
     
     if case.is_archived:
         return case  # Already archived
     
-    prior_status = case.status
-    case.status = CaseStatus.ARCHIVED.value  # Actually set status to archived
     case.is_archived = True
     case.archived_at = datetime.now(timezone.utc)
     case.archived_by_user_id = user_id
@@ -550,10 +592,12 @@ def archive_case(
     history = CaseStatusHistory(
         case_id=case.id,
         organization_id=case.organization_id,
-        from_status=prior_status,
-        to_status=CaseStatus.ARCHIVED.value,
+        from_stage_id=case.stage_id,
+        to_stage_id=case.stage_id,
+        from_label_snapshot=case.status_label,
+        to_label_snapshot=case.status_label,
         changed_by_user_id=user_id,
-        reason=f"Case archived (was: {prior_status})",
+        reason="Case archived",
     )
     db.add(history)
     db.commit()
@@ -598,18 +642,6 @@ def restore_case(
     if existing:
         return None, f"Email already in use by case #{existing.case_number}"
     
-    # Find the prior status from the archive history entry
-    archive_history = db.query(CaseStatusHistory).filter(
-        CaseStatusHistory.case_id == case.id,
-        CaseStatusHistory.to_status == CaseStatus.ARCHIVED.value,
-    ).order_by(CaseStatusHistory.changed_at.desc()).first()
-    
-    # Get prior status from archive history, default to NEW_UNREAD
-    prior_status = CaseStatus.NEW_UNREAD.value  # Safe fallback
-    if archive_history and archive_history.from_status:
-        prior_status = archive_history.from_status
-    
-    case.status = prior_status  # Actually restore the status
     case.is_archived = False
     case.archived_at = None
     case.archived_by_user_id = None
@@ -618,10 +650,12 @@ def restore_case(
     history = CaseStatusHistory(
         case_id=case.id,
         organization_id=case.organization_id,
-        from_status=CaseStatus.ARCHIVED.value,
-        to_status=prior_status,
+        from_stage_id=case.stage_id,
+        to_stage_id=case.stage_id,
+        from_label_snapshot=case.status_label,
+        to_label_snapshot=case.status_label,
         changed_by_user_id=user_id,
-        reason=f"Case restored (back to: {prior_status})",
+        reason="Case restored",
     )
     db.add(history)
     db.commit()
@@ -660,7 +694,7 @@ def list_cases(
     org_id: UUID,
     page: int = 1,
     per_page: int = 20,
-    status: CaseStatus | None = None,
+    stage_id: UUID | None = None,
     source: CaseSource | None = None,
     owner_id: UUID | None = None,
     q: str | None = None,
@@ -716,8 +750,8 @@ def list_cases(
             query = query.filter(Case.id.is_(None))
     
     # Status filter
-    if status:
-        query = query.filter(Case.status == status.value)
+    if stage_id:
+        query = query.filter(Case.stage_id == stage_id)
     
     # Source filter
     if source:
@@ -782,9 +816,15 @@ def list_handoff_queue(
     Returns:
         (cases, total_count)
     """
+    from app.services import pipeline_service
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
+    handoff_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "pending_handoff")
+    if not handoff_stage:
+        return [], 0
+
     query = db.query(Case).filter(
         Case.organization_id == org_id,
-        Case.status == CaseStatus.PENDING_HANDOFF.value,
+        Case.stage_id == handoff_stage.id,
         Case.is_archived == False,
     ).order_by(Case.created_at.desc())
     
@@ -844,14 +884,14 @@ def get_case_stats(db: Session, org_id: UUID) -> dict:
     
     # Count by status
     status_counts = db.query(
-        Case.status,
+        Case.status_label,
         func.count(Case.id).label('count')
     ).filter(
         Case.organization_id == org_id,
         Case.is_archived == False,
-    ).group_by(Case.status).all()
+    ).group_by(Case.status_label).all()
     
-    by_status = {row.status: row.count for row in status_counts}
+    by_status = {row.status_label: row.count for row in status_counts}
     
     # This week
     this_week = base.filter(Case.created_at >= week_ago).count()

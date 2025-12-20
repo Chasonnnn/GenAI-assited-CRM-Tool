@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.db.models import (
     Case, EntityNote, Task, AIActionApproval
 )
-from app.db.enums import CaseStatus, TaskType
+from app.db.enums import TaskType
 
 logger = logging.getLogger(__name__)
 
@@ -142,42 +142,55 @@ class UpdateStatusExecutor(ActionExecutor):
     action_type = "update_status"
     
     def validate(self, payload: dict[str, Any], db: Session, user_id: uuid.UUID, org_id: uuid.UUID) -> tuple[bool, str | None]:
-        new_status = payload.get("status") or payload.get("new_status")
-        if not new_status:
-            return False, "New status is required"
+        stage_id = payload.get("stage_id")
+        if not stage_id:
+            return False, "stage_id is required"
         
-        # Validate status is a valid enum value
-        valid_statuses = [s.value for s in CaseStatus]
-        if new_status not in valid_statuses:
-            return False, f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+        from app.services import pipeline_service
+        stage = pipeline_service.get_stage_by_id(db, stage_id)
+        if not stage or not stage.is_active:
+            return False, "Invalid or inactive stage"
         
         return True, None
     
     def execute(self, payload: dict[str, Any], db: Session, user_id: uuid.UUID, org_id: uuid.UUID, entity_id: uuid.UUID) -> dict[str, Any]:
-        new_status = payload.get("status") or payload.get("new_status")
+        stage_id = payload.get("stage_id")
         
         case = db.query(Case).filter(Case.id == entity_id, Case.organization_id == org_id).first()
         if not case:
             return {"action": "update_status", "success": False, "error": "Case not found"}
         
-        old_status = case.status  # status is a string, not enum
-        case.status = new_status  # assign string value directly
+        from app.services import pipeline_service
+        stage = pipeline_service.get_stage_by_id(db, stage_id)
+        current_stage = pipeline_service.get_stage_by_id(db, case.stage_id)
+        case_pipeline_id = current_stage.pipeline_id if current_stage else None
+        if not case_pipeline_id:
+            case_pipeline_id = pipeline_service.get_or_create_default_pipeline(db, org_id).id
+        if not stage or not stage.is_active or stage.pipeline_id != case_pipeline_id:
+            return {"action": "update_status", "success": False, "error": "Invalid stage for case pipeline"}
+        
+        old_stage_id = case.stage_id
+        old_label = case.status_label
+        case.stage_id = stage.id
+        case.status_label = stage.label
         
         # Add status history entry
         from app.db.models import CaseStatusHistory
         history = CaseStatusHistory(
             case_id=entity_id,
             organization_id=org_id,
-            from_status=old_status,
-            to_status=new_status,
+            from_stage_id=old_stage_id,
+            to_stage_id=stage.id,
+            from_label_snapshot=old_label,
+            to_label_snapshot=stage.label,
             changed_by_user_id=user_id,
         )
         db.add(history)
         
         return {
             "action": "update_status",
-            "old_status": old_status,
-            "new_status": new_status,
+            "old_stage_id": str(old_stage_id) if old_stage_id else None,
+            "new_stage_id": str(stage.id),
             "success": True,
         }
 

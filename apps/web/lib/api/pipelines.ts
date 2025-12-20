@@ -5,12 +5,30 @@
 import { api } from '../api';
 
 // Types
+export type StageType = 'intake' | 'post_approval' | 'terminal';
+
 export interface PipelineStage {
-    status: string;
+    id: string;
+    slug: string;
     label: string;
     color: string;
     order: number;
-    visible: boolean;
+    stage_type: StageType;
+    is_active: boolean;
+}
+
+export interface StageCreate {
+    slug: string;
+    label: string;
+    color: string;
+    stage_type: StageType;
+    order?: number;
+}
+
+export interface StageUpdate {
+    label?: string;
+    color?: string;
+    order?: number;
 }
 
 export interface Pipeline {
@@ -25,7 +43,6 @@ export interface Pipeline {
 
 export interface PipelineUpdate {
     name?: string;
-    stages?: PipelineStage[];
     expected_version?: number;
     comment?: string;
 }
@@ -35,7 +52,14 @@ export interface PipelineVersion {
     version: number;
     payload: {
         name: string;
-        stages: PipelineStage[];
+        stages: Array<{
+            slug: string;
+            label: string;
+            color: string;
+            order: number;
+            stage_type: StageType;
+            is_active: boolean;
+        }>;
     };
     comment: string | null;
     created_by_user_id: string | null;
@@ -54,11 +78,15 @@ export async function listPipelines(): Promise<Pipeline[]> {
     return api.get<Pipeline[]>('/settings/pipelines');
 }
 
+export async function getDefaultPipeline(): Promise<Pipeline> {
+    return api.get<Pipeline>('/settings/pipelines/default');
+}
+
 export async function getPipeline(id: string): Promise<Pipeline> {
     return api.get<Pipeline>(`/settings/pipelines/${id}`);
 }
 
-export async function createPipeline(name: string, stages?: PipelineStage[]): Promise<Pipeline> {
+export async function createPipeline(name: string, stages?: StageCreate[]): Promise<Pipeline> {
     return api.post<Pipeline>('/settings/pipelines', { name, stages });
 }
 
@@ -68,6 +96,42 @@ export async function updatePipeline(id: string, data: PipelineUpdate): Promise<
 
 export async function deletePipeline(id: string): Promise<void> {
     return api.delete(`/settings/pipelines/${id}`);
+}
+
+// ============================================================================
+// Stage CRUD API
+// ============================================================================
+
+export async function listStages(pipelineId: string, includeInactive = false): Promise<PipelineStage[]> {
+    const params = new URLSearchParams();
+    if (includeInactive) params.set('include_inactive', 'true');
+    const query = params.toString();
+    return api.get<PipelineStage[]>(`/settings/pipelines/${pipelineId}/stages${query ? `?${query}` : ''}`);
+}
+
+export async function createStage(pipelineId: string, data: StageCreate): Promise<PipelineStage> {
+    return api.post<PipelineStage>(`/settings/pipelines/${pipelineId}/stages`, data);
+}
+
+export async function updateStage(pipelineId: string, stageId: string, data: StageUpdate): Promise<PipelineStage> {
+    return api.put<PipelineStage>(`/settings/pipelines/${pipelineId}/stages/${stageId}`, data);
+}
+
+export async function deleteStage(
+    pipelineId: string,
+    stageId: string,
+    migrateToStageId: string,
+): Promise<{ deleted: boolean; migrated_cases: number }> {
+    return api.delete<{ deleted: boolean; migrated_cases: number }>(
+        `/settings/pipelines/${pipelineId}/stages/${stageId}`,
+        { body: { migrate_to_stage_id: migrateToStageId } }
+    );
+}
+
+export async function reorderStages(pipelineId: string, orderedStageIds: string[]): Promise<PipelineStage[]> {
+    return api.put<PipelineStage[]>(`/settings/pipelines/${pipelineId}/stages/reorder`, {
+        ordered_stage_ids: orderedStageIds,
+    });
 }
 
 // ============================================================================

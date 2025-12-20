@@ -113,7 +113,7 @@
 **Status:** Functional but missing features
 
 **Requirements:**
-- Switch to Gemini 2.0 Flash model (from OpenAI)
+- Switch to **Gemini 3 Flash** model (latest)
 - Move conversation history to LEFT sidebar (not right)
 - Token usage monitor (track per-org usage)
 - Token budget alerts

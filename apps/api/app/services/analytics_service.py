@@ -10,13 +10,28 @@ from typing import Any
 from sqlalchemy import func, case as sql_case, and_, extract
 from sqlalchemy.orm import Session
 
-from app.db.models import Case, CaseStatusHistory
-from app.db.enums import CaseStatus, CaseSource, OwnerType
+from app.db.models import Case, CaseStatusHistory, PipelineStage
+from app.db.enums import CaseSource, OwnerType
 
 
 # ============================================================================
 # Cases Trend (Time Series)
 # ============================================================================
+
+FUNNEL_SLUGS = [
+    "new_unread",
+    "contacted",
+    "qualified",
+    "pending_match",
+    "meds_started",
+]
+
+
+def _get_default_pipeline_stages(db: Session, organization_id: uuid.UUID) -> list[PipelineStage]:
+    """Get active stages for the default pipeline."""
+    from app.services import pipeline_service
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
+    return pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
 
 def get_cases_trend(
     db: Session,
@@ -104,7 +119,7 @@ def get_cases_by_status(
         start_date = end_date - timedelta(days=30)
     
     query = db.query(
-        Case.status,
+        Case.status_label,
         func.count(Case.id).label("count"),
     ).filter(
         Case.organization_id == organization_id,
@@ -114,9 +129,9 @@ def get_cases_by_status(
     if source:
         query = query.filter(Case.source == source)
     
-    results = query.group_by(Case.status).all()
+    results = query.group_by(Case.status_label).all()
     
-    return {r.status: r.count for r in results}
+    return {r.status_label: r.count for r in results}
 
 
 def get_status_trend(
@@ -134,14 +149,14 @@ def get_status_trend(
     # Get status changes over time
     results = db.query(
         func.date(CaseStatusHistory.changed_at).label("date"),
-        CaseStatusHistory.new_status,
+        func.coalesce(CaseStatusHistory.to_label_snapshot, "unknown").label("status_label"),
         func.count(CaseStatusHistory.id).label("count"),
     ).filter(
         CaseStatusHistory.changed_at >= start_date,
         CaseStatusHistory.changed_at <= end_date,
     ).group_by(
         func.date(CaseStatusHistory.changed_at),
-        CaseStatusHistory.new_status,
+        func.coalesce(CaseStatusHistory.to_label_snapshot, "unknown"),
     ).order_by(func.date(CaseStatusHistory.changed_at)).all()
     
     # Transform to chart format
@@ -150,8 +165,7 @@ def get_status_trend(
         date_str = r.date.isoformat()
         if date_str not in data_by_date:
             data_by_date[date_str] = {}
-        status_val = r.new_status if isinstance(r.new_status, str) else r.new_status.value
-        data_by_date[date_str][status_val] = r.count
+        data_by_date[date_str][r.status_label] = r.count
     
     return [
         {"date": d, **statuses}
@@ -282,14 +296,14 @@ def get_conversion_funnel(
     end_date: date | None = None,
 ) -> list[dict[str, Any]]:
     """Get conversion funnel data."""
-    # Define funnel stages in order (matching actual CaseStatus values)
-    funnel_stages = [
-        ("new_unread", "New Leads"),
-        ("contacted", "Contacted"),
-        ("qualified", "Qualified"),
-        ("pending_match", "Matched"),
-        ("meds_started", "Active"),
-    ]
+    stages = _get_default_pipeline_stages(db, organization_id)
+    stage_by_slug = {s.slug: s for s in stages if s.is_active}
+    funnel_stages = [stage_by_slug[slug] for slug in FUNNEL_SLUGS if slug in stage_by_slug]
+    if not funnel_stages:
+        funnel_stages = sorted(
+            [s for s in stages if s.is_active],
+            key=lambda s: s.order
+        )[:5]
     
     query = db.query(Case).filter(
         Case.organization_id == organization_id,
@@ -305,12 +319,12 @@ def get_conversion_funnel(
     total = query.count()
     
     funnel_data = []
-    for status_value, label in funnel_stages:
+    for stage in funnel_stages:
         # Count cases currently at or past this stage
-        count = query.filter(Case.status == status_value).count()
+        count = query.filter(Case.stage_id == stage.id).count()
         funnel_data.append({
-            "stage": status_value,
-            "label": label,
+            "stage": stage.slug,
+            "label": stage.label,
             "count": count,
             "percentage": round((count / total * 100) if total > 0 else 0, 1),
         })
@@ -369,10 +383,21 @@ def get_summary_kpis(
     
     # Cases needing attention (not contacted in 7+ days)
     stale_date = datetime.utcnow() - timedelta(days=7)
+    stages = _get_default_pipeline_stages(db, organization_id)
+    stage_by_slug = {s.slug: s for s in stages if s.is_active}
+    attention_stage_ids = [
+        s.id for s in [
+            stage_by_slug.get("new_unread"),
+            stage_by_slug.get("contacted"),
+        ] if s
+    ]
+    if not attention_stage_ids and stages:
+        attention_stage_ids = [s.id for s in sorted(stages, key=lambda s: s.order)[:2]]
+
     needs_attention = db.query(func.count(Case.id)).filter(
         Case.organization_id == organization_id,
         Case.is_archived == False,
-        Case.status.in_(["new_unread", "contacted"]),
+        Case.stage_id.in_(attention_stage_ids),
         (Case.last_contacted_at.is_(None)) | (Case.last_contacted_at < stale_date),
     ).scalar() or 0
     
@@ -424,13 +449,14 @@ def get_funnel_with_filter(
     ad_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Get conversion funnel data with optional campaign filter."""
-    funnel_stages = [
-        ("lead_new", "New Leads"),
-        ("contacted", "Contacted"),
-        ("qualified", "Qualified"),
-        ("matched", "Matched"),
-        ("active", "Active"),
-    ]
+    stages = _get_default_pipeline_stages(db, organization_id)
+    stage_by_slug = {s.slug: s for s in stages if s.is_active}
+    funnel_stages = [stage_by_slug[slug] for slug in FUNNEL_SLUGS if slug in stage_by_slug]
+    if not funnel_stages:
+        funnel_stages = sorted(
+            [s for s in stages if s.is_active],
+            key=lambda s: s.order
+        )[:5]
     
     query = db.query(Case).filter(
         Case.organization_id == organization_id,
@@ -447,11 +473,11 @@ def get_funnel_with_filter(
     total = query.count()
     
     funnel_data = []
-    for status_value, label in funnel_stages:
-        count = query.filter(Case.status == status_value).count()
+    for stage in funnel_stages:
+        count = query.filter(Case.stage_id == stage.id).count()
         funnel_data.append({
-            "stage": status_value,
-            "label": label,
+            "stage": stage.slug,
+            "label": stage.label,
             "count": count,
             "percentage": round((count / total * 100) if total > 0 else 0, 1),
         })
