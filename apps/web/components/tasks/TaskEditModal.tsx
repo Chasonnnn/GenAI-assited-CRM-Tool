@@ -157,7 +157,7 @@ export function TaskEditModal({ task, open, onClose, onSave }: TaskEditModalProp
                             <div className="space-y-2">
                                 <Label>Due Date</Label>
                                 <Popover>
-                                    <PopoverTrigger asChild>
+                                    <PopoverTrigger render={
                                         <Button
                                             variant="outline"
                                             className={cn(
@@ -168,7 +168,7 @@ export function TaskEditModal({ task, open, onClose, onSave }: TaskEditModalProp
                                             <CalendarIcon className="mr-2 size-4" />
                                             {dueDate ? format(dueDate, "PPP") : "Select date"}
                                         </Button>
-                                    </PopoverTrigger>
+                                    } />
                                     <PopoverContent className="w-auto p-0" align="start">
                                         <Calendar
                                             mode="single"
