@@ -129,7 +129,11 @@ def resolve_user_and_create_session(
         
         if not membership:
             return None, "no_membership"
-        
+
+        # Track last login time
+        user.last_login_at = datetime.now(timezone.utc)
+        db.commit()
+
         token = create_session_token(
             user.id, 
             membership.organization_id, 
@@ -155,6 +159,10 @@ def resolve_user_and_create_session(
     
     # Create user from invite
     user, membership = create_user_from_invite(db, invite, google_user)
+
+    # Track last login time for new users
+    user.last_login_at = datetime.now(timezone.utc)
+    db.commit()
     
     token = create_session_token(
         user.id,

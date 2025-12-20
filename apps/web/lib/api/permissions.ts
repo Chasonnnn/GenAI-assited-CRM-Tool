@@ -72,49 +72,40 @@ export interface EffectivePermissions {
 // API Functions
 
 export async function getAvailablePermissions(): Promise<PermissionInfo[]> {
-    const res = await api.get<PermissionInfo[]>("/settings/permissions/available")
-    return res.data
+    return api.get<PermissionInfo[]>("/settings/permissions/available")
 }
 
 export async function getMembers(): Promise<Member[]> {
-    const res = await api.get<Member[]>("/settings/permissions/members")
-    return res.data
+    return api.get<Member[]>("/settings/permissions/members")
 }
 
 export async function getMember(memberId: string): Promise<MemberDetail> {
-    const res = await api.get<MemberDetail>(`/settings/permissions/members/${memberId}`)
-    return res.data
+    return api.get<MemberDetail>(`/settings/permissions/members/${memberId}`)
 }
 
 export async function updateMember(memberId: string, data: MemberUpdate): Promise<MemberDetail> {
-    const res = await api.patch<MemberDetail>(`/settings/permissions/members/${memberId}`, data)
-    return res.data
+    return api.patch<MemberDetail>(`/settings/permissions/members/${memberId}`, data)
 }
 
 export async function removeMember(memberId: string): Promise<{ removed: boolean; user_id: string }> {
-    const res = await api.delete<{ removed: boolean; user_id: string }>(`/settings/permissions/members/${memberId}`)
-    return res.data
+    return api.delete<{ removed: boolean; user_id: string }>(`/settings/permissions/members/${memberId}`)
 }
 
 export async function getEffectivePermissions(userId: string): Promise<EffectivePermissions> {
-    const res = await api.get<EffectivePermissions>(`/settings/permissions/effective/${userId}`)
-    return res.data
+    return api.get<EffectivePermissions>(`/settings/permissions/effective/${userId}`)
 }
 
 export async function getRoles(): Promise<RoleSummary[]> {
-    const res = await api.get<RoleSummary[]>("/settings/permissions/roles")
-    return res.data
+    return api.get<RoleSummary[]>("/settings/permissions/roles")
 }
 
 export async function getRoleDetail(role: string): Promise<RoleDetail> {
-    const res = await api.get<RoleDetail>(`/settings/permissions/roles/${role}`)
-    return res.data
+    return api.get<RoleDetail>(`/settings/permissions/roles/${role}`)
 }
 
 export async function updateRolePermissions(
     role: string,
     permissions: Record<string, boolean>
 ): Promise<RoleDetail> {
-    const res = await api.patch<RoleDetail>(`/settings/permissions/roles/${role}`, { permissions })
-    return res.data
+    return api.patch<RoleDetail>(`/settings/permissions/roles/${role}`, { permissions })
 }

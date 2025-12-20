@@ -29,6 +29,12 @@ def create_org(db: Session, name: str, slug: str) -> Organization:
     db.add(org)
     db.commit()
     db.refresh(org)
+
+    # Seed default role permissions for new org
+    from app.services import permission_service
+    permission_service.seed_role_defaults(db, org.id)
+    db.commit()
+
     return org
 
 

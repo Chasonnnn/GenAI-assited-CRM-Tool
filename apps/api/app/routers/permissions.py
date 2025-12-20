@@ -272,6 +272,10 @@ def update_member(
     
     membership, user = result
     
+    # Protect developer accounts from non-developer edits
+    if membership.role == Role.DEVELOPER.value and session.role != Role.DEVELOPER:
+        raise HTTPException(403, "Only Developers can modify Developer accounts")
+
     # Self-modification check
     if user.id == session.user_id:
         raise HTTPException(403, "Cannot modify your own permissions")
@@ -305,18 +309,24 @@ def update_member(
                         f"Cannot grant permission '{override.permission}' - you don't have it"
                     )
             
-            permission_service.set_user_override(
-                db, session.org_id, user.id, session.user_id,
-                override.permission, override.override_type
-            )
+            try:
+                permission_service.set_user_override(
+                    db, session.org_id, user.id, session.user_id,
+                    override.permission, override.override_type
+                )
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
     
     # Remove overrides
     if data.remove_overrides:
         for permission in data.remove_overrides:
-            permission_service.set_user_override(
-                db, session.org_id, user.id, session.user_id,
-                permission, None  # None = delete
-            )
+            try:
+                permission_service.set_user_override(
+                    db, session.org_id, user.id, session.user_id,
+                    permission, None  # None = delete
+                )
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
     
     db.commit()
     
@@ -352,6 +362,10 @@ def remove_member(
     
     membership, user = result
     
+    # Protect developer accounts from non-developer removal
+    if membership.role == Role.DEVELOPER.value and session.role != Role.DEVELOPER:
+        raise HTTPException(403, "Only Developers can remove Developer accounts")
+
     if user.id == session.user_id:
         raise HTTPException(403, "Cannot remove yourself from the organization")
     
@@ -522,9 +536,12 @@ def update_role_permissions(
         raise HTTPException(400, "Developer role permissions cannot be modified")
     
     for permission, is_granted in data.permissions.items():
-        permission_service.set_role_default(
-            db, session.org_id, role, permission, is_granted, session.user_id
-        )
+        try:
+            permission_service.set_role_default(
+                db, session.org_id, role, permission, is_granted, session.user_id
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
     
     db.commit()
     
