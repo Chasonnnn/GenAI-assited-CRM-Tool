@@ -55,3 +55,6 @@ pytz>=2024.1
 
 # Rate limiting (distributed storage for multi-worker setups)
 redis>=5.0.0
+
+# Export storage (S3)
+boto3>=1.34.0

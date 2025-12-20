@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.db.models import MetaPageMapping
-from app.db.enums import AlertType, AlertSeverity, IntegrationType, ConfigStatus
+from app.db.enums import AlertType, AlertSeverity, IntegrationType, ConfigStatus, JobType
 from app.services import alert_service, ops_service
 
 
@@ -185,3 +185,37 @@ def workflow_sweep(
         workflows_triggered=0,  # Actual count happens in worker
     )
 
+
+class DataPurgeScheduleResponse(BaseModel):
+    orgs_processed: int
+    jobs_created: int
+
+
+@router.post("/data-purge", response_model=DataPurgeScheduleResponse)
+def data_purge_schedule(x_internal_secret: str = Header(...)):
+    """Schedule data purge jobs for all organizations."""
+    verify_internal_secret(x_internal_secret)
+
+    from app.db.models import Organization
+    from app.services import job_service
+
+    orgs_processed = 0
+    jobs_created = 0
+
+    with SessionLocal() as db:
+        orgs = db.query(Organization).all()
+        for org in orgs:
+            job_service.schedule_job(
+                db=db,
+                job_type=JobType.DATA_PURGE,
+                org_id=org.id,
+                payload={"org_id": str(org.id)},
+            )
+            orgs_processed += 1
+            jobs_created += 1
+        db.commit()
+
+    return DataPurgeScheduleResponse(
+        orgs_processed=orgs_processed,
+        jobs_created=jobs_created,
+    )

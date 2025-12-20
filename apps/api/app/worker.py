@@ -183,6 +183,12 @@ async def process_job(db, job) -> None:
         
     elif job.job_type == JobType.CSV_IMPORT.value:
         await process_csv_import(db, job)
+
+    elif job.job_type == JobType.EXPORT_GENERATION.value:
+        await process_export_generation(db, job)
+
+    elif job.job_type == JobType.DATA_PURGE.value:
+        await process_data_purge(db, job)
         
     else:
         raise Exception(f"Unknown job type: {job.job_type}")
@@ -612,6 +618,35 @@ async def process_csv_import(db, job) -> None:
         db.commit()
         logger.error(f"CSV import failed: {import_id} - {e}")
         raise
+
+
+async def process_export_generation(db, job) -> None:
+    """Process export generation job."""
+    from app.services import compliance_service
+
+    payload = job.payload or {}
+    export_job_id = payload.get("export_job_id")
+    if not export_job_id:
+        raise Exception("Missing export_job_id in job payload")
+
+    compliance_service.process_export_job(db, UUID(export_job_id))
+
+
+async def process_data_purge(db, job) -> None:
+    """Process data purge job based on retention policies."""
+    from app.services import compliance_service
+
+    payload = job.payload or {}
+    org_id = payload.get("org_id")
+    user_id = payload.get("user_id")
+    if not org_id:
+        raise Exception("Missing org_id in job payload")
+
+    compliance_service.execute_purge(
+        db=db,
+        org_id=UUID(org_id),
+        user_id=UUID(user_id) if user_id else None,
+    )
 
 
 async def process_workflow_sweep(db, job) -> None:

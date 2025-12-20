@@ -3,10 +3,19 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import AuditLogPage from '../app/(app)/settings/audit/page'
 
 const mockUseAuditLogs = vi.fn()
+const mockUseAuditExports = vi.fn()
+const mockCreateExport = vi.fn()
+const mockRefetchExports = vi.fn()
 
 vi.mock('@/lib/hooks/use-audit', () => ({
     useAuditLogs: (filters: any) => mockUseAuditLogs(filters),
     useEventTypes: () => ({ data: ['user_login', 'pipeline_updated'] }),
+    useAuditExports: () => mockUseAuditExports(),
+    useCreateAuditExport: () => ({ mutateAsync: mockCreateExport, isPending: false }),
+}))
+
+vi.mock('@/lib/auth-context', () => ({
+    useAuth: () => ({ user: { role: 'manager' } }),
 }))
 
 describe('AuditLogPage', () => {
@@ -32,6 +41,7 @@ describe('AuditLogPage', () => {
             },
             isLoading: false,
         })
+        mockUseAuditExports.mockReturnValue({ data: { items: [] }, refetch: mockRefetchExports })
     })
 
     it('renders audit entries and supports pagination', () => {
@@ -44,4 +54,3 @@ describe('AuditLogPage', () => {
         expect(mockUseAuditLogs).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, per_page: 20 }))
     })
 })
-

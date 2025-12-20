@@ -1,10 +1,12 @@
 "use client"
 
-import { useState } from "react"
-import { format } from "date-fns"
+import { useEffect, useMemo, useState } from "react"
+import { format, formatDistanceToNow } from "date-fns"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import {
     Select,
     SelectContent,
@@ -12,8 +14,9 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { LoaderIcon, ChevronLeft, ChevronRight, FileText, User, Shield, Settings } from "lucide-react"
-import { useAuditLogs, useEventTypes } from "@/lib/hooks/use-audit"
+import { LoaderIcon, ChevronLeft, ChevronRight, FileText, User, Shield, Settings, Download, Upload } from "lucide-react"
+import { useAuditExports, useAuditLogs, useCreateAuditExport, useEventTypes } from "@/lib/hooks/use-audit"
+import { useAuth } from "@/lib/auth-context"
 
 // Event type icons and labels
 const EVENT_CONFIG: Record<string, { icon: React.ElementType; label: string; color: string }> = {
@@ -38,9 +41,22 @@ function getEventConfig(eventType: string) {
 }
 
 export default function AuditLogPage() {
+    const { user } = useAuth()
+    const isDeveloper = user?.role === "developer"
+
     const [page, setPage] = useState(1)
     const [eventTypeFilter, setEventTypeFilter] = useState<string>("all")
     const perPage = 20
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
+
+    const [exportFormat, setExportFormat] = useState<"csv" | "json">("csv")
+    const [redactMode, setRedactMode] = useState<"redacted" | "full">("redacted")
+    const [exportRange, setExportRange] = useState<DateRangePreset>("month")
+    const [customRange, setCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
+        from: undefined,
+        to: undefined,
+    })
+    const [acknowledgment, setAcknowledgment] = useState("")
 
     const filters = {
         page,
@@ -50,8 +66,62 @@ export default function AuditLogPage() {
 
     const { data: auditData, isLoading } = useAuditLogs(filters)
     const { data: eventTypes } = useEventTypes()
+    const { data: exportJobs, refetch: refetchExports } = useAuditExports()
+    const createExport = useCreateAuditExport()
 
     const totalPages = auditData ? Math.ceil(auditData.total / perPage) : 0
+
+    const hasPendingExports = useMemo(
+        () => exportJobs?.items?.some(job => ["pending", "processing"].includes(job.status)) ?? false,
+        [exportJobs]
+    )
+
+    useEffect(() => {
+        if (!hasPendingExports) return
+        const timer = setInterval(() => {
+            refetchExports()
+        }, 8000)
+        return () => clearInterval(timer)
+    }, [hasPendingExports, refetchExports])
+
+    const getExportDates = () => {
+        const now = new Date()
+        if (exportRange === "custom" && customRange.from && customRange.to) {
+            return { start: customRange.from, end: customRange.to }
+        }
+        if (exportRange === "today") {
+            const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+            return { start, end: now }
+        }
+        if (exportRange === "week") {
+            const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+            return { start, end: now }
+        }
+        if (exportRange === "month") {
+            const start = new Date(now.getFullYear(), now.getMonth(), 1)
+            return { start, end: now }
+        }
+        return { start: new Date(0), end: now }
+    }
+
+    const handleExport = async () => {
+        const { start, end } = getExportDates()
+        if (exportRange === "custom" && (!customRange.from || !customRange.to)) {
+            return
+        }
+        await createExport.mutateAsync({
+            start_date: start.toISOString(),
+            end_date: end.toISOString(),
+            format: exportFormat,
+            redact_mode: redactMode,
+            acknowledgment: redactMode === "full" ? acknowledgment : undefined,
+        })
+        setAcknowledgment("")
+    }
+
+    const handleDownload = (url: string) => {
+        window.open(`${API_BASE}${url}`, "_blank", "noopener,noreferrer")
+    }
 
     return (
         <div className="flex min-h-screen flex-col">
@@ -64,6 +134,131 @@ export default function AuditLogPage() {
 
             {/* Main Content */}
             <div className="flex-1 p-6">
+                <Card className="mb-6">
+                    <CardHeader>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <CardTitle>Export Audit Logs</CardTitle>
+                                <CardDescription>Generate compliance-ready CSV or JSON exports</CardDescription>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Download className="size-5 text-muted-foreground" />
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="flex flex-wrap gap-4">
+                            <div className="flex flex-col gap-2">
+                                <span className="text-sm text-muted-foreground">Date Range</span>
+                                <DateRangePicker
+                                    preset={exportRange}
+                                    onPresetChange={setExportRange}
+                                    customRange={customRange}
+                                    onCustomRangeChange={setCustomRange}
+                                />
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                <span className="text-sm text-muted-foreground">Format</span>
+                                <Select value={exportFormat} onValueChange={(value) => setExportFormat(value as "csv" | "json")}>
+                                    <SelectTrigger className="w-[160px]">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="csv">CSV</SelectItem>
+                                        <SelectItem value="json">JSON</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                <span className="text-sm text-muted-foreground">Redaction</span>
+                                <Select
+                                    value={redactMode}
+                                    onValueChange={(value) => setRedactMode(value as "redacted" | "full")}
+                                    disabled={!isDeveloper}
+                                >
+                                    <SelectTrigger className="w-[180px]">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="redacted">Redacted (default)</SelectItem>
+                                        <SelectItem value="full">Full (Developer)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                <span className="text-sm text-muted-foreground">Request Export</span>
+                                <Button
+                                    onClick={handleExport}
+                                    disabled={createExport.isPending || (redactMode === "full" && !acknowledgment.trim())}
+                                >
+                                    {createExport.isPending ? (
+                                        <LoaderIcon className="size-4 animate-spin mr-2" />
+                                    ) : (
+                                        <Upload className="size-4 mr-2" />
+                                    )}
+                                    Create Export
+                                </Button>
+                            </div>
+                        </div>
+
+                        {redactMode === "full" && isDeveloper && (
+                            <div className="max-w-xl space-y-2">
+                                <p className="text-sm text-muted-foreground">
+                                    Full exports contain PHI. Type confirmation to proceed.
+                                </p>
+                                <Input
+                                    placeholder="Type confirmation (e.g. I UNDERSTAND)"
+                                    value={acknowledgment}
+                                    onChange={(e) => setAcknowledgment(e.target.value)}
+                                />
+                            </div>
+                        )}
+
+                        {exportJobs?.items?.length ? (
+                            <div className="border rounded-lg">
+                                <div className="flex items-center justify-between px-4 py-2 border-b">
+                                    <span className="text-sm font-medium">Recent Exports</span>
+                                    {hasPendingExports && (
+                                        <span className="text-xs text-muted-foreground">Refreshing...</span>
+                                    )}
+                                </div>
+                                <div className="divide-y">
+                                    {exportJobs.items.slice(0, 5).map((job) => (
+                                        <div key={job.id} className="flex items-center justify-between px-4 py-3">
+                                            <div className="space-y-1">
+                                                <div className="flex items-center gap-2">
+                                                    <Badge variant="outline">{job.format.toUpperCase()}</Badge>
+                                                    <Badge variant={job.redact_mode === "full" ? "destructive" : "secondary"}>
+                                                        {job.redact_mode}
+                                                    </Badge>
+                                                    <Badge variant="outline" className="capitalize">
+                                                        {job.status}
+                                                    </Badge>
+                                                </div>
+                                                <p className="text-xs text-muted-foreground">
+                                                    Created {formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}
+                                                </p>
+                                                {job.error_message && (
+                                                    <p className="text-xs text-red-500">{job.error_message}</p>
+                                                )}
+                                            </div>
+                                            <div>
+                                                {job.download_url && (
+                                                    <Button variant="outline" size="sm" onClick={() => handleDownload(job.download_url!)}>
+                                                        Download
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="text-sm text-muted-foreground">No export jobs yet.</div>
+                        )}
+                    </CardContent>
+                </Card>
+
                 <Card>
                     <CardHeader>
                         <div className="flex items-center justify-between">

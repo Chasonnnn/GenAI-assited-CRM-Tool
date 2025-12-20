@@ -33,6 +33,29 @@ export interface AuditLogFilters {
     end_date?: string
 }
 
+export interface AuditExportJob {
+    id: string
+    status: string
+    export_type: string
+    format: string
+    redact_mode: string
+    date_range_start: string
+    date_range_end: string
+    record_count: number | null
+    error_message: string | null
+    created_at: string
+    completed_at: string | null
+    download_url: string | null
+}
+
+export interface AuditExportCreate {
+    start_date: string
+    end_date: string
+    format: 'csv' | 'json'
+    redact_mode: 'redacted' | 'full'
+    acknowledgment?: string
+}
+
 // API functions
 export async function listAuditLogs(filters: AuditLogFilters = {}): Promise<AuditLogListResponse> {
     const params = new URLSearchParams()
@@ -49,4 +72,16 @@ export async function listAuditLogs(filters: AuditLogFilters = {}): Promise<Audi
 
 export async function listEventTypes(): Promise<string[]> {
     return api.get<string[]>('/audit/event-types')
+}
+
+export async function listAuditExports(): Promise<{ items: AuditExportJob[] }> {
+    return api.get<{ items: AuditExportJob[] }>('/audit/exports')
+}
+
+export async function getAuditExport(id: string): Promise<AuditExportJob> {
+    return api.get<AuditExportJob>(`/audit/exports/${id}`)
+}
+
+export async function createAuditExport(data: AuditExportCreate): Promise<AuditExportJob> {
+    return api.post<AuditExportJob>('/audit/exports', data)
 }

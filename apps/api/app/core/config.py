@@ -89,6 +89,16 @@ class Settings(BaseSettings):
     RATE_LIMIT_AUTH: int = 5  # Login attempts
     RATE_LIMIT_WEBHOOK: int = 100  # Meta webhooks
     RATE_LIMIT_API: int = 60  # General API
+
+    # Compliance exports
+    EXPORT_STORAGE_BACKEND: str = "local"  # local or s3
+    EXPORT_LOCAL_DIR: str = ".exports"
+    EXPORT_S3_BUCKET: str = ""
+    EXPORT_S3_REGION: str = ""
+    EXPORT_S3_PREFIX: str = "exports"
+    EXPORT_URL_TTL_SECONDS: int = 3600
+    EXPORT_MAX_RECORDS: int = 50000
+    EXPORT_RATE_LIMIT_PER_HOUR: int = 5
     
     @property
     def cors_origins_list(self) -> list[str]:
