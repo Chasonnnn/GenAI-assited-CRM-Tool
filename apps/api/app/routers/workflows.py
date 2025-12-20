@@ -6,9 +6,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_roles, require_csrf_header
+from app.core.deps import get_db, require_permission, get_current_session, require_csrf_header
 from app.schemas.auth import UserSession
-from app.db.enums import Role, WorkflowTriggerType
+from app.db.enums import WorkflowTriggerType
 from app.services import workflow_service
 from app.services.workflow_engine import engine
 from app.schemas.workflow import (
@@ -31,7 +31,7 @@ def list_workflows(
     enabled_only: bool = False,
     trigger_type: WorkflowTriggerType | None = None,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_automation")),
 ):
     """List all workflows for the organization (manager+ only)."""
     workflows = workflow_service.list_workflows(
@@ -46,7 +46,7 @@ def list_workflows(
 @router.get("/options", response_model=WorkflowOptions)
 def get_workflow_options(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_automation")),
 ):
     """Get available options for workflow builder UI."""
     return workflow_service.get_workflow_options(db, session.org_id)
@@ -55,7 +55,7 @@ def get_workflow_options(
 @router.get("/stats", response_model=WorkflowStats)
 def get_workflow_stats(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_automation")),
 ):
     """Get workflow statistics for dashboard."""
     return workflow_service.get_workflow_stats(db, session.org_id)
@@ -65,7 +65,7 @@ def get_workflow_stats(
 def create_workflow(
     data: WorkflowCreate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_automation")),
 ):
     """Create a new workflow."""
     try:
@@ -84,7 +84,7 @@ def create_workflow(
 def get_workflow(
     workflow_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_automation")),
 ):
     """Get a workflow by ID."""
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
@@ -98,7 +98,7 @@ def update_workflow(
     workflow_id: UUID,
     data: WorkflowUpdate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_automation")),
 ):
     """Update a workflow."""
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
@@ -121,7 +121,7 @@ def update_workflow(
 def delete_workflow(
     workflow_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_automation")),
 ):
     """Delete a workflow."""
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
@@ -136,7 +136,7 @@ def delete_workflow(
 def toggle_workflow(
     workflow_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_automation")),
 ):
     """Toggle a workflow's enabled state."""
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
@@ -151,7 +151,7 @@ def toggle_workflow(
 def duplicate_workflow(
     workflow_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_automation")),
 ):
     """Duplicate a workflow."""
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
@@ -171,7 +171,7 @@ def test_workflow(
     workflow_id: UUID,
     request: WorkflowTestRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_automation")),
 ):
     """Test a workflow against an entity (dry run)."""
     from app.db.models import Case
@@ -253,7 +253,7 @@ def list_executions(
     limit: int = Query(default=50, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_automation")),
 ):
     """Get execution history for a workflow."""
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
@@ -274,9 +274,7 @@ def list_executions(
 @router.get("/me/preferences", response_model=list[UserWorkflowPreferenceRead])
 def get_my_preferences(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([
-        Role.INTAKE_SPECIALIST, Role.CASE_MANAGER, Role.MANAGER, Role.DEVELOPER
-    ])),
+    session: UserSession = Depends(get_current_session),
 ):
     """Get current user's workflow preferences."""
     prefs = workflow_service.get_user_preferences(db, session.user_id, session.org_id)
@@ -299,9 +297,7 @@ def update_my_preference(
     workflow_id: UUID,
     data: UserWorkflowPreferenceUpdate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([
-        Role.INTAKE_SPECIALIST, Role.CASE_MANAGER, Role.MANAGER, Role.DEVELOPER
-    ])),
+    session: UserSession = Depends(get_current_session),
 ):
     """Update user's preference for a workflow (opt in/out)."""
     # Verify workflow exists and is in user's org
