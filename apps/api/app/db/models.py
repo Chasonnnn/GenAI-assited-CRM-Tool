@@ -5,8 +5,8 @@ from datetime import date, datetime, time
 from decimal import Decimal
 
 from sqlalchemy import (
-    Boolean, Date, ForeignKey, Index, Integer, LargeBinary, Numeric, String, 
-    TIMESTAMP, Text, Time, UniqueConstraint, text
+    Boolean, CheckConstraint, Date, ForeignKey, Index, Integer, LargeBinary, 
+    Numeric, String, TIMESTAMP, Text, Time, UniqueConstraint, text
 )
 from sqlalchemy.dialects.postgresql import CITEXT, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -159,6 +159,70 @@ class Membership(Base):
     # Relationships
     user: Mapped["User"] = relationship(back_populates="membership")
     organization: Mapped["Organization"] = relationship(back_populates="memberships")
+
+
+class RolePermission(Base):
+    """
+    Org-specific role permission defaults.
+    
+    Overrides the global ROLE_DEFAULTS from permissions.py.
+    Missing rows default to False at runtime.
+    """
+    __tablename__ = "role_permissions"
+    __table_args__ = (
+        Index("idx_role_permissions_org_role", "organization_id", "role"),
+        UniqueConstraint("organization_id", "role", "permission", name="uq_role_permissions_org_role_perm"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    role: Mapped[str] = mapped_column(String(50), nullable=False)
+    permission: Mapped[str] = mapped_column(String(100), nullable=False)
+    is_granted: Mapped[bool] = mapped_column(Boolean, server_default=text("true"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+
+
+class UserPermissionOverride(Base):
+    """
+    User-level permission grants/revokes.
+    
+    Precedence: revoke > grant > role_default
+    """
+    __tablename__ = "user_permission_overrides"
+    __table_args__ = (
+        Index("idx_user_overrides_org_user", "organization_id", "user_id"),
+        UniqueConstraint("organization_id", "user_id", "permission", name="uq_user_overrides_org_user_perm"),
+        CheckConstraint("override_type IN ('grant', 'revoke')", name="ck_override_type_valid"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    permission: Mapped[str] = mapped_column(String(100), nullable=False)
+    override_type: Mapped[str] = mapped_column(String(10), nullable=False)  # 'grant' or 'revoke'
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
 
 class AuthIdentity(Base):
