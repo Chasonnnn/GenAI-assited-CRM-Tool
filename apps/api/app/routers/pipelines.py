@@ -112,7 +112,7 @@ class StageReorder(BaseModel):
 @router.get("", response_model=list[PipelineRead])
 def list_pipelines(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
 ):
     """
     List all pipelines for the organization.
@@ -166,7 +166,7 @@ def get_default_pipeline(
 def get_pipeline(
     pipeline_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
 ):
     """Get a specific pipeline by ID."""
     pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
@@ -188,7 +188,7 @@ def get_pipeline(
 def create_pipeline(
     data: PipelineCreate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
 ):
     """
     Create a new non-default pipeline.
@@ -218,12 +218,34 @@ def create_pipeline(
     )
 
 
+@router.post("/default/sync-stages", dependencies=[Depends(require_csrf_header)])
+def sync_default_pipeline_stages(
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
+):
+    """
+    Sync missing stages to the default pipeline.
+    
+    Adds any stages from DEFAULT_STAGE_ORDER that don't exist yet.
+    Useful when the stage definitions have been expanded.
+    Requires: Manager+ role
+    """
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, session.org_id, session.user_id)
+    added_count = pipeline_service.sync_missing_stages(db, pipeline, session.user_id)
+    
+    return {
+        "synced": True,
+        "stages_added": added_count,
+        "current_version": pipeline.current_version,
+    }
+
+
 @router.patch("/{pipeline_id}", response_model=PipelineRead, dependencies=[Depends(require_csrf_header)])
 def update_pipeline(
     pipeline_id: UUID,
     data: PipelineUpdate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
 ):
     """
     Update pipeline name and/or stages.
@@ -270,7 +292,7 @@ def update_pipeline(
 def delete_pipeline(
     pipeline_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
 ):
     """
     Delete a pipeline.
@@ -391,7 +413,7 @@ async def list_stages(
     pipeline_id: UUID,
     include_inactive: bool = Query(False),
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
 ):
     """
     List all stages for a pipeline.
@@ -412,7 +434,7 @@ async def create_stage(
     pipeline_id: UUID,
     data: StageCreate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
     _: str = Depends(require_csrf_header),
 ):
     """
@@ -447,7 +469,7 @@ async def update_stage(
     stage_id: UUID,
     data: StageUpdate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
     _: str = Depends(require_csrf_header),
 ):
     """
@@ -483,7 +505,7 @@ async def delete_stage(
     stage_id: UUID,
     data: StageDelete,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
     _: str = Depends(require_csrf_header),
 ):
     """
@@ -525,7 +547,7 @@ async def reorder_stages(
     pipeline_id: UUID,
     data: StageReorder,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
     _: str = Depends(require_csrf_header),
 ):
     """

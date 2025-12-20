@@ -11,11 +11,13 @@ vi.mock('next/link', () => ({
 const mockUseTasks = vi.fn()
 const mockCompleteTask = vi.fn()
 const mockUncompleteTask = vi.fn()
+const mockUpdateTask = vi.fn()
 
 vi.mock('@/lib/hooks/use-tasks', () => ({
     useTasks: (params: any) => mockUseTasks(params),
     useCompleteTask: () => ({ mutateAsync: mockCompleteTask }),
     useUncompleteTask: () => ({ mutateAsync: mockUncompleteTask }),
+    useUpdateTask: () => ({ mutateAsync: mockUpdateTask }),
 }))
 
 describe('TasksPage', () => {
