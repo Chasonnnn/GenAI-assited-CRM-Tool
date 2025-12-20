@@ -34,6 +34,7 @@ import {
     BrainIcon,
 } from "lucide-react"
 import { InlineEditField } from "@/components/inline-edit-field"
+import { FileUploadZone } from "@/components/FileUploadZone"
 import { useCase, useCaseActivity, useChangeStatus, useArchiveCase, useRestoreCase, useUpdateCase } from "@/lib/hooks/use-cases"
 import { useQueues, useClaimCase, useReleaseCase } from "@/lib/hooks/use-queues"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
@@ -636,6 +637,14 @@ export default function CaseDetailPage() {
                                         <p className="text-sm text-muted-foreground text-center py-4">No notes yet. Add the first note above.</p>
                                     )}
                                 </div>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Attachments</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <FileUploadZone caseId={id} />
                             </CardContent>
                         </Card>
                     </TabsContent>

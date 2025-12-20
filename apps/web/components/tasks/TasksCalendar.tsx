@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useCallback } from "react"
 import FullCalendar from "@fullcalendar/react"
 import dayGridPlugin from "@fullcalendar/daygrid"
 import timeGridPlugin from "@fullcalendar/timegrid"
@@ -23,7 +23,7 @@ interface TasksCalendarProps {
     tasks: Task[]
     isLoading?: boolean
     onTaskClick?: (taskId: string) => void
-    onTaskReschedule?: (taskId: string, newDate: string, newTime: string | null) => void
+    onTaskReschedule?: (taskId: string, newDate: string, newTime: string | null) => void | Promise<void>
     className?: string
 }
 
@@ -31,14 +31,14 @@ function getTaskColor(task: Task): string {
     if (task.is_completed) return "#9CA3AF" // gray
 
     switch (task.task_type) {
-        case "call":
+        case "contact":
             return "#3B82F6" // blue
-        case "email":
-            return "#10B981" // green
         case "meeting":
             return "#8B5CF6" // purple
         case "follow_up":
             return "#F59E0B" // yellow
+        case "review":
+            return "#10B981" // green
         default:
             return "#6366F1" // indigo
     }
@@ -80,7 +80,7 @@ export function TasksCalendar({
     )
 
     const handleEventDrop = useCallback(
-        (info: EventDropArg) => {
+        async (info: EventDropArg) => {
             const task = info.event.extendedProps.task as Task
             const newStart = info.event.start
 
@@ -89,8 +89,11 @@ export function TasksCalendar({
                 return
             }
 
-            // Format date as YYYY-MM-DD
-            const newDate = newStart.toISOString().split("T")[0]
+            // Format date as YYYY-MM-DD (local time)
+            const year = newStart.getFullYear()
+            const month = String(newStart.getMonth() + 1).padStart(2, "0")
+            const day = String(newStart.getDate()).padStart(2, "0")
+            const newDate = `${year}-${month}-${day}`
 
             // Preserve time behavior:
             // - If event was all-day (no time), keep it all-day
@@ -102,12 +105,21 @@ export function TasksCalendar({
                 const hours = newStart.getHours().toString().padStart(2, "0")
                 const minutes = newStart.getMinutes().toString().padStart(2, "0")
                 newTime = `${hours}:${minutes}:00`
-            } else if (task.due_time && info.oldEvent.allDay) {
-                // Was all-day before and after - preserve original time if it had one
+            } else if (task.due_time) {
+                // Preserve original time on date-only moves
                 newTime = task.due_time
             }
 
-            onTaskReschedule?.(task.id, newDate, newTime)
+            if (!onTaskReschedule) {
+                info.revert()
+                return
+            }
+
+            try {
+                await onTaskReschedule(task.id, newDate, newTime)
+            } catch {
+                info.revert()
+            }
         },
         [onTaskReschedule]
     )

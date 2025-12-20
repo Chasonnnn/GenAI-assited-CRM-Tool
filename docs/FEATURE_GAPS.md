@@ -5,6 +5,8 @@
 **Test Coverage:** ✅ **101/101 tests passing** - Frontend: 36/36, Backend: 65/65
 
 > **Pipeline Phase 2 Complete ✅** — Custom stages, stage CRUD, soft-delete, versioning, frontend editor all functional.
+> 
+> **Sprint Complete ✅** — File Attachments, Invitation System, and Tasks Calendar all implemented.
 
 ---
 
@@ -19,7 +21,68 @@
 
 ---
 
-## HIGH PRIORITY GAPS — ❌ New Items
+## RECENTLY COMPLETED ✅
+
+### 1. File Attachments on Cases ✅ COMPLETE
+**Status:** Fully implemented
+
+**What was built:**
+- `Attachment` model with security fields (checksum, scan status, quarantine)
+- S3/local storage with signed URLs (5-min expiry)
+- Virus scan job (`scan_attachment.py`) with ClamAV integration
+- EXIF stripping for privacy (`strip_exif_data()`)
+- `FileUploadZone.tsx` component with drag-drop
+- Attachments integrated into Case Notes UI
+- Soft-delete with audit logging
+
+**Security features:**
+- SHA-256 checksum verification
+- File type + MIME type validation
+- Quarantine until scan completes
+- Access control (case-level + uploader/Manager+ for delete)
+
+---
+
+### 2. Invitation System ✅ COMPLETE
+**Status:** Full stack complete
+
+**What was built:**
+- **Backend:**
+  - `OrgInvite` model with resend tracking, revocation
+  - Rate limiting (50 pending per org)
+  - Resend cooldown (5 min, 3/day max)
+  - Gmail integration for invite emails (HTML template)
+  - Email domain validation (`ALLOWED_EMAIL_DOMAINS`)
+  - Accept invite API (creates membership)
+
+- **Frontend:**
+  - `/settings/team/page.tsx` with pending invites table
+  - Invite modal with role selection
+  - Status badges (pending/expired/accepted/revoked)
+  - Resend button with cooldown timer
+  - `/invite/[id]/page.tsx` accept page
+
+**Email flow:**
+- Inviter must have Gmail connected
+- Professional HTML email with accept button
+- Domain validation before sending
+
+---
+
+### 3. Tasks Calendar View ✅ COMPLETE
+**Status:** Fully implemented
+
+**What was built:**
+- FullCalendar integration with month/week/day views
+- List/Calendar view toggle with localStorage persistence
+- Drag-drop rescheduling with API persistence
+- Time preservation on date-only moves
+- Revert on failed reschedule
+- `TaskEditModal.tsx` for click-to-edit
+
+---
+
+## HIGH PRIORITY GAPS — Remaining
 
 ### 1. Context-Aware Floating Chatbot ❌
 **Status:** Not integrated with AI Assistant
@@ -39,59 +102,7 @@
 
 ---
 
-### 2. File Attachments on Cases ❌
-**Status:** Not started
-
-**Requirements:**
-- Upload documents/pictures to cases
-- Integrate with Notes tab (notes + files together)
-- File storage backend (S3/local)
-- Preview/download functionality
-- File type validation
-
-**Considerations:**
-- Max file size limits
-- Allowed file types (pdf, images, docs)
-- Storage costs
-
-**Effort:** Medium (1 week)
-
----
-
-### 3. Invitation System Frontend ⚠️
-**Status:** Backend complete, frontend missing
-
-**What exists:**
-- `OrgInvite` model ✅
-- Invite endpoints ✅
-- Email delivery ✅
-
-**What's missing:**
-- Settings → Team → Invite UI
-- Pending invites list
-- Resend/revoke actions
-
-**Effort:** Small (2-3 days)
-
----
-
-### 4. Tasks Calendar View ❌
-**Status:** List view only
-
-**Requirements:**
-- Toggle between List and Calendar views
-- Google Calendar-style UI
-- Drag-drop task rescheduling
-- Week/month views
-- Task duration visualization
-
-**Libraries:** Consider `react-big-calendar` or `fullcalendar`
-
-**Effort:** Medium (1 week)
-
----
-
-### 5. CSV Import Format Handling ⚠️
+### 2. CSV Import Format Handling ⚠️
 **Status:** Basic mapping, edge cases not handled
 
 **Issues:**
@@ -109,7 +120,7 @@
 
 ---
 
-### 6. AI Assistant Improvements ⚠️
+### 3. AI Assistant Improvements ⚠️
 **Status:** Functional but missing features
 
 **Requirements:**
@@ -131,7 +142,7 @@
 
 ---
 
-### 7. UI Consistency Audit ⚠️
+### 4. UI Consistency Audit ⚠️
 **Status:** Inconsistencies identified
 
 **Issues:**
@@ -148,7 +159,7 @@
 
 ---
 
-### 8. Smart Task Creation from AI ❌
+### 5. Smart Task Creation from AI ❌
 **Status:** Not started
 
 **Requirements:**
@@ -167,7 +178,7 @@
 
 ---
 
-### 9. AI-Powered Weekly Reports ❌
+### 6. AI-Powered Weekly Reports ❌
 **Status:** Not started
 
 **Requirements:**
@@ -196,45 +207,42 @@
 - Automation Engine, Activity Feed
 - Zoom Integration, Matching System
 - Compliance/HIPAA exports
-
-### In Progress ⚠️
-- **Pipeline Phase 2** — DB+API done, frontend pending
+- **File Attachments** (NEW)
+- **Invitation System** (NEW)
+- **Tasks Calendar** (NEW)
 
 ---
 
 ## PRIORITY RECOMMENDATIONS
 
 ### Immediate (Next Sprint)
-1. **File Attachments** — High user value
-2. **Invitation Frontend** — Low effort, completes feature
-3. **Tasks Calendar View** — High user value
+1. **Context-Aware Chatbot** — AI integration
+2. **AI Assistant Improvements** — Sidebar, token tracking
+3. **UI Consistency Audit** — Polish
 
 ### Short Term
-4. **Context-Aware Chatbot** — AI integration
-5. **AI Assistant Improvements** — Sidebar, token tracking
-6. **UI Consistency Audit** — Polish
+4. **CSV Import Improvements** — Flexibility
+5. **Smart Task Creation** — AI feature
 
 ### Medium Term
-7. **CSV Import Improvements** — Flexibility
-8. **Smart Task Creation** — AI feature
-9. **AI Weekly Reports** — Batch analytics
+6. **AI Weekly Reports** — Batch analytics
 
 ---
 
 ## EFFORT SUMMARY
 
-| Feature | Effort | Priority |
-|---------|--------|----------|
-| File Attachments | 1 week | High |
-| Invitation Frontend | 2-3 days | High |
-| Tasks Calendar | 1 week | High |
-| Context-Aware Chatbot | 1 week | Medium |
-| AI Assistant Improvements | 3-4 days | Medium |
-| UI Consistency | 1-2 days | Medium |
-| CSV Import | 1 week | Medium |
-| Smart Task Creation | 1 week | Low |
-| AI Weekly Reports | 1-2 weeks | Low |
+| Feature | Effort | Priority | Status |
+|---------|--------|----------|--------|
+| File Attachments | 1 week | High | ✅ Done |
+| Invitation Frontend | 2-3 days | High | ✅ Done |
+| Tasks Calendar | 1 week | High | ✅ Done |
+| Context-Aware Chatbot | 1 week | High | ❌ |
+| AI Assistant Improvements | 3-4 days | Medium | ⚠️ |
+| UI Consistency | 1-2 days | Medium | ⚠️ |
+| CSV Import | 1 week | Medium | ⚠️ |
+| Smart Task Creation | 1 week | Low | ❌ |
+| AI Weekly Reports | 1-2 weeks | Low | ❌ |
 
-**Total New Gaps:** 9 features  
-**Total Effort:** ~6-8 weeks
-
+**Total Remaining Gaps:** 6 features  
+**Completed This Sprint:** 3 features  
+**Total Remaining Effort:** ~4-5 weeks

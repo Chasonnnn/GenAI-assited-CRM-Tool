@@ -2,7 +2,7 @@
  * Invitations API client
  */
 
-import { api } from "./client"
+import api from "./index"
 
 export interface Invite {
     id: string
