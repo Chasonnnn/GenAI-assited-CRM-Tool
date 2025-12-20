@@ -17,6 +17,43 @@ depends_on = None
 
 def upgrade() -> None:
     conn = op.get_bind()
+    
+    # Strategy 0: Create default pipelines for orgs that have cases but no pipeline
+    # First, find orgs with cases but no pipelines and create pipelines for them
+    conn.execute(sa.text("""
+        INSERT INTO pipelines (id, organization_id, name, is_default, current_version, created_at, updated_at)
+        SELECT 
+            gen_random_uuid(),
+            c.organization_id,
+            'Default Pipeline',
+            TRUE,
+            1,
+            NOW(),
+            NOW()
+        FROM cases c
+        LEFT JOIN pipelines p ON p.organization_id = c.organization_id
+        WHERE p.id IS NULL
+        GROUP BY c.organization_id
+    """))
+    
+    # Create default stages for newly created pipelines that don't have stages
+    conn.execute(sa.text("""
+        INSERT INTO pipeline_stages (id, pipeline_id, slug, label, color, stage_type, "order", is_active, created_at, updated_at)
+        SELECT 
+            gen_random_uuid(),
+            p.id,
+            'new_unread',
+            'New Unread',
+            '#3B82F6',
+            'intake',
+            1,
+            TRUE,
+            NOW(),
+            NOW()
+        FROM pipelines p
+        LEFT JOIN pipeline_stages ps ON ps.pipeline_id = p.id
+        WHERE ps.id IS NULL
+    """))
 
     # Strategy 1: Update cases that have stage_id but missing status_label
     conn.execute(sa.text("""

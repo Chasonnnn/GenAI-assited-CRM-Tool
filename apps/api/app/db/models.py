@@ -315,6 +315,7 @@ class Case(Base):
             postgresql_where=text("is_archived = FALSE")
         ),
         # Query optimization indexes
+        Index("idx_cases_stage", "stage_id"),  # Single-column for FK lookups
         Index("idx_cases_org_stage", "organization_id", "stage_id"),
         Index("idx_cases_org_owner", "organization_id", "owner_type", "owner_id"),
         Index("idx_cases_org_created", "organization_id", "created_at"),
@@ -2411,6 +2412,13 @@ class Match(Base):
         UniqueConstraint(
             "organization_id", "case_id", "intended_parent_id",
             name="uq_match_org_case_ip"
+        ),
+        # Only one accepted match allowed per case per org
+        Index(
+            "uq_one_accepted_match_per_case",
+            "organization_id", "case_id",
+            unique=True,
+            postgresql_where=text("status = 'accepted'")
         ),
         Index("ix_matches_case_id", "case_id"),
         Index("ix_matches_ip_id", "intended_parent_id"),
