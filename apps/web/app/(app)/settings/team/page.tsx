@@ -269,12 +269,12 @@ function MembersTab() {
                             Clear Selection
                         </Button>
                         <Dialog open={showBulkDialog} onOpenChange={setShowBulkDialog}>
-                            <DialogTrigger asChild>
+                            <DialogTrigger render={
                                 <Button size="sm">
                                     <UserCog className="size-4 mr-2" />
                                     Assign Role
                                 </Button>
-                            </DialogTrigger>
+                            } />
                             <DialogContent>
                                 <DialogHeader>
                                     <DialogTitle>Bulk Assign Role</DialogTitle>
@@ -516,12 +516,12 @@ export default function TeamSettingsPage() {
                         </Button>
                     </Link>
                     <Dialog open={showInviteModal} onOpenChange={setShowInviteModal}>
-                        <DialogTrigger asChild>
+                        <DialogTrigger render={
                             <Button>
                                 <UserPlus className="size-4 mr-2" />
                                 Invite Member
                             </Button>
-                        </DialogTrigger>
+                        } />
                         <InviteTeamModal onClose={() => setShowInviteModal(false)} />
                     </Dialog>
                 </div>
