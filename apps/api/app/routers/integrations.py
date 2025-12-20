@@ -454,7 +454,7 @@ async def create_zoom_meeting(
         case = case_service.get_case(db, session.org_id, request.entity_id)
         if not case:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
-        check_case_access(case, session.role, session.user_id)
+        check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
     else:
         ip = ip_service.get_intended_parent(db, request.entity_id, session.org_id)
         if not ip:

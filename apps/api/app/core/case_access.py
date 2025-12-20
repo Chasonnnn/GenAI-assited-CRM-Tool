@@ -3,10 +3,14 @@
 Access is now owner-based (Salesforce-style):
 - owner_type="queue": any case_manager+ can access/claim
 - owner_type="user": owner, managers, or same-role users can access
+
+Permission-based filtering:
+- view_post_approval_cases: controls access to post_approval stage cases
 """
 
 from uuid import UUID
 from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
 
 from app.db.enums import Role, OwnerType
 from app.db.models import Case
@@ -16,19 +20,25 @@ def check_case_access(
     case: Case,
     user_role: Role | str,
     user_id: UUID | None = None,
+    db: Session | None = None,
+    org_id: UUID | None = None,
 ) -> None:
     """
-    Check if user can access this case based on ownership.
+    Check if user can access this case based on ownership and permissions.
     
-    New logic (owner-based):
-    - queue-owned: any case_manager+ can see
-    - user-owned: owner, or managers can see
-    - intake_specialist: only if they own it or it's in an intake queue
+    Access rules:
+    - Developer: always allowed (no DB check)
+    - Post-approval stages: requires view_post_approval_cases permission
+    - Queue-owned: case_manager+ can see
+    - User-owned: owner, or managers can see
+    - Intake specialists: only their own cases
     
     Args:
         case: The case being accessed
         user_role: The user's role from session
         user_id: The user's ID (for ownership check)
+        db: Database session (required for permission checks)
+        org_id: Organization ID (required for permission checks)
         
     Raises:
         HTTPException: 403 if access denied
@@ -36,8 +46,16 @@ def check_case_access(
     # Normalize role to string
     role_str = user_role.value if hasattr(user_role, 'value') else user_role
     
-    # Managers/developers can access everything
-    if role_str in [Role.MANAGER.value, Role.DEVELOPER.value]:
+    # Developers bypass all checks (immutable super-admin)
+    if role_str == Role.DEVELOPER.value:
+        return
+    
+    # Permission-based check for post-approval cases (applies to all roles including Manager)
+    if db and org_id and user_id and case.stage_id:
+        _check_post_approval_access(db, org_id, user_id, role_str, case)
+    
+    # Manager bypass for ownership checks (but NOT for permission checks above)
+    if role_str == Role.MANAGER.value:
         return
     
     # Owner fields are required for all cases
@@ -48,6 +66,36 @@ def check_case_access(
         )
 
     _check_owner_based_access(case, role_str, user_id)
+
+
+def _check_post_approval_access(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    role_str: str,
+    case: Case,
+) -> None:
+    """
+    Check view_post_approval_cases permission if case is in a post_approval stage.
+    
+    Treats missing/null stage as non-post-approval (fail open for deleted stages).
+    """
+    from app.services import pipeline_service, permission_service
+    
+    stage = pipeline_service.get_stage_by_id(db, case.stage_id)
+    
+    # No stage or not post_approval = no restriction
+    if not stage or stage.stage_type != "post_approval":
+        return
+    
+    # Check permission
+    if not permission_service.check_permission(
+        db, org_id, user_id, role_str, "view_post_approval_cases"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to post-approval cases"
+        )
 
 
 def _check_owner_based_access(case: Case, role_str: str, user_id: UUID | None) -> None:

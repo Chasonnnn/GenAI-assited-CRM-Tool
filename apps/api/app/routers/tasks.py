@@ -116,7 +116,7 @@ def _check_task_case_access(task, session: "UserSession", db: Session) -> None:
     if task.case_id:
         case = case_service.get_case(db, session.org_id, task.case_id)
         if case:
-            check_case_access(case, session.role, session.user_id)
+            check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
 
 
 @router.get("", response_model=TaskListResponse)
@@ -146,7 +146,7 @@ def list_tasks(
         from app.services import case_service
         case = case_service.get_case(db, session.org_id, case_id)
         if case:
-            check_case_access(case, session.role, session.user_id)
+            check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
     
     tasks, total = task_service.list_tasks(
         db=db,
@@ -191,8 +191,8 @@ def create_task(
         case = case_service.get_case(db, session.org_id, data.case_id)
         if not case:
             raise HTTPException(status_code=400, detail="Case not found")
-        # Access control: intake can't access handed-off cases
-        check_case_access(case, session.role, session.user_id)
+        # Access control: checks ownership + post-approval permission
+        check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
     
     # Verify owner belongs to org if specified
     if data.owner_type == OwnerType.USER.value:

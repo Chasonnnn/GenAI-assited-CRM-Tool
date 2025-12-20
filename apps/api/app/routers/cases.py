@@ -208,7 +208,17 @@ def list_cases(
     - owner_type: Filter by owner type ('user' or 'queue')
     - owner_id: Filter by owner ID (when owner_type='user')
     - created_from/created_to: ISO date strings for date range filtering
+    - Post-approval cases hidden if user lacks view_post_approval_cases permission
     """
+    from app.services import permission_service
+    
+    # Permission-based stage filtering (Developer bypasses via permission_service)
+    exclude_stage_types = []
+    if not permission_service.check_permission(
+        db, session.org_id, session.user_id, session.role.value, "view_post_approval_cases"
+    ):
+        exclude_stage_types.append("post_approval")
+    
     cases, total = case_service.list_cases(
         db=db,
         org_id=session.org_id,
@@ -225,6 +235,7 @@ def list_cases(
         queue_id=queue_id,
         created_from=created_from,
         created_to=created_to,
+        exclude_stage_types=exclude_stage_types if exclude_stage_types else None,
     )
     
     pages = (total + per_page - 1) // per_page if per_page > 0 else 0
@@ -520,13 +531,13 @@ def get_case(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Get case by ID (respects role-based access)."""
+    """Get case by ID (respects permission-based access)."""
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     
-    # Access control: intake can't view case_manager_only statuses
-    check_case_access(case, session.role, session.user_id)
+    # Access control: checks ownership + post-approval permission
+    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
     
     return _case_to_read(case, db)
 
@@ -578,7 +589,7 @@ async def send_case_email(
         raise HTTPException(status_code=404, detail="Case not found")
     
     # Access control
-    check_case_access(case, session.role, session.user_id)
+    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
     
     if not case.email:
         raise HTTPException(status_code=400, detail="Case has no email address")
@@ -748,7 +759,7 @@ def update_case(
         raise HTTPException(status_code=404, detail="Case not found")
     
     # Access control: intake can't access handed-off cases
-    check_case_access(case, session.role, session.user_id)
+    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
     
     # Permission check: must be able to modify
     if not can_modify_case(case, str(session.user_id), session.role):
@@ -779,7 +790,7 @@ def change_status(
         raise HTTPException(status_code=404, detail="Case not found")
     
     # Access control: intake can't access handed-off cases
-    check_case_access(case, session.role, session.user_id)
+    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
     
     if case.is_archived:
         raise HTTPException(status_code=400, detail="Cannot change status of archived case")
@@ -1020,7 +1031,7 @@ def get_case_activity(
         raise HTTPException(status_code=404, detail="Case not found")
     
     # Access control
-    check_case_access(case, session.role, session.user_id)
+    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
     
     # Query activity log with pagination
     base_query = db.query(CaseActivityLog).filter(
