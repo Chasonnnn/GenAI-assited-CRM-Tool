@@ -5,6 +5,11 @@ v2: With version control integration
 - Optimistic locking via expected_version
 - Rollback support with audit trail
 
+v2.1: PipelineStage CRUD
+- Stage rows instead of JSON
+- Immutable slug/stage_type
+- Soft-delete with migration
+
 Each stage maps to a CaseStatus enum with custom label, color, and order.
 """
 
@@ -14,7 +19,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.db.enums import CaseStatus
-from app.db.models import Pipeline
+from app.db.models import Pipeline, PipelineStage, Case
 from app.services import version_service
 
 
@@ -333,3 +338,221 @@ def rollback_pipeline(
     db.refresh(pipeline)
     
     return pipeline, None
+
+
+# =============================================================================
+# Stage CRUD (v2.1 - PipelineStage rows)
+# =============================================================================
+
+def get_stages(
+    db: Session,
+    pipeline_id: UUID,
+    include_inactive: bool = False,
+) -> list[PipelineStage]:
+    """Get all stages for a pipeline, ordered by position."""
+    query = db.query(PipelineStage).filter(PipelineStage.pipeline_id == pipeline_id)
+    if not include_inactive:
+        query = query.filter(PipelineStage.is_active == True)
+    return query.order_by(PipelineStage.order).all()
+
+
+def get_stage_by_id(db: Session, stage_id: UUID) -> PipelineStage | None:
+    """Get a stage by ID."""
+    return db.query(PipelineStage).filter(PipelineStage.id == stage_id).first()
+
+
+def get_stage_by_slug(db: Session, pipeline_id: UUID, slug: str) -> PipelineStage | None:
+    """Get a stage by slug (unique per pipeline)."""
+    return db.query(PipelineStage).filter(
+        PipelineStage.pipeline_id == pipeline_id,
+        PipelineStage.slug == slug,
+    ).first()
+
+
+def validate_stage_slug(db: Session, pipeline_id: UUID, slug: str) -> bool:
+    """Check if slug is valid (unique per pipeline, not empty)."""
+    if not slug or len(slug) > 50:
+        return False
+    existing = get_stage_by_slug(db, pipeline_id, slug)
+    return existing is None
+
+
+def create_stage(
+    db: Session,
+    pipeline_id: UUID,
+    slug: str,
+    label: str,
+    color: str,
+    stage_type: str,
+    order: int | None = None,
+) -> PipelineStage:
+    """
+    Create a new pipeline stage.
+    
+    Slug and stage_type are immutable after creation.
+    Raises ValueError if slug already exists or stage_type is invalid.
+    """
+    # Validate stage_type
+    if stage_type not in ("intake", "post_approval", "terminal"):
+        raise ValueError(f"Invalid stage_type: {stage_type}")
+    
+    # Validate slug uniqueness
+    if not validate_stage_slug(db, pipeline_id, slug):
+        raise ValueError(f"Slug '{slug}' already exists or is invalid")
+    
+    # Auto-calculate order if not provided
+    if order is None:
+        max_order = db.query(PipelineStage).filter(
+            PipelineStage.pipeline_id == pipeline_id,
+        ).count()
+        order = max_order + 1
+    
+    stage = PipelineStage(
+        pipeline_id=pipeline_id,
+        slug=slug,
+        label=label,
+        color=color,
+        stage_type=stage_type,
+        order=order,
+        is_active=True,
+    )
+    db.add(stage)
+    db.commit()
+    db.refresh(stage)
+    return stage
+
+
+def update_stage(
+    db: Session,
+    stage: PipelineStage,
+    label: str | None = None,
+    color: str | None = None,
+    order: int | None = None,
+) -> PipelineStage:
+    """
+    Update stage label, color, or order.
+    
+    Slug and stage_type are IMMUTABLE - any attempt to change them is ignored.
+    Syncs case status_label when label changes.
+    """
+    label_changed = False
+    
+    if label is not None and label != stage.label:
+        stage.label = label
+        label_changed = True
+    
+    if color is not None:
+        stage.color = color
+    
+    if order is not None:
+        stage.order = order
+    
+    stage.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(stage)
+    
+    # Sync case labels if label changed
+    if label_changed:
+        sync_case_labels(db, stage.id, stage.label)
+    
+    return stage
+
+
+def delete_stage(
+    db: Session,
+    stage: PipelineStage,
+    migrate_to_stage_id: UUID,
+) -> int:
+    """
+    Soft-delete a stage and migrate cases to another stage.
+    
+    Returns the number of cases migrated.
+    Raises ValueError if migrate_to is invalid or same stage.
+    """
+    if stage.id == migrate_to_stage_id:
+        raise ValueError("Cannot migrate cases to the same stage")
+    
+    # Validate migrate_to stage
+    target = get_stage_by_id(db, migrate_to_stage_id)
+    if not target:
+        raise ValueError("Target stage not found")
+    if not target.is_active:
+        raise ValueError("Target stage is not active")
+    if target.pipeline_id != stage.pipeline_id:
+        raise ValueError("Target stage must be in the same pipeline")
+    
+    # Migrate cases
+    migrated = db.query(Case).filter(Case.stage_id == stage.id).update({
+        Case.stage_id: migrate_to_stage_id,
+        Case.status_label: target.label,
+    })
+    
+    # Soft-delete stage
+    stage.is_active = False
+    stage.deleted_at = datetime.now(timezone.utc)
+    stage.updated_at = datetime.now(timezone.utc)
+    
+    db.commit()
+    return migrated
+
+
+def reorder_stages(
+    db: Session,
+    pipeline_id: UUID,
+    ordered_stage_ids: list[UUID],
+) -> list[PipelineStage]:
+    """
+    Reorder stages by providing an ordered list of stage IDs.
+    
+    Normalizes order values to 1, 2, 3...
+    Only active stages can be reordered.
+    """
+    stages = get_stages(db, pipeline_id)
+    stage_map = {s.id: s for s in stages}
+    
+    # Validate all IDs are valid active stages
+    for i, stage_id in enumerate(ordered_stage_ids):
+        if stage_id not in stage_map:
+            raise ValueError(f"Stage ID {stage_id} not found or not active")
+        stage_map[stage_id].order = i + 1
+    
+    db.commit()
+    return get_stages(db, pipeline_id)
+
+
+def sync_case_labels(db: Session, stage_id: UUID, new_label: str) -> int:
+    """
+    Sync Case.status_label when a stage's label changes.
+    
+    History snapshots are NOT updated (frozen at change time).
+    Returns number of cases updated.
+    """
+    updated = db.query(Case).filter(Case.stage_id == stage_id).update({
+        Case.status_label: new_label,
+    })
+    db.commit()
+    return updated
+
+
+def validate_case_stage(
+    db: Session,
+    pipeline_id: UUID,
+    stage_id: UUID,
+) -> bool:
+    """
+    Validate that a stage_id is valid for a pipeline.
+    
+    Stage must exist, be active, and belong to the pipeline.
+    """
+    stage = get_stage_by_id(db, stage_id)
+    if not stage:
+        return False
+    return stage.pipeline_id == pipeline_id and stage.is_active
+
+
+def get_default_stage(db: Session, pipeline_id: UUID) -> PipelineStage | None:
+    """Get the first active stage (usually 'new_unread') as default."""
+    return db.query(PipelineStage).filter(
+        PipelineStage.pipeline_id == pipeline_id,
+        PipelineStage.is_active == True,
+    ).order_by(PipelineStage.order).first()

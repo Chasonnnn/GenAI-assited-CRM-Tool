@@ -76,6 +76,46 @@ class RollbackRequest(BaseModel):
     target_version: int
 
 
+# v2.1 Stage schemas
+class StageRead(BaseModel):
+    """Stage response."""
+    id: UUID
+    slug: str
+    label: str
+    color: str
+    order: int
+    stage_type: str
+    is_active: bool
+    
+    model_config = {"from_attributes": True}
+
+
+class StageCreate(BaseModel):
+    """Request to create a new stage."""
+    slug: str = Field(min_length=1, max_length=50, pattern=r"^[a-z0-9_]+$")
+    label: str = Field(min_length=1, max_length=100)
+    color: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    stage_type: str = Field(pattern=r"^(intake|post_approval|terminal)$")
+    order: int | None = None  # Auto-calculated if not provided
+
+
+class StageUpdate(BaseModel):
+    """Request to update a stage (slug/stage_type immutable)."""
+    label: str | None = Field(None, min_length=1, max_length=100)
+    color: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    order: int | None = None
+
+
+class StageDelete(BaseModel):
+    """Request to delete a stage with case migration."""
+    migrate_to_stage_id: UUID
+
+
+class StageReorder(BaseModel):
+    """Request to reorder stages."""
+    ordered_stage_ids: list[UUID]
+
+
 # =============================================================================
 # CRUD Endpoints
 # =============================================================================
@@ -362,3 +402,166 @@ def rollback_pipeline(
         created_at=updated.created_at.isoformat(),
         updated_at=updated.updated_at.isoformat(),
     )
+
+
+# =============================================================================
+# Stage CRUD Endpoints (v2.1)
+# =============================================================================
+
+@router.get("/{pipeline_id}/stages", response_model=list[StageRead])
+async def list_stages(
+    pipeline_id: UUID,
+    include_inactive: bool = Query(False),
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+):
+    """
+    List all stages for a pipeline.
+    
+    Stages are ordered by 'order' field.
+    Use include_inactive=true to include soft-deleted stages.
+    Requires: Manager+ role
+    """
+    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
+    if not pipeline:
+        raise HTTPException(404, "Pipeline not found")
+    
+    return pipeline_service.get_stages(db, pipeline_id, include_inactive)
+
+
+@router.post("/{pipeline_id}/stages", response_model=StageRead, status_code=201)
+async def create_stage(
+    pipeline_id: UUID,
+    data: StageCreate,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    _: str = Depends(require_csrf_header),
+):
+    """
+    Create a new stage in a pipeline.
+    
+    Slug and stage_type are immutable after creation.
+    Requires: Manager+ role
+    """
+    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
+    if not pipeline:
+        raise HTTPException(404, "Pipeline not found")
+    
+    try:
+        stage = pipeline_service.create_stage(
+            db=db,
+            pipeline_id=pipeline_id,
+            slug=data.slug,
+            label=data.label,
+            color=data.color,
+            stage_type=data.stage_type,
+            order=data.order,
+        )
+        return stage
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.put("/{pipeline_id}/stages/{stage_id}", response_model=StageRead)
+async def update_stage(
+    pipeline_id: UUID,
+    stage_id: UUID,
+    data: StageUpdate,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    _: str = Depends(require_csrf_header),
+):
+    """
+    Update a stage's label, color, or order.
+    
+    Slug and stage_type are IMMUTABLE and cannot be changed.
+    When label changes, all cases using this stage update their status_label.
+    Requires: Manager+ role
+    """
+    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
+    if not pipeline:
+        raise HTTPException(404, "Pipeline not found")
+    
+    stage = pipeline_service.get_stage_by_id(db, stage_id)
+    if not stage or stage.pipeline_id != pipeline_id:
+        raise HTTPException(404, "Stage not found")
+    if not stage.is_active:
+        raise HTTPException(400, "Cannot update an inactive stage")
+    
+    return pipeline_service.update_stage(
+        db=db,
+        stage=stage,
+        label=data.label,
+        color=data.color,
+        order=data.order,
+    )
+
+
+@router.delete("/{pipeline_id}/stages/{stage_id}")
+async def delete_stage(
+    pipeline_id: UUID,
+    stage_id: UUID,
+    data: StageDelete,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    _: str = Depends(require_csrf_header),
+):
+    """
+    Soft-delete a stage and migrate cases to another stage.
+    
+    All cases currently in this stage will be moved to migrate_to_stage_id.
+    History rows are preserved pointing to this stage.
+    Requires: Manager+ role
+    """
+    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
+    if not pipeline:
+        raise HTTPException(404, "Pipeline not found")
+    
+    stage = pipeline_service.get_stage_by_id(db, stage_id)
+    if not stage or stage.pipeline_id != pipeline_id:
+        raise HTTPException(404, "Stage not found")
+    if not stage.is_active:
+        raise HTTPException(400, "Stage is already deleted")
+    
+    # Count active stages to prevent deleting last one
+    active_count = len(pipeline_service.get_stages(db, pipeline_id))
+    if active_count <= 1:
+        raise HTTPException(400, "Cannot delete the last remaining stage")
+    
+    try:
+        migrated = pipeline_service.delete_stage(
+            db=db,
+            stage=stage,
+            migrate_to_stage_id=data.migrate_to_stage_id,
+        )
+        return {"deleted": True, "migrated_cases": migrated}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.put("/{pipeline_id}/stages/reorder", response_model=list[StageRead])
+async def reorder_stages(
+    pipeline_id: UUID,
+    data: StageReorder,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    _: str = Depends(require_csrf_header),
+):
+    """
+    Reorder stages by providing a list of stage IDs in desired order.
+    
+    Order values are normalized to 1, 2, 3...
+    Requires: Manager+ role
+    """
+    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
+    if not pipeline:
+        raise HTTPException(404, "Pipeline not found")
+    
+    try:
+        return pipeline_service.reorder_stages(
+            db=db,
+            pipeline_id=pipeline_id,
+            ordered_stage_ids=data.ordered_stage_ids,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
