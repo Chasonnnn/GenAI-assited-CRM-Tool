@@ -6,7 +6,6 @@ const mockUseAuth = vi.fn()
 const mockUsePipelines = vi.fn()
 const mockUsePipeline = vi.fn()
 const mockUsePipelineVersions = vi.fn()
-const mockUpdatePipeline = vi.fn()
 const mockRollbackPipeline = vi.fn()
 const mockUpdateStage = vi.fn()
 const mockReorderStages = vi.fn()
@@ -19,7 +18,6 @@ vi.mock('@/lib/hooks/use-pipelines', () => ({
     usePipelines: () => mockUsePipelines(),
     usePipeline: (id: string | null) => mockUsePipeline(id),
     usePipelineVersions: (id: string | null) => mockUsePipelineVersions(id),
-    useUpdatePipeline: () => ({ mutateAsync: mockUpdatePipeline, isPending: false }),
     useRollbackPipeline: () => ({ mutateAsync: mockRollbackPipeline, isPending: false }),
     useUpdateStage: () => ({ mutateAsync: mockUpdateStage, isPending: false }),
     useReorderStages: () => ({ mutateAsync: mockReorderStages, isPending: false }),
@@ -60,28 +58,31 @@ describe('PipelinesSettingsPage', () => {
         mockUsePipelines.mockReset()
         mockUsePipeline.mockReset()
         mockUsePipelineVersions.mockReset()
-        mockUpdatePipeline.mockReset()
         mockRollbackPipeline.mockReset()
+        mockUpdateStage.mockReset()
+        mockReorderStages.mockReset()
 
         mockUseAuth.mockReturnValue({ user: { role: 'manager' } })
         mockUsePipelines.mockReturnValue({ data: [pipelineFixture], isLoading: false })
         mockUsePipeline.mockReturnValue({ data: pipelineFixture, isLoading: false })
         mockUsePipelineVersions.mockReturnValue({ data: [], isLoading: false, isError: false })
-        mockUpdatePipeline.mockResolvedValue(pipelineFixture)
+        mockUpdateStage.mockResolvedValue({})
+        mockReorderStages.mockResolvedValue({})
     })
 
-    it('renders stages with read-only status keys', () => {
+    it('renders stages with read-only slug inputs', () => {
         render(<PipelinesSettingsPage />)
 
         expect(screen.getByText('Pipeline Settings')).toBeInTheDocument()
         expect(screen.getByDisplayValue('New Unread')).toBeInTheDocument()
 
-        const statusInput = screen.getByDisplayValue('new_unread')
-        expect(statusInput).toBeDisabled()
-        expect(statusInput).toHaveAttribute('readonly')
+        // Slug inputs should be readonly
+        const slugInput = screen.getByDisplayValue('new_unread')
+        expect(slugInput).toBeDisabled()
+        expect(slugInput).toHaveAttribute('readonly')
     })
 
-    it('saves edited stages with expected version', async () => {
+    it('saves edited stage label using updateStage', async () => {
         render(<PipelinesSettingsPage />)
 
         const labelInputs = screen.getAllByPlaceholderText('Label')
@@ -92,16 +93,16 @@ describe('PipelinesSettingsPage', () => {
         fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
 
         await waitFor(() => {
-            expect(mockUpdatePipeline).toHaveBeenCalled()
+            expect(mockUpdateStage).toHaveBeenCalled()
         })
 
-        const call = mockUpdatePipeline.mock.calls[0][0]
-        expect(call.id).toBe('p1')
-        expect(call.data.expected_version).toBe(2)
-        expect(call.data.stages[0].label).toBe('New Lead')
+        const call = mockUpdateStage.mock.calls[0][0]
+        expect(call.pipelineId).toBe('p1')
+        expect(call.stageId).toBe('s1')
+        expect(call.data.label).toBe('New Lead')
     })
 
-    it('reorders stages and saves updated order', async () => {
+    it('reorders stages and saves using reorderStages', async () => {
         render(<PipelinesSettingsPage />)
 
         const firstRow = screen.getByDisplayValue('New Unread').closest('[draggable="true"]')
@@ -119,14 +120,13 @@ describe('PipelinesSettingsPage', () => {
         fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
 
         await waitFor(() => {
-            expect(mockUpdatePipeline).toHaveBeenCalled()
+            expect(mockReorderStages).toHaveBeenCalled()
         })
 
-        const call = mockUpdatePipeline.mock.calls[0][0]
-        expect(call.data.stages[0].status).toBe('contacted')
-        expect(call.data.stages[0].order).toBe(1)
-        expect(call.data.stages[1].status).toBe('new_unread')
-        expect(call.data.stages[1].order).toBe(2)
+        const call = mockReorderStages.mock.calls[0][0]
+        expect(call.pipelineId).toBe('p1')
+        // After drag: s2 is now first, s1 is second
+        expect(call.orderedStageIds).toEqual(['s2', 's1'])
     })
 
     it('updates stage color and saves', async () => {
@@ -142,30 +142,11 @@ describe('PipelinesSettingsPage', () => {
         fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
 
         await waitFor(() => {
-            expect(mockUpdatePipeline).toHaveBeenCalled()
+            expect(mockUpdateStage).toHaveBeenCalled()
         })
 
-        const call = mockUpdatePipeline.mock.calls[0][0]
-        expect(call.data.stages[0].color).toBe('#ff0000')
-    })
-
-    it('saves change note comment with the update', async () => {
-        render(<PipelinesSettingsPage />)
-
-        const labelInputs = screen.getAllByPlaceholderText('Label')
-        fireEvent.change(labelInputs[0], { target: { value: 'New Lead' } })
-
-        const commentInput = screen.getByLabelText('Change Note (optional)')
-        fireEvent.change(commentInput, { target: { value: 'Renamed first stage' } })
-
-        fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
-
-        await waitFor(() => {
-            expect(mockUpdatePipeline).toHaveBeenCalled()
-        })
-
-        const call = mockUpdatePipeline.mock.calls[0][0]
-        expect(call.data.comment).toBe('Renamed first stage')
+        const call = mockUpdateStage.mock.calls[0][0]
+        expect(call.data.color).toBe('#ff0000')
     })
 
     it('rolls back to a previous version', async () => {
