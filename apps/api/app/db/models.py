@@ -198,6 +198,7 @@ class OrgInvite(Base):
     Invite-only access control.
     
     Constraint: One pending invite per email GLOBALLY.
+    Enterprise features: resend throttling, revocation tracking.
     """
     __tablename__ = "org_invites"
     __table_args__ = (
@@ -205,7 +206,7 @@ class OrgInvite(Base):
             "uq_pending_invite_email", 
             "email", 
             unique=True, 
-            postgresql_where=text("accepted_at IS NULL")
+            postgresql_where=text("accepted_at IS NULL AND revoked_at IS NULL")
         ),
         Index("idx_org_invites_org_id", "organization_id"),
     )
@@ -234,8 +235,26 @@ class OrgInvite(Base):
         nullable=False
     )
     
+    # Resend throttling
+    resend_count: Mapped[int] = mapped_column(
+        Integer,
+        server_default=text("0"),
+        nullable=False
+    )
+    last_resent_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    
+    # Revocation tracking
+    revoked_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    revoked_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    
     # Relationships
     organization: Mapped["Organization"] = relationship(back_populates="invites")
+    invited_by: Mapped["User | None"] = relationship(foreign_keys=[invited_by_user_id])
+    revoked_by: Mapped["User | None"] = relationship(foreign_keys=[revoked_by_user_id])
 
 
 # =============================================================================
@@ -2495,3 +2514,89 @@ class Match(Base):
     intended_parent: Mapped["IntendedParent"] = relationship()
     proposed_by: Mapped["User"] = relationship(foreign_keys=[proposed_by_user_id])
     reviewed_by: Mapped["User"] = relationship(foreign_keys=[reviewed_by_user_id])
+
+
+# =============================================================================
+# Attachments
+# =============================================================================
+
+class Attachment(Base):
+    """
+    File attachments for cases (and future: intended parents).
+    
+    Security features:
+    - SHA-256 checksum for integrity verification
+    - Virus scan status with quarantine until clean
+    - Soft-delete with audit trail
+    - Access control via case ownership
+    """
+    __tablename__ = "attachments"
+    __table_args__ = (
+        Index("idx_attachments_case", "case_id"),
+        Index("idx_attachments_org_scan", "organization_id", "scan_status"),
+        Index(
+            "idx_attachments_active",
+            "case_id",
+            postgresql_where=text("deleted_at IS NULL AND quarantined = FALSE")
+        ),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    case_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cases.id", ondelete="CASCADE"),
+        nullable=True  # Future: intended_parent_id
+    )
+    uploaded_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=False
+    )
+    
+    # File metadata
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    checksum_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    
+    # Security / Virus scan
+    scan_status: Mapped[str] = mapped_column(
+        String(20),
+        server_default=text("'pending'"),
+        nullable=False
+    )  # pending | clean | infected | error
+    scanned_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    quarantined: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("TRUE"),
+        nullable=False
+    )
+    
+    # Soft-delete
+    deleted_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    deleted_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    case: Mapped["Case"] = relationship()
+    uploaded_by: Mapped["User"] = relationship(foreign_keys=[uploaded_by_user_id])
+    deleted_by: Mapped["User | None"] = relationship(foreign_keys=[deleted_by_user_id])

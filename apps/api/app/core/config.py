@@ -100,6 +100,14 @@ class Settings(BaseSettings):
     EXPORT_MAX_RECORDS: int = 50000
     EXPORT_RATE_LIMIT_PER_HOUR: int = 5
     
+    # Attachment Storage
+    STORAGE_BACKEND: str = "local"  # local or s3
+    LOCAL_STORAGE_PATH: str = ".attachments"
+    S3_BUCKET: str = ""
+    S3_REGION: str = "us-east-1"
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse CORS_ORIGINS into a list."""
