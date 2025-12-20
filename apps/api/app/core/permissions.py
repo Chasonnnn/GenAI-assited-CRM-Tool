@@ -114,6 +114,10 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
         "manage_team", "Manage Team", 
         "Invite members and change roles", PermissionCategory.TEAM
     ),
+    "view_roles": PermissionDef(
+        "view_roles", "View Role Permissions", 
+        "View default permissions for each role", PermissionCategory.TEAM
+    ),
     "manage_roles": PermissionDef(
         "manage_roles", "Manage Role Permissions", 
         "Edit default permissions per role", PermissionCategory.TEAM,
@@ -245,6 +249,7 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "edit_tasks",
         "delete_tasks",
         "manage_team",
+        "view_roles",
         "view_audit_log",
         "manage_integrations",
         "manage_automation",

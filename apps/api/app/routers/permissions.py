@@ -438,7 +438,7 @@ ROLE_LABELS = {
 
 @router.get("/roles", response_model=list[RoleSummary])
 def list_roles(
-    session: UserSession = Depends(require_permission("manage_roles")),
+    session: UserSession = Depends(require_permission("view_roles")),
 ):
     """
     List all roles with permission counts.
@@ -460,7 +460,7 @@ def list_roles(
 def get_role_detail(
     role: str,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("manage_roles")),
+    session: UserSession = Depends(require_permission("view_roles")),
 ):
     """
     Get role detail with all permissions grouped by category.
