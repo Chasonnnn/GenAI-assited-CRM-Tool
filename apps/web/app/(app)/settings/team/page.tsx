@@ -34,13 +34,14 @@ import {
 } from "@/components/ui/select"
 import {
     Loader2, UserPlus, Mail, RotateCcw, X, Clock, Check, XCircle,
-    Users, Shield, ChevronRight, Settings2
+    Users, Shield, ChevronRight, Settings2, UserCog
 } from "lucide-react"
 import { useInvites, useCreateInvite, useResendInvite, useRevokeInvite } from "@/lib/hooks/use-invites"
-import { useMembers, useRemoveMember } from "@/lib/hooks/use-permissions"
+import { useMembers, useRemoveMember, useBulkUpdateRoles } from "@/lib/hooks/use-permissions"
 import { useToast } from "@/components/ui/use-toast"
 import { formatDistanceToNow } from "date-fns"
 import { useAuth } from "@/lib/auth-context"
+import { Checkbox } from "@/components/ui/checkbox"
 
 const ROLE_LABELS: Record<string, string> = {
     intake_specialist: "Intake Specialist",
@@ -174,8 +175,14 @@ function InviteTeamModal({ onClose }: { onClose: () => void }) {
 function MembersTab() {
     const { data: members, isLoading } = useMembers()
     const removeMember = useRemoveMember()
+    const bulkUpdate = useBulkUpdateRoles()
     const { toast } = useToast()
     const { user } = useAuth()
+
+    // Selection state for bulk operations
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+    const [showBulkDialog, setShowBulkDialog] = useState(false)
+    const [bulkRole, setBulkRole] = useState("case_manager")
 
     const handleRemove = async (memberId: string, email: string) => {
         if (!confirm(`Remove ${email} from the organization? This cannot be undone.`)) return
@@ -186,6 +193,54 @@ function MembersTab() {
         } catch (error) {
             toast({
                 title: "Failed to remove member",
+                description: error instanceof Error ? error.message : "Unknown error",
+                variant: "destructive",
+            })
+        }
+    }
+
+    const toggleSelect = (id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev)
+            if (next.has(id)) {
+                next.delete(id)
+            } else {
+                next.add(id)
+            }
+            return next
+        })
+    }
+
+    const toggleSelectAll = () => {
+        if (!members) return
+        const selectableIds = members
+            .filter(m => m.user_id !== user?.id && m.role !== "developer")
+            .map(m => m.id)
+
+        if (selectedIds.size === selectableIds.length) {
+            setSelectedIds(new Set())
+        } else {
+            setSelectedIds(new Set(selectableIds))
+        }
+    }
+
+    const handleBulkAssign = async () => {
+        if (selectedIds.size === 0) return
+
+        try {
+            const result = await bulkUpdate.mutateAsync({
+                memberIds: Array.from(selectedIds),
+                role: bulkRole,
+            })
+            toast({
+                title: "Roles updated",
+                description: `${result.success} member(s) updated${result.failed > 0 ? `, ${result.failed} failed` : ""}`,
+            })
+            setSelectedIds(new Set())
+            setShowBulkDialog(false)
+        } catch (error) {
+            toast({
+                title: "Failed to update roles",
                 description: error instanceof Error ? error.message : "Unknown error",
                 variant: "destructive",
             })
@@ -208,60 +263,143 @@ function MembersTab() {
         )
     }
 
+    const selectableMembers = members.filter(m => m.user_id !== user?.id && m.role !== "developer")
+    const allSelected = selectableMembers.length > 0 && selectedIds.size === selectableMembers.length
+
     return (
-        <Table>
-            <TableHeader>
-                <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Last Login</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {members.map((member) => (
-                    <TableRow key={member.id}>
-                        <TableCell className="font-medium">
-                            {member.display_name || "—"}
-                            {member.user_id === user?.id && (
-                                <Badge variant="outline" className="ml-2 text-xs">You</Badge>
-                            )}
-                        </TableCell>
-                        <TableCell>{member.email}</TableCell>
-                        <TableCell>
-                            <Badge className={ROLE_COLORS[member.role] || "bg-gray-100"}>
-                                {ROLE_LABELS[member.role] || member.role}
-                            </Badge>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                            {member.last_login_at
-                                ? formatDistanceToNow(new Date(member.last_login_at), { addSuffix: true })
-                                : "Never"}
-                        </TableCell>
-                        <TableCell className="text-right space-x-2">
-                            <Link href={`/settings/team/members/${member.id}`}>
-                                <Button variant="ghost" size="sm">
-                                    <Settings2 className="size-4 mr-1" />
-                                    Manage
+        <div>
+            {/* Bulk Actions Bar */}
+            {selectedIds.size > 0 && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
+                    <span className="text-sm text-blue-800">
+                        {selectedIds.size} member{selectedIds.size !== 1 ? "s" : ""} selected
+                    </span>
+                    <div className="flex gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedIds(new Set())}
+                        >
+                            Clear Selection
+                        </Button>
+                        <Dialog open={showBulkDialog} onOpenChange={setShowBulkDialog}>
+                            <DialogTrigger asChild>
+                                <Button size="sm">
+                                    <UserCog className="size-4 mr-2" />
+                                    Assign Role
                                 </Button>
-                            </Link>
-                            {member.user_id !== user?.id && (
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleRemove(member.id, member.email)}
-                                    disabled={removeMember.isPending}
-                                    className="text-destructive hover:text-destructive"
-                                >
-                                    <X className="size-4" />
-                                </Button>
-                            )}
-                        </TableCell>
+                            </DialogTrigger>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>Bulk Assign Role</DialogTitle>
+                                    <DialogDescription>
+                                        Assign the same role to {selectedIds.size} selected member{selectedIds.size !== 1 ? "s" : ""}.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <div className="py-4 space-y-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="bulk-role">New Role</Label>
+                                        <Select value={bulkRole} onValueChange={setBulkRole}>
+                                            <SelectTrigger>
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="intake_specialist">Intake Specialist</SelectItem>
+                                                <SelectItem value="case_manager">Case Manager</SelectItem>
+                                                <SelectItem value="manager">Manager</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                                <DialogFooter>
+                                    <Button variant="outline" onClick={() => setShowBulkDialog(false)}>
+                                        Cancel
+                                    </Button>
+                                    <Button onClick={handleBulkAssign} disabled={bulkUpdate.isPending}>
+                                        {bulkUpdate.isPending && <Loader2 className="size-4 mr-2 animate-spin" />}
+                                        Apply to {selectedIds.size} Member{selectedIds.size !== 1 ? "s" : ""}
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
+                    </div>
+                </div>
+            )}
+
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead className="w-12">
+                            <Checkbox
+                                checked={allSelected}
+                                onCheckedChange={toggleSelectAll}
+                                aria-label="Select all"
+                            />
+                        </TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Last Login</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                ))}
-            </TableBody>
-        </Table>
+                </TableHeader>
+                <TableBody>
+                    {members.map((member) => {
+                        const isSelectable = member.user_id !== user?.id && member.role !== "developer"
+                        const isSelected = selectedIds.has(member.id)
+
+                        return (
+                            <TableRow key={member.id} className={isSelected ? "bg-blue-50" : ""}>
+                                <TableCell>
+                                    <Checkbox
+                                        checked={isSelected}
+                                        onCheckedChange={() => toggleSelect(member.id)}
+                                        disabled={!isSelectable}
+                                        aria-label={`Select ${member.email}`}
+                                    />
+                                </TableCell>
+                                <TableCell className="font-medium">
+                                    {member.display_name || "—"}
+                                    {member.user_id === user?.id && (
+                                        <Badge variant="outline" className="ml-2 text-xs">You</Badge>
+                                    )}
+                                </TableCell>
+                                <TableCell>{member.email}</TableCell>
+                                <TableCell>
+                                    <Badge className={ROLE_COLORS[member.role] || "bg-gray-100"}>
+                                        {ROLE_LABELS[member.role] || member.role}
+                                    </Badge>
+                                </TableCell>
+                                <TableCell className="text-muted-foreground">
+                                    {member.last_login_at
+                                        ? formatDistanceToNow(new Date(member.last_login_at), { addSuffix: true })
+                                        : "Never"}
+                                </TableCell>
+                                <TableCell className="text-right space-x-2">
+                                    <Link href={`/settings/team/members/${member.id}`}>
+                                        <Button variant="ghost" size="sm">
+                                            <Settings2 className="size-4 mr-1" />
+                                            Manage
+                                        </Button>
+                                    </Link>
+                                    {member.user_id !== user?.id && (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => handleRemove(member.id, member.email)}
+                                            disabled={removeMember.isPending}
+                                            className="text-destructive hover:text-destructive"
+                                        >
+                                            <X className="size-4" />
+                                        </Button>
+                                    )}
+                                </TableCell>
+                            </TableRow>
+                        )
+                    })}
+                </TableBody>
+            </Table>
+        </div>
     )
 }
 
