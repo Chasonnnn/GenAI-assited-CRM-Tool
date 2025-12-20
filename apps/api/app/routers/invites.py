@@ -7,8 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db, require_roles
-from app.db.enums import Role
+from app.core.deps import get_current_session, get_db, require_permission
+
 from app.db.models import OrgInvite
 from app.schemas.auth import UserSession
 from app.services import invite_service
@@ -82,7 +82,7 @@ def _invite_to_read(invite) -> InviteRead:
 @router.get("", response_model=InviteListResponse)
 async def list_invites(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_team")),
 ):
     """List all invitations for the organization (Manager+ only)."""
     invites = invite_service.list_invites(db, session.org_id)
@@ -98,7 +98,7 @@ async def list_invites(
 async def create_invite(
     body: InviteCreate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_team")),
 ):
     """Create a new invitation (Manager+ only)."""
     # Validate role
@@ -152,7 +152,7 @@ async def create_invite(
 async def resend_invite(
     invite_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_team")),
 ):
     """Resend an invitation email (Manager+ only)."""
     invite = invite_service.get_invite(db, session.org_id, invite_id)
@@ -182,7 +182,7 @@ async def resend_invite(
 async def revoke_invite(
     invite_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_team")),
 ):
     """Revoke an invitation (Manager+ only)."""
     invite = invite_service.get_invite(db, session.org_id, invite_id)
