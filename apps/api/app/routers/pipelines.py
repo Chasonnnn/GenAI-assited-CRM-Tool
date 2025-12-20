@@ -13,8 +13,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db, require_csrf_header, require_roles
-from app.db.enums import Role
+from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
+
 from app.schemas.auth import UserSession
 from app.services import pipeline_service, version_service
 
@@ -112,7 +112,7 @@ class StageReorder(BaseModel):
 @router.get("", response_model=list[PipelineRead])
 def list_pipelines(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_pipelines")),
 ):
     """
     List all pipelines for the organization.
@@ -166,7 +166,7 @@ def get_default_pipeline(
 def get_pipeline(
     pipeline_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_pipelines")),
 ):
     """Get a specific pipeline by ID."""
     pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
@@ -188,7 +188,7 @@ def get_pipeline(
 def create_pipeline(
     data: PipelineCreate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_pipelines")),
 ):
     """
     Create a new non-default pipeline.
@@ -221,7 +221,7 @@ def create_pipeline(
 @router.post("/default/sync-stages", dependencies=[Depends(require_csrf_header)])
 def sync_default_pipeline_stages(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_pipelines")),
 ):
     """
     Sync missing stages to the default pipeline.
@@ -245,7 +245,7 @@ def update_pipeline(
     pipeline_id: UUID,
     data: PipelineUpdate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_pipelines")),
 ):
     """
     Update pipeline name and/or stages.
@@ -292,7 +292,7 @@ def update_pipeline(
 def delete_pipeline(
     pipeline_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_pipelines")),
 ):
     """
     Delete a pipeline.
@@ -321,7 +321,7 @@ def get_pipeline_versions(
     pipeline_id: UUID,
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_pipelines")),
 ):
     """
     Get version history for a pipeline.
@@ -352,7 +352,7 @@ def rollback_pipeline(
     pipeline_id: UUID,
     data: RollbackRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_pipelines")),
 ):
     """
     Rollback pipeline to a previous version.
@@ -413,7 +413,7 @@ async def list_stages(
     pipeline_id: UUID,
     include_inactive: bool = Query(False),
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_pipelines")),
 ):
     """
     List all stages for a pipeline.
@@ -434,7 +434,7 @@ async def create_stage(
     pipeline_id: UUID,
     data: StageCreate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_pipelines")),
     _: str = Depends(require_csrf_header),
 ):
     """
@@ -469,7 +469,7 @@ async def update_stage(
     stage_id: UUID,
     data: StageUpdate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_pipelines")),
     _: str = Depends(require_csrf_header),
 ):
     """
@@ -505,7 +505,7 @@ async def delete_stage(
     stage_id: UUID,
     data: StageDelete,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_pipelines")),
     _: str = Depends(require_csrf_header),
 ):
     """
@@ -547,7 +547,7 @@ async def reorder_stages(
     pipeline_id: UUID,
     data: StageReorder,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_pipelines")),
     _: str = Depends(require_csrf_header),
 ):
     """
