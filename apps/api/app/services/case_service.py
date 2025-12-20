@@ -705,6 +705,7 @@ def list_cases(
     queue_id: UUID | None = None,
     created_from: str | None = None,  # ISO date string
     created_to: str | None = None,    # ISO date string
+    exclude_stage_types: list[str] | None = None,  # Permission-based stage filter
 ):
     """
     List cases with filters and pagination.
@@ -716,18 +717,34 @@ def list_cases(
         queue_id: Filter by specific queue (when owner_type='queue')
         created_from: Filter by creation date from (ISO format YYYY-MM-DD)
         created_to: Filter by creation date to (ISO format YYYY-MM-DD)
+        exclude_stage_types: Stage types to exclude (e.g. ['post_approval'] for users without permission)
     
     Returns:
         (cases, total_count)
     """
     from app.db.enums import Role, OwnerType
+    from app.db.models import PipelineStage
     from datetime import datetime
+    from sqlalchemy import or_
     
     query = db.query(Case).filter(Case.organization_id == org_id)
     
     # Archived filter (default: exclude)
     if not include_archived:
         query = query.filter(Case.is_archived == False)
+    
+    # Permission-based stage type filter (exclude certain stage types)
+    # NULL stage_id cases are kept visible (not excluded)
+    if exclude_stage_types:
+        excluded_stage_ids = db.query(PipelineStage.id).filter(
+            PipelineStage.stage_type.in_(exclude_stage_types),
+        ).scalar_subquery()
+        query = query.filter(
+            or_(
+                Case.stage_id.is_(None),
+                ~Case.stage_id.in_(excluded_stage_ids)
+            )
+        )
     
     # Owner-type filter
     if owner_type:

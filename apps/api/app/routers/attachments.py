@@ -60,7 +60,7 @@ def _get_case_with_access(
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     
-    check_case_access(case, session.role, session.user_id)
+    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
     if require_write and not can_modify_case(case, session.user_id, session.role):
         raise HTTPException(status_code=403, detail="Not authorized to modify this case")
     
