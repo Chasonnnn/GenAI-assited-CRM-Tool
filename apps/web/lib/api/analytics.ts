@@ -30,7 +30,9 @@ export interface TrendPoint {
 
 export interface MetaPerformance {
     leads_received: number;
+    leads_qualified: number;
     leads_converted: number;
+    qualification_rate: number;
     conversion_rate: number;
     avg_time_to_convert_hours: number | null;
 }
