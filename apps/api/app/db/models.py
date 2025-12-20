@@ -350,11 +350,26 @@ class Case(Base):
     )
     
     # Workflow
-    status: Mapped[str] = mapped_column(
+    # DEPRECATED: old enum-based status (kept for migration, will be removed)
+    status: Mapped[str | None] = mapped_column(
         String(50),
         server_default=text(f"'{DEFAULT_CASE_STATUS.value}'"),
-        nullable=False
+        nullable=True
     )
+    
+    # v2: Pipeline reference
+    pipeline_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("pipelines.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    stage_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("pipeline_stages.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    status_label: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    
     source: Mapped[str] = mapped_column(
         String(20),
         server_default=text(f"'{DEFAULT_CASE_SOURCE.value}'"),
@@ -490,8 +505,24 @@ class CaseStatusHistory(Base):
         ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False
     )
-    from_status: Mapped[str] = mapped_column(String(50), nullable=False)
-    to_status: Mapped[str] = mapped_column(String(50), nullable=False)
+    # DEPRECATED: old string-based status (kept for migration)
+    from_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    to_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    
+    # v2: Stage references with label snapshots
+    from_stage_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("pipeline_stages.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    to_stage_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("pipeline_stages.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    from_label_snapshot: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    to_label_snapshot: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    
     changed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -1941,24 +1972,17 @@ class CaseImport(Base):
 
 
 # =============================================================================
-# Org-Configurable Pipelines (Display-Only v1)
+# Org-Configurable Pipelines (v2 - Full CRUD)
 # =============================================================================
 
 class Pipeline(Base):
     """
-    Organization pipeline configuration for case status display.
+    Organization pipeline configuration.
     
-    v1 (Display-Only):
-    - Maps existing CaseStatus values to custom labels/colors/order
-    - Does NOT add new statuses (backend still uses CaseStatus enum)
-    - Frontend reads this for UI customization
-    
-    stages JSON format:
-    [
-        {"status": "new_unread", "label": "New Lead", "color": "#3B82F6", "order": 1, "visible": true},
-        {"status": "contacted", "label": "Reached Out", "color": "#10B981", "order": 2, "visible": true},
-        ...
-    ]
+    v2 (Full CRUD):
+    - PipelineStage rows define custom stages
+    - Cases reference stage_id (FK)
+    - Stages have immutable slugs, editable labels/colors
     """
     __tablename__ = "pipelines"
     __table_args__ = (
@@ -1979,8 +2003,8 @@ class Pipeline(Base):
     name: Mapped[str] = mapped_column(String(100), default="Default", nullable=False)
     is_default: Mapped[bool] = mapped_column(default=True, nullable=False)
     
-    # Stage configuration (JSON array of stage objects)
-    stages: Mapped[list] = mapped_column(JSONB, nullable=False)
+    # DEPRECATED: stages JSON (kept for migration, will be removed)
+    stages: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     
     # Version control
     current_version: Mapped[int] = mapped_column(default=1, nullable=False)
@@ -1996,6 +2020,71 @@ class Pipeline(Base):
     
     # Relationships
     organization: Mapped["Organization"] = relationship()
+    stage_rows: Mapped[list["PipelineStage"]] = relationship(
+        back_populates="pipeline",
+        cascade="all, delete-orphan",
+        order_by="PipelineStage.order"
+    )
+
+
+class PipelineStage(Base):
+    """
+    Individual pipeline stage configuration.
+    
+    - slug: Immutable after creation, unique per pipeline
+    - stage_type: Immutable, controls role access (intake/post_approval/terminal)
+    - Soft-delete via is_active + deleted_at
+    - Cases reference stage_id (FK)
+    """
+    __tablename__ = "pipeline_stages"
+    __table_args__ = (
+        UniqueConstraint("pipeline_id", "slug", name="uq_stage_slug"),
+        Index("idx_stage_pipeline_order", "pipeline_id", "order"),
+        Index("idx_stage_pipeline_active", "pipeline_id", "is_active"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    pipeline_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("pipelines.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # Immutable after creation
+    slug: Mapped[str] = mapped_column(String(50), nullable=False)
+    stage_type: Mapped[str] = mapped_column(String(20), nullable=False)  # intake/post_approval/terminal
+    
+    # Editable
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+    color: Mapped[str] = mapped_column(String(7), nullable=False)  # hex #RRGGBB
+    order: Mapped[int] = mapped_column(Integer, nullable=False)
+    
+    # Soft-delete
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("TRUE"),
+        nullable=False
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    
+    # Future: transition rules
+    allowed_next_slugs: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    pipeline: Mapped["Pipeline"] = relationship(back_populates="stage_rows")
 
 
 # =============================================================================
