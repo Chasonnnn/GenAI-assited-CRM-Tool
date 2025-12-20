@@ -71,9 +71,15 @@ export default function AuditLogPage() {
 
     const totalPages = auditData ? Math.ceil(auditData.total / perPage) : 0
 
+    const visibleExportJobs = useMemo(() => {
+        const items = exportJobs?.items ?? []
+        if (isDeveloper) return items
+        return items.filter(job => job.redact_mode !== "full")
+    }, [exportJobs, isDeveloper])
+
     const hasPendingExports = useMemo(
-        () => exportJobs?.items?.some(job => ["pending", "processing"].includes(job.status)) ?? false,
-        [exportJobs]
+        () => visibleExportJobs.some(job => ["pending", "processing"].includes(job.status)),
+        [visibleExportJobs]
     )
 
     useEffect(() => {
@@ -224,7 +230,7 @@ export default function AuditLogPage() {
                             </div>
                         )}
 
-                        {exportJobs?.items?.length ? (
+                        {visibleExportJobs.length ? (
                             <div className="border rounded-lg">
                                 <div className="flex items-center justify-between px-4 py-2 border-b">
                                     <span className="text-sm font-medium">Recent Exports</span>
@@ -233,7 +239,7 @@ export default function AuditLogPage() {
                                     )}
                                 </div>
                                 <div className="divide-y">
-                                    {exportJobs.items.slice(0, 5).map((job) => (
+                                    {visibleExportJobs.slice(0, 5).map((job) => (
                                         <div key={job.id} className="flex items-center justify-between px-4 py-3">
                                             <div className="space-y-1">
                                                 <div className="flex items-center gap-2">

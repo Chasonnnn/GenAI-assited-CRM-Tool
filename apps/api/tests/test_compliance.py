@@ -3,6 +3,8 @@ import csv
 import json
 import os
 
+import pytest
+
 from app.core.config import settings
 from app.db.enums import AuditEventType, TaskType
 from app.db.models import AuditLog, Task
@@ -28,10 +30,23 @@ def _create_audit_log(db, org_id, user_id, **overrides):
     return log
 
 
-def test_export_job_redacts_phi(db, test_org, test_user, tmp_path):
+@pytest.fixture
+def export_settings(tmp_path):
+    original = {
+        "EXPORT_STORAGE_BACKEND": settings.EXPORT_STORAGE_BACKEND,
+        "EXPORT_LOCAL_DIR": settings.EXPORT_LOCAL_DIR,
+        "EXPORT_MAX_RECORDS": settings.EXPORT_MAX_RECORDS,
+        "EXPORT_RATE_LIMIT_PER_HOUR": settings.EXPORT_RATE_LIMIT_PER_HOUR,
+    }
     settings.EXPORT_STORAGE_BACKEND = "local"
     settings.EXPORT_LOCAL_DIR = str(tmp_path)
     settings.EXPORT_MAX_RECORDS = 1000
+    yield
+    for key, value in original.items():
+        setattr(settings, key, value)
+
+
+def test_export_job_redacts_phi(db, test_org, test_user, export_settings):
 
     _create_audit_log(
         db,
@@ -80,10 +95,7 @@ def test_export_job_redacts_phi(db, test_org, test_user, tmp_path):
     assert len(row_data["created_at"]) == 7
 
 
-def test_export_job_full_mode_keeps_values(db, test_org, test_user, tmp_path):
-    settings.EXPORT_STORAGE_BACKEND = "local"
-    settings.EXPORT_LOCAL_DIR = str(tmp_path)
-    settings.EXPORT_MAX_RECORDS = 1000
+def test_export_job_full_mode_keeps_values(db, test_org, test_user, export_settings):
 
     _create_audit_log(
         db,
@@ -157,12 +169,8 @@ def test_legal_hold_blocks_purge_preview(db, test_org, test_user):
     assert results == []
 
 
-def test_export_empty_result(db, test_org, test_user, tmp_path):
+def test_export_empty_result(db, test_org, test_user, export_settings):
     """Export when no logs match the date range returns empty file."""
-    settings.EXPORT_STORAGE_BACKEND = "local"
-    settings.EXPORT_LOCAL_DIR = str(tmp_path)
-    settings.EXPORT_MAX_RECORDS = 1000
-
     # Use a date range far in the past where no logs exist
     start_date = datetime(2000, 1, 1)
     end_date = datetime(2000, 1, 2)
@@ -255,22 +263,29 @@ def test_specific_entity_legal_hold_blocks_related(db, test_org, test_user):
     assert case_result.count == 1  # Only case2
 
 
-def test_rate_limit_exceeded(db, test_org, test_user, tmp_path):
+def test_rate_limit_exceeded(db, test_org, test_user, export_settings):
     """Export rate limit returns error when exceeded."""
-    import pytest
-
-    settings.EXPORT_STORAGE_BACKEND = "local"
-    settings.EXPORT_LOCAL_DIR = str(tmp_path)
-    settings.EXPORT_MAX_RECORDS = 1000
-    original_limit = settings.EXPORT_RATE_LIMIT_PER_HOUR
     settings.EXPORT_RATE_LIMIT_PER_HOUR = 1
+    start_date = datetime.utcnow() - timedelta(days=1)
+    end_date = datetime.utcnow() + timedelta(days=1)
 
-    try:
-        start_date = datetime.utcnow() - timedelta(days=1)
-        end_date = datetime.utcnow() + timedelta(days=1)
+    # First export should succeed
+    job1 = compliance_service.create_export_job(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        export_type="audit",
+        start_date=start_date,
+        end_date=end_date,
+        file_format="csv",
+        redact_mode="redacted",
+        acknowledgment=None,
+    )
+    assert job1 is not None
 
-        # First export should succeed
-        job1 = compliance_service.create_export_job(
+    # Second export should fail due to rate limit
+    with pytest.raises(ValueError, match="rate limit"):
+        compliance_service.create_export_job(
             db=db,
             org_id=test_org.id,
             user_id=test_user.id,
@@ -281,20 +296,3 @@ def test_rate_limit_exceeded(db, test_org, test_user, tmp_path):
             redact_mode="redacted",
             acknowledgment=None,
         )
-        assert job1 is not None
-
-        # Second export should fail due to rate limit
-        with pytest.raises(ValueError, match="rate limit"):
-            compliance_service.create_export_job(
-                db=db,
-                org_id=test_org.id,
-                user_id=test_user.id,
-                export_type="audit",
-                start_date=start_date,
-                end_date=end_date,
-                file_format="csv",
-                redact_mode="redacted",
-                acknowledgment=None,
-            )
-    finally:
-        settings.EXPORT_RATE_LIMIT_PER_HOUR = original_limit
