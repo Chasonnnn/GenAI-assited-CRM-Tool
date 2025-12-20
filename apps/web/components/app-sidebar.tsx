@@ -277,7 +277,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                             )}
                             {/* Settings with sub-menu */}
                             <Collapsible
-                                open={pathname?.startsWith("/settings") || undefined}
+                                defaultOpen={pathname?.startsWith("/settings") ?? false}
                                 className="group/collapsible"
                             >
                                 <SidebarMenuItem>
