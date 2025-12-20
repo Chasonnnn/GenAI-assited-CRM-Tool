@@ -12,14 +12,14 @@ import { useAuth } from "@/lib/auth-context"
 const ROLE_DESCRIPTIONS: Record<string, string> = {
     intake_specialist: "Entry-level role for processing new leads and initial case intake",
     case_manager: "Mid-level role for managing post-approval cases and matching",
-    manager: "Admin role with team management and organization settings",
+    admin: "Admin role with team management and organization settings",
     developer: "Full access to all features including system configuration",
 }
 
 const ROLE_ICONS: Record<string, string> = {
     intake_specialist: "👤",
     case_manager: "📋",
-    manager: "👔",
+    admin: "👔",
     developer: "🔧",
 }
 

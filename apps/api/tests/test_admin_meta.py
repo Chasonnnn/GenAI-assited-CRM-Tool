@@ -259,7 +259,7 @@ async def test_meta_pages_org_isolation(authed_client: AsyncClient, db, client):
         id=uuid.uuid4(),
         user_id=user2.id,
         organization_id=org2.id,
-        role=Role.MANAGER,
+        role=Role.ADMIN,
     )
     db.add(membership2)
     db.flush()

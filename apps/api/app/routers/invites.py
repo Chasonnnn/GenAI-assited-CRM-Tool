@@ -290,7 +290,7 @@ async def accept_invite(
     # Map role string to enum
     role_map = {
         "member": RoleEnum.MEMBER,
-        "manager": RoleEnum.MANAGER,
+        "admin": RoleEnum.ADMIN,
     }
     role = role_map.get(invite.role, RoleEnum.MEMBER)
     

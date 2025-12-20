@@ -46,14 +46,14 @@ import { Checkbox } from "@/components/ui/checkbox"
 const ROLE_LABELS: Record<string, string> = {
     intake_specialist: "Intake Specialist",
     case_manager: "Case Manager",
-    manager: "Manager",
+    admin: "Admin",
     developer: "Developer",
 }
 
 const ROLE_COLORS: Record<string, string> = {
     intake_specialist: "bg-blue-100 text-blue-800",
     case_manager: "bg-green-100 text-green-800",
-    manager: "bg-purple-100 text-purple-800",
+    admin: "bg-purple-100 text-purple-800",
     developer: "bg-orange-100 text-orange-800",
 }
 
@@ -143,7 +143,7 @@ function InviteTeamModal({ onClose }: { onClose: () => void }) {
                             <SelectContent>
                                 <SelectItem value="intake_specialist">Intake Specialist</SelectItem>
                                 <SelectItem value="case_manager">Case Manager</SelectItem>
-                                <SelectItem value="manager">Manager</SelectItem>
+                                <SelectItem value="admin">Admin</SelectItem>
                             </SelectContent>
                         </Select>
                         <p className="text-xs text-muted-foreground">
@@ -292,7 +292,7 @@ function MembersTab() {
                                             <SelectContent>
                                                 <SelectItem value="intake_specialist">Intake Specialist</SelectItem>
                                                 <SelectItem value="case_manager">Case Manager</SelectItem>
-                                                <SelectItem value="manager">Manager</SelectItem>
+                                                <SelectItem value="admin">Admin</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>

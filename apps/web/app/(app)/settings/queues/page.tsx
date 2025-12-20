@@ -47,7 +47,7 @@ export default function QueuesSettingsPage() {
     const [formData, setFormData] = React.useState<QueueCreatePayload>({ name: "", description: "" })
 
     // Check if user is a manager
-    const isManager = user?.role && ['manager', 'developer'].includes(user.role)
+    const isManager = user?.role && ['admin', 'developer'].includes(user.role)
 
     // Redirect if not manager
     React.useEffect(() => {

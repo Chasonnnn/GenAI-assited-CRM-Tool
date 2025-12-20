@@ -432,7 +432,7 @@ def get_effective_permissions(
 ROLE_LABELS = {
     "intake_specialist": "Intake Specialist",
     "case_manager": "Case Manager",
-    "manager": "Manager",
+    "admin": "Admin",
     "developer": "Developer",
 }
 

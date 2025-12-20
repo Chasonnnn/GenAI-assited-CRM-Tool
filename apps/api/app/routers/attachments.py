@@ -213,7 +213,7 @@ async def delete_attachment(
         raise HTTPException(status_code=404, detail="Attachment not found")
     
     # Access control: uploader or Manager+
-    is_manager = session.role in (Role.MANAGER, Role.DEVELOPER)
+    is_manager = session.role in (Role.ADMIN, Role.DEVELOPER)
     is_uploader = attachment.uploaded_by_user_id == session.user_id
     
     if not is_manager and not is_uploader:

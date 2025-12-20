@@ -206,7 +206,7 @@ def archive_intended_parent(
 def restore_intended_parent(
     ip_id: UUID,
     db: Session = Depends(get_db),
-    session = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ):
     """Restore an archived intended parent (manager only)."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -230,7 +230,7 @@ def restore_intended_parent(
 def delete_intended_parent(
     ip_id: UUID,
     db: Session = Depends(get_db),
-    session = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ):
     """Hard delete an archived intended parent (manager only)."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -323,7 +323,7 @@ def delete_note(
         raise HTTPException(status_code=404, detail="Note not found")
     
     # Check permission: author or manager+
-    if note.author_id != session.user_id and session.role not in (Role.MANAGER, Role.DEVELOPER):
+    if note.author_id != session.user_id and session.role not in (Role.ADMIN, Role.DEVELOPER):
         raise HTTPException(status_code=403, detail="Not authorized to delete this note")
     
     note_service.delete_note(db, note)

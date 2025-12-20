@@ -230,7 +230,7 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "view_reports",
         "view_email_templates",
     },
-    "manager": {
+    "admin": {
         "view_dashboard",
         "view_cases",
         "edit_cases",

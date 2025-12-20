@@ -91,7 +91,7 @@ def manager_user(db, org_a):
         id=uuid.uuid4(),
         user_id=user.id,
         organization_id=org_a.id,
-        role=Role.MANAGER.value,
+        role=Role.ADMIN.value,
     )
     db.add(membership)
     db.flush()
@@ -139,7 +139,7 @@ def user_in_org_b(db, org_b):
         id=uuid.uuid4(),
         user_id=user.id,
         organization_id=org_b.id,
-        role=Role.MANAGER.value,
+        role=Role.ADMIN.value,
     )
     db.add(membership)
     db.flush()
@@ -188,7 +188,7 @@ def test_precedence_user_revoke_overrides_role_grant(db, org_a, manager_user, de
     role_perm = RolePermission(
         id=uuid.uuid4(),
         organization_id=org_a.id,
-        role=Role.MANAGER.value,
+        role=Role.ADMIN.value,
         permission="view_post_approval_cases",
         is_granted=True,
     )
@@ -197,7 +197,7 @@ def test_precedence_user_revoke_overrides_role_grant(db, org_a, manager_user, de
     
     # Verify role grants permission
     result = permission_service.check_permission(
-        db, org_a.id, manager_user.id, Role.MANAGER.value, "view_post_approval_cases"
+        db, org_a.id, manager_user.id, Role.ADMIN.value, "view_post_approval_cases"
     )
     assert result is True, "Role grant should work"
     
@@ -214,7 +214,7 @@ def test_precedence_user_revoke_overrides_role_grant(db, org_a, manager_user, de
     
     # Verify revoke overrides role grant
     result = permission_service.check_permission(
-        db, org_a.id, manager_user.id, Role.MANAGER.value, "view_post_approval_cases"
+        db, org_a.id, manager_user.id, Role.ADMIN.value, "view_post_approval_cases"
     )
     assert result is False, "User revoke should override role grant"
 
@@ -253,7 +253,7 @@ def test_precedence_user_grant_overrides_role_deny(db, org_a, intake_user, devel
 def test_missing_permission_returns_false(db, org_a, manager_user):
     """Missing/undefined permission should return False."""
     result = permission_service.check_permission(
-        db, org_a.id, manager_user.id, Role.MANAGER.value, "completely_undefined_permission"
+        db, org_a.id, manager_user.id, Role.ADMIN.value, "completely_undefined_permission"
     )
     assert result is False, "Missing permission should return False"
 
@@ -327,14 +327,14 @@ def test_org_scoping_overrides_isolated(db, org_a, org_b, manager_user, user_in_
     
     # Manager in org A should have the custom permission
     result_a = permission_service.check_permission(
-        db, org_a.id, manager_user.id, Role.MANAGER.value, "some_custom_permission_xyz"
+        db, org_a.id, manager_user.id, Role.ADMIN.value, "some_custom_permission_xyz"
     )
     assert result_a is True, "Manager in org A should have permission from override"
     
     # User in org B should NOT have the custom permission
     # (they don't have the override, and it's not in ROLE_DEFAULTS)
     result_b = permission_service.check_permission(
-        db, org_b.id, user_in_org_b.id, Role.MANAGER.value, "some_custom_permission_xyz"
+        db, org_b.id, user_in_org_b.id, Role.ADMIN.value, "some_custom_permission_xyz"
     )
     assert result_b is False, "User in org B should not have permission (no override/default)"
 
@@ -345,7 +345,7 @@ def test_org_scoping_role_defaults_isolated(db, org_a, org_b, manager_user, user
     role_perm_a = RolePermission(
         id=uuid.uuid4(),
         organization_id=org_a.id,
-        role=Role.MANAGER.value,
+        role=Role.ADMIN.value,
         permission="some_custom_permission",
         is_granted=True,
     )
@@ -354,12 +354,12 @@ def test_org_scoping_role_defaults_isolated(db, org_a, org_b, manager_user, user
     
     # Manager in org A should have permission
     result_a = permission_service.check_permission(
-        db, org_a.id, manager_user.id, Role.MANAGER.value, "some_custom_permission"
+        db, org_a.id, manager_user.id, Role.ADMIN.value, "some_custom_permission"
     )
     assert result_a is True, "Org A manager should have permission from role default"
     
     # Manager in org B should NOT have this permission (no role default there)
     result_b = permission_service.check_permission(
-        db, org_b.id, user_in_org_b.id, Role.MANAGER.value, "some_custom_permission"
+        db, org_b.id, user_in_org_b.id, Role.ADMIN.value, "some_custom_permission"
     )
     assert result_b is False, "Org B manager should NOT have permission (no role default)"

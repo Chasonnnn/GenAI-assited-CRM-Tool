@@ -93,7 +93,7 @@ def create_queue(
     db: Session = Depends(get_db),
 ):
     """Create a new queue. Manager+ only."""
-    if session.role not in [Role.MANAGER.value, Role.DEVELOPER.value]:
+    if session.role not in [Role.ADMIN.value, Role.DEVELOPER.value]:
         raise HTTPException(status_code=403, detail="Manager role required")
     
     try:
@@ -114,7 +114,7 @@ def update_queue(
     db: Session = Depends(get_db),
 ):
     """Update a queue. Manager+ only."""
-    if session.role not in [Role.MANAGER.value, Role.DEVELOPER.value]:
+    if session.role not in [Role.ADMIN.value, Role.DEVELOPER.value]:
         raise HTTPException(status_code=403, detail="Manager role required")
     
     try:
@@ -139,7 +139,7 @@ def delete_queue(
     db: Session = Depends(get_db),
 ):
     """Soft-delete a queue (set inactive). Manager+ only."""
-    if session.role not in [Role.MANAGER.value, Role.DEVELOPER.value]:
+    if session.role not in [Role.ADMIN.value, Role.DEVELOPER.value]:
         raise HTTPException(status_code=403, detail="Manager role required")
     
     try:
@@ -166,7 +166,7 @@ def claim_case(
     - Sets owner to current user
     - Returns 409 if already claimed by a user
     """
-    if session.role not in [Role.CASE_MANAGER.value, Role.MANAGER.value, Role.DEVELOPER.value]:
+    if session.role not in [Role.CASE_MANAGER.value, Role.ADMIN.value, Role.DEVELOPER.value]:
         raise HTTPException(status_code=403, detail="Case manager role required")
     
     try:
@@ -194,7 +194,7 @@ def release_case(
     - Case must be owned by a user
     - Transfers ownership to specified queue
     """
-    if session.role not in [Role.CASE_MANAGER.value, Role.MANAGER.value, Role.DEVELOPER.value]:
+    if session.role not in [Role.CASE_MANAGER.value, Role.ADMIN.value, Role.DEVELOPER.value]:
         raise HTTPException(status_code=403, detail="Case manager role required")
     
     try:
@@ -221,7 +221,7 @@ def assign_case_to_queue(
     
     Works whether case is currently user-owned or queue-owned.
     """
-    if session.role not in [Role.MANAGER.value, Role.DEVELOPER.value]:
+    if session.role not in [Role.ADMIN.value, Role.DEVELOPER.value]:
         raise HTTPException(status_code=403, detail="Manager role required")
     
     try:

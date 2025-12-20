@@ -48,7 +48,7 @@ describe('QueuesSettingsPage', () => {
     })
 
     it('renders queues for manager users', () => {
-        mockUseAuth.mockReturnValue({ user: { role: 'manager' } })
+        mockUseAuth.mockReturnValue({ user: { role: 'admin' } })
         mockUseQueues.mockReturnValue({
             data: [
                 {

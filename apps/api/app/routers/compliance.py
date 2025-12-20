@@ -27,7 +27,7 @@ router = APIRouter(prefix="/compliance", tags=["Compliance"])
 @router.get("/policies", response_model=list[RetentionPolicyRead])
 def list_policies(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> list[RetentionPolicyRead]:
     """List retention policies for the organization."""
     return compliance_service.list_retention_policies(db, session.org_id)
@@ -37,7 +37,7 @@ def list_policies(
 def upsert_policy(
     payload: RetentionPolicyUpsert,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> RetentionPolicyRead:
     """Create or update a retention policy."""
     try:
@@ -56,7 +56,7 @@ def upsert_policy(
 @router.get("/legal-holds", response_model=list[LegalHoldRead])
 def list_legal_holds(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> list[LegalHoldRead]:
     """List legal holds for the organization."""
     return compliance_service.list_legal_holds(db, session.org_id)
@@ -66,7 +66,7 @@ def list_legal_holds(
 def create_legal_hold(
     payload: LegalHoldCreate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> LegalHoldRead:
     """Create a legal hold (org-wide or entity-specific)."""
     return compliance_service.create_legal_hold(
@@ -83,7 +83,7 @@ def create_legal_hold(
 def release_legal_hold(
     hold_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> LegalHoldRead:
     """Release a legal hold."""
     hold = compliance_service.release_legal_hold(

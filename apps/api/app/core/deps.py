@@ -135,7 +135,7 @@ def require_roles(allowed_roles: list):
     Uses enum values (not strings) to prevent drift.
     
     Usage:
-        @router.post("/admin", dependencies=[Depends(require_roles([Role.MANAGER, Role.DEVELOPER]))])
+        @router.post("/admin", dependencies=[Depends(require_roles([Role.ADMIN, Role.DEVELOPER]))])
     """
     def dependency(request: Request, db: Session = Depends(get_db)):
         session = get_current_session(request, db)

@@ -862,7 +862,7 @@ def bulk_assign_cases(
     from app.db.enums import Role
     
     # Role check: case_manager+
-    allowed_roles = {Role.CASE_MANAGER, Role.MANAGER, Role.DEVELOPER}
+    allowed_roles = {Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER}
     if session.role not in allowed_roles:
         raise HTTPException(status_code=403, detail="Only case managers and above can bulk assign cases")
     

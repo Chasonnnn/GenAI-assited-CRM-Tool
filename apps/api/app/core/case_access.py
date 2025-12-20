@@ -55,7 +55,7 @@ def check_case_access(
         _check_post_approval_access(db, org_id, user_id, role_str, case)
     
     # Manager bypass for ownership checks (but NOT for permission checks above)
-    if role_str == Role.MANAGER.value:
+    if role_str == Role.ADMIN.value:
         return
     
     # Owner fields are required for all cases
@@ -156,10 +156,10 @@ def can_modify_case(
     
     # Archived cases: only managers
     if case.is_archived:
-        return role_str in [Role.MANAGER.value, Role.DEVELOPER.value]
+        return role_str in [Role.ADMIN.value, Role.DEVELOPER.value]
     
     # Manager+ can always modify
-    if role_str in [Role.MANAGER.value, Role.DEVELOPER.value]:
+    if role_str in [Role.ADMIN.value, Role.DEVELOPER.value]:
         return True
     
     # Owner can modify

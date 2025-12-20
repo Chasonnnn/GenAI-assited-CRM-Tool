@@ -556,7 +556,7 @@ class WorkflowEngine:
             from app.db.enums import Role
             memberships = db.query(Membership).filter(
                 Membership.organization_id == entity.organization_id,
-                Membership.role.in_([Role.MANAGER.value, Role.DEVELOPER.value]),
+                Membership.role.in_([Role.ADMIN.value, Role.DEVELOPER.value]),
             ).all()
             user_ids = [m.user_id for m in memberships]
         elif isinstance(recipients, list):

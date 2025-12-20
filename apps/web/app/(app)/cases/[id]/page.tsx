@@ -221,7 +221,7 @@ export default function CaseDetailPage() {
     const { data: aiSettings } = useAISettings()
 
     // Fetch queues for release dialog
-    const canManageQueue = user?.role && ['case_manager', 'manager', 'developer'].includes(user.role)
+    const canManageQueue = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
     const { data: queues } = useQueues()
 
     const copyEmail = () => {
@@ -398,7 +398,7 @@ export default function CaseDetailPage() {
                     )}
 
                     {/* Propose Match Button - only for manager+ on active cases */}
-                    {user?.role && ['manager', 'developer'].includes(user.role) && !caseData.is_archived && (
+                    {user?.role && ['admin', 'developer'].includes(user.role) && !caseData.is_archived && (
                         <Button
                             variant="outline"
                             size="sm"

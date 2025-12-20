@@ -62,7 +62,7 @@ describe('PipelinesSettingsPage', () => {
         mockUpdateStage.mockReset()
         mockReorderStages.mockReset()
 
-        mockUseAuth.mockReturnValue({ user: { role: 'manager' } })
+        mockUseAuth.mockReturnValue({ user: { role: 'admin' } })
         mockUsePipelines.mockReturnValue({ data: [pipelineFixture], isLoading: false })
         mockUsePipeline.mockReturnValue({ data: pipelineFixture, isLoading: false })
         mockUsePipelineVersions.mockReturnValue({ data: [], isLoading: false, isError: false })
