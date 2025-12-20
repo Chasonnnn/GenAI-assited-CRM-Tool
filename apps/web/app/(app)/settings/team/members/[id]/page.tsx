@@ -47,20 +47,43 @@ function AddOverrideDialog({
     open,
     onOpenChange,
     onAdd,
-    existingOverrides
+    existingOverrides,
+    effectivePermissions
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
     onAdd: (permission: string, type: "grant" | "revoke") => void
     existingOverrides: string[]
+    effectivePermissions: string[]
 }) {
     const [permission, setPermission] = useState("")
     const [type, setType] = useState<"grant" | "revoke">("grant")
     const { data: allPermissions } = useAvailablePermissions()
 
-    const availablePermissions = allPermissions?.filter(
-        p => !existingOverrides.includes(p.key) && !p.developer_only
-    ) || []
+    // Filter permissions based on override type:
+    // - Grant: show permissions user DOESN'T have (not in effective && not developer_only)
+    // - Revoke: show permissions user HAS (in effective)
+    // Always exclude already overridden permissions
+    const availablePermissions = allPermissions?.filter(p => {
+        // Skip if already has an override for this permission
+        if (existingOverrides.includes(p.key)) return false
+        // Skip developer_only permissions for non-developers
+        if (p.developer_only) return false
+
+        if (type === "grant") {
+            // Grant: only show permissions they DON'T currently have
+            return !effectivePermissions.includes(p.key)
+        } else {
+            // Revoke: only show permissions they DO currently have
+            return effectivePermissions.includes(p.key)
+        }
+    }) || []
+
+    // Clear selected permission when type changes (since options change)
+    const handleTypeChange = (value: string) => {
+        setType(value as "grant" | "revoke")
+        setPermission("") // Reset selection when type changes
+    }
 
     const handleAdd = () => {
         if (permission) {
@@ -72,10 +95,6 @@ function AddOverrideDialog({
 
     const handlePermissionChange = (value: string) => {
         setPermission(value)
-    }
-
-    const handleTypeChange = (value: string) => {
-        setType(value as "grant" | "revoke")
     }
 
     return (
@@ -447,6 +466,7 @@ export default function MemberDetailPage() {
                 onOpenChange={setShowOverrideDialog}
                 onAdd={handleAddOverride}
                 existingOverrides={displayedOverrides.map(o => o.permission)}
+                effectivePermissions={member?.effective_permissions || []}
             />
         </div>
     )
