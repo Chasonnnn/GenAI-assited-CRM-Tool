@@ -92,13 +92,18 @@ function AddOverrideDialog({
                     <div className="space-y-2">
                         <Label>Permission</Label>
                         <Select value={permission} onValueChange={handlePermissionChange}>
-                            <SelectTrigger>
+                            <SelectTrigger className="w-full">
                                 <SelectValue placeholder="Select permission..." />
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent
+                                side="bottom"
+                                sideOffset={4}
+                                alignItemWithTrigger={false}
+                                className="min-w-max max-h-[300px]"
+                            >
                                 {availablePermissions.map(p => (
                                     <SelectItem key={p.key} value={p.key}>
-                                        <div>
+                                        <div className="whitespace-nowrap">
                                             <span className="font-medium">{p.label}</span>
                                             <span className="text-muted-foreground ml-2">({p.category})</span>
                                         </div>
