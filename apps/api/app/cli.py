@@ -234,5 +234,79 @@ def deactivate_meta_page(page_id: str):
         db.close()
 
 
+@cli.command()
+@click.option("--dry-run", is_flag=True, help="Preview changes without applying")
+def backfill_permissions(dry_run: bool):
+    """
+    Backfill new permissions to all organizations.
+    
+    Run this after adding new permissions to PERMISSION_REGISTRY or ROLE_DEFAULTS.
+    Creates missing role_permissions rows for each org.
+    
+    Recommended: Run nightly via cron or on deploy.
+    
+    Example:
+        python -m app.cli backfill-permissions
+        python -m app.cli backfill-permissions --dry-run
+    """
+    from app.services import permission_service
+    from app.core.permissions import PERMISSION_REGISTRY, ROLE_DEFAULTS
+    
+    db = SessionLocal()
+    try:
+        orgs = db.query(Organization).all()
+        click.echo(f"Found {len(orgs)} organization(s)")
+        click.echo(f"Permission registry: {len(PERMISSION_REGISTRY)} permissions")
+        click.echo(f"Role defaults: {list(ROLE_DEFAULTS.keys())}")
+        click.echo()
+        
+        if dry_run:
+            click.echo("🔍 DRY RUN - no changes will be made")
+            click.echo()
+        
+        total_created = 0
+        for org in orgs:
+            if dry_run:
+                # Count what would be created
+                from app.db.models import RolePermission
+                count = 0
+                for role, permissions in ROLE_DEFAULTS.items():
+                    if role == "developer":
+                        continue
+                    for permission in permissions:
+                        existing = db.query(RolePermission).filter(
+                            RolePermission.organization_id == org.id,
+                            RolePermission.role == role,
+                            RolePermission.permission == permission,
+                        ).first()
+                        if not existing:
+                            count += 1
+                if count > 0:
+                    click.echo(f"  {org.slug}: would create {count} permissions")
+                    total_created += count
+            else:
+                created = permission_service.seed_role_defaults(db, org.id)
+                if created > 0:
+                    click.echo(f"  {org.slug}: created {created} permissions")
+                    total_created += created
+        
+        if not dry_run:
+            db.commit()
+        
+        click.echo()
+        if total_created > 0:
+            verb = "would create" if dry_run else "created"
+            click.echo(f"✓ {verb.capitalize()} {total_created} total permission(s)")
+        else:
+            click.echo("✓ All permissions already up to date")
+        
+    except Exception as e:
+        db.rollback()
+        click.echo(f"❌ Error: {e}")
+        raise
+    finally:
+        db.close()
+
+
 if __name__ == "__main__":
     cli()
