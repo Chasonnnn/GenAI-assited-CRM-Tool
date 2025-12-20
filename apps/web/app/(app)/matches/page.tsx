@@ -61,11 +61,12 @@ function MatchRow({ match }: { match: MatchListItem }) {
                 {formatDistanceToNow(new Date(match.proposed_at), { addSuffix: true })}
             </TableCell>
             <TableCell className="text-right">
-                <Button variant="ghost" size="sm" asChild>
-                    <Link href={`/matches/${match.id}`}>
-                        <ArrowRightIcon className="size-4" />
-                    </Link>
-                </Button>
+                <Link
+                    href={`/matches/${match.id}`}
+                    className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent hover:text-accent-foreground"
+                >
+                    <ArrowRightIcon className="size-4" />
+                </Link>
             </TableCell>
         </TableRow>
     )

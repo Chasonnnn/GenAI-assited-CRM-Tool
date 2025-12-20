@@ -1,5 +1,4 @@
 import * as React from "react"
-import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
@@ -36,26 +35,38 @@ const buttonVariants = cva(
   }
 )
 
+interface ButtonProps
+  extends React.ComponentProps<"button">,
+  VariantProps<typeof buttonVariants> {
+  asChild?: boolean
+}
+
+/**
+ * Button component with variants.
+ * 
+ * For use with Base UI triggers, use `render={}` prop on the trigger instead of asChild.
+ * Example: <DialogTrigger render={<Button>Click me</Button>} />
+ */
 function Button({
   className,
   variant = "default",
   size = "default",
   asChild = false,
+  children,
   ...props
-}: React.ComponentProps<"button"> &
-  VariantProps<typeof buttonVariants> & {
-    asChild?: boolean
-  }) {
-  const Comp = asChild ? Slot : "button"
-
+}: ButtonProps) {
+  // Note: asChild is kept for backwards compatibility with existing code
+  // but for Base UI components, use render={} prop on the parent component instead
   return (
-    <Comp
+    <button
       data-slot="button"
       data-variant={variant}
       data-size={size}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
-    />
+    >
+      {children}
+    </button>
   )
 }
 

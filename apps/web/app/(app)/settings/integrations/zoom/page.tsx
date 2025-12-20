@@ -189,11 +189,14 @@ export default function ZoomSettingsPage() {
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                <Button variant="ghost" size="sm" asChild>
-                                                    <a href={meeting.join_url} target="_blank" rel="noopener noreferrer">
-                                                        <ExternalLinkIcon className="size-4" />
-                                                    </a>
-                                                </Button>
+                                                <a
+                                                    href={meeting.join_url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent hover:text-accent-foreground"
+                                                >
+                                                    <ExternalLinkIcon className="size-4" />
+                                                </a>
                                             </TableCell>
                                         </TableRow>
                                     ))}
