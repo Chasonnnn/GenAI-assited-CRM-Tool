@@ -8,7 +8,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { PlusIcon, LoaderIcon } from "lucide-react"
+import { PlusIcon, LoaderIcon, ListIcon, CalendarIcon } from "lucide-react"
+import { TasksCalendar } from "@/components/tasks/TasksCalendar"
 import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-tasks"
 import type { TaskListItem } from "@/lib/types/task"
 
@@ -83,6 +84,17 @@ const categoryColors: Record<DueCategory, { text: string; badge: string }> = {
 export default function TasksPage() {
     const [filter, setFilter] = useState<"all" | "my_tasks">("my_tasks")
     const [showCompleted, setShowCompleted] = useState(false)
+    const [view, setView] = useState<"list" | "calendar">(() => {
+        if (typeof window !== "undefined") {
+            return (localStorage.getItem("tasks-view") as "list" | "calendar") || "list"
+        }
+        return "list"
+    })
+
+    const handleViewChange = (newView: "list" | "calendar") => {
+        setView(newView)
+        localStorage.setItem("tasks-view", newView)
+    }
 
     // Fetch incomplete tasks
     const { data: incompleteTasks, isLoading: loadingIncomplete } = useTasks({
@@ -209,7 +221,7 @@ export default function TasksPage() {
             {/* Main Content */}
             <div className="flex-1 space-y-4 p-6">
                 {/* Filters Row */}
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex gap-2">
                         <Button
                             variant={filter === "my_tasks" ? "secondary" : "ghost"}
@@ -226,6 +238,26 @@ export default function TasksPage() {
                             All Tasks
                         </Button>
                     </div>
+
+                    {/* View Toggle */}
+                    <div className="flex gap-1 border rounded-lg p-1">
+                        <Button
+                            variant={view === "list" ? "secondary" : "ghost"}
+                            size="sm"
+                            onClick={() => handleViewChange("list")}
+                        >
+                            <ListIcon className="size-4 mr-1" />
+                            List
+                        </Button>
+                        <Button
+                            variant={view === "calendar" ? "secondary" : "ghost"}
+                            size="sm"
+                            onClick={() => handleViewChange("calendar")}
+                        >
+                            <CalendarIcon className="size-4 mr-1" />
+                            Calendar
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Loading State */}
@@ -236,8 +268,31 @@ export default function TasksPage() {
                     </Card>
                 )}
 
-                {/* Tasks Card */}
-                {!isLoading && (
+                {/* Calendar View */}
+                {!isLoading && view === "calendar" && (
+                    <TasksCalendar
+                        tasks={(incompleteTasks?.items || []).map((task: TaskListItem) => ({
+                            id: task.id,
+                            title: task.title,
+                            due_date: task.due_date,
+                            due_time: task.due_time || null,
+                            is_completed: task.is_completed,
+                            task_type: task.task_type,
+                            case_id: task.case_id,
+                        }))}
+                        onTaskClick={(taskId) => {
+                            // TODO: Open task detail modal
+                            console.log("Task clicked:", taskId)
+                        }}
+                        onTaskReschedule={(taskId, newDate, newTime) => {
+                            // TODO: Call updateTask mutation
+                            console.log("Reschedule:", taskId, newDate, newTime)
+                        }}
+                    />
+                )}
+
+                {/* List View */}
+                {!isLoading && view === "list" && (
                     <Card className="p-6">
                         <div className="space-y-6">
                             {/* Task sections by due date */}

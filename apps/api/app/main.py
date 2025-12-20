@@ -184,6 +184,14 @@ app.include_router(ws_router.router)
 from app.routers import queues
 app.include_router(queues.router, prefix="/queues", tags=["queues"])
 
+# File Attachments
+from app.routers import attachments
+app.include_router(attachments.router, tags=["attachments"])
+
+# Team Invitations
+from app.routers import invites
+app.include_router(invites.router, tags=["invites"])
+
 # Dev router (ONLY mounted in dev mode)
 if settings.ENV == "dev":
     from app.routers import dev
