@@ -11,8 +11,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db, require_roles, require_csrf_header
-from app.db.enums import Role, AlertStatus, AlertSeverity
+from app.core.deps import get_current_session, get_db, require_permission, require_csrf_header
+from app.db.enums import AlertStatus, AlertSeverity
 from app.db.models import SystemAlert
 from app.schemas.auth import UserSession
 from app.services import ops_service, alert_service
@@ -73,7 +73,7 @@ AlertSeverityParam = Literal["warn", "error", "critical"]
 
 @router.get("/health", response_model=list[IntegrationHealthResponse])
 def get_integration_health(
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_ops")),
     db: Session = Depends(get_db),
 ):
     """Get health status of all integrations."""
@@ -82,7 +82,7 @@ def get_integration_health(
 
 @router.get("/alerts/summary", response_model=AlertSummaryResponse)
 def get_alerts_summary(
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_ops")),
     db: Session = Depends(get_db),
 ):
     """Get count of open alerts by severity."""
@@ -96,7 +96,7 @@ def list_alerts(
     severity: Optional[AlertSeverityParam] = Query(None, description="Filter by severity"),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_ops")),
     db: Session = Depends(get_db),
 ):
     """List system alerts with optional filters."""
@@ -140,7 +140,7 @@ def list_alerts(
 @router.post("/alerts/{alert_id}/resolve", dependencies=[Depends(require_csrf_header)])
 def resolve_alert(
     alert_id: UUID,
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_ops")),
     db: Session = Depends(get_db),
 ):
     """Resolve an alert."""
@@ -160,7 +160,7 @@ def resolve_alert(
 @router.post("/alerts/{alert_id}/acknowledge", dependencies=[Depends(require_csrf_header)])
 def acknowledge_alert(
     alert_id: UUID,
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_ops")),
     db: Session = Depends(get_db),
 ):
     """Acknowledge an alert (stops notifications but keeps open)."""
@@ -181,7 +181,7 @@ def acknowledge_alert(
 def snooze_alert(
     alert_id: UUID,
     hours: int = Query(24, ge=1, le=168),  # 1 hour to 1 week
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("manage_ops")),
     db: Session = Depends(get_db),
 ):
     """Snooze an alert for specified hours."""

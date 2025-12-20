@@ -15,7 +15,7 @@ from app.core.deps import (
     get_db,
     is_owner_or_can_manage,
     require_csrf_header,
-    require_roles,
+    require_permission,
 )
 from app.db.enums import CaseSource, Role, ROLES_CAN_ARCHIVE, OwnerType
 from app.db.models import User, Queue
@@ -293,7 +293,7 @@ class ImportStatusResponse(BaseModel):
 async def preview_import(
     request: Request,
     file: UploadFile = File(...),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("edit_cases")),
     db: Session = Depends(get_db),
 ):
     """
@@ -340,7 +340,7 @@ async def preview_import(
 async def confirm_import(
     request: Request,
     file: UploadFile = File(...),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("edit_cases")),
     db: Session = Depends(get_db),
 ):
     """
@@ -424,7 +424,7 @@ async def confirm_import(
 @router.get("/import/{import_id}", response_model=ImportStatusResponse)
 def get_import_status(
     import_id: UUID,
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("edit_cases")),
     db: Session = Depends(get_db),
 ):
     """Get status of an import job."""
@@ -448,7 +448,7 @@ def get_import_status(
 
 @router.get("/import", response_model=list[ImportStatusResponse])
 def list_imports(
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("edit_cases")),
     db: Session = Depends(get_db),
 ):
     """List recent imports for the organization."""
@@ -474,7 +474,7 @@ def list_imports(
 # NOTE: /handoff-queue MUST come before /{case_id} routes to avoid routing conflict
 @router.get("/handoff-queue", response_model=CaseListResponse)
 def list_handoff_queue(
-    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("view_post_approval_cases")),
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
@@ -1079,7 +1079,7 @@ def get_case_activity(
 @router.post("/{case_id}/accept", response_model=CaseRead, dependencies=[Depends(require_csrf_header)])
 def accept_handoff(
     case_id: UUID,
-    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("assign_cases")),
     db: Session = Depends(get_db),
 ):
     """
@@ -1103,7 +1103,7 @@ def accept_handoff(
 def deny_handoff(
     case_id: UUID,
     data: CaseHandoffDeny,
-    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("assign_cases")),
     db: Session = Depends(get_db),
 ):
     """

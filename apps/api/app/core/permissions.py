@@ -158,6 +158,33 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
         "manage_compliance", "Manage Compliance", 
         "Legal holds, purge requests, HIPAA exports", PermissionCategory.COMPLIANCE
     ),
+    
+    # New granular permissions
+    "manage_meta_leads": PermissionDef(
+        "manage_meta_leads", "Manage Meta Leads", 
+        "Configure Meta leadgen integration and webhooks", PermissionCategory.SETTINGS
+    ),
+    "view_email_templates": PermissionDef(
+        "view_email_templates", "View Email Templates", 
+        "List and preview email templates", PermissionCategory.SETTINGS
+    ),
+    "manage_email_templates": PermissionDef(
+        "manage_email_templates", "Manage Email Templates", 
+        "Create, edit and delete email templates", PermissionCategory.SETTINGS
+    ),
+    "manage_ops": PermissionDef(
+        "manage_ops", "Manage Operations", 
+        "View alerts, queue stats, system monitoring", PermissionCategory.SETTINGS
+    ),
+    "manage_jobs": PermissionDef(
+        "manage_jobs", "Manage Background Jobs", 
+        "Trigger and view job status", PermissionCategory.SETTINGS,
+        developer_only=True
+    ),
+    "archive_cases": PermissionDef(
+        "archive_cases", "Archive Cases", 
+        "Archive and restore cases", PermissionCategory.CASES
+    ),
 }
 
 
@@ -177,6 +204,7 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "view_tasks",
         "create_tasks",
         "edit_tasks",
+        "view_email_templates",
     },
     "case_manager": {
         "view_dashboard",
@@ -185,6 +213,7 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "view_post_approval_cases",
         "change_case_status",
         "assign_cases",
+        "archive_cases",
         "view_case_notes",
         "edit_case_notes",
         "view_intended_parents",
@@ -195,6 +224,7 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "edit_tasks",
         "delete_tasks",
         "view_reports",
+        "view_email_templates",
     },
     "manager": {
         "view_dashboard",
@@ -204,6 +234,7 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "view_post_approval_cases",
         "change_case_status",
         "assign_cases",
+        "archive_cases",
         "view_case_notes",
         "edit_case_notes",
         "view_intended_parents",
@@ -222,6 +253,10 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "view_ai_assistant",
         "export_data",
         "manage_compliance",
+        "manage_meta_leads",
+        "view_email_templates",
+        "manage_email_templates",
+        "manage_ops",
     },
     "developer": set(PERMISSION_REGISTRY.keys()),  # All permissions
 }
