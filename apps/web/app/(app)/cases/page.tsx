@@ -15,8 +15,9 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { PlusIcon, MoreVerticalIcon, SearchIcon, XIcon, LoaderIcon, CheckIcon, ArchiveIcon, UserPlusIcon, UsersIcon, UploadIcon } from "lucide-react"
 import { useCases, useArchiveCase, useRestoreCase, useUpdateCase, useAssignees, useBulkAssign, useBulkArchive } from "@/lib/hooks/use-cases"
 import { useQueues } from "@/lib/hooks/use-queues"
+import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useAuth } from "@/lib/auth-context"
-import { STATUS_CONFIG, type CaseStatus, type CaseSource } from "@/lib/types/case"
+import type { CaseSource } from "@/lib/types/case"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 
 // Format date for display
@@ -116,7 +117,7 @@ function FloatingActionBar({
 }
 
 export default function CasesPage() {
-    const [statusFilter, setStatusFilter] = useState<CaseStatus | "all">("all")
+    const [stageFilter, setStageFilter] = useState<string>("all")
     const [sourceFilter, setSourceFilter] = useState<CaseSource | "all">("all")
     const [queueFilter, setQueueFilter] = useState<string>("all")  // Queue filter
     const [dateRange, setDateRange] = useState<DateRangePreset>('all')
@@ -134,6 +135,9 @@ export default function CasesPage() {
     // Fetch queues for filter dropdown (case_manager+ only)
     const canSeeQueues = user?.role && ['case_manager', 'manager', 'developer'].includes(user.role)
     const { data: queues } = useQueues()
+    const { data: defaultPipeline } = useDefaultPipeline()
+    const stageOptions = defaultPipeline?.stages || []
+    const stageById = new Map(stageOptions.map(stage => [stage.id, stage]))
 
     // Debounce search input
     useEffect(() => {
@@ -144,7 +148,7 @@ export default function CasesPage() {
     // Reset page when filters change
     useEffect(() => {
         setPage(1)
-    }, [statusFilter, sourceFilter, queueFilter, debouncedSearch, dateRange, customRange])
+    }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, dateRange, customRange])
 
     // Convert date range to ISO strings
     const getDateRangeParams = () => {
@@ -171,7 +175,7 @@ export default function CasesPage() {
     const { data, isLoading, error } = useCases({
         page,
         per_page: perPage,
-        status: statusFilter === "all" ? undefined : statusFilter,
+        stage_id: stageFilter === "all" ? undefined : stageFilter,
         source: sourceFilter === "all" ? undefined : sourceFilter,
         q: debouncedSearch || undefined,
         queue_id: queueFilter !== "all" ? queueFilter : undefined,
@@ -182,10 +186,10 @@ export default function CasesPage() {
     const restoreMutation = useRestoreCase()
     const updateMutation = useUpdateCase()
 
-    const hasActiveFilters = statusFilter !== "all" || sourceFilter !== "all" || queueFilter !== "all" || searchQuery !== ""
+    const hasActiveFilters = stageFilter !== "all" || sourceFilter !== "all" || queueFilter !== "all" || searchQuery !== ""
 
     const resetFilters = useCallback(() => {
-        setStatusFilter("all")
+        setStageFilter("all")
         setSourceFilter("all")
         setQueueFilter("all")
         setSearchQuery("")
@@ -249,25 +253,17 @@ export default function CasesPage() {
 
                 {/* Filters Row */}
                 <div className="flex flex-wrap items-center gap-3">
-                    <Select value={statusFilter} onValueChange={(value) => setStatusFilter((value || "all") as CaseStatus | "all")}>
+                    <Select value={stageFilter} onValueChange={(value) => setStageFilter(value || "all")}>
                         <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="All Statuses" />
+                            <SelectValue placeholder="All Stages" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all">All Statuses</SelectItem>
-                            <SelectItem value="new_unread">New</SelectItem>
-                            <SelectItem value="contacted">Contacted</SelectItem>
-                            <SelectItem value="followup_scheduled">Follow-up Scheduled</SelectItem>
-                            <SelectItem value="application_submitted">Application Submitted</SelectItem>
-                            <SelectItem value="under_review">Under Review</SelectItem>
-                            <SelectItem value="approved">Approved</SelectItem>
-                            <SelectItem value="pending_handoff">Pending Handoff</SelectItem>
-                            <SelectItem value="disqualified">Disqualified</SelectItem>
-                            <SelectItem value="pending_match">Pending Match</SelectItem>
-                            <SelectItem value="meds_started">Meds Started</SelectItem>
-                            <SelectItem value="exam_passed">Exam Passed</SelectItem>
-                            <SelectItem value="embryo_transferred">Embryo Transferred</SelectItem>
-                            <SelectItem value="delivered">Delivered</SelectItem>
+                            <SelectItem value="all">All Stages</SelectItem>
+                            {stageOptions.map((stage) => (
+                                <SelectItem key={stage.id} value={stage.id}>
+                                    {stage.label}
+                                </SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
 
@@ -390,10 +386,9 @@ export default function CasesPage() {
                                 </TableHeader>
                                 <TableBody>
                                     {data.items.map((caseItem) => {
-                                        const statusConfig = STATUS_CONFIG[caseItem.status as CaseStatus] || {
-                                            label: caseItem.status,
-                                            color: "bg-gray-100 text-gray-700"
-                                        }
+                                        const stage = stageById.get(caseItem.stage_id)
+                                        const statusLabel = caseItem.status_label || stage?.label || "Unknown"
+                                        const statusColor = stage?.color || "#6B7280"
                                         // Apply gold styling for entire row on priority cases
                                         const rowClass = caseItem.is_priority ? "text-amber-600" : ""
 
@@ -424,8 +419,8 @@ export default function CasesPage() {
                                                     {caseItem.email}
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Badge className={statusConfig.color}>
-                                                        {statusConfig.label}
+                                                    <Badge style={{ backgroundColor: statusColor, color: "white" }}>
+                                                        {statusLabel}
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>

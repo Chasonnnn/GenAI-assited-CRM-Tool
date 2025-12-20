@@ -36,6 +36,7 @@ import {
 import { InlineEditField } from "@/components/inline-edit-field"
 import { useCase, useCaseActivity, useChangeStatus, useArchiveCase, useRestoreCase, useUpdateCase } from "@/lib/hooks/use-cases"
 import { useQueues, useClaimCase, useReleaseCase } from "@/lib/hooks/use-queues"
+import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useNotes, useCreateNote, useDeleteNote } from "@/lib/hooks/use-notes"
 import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-tasks"
 import { useZoomStatus, useCreateZoomMeeting, useSendZoomInvite } from "@/lib/hooks/use-user-integrations"
@@ -43,7 +44,6 @@ import { useSummarizeCase, useDraftEmail, useAISettings } from "@/lib/hooks/use-
 import { EmailComposeDialog } from "@/components/email/EmailComposeDialog"
 import { ProposeMatchDialog } from "@/components/matches/ProposeMatchDialog"
 import type { EmailType, SummarizeCaseResponse, DraftEmailResponse } from "@/lib/api/ai"
-import { STATUS_CONFIG, type CaseStatus } from "@/lib/types/case"
 import type { NoteRead } from "@/lib/types/note"
 import type { TaskListItem } from "@/lib/types/task"
 import type { CaseStatusHistory } from "@/lib/api/cases"
@@ -105,25 +105,6 @@ function getInitials(name: string | null): string {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
-// Status options for dropdown - matches backend CaseStatus enum
-// Note: 'approved' auto-transitions to 'pending_handoff' on backend
-// Note: Stage-B statuses (pending_match+) blocked for intake on backend
-const STATUS_OPTIONS: CaseStatus[] = [
-    'new_unread',
-    'contacted',
-    'followup_scheduled',
-    'application_submitted',
-    'under_review',
-    'approved',        // Backend auto-converts to pending_handoff
-    'pending_handoff', // Visible but only changeable via Accept
-    'disqualified',
-    'pending_match',
-    'meds_started',
-    'exam_passed',
-    'embryo_transferred',
-    'delivered',
-]
-
 // Format activity type for display
 function formatActivityType(type: string): string {
     const labels: Record<string, string> = {
@@ -178,6 +159,12 @@ export default function CaseDetailPage() {
     const id = params.id as string
     const router = useRouter()
     const { user } = useAuth()
+    const { data: defaultPipeline } = useDefaultPipeline()
+    const stageOptions = React.useMemo(() => defaultPipeline?.stages || [], [defaultPipeline])
+    const stageById = React.useMemo(
+        () => new Map(stageOptions.map(stage => [stage.id, stage])),
+        [stageOptions]
+    )
     const [copiedEmail, setCopiedEmail] = React.useState(false)
     const [editDialogOpen, setEditDialogOpen] = React.useState(false)
     const [releaseDialogOpen, setReleaseDialogOpen] = React.useState(false)
@@ -243,9 +230,9 @@ export default function CaseDetailPage() {
         setTimeout(() => setCopiedEmail(false), 2000)
     }
 
-    const handleStatusChange = async (newStatus: CaseStatus) => {
+    const handleStatusChange = async (newStageId: string) => {
         if (!caseData) return
-        await changeStatusMutation.mutateAsync({ caseId: id, data: { status: newStatus } })
+        await changeStatusMutation.mutateAsync({ caseId: id, data: { stage_id: newStageId } })
     }
 
     const handleArchive = async () => {
@@ -311,7 +298,9 @@ export default function CaseDetailPage() {
         )
     }
 
-    const statusConfig = STATUS_CONFIG[caseData.status] || { label: caseData.status, color: 'bg-gray-500' }
+    const stage = stageById.get(caseData.stage_id)
+    const statusLabel = caseData.status_label || stage?.label || 'Unknown'
+    const statusColor = stage?.color || '#6B7280'
 
     return (
         <div className="flex flex-1 flex-col">
@@ -323,7 +312,7 @@ export default function CaseDetailPage() {
                         Back
                     </Button>
                     <h1 className="text-lg font-semibold">Case #{caseData.case_number}</h1>
-                    <Badge className={`${statusConfig.color} text-white`}>{statusConfig.label}</Badge>
+                    <Badge style={{ backgroundColor: statusColor, color: 'white' }}>{statusLabel}</Badge>
                     {caseData.is_archived && <Badge variant="secondary">Archived</Badge>}
                 </div>
                 <div className="flex items-center gap-2">
@@ -336,19 +325,19 @@ export default function CaseDetailPage() {
                             }
                         />
                         <DropdownMenuContent align="end">
-                            {STATUS_OPTIONS.map((status: CaseStatus) => {
-                                const config = STATUS_CONFIG[status]
-                                return (
-                                    <DropdownMenuItem
-                                        key={status}
-                                        onClick={() => handleStatusChange(status)}
-                                        disabled={status === caseData.status}
-                                    >
-                                        <span className={`mr-2 size-2 rounded-full ${config.color}`} />
-                                        {config.label}
-                                    </DropdownMenuItem>
-                                )
-                            })}
+                            {stageOptions.map((stageOption) => (
+                                <DropdownMenuItem
+                                    key={stageOption.id}
+                                    onClick={() => handleStatusChange(stageOption.id)}
+                                    disabled={stageOption.id === caseData.stage_id}
+                                >
+                                    <span
+                                        className="mr-2 size-2 rounded-full"
+                                        style={{ backgroundColor: stageOption.color }}
+                                    />
+                                    {stageOption.label}
+                                </DropdownMenuItem>
+                            ))}
                         </DropdownMenuContent>
                     </DropdownMenu>
 
@@ -1206,7 +1195,7 @@ export default function CaseDetailPage() {
                     email: caseData.email,
                     full_name: caseData.full_name,
                     case_number: caseData.case_number,
-                    status: caseData.status,
+                    status: caseData.status_label,
                     state: caseData.state || undefined,
                     phone: caseData.phone || undefined,
                 }}

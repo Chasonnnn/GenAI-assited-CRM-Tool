@@ -7,14 +7,13 @@ v2: With version control
 """
 
 from datetime import datetime
-from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_csrf_header, require_roles
+from app.core.deps import get_current_session, get_db, require_csrf_header, require_roles
 from app.db.enums import Role
 from app.schemas.auth import UserSession
 from app.services import pipeline_service, version_service
@@ -26,21 +25,12 @@ router = APIRouter(prefix="/settings/pipelines", tags=["Pipelines"])
 # Schemas
 # =============================================================================
 
-class PipelineStage(BaseModel):
-    """Single pipeline stage configuration."""
-    status: str  # Must match a CaseStatus value
-    label: str  # Display label
-    color: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")  # Hex color
-    order: int = Field(ge=1)
-    visible: bool = True
-
-
 class PipelineRead(BaseModel):
     """Pipeline response with version info."""
     id: UUID
     name: str
     is_default: bool
-    stages: list[dict[str, Any]]
+    stages: list["StageRead"]
     current_version: int
     created_at: str
     updated_at: str
@@ -51,13 +41,12 @@ class PipelineRead(BaseModel):
 class PipelineCreate(BaseModel):
     """Request to create a new pipeline."""
     name: str = Field(min_length=1, max_length=100)
-    stages: list[PipelineStage] | None = None  # Uses defaults if not provided
+    stages: list["StageCreate"] | None = None  # Uses defaults if not provided
 
 
 class PipelineUpdate(BaseModel):
-    """Request to update pipeline stages."""
+    """Request to update pipeline name."""
     name: str | None = Field(None, min_length=1, max_length=100)
-    stages: list[PipelineStage] | None = None
     expected_version: int | None = None  # For optimistic locking
     comment: str | None = None  # Version comment
 
@@ -141,7 +130,7 @@ def list_pipelines(
             id=p.id,
             name=p.name,
             is_default=p.is_default,
-            stages=p.stages,
+            stages=pipeline_service.get_stages(db, p.id),
             current_version=p.current_version,
             created_at=p.created_at.isoformat(),
             updated_at=p.updated_at.isoformat(),
@@ -153,12 +142,12 @@ def list_pipelines(
 @router.get("/default", response_model=PipelineRead)
 def get_default_pipeline(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(get_current_session),
 ):
     """
     Get the default pipeline (creates if not exists).
     
-    Requires: Manager+ role
+    Requires: Authenticated user
     """
     pipeline = pipeline_service.get_or_create_default_pipeline(db, session.org_id, session.user_id)
     
@@ -166,7 +155,7 @@ def get_default_pipeline(
         id=pipeline.id,
         name=pipeline.name,
         is_default=pipeline.is_default,
-        stages=pipeline.stages,
+        stages=pipeline_service.get_stages(db, pipeline.id),
         current_version=pipeline.current_version,
         created_at=pipeline.created_at.isoformat(),
         updated_at=pipeline.updated_at.isoformat(),
@@ -188,7 +177,7 @@ def get_pipeline(
         id=pipeline.id,
         name=pipeline.name,
         is_default=pipeline.is_default,
-        stages=pipeline.stages,
+        stages=pipeline_service.get_stages(db, pipeline.id),
         current_version=pipeline.current_version,
         created_at=pipeline.created_at.isoformat(),
         updated_at=pipeline.updated_at.isoformat(),
@@ -222,7 +211,7 @@ def create_pipeline(
         id=pipeline.id,
         name=pipeline.name,
         is_default=pipeline.is_default,
-        stages=pipeline.stages,
+        stages=pipeline_service.get_stages(db, pipeline.id),
         current_version=pipeline.current_version,
         created_at=pipeline.created_at.isoformat(),
         updated_at=pipeline.updated_at.isoformat(),
@@ -254,20 +243,7 @@ def update_pipeline(
         except version_service.VersionConflictError as e:
             raise HTTPException(status_code=409, detail=f"Version conflict: expected {e.expected}, got {e.actual}")
     
-    if data.stages is not None:
-        stages = [s.model_dump() for s in data.stages]
-        try:
-            pipeline_service.update_pipeline_stages(
-                db=db,
-                pipeline=pipeline,
-                stages=stages,
-                user_id=session.user_id,
-                expected_version=None,  # Already checked above
-                comment=data.comment,
-            )
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-    elif data.name is not None:
+    if data.name is not None:
         # Name-only update also needs versioning
         pipeline_service.update_pipeline_name(
             db=db,
@@ -276,12 +252,14 @@ def update_pipeline(
             user_id=session.user_id,
             comment=data.comment or "Renamed",
         )
+    else:
+        raise HTTPException(status_code=400, detail="No updates provided")
     
     return PipelineRead(
         id=pipeline.id,
         name=pipeline.name,
         is_default=pipeline.is_default,
-        stages=pipeline.stages,
+        stages=pipeline_service.get_stages(db, pipeline.id),
         current_version=pipeline.current_version,
         created_at=pipeline.created_at.isoformat(),
         updated_at=pipeline.updated_at.isoformat(),
@@ -397,7 +375,7 @@ def rollback_pipeline(
         id=updated.id,
         name=updated.name,
         is_default=updated.is_default,
-        stages=updated.stages,
+        stages=pipeline_service.get_stages(db, updated.id, include_inactive=True),
         current_version=updated.current_version,
         created_at=updated.created_at.isoformat(),
         updated_at=updated.updated_at.isoformat(),
@@ -456,6 +434,7 @@ async def create_stage(
             color=data.color,
             stage_type=data.stage_type,
             order=data.order,
+            user_id=session.user_id,
         )
         return stage
     except ValueError as e:
@@ -494,6 +473,7 @@ async def update_stage(
         label=data.label,
         color=data.color,
         order=data.order,
+        user_id=session.user_id,
     )
 
 
@@ -533,6 +513,7 @@ async def delete_stage(
             db=db,
             stage=stage,
             migrate_to_stage_id=data.migrate_to_stage_id,
+            user_id=session.user_id,
         )
         return {"deleted": True, "migrated_cases": migrated}
     except ValueError as e:
@@ -562,6 +543,7 @@ async def reorder_stages(
             db=db,
             pipeline_id=pipeline_id,
             ordered_stage_ids=data.ordered_stage_ids,
+            user_id=session.user_id,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))

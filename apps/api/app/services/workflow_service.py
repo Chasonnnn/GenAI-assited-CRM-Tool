@@ -12,7 +12,7 @@ from app.db.models import (
 )
 from app.db.enums import (
     WorkflowTriggerType, WorkflowActionType, WorkflowExecutionStatus,
-    CaseStatus, OwnerType
+    OwnerType
 )
 from app.schemas.workflow import (
     WorkflowCreate, WorkflowUpdate, WorkflowRead, WorkflowListItem,
@@ -315,8 +315,14 @@ def get_workflow_options(db: Session, org_id: UUID) -> WorkflowOptions:
     queues = db.query(Queue).filter(Queue.organization_id == org_id).all()
     queue_options = [{"id": str(q.id), "name": q.name} for q in queues]
     
-    # Statuses
-    statuses = [{"value": s.value, "label": s.value.replace("_", " ").title()} for s in CaseStatus]
+    # Stages (status options)
+    from app.services import pipeline_service
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
+    stages = pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
+    statuses = [
+        {"id": str(s.id), "value": s.slug, "label": s.label, "is_active": s.is_active}
+        for s in stages
+    ]
     
     return WorkflowOptions(
         trigger_types=trigger_types,

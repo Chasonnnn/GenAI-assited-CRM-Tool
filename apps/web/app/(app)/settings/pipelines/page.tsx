@@ -4,7 +4,6 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
@@ -16,7 +15,14 @@ import {
     CheckIcon,
     InfoIcon
 } from "lucide-react"
-import { usePipelines, usePipeline, useUpdatePipeline, usePipelineVersions, useRollbackPipeline } from "@/lib/hooks/use-pipelines"
+import {
+    usePipelines,
+    usePipeline,
+    usePipelineVersions,
+    useRollbackPipeline,
+    useReorderStages,
+    useUpdateStage,
+} from "@/lib/hooks/use-pipelines"
 import type { PipelineStage } from "@/lib/api/pipelines"
 import { formatDistanceToNow } from "date-fns"
 import { useAuth } from "@/lib/auth-context"
@@ -56,7 +62,7 @@ function StageEditor({
         setDragIndex(null)
     }
 
-    const updateStage = (index: number, field: keyof PipelineStage, value: string) => {
+    const updateStage = (index: number, field: "label" | "color", value: string) => {
         const newStages = [...stages]
         newStages[index] = { ...newStages[index], [field]: value }
         onChange(newStages)
@@ -67,7 +73,7 @@ function StageEditor({
             <div className="space-y-2">
                 {stages.map((stage, index) => (
                     <div
-                        key={stage.status}
+                        key={stage.id}
                         draggable
                         onDragStart={() => handleDragStart(index)}
                         onDragOver={(e) => handleDragOver(e, index)}
@@ -94,11 +100,11 @@ function StageEditor({
                                 className="h-9"
                             />
                             <Input
-                                value={stage.status}
+                                value={stage.slug}
                                 readOnly
                                 disabled
                                 className="h-9 font-mono text-sm bg-muted"
-                                title="Status key is read-only"
+                                title="Stage slug is read-only"
                             />
                         </div>
 
@@ -112,7 +118,7 @@ function StageEditor({
             <Alert>
                 <InfoIcon className="size-4" />
                 <AlertDescription>
-                    Drag stages to reorder. Edit labels and colors. Status keys are read-only.
+                    Drag stages to reorder. Edit labels and colors. Stage slugs are read-only.
                 </AlertDescription>
             </Alert>
         </div>
@@ -206,11 +212,11 @@ export default function PipelinesSettingsPage() {
     const defaultPipeline = pipelines?.find(p => p.is_default)
     const { data: pipeline, isLoading: pipelineLoading } = usePipeline(defaultPipeline?.id || null)
 
-    const updatePipeline = useUpdatePipeline()
+    const updateStage = useUpdateStage()
+    const reorderStages = useReorderStages()
     const rollbackPipeline = useRollbackPipeline()
 
     const [editedStages, setEditedStages] = useState<PipelineStage[] | null>(null)
-    const [comment, setComment] = useState("")
 
     const isLoading = pipelinesLoading || pipelineLoading
     const currentStages = editedStages ?? pipeline?.stages ?? []
@@ -219,17 +225,34 @@ export default function PipelinesSettingsPage() {
     const handleSave = async () => {
         if (!pipeline || !editedStages) return
 
+        const originalStages = pipeline.stages || []
+        const originalById = new Map(originalStages.map(stage => [stage.id, stage]))
+        const changedStages = editedStages.filter(stage => {
+            const original = originalById.get(stage.id)
+            return original && (stage.label !== original.label || stage.color !== original.color)
+        })
+        const orderChanged = editedStages.map(stage => stage.id).join(",") !== originalStages.map(stage => stage.id).join(",")
+
         try {
-            await updatePipeline.mutateAsync({
-                id: pipeline.id,
-                data: {
-                    stages: editedStages,
-                    expected_version: pipeline.current_version,
-                    comment: comment || undefined,
-                }
-            })
+            if (orderChanged) {
+                await reorderStages.mutateAsync({
+                    pipelineId: pipeline.id,
+                    orderedStageIds: editedStages.map(stage => stage.id),
+                })
+            }
+
+            for (const stage of changedStages) {
+                await updateStage.mutateAsync({
+                    pipelineId: pipeline.id,
+                    stageId: stage.id,
+                    data: {
+                        label: stage.label,
+                        color: stage.color,
+                    },
+                })
+            }
+
             setEditedStages(null)
-            setComment("")
         } catch (e) {
             // Error handled by mutation
         }
@@ -248,7 +271,6 @@ export default function PipelinesSettingsPage() {
 
     const handleReset = () => {
         setEditedStages(null)
-        setComment("")
     }
 
     if (isLoading) {
@@ -303,34 +325,22 @@ export default function PipelinesSettingsPage() {
                     {hasChanges && (
                         <Card>
                             <CardContent className="pt-6">
-                                <div className="space-y-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="comment">Change Note (optional)</Label>
-                                        <Input
-                                            id="comment"
-                                            placeholder="Describe what you changed..."
-                                            value={comment}
-                                            onChange={(e) => setComment(e.target.value)}
-                                        />
-                                    </div>
-
-                                    <div className="flex gap-3">
-                                        <Button
-                                            onClick={handleSave}
-                                            disabled={updatePipeline.isPending}
-                                            className="flex-1"
-                                        >
-                                            {updatePipeline.isPending ? (
-                                                <Loader2Icon className="size-4 mr-2 animate-spin" />
-                                            ) : (
-                                                <SaveIcon className="size-4 mr-2" />
-                                            )}
-                                            Save Changes
-                                        </Button>
-                                        <Button variant="outline" onClick={handleReset}>
-                                            Discard
-                                        </Button>
-                                    </div>
+                                <div className="flex gap-3">
+                                    <Button
+                                        onClick={handleSave}
+                                        disabled={updateStage.isPending || reorderStages.isPending}
+                                        className="flex-1"
+                                    >
+                                        {updateStage.isPending || reorderStages.isPending ? (
+                                            <Loader2Icon className="size-4 mr-2 animate-spin" />
+                                        ) : (
+                                            <SaveIcon className="size-4 mr-2" />
+                                        )}
+                                        Save Changes
+                                    </Button>
+                                    <Button variant="outline" onClick={handleReset}>
+                                        Discard
+                                    </Button>
                                 </div>
                             </CardContent>
                         </Card>
@@ -366,7 +376,7 @@ export default function PipelinesSettingsPage() {
                             <div className="flex flex-wrap gap-2">
                                 {currentStages.map((stage) => (
                                     <Badge
-                                        key={stage.status}
+                                        key={stage.id}
                                         style={{
                                             backgroundColor: stage.color,
                                             color: '#fff'

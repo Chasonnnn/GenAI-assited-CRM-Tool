@@ -12,8 +12,9 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_roles
-from app.db.enums import Role, CaseStatus
+from app.db.enums import Role
 from app.db.models import Case, MetaLead
+from app.services import pipeline_service
 from app.schemas.auth import UserSession
 
 
@@ -121,39 +122,43 @@ def get_analytics_summary(
         Case.created_at < end,
     ).count()
     
-    # Qualified rate (qualified + all post-qualified stages / total)
-    # Includes all statuses from QUALIFIED onwards except DISQUALIFIED
-    qualified_statuses = [
-        CaseStatus.QUALIFIED.value, CaseStatus.APPLIED.value,
-        CaseStatus.FOLLOWUP_SCHEDULED.value, CaseStatus.APPLICATION_SUBMITTED.value,
-        CaseStatus.UNDER_REVIEW.value, CaseStatus.APPROVED.value, 
-        CaseStatus.PENDING_HANDOFF.value, CaseStatus.PENDING_MATCH.value,
-        CaseStatus.MEDS_STARTED.value, CaseStatus.EXAM_PASSED.value,
-        CaseStatus.EMBRYO_TRANSFERRED.value, CaseStatus.DELIVERED.value,
-    ]
+    # Qualified rate (qualified stage and later, fallback to post_approval/terminal)
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
+    stages = pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
+    qualified_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "qualified")
+    if qualified_stage:
+        qualified_stage_ids = [
+            s.id for s in stages if s.order >= qualified_stage.order and s.is_active
+        ]
+    else:
+        qualified_stage_ids = [
+            s.id for s in stages if s.stage_type in ("post_approval", "terminal") and s.is_active
+        ]
     qualified_count = db.query(Case).filter(
         Case.organization_id == org_id,
         Case.is_archived == False,
-        Case.status.in_(qualified_statuses),
+        Case.stage_id.in_(qualified_stage_ids),
     ).count()
     qualified_rate = (qualified_count / total_cases * 100) if total_cases > 0 else 0.0
     
     # Average time to qualified (hours) from status history
-    avg_hours_result = db.execute(
-        text("""
-            SELECT AVG(EXTRACT(EPOCH FROM (csh.changed_at - c.created_at)) / 3600) as avg_hours
-            FROM cases c
-            JOIN case_status_history csh ON c.id = csh.case_id
-            WHERE c.organization_id = :org_id
-              AND c.is_archived = false
-              AND csh.to_status = 'qualified'
-              AND csh.changed_at >= :start
-              AND csh.changed_at < :end
-        """),
-        {"org_id": org_id, "start": start, "end": end}
-    )
-    avg_hours_row = avg_hours_result.fetchone()
-    avg_time_to_qualified_hours = round(avg_hours_row[0], 1) if avg_hours_row and avg_hours_row[0] else None
+    avg_time_to_qualified_hours = None
+    if qualified_stage:
+        avg_hours_result = db.execute(
+            text("""
+                SELECT AVG(EXTRACT(EPOCH FROM (csh.changed_at - c.created_at)) / 3600) as avg_hours
+                FROM cases c
+                JOIN case_status_history csh ON c.id = csh.case_id
+                WHERE c.organization_id = :org_id
+                  AND c.is_archived = false
+                  AND csh.to_stage_id = :qualified_stage_id
+                  AND csh.changed_at >= :start
+                  AND csh.changed_at < :end
+            """),
+            {"org_id": org_id, "start": start, "end": end, "qualified_stage_id": qualified_stage.id}
+        )
+        avg_hours_row = avg_hours_result.fetchone()
+        avg_time_to_qualified_hours = round(avg_hours_row[0], 1) if avg_hours_row and avg_hours_row[0] else None
     
     return AnalyticsSummary(
         total_cases=total_cases,
@@ -173,11 +178,11 @@ def get_cases_by_status(
     
     result = db.execute(
         text("""
-            SELECT status, COUNT(*) as count
+            SELECT status_label, COUNT(*) as count
             FROM cases
             WHERE organization_id = :org_id
               AND is_archived = false
-            GROUP BY status
+            GROUP BY status_label
             ORDER BY count DESC
         """),
         {"org_id": org_id}

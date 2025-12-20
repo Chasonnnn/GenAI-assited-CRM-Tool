@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from app.db.enums import CaseSource, CaseStatus, OwnerType
+from app.db.enums import CaseSource, OwnerType
 from app.utils.normalization import normalize_phone, normalize_state
 
 
@@ -106,7 +106,8 @@ class CaseRead(BaseModel):
     """Full case response for detail views."""
     id: UUID
     case_number: str
-    status: CaseStatus
+    stage_id: UUID
+    status_label: str
     source: CaseSource
     is_priority: bool
     
@@ -152,7 +153,8 @@ class CaseListItem(BaseModel):
     """Compact case for table views."""
     id: UUID
     case_number: str
-    status: CaseStatus
+    stage_id: UUID
+    status_label: str
     source: CaseSource
     full_name: str
     email: str
@@ -181,8 +183,8 @@ class CaseListResponse(BaseModel):
 
 
 class CaseStatusChange(BaseModel):
-    """Request to change case status."""
-    status: CaseStatus
+    """Request to change case stage."""
+    stage_id: UUID
     reason: str | None = Field(None, max_length=500)
 
 
@@ -195,8 +197,10 @@ class CaseAssign(BaseModel):
 class CaseStatusHistoryRead(BaseModel):
     """Status history entry response."""
     id: UUID
-    from_status: str
-    to_status: str
+    from_stage_id: UUID | None
+    to_stage_id: UUID | None
+    from_label_snapshot: str | None
+    to_label_snapshot: str | None
     changed_by_user_id: UUID | None
     changed_by_name: str | None = None
     reason: str | None

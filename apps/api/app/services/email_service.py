@@ -229,7 +229,7 @@ def render_template(
 
 def build_case_template_variables(db: Session, case: Case) -> dict[str, str]:
     """Build flat template variables for a case context."""
-    from app.db.enums import CaseStatus, OwnerType
+    from app.db.enums import OwnerType
     from app.db.models import Organization, Queue, User
 
     org = db.query(Organization).filter(Organization.id == case.organization_id).first()
@@ -242,15 +242,12 @@ def build_case_template_variables(db: Session, case: Case) -> dict[str, str]:
         queue = db.query(Queue).filter(Queue.id == case.owner_id).first()
         owner_name = queue.name if queue else ""
 
-    status_labels = {s.value: s.value.replace("_", " ").title() for s in CaseStatus}
-    status_value = case.status.value if hasattr(case.status, "value") else case.status
-
     return {
         "full_name": case.full_name or "",
         "email": case.email or "",
         "phone": case.phone or "",
         "case_number": case.case_number or "",
-        "status": status_labels.get(status_value, str(status_value) if status_value else ""),
+        "status_label": case.status_label or "",
         "state": case.state or "",
         "owner_name": owner_name,
         "org_name": org.name if org else "",

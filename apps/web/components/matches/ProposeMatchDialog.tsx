@@ -82,7 +82,7 @@ export function ProposeMatchDialog({
                                 Loading...
                             </div>
                         ) : (
-                            <Select value={selectedIpId} onValueChange={setSelectedIpId}>
+                            <Select value={selectedIpId} onValueChange={(v) => setSelectedIpId(v || "")}>
                                 <SelectTrigger>
                                     <SelectValue placeholder="Select intended parent(s)" />
                                 </SelectTrigger>

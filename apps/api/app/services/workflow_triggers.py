@@ -15,6 +15,9 @@ from app.services.workflow_engine import engine
 
 def trigger_case_created(db: Session, case: Case) -> None:
     """Trigger workflows when a new case is created."""
+    from app.services import pipeline_service
+    stage = pipeline_service.get_stage_by_id(db, case.stage_id)
+    stage_slug = stage.slug if stage else None
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.CASE_CREATED,
@@ -24,7 +27,9 @@ def trigger_case_created(db: Session, case: Case) -> None:
             "case_id": str(case.id),
             "case_number": case.case_number,
             "source": case.source,
-            "status": case.status,
+            "stage_id": str(case.stage_id),
+            "stage_slug": stage_slug,
+            "status_label": case.status_label,
         },
         org_id=case.organization_id,
         source=WorkflowEventSource.USER,
@@ -34,11 +39,13 @@ def trigger_case_created(db: Session, case: Case) -> None:
 def trigger_status_changed(
     db: Session,
     case: Case,
-    old_status: str,
-    new_status: str,
+    old_stage_id: UUID | None,
+    new_stage_id: UUID | None,
+    old_stage_slug: str | None,
+    new_stage_slug: str | None,
 ) -> None:
     """Trigger workflows when case status changes."""
-    if old_status == new_status:
+    if old_stage_id == new_stage_id:
         return
     
     engine.trigger(
@@ -48,8 +55,10 @@ def trigger_status_changed(
         entity_id=case.id,
         event_data={
             "case_id": str(case.id),
-            "old_status": old_status,
-            "new_status": new_status,
+            "old_stage_id": str(old_stage_id) if old_stage_id else None,
+            "new_stage_id": str(new_stage_id) if new_stage_id else None,
+            "old_status": old_stage_slug,
+            "new_status": new_stage_slug,
         },
         org_id=case.organization_id,
         source=WorkflowEventSource.USER,

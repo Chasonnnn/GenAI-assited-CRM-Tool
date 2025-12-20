@@ -16,7 +16,7 @@ from app.db.models import (
 from app.db.enums import (
     WorkflowTriggerType, WorkflowActionType, WorkflowExecutionStatus,
     WorkflowEventSource, WorkflowConditionOperator, JobType, EntityType,
-    CaseStatus, OwnerType,
+    OwnerType,
 )
 from app.services import workflow_service, job_service, notification_service
 from app.schemas.workflow import ALLOWED_UPDATE_FIELDS
@@ -116,12 +116,12 @@ class WorkflowEngine:
         config = workflow.trigger_config
         
         if trigger_type == WorkflowTriggerType.STATUS_CHANGED:
-            to_status = config.get("to_status")
-            from_status = config.get("from_status")
+            to_stage_id = config.get("to_stage_id")
+            from_stage_id = config.get("from_stage_id")
             
-            if to_status and event_data.get("new_status") != to_status:
+            if to_stage_id and str(event_data.get("new_stage_id")) != str(to_stage_id):
                 return False
-            if from_status and event_data.get("old_status") != from_status:
+            if from_stage_id and str(event_data.get("old_stage_id")) != str(from_stage_id):
                 return False
             return True
         
@@ -593,12 +593,71 @@ class WorkflowEngine:
         
         if field not in ALLOWED_UPDATE_FIELDS:
             return {"success": False, "error": f"Field {field} not allowed for update"}
-        
+
         old_value = getattr(entity, field, None)
-        setattr(entity, field, value)
-        entity.updated_at = datetime.now(timezone.utc)
         
-        db.commit()
+        if field == "stage_id":
+            from app.services import pipeline_service
+            from app.db.models import CaseStatusHistory
+
+            new_stage_id = UUID(value) if isinstance(value, str) else value
+            if new_stage_id == entity.stage_id:
+                return {"success": True, "description": "Stage unchanged"}
+
+            stage = pipeline_service.get_stage_by_id(db, new_stage_id)
+            current_stage = pipeline_service.get_stage_by_id(db, entity.stage_id) if entity.stage_id else None
+            case_pipeline_id = current_stage.pipeline_id if current_stage else None
+            if not case_pipeline_id:
+                case_pipeline_id = pipeline_service.get_or_create_default_pipeline(
+                    db,
+                    entity.organization_id,
+                ).id
+            if not stage or not stage.is_active or stage.pipeline_id != case_pipeline_id:
+                return {"success": False, "error": "Invalid stage for case pipeline"}
+
+            old_stage_id = entity.stage_id
+            old_label = entity.status_label
+            old_stage = pipeline_service.get_stage_by_id(db, old_stage_id) if old_stage_id else None
+            old_slug = old_stage.slug if old_stage else None
+            entity.stage_id = stage.id
+            entity.status_label = stage.label
+            entity.updated_at = datetime.now(timezone.utc)
+
+            history = CaseStatusHistory(
+                case_id=entity.id,
+                organization_id=entity.organization_id,
+                from_stage_id=old_stage_id,
+                to_stage_id=stage.id,
+                from_label_snapshot=old_label,
+                to_label_snapshot=stage.label,
+                changed_by_user_id=None,
+                reason="Workflow update",
+            )
+            db.add(history)
+            db.commit()
+
+            # Trigger status_changed workflow with loop protection
+            self.trigger(
+                db=db,
+                trigger_type=WorkflowTriggerType.STATUS_CHANGED,
+                entity_type="case",
+                entity_id=entity.id,
+                event_data={
+                    "case_id": str(entity.id),
+                    "old_stage_id": str(old_stage_id) if old_stage_id else None,
+                    "new_stage_id": str(stage.id),
+                    "old_status": old_slug,
+                    "new_status": stage.slug,
+                },
+                org_id=entity.organization_id,
+                event_id=event_id,
+                depth=depth + 1,
+                source=WorkflowEventSource.WORKFLOW,
+            )
+        else:
+            setattr(entity, field, value)
+            entity.updated_at = datetime.now(timezone.utc)
+            db.commit()
         
         # Trigger case_updated workflow
         self.trigger(
@@ -608,7 +667,7 @@ class WorkflowEngine:
             entity_id=entity.id,
             event_data={
                 "changed_fields": [field],
-                "old_values": {field: str(old_value)},
+                "old_values": {field: str(old_value) if old_value is not None else None},
                 "new_values": {field: str(value)},
             },
             org_id=entity.organization_id,

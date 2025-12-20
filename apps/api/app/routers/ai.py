@@ -716,7 +716,7 @@ def summarize_case(
     context = f"""Case #{case.case_number}
 Name: {case.full_name}
 Email: {case.email}
-Status: {case.status}
+Status: {case.status_label}
 Created: {case.created_at.strftime('%Y-%m-%d')}
 
 Recent Notes:
@@ -788,7 +788,7 @@ Be concise and professional. Focus on actionable insights."""
         case_number=case.case_number,
         full_name=case.full_name,
         summary=parsed.get("summary", "Unable to generate summary"),
-        current_status=case.status,
+        current_status=case.status_label,
         key_dates=key_dates,
         pending_tasks=pending_tasks,
         recent_activity=parsed.get("recent_activity", "No recent activity"),
@@ -836,7 +836,7 @@ def draft_email(
 
 Recipient: {case.full_name}
 Email: {case.email}
-Case Status: {case.status}
+Case Status: {case.status_label}
 {additional}
 
 Sender Name: {sender_name}
@@ -921,10 +921,10 @@ def analyze_dashboard(
     ).scalar() or 0
     
     # Cases by status
-    status_counts = db.query(Case.status, func.count(Case.id)).filter(
+    status_counts = db.query(Case.status_label, func.count(Case.id)).filter(
         Case.organization_id == session.org_id,
         Case.is_archived == False
-    ).group_by(Case.status).all()
+    ).group_by(Case.status_label).all()
     
     # New cases this week vs last week
     cases_this_week = db.query(func.count(Case.id)).filter(
@@ -1042,4 +1042,3 @@ Focus on:
         recommendations=parsed.get("recommendations", []),
         stats=stats,
     )
-

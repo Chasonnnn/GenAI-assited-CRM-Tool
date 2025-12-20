@@ -209,7 +209,7 @@ export default function ComplianceSettingsPage() {
                         <div className="grid gap-4 md:grid-cols-3">
                             <div className="space-y-2">
                                 <Label>Hold Scope</Label>
-                                <Select value={holdType} onValueChange={setHoldType}>
+                                <Select value={holdType} onValueChange={(v) => setHoldType(v || "org")}>
                                     <SelectTrigger>
                                         <SelectValue />
                                     </SelectTrigger>

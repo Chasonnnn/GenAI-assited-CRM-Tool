@@ -82,8 +82,7 @@ def _build_dynamic_context(
         if phone != "N/A":
             phone = pii_mapping.add_phone(phone)
     
-    # Case.status is a string, not enum
-    status_value = case.status if isinstance(case.status, str) else case.status.value
+    status_value = case.status_label or "N/A"
     source_value = case.source if isinstance(case.source, str) else case.source.value
     
     lines = [

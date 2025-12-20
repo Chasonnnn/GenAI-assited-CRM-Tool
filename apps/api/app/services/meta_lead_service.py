@@ -5,7 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.db.enums import CaseSource, CaseStatus
+from app.db.enums import CaseSource
 from app.db.models import Case, MetaLead
 from app.schemas.case import CaseCreate
 from app.services import case_service

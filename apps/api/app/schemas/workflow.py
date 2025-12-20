@@ -12,7 +12,6 @@ from app.db.enums import (
     WorkflowConditionOperator,
     WorkflowExecutionStatus,
     WorkflowEventSource,
-    CaseStatus,
     OwnerType,
 )
 
@@ -23,7 +22,7 @@ from app.db.enums import (
 
 ALLOWED_CONDITION_FIELDS = {
     # Basic fields
-    "status", "source", "is_priority", "state", "created_at",
+    "status_label", "stage_id", "source", "is_priority", "state", "created_at",
     # Owner fields  
     "owner_type", "owner_id",
     # Contact fields
@@ -40,12 +39,12 @@ ALLOWED_CONDITION_FIELDS = {
 }
 
 ALLOWED_UPDATE_FIELDS = {
-    "status", "is_priority", "owner_type", "owner_id",
+    "stage_id", "is_priority", "owner_type", "owner_id",
 }
 
 ALLOWED_EMAIL_VARIABLES = {
     "full_name", "email", "phone",
-    "case_number", "status", "state",
+    "case_number", "status_label", "state",
     "owner_name", "org_name",
 }
 
@@ -74,8 +73,8 @@ class Condition(BaseModel):
 
 class StatusChangeTriggerConfig(BaseModel):
     """Config for status_changed trigger."""
-    from_status: CaseStatus | None = None
-    to_status: CaseStatus
+    from_stage_id: UUID | None = None
+    to_stage_id: UUID
 
 
 class ScheduledTriggerConfig(BaseModel):

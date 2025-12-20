@@ -1,9 +1,11 @@
 """Metadata router - API endpoints for picklist values (enums)."""
 
 from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session
-from app.db.enums import CaseStatus, CaseSource, TaskType, IntendedParentStatus, Role
+from app.core.deps import get_current_session, get_db
+from app.db.enums import CaseSource, TaskType, IntendedParentStatus, Role
+from app.services import pipeline_service
 from app.schemas.auth import UserSession
 
 router = APIRouter()
@@ -12,25 +14,22 @@ router = APIRouter()
 @router.get("/statuses")
 def list_case_statuses(
     session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
 ):
     """
     Get all case statuses with metadata.
     
     Returns list of {value, label, stage} for populating dropdowns.
     """
-    # Group statuses by stage (A = Intake, B = Post-approval)
-    intake_statuses = {s.value for s in CaseStatus.intake_visible()}
-    
     statuses = []
-    for status in CaseStatus:
-        # Skip pseudo-statuses used for history only
-        if status.value in ("archived", "restored"):
-            continue
-        
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, session.org_id, session.user_id)
+    stages = pipeline_service.get_stages(db, pipeline.id, include_inactive=False)
+    for stage in stages:
         statuses.append({
-            "value": status.value,
-            "label": status.value.replace("_", " ").title(),
-            "stage": "A" if status.value in intake_statuses else "B",
+            "id": str(stage.id),
+            "value": stage.slug,
+            "label": stage.label,
+            "stage_type": stage.stage_type,
         })
     
     return {"statuses": statuses}
