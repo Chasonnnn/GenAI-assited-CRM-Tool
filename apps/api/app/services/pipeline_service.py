@@ -189,6 +189,63 @@ def list_pipelines(db: Session, org_id: UUID) -> list[Pipeline]:
     ).order_by(Pipeline.is_default.desc(), Pipeline.name).all()
 
 
+def sync_missing_stages(
+    db: Session,
+    pipeline: Pipeline,
+    user_id: UUID | None = None,
+) -> int:
+    """
+    Add missing default stages to an existing pipeline.
+    
+    Compares existing stages against DEFAULT_STAGE_ORDER and adds any missing ones.
+    Returns count of stages added.
+    """
+    # Get existing stage slugs
+    existing_slugs = {s.slug for s in pipeline.stages if not s.deleted_at}
+    
+    # Find missing slugs
+    default_defs = get_default_stage_defs()
+    missing = [d for d in default_defs if d["slug"] not in existing_slugs]
+    
+    if not missing:
+        return 0
+    
+    # Get max order from existing stages
+    max_order = max((s.order for s in pipeline.stages), default=0)
+    
+    # Add missing stages
+    for i, stage_def in enumerate(missing):
+        db.add(PipelineStage(
+            pipeline_id=pipeline.id,
+            slug=stage_def["slug"],
+            label=stage_def["label"],
+            color=stage_def["color"],
+            order=max_order + i + 1,  # Append after existing
+            stage_type=stage_def["stage_type"],
+            is_active=True,
+        ))
+    
+    # Update pipeline version
+    pipeline.current_version += 1
+    pipeline.updated_at = datetime.now(timezone.utc)
+    
+    # Create version snapshot if user provided
+    if user_id:
+        version_service.create_version(
+            db=db,
+            org_id=pipeline.organization_id,
+            entity_type=ENTITY_TYPE,
+            entity_id=pipeline.id,
+            payload=_pipeline_payload(pipeline),
+            created_by_user_id=user_id,
+            comment=f"Added {len(missing)} missing stages",
+        )
+    
+    db.commit()
+    db.refresh(pipeline)
+    return len(missing)
+
+
 def update_pipeline_stages(
     db: Session,
     pipeline: Pipeline,
