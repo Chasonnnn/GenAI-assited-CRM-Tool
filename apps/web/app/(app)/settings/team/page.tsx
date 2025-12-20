@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -31,10 +32,29 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { Loader2, UserPlus, Mail, RotateCcw, X, Clock, Check, XCircle } from "lucide-react"
+import {
+    Loader2, UserPlus, Mail, RotateCcw, X, Clock, Check, XCircle,
+    Users, Shield, ChevronRight, Settings2
+} from "lucide-react"
 import { useInvites, useCreateInvite, useResendInvite, useRevokeInvite } from "@/lib/hooks/use-invites"
+import { useMembers, useRemoveMember } from "@/lib/hooks/use-permissions"
 import { useToast } from "@/components/ui/use-toast"
 import { formatDistanceToNow } from "date-fns"
+import { useAuth } from "@/lib/auth-context"
+
+const ROLE_LABELS: Record<string, string> = {
+    intake_specialist: "Intake Specialist",
+    case_manager: "Case Manager",
+    manager: "Manager",
+    developer: "Developer",
+}
+
+const ROLE_COLORS: Record<string, string> = {
+    intake_specialist: "bg-blue-100 text-blue-800",
+    case_manager: "bg-green-100 text-green-800",
+    manager: "bg-purple-100 text-purple-800",
+    developer: "bg-orange-100 text-orange-800",
+}
 
 function getStatusBadge(status: string) {
     switch (status) {
@@ -73,7 +93,7 @@ function getStatusBadge(status: string) {
 
 function InviteTeamModal({ onClose }: { onClose: () => void }) {
     const [email, setEmail] = useState("")
-    const [role, setRole] = useState("member")
+    const [role, setRole] = useState("intake_specialist")
     const createInvite = useCreateInvite()
     const { toast } = useToast()
 
@@ -84,7 +104,7 @@ function InviteTeamModal({ onClose }: { onClose: () => void }) {
             await createInvite.mutateAsync({ email, role })
             toast({
                 title: "Invitation sent",
-                description: `Invited ${email} as ${role}`,
+                description: `Invited ${email} as ${ROLE_LABELS[role] || role}`,
             })
             onClose()
         } catch (error) {
@@ -126,10 +146,14 @@ function InviteTeamModal({ onClose }: { onClose: () => void }) {
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="member">Member</SelectItem>
+                                <SelectItem value="intake_specialist">Intake Specialist</SelectItem>
+                                <SelectItem value="case_manager">Case Manager</SelectItem>
                                 <SelectItem value="manager">Manager</SelectItem>
                             </SelectContent>
                         </Select>
+                        <p className="text-xs text-muted-foreground">
+                            Role permissions can be customized after invitation is accepted.
+                        </p>
                     </div>
                 </div>
 
@@ -147,8 +171,101 @@ function InviteTeamModal({ onClose }: { onClose: () => void }) {
     )
 }
 
-export default function TeamSettingsPage() {
-    const [showInviteModal, setShowInviteModal] = useState(false)
+function MembersTab() {
+    const { data: members, isLoading } = useMembers()
+    const removeMember = useRemoveMember()
+    const { toast } = useToast()
+    const { user } = useAuth()
+
+    const handleRemove = async (memberId: string, email: string) => {
+        if (!confirm(`Remove ${email} from the organization? This cannot be undone.`)) return
+
+        try {
+            await removeMember.mutateAsync(memberId)
+            toast({ title: "Member removed" })
+        } catch (error) {
+            toast({
+                title: "Failed to remove member",
+                description: error instanceof Error ? error.message : "Unknown error",
+                variant: "destructive",
+            })
+        }
+    }
+
+    if (isLoading) {
+        return (
+            <div className="flex justify-center py-8">
+                <Loader2 className="size-6 animate-spin text-muted-foreground" />
+            </div>
+        )
+    }
+
+    if (!members?.length) {
+        return (
+            <div className="text-center py-8 text-muted-foreground">
+                No team members yet
+            </div>
+        )
+    }
+
+    return (
+        <Table>
+            <TableHeader>
+                <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Last Login</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+            </TableHeader>
+            <TableBody>
+                {members.map((member) => (
+                    <TableRow key={member.id}>
+                        <TableCell className="font-medium">
+                            {member.display_name || "—"}
+                            {member.user_id === user?.id && (
+                                <Badge variant="outline" className="ml-2 text-xs">You</Badge>
+                            )}
+                        </TableCell>
+                        <TableCell>{member.email}</TableCell>
+                        <TableCell>
+                            <Badge className={ROLE_COLORS[member.role] || "bg-gray-100"}>
+                                {ROLE_LABELS[member.role] || member.role}
+                            </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                            {member.last_login_at
+                                ? formatDistanceToNow(new Date(member.last_login_at), { addSuffix: true })
+                                : "Never"}
+                        </TableCell>
+                        <TableCell className="text-right space-x-2">
+                            <Link href={`/settings/team/members/${member.id}`}>
+                                <Button variant="ghost" size="sm">
+                                    <Settings2 className="size-4 mr-1" />
+                                    Manage
+                                </Button>
+                            </Link>
+                            {member.user_id !== user?.id && (
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRemove(member.id, member.email)}
+                                    disabled={removeMember.isPending}
+                                    className="text-destructive hover:text-destructive"
+                                >
+                                    <X className="size-4" />
+                                </Button>
+                            )}
+                        </TableCell>
+                    </TableRow>
+                ))}
+            </TableBody>
+        </Table>
+    )
+}
+
+function InvitationsTab() {
     const { data, isLoading } = useInvites()
     const resendInvite = useResendInvite()
     const revokeInvite = useRevokeInvite()
@@ -183,7 +300,84 @@ export default function TeamSettingsPage() {
     }
 
     const pendingInvites = data?.invites.filter(inv => inv.status === "pending") || []
-    const allInvites = data?.invites || []
+
+    if (isLoading) {
+        return (
+            <div className="flex justify-center py-8">
+                <Loader2 className="size-6 animate-spin text-muted-foreground" />
+            </div>
+        )
+    }
+
+    if (pendingInvites.length === 0) {
+        return (
+            <div className="text-center py-8 text-muted-foreground">
+                No pending invitations
+            </div>
+        )
+    }
+
+    return (
+        <Table>
+            <TableHeader>
+                <TableRow>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Expires</TableHead>
+                    <TableHead>Resends</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+            </TableHeader>
+            <TableBody>
+                {pendingInvites.map((invite) => (
+                    <TableRow key={invite.id}>
+                        <TableCell className="font-medium">{invite.email}</TableCell>
+                        <TableCell>
+                            <Badge className={ROLE_COLORS[invite.role] || "bg-gray-100"}>
+                                {ROLE_LABELS[invite.role] || invite.role}
+                            </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                            {invite.expires_at
+                                ? formatDistanceToNow(new Date(invite.expires_at), { addSuffix: true })
+                                : "Never"}
+                        </TableCell>
+                        <TableCell>{invite.resend_count}/3</TableCell>
+                        <TableCell className="text-right space-x-2">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleResend(invite.id)}
+                                disabled={!invite.can_resend || resendInvite.isPending}
+                            >
+                                <RotateCcw className="size-4" />
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRevoke(invite.id)}
+                                disabled={revokeInvite.isPending}
+                                className="text-destructive hover:text-destructive"
+                            >
+                                <X className="size-4" />
+                            </Button>
+                        </TableCell>
+                    </TableRow>
+                ))}
+            </TableBody>
+        </Table>
+    )
+}
+
+export default function TeamSettingsPage() {
+    const [showInviteModal, setShowInviteModal] = useState(false)
+    const { data: inviteData } = useInvites()
+    const { data: members } = useMembers()
+    const { user } = useAuth()
+    const isDeveloper = user?.role === "developer"
+
+    const pendingCount = inviteData?.pending_count || 0
+    const memberCount = members?.length || 0
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-6 max-w-5xl mx-auto">
@@ -191,144 +385,55 @@ export default function TeamSettingsPage() {
                 <div>
                     <h1 className="text-2xl font-bold">Team Management</h1>
                     <p className="text-sm text-muted-foreground">
-                        Manage team members and pending invitations
+                        Manage team members, roles, and permissions
                     </p>
                 </div>
 
-                <Dialog open={showInviteModal} onOpenChange={setShowInviteModal}>
-                    <DialogTrigger asChild>
-                        <Button>
-                            <UserPlus className="size-4 mr-2" />
-                            Invite Team Member
+                <div className="flex gap-2">
+                    <Link href="/settings/team/roles">
+                        <Button variant="outline">
+                            <Shield className="size-4 mr-2" />
+                            Role Permissions
                         </Button>
-                    </DialogTrigger>
-                    <InviteTeamModal onClose={() => setShowInviteModal(false)} />
-                </Dialog>
+                    </Link>
+                    <Dialog open={showInviteModal} onOpenChange={setShowInviteModal}>
+                        <DialogTrigger asChild>
+                            <Button>
+                                <UserPlus className="size-4 mr-2" />
+                                Invite Member
+                            </Button>
+                        </DialogTrigger>
+                        <InviteTeamModal onClose={() => setShowInviteModal(false)} />
+                    </Dialog>
+                </div>
             </div>
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Invitations</CardTitle>
+                    <CardTitle>Team</CardTitle>
                     <CardDescription>
-                        {data?.pending_count || 0} pending invitation{(data?.pending_count || 0) !== 1 ? "s" : ""}
+                        {memberCount} member{memberCount !== 1 ? "s" : ""} • {pendingCount} pending invitation{pendingCount !== 1 ? "s" : ""}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <Tabs defaultValue="pending">
+                    <Tabs defaultValue="members">
                         <TabsList className="mb-4">
-                            <TabsTrigger value="pending">
-                                Pending ({pendingInvites.length})
+                            <TabsTrigger value="members">
+                                <Users className="size-4 mr-1" />
+                                Members ({memberCount})
                             </TabsTrigger>
-                            <TabsTrigger value="all">
-                                All History ({allInvites.length})
+                            <TabsTrigger value="invitations">
+                                <Mail className="size-4 mr-1" />
+                                Invitations ({pendingCount})
                             </TabsTrigger>
                         </TabsList>
 
-                        <TabsContent value="pending">
-                            {isLoading ? (
-                                <div className="flex justify-center py-8">
-                                    <Loader2 className="size-6 animate-spin text-muted-foreground" />
-                                </div>
-                            ) : pendingInvites.length === 0 ? (
-                                <div className="text-center py-8 text-muted-foreground">
-                                    No pending invitations
-                                </div>
-                            ) : (
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Email</TableHead>
-                                            <TableHead>Role</TableHead>
-                                            <TableHead>Expires</TableHead>
-                                            <TableHead>Resends</TableHead>
-                                            <TableHead className="text-right">Actions</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {pendingInvites.map((invite) => (
-                                            <TableRow key={invite.id}>
-                                                <TableCell className="font-medium">{invite.email}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant="secondary" className="capitalize">
-                                                        {invite.role}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-muted-foreground">
-                                                    {invite.expires_at
-                                                        ? formatDistanceToNow(new Date(invite.expires_at), { addSuffix: true })
-                                                        : "Never"}
-                                                </TableCell>
-                                                <TableCell>{invite.resend_count}/3</TableCell>
-                                                <TableCell className="text-right space-x-2">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => handleResend(invite.id)}
-                                                        disabled={!invite.can_resend || resendInvite.isPending}
-                                                        title={
-                                                            invite.can_resend
-                                                                ? "Resend invitation"
-                                                                : invite.resend_cooldown_seconds
-                                                                    ? `Wait ${invite.resend_cooldown_seconds}s`
-                                                                    : "Max resends reached"
-                                                        }
-                                                    >
-                                                        <RotateCcw className="size-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => handleRevoke(invite.id)}
-                                                        disabled={revokeInvite.isPending}
-                                                        className="text-destructive hover:text-destructive"
-                                                    >
-                                                        <X className="size-4" />
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            )}
+                        <TabsContent value="members">
+                            <MembersTab />
                         </TabsContent>
 
-                        <TabsContent value="all">
-                            {isLoading ? (
-                                <div className="flex justify-center py-8">
-                                    <Loader2 className="size-6 animate-spin text-muted-foreground" />
-                                </div>
-                            ) : allInvites.length === 0 ? (
-                                <div className="text-center py-8 text-muted-foreground">
-                                    No invitation history
-                                </div>
-                            ) : (
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Email</TableHead>
-                                            <TableHead>Role</TableHead>
-                                            <TableHead>Status</TableHead>
-                                            <TableHead>Created</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {allInvites.map((invite) => (
-                                            <TableRow key={invite.id}>
-                                                <TableCell className="font-medium">{invite.email}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant="secondary" className="capitalize">
-                                                        {invite.role}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell>{getStatusBadge(invite.status)}</TableCell>
-                                                <TableCell className="text-muted-foreground">
-                                                    {formatDistanceToNow(new Date(invite.created_at), { addSuffix: true })}
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            )}
+                        <TabsContent value="invitations">
+                            <InvitationsTab />
                         </TabsContent>
                     </Tabs>
                 </CardContent>

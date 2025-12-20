@@ -153,9 +153,13 @@ app.include_router(audit.router)
 from app.routers import compliance
 app.include_router(compliance.router)
 
-# Pipeline Configuration (Manager+)
+# Pipeline Configuration (Developer only)
 from app.routers import pipelines
 app.include_router(pipelines.router)
+
+# Permission Management (Manager+)
+from app.routers import permissions
+app.include_router(permissions.router)
 
 # Matches (Surrogate ↔ Intended Parent pairing)
 from app.routers import matches

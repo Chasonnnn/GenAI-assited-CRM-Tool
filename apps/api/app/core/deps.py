@@ -148,6 +148,34 @@ def require_roles(allowed_roles: list):
     return dependency
 
 
+def require_permission(permission: str):
+    """
+    Dependency factory for permission-based authorization.
+    
+    Uses the RBAC permission system with:
+    - Role defaults
+    - User-level overrides (grant/revoke)
+    - Developer always has all permissions
+    
+    Usage:
+        @router.get("/cases", dependencies=[Depends(require_permission("view_cases"))])
+    """
+    def dependency(request: Request, db: Session = Depends(get_db)):
+        from app.services import permission_service
+        
+        session = get_current_session(request, db)
+        
+        if not permission_service.check_permission(
+            db, session.org_id, session.user_id, session.role.value, permission
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Missing permission: {permission}"
+            )
+        return session
+    return dependency
+
+
 def require_csrf_header(request: Request) -> None:
     """
     Verify CSRF header on mutations.
