@@ -38,7 +38,7 @@ import {
 } from "lucide-react"
 import { useInvites, useCreateInvite, useResendInvite, useRevokeInvite } from "@/lib/hooks/use-invites"
 import { useMembers, useRemoveMember, useBulkUpdateRoles } from "@/lib/hooks/use-permissions"
-import { useToast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import { formatDistanceToNow } from "date-fns"
 import { useAuth } from "@/lib/auth-context"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -96,23 +96,17 @@ function InviteTeamModal({ onClose }: { onClose: () => void }) {
     const [email, setEmail] = useState("")
     const [role, setRole] = useState("intake_specialist")
     const createInvite = useCreateInvite()
-    const { toast } = useToast()
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
 
         try {
             await createInvite.mutateAsync({ email, role })
-            toast({
-                title: "Invitation sent",
-                description: `Invited ${email} as ${ROLE_LABELS[role] || role}`,
-            })
+            toast.success(`Invited ${email} as ${ROLE_LABELS[role] || role}`)
             onClose()
         } catch (error) {
-            toast({
-                title: "Failed to send invitation",
+            toast.error("Failed to send invitation", {
                 description: error instanceof Error ? error.message : "Unknown error",
-                variant: "destructive",
             })
         }
     }
@@ -176,7 +170,6 @@ function MembersTab() {
     const { data: members, isLoading } = useMembers()
     const removeMember = useRemoveMember()
     const bulkUpdate = useBulkUpdateRoles()
-    const { toast } = useToast()
     const { user } = useAuth()
 
     // Selection state for bulk operations
@@ -189,12 +182,10 @@ function MembersTab() {
 
         try {
             await removeMember.mutateAsync(memberId)
-            toast({ title: "Member removed" })
+            toast.success("Member removed")
         } catch (error) {
-            toast({
-                title: "Failed to remove member",
+            toast.error("Failed to remove member", {
                 description: error instanceof Error ? error.message : "Unknown error",
-                variant: "destructive",
             })
         }
     }
@@ -232,17 +223,12 @@ function MembersTab() {
                 memberIds: Array.from(selectedIds),
                 role: bulkRole,
             })
-            toast({
-                title: "Roles updated",
-                description: `${result.success} member(s) updated${result.failed > 0 ? `, ${result.failed} failed` : ""}`,
-            })
+            toast.success(`${result.success} member(s) updated${result.failed > 0 ? `, ${result.failed} failed` : ""}`)
             setSelectedIds(new Set())
             setShowBulkDialog(false)
         } catch (error) {
-            toast({
-                title: "Failed to update roles",
+            toast.error("Failed to update roles", {
                 description: error instanceof Error ? error.message : "Unknown error",
-                variant: "destructive",
             })
         }
     }
@@ -407,17 +393,14 @@ function InvitationsTab() {
     const { data, isLoading } = useInvites()
     const resendInvite = useResendInvite()
     const revokeInvite = useRevokeInvite()
-    const { toast } = useToast()
 
     const handleResend = async (inviteId: string) => {
         try {
             await resendInvite.mutateAsync(inviteId)
-            toast({ title: "Invitation resent" })
+            toast.success("Invitation resent")
         } catch (error) {
-            toast({
-                title: "Failed to resend",
+            toast.error("Failed to resend", {
                 description: error instanceof Error ? error.message : "Unknown error",
-                variant: "destructive",
             })
         }
     }
@@ -427,12 +410,10 @@ function InvitationsTab() {
 
         try {
             await revokeInvite.mutateAsync(inviteId)
-            toast({ title: "Invitation revoked" })
+            toast.success("Invitation revoked")
         } catch (error) {
-            toast({
-                title: "Failed to revoke",
+            toast.error("Failed to revoke", {
                 description: error instanceof Error ? error.message : "Unknown error",
-                variant: "destructive",
             })
         }
     }
