@@ -11,8 +11,8 @@ from pydantic import BaseModel
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db, require_roles
-from app.db.enums import Role
+from app.core.deps import get_current_session, get_db, require_permission
+
 from app.db.models import Case, MetaLead
 from app.services import pipeline_service
 from app.schemas.auth import UserSession
@@ -101,7 +101,7 @@ def parse_date_range(from_date: str | None, to_date: str | None) -> tuple[dateti
 def get_analytics_summary(
     from_date: Optional[str] = Query(None, description="ISO date string"),
     to_date: Optional[str] = Query(None, description="ISO date string"),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("view_reports")),
     db: Session = Depends(get_db),
 ):
     """Get high-level analytics summary."""
@@ -170,7 +170,7 @@ def get_analytics_summary(
 
 @router.get("/cases/by-status", response_model=list[StatusCount])
 def get_cases_by_status(
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("view_reports")),
     db: Session = Depends(get_db),
 ):
     """Get case counts grouped by status."""
@@ -193,7 +193,7 @@ def get_cases_by_status(
 
 @router.get("/cases/by-assignee", response_model=list[AssigneeCount])
 def get_cases_by_assignee(
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("view_reports")),
     db: Session = Depends(get_db),
 ):
     """Get case counts grouped by owner (user-owned cases only)."""
@@ -228,7 +228,7 @@ def get_cases_trend(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
     period: Literal["day", "week", "month"] = Query("day"),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("view_reports")),
     db: Session = Depends(get_db),
 ):
     """Get case creation trend over time."""
@@ -263,7 +263,7 @@ def get_cases_trend(
 def get_meta_performance(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("view_reports")),
     db: Session = Depends(get_db),
 ):
     """Get Meta Lead Ads performance metrics."""
@@ -315,7 +315,7 @@ def get_meta_performance(
 async def get_meta_spend(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("view_reports")),
     db: Session = Depends(get_db),
 ):
     """
@@ -593,7 +593,7 @@ def get_activity_feed(
     offset: int = Query(0, ge=0),
     activity_type: Optional[str] = Query(None, description="Filter by activity type"),
     user_id: Optional[str] = Query(None, description="Filter by actor user ID"),
-    session: UserSession = Depends(require_roles([Role.MANAGER, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("view_reports")),
     db: Session = Depends(get_db),
 ) -> ActivityFeedResponse:
     """
