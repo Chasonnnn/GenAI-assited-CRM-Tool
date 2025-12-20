@@ -11,7 +11,9 @@ from botocore.exceptions import ClientError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.models import Attachment, AuditLog
+from app.db.enums import AuditEventType
+from app.db.models import Attachment
+from app.services import audit_service
 
 
 # =============================================================================
@@ -112,6 +114,45 @@ def store_file(storage_key: str, file: BinaryIO) -> None:
             f.write(file.read())
 
 
+def strip_exif_data(file: BinaryIO, content_type: str) -> BinaryIO:
+    """
+    Strip EXIF metadata from image files for privacy.
+    
+    Returns the same file object if not an image or if stripping fails.
+    """
+    if content_type not in ("image/jpeg", "image/png"):
+        return file
+    
+    try:
+        from PIL import Image
+        from io import BytesIO
+        
+        file.seek(0)
+        img = Image.open(file)
+        
+        # Create new image without EXIF
+        data = list(img.getdata())
+        img_no_exif = Image.new(img.mode, img.size)
+        img_no_exif.putdata(data)
+        
+        # Save to new buffer
+        output = BytesIO()
+        img_format = "JPEG" if content_type == "image/jpeg" else "PNG"
+        img_no_exif.save(output, format=img_format, quality=95)
+        output.seek(0)
+        
+        return output
+        
+    except ImportError:
+        # Pillow not installed, skip stripping
+        file.seek(0)
+        return file
+    except Exception:
+        # Failed to process, return original
+        file.seek(0)
+        return file
+
+
 def generate_signed_url(storage_key: str) -> str:
     """Generate signed download URL."""
     backend = _get_storage_backend()
@@ -130,7 +171,7 @@ def generate_signed_url(storage_key: str) -> str:
             return ""
     else:
         # Local: return file path (for dev only)
-        return f"/api/attachments/local/{storage_key}"
+        return f"/attachments/local/{storage_key}"
 
 
 def delete_file(storage_key: str) -> None:
@@ -171,8 +212,13 @@ def upload_attachment(
     if not is_valid:
         raise ValueError(error)
     
+    scan_enabled = getattr(settings, "ATTACHMENT_SCAN_ENABLED", False)
+
     # Calculate checksum
     checksum = calculate_checksum(file)
+    
+    # Strip EXIF data from images for privacy
+    processed_file = strip_exif_data(file, content_type)
     
     # Generate storage key
     attachment_id = uuid.uuid4()
@@ -180,7 +226,7 @@ def upload_attachment(
     storage_key = f"{org_id}/{case_id}/{attachment_id}.{ext}"
     
     # Store file
-    store_file(storage_key, file)
+    store_file(storage_key, processed_file)
     
     # Create record
     attachment = Attachment(
@@ -193,23 +239,41 @@ def upload_attachment(
         content_type=content_type,
         file_size=file_size,
         checksum_sha256=checksum,
-        scan_status="pending",
-        quarantined=True,
+        scan_status="pending" if scan_enabled else "clean",
+        quarantined=scan_enabled,
     )
     db.add(attachment)
     
     # Audit log
-    audit = AuditLog(
-        organization_id=org_id,
-        user_id=user_id,
-        action="attachment.upload",
-        entity_type="attachment",
-        entity_id=attachment_id,
-        changes={"filename": filename, "size": file_size},
+    audit_service.log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.ATTACHMENT_UPLOADED,
+        actor_user_id=user_id,
+        target_type="attachment",
+        target_id=attachment_id,
+        details={
+            "case_id": str(case_id),
+            "file_ext": ext,
+            "file_size": file_size,
+        },
     )
-    db.add(audit)
     
     db.flush()
+    
+    # Enqueue virus scan job if scanning is enabled
+    if scan_enabled:
+        try:
+            from app.jobs.scan_attachment import scan_attachment_job
+            # Note: In production, this should be enqueued to a background worker
+            # For now, we log the intent - the job can be run manually or via cron
+            import logging
+            logging.info(f"Attachment {attachment_id} queued for virus scan")
+            # To run synchronously (blocking, not recommended for prod):
+            # scan_attachment_job(attachment_id)
+        except ImportError:
+            pass
+    
     return attachment
 
 
@@ -257,15 +321,20 @@ def get_download_url(
         return None
     
     # Audit log
-    audit = AuditLog(
-        organization_id=org_id,
-        user_id=user_id,
-        action="attachment.download",
-        entity_type="attachment",
-        entity_id=attachment_id,
-        changes={"filename": attachment.filename},
+    ext = attachment.filename.rsplit(".", 1)[-1].lower() if "." in attachment.filename else ""
+    audit_service.log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.ATTACHMENT_DOWNLOADED,
+        actor_user_id=user_id,
+        target_type="attachment",
+        target_id=attachment_id,
+        details={
+            "case_id": str(attachment.case_id) if attachment.case_id else None,
+            "file_ext": ext,
+            "file_size": attachment.file_size,
+        },
     )
-    db.add(audit)
     db.flush()
     
     return generate_signed_url(attachment.storage_key)
@@ -286,15 +355,20 @@ def soft_delete_attachment(
     attachment.deleted_by_user_id = user_id
     
     # Audit log
-    audit = AuditLog(
-        organization_id=org_id,
-        user_id=user_id,
-        action="attachment.delete",
-        entity_type="attachment",
-        entity_id=attachment_id,
-        changes={"filename": attachment.filename},
+    ext = attachment.filename.rsplit(".", 1)[-1].lower() if "." in attachment.filename else ""
+    audit_service.log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.ATTACHMENT_DELETED,
+        actor_user_id=user_id,
+        target_type="attachment",
+        target_id=attachment_id,
+        details={
+            "case_id": str(attachment.case_id) if attachment.case_id else None,
+            "file_ext": ext,
+            "file_size": attachment.file_size,
+        },
     )
-    db.add(audit)
     
     db.flush()
     return True

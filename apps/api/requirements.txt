@@ -58,3 +58,6 @@ redis>=5.0.0
 
 # Export storage (S3)
 boto3>=1.34.0
+
+# Image processing (EXIF stripping)
+pillow>=10.0.0

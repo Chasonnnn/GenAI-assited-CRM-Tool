@@ -10,7 +10,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { PlusIcon, LoaderIcon, ListIcon, CalendarIcon } from "lucide-react"
 import { TasksCalendar } from "@/components/tasks/TasksCalendar"
-import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-tasks"
+import { TaskEditModal } from "@/components/tasks/TaskEditModal"
+import { useTasks, useCompleteTask, useUncompleteTask, useUpdateTask } from "@/lib/hooks/use-tasks"
 import type { TaskListItem } from "@/lib/types/task"
 
 // Get initials from name
@@ -96,6 +97,20 @@ export default function TasksPage() {
         localStorage.setItem("tasks-view", newView)
     }
 
+    // Edit modal state
+    const [editingTask, setEditingTask] = useState<TaskListItem | null>(null)
+
+    const handleTaskClick = (taskId: string) => {
+        const task = incompleteTasks?.items.find((t: TaskListItem) => t.id === taskId)
+        if (task) {
+            setEditingTask(task)
+        }
+    }
+
+    const handleSaveTask = async (taskId: string, data: Partial<TaskListItem>) => {
+        await updateTask.mutateAsync({ taskId, data })
+    }
+
     // Fetch incomplete tasks
     const { data: incompleteTasks, isLoading: loadingIncomplete } = useTasks({
         my_tasks: filter === "my_tasks",
@@ -112,6 +127,7 @@ export default function TasksPage() {
 
     const completeTask = useCompleteTask()
     const uncompleteTask = useUncompleteTask()
+    const updateTask = useUpdateTask()
 
     const handleTaskToggle = async (taskId: string, isCompleted: boolean) => {
         if (isCompleted) {
@@ -280,13 +296,12 @@ export default function TasksPage() {
                             task_type: task.task_type,
                             case_id: task.case_id,
                         }))}
-                        onTaskClick={(taskId) => {
-                            // TODO: Open task detail modal
-                            console.log("Task clicked:", taskId)
-                        }}
-                        onTaskReschedule={(taskId, newDate, newTime) => {
-                            // TODO: Call updateTask mutation
-                            console.log("Reschedule:", taskId, newDate, newTime)
+                        onTaskClick={handleTaskClick}
+                        onTaskReschedule={async (taskId, newDate, newTime) => {
+                            await updateTask.mutateAsync({
+                                taskId,
+                                data: { due_date: newDate, due_time: newTime },
+                            })
                         }}
                     />
                 )}
@@ -339,6 +354,23 @@ export default function TasksPage() {
                     </Card>
                 )}
             </div>
+
+            {/* Edit Modal */}
+            <TaskEditModal
+                task={editingTask ? {
+                    id: editingTask.id,
+                    title: editingTask.title,
+                    description: editingTask.description ?? null,
+                    task_type: editingTask.task_type,
+                    due_date: editingTask.due_date,
+                    due_time: editingTask.due_time ?? null,
+                    is_completed: editingTask.is_completed,
+                    case_id: editingTask.case_id,
+                } : null}
+                open={!!editingTask}
+                onClose={() => setEditingTask(null)}
+                onSave={handleSaveTask}
+            />
         </div>
     )
 }

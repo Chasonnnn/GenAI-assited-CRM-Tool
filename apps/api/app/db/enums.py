@@ -425,3 +425,8 @@ class AuditEventType(str, Enum):
     USER_INVITED = "user_invited"
     USER_ROLE_CHANGED = "user_role_changed"
     USER_DEACTIVATED = "user_deactivated"
+
+    # Attachments
+    ATTACHMENT_UPLOADED = "attachment_uploaded"
+    ATTACHMENT_DOWNLOADED = "attachment_downloaded"
+    ATTACHMENT_DELETED = "attachment_deleted"

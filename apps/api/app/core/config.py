@@ -107,6 +107,7 @@ class Settings(BaseSettings):
     S3_REGION: str = "us-east-1"
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
+    ATTACHMENT_SCAN_ENABLED: bool = False
     
     @property
     def cors_origins_list(self) -> list[str]:
