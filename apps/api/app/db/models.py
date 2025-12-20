@@ -13,8 +13,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.db.enums import (
-    DEFAULT_CASE_SOURCE, DEFAULT_CASE_STATUS, DEFAULT_JOB_STATUS, DEFAULT_EMAIL_STATUS,
-    DEFAULT_IP_STATUS, CaseSource, CaseStatus, TaskType, JobType, JobStatus, EmailStatus,
+    DEFAULT_CASE_SOURCE, DEFAULT_JOB_STATUS, DEFAULT_EMAIL_STATUS,
+    DEFAULT_IP_STATUS, CaseSource, TaskType, JobType, JobStatus, EmailStatus,
     IntendedParentStatus, EntityType, OwnerType
 )
 
@@ -315,7 +315,7 @@ class Case(Base):
             postgresql_where=text("is_archived = FALSE")
         ),
         # Query optimization indexes
-        Index("idx_cases_org_status", "organization_id", "status"),
+        Index("idx_cases_org_stage", "organization_id", "stage_id"),
         Index("idx_cases_org_owner", "organization_id", "owner_type", "owner_id"),
         Index("idx_cases_org_created", "organization_id", "created_at"),
         Index(
@@ -349,26 +349,18 @@ class Case(Base):
         nullable=False
     )
     
-    # Workflow
-    # DEPRECATED: old enum-based status (kept for migration, will be removed)
-    status: Mapped[str | None] = mapped_column(
-        String(50),
-        server_default=text(f"'{DEFAULT_CASE_STATUS.value}'"),
-        nullable=True
-    )
-    
-    # v2: Pipeline reference
-    pipeline_id: Mapped[uuid.UUID | None] = mapped_column(
+    # Workflow (v2: pipeline stages)
+    pipeline_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("pipelines.id", ondelete="SET NULL"),
-        nullable=True
+        nullable=False
     )
-    stage_id: Mapped[uuid.UUID | None] = mapped_column(
+    stage_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("pipeline_stages.id", ondelete="SET NULL"),
-        nullable=True
+        nullable=False
     )
-    status_label: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status_label: Mapped[str] = mapped_column(String(100), nullable=False)
     
     source: Mapped[str] = mapped_column(
         String(20),
@@ -453,6 +445,8 @@ class Case(Base):
     organization: Mapped["Organization"] = relationship(back_populates="cases")
     created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
     archived_by: Mapped["User | None"] = relationship(foreign_keys=[archived_by_user_id])
+    pipeline: Mapped["Pipeline"] = relationship(foreign_keys=[pipeline_id])
+    stage: Mapped["PipelineStage"] = relationship(foreign_keys=[stage_id])
     
     # Owner relationships for eager loading (fixes N+1 query)
     # These use custom join conditions since owner_id can point to either User or Queue
@@ -505,10 +499,6 @@ class CaseStatusHistory(Base):
         ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False
     )
-    # DEPRECATED: old string-based status (kept for migration)
-    from_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    to_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    
     # v2: Stage references with label snapshots
     from_stage_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -2003,9 +1993,6 @@ class Pipeline(Base):
     name: Mapped[str] = mapped_column(String(100), default="Default", nullable=False)
     is_default: Mapped[bool] = mapped_column(default=True, nullable=False)
     
-    # DEPRECATED: stages JSON (kept for migration, will be removed)
-    stages: Mapped[list | None] = mapped_column(JSONB, nullable=True)
-    
     # Version control
     current_version: Mapped[int] = mapped_column(default=1, nullable=False)
     
@@ -2020,7 +2007,7 @@ class Pipeline(Base):
     
     # Relationships
     organization: Mapped["Organization"] = relationship()
-    stage_rows: Mapped[list["PipelineStage"]] = relationship(
+    stages: Mapped[list["PipelineStage"]] = relationship(
         back_populates="pipeline",
         cascade="all, delete-orphan",
         order_by="PipelineStage.order"
