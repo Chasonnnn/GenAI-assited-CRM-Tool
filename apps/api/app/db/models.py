@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     Boolean, Date, ForeignKey, Index, Integer, LargeBinary, Numeric, String, 
-    Text, Time, UniqueConstraint, text
+    TIMESTAMP, Text, Time, UniqueConstraint, text
 )
 from sqlalchemy.dialects.postgresql import CITEXT, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -2050,16 +2050,18 @@ class PipelineStage(Base):
         server_default=text("TRUE"),
         nullable=False
     )
-    deleted_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
     
     # Future: transition rules
     allowed_next_slugs: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     
     created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(),
         server_default=text("now()"),
         nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(),
         server_default=text("now()"),
         nullable=False
     )
