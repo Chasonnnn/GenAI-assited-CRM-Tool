@@ -1,8 +1,21 @@
 "use client"
 
 import { Suspense } from "react"
-import { AppSidebar } from "@/components/app-sidebar"
+import dynamic from "next/dynamic"
 import { useRequireAuth } from "@/lib/auth-context"
+
+// Dynamic import with SSR disabled to prevent hydration mismatch from Base UI's ID generation
+const AppSidebar = dynamic(
+  () => import("@/components/app-sidebar").then(mod => mod.AppSidebar),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+)
 
 export default function AppLayout({
   children,
