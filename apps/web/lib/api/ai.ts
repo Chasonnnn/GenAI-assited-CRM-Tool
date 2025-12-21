@@ -212,3 +212,20 @@ export async function draftEmail(request: DraftEmailRequest): Promise<DraftEmail
 export async function analyzeDashboard(): Promise<AnalyzeDashboardResponse> {
     return api.post<AnalyzeDashboardResponse>('/ai/analyze-dashboard');
 }
+
+// ============================================================================
+// AI Usage API
+// ============================================================================
+
+export interface AIUsageSummary {
+    period_days: number;
+    total_requests: number;
+    total_prompt_tokens: number;
+    total_completion_tokens: number;
+    total_tokens: number;
+    total_cost_usd: number;
+}
+
+export async function getAIUsageSummary(days: number = 30): Promise<AIUsageSummary> {
+    return api.get<AIUsageSummary>(`/ai/usage/summary?days=${days}`);
+}

@@ -356,7 +356,9 @@ def get_conversation(
 
 
 @router.get("/conversations/global")
+@limiter.limit("120/minute")
 def get_global_conversation(
+    request: Request,
     db: Session = Depends(get_db),
     session: UserSession = Depends(require_permission("use_ai_assistant")),
 ) -> dict[str, Any]:

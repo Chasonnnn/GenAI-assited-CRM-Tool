@@ -14,8 +14,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { LoaderIcon, ChevronLeft, ChevronRight, FileText, User, Shield, Settings, Download, Upload } from "lucide-react"
-import { useAuditExports, useAuditLogs, useCreateAuditExport, useEventTypes } from "@/lib/hooks/use-audit"
+import { LoaderIcon, ChevronLeft, ChevronRight, FileText, User, Shield, Settings, Download, Upload, Sparkles, AlertTriangle, CheckIcon, XIcon } from "lucide-react"
+import { useAIAuditActivity, useAuditExports, useAuditLogs, useCreateAuditExport, useEventTypes } from "@/lib/hooks/use-audit"
 import { useAuth } from "@/lib/auth-context"
 
 // Event type icons and labels
@@ -30,6 +30,18 @@ const EVENT_CONFIG: Record<string, { icon: React.ElementType; label: string; col
     user_logout: { icon: User, label: "User Logout", color: "bg-gray-500" },
     // Security events
     permission_changed: { icon: Shield, label: "Permission Change", color: "bg-red-500" },
+    // AI events
+    ai_action_approved: { icon: Sparkles, label: "AI Action Approved", color: "bg-emerald-500" },
+    ai_action_rejected: { icon: Sparkles, label: "AI Action Rejected", color: "bg-slate-500" },
+    ai_action_failed: { icon: AlertTriangle, label: "AI Action Failed", color: "bg-rose-500" },
+    ai_action_denied: { icon: AlertTriangle, label: "AI Action Denied", color: "bg-amber-500" },
+}
+
+const AI_EVENT_LABELS: Record<string, { label: string; icon: React.ElementType; tone: string }> = {
+    ai_action_approved: { label: "Approved", icon: CheckIcon, tone: "text-emerald-600" },
+    ai_action_rejected: { label: "Rejected", icon: XIcon, tone: "text-slate-500" },
+    ai_action_failed: { label: "Failed", icon: AlertTriangle, tone: "text-rose-600" },
+    ai_action_denied: { label: "Denied", icon: AlertTriangle, tone: "text-amber-600" },
 }
 
 function getEventConfig(eventType: string) {
@@ -57,6 +69,7 @@ export default function AuditLogPage() {
         to: undefined,
     })
     const [acknowledgment, setAcknowledgment] = useState("")
+    const [aiActivityHours, setAiActivityHours] = useState<24 | 168 | 720>(24) // 24h, 7d, 30d
 
     const filters = {
         page,
@@ -68,6 +81,9 @@ export default function AuditLogPage() {
     const { data: eventTypes } = useEventTypes()
     const { data: exportJobs, refetch: refetchExports } = useAuditExports()
     const createExport = useCreateAuditExport()
+    const { data: aiActivity, isLoading: aiActivityLoading } = useAIAuditActivity(aiActivityHours)
+
+    const aiActivityLabel = aiActivityHours === 24 ? "24 hours" : aiActivityHours === 168 ? "7 days" : "30 days"
 
     const totalPages = auditData ? Math.ceil(auditData.total / perPage) : 0
 
@@ -127,6 +143,10 @@ export default function AuditLogPage() {
 
     const handleDownload = (url: string) => {
         window.open(`${API_BASE}${url}`, "_blank", "noopener,noreferrer")
+    }
+
+    const handleFilterAIEvents = () => {
+        setEventTypeFilter("ai_action_approved")
     }
 
     return (
@@ -304,6 +324,82 @@ export default function AuditLogPage() {
                         </div>
                     </CardHeader>
                     <CardContent>
+                        <div className="mb-6 rounded-lg border p-4">
+                            <div className="flex flex-wrap items-start justify-between gap-4">
+                                <div>
+                                    <p className="text-sm font-semibold">AI Activity</p>
+                                    <p className="text-xs text-muted-foreground">Last {aiActivityLabel}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Select
+                                        value={String(aiActivityHours)}
+                                        onValueChange={(v) => setAiActivityHours(Number(v) as 24 | 168 | 720)}
+                                    >
+                                        <SelectTrigger className="w-[100px] h-8 text-xs">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="24">24 hours</SelectItem>
+                                            <SelectItem value="168">7 days</SelectItem>
+                                            <SelectItem value="720">30 days</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <Button variant="outline" size="sm" onClick={handleFilterAIEvents}>
+                                        Filter AI Events
+                                    </Button>
+                                </div>
+                            </div>
+                            <div className="mt-3 grid gap-3 md:grid-cols-2">
+                                {Object.entries(AI_EVENT_LABELS).map(([key, meta]) => (
+                                    <div key={key} className="flex items-center gap-2 text-sm">
+                                        <meta.icon className={`h-4 w-4 ${meta.tone}`} />
+                                        <span className="flex-1 text-muted-foreground">{meta.label}</span>
+                                        <span className="font-semibold text-foreground">
+                                            {aiActivity?.counts?.[key] ?? 0}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="mt-4 border-t pt-4">
+                                <p className="text-xs font-medium text-muted-foreground">Recent AI Events</p>
+                                <div className="mt-2 space-y-2">
+                                    {aiActivityLoading ? (
+                                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                            <LoaderIcon className="h-3.5 w-3.5 animate-spin" />
+                                            Loading AI activity...
+                                        </div>
+                                    ) : aiActivity?.recent?.length ? (
+                                        aiActivity.recent.map((entry) => {
+                                            const meta = AI_EVENT_LABELS[entry.event_type] || {
+                                                label: entry.event_type,
+                                                icon: Sparkles,
+                                                tone: "text-muted-foreground",
+                                            }
+                                            return (
+                                                <button
+                                                    key={entry.id}
+                                                    className="flex items-start gap-2 text-xs w-full text-left hover:bg-muted/50 rounded p-1 -m-1 transition-colors"
+                                                    onClick={() => setEventTypeFilter(entry.event_type)}
+                                                >
+                                                    <meta.icon className={`mt-0.5 h-3.5 w-3.5 ${meta.tone}`} />
+                                                    <div className="flex-1">
+                                                        <div className="font-medium text-foreground">{meta.label}</div>
+                                                        <div className="text-[11px] text-muted-foreground">
+                                                            {formatDistanceToNow(new Date(entry.created_at), { addSuffix: true })}
+                                                        </div>
+                                                    </div>
+                                                </button>
+                                            )
+                                        })
+                                    ) : (
+                                        <div className="text-xs text-muted-foreground">
+                                            No AI activity recorded yet.
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
                         {isLoading ? (
                             <div className="py-12 flex items-center justify-center">
                                 <LoaderIcon className="size-8 animate-spin text-muted-foreground" />

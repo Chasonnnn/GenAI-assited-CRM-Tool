@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
     listAuditLogs,
     listEventTypes,
+    getAIAuditActivity,
     listAuditExports,
     getAuditExport,
     createAuditExport,
@@ -19,6 +20,7 @@ export const auditKeys = {
     lists: () => [...auditKeys.all, 'list'] as const,
     list: (filters: AuditLogFilters) => [...auditKeys.lists(), filters] as const,
     eventTypes: () => [...auditKeys.all, 'event-types'] as const,
+    aiActivity: () => [...auditKeys.all, 'ai-activity'] as const,
     exports: () => [...auditKeys.all, 'exports'] as const,
     export: (id: string) => [...auditKeys.exports(), id] as const,
 }
@@ -36,6 +38,14 @@ export function useEventTypes() {
         queryKey: auditKeys.eventTypes(),
         queryFn: listEventTypes,
         staleTime: 1000 * 60 * 5, // 5 minutes
+    })
+}
+
+export function useAIAuditActivity(hours: number = 24) {
+    return useQuery({
+        queryKey: [...auditKeys.aiActivity(), hours],
+        queryFn: () => getAIAuditActivity(hours),
+        staleTime: 1000 * 60, // 1 minute
     })
 }
 

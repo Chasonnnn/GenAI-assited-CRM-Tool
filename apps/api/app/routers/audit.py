@@ -2,7 +2,7 @@
 
 import os
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -47,6 +47,12 @@ class AuditLogListResponse(BaseModel):
     total: int
     page: int
     per_page: int
+
+
+class AuditAIActivityResponse(BaseModel):
+    """Summary of recent AI audit activity."""
+    counts_24h: dict[str, int]
+    recent: list[AuditLogRead]
 
 
 # ============================================================================
@@ -127,6 +133,62 @@ def list_event_types(
 ) -> list[str]:
     """List available audit event types for filtering."""
     return [e.value for e in AuditEventType]
+
+
+@router.get("/ai-activity", response_model=AuditAIActivityResponse)
+def get_ai_activity(
+    hours: int = Query(24, ge=1, le=720, description="Hours to look back for counts (default 24)"),
+    limit: int = Query(6, ge=1, le=50),
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_permission("view_audit_log")),
+) -> AuditAIActivityResponse:
+    """Get recent AI audit activity and counts for the specified time window."""
+    ai_event_types = [
+        AuditEventType.AI_ACTION_APPROVED.value,
+        AuditEventType.AI_ACTION_REJECTED.value,
+        AuditEventType.AI_ACTION_FAILED.value,
+        AuditEventType.AI_ACTION_DENIED.value,
+    ]
+
+    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    counts = {}
+    for event_type in ai_event_types:
+        counts[event_type] = db.query(AuditLog).filter(
+            AuditLog.organization_id == session.org_id,
+            AuditLog.event_type == event_type,
+            AuditLog.created_at >= cutoff,
+        ).count()
+
+    recent_logs = db.query(AuditLog).filter(
+        AuditLog.organization_id == session.org_id,
+        AuditLog.event_type.in_(ai_event_types),
+    ).order_by(AuditLog.created_at.desc()).limit(limit).all()
+
+    actor_ids = {log.actor_user_id for log in recent_logs if log.actor_user_id}
+    actor_names = {}
+    if actor_ids:
+        actors = db.query(User).filter(User.id.in_(actor_ids)).all()
+        actor_names = {actor.id: actor.display_name for actor in actors}
+
+    recent_items = [
+        AuditLogRead(
+            id=log.id,
+            event_type=log.event_type,
+            actor_user_id=log.actor_user_id,
+            actor_name=actor_names.get(log.actor_user_id) if log.actor_user_id else None,
+            target_type=log.target_type,
+            target_id=log.target_id,
+            details=log.details,
+            ip_address=log.ip_address,
+            created_at=log.created_at,
+        )
+        for log in recent_logs
+    ]
+
+    return AuditAIActivityResponse(
+        counts_24h=counts,
+        recent=recent_items,
+    )
 
 
 @router.get("/exports", response_model=ExportJobListResponse)

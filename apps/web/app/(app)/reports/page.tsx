@@ -19,6 +19,7 @@ import { USMapChart } from "@/components/charts/us-map-chart"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { useAuth } from "@/lib/auth-context"
 import { useSetAIContext } from "@/lib/context/ai-context"
+import { useAIUsageSummary } from "@/lib/hooks/use-ai"
 
 // Chart configs
 const casesOverviewConfig = {
@@ -42,6 +43,40 @@ const chartColors = [
     "#06b6d4",
     "#ef4444",
 ]
+
+// AI Usage Stats sub-component
+function AIUsageStats() {
+    const { data: usage, isLoading } = useAIUsageSummary(30)
+
+    if (isLoading) {
+        return <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+    }
+
+    if (!usage || usage.total_requests === 0) {
+        return <p className="text-xs text-muted-foreground">No AI usage yet</p>
+    }
+
+    const formatTokens = (num: number) => {
+        if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`
+        if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`
+        return num.toString()
+    }
+
+    return (
+        <div className="space-y-1">
+            <div className="text-2xl font-bold">{usage.total_requests}</div>
+            <p className="text-xs text-muted-foreground">requests (30d)</p>
+            <div className="flex items-center gap-2 pt-1 text-xs">
+                <span className="text-muted-foreground">Tokens:</span>
+                <span className="font-medium">{formatTokens(usage.total_tokens)}</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+                <span className="text-muted-foreground">Est. cost:</span>
+                <span className="font-medium">${usage.total_cost_usd.toFixed(2)}</span>
+            </div>
+        </div>
+    )
+}
 
 export default function ReportsPage() {
     const { user } = useAuth()
@@ -345,6 +380,19 @@ export default function ReportsPage() {
                             )}
                         </CardContent>
                     </Card>
+
+                    {/* AI Usage Card - only show if AI is enabled */}
+                    {aiEnabled && (
+                        <Card className="animate-in fade-in-50 duration-500 delay-500">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium">AI Usage</CardTitle>
+                                <SparklesIcon className="size-4 text-muted-foreground" />
+                            </CardHeader>
+                            <CardContent>
+                                <AIUsageStats />
+                            </CardContent>
+                        </Card>
+                    )}
                 </div>
 
                 {/* Charts Grid */}
