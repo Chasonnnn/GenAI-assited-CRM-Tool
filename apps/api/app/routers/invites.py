@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db, require_permission
+from app.core.deps import get_current_session, get_db, require_permission, require_csrf_header
 
 from app.db.models import OrgInvite
 from app.schemas.auth import UserSession
@@ -94,7 +94,7 @@ async def list_invites(
     )
 
 
-@router.post("", response_model=InviteRead)
+@router.post("", response_model=InviteRead, dependencies=[Depends(require_csrf_header)])
 async def create_invite(
     body: InviteCreate,
     db: Session = Depends(get_db),
@@ -148,7 +148,7 @@ async def create_invite(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/{invite_id}/resend")
+@router.post("/{invite_id}/resend", dependencies=[Depends(require_csrf_header)])
 async def resend_invite(
     invite_id: UUID,
     db: Session = Depends(get_db),
@@ -178,7 +178,7 @@ async def resend_invite(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.delete("/{invite_id}")
+@router.delete("/{invite_id}", dependencies=[Depends(require_csrf_header)])
 async def revoke_invite(
     invite_id: UUID,
     db: Session = Depends(get_db),
@@ -245,7 +245,7 @@ async def get_invite_details(
     )
 
 
-@router.post("/accept/{invite_id}")
+@router.post("/accept/{invite_id}", dependencies=[Depends(require_csrf_header)])
 async def accept_invite(
     invite_id: UUID,
     db: Session = Depends(get_db),
