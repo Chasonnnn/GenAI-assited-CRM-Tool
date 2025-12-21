@@ -138,7 +138,7 @@ export function TaskEditModal({ task, open, onClose, onSave }: TaskEditModalProp
                         {/* Task Type */}
                         <div className="space-y-2">
                             <Label htmlFor="task-type">Type</Label>
-                            <Select value={taskType} onValueChange={setTaskType}>
+                            <Select value={taskType} onValueChange={(v) => v && setTaskType(v)}>
                                 <SelectTrigger>
                                     <SelectValue />
                                 </SelectTrigger>

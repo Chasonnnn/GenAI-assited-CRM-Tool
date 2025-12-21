@@ -80,8 +80,8 @@ function AddOverrideDialog({
     }) || []
 
     // Clear selected permission when type changes (since options change)
-    const handleTypeChange = (value: string) => {
-        setType(value as "grant" | "revoke")
+    const handleTypeChange = (value: string | null) => {
+        if (value) setType(value as "grant" | "revoke")
         setPermission("") // Reset selection when type changes
     }
 
@@ -93,8 +93,8 @@ function AddOverrideDialog({
         }
     }
 
-    const handlePermissionChange = (value: string) => {
-        setPermission(value)
+    const handlePermissionChange = (value: string | null) => {
+        setPermission(value ?? "")
     }
 
     return (
@@ -186,7 +186,7 @@ export default function MemberDetailPage() {
     const isCurrentUser = member?.email === currentUserId
     const hasChanges = pendingRole !== null || pendingOverrides.add.length > 0 || pendingOverrides.remove.length > 0
 
-    const handleRoleChange = (newRole: string) => {
+    const handleRoleChange = (newRole: string | null) => {
         if (newRole === member?.role) {
             setPendingRole(null)
         } else {
