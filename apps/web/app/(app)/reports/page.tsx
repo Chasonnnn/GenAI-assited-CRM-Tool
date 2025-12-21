@@ -181,29 +181,29 @@ export default function ReportsPage() {
                                 ))}
                             </SelectContent>
                         </Select>
-                        <DropdownMenu>
-                            <DropdownMenuTrigger className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-                                Export
-                                <ChevronDownIcon className="size-4" />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                    onClick={async () => {
-                                        setIsExporting(true)
-                                        try {
-                                            await exportAnalyticsPDF({ from_date: fromDate, to_date: toDate })
-                                        } catch (error) {
-                                            console.error('Failed to export PDF:', error)
-                                        } finally {
-                                            setIsExporting(false)
-                                        }
-                                    }}
-                                    disabled={isExporting}
-                                >
-                                    {isExporting ? 'Exporting...' : 'Export PDF'}
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                        <button
+                            className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                            onClick={async () => {
+                                setIsExporting(true)
+                                try {
+                                    await exportAnalyticsPDF({ from_date: fromDate, to_date: toDate })
+                                } catch (error) {
+                                    console.error('Failed to export PDF:', error)
+                                } finally {
+                                    setIsExporting(false)
+                                }
+                            }}
+                            disabled={isExporting}
+                        >
+                            {isExporting ? (
+                                <>
+                                    <Loader2Icon className="size-4 animate-spin" />
+                                    Exporting...
+                                </>
+                            ) : (
+                                'Export PDF'
+                            )}
+                        </button>
                     </div>
                 </div>
             </div>

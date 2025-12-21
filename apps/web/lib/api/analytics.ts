@@ -253,7 +253,7 @@ export async function getActivityFeed(params: ActivityFeedParams = {}): Promise<
 
 /**
  * Export analytics as PDF.
- * Triggers a download of the PDF file.
+ * Uses a hidden iframe to download with cookies.
  */
 export async function exportAnalyticsPDF(params: DateRangeParams = {}): Promise<void> {
     const searchParams = new URLSearchParams();
@@ -261,28 +261,19 @@ export async function exportAnalyticsPDF(params: DateRangeParams = {}): Promise<
     if (params.to_date) searchParams.set('to_date', params.to_date);
 
     const query = searchParams.toString();
-    const url = `/analytics/export/pdf${query ? `?${query}` : ''}`;
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const url = `${baseUrl}/analytics/export/pdf${query ? `?${query}` : ''}`;
 
-    // Fetch the PDF blob
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${url}`, {
-        credentials: 'include',
-        headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-        },
-    });
+    // Create hidden iframe for authenticated download
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = url;
+    document.body.appendChild(iframe);
 
-    if (!response.ok) {
-        throw new Error('Failed to export PDF');
-    }
-
-    // Get the blob and create download link
-    const blob = await response.blob();
-    const downloadUrl = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = `analytics_report_${new Date().toISOString().split('T')[0]}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(downloadUrl);
+    // Clean up after download starts
+    setTimeout(() => {
+        document.body.removeChild(iframe);
+    }, 5000);
 }
+
+
