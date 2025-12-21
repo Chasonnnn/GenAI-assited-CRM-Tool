@@ -260,14 +260,14 @@ Version numbers in docs don't match backend settings.
 ## RECENTLY COMPLETED
 
 ### Reports PDF Export ✅ COMPLETE
-**Status:** Fully functional
+**Status:** Fully functional with native charts
 
 **What was built:**
-- Backend generates PDF with reportlab
+- Backend generates PDF with reportlab including native bar, line, and pie charts
 - Endpoint at `/analytics/export/pdf` with date range params
-- Includes summary, status breakdown, assignee breakdown, Meta performance, trends
-- Frontend Export PDF button on Reports page
-- Proper filename via Content-Disposition
+- Includes: Key Metrics summary, Cases by Status (bar chart), Cases Trend (line chart), Team Performance (pie chart), Meta Lead Ads funnel
+- Frontend Export PDF button calls backend API
+- Small file size (~50KB) with professional formatting
 
 ---
 
