@@ -216,6 +216,46 @@ def get_me(
     )
 
 
+from pydantic import BaseModel
+
+
+class UpdateProfileRequest(BaseModel):
+    display_name: str | None = None
+
+
+@router.patch("/me", dependencies=[Depends(require_csrf_header)])
+def update_me(
+    body: UpdateProfileRequest,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> MeResponse:
+    """
+    Update current user's profile.
+    
+    Updateable fields: display_name
+    """
+    user = db.query(User).filter(User.id == session.user_id).first()
+    org = db.query(Organization).filter(Organization.id == session.org_id).first()
+    
+    if body.display_name is not None:
+        user.display_name = body.display_name
+    
+    db.commit()
+    db.refresh(user)
+    
+    return MeResponse(
+        user_id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        avatar_url=user.avatar_url,
+        org_id=org.id,
+        org_name=org.name,
+        org_slug=org.slug,
+        role=session.role,
+        ai_enabled=org.ai_enabled if org else False,
+    )
+
+
 @router.post("/logout", dependencies=[Depends(require_csrf_header)])
 def logout(
     request: Request,

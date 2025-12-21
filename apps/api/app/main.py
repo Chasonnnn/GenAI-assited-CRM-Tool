@@ -196,6 +196,10 @@ app.include_router(attachments.router, tags=["attachments"])
 from app.routers import invites
 app.include_router(invites.router, tags=["invites"])
 
+# Settings (organization and user preferences)
+from app.routers import settings as settings_router
+app.include_router(settings_router.router, tags=["settings"])
+
 # Dev router (ONLY mounted in dev mode)
 if settings.ENV == "dev":
     from app.routers import dev

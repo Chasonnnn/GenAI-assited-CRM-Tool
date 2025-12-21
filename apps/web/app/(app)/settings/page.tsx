@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,9 +10,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { CameraIcon, MonitorIcon, SmartphoneIcon, LoaderIcon } from "lucide-react"
+import { CameraIcon, MonitorIcon, SmartphoneIcon, LoaderIcon, CheckIcon } from "lucide-react"
 import { useNotificationSettings, useUpdateNotificationSettings } from "@/lib/hooks/use-notifications"
 import { useAuth } from "@/lib/auth-context"
+import { updateProfile, updateOrgSettings } from "@/lib/api/settings"
+
 // Notification Settings Card - wired to real API
 function NotificationsSettingsCard() {
   const { data: settings, isLoading } = useNotificationSettings()
@@ -99,8 +102,22 @@ function NotificationsSettingsCard() {
 
 export default function SettingsPage() {
   const searchParams = useSearchParams()
+  const { user, refetch } = useAuth()
 
-  const { user } = useAuth()
+  // Profile form state
+  const [profileName, setProfileName] = useState(user?.display_name || "")
+  const [profilePhone, setProfilePhone] = useState("")
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileSaved, setProfileSaved] = useState(false)
+
+  // Org form state
+  const [orgName, setOrgName] = useState(user?.org_name || "")
+  const [orgAddress, setOrgAddress] = useState("")
+  const [orgPhone, setOrgPhone] = useState("")
+  const [orgEmail, setOrgEmail] = useState("")
+  const [orgSaving, setOrgSaving] = useState(false)
+  const [orgSaved, setOrgSaved] = useState(false)
+
   const activeTab = (() => {
     const tab = searchParams?.get("tab")
     if (tab === "notifications") return tab
@@ -114,6 +131,42 @@ export default function SettingsPage() {
       .join("")
       .toUpperCase()
       .slice(0, 2) || "??"
+
+  const handleSaveProfile = async () => {
+    setProfileSaving(true)
+    try {
+      await updateProfile({
+        display_name: profileName || undefined,
+        phone: profilePhone || undefined,
+      })
+      setProfileSaved(true)
+      setTimeout(() => setProfileSaved(false), 2000)
+      refetch()
+    } catch (error) {
+      console.error("Failed to save profile:", error)
+    } finally {
+      setProfileSaving(false)
+    }
+  }
+
+  const handleSaveOrg = async () => {
+    setOrgSaving(true)
+    try {
+      await updateOrgSettings({
+        name: orgName || undefined,
+        address: orgAddress || undefined,
+        phone: orgPhone || undefined,
+        email: orgEmail || undefined,
+      })
+      setOrgSaved(true)
+      setTimeout(() => setOrgSaved(false), 2000)
+      refetch()
+    } catch (error) {
+      console.error("Failed to save organization:", error)
+    } finally {
+      setOrgSaving(false)
+    }
+  }
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -158,7 +211,11 @@ export default function SettingsPage() {
                   <div className="grid gap-6 md:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="fullName">Full Name</Label>
-                      <Input id="fullName" defaultValue={user?.display_name || ""} />
+                      <Input
+                        id="fullName"
+                        value={profileName}
+                        onChange={(e) => setProfileName(e.target.value)}
+                      />
                     </div>
 
                     <div className="space-y-2">
@@ -169,7 +226,13 @@ export default function SettingsPage() {
 
                     <div className="space-y-2">
                       <Label htmlFor="phone">Phone</Label>
-                      <Input id="phone" type="tel" placeholder="-" />
+                      <Input
+                        id="phone"
+                        type="tel"
+                        placeholder="-"
+                        value={profilePhone}
+                        onChange={(e) => setProfilePhone(e.target.value)}
+                      />
                     </div>
 
                     <div className="space-y-2">
@@ -182,7 +245,15 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  <Button>Save Changes</Button>
+                  <Button onClick={handleSaveProfile} disabled={profileSaving}>
+                    {profileSaving ? (
+                      <><LoaderIcon className="mr-2 size-4 animate-spin" /> Saving...</>
+                    ) : profileSaved ? (
+                      <><CheckIcon className="mr-2 size-4" /> Saved!</>
+                    ) : (
+                      "Save Changes"
+                    )}
+                  </Button>
                 </div>
 
                 <div className="border-t border-border" />
@@ -197,26 +268,56 @@ export default function SettingsPage() {
                   <div className="grid gap-6 md:grid-cols-2">
                     <div className="space-y-2 md:col-span-2">
                       <Label htmlFor="orgName">Organization Name</Label>
-                      <Input id="orgName" defaultValue={user?.org_name || ""} />
+                      <Input
+                        id="orgName"
+                        value={orgName}
+                        onChange={(e) => setOrgName(e.target.value)}
+                      />
                     </div>
 
                     <div className="space-y-2 md:col-span-2">
                       <Label htmlFor="address">Address</Label>
-                      <Textarea id="address" rows={3} placeholder="-" />
+                      <Textarea
+                        id="address"
+                        rows={3}
+                        placeholder="-"
+                        value={orgAddress}
+                        onChange={(e) => setOrgAddress(e.target.value)}
+                      />
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="orgPhone">Phone</Label>
-                      <Input id="orgPhone" type="tel" placeholder="-" />
+                      <Input
+                        id="orgPhone"
+                        type="tel"
+                        placeholder="-"
+                        value={orgPhone}
+                        onChange={(e) => setOrgPhone(e.target.value)}
+                      />
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="orgEmail">Email</Label>
-                      <Input id="orgEmail" type="email" placeholder="-" />
+                      <Input
+                        id="orgEmail"
+                        type="email"
+                        placeholder="-"
+                        value={orgEmail}
+                        onChange={(e) => setOrgEmail(e.target.value)}
+                      />
                     </div>
                   </div>
 
-                  <Button>Save Changes</Button>
+                  <Button onClick={handleSaveOrg} disabled={orgSaving}>
+                    {orgSaving ? (
+                      <><LoaderIcon className="mr-2 size-4 animate-spin" /> Saving...</>
+                    ) : orgSaved ? (
+                      <><CheckIcon className="mr-2 size-4" /> Saved!</>
+                    ) : (
+                      "Save Changes"
+                    )}
+                  </Button>
                 </div>
 
                 <div className="border-t border-border" />

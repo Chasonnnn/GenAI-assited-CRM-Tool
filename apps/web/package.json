@@ -36,6 +36,8 @@
     "date-fns": "4.1.0",
     "embla-carousel-react": "8.6.0",
     "input-otp": "1.4.2",
+    "html-to-image": "^1.11.13",
+    "jspdf": "^2.5.1",
     "lucide-react": "^0.561.0",
     "next": "16.1.0",
     "next-themes": "^0.4.6",
