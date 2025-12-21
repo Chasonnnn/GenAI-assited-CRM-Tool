@@ -12,6 +12,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 
 from app.core.websocket import manager
 from app.core.security import decode_session_token
+from app.core.deps import COOKIE_NAME
 
 router = APIRouter(prefix="/ws", tags=["WebSocket"])
 
@@ -44,7 +45,7 @@ async def websocket_notifications(
     
     # Fall back to cookie if no token param
     if not user_id:
-        cookie = websocket.cookies.get("session")
+        cookie = websocket.cookies.get(COOKIE_NAME)
         if cookie:
             try:
                 payload = decode_session_token(cookie)

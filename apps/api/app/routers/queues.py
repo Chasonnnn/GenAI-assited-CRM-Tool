@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_session
+from app.core.deps import get_db, get_current_session, require_csrf_header
 from app.schemas.auth import UserSession
 from app.db.enums import Role
 from app.services import queue_service
@@ -86,7 +86,7 @@ def get_queue(
     return queue
 
 
-@router.post("", response_model=QueueResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=QueueResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_csrf_header)])
 def create_queue(
     data: QueueCreate,
     session: UserSession = Depends(get_current_session),
@@ -106,7 +106,7 @@ def create_queue(
         raise HTTPException(status_code=409, detail=str(e))
 
 
-@router.patch("/{queue_id}", response_model=QueueResponse)
+@router.patch("/{queue_id}", response_model=QueueResponse, dependencies=[Depends(require_csrf_header)])
 def update_queue(
     queue_id: UUID,
     data: QueueUpdate,
@@ -132,7 +132,7 @@ def update_queue(
         raise HTTPException(status_code=409, detail=str(e))
 
 
-@router.delete("/{queue_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{queue_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_csrf_header)])
 def delete_queue(
     queue_id: UUID,
     session: UserSession = Depends(get_current_session),
@@ -153,7 +153,7 @@ def delete_queue(
 # Claim / Release Endpoints (on cases)
 # =============================================================================
 
-@router.post("/cases/{case_id}/claim", response_model=dict)
+@router.post("/cases/{case_id}/claim", response_model=dict, dependencies=[Depends(require_csrf_header)])
 def claim_case(
     case_id: UUID,
     session: UserSession = Depends(get_current_session),
@@ -181,7 +181,7 @@ def claim_case(
         raise HTTPException(status_code=409, detail=str(e))
 
 
-@router.post("/cases/{case_id}/release", response_model=dict)
+@router.post("/cases/{case_id}/release", response_model=dict, dependencies=[Depends(require_csrf_header)])
 def release_case(
     case_id: UUID,
     data: ReleaseRequest,
@@ -209,7 +209,7 @@ def release_case(
         raise HTTPException(status_code=404, detail="Queue not found or inactive")
 
 
-@router.post("/cases/{case_id}/assign", response_model=dict)
+@router.post("/cases/{case_id}/assign", response_model=dict, dependencies=[Depends(require_csrf_header)])
 def assign_case_to_queue(
     case_id: UUID,
     data: AssignToQueueRequest,

@@ -261,19 +261,47 @@ export async function exportAnalyticsPDF(params: DateRangeParams = {}): Promise<
     if (params.to_date) searchParams.set('to_date', params.to_date);
 
     const query = searchParams.toString();
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
     const url = `${baseUrl}/analytics/export/pdf${query ? `?${query}` : ''}`;
 
-    // Create hidden iframe for authenticated download
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = url;
-    document.body.appendChild(iframe);
+    const response = await fetch(url, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+    });
 
-    // Clean up after download starts
-    setTimeout(() => {
-        document.body.removeChild(iframe);
-    }, 5000);
+    if (!response.ok) {
+        throw new Error(`Export failed (${response.status})`);
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/pdf')) {
+        const errorText = await response.text();
+        throw new Error(errorText || 'Export failed (unexpected response)');
+    }
+
+    const filenameDate = (params.to_date || params.from_date || new Date().toISOString().slice(0, 10))
+        .replace(/-/g, '');
+    const filename = `${filenameDate}report.pdf`;
+
+    const buffer = await response.arrayBuffer();
+    const headerBytes = new Uint8Array(buffer.slice(0, 4));
+    const headerText = String.fromCharCode(...headerBytes);
+    if (headerText !== '%PDF') {
+        const errorText = new TextDecoder().decode(buffer);
+        throw new Error(errorText || 'Export failed (invalid PDF)');
+    }
+
+    const blob = new Blob([buffer], { type: 'application/pdf' });
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(blobUrl);
 }
-
-
