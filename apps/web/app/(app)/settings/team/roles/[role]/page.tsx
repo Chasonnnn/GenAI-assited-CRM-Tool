@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
@@ -12,7 +12,6 @@ import { ChevronLeft, Shield, Lock, Loader2, Save, AlertTriangle } from "lucide-
 import { useRoleDetail, useUpdateRolePermissions } from "@/lib/hooks/use-permissions"
 import { useAuth } from "@/lib/auth-context"
 import { toast } from "sonner"
-import type { RolePermission } from "@/lib/api/permissions"
 
 const ROLE_LABELS: Record<string, string> = {
     intake_specialist: "Intake Specialist",

@@ -10,7 +10,6 @@ import {
     markAllNotificationsRead,
     getNotificationSettings,
     updateNotificationSettings,
-    type Notification,
     type NotificationListResponse,
     type NotificationSettings,
 } from '../api/notifications'

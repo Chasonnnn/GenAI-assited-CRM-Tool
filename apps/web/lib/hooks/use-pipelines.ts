@@ -5,9 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as pipelinesApi from '../api/pipelines';
 import type {
-    Pipeline,
     PipelineUpdate,
-    PipelineVersion,
     StageCreate,
     StageUpdate,
 } from '../api/pipelines';

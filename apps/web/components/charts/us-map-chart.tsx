@@ -10,7 +10,7 @@ import { scaleQuantize } from "d3-scale"
 const geoUrl = "https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json"
 
 // State abbreviation to name mapping for tooltips (reserved for future use)
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 const stateNames: Record<string, string> = {
     AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
     CO: "Colorado", CT: "Connecticut", DE: "Delaware", FL: "Florida", GA: "Georgia",

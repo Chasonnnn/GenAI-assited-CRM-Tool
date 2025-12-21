@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Checkbox } from "@/components/ui/checkbox"
-import { PlusIcon, MoreVerticalIcon, SearchIcon, XIcon, LoaderIcon, CheckIcon, ArchiveIcon, UserPlusIcon, UsersIcon, UploadIcon } from "lucide-react"
+import { MoreVerticalIcon, SearchIcon, XIcon, LoaderIcon, ArchiveIcon, UserPlusIcon, UsersIcon, UploadIcon } from "lucide-react"
 import { useCases, useArchiveCase, useRestoreCase, useUpdateCase, useAssignees, useBulkAssign, useBulkArchive } from "@/lib/hooks/use-cases"
 import { useQueues } from "@/lib/hooks/use-queues"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"

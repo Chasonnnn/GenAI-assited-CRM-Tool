@@ -3,7 +3,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { invitesApi, type Invite, type CreateInviteRequest } from "../api/invites"
+import { invitesApi, type CreateInviteRequest } from "../api/invites"
 
 export function useInvites() {
     return useQuery({

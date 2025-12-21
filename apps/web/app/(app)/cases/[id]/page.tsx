@@ -45,9 +45,7 @@ import { useSummarizeCase, useDraftEmail, useAISettings } from "@/lib/hooks/use-
 import { EmailComposeDialog } from "@/components/email/EmailComposeDialog"
 import { ProposeMatchDialog } from "@/components/matches/ProposeMatchDialog"
 import type { EmailType, SummarizeCaseResponse, DraftEmailResponse } from "@/lib/api/ai"
-import type { NoteRead } from "@/lib/types/note"
 import type { TaskListItem } from "@/lib/types/task"
-import type { CaseStatusHistory } from "@/lib/api/cases"
 import { useAuth } from "@/lib/auth-context"
 
 // Format date for display

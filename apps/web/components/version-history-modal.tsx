@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
-import { History, RotateCcw, User, Calendar, MessageSquare, ChevronDown, ChevronUp } from "lucide-react"
+import { History, RotateCcw, Calendar, MessageSquare, ChevronDown, ChevronUp } from "lucide-react"
 import { format } from "date-fns"
 import { useState } from "react"
 

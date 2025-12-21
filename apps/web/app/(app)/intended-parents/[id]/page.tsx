@@ -41,7 +41,6 @@ import {
     MapPinIcon,
     DollarSignIcon,
     ClockIcon,
-    UserIcon,
     ArchiveIcon,
     ArchiveRestoreIcon,
     Trash2Icon,
