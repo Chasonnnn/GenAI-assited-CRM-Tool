@@ -250,3 +250,39 @@ export async function getActivityFeed(params: ActivityFeedParams = {}): Promise<
     const query = searchParams.toString();
     return api.get<ActivityFeedResponse>(`/analytics/activity-feed${query ? `?${query}` : ''}`);
 }
+
+/**
+ * Export analytics as PDF.
+ * Triggers a download of the PDF file.
+ */
+export async function exportAnalyticsPDF(params: DateRangeParams = {}): Promise<void> {
+    const searchParams = new URLSearchParams();
+    if (params.from_date) searchParams.set('from_date', params.from_date);
+    if (params.to_date) searchParams.set('to_date', params.to_date);
+
+    const query = searchParams.toString();
+    const url = `/analytics/export/pdf${query ? `?${query}` : ''}`;
+
+    // Fetch the PDF blob
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${url}`, {
+        credentials: 'include',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to export PDF');
+    }
+
+    // Get the blob and create download link
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = `analytics_report_${new Date().toISOString().split('T')[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(downloadUrl);
+}

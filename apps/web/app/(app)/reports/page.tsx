@@ -14,6 +14,7 @@ import {
     ChartLegendContent,
 } from "@/components/ui/chart"
 import { useAnalyticsSummary, useCasesByStatus, useCasesByAssignee, useCasesTrend, useMetaPerformance, useFunnelCompare, useCasesByStateCompare, useCampaigns, useMetaSpend } from "@/lib/hooks/use-analytics"
+import { exportAnalyticsPDF } from "@/lib/api/analytics"
 import { FunnelChart } from "@/components/charts/funnel-chart"
 import { USMapChart } from "@/components/charts/us-map-chart"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
@@ -52,6 +53,7 @@ export default function ReportsPage() {
         to: undefined,
     })
     const [selectedCampaign, setSelectedCampaign] = useState<string>('')
+    const [isExporting, setIsExporting] = useState(false)
 
     // Compute date range based on selected option
     const { fromDate, toDate } = useMemo(() => {
@@ -185,8 +187,21 @@ export default function ReportsPage() {
                                 <ChevronDownIcon className="size-4" />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                                <DropdownMenuItem>Export PDF</DropdownMenuItem>
-                                <DropdownMenuItem>Export CSV</DropdownMenuItem>
+                                <DropdownMenuItem
+                                    onClick={async () => {
+                                        setIsExporting(true)
+                                        try {
+                                            await exportAnalyticsPDF({ from_date: fromDate, to_date: toDate })
+                                        } catch (error) {
+                                            console.error('Failed to export PDF:', error)
+                                        } finally {
+                                            setIsExporting(false)
+                                        }
+                                    }}
+                                    disabled={isExporting}
+                                >
+                                    {isExporting ? 'Exporting...' : 'Export PDF'}
+                                </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </div>

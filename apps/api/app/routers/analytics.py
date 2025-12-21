@@ -717,3 +717,205 @@ def get_activity_feed(
         ],
         has_more=has_more,
     )
+
+
+# =============================================================================
+# PDF Export
+# =============================================================================
+
+@router.get("/export/pdf")
+async def export_analytics_pdf(
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+    from_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    to_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+):
+    """
+    Export analytics data as a PDF report.
+    
+    Generates a PDF containing:
+    - Summary statistics
+    - Cases by status breakdown
+    - Cases by assignee breakdown
+    - Meta leads performance (if any)
+    - Recent trend data
+    """
+    from fastapi.responses import Response
+    from app.db.models import Organization, Task
+    from app.services.pdf_service import create_analytics_pdf
+    
+    org_id = session.org_id
+    
+    # Parse date range
+    start_dt = None
+    end_dt = None
+    date_range_str = "All Time"
+    
+    if from_date:
+        try:
+            start_dt = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+    
+    if to_date:
+        try:
+            end_dt = datetime.strptime(to_date, "%Y-%m-%d").replace(
+                hour=23, minute=59, second=59, tzinfo=timezone.utc
+            )
+        except ValueError:
+            pass
+    
+    if from_date and to_date:
+        date_range_str = f"{from_date} to {to_date}"
+    elif from_date:
+        date_range_str = f"From {from_date}"
+    elif to_date:
+        date_range_str = f"Until {to_date}"
+    
+    # Build date filter
+    date_filter = Case.is_archived == False
+    if start_dt:
+        date_filter = date_filter & (Case.created_at >= start_dt)
+    if end_dt:
+        date_filter = date_filter & (Case.created_at <= end_dt)
+    
+    # Get organization name
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    org_name = org.name if org else "Organization"
+    
+    # Get summary data
+    total_cases = db.query(func.count(Case.id)).filter(
+        Case.organization_id == org_id,
+        date_filter
+    ).scalar() or 0
+    
+    # New this period (last 7 days from end date or now)
+    period_start = (end_dt or datetime.now(timezone.utc)) - timedelta(days=7)
+    new_this_period = db.query(func.count(Case.id)).filter(
+        Case.organization_id == org_id,
+        Case.is_archived == False,
+        Case.created_at >= period_start
+    ).scalar() or 0
+    
+    # Get qualified rate
+    from app.db.models import PipelineStage
+    qualified_stage = db.query(PipelineStage).filter(
+        PipelineStage.slug == "qualified"
+    ).first()
+    
+    qualified_rate = 0.0
+    if qualified_stage and total_cases > 0:
+        qualified_count = db.query(func.count(Case.id)).filter(
+            Case.organization_id == org_id,
+            Case.is_archived == False,
+            Case.stage_id.in_(
+                db.query(PipelineStage.id).filter(
+                    PipelineStage.order >= qualified_stage.order
+                )
+            )
+        ).scalar() or 0
+        qualified_rate = (qualified_count / total_cases) * 100
+    
+    # Task stats
+    pending_tasks = db.query(func.count(Task.id)).filter(
+        Task.organization_id == org_id,
+        Task.is_completed == False
+    ).scalar() or 0
+    
+    overdue_tasks = db.query(func.count(Task.id)).filter(
+        Task.organization_id == org_id,
+        Task.is_completed == False,
+        Task.due_date < datetime.now(timezone.utc).date()
+    ).scalar() or 0
+    
+    summary = {
+        "total_cases": total_cases,
+        "new_this_period": new_this_period,
+        "qualified_rate": qualified_rate,
+        "pending_tasks": pending_tasks,
+        "overdue_tasks": overdue_tasks,
+    }
+    
+    # Cases by status
+    status_query = db.query(
+        PipelineStage.label.label('status'),
+        func.count(Case.id).label('count')
+    ).join(
+        Case, Case.stage_id == PipelineStage.id
+    ).filter(
+        Case.organization_id == org_id,
+        Case.is_archived == False
+    ).group_by(PipelineStage.label, PipelineStage.order).order_by(PipelineStage.order)
+    
+    cases_by_status = [{"status": row.status, "count": row.count} for row in status_query.all()]
+    
+    # Cases by assignee
+    from app.db.models import User
+    assignee_query = db.query(
+        User.display_name.label('display_name'),
+        func.count(Case.id).label('count')
+    ).outerjoin(
+        User, (Case.owner_type == 'user') & (Case.owner_id == User.id)
+    ).filter(
+        Case.organization_id == org_id,
+        Case.is_archived == False
+    ).group_by(User.display_name).order_by(func.count(Case.id).desc())
+    
+    cases_by_assignee = [{"display_name": row.display_name or "Unassigned", "count": row.count} for row in assignee_query.all()]
+    
+    # Trend data (last 30 days)
+    trend_start = datetime.now(timezone.utc) - timedelta(days=30)
+    trend_query = db.query(
+        func.date(Case.created_at).label('date'),
+        func.count(Case.id).label('count')
+    ).filter(
+        Case.organization_id == org_id,
+        Case.is_archived == False,
+        Case.created_at >= trend_start
+    ).group_by(func.date(Case.created_at)).order_by(func.date(Case.created_at))
+    
+    trend_data = [{"date": str(row.date), "count": row.count} for row in trend_query.all()]
+    
+    # Meta performance
+    meta_performance = None
+    leads_received = db.query(func.count(MetaLead.id)).filter(
+        MetaLead.organization_id == org_id
+    ).scalar() or 0
+    
+    if leads_received > 0:
+        leads_converted = db.query(func.count(MetaLead.id)).filter(
+            MetaLead.organization_id == org_id,
+            MetaLead.is_converted == True
+        ).scalar() or 0
+        
+        leads_qualified = leads_converted  # Simplified - could add stage check
+        
+        meta_performance = {
+            "leads_received": leads_received,
+            "leads_qualified": leads_qualified,
+            "leads_converted": leads_converted,
+            "qualification_rate": (leads_qualified / leads_received) * 100 if leads_received > 0 else 0,
+            "conversion_rate": (leads_converted / leads_received) * 100 if leads_received > 0 else 0,
+            "avg_time_to_convert_hours": None,
+        }
+    
+    # Generate PDF
+    pdf_bytes = create_analytics_pdf(
+        summary=summary,
+        cases_by_status=cases_by_status,
+        cases_by_assignee=cases_by_assignee,
+        trend_data=trend_data,
+        meta_performance=meta_performance,
+        org_name=org_name,
+        date_range=date_range_str,
+    )
+    
+    # Return PDF response
+    filename = f"analytics_report_{datetime.now().strftime('%Y%m%d')}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )

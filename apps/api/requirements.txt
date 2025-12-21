@@ -61,3 +61,4 @@ boto3>=1.34.0
 
 # Image processing (EXIF stripping)
 pillow>=10.0.0
+reportlab>=4.4.0
