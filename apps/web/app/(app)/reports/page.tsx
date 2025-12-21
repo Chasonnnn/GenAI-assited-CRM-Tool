@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useRef } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -53,7 +53,6 @@ export default function ReportsPage() {
     })
     const [selectedCampaign, setSelectedCampaign] = useState<string>('')
     const [isExporting, setIsExporting] = useState(false)
-    const reportRef = useRef<HTMLDivElement | null>(null)
 
     // Compute date range based on selected option
     const { fromDate, toDate } = useMemo(() => {
@@ -156,62 +155,42 @@ export default function ReportsPage() {
     }, [trendChartData])
 
     const handleExportPDF = async () => {
-        if (!reportRef.current) return
         setIsExporting(true)
         try {
-            const [{ toPng }, { jsPDF }] = await Promise.all([
-                import("html-to-image"),
-                import("jspdf"),
-            ])
+            // Call backend API which generates PDF with native charts
+            const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
+            const params = new URLSearchParams()
+            if (fromDate) params.set('from_date', fromDate)
+            if (toDate) params.set('to_date', toDate)
 
-            // Add print-friendly class for light theme during capture
-            reportRef.current.classList.add('print-export')
+            const url = `${baseUrl}/analytics/export/pdf${params.toString() ? `?${params}` : ''}`
 
-            // Wait for any chart animations to complete
-            await new Promise(resolve => setTimeout(resolve, 500))
-
-            // Use toPng for better SVG chart support
-            const imgData = await toPng(reportRef.current, {
-                pixelRatio: 2,
-                cacheBust: true,
-                backgroundColor: "#ffffff",
+            const response = await fetch(url, {
+                credentials: 'include',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
             })
 
-            // Remove print class
-            reportRef.current.classList.remove('print-export')
-
-            const pdf = new jsPDF({ orientation: "p", unit: "mm", format: "a4" })
-            const pageWidth = pdf.internal.pageSize.getWidth()
-            const pageHeight = pdf.internal.pageSize.getHeight()
-
-            // Create an image to get dimensions
-            const img = new Image()
-            img.src = imgData
-            await new Promise(resolve => { img.onload = resolve })
-
-            const imgWidth = pageWidth
-            const imgHeight = (img.height * imgWidth) / img.width
-
-            let heightLeft = imgHeight
-            let position = 0
-
-            pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight)
-            heightLeft -= pageHeight
-
-            while (heightLeft > 0) {
-                position -= pageHeight
-                pdf.addPage()
-                pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight)
-                heightLeft -= pageHeight
+            if (!response.ok) {
+                throw new Error(`Export failed (${response.status})`)
             }
 
-            const filenameDate = (toDate || fromDate || new Date().toISOString().slice(0, 10))
-                .replace(/-/g, "")
-            pdf.save(`${filenameDate}report.pdf`)
+            // Get filename from Content-Disposition or generate default
+            const disposition = response.headers.get('content-disposition') || ''
+            const filenameMatch = disposition.match(/filename="([^"]+)"/)
+            const filename = filenameMatch?.[1] || `analytics_report_${new Date().toISOString().slice(0, 10)}.pdf`
+
+            // Download the PDF
+            const blob = await response.blob()
+            const blobUrl = URL.createObjectURL(blob)
+            const link = document.createElement('a')
+            link.href = blobUrl
+            link.download = filename
+            document.body.appendChild(link)
+            link.click()
+            link.remove()
+            URL.revokeObjectURL(blobUrl)
         } catch (error) {
             console.error("Failed to export PDF:", error)
-            // Make sure to remove class on error too
-            reportRef.current?.classList.remove('print-export')
         } finally {
             setIsExporting(false)
         }
@@ -262,7 +241,7 @@ export default function ReportsPage() {
             </div>
 
             {/* Main Content */}
-            <div className="flex-1 space-y-6 p-6" ref={reportRef}>
+            <div className="flex-1 space-y-6 p-6">
                 {/* Quick Stats Row */}
                 <div className="grid gap-4 md:grid-cols-4">
                     <Card className="animate-in fade-in-50 duration-500">
