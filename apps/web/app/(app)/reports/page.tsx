@@ -159,23 +159,38 @@ export default function ReportsPage() {
         if (!reportRef.current) return
         setIsExporting(true)
         try {
-            const [{ toCanvas }, { jsPDF }] = await Promise.all([
+            const [{ toPng }, { jsPDF }] = await Promise.all([
                 import("html-to-image"),
                 import("jspdf"),
             ])
 
-            const canvas = await toCanvas(reportRef.current, {
+            // Add print-friendly class for light theme during capture
+            reportRef.current.classList.add('print-export')
+
+            // Wait for any chart animations to complete
+            await new Promise(resolve => setTimeout(resolve, 500))
+
+            // Use toPng for better SVG chart support
+            const imgData = await toPng(reportRef.current, {
                 pixelRatio: 2,
                 cacheBust: true,
                 backgroundColor: "#ffffff",
             })
 
-            const imgData = canvas.toDataURL("image/png")
+            // Remove print class
+            reportRef.current.classList.remove('print-export')
+
             const pdf = new jsPDF({ orientation: "p", unit: "mm", format: "a4" })
             const pageWidth = pdf.internal.pageSize.getWidth()
             const pageHeight = pdf.internal.pageSize.getHeight()
+
+            // Create an image to get dimensions
+            const img = new Image()
+            img.src = imgData
+            await new Promise(resolve => { img.onload = resolve })
+
             const imgWidth = pageWidth
-            const imgHeight = (canvas.height * imgWidth) / canvas.width
+            const imgHeight = (img.height * imgWidth) / img.width
 
             let heightLeft = imgHeight
             let position = 0
@@ -195,6 +210,8 @@ export default function ReportsPage() {
             pdf.save(`${filenameDate}report.pdf`)
         } catch (error) {
             console.error("Failed to export PDF:", error)
+            // Make sure to remove class on error too
+            reportRef.current?.classList.remove('print-export')
         } finally {
             setIsExporting(false)
         }
