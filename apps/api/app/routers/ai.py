@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_session, require_roles, require_csrf_header
+from app.core.deps import get_db, get_current_session, require_roles, require_csrf_header, require_permission
 from app.db.enums import Role
 from app.db.models import Case, UserIntegration, AIConversation
 from app.schemas.auth import UserSession
@@ -230,9 +230,12 @@ def chat(
     request: Request,  # Required by limiter
     body: ChatRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission("use_ai_assistant")),
 ) -> ChatResponseModel:
-    """Send a message to the AI assistant."""
+    """Send a message to the AI assistant.
+    
+    Requires: use_ai_assistant permission
+    """
     # Check consent before allowing chat
     settings = ai_settings_service.get_ai_settings(db, session.org_id)
     if settings and ai_settings_service.is_consent_required(settings):
@@ -364,9 +367,12 @@ class ActionApprovalResponse(BaseModel):
 def approve_action(
     approval_id: uuid.UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission("approve_ai_actions")),
 ) -> ActionApprovalResponse:
-    """Approve and execute a proposed action."""
+    """Approve and execute a proposed action.
+    
+    Requires: approve_ai_actions permission (plus action-specific permissions)
+    """
     from app.db.models import AIActionApproval, AIMessage, AIConversation
     from app.services.ai_action_executor import execute_action
     
@@ -396,13 +402,20 @@ def approve_action(
             detail=f"Action already processed (status: {approval.status})"
         )
     
-    # Execute the action
+    # Get user's permissions for action-specific checks
+    from app.services import permission_service
+    user_permissions = permission_service.get_effective_permissions(
+        db, session.org_id, session.user_id, session.role.value
+    )
+    
+    # Execute the action with permission checks
     result = execute_action(
         db=db,
         approval=approval,
         user_id=session.user_id,
         org_id=session.org_id,
         entity_id=conversation.entity_id,
+        user_permissions=user_permissions,
     )
     
     # Audit log

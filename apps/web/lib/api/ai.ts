@@ -47,12 +47,20 @@ export interface ProposedAction {
     status: string;
 }
 
+export interface ActionApproval {
+    id: string;
+    action_index: number;
+    action_type: string;
+    status: string;
+}
+
 export interface AIMessage {
     id: string;
     role: 'user' | 'assistant';
     content: string;
     created_at: string;
     proposed_actions?: ProposedAction[];
+    action_approvals?: ActionApproval[];
 }
 
 export interface AIConversation {
@@ -65,7 +73,7 @@ export interface AIConversation {
 }
 
 export interface ChatRequest {
-    entity_type: 'case';
+    entity_type: 'case' | 'intended-parent';
     entity_id: string;
     message: string;
 }

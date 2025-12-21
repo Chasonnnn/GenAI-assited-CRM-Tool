@@ -3,6 +3,9 @@
 import { Suspense } from "react"
 import dynamic from "next/dynamic"
 import { useRequireAuth } from "@/lib/auth-context"
+import { AIContextProvider } from "@/lib/context/ai-context"
+import { AIChatDrawer } from "@/components/ai/AIChatDrawer"
+import { AIFloatingButton } from "@/components/ai/AIFloatingButton"
 
 // Dynamic import with SSR disabled to prevent hydration mismatch from Base UI's ID generation
 const AppSidebar = dynamic(
@@ -39,14 +42,20 @@ export default function AppLayout({
   }
 
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
-      }
-    >
-      <AppSidebar>{children}</AppSidebar>
-    </Suspense>
+    <AIContextProvider>
+      <Suspense
+        fallback={
+          <div className="flex min-h-screen items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        }
+      >
+        <AppSidebar>{children}</AppSidebar>
+      </Suspense>
+
+      {/* AI Assistant - only shown when AI is enabled */}
+      <AIChatDrawer />
+      <AIFloatingButton />
+    </AIContextProvider>
   )
 }

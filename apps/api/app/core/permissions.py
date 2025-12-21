@@ -29,6 +29,7 @@ class PermissionCategory(str, Enum):
     TASKS = "Tasks"
     TEAM = "Team"
     SETTINGS = "Settings"
+    AI = "AI Assistant"
     COMPLIANCE = "Compliance"
 
 
@@ -148,9 +149,13 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
         "view_reports", "View Reports", 
         "Access analytics and reports", PermissionCategory.SETTINGS
     ),
-    "view_ai_assistant": PermissionDef(
-        "view_ai_assistant", "Use AI Assistant", 
-        "Access AI chat features", PermissionCategory.SETTINGS
+    "use_ai_assistant": PermissionDef(
+        "use_ai_assistant", "Use AI Assistant", 
+        "Chat with AI and view suggestions", PermissionCategory.AI
+    ),
+    "approve_ai_actions": PermissionDef(
+        "approve_ai_actions", "Approve AI Actions", 
+        "Execute AI-proposed actions (send email, create task, etc.)", PermissionCategory.AI
     ),
     
     # Compliance
@@ -255,7 +260,8 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "manage_automation",
         "manage_queues",
         "view_reports",
-        "view_ai_assistant",
+        "use_ai_assistant",
+        "approve_ai_actions",
         "export_data",
         "manage_compliance",
         "manage_meta_leads",
