@@ -257,19 +257,17 @@ Version numbers in docs don't match backend settings.
 
 ---
 
-## PENDING WORK
+## RECENTLY COMPLETED
 
-### Reports PDF Export 🔧 WIP
-**Status:** Backend complete, frontend download filename issue
+### Reports PDF Export ✅ COMPLETE
+**Status:** Fully functional
 
-**What works:**
-- Backend generates valid PDF with reportlab
-- Endpoint at `/analytics/export/pdf`
-- Includes summary, status, assignee, Meta performance, trends
-
-**Issue:**
-- Browser blob download generates UUID filename instead of respecting `Content-Disposition`
-- Need to investigate iframe/direct download approach
+**What was built:**
+- Backend generates PDF with reportlab
+- Endpoint at `/analytics/export/pdf` with date range params
+- Includes summary, status breakdown, assignee breakdown, Meta performance, trends
+- Frontend Export PDF button on Reports page
+- Proper filename via Content-Disposition
 
 ---
 
@@ -326,21 +324,20 @@ Version numbers in docs don't match backend settings.
 | File Attachments | 1 week | High | ✅ Done |
 | Invitation Frontend | 2-3 days | High | ✅ Done |
 | Tasks Calendar | 1 week | High | ✅ Done |
+| PDF Export | 1 day | Medium | ✅ Done |
 | CSRF on Mutations | 2-3 hours | High | ✅ Fixed |
 | WebSocket Auth Fix | 1 hour | High | ✅ Fixed |
 | CORS PUT Method | 5 min | Medium | ✅ Fixed |
 | WS/REST URL Mismatch | 5 min | Medium | ✅ Fixed |
 | Settings Save APIs | 2-3 days | Medium | ✅ Fixed |
 | Context-Aware Chatbot | 1 week | High | ❌ |
-| PDF Export Polish | 2 hours | Medium | 🔧 WIP |
 | AI Assistant Improvements | 3-4 days | Medium | ⚠️ |
 | UI Consistency | 1-2 days | Medium | ⚠️ |
 | CSV Import | 1 week | Medium | ⚠️ |
 | Smart Task Creation | 1 week | Low | ❌ |
 | AI Weekly Reports | 1-2 weeks | Low | ❌ |
 
-**Security/Infrastructure Fixes Completed:** 5 ✅  
-**Total Remaining Gaps:** 6 features  
-**Completed This Sprint:** 3 features + 5 fixes  
+**Features/Fixes Completed This Session:** 6 ✅  
+**Total Remaining Gaps:** 5 features  
 **Total Remaining Effort:** ~4 weeks
 
