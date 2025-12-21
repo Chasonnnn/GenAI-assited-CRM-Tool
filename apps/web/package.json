@@ -7,8 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run test",
     "analyze": "next experimental-analyze"
   },
   "dependencies": {
