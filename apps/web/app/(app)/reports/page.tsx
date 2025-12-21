@@ -18,6 +18,7 @@ import { FunnelChart } from "@/components/charts/funnel-chart"
 import { USMapChart } from "@/components/charts/us-map-chart"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { useAuth } from "@/lib/auth-context"
+import { useSetAIContext } from "@/lib/context/ai-context"
 
 // Chart configs
 const casesOverviewConfig = {
@@ -53,6 +54,9 @@ export default function ReportsPage() {
     })
     const [selectedCampaign, setSelectedCampaign] = useState<string>('')
     const [isExporting, setIsExporting] = useState(false)
+
+    // Clear AI context for reports pages (use global mode)
+    useSetAIContext(null)
 
     // Compute date range based on selected option
     const { fromDate, toDate } = useMemo(() => {

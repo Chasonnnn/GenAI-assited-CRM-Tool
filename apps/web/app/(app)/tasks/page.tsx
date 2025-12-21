@@ -12,6 +12,7 @@ import { PlusIcon, LoaderIcon, ListIcon, CalendarIcon } from "lucide-react"
 import { TasksCalendar } from "@/components/tasks/TasksCalendar"
 import { TaskEditModal } from "@/components/tasks/TaskEditModal"
 import { useTasks, useCompleteTask, useUncompleteTask, useUpdateTask } from "@/lib/hooks/use-tasks"
+import { useSetAIContext } from "@/lib/context/ai-context"
 import type { TaskListItem } from "@/lib/types/task"
 
 // Get initials from name
@@ -133,6 +134,9 @@ export default function TasksPage() {
     const completeTask = useCompleteTask()
     const uncompleteTask = useUncompleteTask()
     const updateTask = useUpdateTask()
+
+    // Clear AI context for list views (use global mode)
+    useSetAIContext(null)
 
     const handleTaskToggle = async (taskId: string, isCompleted: boolean) => {
         if (isCompleted) {

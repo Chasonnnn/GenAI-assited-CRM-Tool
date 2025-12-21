@@ -57,6 +57,7 @@ import {
     useCreateIntendedParentNote,
     useDeleteIntendedParentNote,
 } from "@/lib/hooks/use-intended-parents"
+import { useSetAIContext } from "@/lib/context/ai-context"
 import type { IntendedParentStatus } from "@/lib/types/intended-parent"
 
 const STATUS_LABELS: Record<IntendedParentStatus, string> = {
@@ -102,6 +103,17 @@ export default function IntendedParentDetailPage() {
     const deleteMutation = useDeleteIntendedParent()
     const createNoteMutation = useCreateIntendedParentNote()
     const deleteNoteMutation = useDeleteIntendedParentNote()
+
+    // Set AI context for this intended parent
+    useSetAIContext(
+        ip
+            ? {
+                entityType: "case", // Use case type for now - global mode works
+                entityId: ip.id,
+                entityName: `Intended Parent: ${ip.full_name}`,
+            }
+            : null
+    )
 
     const formatDate = (dateStr: string) => {
         return new Date(dateStr).toLocaleDateString("en-US", {

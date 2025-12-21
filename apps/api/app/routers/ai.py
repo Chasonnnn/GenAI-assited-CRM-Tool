@@ -715,9 +715,12 @@ def summarize_case(
     request: Request,
     body: SummarizeCaseRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission("use_ai_assistant")),
 ) -> SummarizeCaseResponse:
-    """Generate a comprehensive summary of a case using AI."""
+    """Generate a comprehensive summary of a case using AI.
+    
+    Requires: use_ai_assistant permission
+    """
     from app.services import ai_settings_service
     from app.services.ai_provider import ChatMessage, get_provider
     
@@ -847,9 +850,12 @@ def draft_email(
     request: Request,
     body: DraftEmailRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission("use_ai_assistant")),
 ) -> DraftEmailResponse:
-    """Draft an email for a case using AI."""
+    """Draft an email for a case using AI.
+    
+    Requires: use_ai_assistant permission
+    """
     from app.services import ai_settings_service
     from app.services.ai_provider import ChatMessage, get_provider
     
