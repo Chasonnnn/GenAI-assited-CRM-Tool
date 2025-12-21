@@ -239,12 +239,12 @@
 
 ---
 
-#### Settings Save Buttons Non-Functional
-**Files:** `apps/web/app/(app)/settings/page.tsx:160`, `apps/web/app/(app)/settings/page.tsx:219`
+#### ~~Settings Save Buttons Non-Functional~~ ✅ FIXED
+**Files:** `apps/web/app/(app)/settings/page.tsx`, `apps/api/app/routers/auth.py`, `apps/api/app/routers/settings.py`
 
-Settings "Save Changes" buttons are not wired to any API; profile/org fields are non-functional.
+~~Settings "Save Changes" buttons are not wired to any API; profile/org fields are non-functional.~~
 
-**Fix:** Implement PATCH endpoints for user profile and org settings.
+**Fixed:** Added PATCH /auth/me for profile and PATCH /settings/organization for org settings.
 
 ---
 
@@ -330,7 +330,7 @@ Version numbers in docs don't match backend settings.
 | WebSocket Auth Fix | 1 hour | High | ✅ Fixed |
 | CORS PUT Method | 5 min | Medium | ✅ Fixed |
 | WS/REST URL Mismatch | 5 min | Medium | ✅ Fixed |
-| Settings Save APIs | 2-3 days | Medium | ❌ |
+| Settings Save APIs | 2-3 days | Medium | ✅ Fixed |
 | Context-Aware Chatbot | 1 week | High | ❌ |
 | PDF Export Polish | 2 hours | Medium | 🔧 WIP |
 | AI Assistant Improvements | 3-4 days | Medium | ⚠️ |
@@ -339,8 +339,8 @@ Version numbers in docs don't match backend settings.
 | Smart Task Creation | 1 week | Low | ❌ |
 | AI Weekly Reports | 1-2 weeks | Low | ❌ |
 
-**Security Fixes Completed:** 4 ✅  
-**Total Remaining Gaps:** 7 features  
-**Completed This Sprint:** 3 features + 4 security fixes  
-**Total Remaining Effort:** ~4-5 weeks
+**Security/Infrastructure Fixes Completed:** 5 ✅  
+**Total Remaining Gaps:** 6 features  
+**Completed This Sprint:** 3 features + 5 fixes  
+**Total Remaining Effort:** ~4 weeks
 
