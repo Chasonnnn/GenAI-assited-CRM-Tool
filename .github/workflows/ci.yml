@@ -86,6 +86,10 @@ jobs:
       
       - name: Run type check
         working-directory: apps/web
+        run: pnpm run typecheck
+      
+      - name: Run build
+        working-directory: apps/web
         run: pnpm run build
       
       - name: Run tests
@@ -118,8 +122,8 @@ jobs:
         with:
           node-version: '24'
       
-      - name: Install and check TypeScript
+      - name: TypeScript check
         working-directory: apps/web
         run: |
           pnpm install
-          pnpm run build
+          pnpm run typecheck
