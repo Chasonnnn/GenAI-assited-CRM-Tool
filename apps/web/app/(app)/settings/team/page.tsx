@@ -136,7 +136,7 @@ function InviteTeamModal({ onClose }: { onClose: () => void }) {
 
                     <div className="space-y-2">
                         <Label htmlFor="role">Role</Label>
-                        <Select value={role} onValueChange={setRole}>
+                        <Select value={role} onValueChange={(v) => v && setRole(v)}>
                             <SelectTrigger>
                                 <SelectValue />
                             </SelectTrigger>
@@ -205,7 +205,7 @@ function MembersTab() {
     const toggleSelectAll = () => {
         if (!members) return
         const selectableIds = members
-            .filter(m => m.user_id !== user?.id && m.role !== "developer")
+            .filter(m => m.user_id !== user?.user_id && m.role !== "developer")
             .map(m => m.id)
 
         if (selectedIds.size === selectableIds.length) {
@@ -249,7 +249,7 @@ function MembersTab() {
         )
     }
 
-    const selectableMembers = members.filter(m => m.user_id !== user?.id && m.role !== "developer")
+    const selectableMembers = members.filter(m => m.user_id !== user?.user_id && m.role !== "developer")
     const allSelected = selectableMembers.length > 0 && selectedIds.size === selectableMembers.length
 
     return (
@@ -285,7 +285,7 @@ function MembersTab() {
                                 <div className="py-4 space-y-4">
                                     <div className="space-y-2">
                                         <Label htmlFor="bulk-role">New Role</Label>
-                                        <Select value={bulkRole} onValueChange={setBulkRole}>
+                                        <Select value={bulkRole} onValueChange={(v) => v && setBulkRole(v)}>
                                             <SelectTrigger>
                                                 <SelectValue />
                                             </SelectTrigger>
@@ -331,7 +331,7 @@ function MembersTab() {
                 </TableHeader>
                 <TableBody>
                     {members.map((member) => {
-                        const isSelectable = member.user_id !== user?.id && member.role !== "developer"
+                        const isSelectable = member.user_id !== user?.user_id && member.role !== "developer"
                         const isSelected = selectedIds.has(member.id)
 
                         return (
@@ -346,7 +346,7 @@ function MembersTab() {
                                 </TableCell>
                                 <TableCell className="font-medium">
                                     {member.display_name || "—"}
-                                    {member.user_id === user?.id && (
+                                    {member.user_id === user?.user_id && (
                                         <Badge variant="outline" className="ml-2 text-xs">You</Badge>
                                     )}
                                 </TableCell>
@@ -368,7 +368,7 @@ function MembersTab() {
                                             Manage
                                         </Button>
                                     </Link>
-                                    {member.user_id !== user?.id && (
+                                    {member.user_id !== user?.user_id && (
                                         <Button
                                             variant="ghost"
                                             size="sm"

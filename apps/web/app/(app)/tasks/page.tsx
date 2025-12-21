@@ -108,7 +108,12 @@ export default function TasksPage() {
     }
 
     const handleSaveTask = async (taskId: string, data: Partial<TaskListItem>) => {
-        await updateTask.mutateAsync({ taskId, data })
+        // Convert null to undefined for fields that don't accept null in TaskCreatePayload
+        const payload: Record<string, unknown> = {}
+        for (const [key, value] of Object.entries(data)) {
+            payload[key] = value === null ? undefined : value
+        }
+        await updateTask.mutateAsync({ taskId, data: payload })
     }
 
     // Fetch incomplete tasks
@@ -300,7 +305,7 @@ export default function TasksPage() {
                         onTaskReschedule={async (taskId, newDate, newTime) => {
                             await updateTask.mutateAsync({
                                 taskId,
-                                data: { due_date: newDate, due_time: newTime },
+                                data: { due_date: newDate, due_time: newTime ?? undefined },
                             })
                         }}
                     />
@@ -369,7 +374,7 @@ export default function TasksPage() {
                 } : null}
                 open={!!editingTask}
                 onClose={() => setEditingTask(null)}
-                onSave={handleSaveTask}
+                onSave={(taskId, data) => handleSaveTask(taskId, data as Partial<TaskListItem>)}
             />
         </div>
     )
