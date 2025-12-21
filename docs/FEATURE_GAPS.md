@@ -198,6 +198,95 @@
 
 ---
 
+## SECURITY & INFRASTRUCTURE ISSUES
+
+### 🔴 High Priority
+
+#### CSRF Missing on Queue/Invite Mutations
+**Files:** `apps/api/app/routers/queues.py:89`, `apps/api/app/routers/invites.py:97`
+
+Queue and invite mutation endpoints (create/update/delete/claim/release/assign) lack CSRF checks despite using cookie auth, leaving a CSRF attack surface.
+
+**Fix:** Add `require_csrf` dependency to all mutation endpoints.
+
+---
+
+#### WebSocket Auth Cookie Mismatch
+**Files:** `apps/api/app/routers/websocket.py:46`, `apps/api/app/core/deps.py:15`
+
+WebSocket auth reads `cookie` session but the server sets `crm_session`, so notification sockets won't authenticate in production.
+
+**Fix:** Align cookie name in WebSocket auth handler.
+
+---
+
+### 🟡 Medium Priority
+
+#### ~~CORS Missing PUT Method~~ ✅ FIXED
+**File:** `apps/api/app/main.py:89`
+
+~~CORS did not allow PUT, blocking match accept/reject from browser.~~
+**Fixed:** Added PUT to `allow_methods`.
+
+---
+
+#### WebSocket/REST URL Environment Mismatch
+**Files:** `apps/web/lib/hooks/use-notification-socket.ts:64`, `apps/web/lib/api.ts:6`
+
+WebSocket client uses `NEXT_PUBLIC_API_URL` while REST uses `NEXT_PUBLIC_API_BASE_URL`, so WS can point at wrong host in production.
+
+**Fix:** Standardize to single env var or add explicit `NEXT_PUBLIC_API_WS_URL`.
+
+---
+
+#### Settings Save Buttons Non-Functional
+**Files:** `apps/web/app/(app)/settings/page.tsx:160`, `apps/web/app/(app)/settings/page.tsx:219`
+
+Settings "Save Changes" buttons are not wired to any API; profile/org fields are non-functional.
+
+**Fix:** Implement PATCH endpoints for user profile and org settings.
+
+---
+
+### 🟢 Low Priority
+
+#### Version Drift in Docs
+**Files:** `README.md:3`, `apps/api/app/core/config.py:15`
+
+Version numbers in docs don't match backend settings.
+
+---
+
+## PENDING WORK
+
+### Reports PDF Export 🔧 WIP
+**Status:** Backend complete, frontend download filename issue
+
+**What works:**
+- Backend generates valid PDF with reportlab
+- Endpoint at `/analytics/export/pdf`
+- Includes summary, status, assignee, Meta performance, trends
+
+**Issue:**
+- Browser blob download generates UUID filename instead of respecting `Content-Disposition`
+- Need to investigate iframe/direct download approach
+
+---
+
+## ENTERPRISE POLISH SUGGESTIONS
+
+1. **Gate auth bypass** with environment flags and wire login + invite flows to backend OAuth (or implement Duo), including return-to handling and session cookie creation.
+
+2. **Enforce CSRF globally** via middleware; align WebSocket auth to `crm_session` and add origin checks or token-based WS auth.
+
+3. **Standardize API/WS base URLs** (e.g., `NEXT_PUBLIC_API_BASE_URL` + `NEXT_PUBLIC_API_WS_URL`).
+
+4. **Finish Settings APIs** (profile/org preferences) with audit logging and permissions; add server-side validation for enterprise governance.
+
+5. **Implement AI usage dashboards/budgets** and persist conversation history server-side.
+
+---
+
 ## EXISTING FEATURES — Reference
 
 ### Complete ✅
@@ -216,16 +305,19 @@
 ## PRIORITY RECOMMENDATIONS
 
 ### Immediate (Next Sprint)
-1. **Context-Aware Chatbot** — AI integration
-2. **AI Assistant Improvements** — Sidebar, token tracking
-3. **UI Consistency Audit** — Polish
+1. **CSRF on Queue/Invite endpoints** — Security
+2. **WebSocket auth cookie fix** — Security
+3. **Context-Aware Chatbot** — AI integration
 
 ### Short Term
-4. **CSV Import Improvements** — Flexibility
-5. **Smart Task Creation** — AI feature
+4. **Settings Save functionality** — Complete UI
+5. **AI Assistant Improvements** — Sidebar, token tracking
+6. **PDF Export filename fix** — Polish
 
 ### Medium Term
-6. **AI Weekly Reports** — Batch analytics
+7. **CSV Import Improvements** — Flexibility
+8. **Smart Task Creation** — AI feature
+9. **AI Weekly Reports** — Batch analytics
 
 ---
 
@@ -236,13 +328,18 @@
 | File Attachments | 1 week | High | ✅ Done |
 | Invitation Frontend | 2-3 days | High | ✅ Done |
 | Tasks Calendar | 1 week | High | ✅ Done |
+| CSRF on Mutations | 2-3 hours | High | ❌ Security |
+| WebSocket Auth Fix | 1 hour | High | ❌ Security |
 | Context-Aware Chatbot | 1 week | High | ❌ |
+| Settings Save APIs | 2-3 days | Medium | ❌ |
+| PDF Export Polish | 2 hours | Medium | 🔧 WIP |
 | AI Assistant Improvements | 3-4 days | Medium | ⚠️ |
 | UI Consistency | 1-2 days | Medium | ⚠️ |
 | CSV Import | 1 week | Medium | ⚠️ |
 | Smart Task Creation | 1 week | Low | ❌ |
 | AI Weekly Reports | 1-2 weeks | Low | ❌ |
 
-**Total Remaining Gaps:** 6 features  
+**Total Remaining Gaps:** 9 features + 2 security fixes  
 **Completed This Sprint:** 3 features  
-**Total Remaining Effort:** ~4-5 weeks
+**Total Remaining Effort:** ~5-6 weeks
+
