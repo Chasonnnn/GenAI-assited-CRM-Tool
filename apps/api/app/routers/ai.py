@@ -96,9 +96,13 @@ class ConsentResponse(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    """Send a chat message."""
-    entity_type: str = Field(..., pattern="^(case)$")  # Only case for now
-    entity_id: uuid.UUID
+    """Send a chat message.
+    
+    entity_type and entity_id are optional for global chat mode.
+    When provided, context is injected for that specific entity.
+    """
+    entity_type: str | None = Field(None, pattern="^(case|global)$")  # case or global
+    entity_id: uuid.UUID | None = None
     message: str = Field(..., min_length=1, max_length=10000)
 
 
@@ -244,10 +248,20 @@ def chat(
             detail="AI consent not accepted. A manager must accept the data processing consent before using AI.",
         )
     
-    # Check if user has access to the entity
-    if body.entity_type == "case":
+    # Determine entity type and ID - support global mode
+    entity_type = body.entity_type or "global"
+    entity_id = body.entity_id
+    
+    # For global mode, use a special "global" entity ID based on user
+    if entity_type == "global" or entity_id is None:
+        entity_type = "global"
+        # Use user_id as entity_id for global conversations
+        entity_id = session.user_id
+    
+    # Check if user has access to the entity (only for case type)
+    if entity_type == "case":
         case = db.query(Case).filter(
-            Case.id == body.entity_id,
+            Case.id == entity_id,
             Case.organization_id == session.org_id
         ).first()
         if not case:
@@ -267,8 +281,8 @@ def chat(
         db,
         session.org_id,
         session.user_id,
-        body.entity_type,
-        body.entity_id,
+        entity_type,
+        entity_id,
         body.message,
         user_integrations,
     )
@@ -299,27 +313,45 @@ def get_conversation(
     conversation = conversations[0]
     messages = ai_chat_service.get_conversation_messages(db, conversation.id)
     
+    formatted_messages = []
+    for msg in messages:
+        # Build proposed_actions with approval_id from action_approvals
+        proposed_actions = None
+        if msg.proposed_actions:
+            proposed_actions = []
+            for i, action in enumerate(msg.proposed_actions):
+                # Find matching approval by action_index
+                approval = next(
+                    (a for a in (msg.action_approvals or []) if a.action_index == i),
+                    None
+                )
+                proposed_actions.append({
+                    "approval_id": str(approval.id) if approval else None,
+                    "action_type": action.get("type", "unknown"),
+                    "action_data": action,
+                    "status": approval.status if approval else "unknown",
+                })
+        
+        formatted_messages.append({
+            "id": str(msg.id),
+            "role": msg.role,
+            "content": msg.content,
+            "proposed_actions": proposed_actions,
+            "created_at": msg.created_at.isoformat(),
+            "action_approvals": [
+                {
+                    "id": str(a.id),
+                    "action_index": a.action_index,
+                    "action_type": a.action_type,
+                    "status": a.status,
+                }
+                for a in msg.action_approvals
+            ] if msg.action_approvals else None,
+        })
+    
     return {
         "conversation_id": str(conversation.id),
-        "messages": [
-            {
-                "id": str(msg.id),
-                "role": msg.role,
-                "content": msg.content,
-                "proposed_actions": msg.proposed_actions,
-                "created_at": msg.created_at.isoformat(),
-                "action_approvals": [
-                    {
-                        "id": str(a.id),
-                        "action_index": a.action_index,
-                        "action_type": a.action_type,
-                        "status": a.status,
-                    }
-                    for a in msg.action_approvals
-                ] if msg.action_approvals else None,
-            }
-            for msg in messages
-        ],
+        "messages": formatted_messages,
     }
 
 

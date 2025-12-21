@@ -55,6 +55,27 @@ Example action format:
 - Keep responses focused on the current case context
 """
 
+GLOBAL_SYSTEM_PROMPT = """You are an AI assistant for a surrogacy agency CRM called CareFlow. You help staff manage cases efficiently.
+
+You are in GLOBAL mode - no specific case is selected. You can:
+- Answer general questions about workflows and processes
+- Help draft messages that the user can copy/paste
+- Suggest next steps based on information the user provides
+- Help parse emails or notes the user pastes to extract relevant information
+
+If the user pastes an email or describes a situation, you can help:
+1. Identify if it relates to an existing case (ask for the person's name or case number)
+2. Suggest what tasks should be created
+3. Draft responses
+4. Recommend next steps
+
+## Guidelines
+- Be concise and professional
+- If you need a specific case context to take action, ask the user to open that case
+- Don't provide legal or medical advice
+- You cannot execute actions without case context
+"""
+
 
 def _build_dynamic_context(
     case: Case, 
@@ -291,6 +312,9 @@ def chat(
     
     # Load context based on entity type
     case = None
+    system_prompt = SYSTEM_PROMPT
+    dynamic_context = ""
+    
     if entity_type == "case":
         case, notes, tasks = get_case_context(db, entity_id, notes_limit)
         if not case:
@@ -304,6 +328,10 @@ def chat(
             anonymize=should_anonymize,
             pii_mapping=pii_mapping,
         )
+    elif entity_type == "global":
+        # Global mode - use simplified prompt
+        system_prompt = GLOBAL_SYSTEM_PROMPT
+        dynamic_context = f"User's connected integrations: {', '.join(user_integrations) if user_integrations else 'none'}"
     else:
         dynamic_context = "No context available for this entity type."
     
@@ -320,7 +348,7 @@ def chat(
     history = get_conversation_history(db, conversation.id, history_limit)
     
     ai_messages = [
-        ChatMessage(role="system", content=SYSTEM_PROMPT + "\n\n" + dynamic_context),
+        ChatMessage(role="system", content=system_prompt + "\n\n" + dynamic_context),
     ]
     
     # Add conversation history (anonymize if PII anonymization is enabled)

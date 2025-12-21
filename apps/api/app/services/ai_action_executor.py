@@ -342,29 +342,12 @@ def execute_action(
     Returns:
         Result dict from executor
     """
-    from app.db.models import CaseActivity
-    
     # 1. Check approve_ai_actions permission
     if user_permissions is not None and "approve_ai_actions" not in user_permissions:
         error_msg = "You don't have permission to execute AI actions"
         approval.status = "failed"
         approval.error_message = error_msg
         approval.executed_at = datetime.utcnow()
-        
-        # Log denied action
-        activity = CaseActivity(
-            case_id=entity_id,
-            organization_id=org_id,
-            user_id=user_id,
-            activity_type="ai_action_denied",
-            details={
-                "action_type": approval.action_type,
-                "reason": "Missing approve_ai_actions permission",
-                "approval_id": str(approval.id),
-            },
-        )
-        db.add(activity)
-        
         logger.warning(f"AI action denied: user {user_id} lacks approve_ai_actions permission")
         return {"success": False, "error": error_msg}
     
@@ -376,21 +359,6 @@ def execute_action(
             approval.status = "failed"
             approval.error_message = error_msg
             approval.executed_at = datetime.utcnow()
-            
-            # Log denied action
-            activity = CaseActivity(
-                case_id=entity_id,
-                organization_id=org_id,
-                user_id=user_id,
-                activity_type="ai_action_denied",
-                details={
-                    "action_type": approval.action_type,
-                    "reason": f"Missing {required_permission} permission",
-                    "approval_id": str(approval.id),
-                },
-            )
-            db.add(activity)
-            
             logger.warning(f"AI action denied: user {user_id} lacks {required_permission} permission for {approval.action_type}")
             return {"success": False, "error": error_msg}
     
@@ -418,45 +386,12 @@ def execute_action(
         if not result.get("success"):
             approval.error_message = result.get("error")
         
-        # 6. Log successful or failed execution to case activity
-        activity = CaseActivity(
-            case_id=entity_id,
-            organization_id=org_id,
-            user_id=user_id,
-            activity_type="ai_action_executed" if result.get("success") else "ai_action_failed",
-            details={
-                "action_type": approval.action_type,
-                "action_data": approval.action_payload,
-                "approval_id": str(approval.id),
-                "approved_by": str(user_id),
-                "execution_result": "success" if result.get("success") else "failed",
-                "error_message": result.get("error") if not result.get("success") else None,
-                "result": {k: v for k, v in result.items() if k not in ("success", "error")},
-            },
-        )
-        db.add(activity)
-        
+        # Note: Audit logging happens in the router (ai.py) after commit
         return result
     except Exception as e:
         logger.exception(f"Action execution failed: {e}")
         approval.status = "failed"
         approval.error_message = str(e)
         approval.executed_at = datetime.utcnow()
-        
-        # Log failed execution
-        activity = CaseActivity(
-            case_id=entity_id,
-            organization_id=org_id,
-            user_id=user_id,
-            activity_type="ai_action_failed",
-            details={
-                "action_type": approval.action_type,
-                "action_data": approval.action_payload,
-                "approval_id": str(approval.id),
-                "error_message": str(e),
-            },
-        )
-        db.add(activity)
-        
         return {"success": False, "error": str(e)}
 
