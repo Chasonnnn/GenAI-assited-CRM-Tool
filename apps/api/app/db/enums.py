@@ -415,6 +415,8 @@ class AuditEventType(str, Enum):
     # AI actions
     AI_ACTION_APPROVED = "ai_action_approved"
     AI_ACTION_REJECTED = "ai_action_rejected"
+    AI_ACTION_FAILED = "ai_action_failed"
+    AI_ACTION_DENIED = "ai_action_denied"
     
     # Integrations
     INTEGRATION_CONNECTED = "integration_connected"
