@@ -24,6 +24,11 @@ export interface AuditLogListResponse {
     per_page: number
 }
 
+export interface AIAuditActivity {
+    counts: Record<string, number>
+    recent: AuditLogEntry[]
+}
+
 export interface AuditLogFilters {
     page?: number
     per_page?: number
@@ -72,6 +77,12 @@ export async function listAuditLogs(filters: AuditLogFilters = {}): Promise<Audi
 
 export async function listEventTypes(): Promise<string[]> {
     return api.get<string[]>('/audit/event-types')
+}
+
+export async function getAIAuditActivity(hours: number = 24): Promise<AIAuditActivity> {
+    const data = await api.get<{ counts_24h: Record<string, number>; recent: AuditLogEntry[] }>(`/audit/ai-activity?hours=${hours}`)
+    // Normalize response field name
+    return { counts: data.counts_24h, recent: data.recent }
 }
 
 export async function listAuditExports(): Promise<{ items: AuditExportJob[] }> {

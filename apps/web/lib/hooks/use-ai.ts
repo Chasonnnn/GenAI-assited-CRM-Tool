@@ -158,3 +158,11 @@ export function useAnalyzeDashboard() {
     });
 }
 
+export function useAIUsageSummary(days: number = 30) {
+    return useQuery({
+        queryKey: [...aiKeys.all, 'usage', 'summary', days],
+        queryFn: () => aiApi.getAIUsageSummary(days),
+        staleTime: 5 * 60 * 1000, // 5 minutes
+    });
+}
+
