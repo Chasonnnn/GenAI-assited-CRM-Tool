@@ -222,3 +222,27 @@
     animation: none !important;
   }
 }
+
+/* Print/Export mode - force light theme for PDF generation */
+.print-export,
+.print-export * {
+  --background: oklch(0.99 0.002 75) !important;
+  --foreground: oklch(0.216 0.006 56.043) !important;
+  --card: oklch(1 0 0) !important;
+  --card-foreground: oklch(0.216 0.006 56.043) !important;
+  --muted: oklch(0.97 0.001 75) !important;
+  --muted-foreground: oklch(0.553 0.013 58.071) !important;
+  --border: oklch(0.923 0.003 48.717) !important;
+  --popover: oklch(1 0 0) !important;
+  --popover-foreground: oklch(0.216 0.006 56.043) !important;
+  color: oklch(0.216 0.006 56.043) !important;
+  background-color: oklch(1 0 0) !important;
+}
+
+.print-export .dark {
+  /* Override any dark class */
+  --background: oklch(0.99 0.002 75) !important;
+  --foreground: oklch(0.216 0.006 56.043) !important;
+  --card: oklch(1 0 0) !important;
+  --card-foreground: oklch(0.216 0.006 56.043) !important;
+}
