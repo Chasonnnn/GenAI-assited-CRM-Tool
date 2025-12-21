@@ -202,21 +202,21 @@
 
 ### 🔴 High Priority
 
-#### CSRF Missing on Queue/Invite Mutations
-**Files:** `apps/api/app/routers/queues.py:89`, `apps/api/app/routers/invites.py:97`
+#### ~~CSRF Missing on Queue/Invite Mutations~~ ✅ FIXED
+**Files:** `apps/api/app/routers/queues.py`, `apps/api/app/routers/invites.py`
 
-Queue and invite mutation endpoints (create/update/delete/claim/release/assign) lack CSRF checks despite using cookie auth, leaving a CSRF attack surface.
+~~Queue and invite mutation endpoints (create/update/delete/claim/release/assign) lack CSRF checks despite using cookie auth, leaving a CSRF attack surface.~~
 
-**Fix:** Add `require_csrf` dependency to all mutation endpoints.
+**Fixed:** Added `require_csrf_header` dependency to all mutation endpoints.
 
 ---
 
-#### WebSocket Auth Cookie Mismatch
-**Files:** `apps/api/app/routers/websocket.py:46`, `apps/api/app/core/deps.py:15`
+#### ~~WebSocket Auth Cookie Mismatch~~ ✅ FIXED
+**Files:** `apps/api/app/routers/websocket.py`
 
-WebSocket auth reads `cookie` session but the server sets `crm_session`, so notification sockets won't authenticate in production.
+~~WebSocket auth reads `cookie` session but the server sets `crm_session`, so notification sockets won't authenticate in production.~~
 
-**Fix:** Align cookie name in WebSocket auth handler.
+**Fixed:** Imported and used `COOKIE_NAME` from deps.py.
 
 ---
 
@@ -230,12 +230,12 @@ WebSocket auth reads `cookie` session but the server sets `crm_session`, so noti
 
 ---
 
-#### WebSocket/REST URL Environment Mismatch
-**Files:** `apps/web/lib/hooks/use-notification-socket.ts:64`, `apps/web/lib/api.ts:6`
+#### ~~WebSocket/REST URL Environment Mismatch~~ ✅ FIXED
+**Files:** `apps/web/lib/hooks/use-notification-socket.ts`
 
-WebSocket client uses `NEXT_PUBLIC_API_URL` while REST uses `NEXT_PUBLIC_API_BASE_URL`, so WS can point at wrong host in production.
+~~WebSocket client uses `NEXT_PUBLIC_API_URL` while REST uses `NEXT_PUBLIC_API_BASE_URL`, so WS can point at wrong host in production.~~
 
-**Fix:** Standardize to single env var or add explicit `NEXT_PUBLIC_API_WS_URL`.
+**Fixed:** Standardized to use `NEXT_PUBLIC_API_BASE_URL`.
 
 ---
 
@@ -305,19 +305,17 @@ Version numbers in docs don't match backend settings.
 ## PRIORITY RECOMMENDATIONS
 
 ### Immediate (Next Sprint)
-1. **CSRF on Queue/Invite endpoints** — Security
-2. **WebSocket auth cookie fix** — Security
-3. **Context-Aware Chatbot** — AI integration
+1. **Settings Save functionality** — Complete UI
+2. **Context-Aware Chatbot** — AI integration
+3. **AI Assistant Improvements** — Sidebar, token tracking
 
 ### Short Term
-4. **Settings Save functionality** — Complete UI
-5. **AI Assistant Improvements** — Sidebar, token tracking
-6. **PDF Export filename fix** — Polish
+4. **PDF Export filename fix** — Polish
+5. **CSV Import Improvements** — Flexibility
+6. **Smart Task Creation** — AI feature
 
 ### Medium Term
-7. **CSV Import Improvements** — Flexibility
-8. **Smart Task Creation** — AI feature
-9. **AI Weekly Reports** — Batch analytics
+7. **AI Weekly Reports** — Batch analytics
 
 ---
 
@@ -328,10 +326,12 @@ Version numbers in docs don't match backend settings.
 | File Attachments | 1 week | High | ✅ Done |
 | Invitation Frontend | 2-3 days | High | ✅ Done |
 | Tasks Calendar | 1 week | High | ✅ Done |
-| CSRF on Mutations | 2-3 hours | High | ❌ Security |
-| WebSocket Auth Fix | 1 hour | High | ❌ Security |
-| Context-Aware Chatbot | 1 week | High | ❌ |
+| CSRF on Mutations | 2-3 hours | High | ✅ Fixed |
+| WebSocket Auth Fix | 1 hour | High | ✅ Fixed |
+| CORS PUT Method | 5 min | Medium | ✅ Fixed |
+| WS/REST URL Mismatch | 5 min | Medium | ✅ Fixed |
 | Settings Save APIs | 2-3 days | Medium | ❌ |
+| Context-Aware Chatbot | 1 week | High | ❌ |
 | PDF Export Polish | 2 hours | Medium | 🔧 WIP |
 | AI Assistant Improvements | 3-4 days | Medium | ⚠️ |
 | UI Consistency | 1-2 days | Medium | ⚠️ |
@@ -339,7 +339,8 @@ Version numbers in docs don't match backend settings.
 | Smart Task Creation | 1 week | Low | ❌ |
 | AI Weekly Reports | 1-2 weeks | Low | ❌ |
 
-**Total Remaining Gaps:** 9 features + 2 security fixes  
-**Completed This Sprint:** 3 features  
-**Total Remaining Effort:** ~5-6 weeks
+**Security Fixes Completed:** 4 ✅  
+**Total Remaining Gaps:** 7 features  
+**Completed This Sprint:** 3 features + 4 security fixes  
+**Total Remaining Effort:** ~4-5 weeks
 

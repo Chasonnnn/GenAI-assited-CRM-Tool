@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useRef } from "react"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -14,7 +14,6 @@ import {
     ChartLegendContent,
 } from "@/components/ui/chart"
 import { useAnalyticsSummary, useCasesByStatus, useCasesByAssignee, useCasesTrend, useMetaPerformance, useFunnelCompare, useCasesByStateCompare, useCampaigns, useMetaSpend } from "@/lib/hooks/use-analytics"
-import { exportAnalyticsPDF } from "@/lib/api/analytics"
 import { FunnelChart } from "@/components/charts/funnel-chart"
 import { USMapChart } from "@/components/charts/us-map-chart"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
@@ -54,6 +53,7 @@ export default function ReportsPage() {
     })
     const [selectedCampaign, setSelectedCampaign] = useState<string>('')
     const [isExporting, setIsExporting] = useState(false)
+    const reportRef = useRef<HTMLDivElement | null>(null)
 
     // Compute date range based on selected option
     const { fromDate, toDate } = useMemo(() => {
@@ -155,6 +155,51 @@ export default function ReportsPage() {
         return trendChartData.reduce((sum, d) => sum + d.count, 0)
     }, [trendChartData])
 
+    const handleExportPDF = async () => {
+        if (!reportRef.current) return
+        setIsExporting(true)
+        try {
+            const [{ toCanvas }, { jsPDF }] = await Promise.all([
+                import("html-to-image"),
+                import("jspdf"),
+            ])
+
+            const canvas = await toCanvas(reportRef.current, {
+                pixelRatio: 2,
+                cacheBust: true,
+                backgroundColor: "#ffffff",
+            })
+
+            const imgData = canvas.toDataURL("image/png")
+            const pdf = new jsPDF({ orientation: "p", unit: "mm", format: "a4" })
+            const pageWidth = pdf.internal.pageSize.getWidth()
+            const pageHeight = pdf.internal.pageSize.getHeight()
+            const imgWidth = pageWidth
+            const imgHeight = (canvas.height * imgWidth) / canvas.width
+
+            let heightLeft = imgHeight
+            let position = 0
+
+            pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight)
+            heightLeft -= pageHeight
+
+            while (heightLeft > 0) {
+                position -= pageHeight
+                pdf.addPage()
+                pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight)
+                heightLeft -= pageHeight
+            }
+
+            const filenameDate = (toDate || fromDate || new Date().toISOString().slice(0, 10))
+                .replace(/-/g, "")
+            pdf.save(`${filenameDate}report.pdf`)
+        } catch (error) {
+            console.error("Failed to export PDF:", error)
+        } finally {
+            setIsExporting(false)
+        }
+    }
+
     return (
         <div className="flex min-h-screen flex-col">
             {/* Page Header */}
@@ -183,16 +228,7 @@ export default function ReportsPage() {
                         </Select>
                         <button
                             className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                            onClick={async () => {
-                                setIsExporting(true)
-                                try {
-                                    await exportAnalyticsPDF({ from_date: fromDate, to_date: toDate })
-                                } catch (error) {
-                                    console.error('Failed to export PDF:', error)
-                                } finally {
-                                    setIsExporting(false)
-                                }
-                            }}
+                            onClick={handleExportPDF}
                             disabled={isExporting}
                         >
                             {isExporting ? (
@@ -209,7 +245,7 @@ export default function ReportsPage() {
             </div>
 
             {/* Main Content */}
-            <div className="flex-1 space-y-6 p-6">
+            <div className="flex-1 space-y-6 p-6" ref={reportRef}>
                 {/* Quick Stats Row */}
                 <div className="grid gap-4 md:grid-cols-4">
                     <Card className="animate-in fade-in-50 duration-500">
