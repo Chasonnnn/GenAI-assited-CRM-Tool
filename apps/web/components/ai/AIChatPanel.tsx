@@ -93,11 +93,13 @@ export function AIChatPanel({
         }
     }
 
-    const handleApprove = (approvalId: string) => {
+    const handleApprove = (approvalId: string | null | undefined) => {
+        if (!approvalId) return
         approveAction.mutate(approvalId)
     }
 
-    const handleReject = (approvalId: string) => {
+    const handleReject = (approvalId: string | null | undefined) => {
+        if (!approvalId) return
         rejectAction.mutate(approvalId)
     }
 
@@ -174,16 +176,17 @@ export function AIChatPanel({
                                                 const approval = msg.action_approvals?.find(
                                                     (a) => a.action_index === idx
                                                 )
-                                                const status = approval?.status || "pending"
+                                                const approvalId = action.approval_id
+                                                const status = approval?.status || (approvalId ? "pending" : "unavailable")
 
                                                 return (
                                                     <ActionCard
                                                         key={action.approval_id || idx}
                                                         action={action}
                                                         status={status}
-                                                        canApprove={canApproveActions && status === "pending"}
-                                                        onApprove={() => handleApprove(action.approval_id)}
-                                                        onReject={() => handleReject(action.approval_id)}
+                                                        canApprove={!!approvalId && canApproveActions && status === "pending"}
+                                                        onApprove={() => handleApprove(approvalId)}
+                                                        onReject={() => handleReject(approvalId)}
                                                         isApproving={approveAction.isPending}
                                                         isRejecting={rejectAction.isPending}
                                                     />
@@ -331,7 +334,13 @@ function ActionCard({
                         }
                         className="text-xs"
                     >
-                        {status === "executed" ? "Done" : status === "rejected" ? "Rejected" : status}
+                        {status === "executed"
+                            ? "Done"
+                            : status === "rejected"
+                                ? "Rejected"
+                                : status === "unavailable"
+                                    ? "Unavailable"
+                                    : status}
                     </Badge>
                 )}
             </div>

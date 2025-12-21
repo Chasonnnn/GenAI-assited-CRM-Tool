@@ -41,7 +41,7 @@ export interface ConsentAcceptResponse {
 }
 
 export interface ProposedAction {
-    approval_id: string;
+    approval_id: string | null;
     action_type: string;
     action_data: Record<string, unknown>;
     status: string;
@@ -212,4 +212,3 @@ export async function draftEmail(request: DraftEmailRequest): Promise<DraftEmail
 export async function analyzeDashboard(): Promise<AnalyzeDashboardResponse> {
     return api.post<AnalyzeDashboardResponse>('/ai/analyze-dashboard');
 }
-

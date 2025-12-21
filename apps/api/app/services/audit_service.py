@@ -364,6 +364,50 @@ def log_ai_action_rejected(
     )
 
 
+def log_ai_action_failed(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    approval_id: UUID,
+    action_type: str,
+    error: str | None = None,
+    request: Request | None = None,
+) -> AuditLog:
+    """Log AI action failure during execution."""
+    return log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.AI_ACTION_FAILED,
+        actor_user_id=user_id,
+        target_type="ai_action",
+        target_id=approval_id,
+        details={"action_type": action_type, "error": error},
+        request=request,
+    )
+
+
+def log_ai_action_denied(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    approval_id: UUID,
+    action_type: str,
+    reason: str | None = None,
+    request: Request | None = None,
+) -> AuditLog:
+    """Log AI action denial (permission/authorization)."""
+    return log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.AI_ACTION_DENIED,
+        actor_user_id=user_id,
+        target_type="ai_action",
+        target_id=approval_id,
+        details={"action_type": action_type, "reason": reason},
+        request=request,
+    )
+
+
 # =============================================================================
 # Integration Events
 # =============================================================================

@@ -349,7 +349,7 @@ def execute_action(
         approval.error_message = error_msg
         approval.executed_at = datetime.utcnow()
         logger.warning(f"AI action denied: user {user_id} lacks approve_ai_actions permission")
-        return {"success": False, "error": error_msg}
+        return {"success": False, "error": error_msg, "error_code": "permission_denied"}
     
     # 2. Check action-specific permission
     required_permission = ACTION_PERMISSIONS.get(approval.action_type)
@@ -360,7 +360,7 @@ def execute_action(
             approval.error_message = error_msg
             approval.executed_at = datetime.utcnow()
             logger.warning(f"AI action denied: user {user_id} lacks {required_permission} permission for {approval.action_type}")
-            return {"success": False, "error": error_msg}
+            return {"success": False, "error": error_msg, "error_code": "permission_denied"}
     
     # 3. Get executor
     executor = get_executor(approval.action_type)
@@ -368,7 +368,7 @@ def execute_action(
         approval.status = "failed"
         approval.error_message = f"Unknown action type: {approval.action_type}"
         approval.executed_at = datetime.utcnow()
-        return {"success": False, "error": approval.error_message}
+        return {"success": False, "error": approval.error_message, "error_code": "unknown_action"}
     
     # 4. Validate
     is_valid, error = executor.validate(approval.action_payload, db, user_id, org_id)
@@ -376,7 +376,7 @@ def execute_action(
         approval.status = "failed"
         approval.error_message = error
         approval.executed_at = datetime.utcnow()
-        return {"success": False, "error": error}
+        return {"success": False, "error": error, "error_code": "invalid_payload"}
     
     # 5. Execute
     try:
@@ -385,6 +385,8 @@ def execute_action(
         approval.executed_at = datetime.utcnow()
         if not result.get("success"):
             approval.error_message = result.get("error")
+            if "error_code" not in result:
+                result["error_code"] = "execution_failed"
         
         # Note: Audit logging happens in the router (ai.py) after commit
         return result
@@ -393,5 +395,4 @@ def execute_action(
         approval.status = "failed"
         approval.error_message = str(e)
         approval.executed_at = datetime.utcnow()
-        return {"success": False, "error": str(e)}
-
+        return {"success": False, "error": str(e), "error_code": "execution_failed"}

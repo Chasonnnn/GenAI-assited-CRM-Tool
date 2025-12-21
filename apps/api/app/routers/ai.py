@@ -299,7 +299,7 @@ def get_conversation(
     entity_type: str,
     entity_id: uuid.UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission("use_ai_assistant")),
 ) -> dict[str, Any]:
     """Get conversation history for an entity."""
     conversations = ai_chat_service.get_user_conversations(
@@ -358,7 +358,7 @@ def get_conversation(
 @router.get("/conversations/global")
 def get_global_conversation(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission("use_ai_assistant")),
 ) -> dict[str, Any]:
     """Get global conversation history for the current user.
     
@@ -512,7 +512,26 @@ def approve_action(
             approval_id=approval.id,
             action_type=approval.action_type,
         )
-    # Note: Failed executions are not logged as "approved" - the error is returned in response
+    else:
+        error_code = result.get("error_code")
+        if error_code == "permission_denied":
+            audit_service.log_ai_action_denied(
+                db=db,
+                org_id=session.org_id,
+                user_id=session.user_id,
+                approval_id=approval.id,
+                action_type=approval.action_type,
+                reason=result.get("error"),
+            )
+        else:
+            audit_service.log_ai_action_failed(
+                db=db,
+                org_id=session.org_id,
+                user_id=session.user_id,
+                approval_id=approval.id,
+                action_type=approval.action_type,
+                error=result.get("error"),
+            )
     
     db.commit()
     
@@ -588,7 +607,7 @@ def get_pending_actions(
     entity_type: str | None = None,
     entity_id: uuid.UUID | None = None,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission("use_ai_assistant")),
 ) -> dict[str, Any]:
     """Get all pending actions for the current user."""
     from app.db.models import AIActionApproval, AIMessage, AIConversation

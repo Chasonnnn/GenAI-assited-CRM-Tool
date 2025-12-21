@@ -28,7 +28,7 @@ interface Message {
 }
 
 interface ProposedAction {
-    approval_id: string
+    approval_id: string | null
     action_type: string
     action_data: Record<string, unknown>
     status: string
@@ -124,7 +124,8 @@ export default function AIAssistantPage() {
         }
     }
 
-    const handleApprove = async (approvalId: string) => {
+    const handleApprove = async (approvalId: string | null) => {
+        if (!approvalId) return
         try {
             await approveAction.mutateAsync(approvalId)
             // Update the action status in messages
@@ -139,7 +140,8 @@ export default function AIAssistantPage() {
         }
     }
 
-    const handleReject = async (approvalId: string) => {
+    const handleReject = async (approvalId: string | null) => {
+        if (!approvalId) return
         try {
             await rejectAction.mutateAsync(approvalId)
             setMessages(prev => prev.map(msg => ({
