@@ -355,6 +355,58 @@ def get_conversation(
     }
 
 
+@router.get("/conversations/global")
+def get_global_conversation(
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+) -> dict[str, Any]:
+    """Get global conversation history for the current user.
+    
+    Global conversations use entity_type='global' and entity_id=user_id.
+    """
+    conversations = ai_chat_service.get_user_conversations(
+        db, session.user_id, "global", session.user_id
+    )
+    
+    if not conversations:
+        return {"messages": []}
+    
+    # Get the most recent conversation
+    conversation = conversations[0]
+    messages = ai_chat_service.get_conversation_messages(db, conversation.id)
+    
+    formatted_messages = []
+    for msg in messages:
+        # Build proposed_actions with approval_id from action_approvals
+        proposed_actions = None
+        if msg.proposed_actions:
+            proposed_actions = []
+            for i, action in enumerate(msg.proposed_actions):
+                approval = next(
+                    (a for a in (msg.action_approvals or []) if a.action_index == i),
+                    None
+                )
+                proposed_actions.append({
+                    "approval_id": str(approval.id) if approval else None,
+                    "action_type": action.get("type", "unknown"),
+                    "action_data": action,
+                    "status": approval.status if approval else "unknown",
+                })
+        
+        formatted_messages.append({
+            "id": str(msg.id),
+            "role": msg.role,
+            "content": msg.content,
+            "proposed_actions": proposed_actions,
+            "created_at": msg.created_at.isoformat(),
+        })
+    
+    return {
+        "conversation_id": str(conversation.id),
+        "messages": formatted_messages,
+    }
+
+
 @router.get("/conversations/{entity_type}/{entity_id}/all")
 def get_all_conversations(
     entity_type: str,
@@ -450,15 +502,17 @@ def approve_action(
         user_permissions=user_permissions,
     )
     
-    # Audit log
+    # Audit log - only log approved if actually successful
     from app.services import audit_service
-    audit_service.log_ai_action_approved(
-        db=db,
-        org_id=session.org_id,
-        user_id=session.user_id,
-        approval_id=approval.id,
-        action_type=approval.action_type,
-    )
+    if result.get("success"):
+        audit_service.log_ai_action_approved(
+            db=db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+            approval_id=approval.id,
+            action_type=approval.action_type,
+        )
+    # Note: Failed executions are not logged as "approved" - the error is returned in response
     
     db.commit()
     

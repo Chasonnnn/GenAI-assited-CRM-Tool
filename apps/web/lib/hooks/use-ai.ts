@@ -74,14 +74,16 @@ export function useAcceptConsent() {
 // ============================================================================
 
 export function useConversation(entityType?: string | null, entityId?: string | null) {
-    // For global mode, use 'global' as entity type
-    const effectiveType = entityType || 'global';
-    const effectiveId = entityId || 'global';
+    // Determine if this is global mode
+    const isGlobal = !entityType || !entityId || entityType === 'global';
 
     return useQuery({
-        queryKey: aiKeys.conversation(effectiveType, effectiveId),
-        queryFn: () => aiApi.getConversation(effectiveType, effectiveId),
-        enabled: true,  // Always enabled - global mode works too
+        queryKey: isGlobal
+            ? [...aiKeys.all, 'conversation', 'global']
+            : aiKeys.conversation(entityType!, entityId!),
+        queryFn: () => isGlobal
+            ? aiApi.getGlobalConversation()
+            : aiApi.getConversation(entityType!, entityId!),
         staleTime: 30 * 1000, // 30 seconds
     });
 }
@@ -93,11 +95,16 @@ export function useSendMessage() {
         mutationFn: (request: ChatRequest) => aiApi.sendChatMessage(request),
         onSuccess: (_data, variables) => {
             // Invalidate conversation to refetch with new message
-            const effectiveType = variables.entity_type || 'global';
-            const effectiveId = variables.entity_id || 'global';
-            queryClient.invalidateQueries({
-                queryKey: aiKeys.conversation(effectiveType, effectiveId)
-            });
+            const isGlobal = !variables.entity_type || !variables.entity_id || variables.entity_type === 'global';
+            if (isGlobal) {
+                queryClient.invalidateQueries({
+                    queryKey: [...aiKeys.all, 'conversation', 'global']
+                });
+            } else {
+                queryClient.invalidateQueries({
+                    queryKey: aiKeys.conversation(variables.entity_type!, variables.entity_id!)
+                });
+            }
         },
     });
 }
