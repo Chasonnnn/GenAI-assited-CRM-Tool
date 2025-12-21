@@ -73,11 +73,15 @@ export function useAcceptConsent() {
 // Chat Hooks
 // ============================================================================
 
-export function useConversation(entityType: string, entityId: string) {
+export function useConversation(entityType?: string | null, entityId?: string | null) {
+    // For global mode, use 'global' as entity type
+    const effectiveType = entityType || 'global';
+    const effectiveId = entityId || 'global';
+
     return useQuery({
-        queryKey: aiKeys.conversation(entityType, entityId),
-        queryFn: () => aiApi.getConversation(entityType, entityId),
-        enabled: !!entityType && !!entityId,
+        queryKey: aiKeys.conversation(effectiveType, effectiveId),
+        queryFn: () => aiApi.getConversation(effectiveType, effectiveId),
+        enabled: true,  // Always enabled - global mode works too
         staleTime: 30 * 1000, // 30 seconds
     });
 }
@@ -89,8 +93,10 @@ export function useSendMessage() {
         mutationFn: (request: ChatRequest) => aiApi.sendChatMessage(request),
         onSuccess: (_data, variables) => {
             // Invalidate conversation to refetch with new message
+            const effectiveType = variables.entity_type || 'global';
+            const effectiveId = variables.entity_id || 'global';
             queryClient.invalidateQueries({
-                queryKey: aiKeys.conversation(variables.entity_type, variables.entity_id)
+                queryKey: aiKeys.conversation(effectiveType, effectiveId)
             });
         },
     });

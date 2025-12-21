@@ -23,9 +23,9 @@ import { useConversation, useSendMessage, useApproveAction, useRejectAction } fr
 import type { ProposedAction } from "@/lib/api/ai"
 
 interface AIChatPanelProps {
-    entityType: "case" | "intended-parent"
-    entityId: string
-    entityName: string
+    entityType?: "case" | null  // null/undefined = global mode
+    entityId?: string | null
+    entityName?: string | null
     canApproveActions?: boolean
     onClose?: () => void
 }
@@ -123,7 +123,9 @@ export function AIChatPanel({
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <span>Context:</span>
                     <Badge variant="secondary" className="font-normal">
-                        {entityType === "case" ? "Case" : "Intended Parent"} • {entityName}
+                        {entityType === "case" && entityName
+                            ? `Case • ${entityName}`
+                            : "Global Mode"}
                     </Badge>
                 </div>
             </div>
@@ -139,10 +141,14 @@ export function AIChatPanel({
                         <div className="flex flex-col items-center justify-center py-8 text-center">
                             <SparklesIcon className="mb-4 h-10 w-10 text-muted-foreground/50" />
                             <p className="text-sm text-muted-foreground">
-                                Ask me anything about this {entityType === "case" ? "case" : "intended parent"}.
+                                {entityType === "case"
+                                    ? `Ask me anything about this case.`
+                                    : "Ask me anything! I can help with drafts, answer questions, or parse emails."}
                             </p>
                             <p className="mt-1 text-xs text-muted-foreground/70">
-                                I can help summarize, draft emails, suggest next steps, and more.
+                                {entityType === "case"
+                                    ? "I can help summarize, draft emails, suggest next steps, and more."
+                                    : "Open a case for context-aware assistance with actions."}
                             </p>
                         </div>
                     ) : (
