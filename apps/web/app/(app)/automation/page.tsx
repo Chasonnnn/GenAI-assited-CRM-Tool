@@ -26,7 +26,6 @@ import {
     PlusIcon,
     MoreVerticalIcon,
     MailIcon,
-    BellIcon,
     UserIcon,
     CalendarIcon,
     CheckCircle2Icon,

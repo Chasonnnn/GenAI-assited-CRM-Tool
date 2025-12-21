@@ -5,7 +5,6 @@
 import api from './index'
 import type {
     IntendedParent,
-    IntendedParentListItem,
     IntendedParentCreate,
     IntendedParentUpdate,
     IntendedParentStatusUpdate,

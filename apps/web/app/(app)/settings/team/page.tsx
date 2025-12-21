@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/select"
 import {
     Loader2, UserPlus, Mail, RotateCcw, X, Clock, Check, XCircle,
-    Users, Shield, ChevronRight, Settings2, UserCog
+    Users, Shield, Settings2, UserCog
 } from "lucide-react"
 import { useInvites, useCreateInvite, useResendInvite, useRevokeInvite } from "@/lib/hooks/use-invites"
 import { useMembers, useRemoveMember, useBulkUpdateRoles } from "@/lib/hooks/use-permissions"

@@ -3,7 +3,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { attachmentsApi, type Attachment } from "../api/attachments"
+import { attachmentsApi } from "../api/attachments"
 
 export function useAttachments(caseId: string | null) {
     return useQuery({

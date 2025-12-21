@@ -4,7 +4,6 @@
 
 import api from './index';
 import type {
-    CaseListItem,
     CaseListResponse,
     CaseRead,
     CaseSource,

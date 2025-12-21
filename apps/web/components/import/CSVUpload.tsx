@@ -5,8 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { UploadIcon, XIcon, CheckIcon, AlertTriangleIcon, XCircleIcon, FileIcon, Loader2Icon } from "lucide-react"
+import { UploadIcon, XIcon, CheckIcon, XCircleIcon, FileIcon, Loader2Icon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { usePreviewImport, useExecuteImport, type ImportPreview } from "@/lib/hooks/use-import"
 
