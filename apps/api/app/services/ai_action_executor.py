@@ -292,6 +292,19 @@ class SendEmailExecutor(ActionExecutor):
 
 
 # ============================================================================
+# Permission Mapping for Actions
+# ============================================================================
+
+# Maps action types to the permission required to execute them
+ACTION_PERMISSIONS: dict[str, str] = {
+    "add_note": "edit_case_notes",
+    "create_task": "create_tasks",
+    "update_status": "change_case_status",
+    "send_email": "edit_cases",  # Sending email updates case contact info
+}
+
+
+# ============================================================================
 # Executor Registry
 # ============================================================================
 
@@ -314,8 +327,9 @@ def execute_action(
     user_id: uuid.UUID,
     org_id: uuid.UUID,
     entity_id: uuid.UUID,
+    user_permissions: set[str] | None = None,
 ) -> dict[str, Any]:
-    """Execute an approved action.
+    """Execute an approved action with permission checks and activity logging.
     
     Args:
         db: Database session
@@ -323,10 +337,64 @@ def execute_action(
         user_id: User executing the action
         org_id: Organization ID
         entity_id: The entity (case) ID
+        user_permissions: Set of permissions the user has (for authorization)
     
     Returns:
         Result dict from executor
     """
+    from app.db.models import CaseActivity
+    
+    # 1. Check approve_ai_actions permission
+    if user_permissions is not None and "approve_ai_actions" not in user_permissions:
+        error_msg = "You don't have permission to execute AI actions"
+        approval.status = "failed"
+        approval.error_message = error_msg
+        approval.executed_at = datetime.utcnow()
+        
+        # Log denied action
+        activity = CaseActivity(
+            case_id=entity_id,
+            organization_id=org_id,
+            user_id=user_id,
+            activity_type="ai_action_denied",
+            details={
+                "action_type": approval.action_type,
+                "reason": "Missing approve_ai_actions permission",
+                "approval_id": str(approval.id),
+            },
+        )
+        db.add(activity)
+        
+        logger.warning(f"AI action denied: user {user_id} lacks approve_ai_actions permission")
+        return {"success": False, "error": error_msg}
+    
+    # 2. Check action-specific permission
+    required_permission = ACTION_PERMISSIONS.get(approval.action_type)
+    if required_permission and user_permissions is not None:
+        if required_permission not in user_permissions:
+            error_msg = f"You don't have permission to {approval.action_type.replace('_', ' ')}"
+            approval.status = "failed"
+            approval.error_message = error_msg
+            approval.executed_at = datetime.utcnow()
+            
+            # Log denied action
+            activity = CaseActivity(
+                case_id=entity_id,
+                organization_id=org_id,
+                user_id=user_id,
+                activity_type="ai_action_denied",
+                details={
+                    "action_type": approval.action_type,
+                    "reason": f"Missing {required_permission} permission",
+                    "approval_id": str(approval.id),
+                },
+            )
+            db.add(activity)
+            
+            logger.warning(f"AI action denied: user {user_id} lacks {required_permission} permission for {approval.action_type}")
+            return {"success": False, "error": error_msg}
+    
+    # 3. Get executor
     executor = get_executor(approval.action_type)
     if not executor:
         approval.status = "failed"
@@ -334,7 +402,7 @@ def execute_action(
         approval.executed_at = datetime.utcnow()
         return {"success": False, "error": approval.error_message}
     
-    # Validate
+    # 4. Validate
     is_valid, error = executor.validate(approval.action_payload, db, user_id, org_id)
     if not is_valid:
         approval.status = "failed"
@@ -342,17 +410,53 @@ def execute_action(
         approval.executed_at = datetime.utcnow()
         return {"success": False, "error": error}
     
-    # Execute
+    # 5. Execute
     try:
         result = executor.execute(approval.action_payload, db, user_id, org_id, entity_id)
         approval.status = "executed" if result.get("success") else "failed"
         approval.executed_at = datetime.utcnow()
         if not result.get("success"):
             approval.error_message = result.get("error")
+        
+        # 6. Log successful or failed execution to case activity
+        activity = CaseActivity(
+            case_id=entity_id,
+            organization_id=org_id,
+            user_id=user_id,
+            activity_type="ai_action_executed" if result.get("success") else "ai_action_failed",
+            details={
+                "action_type": approval.action_type,
+                "action_data": approval.action_payload,
+                "approval_id": str(approval.id),
+                "approved_by": str(user_id),
+                "execution_result": "success" if result.get("success") else "failed",
+                "error_message": result.get("error") if not result.get("success") else None,
+                "result": {k: v for k, v in result.items() if k not in ("success", "error")},
+            },
+        )
+        db.add(activity)
+        
         return result
     except Exception as e:
         logger.exception(f"Action execution failed: {e}")
         approval.status = "failed"
         approval.error_message = str(e)
         approval.executed_at = datetime.utcnow()
+        
+        # Log failed execution
+        activity = CaseActivity(
+            case_id=entity_id,
+            organization_id=org_id,
+            user_id=user_id,
+            activity_type="ai_action_failed",
+            details={
+                "action_type": approval.action_type,
+                "action_data": approval.action_payload,
+                "approval_id": str(approval.id),
+                "error_message": str(e),
+            },
+        )
+        db.add(activity)
+        
         return {"success": False, "error": str(e)}
+

@@ -42,6 +42,7 @@ import { useNotes, useCreateNote, useDeleteNote } from "@/lib/hooks/use-notes"
 import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-tasks"
 import { useZoomStatus, useCreateZoomMeeting, useSendZoomInvite } from "@/lib/hooks/use-user-integrations"
 import { useSummarizeCase, useDraftEmail, useAISettings } from "@/lib/hooks/use-ai"
+import { useSetAIContext } from "@/lib/context/ai-context"
 import { EmailComposeDialog } from "@/components/email/EmailComposeDialog"
 import { ProposeMatchDialog } from "@/components/matches/ProposeMatchDialog"
 import type { EmailType, SummarizeCaseResponse, DraftEmailResponse } from "@/lib/api/ai"
@@ -217,6 +218,17 @@ export default function CaseDetailPage() {
     // Check if user has Zoom connected
     const { data: zoomStatus } = useZoomStatus()
     const { data: aiSettings } = useAISettings()
+
+    // Set AI context for the chat panel
+    useSetAIContext(
+        caseData
+            ? {
+                entityType: "case",
+                entityId: caseData.id,
+                entityName: `Case #${caseData.case_number} - ${caseData.full_name}`,
+            }
+            : null
+    )
 
     // Fetch queues for release dialog
     const canManageQueue = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
