@@ -136,6 +136,10 @@ export async function getConversation(entityType: string, entityId: string): Pro
     return api.get<AIConversation>(`/ai/conversations/${entityType}/${entityId}`);
 }
 
+export async function getGlobalConversation(): Promise<AIConversation> {
+    return api.get<AIConversation>('/ai/conversations/global');
+}
+
 // ============================================================================
 // Action Approval API
 // ============================================================================

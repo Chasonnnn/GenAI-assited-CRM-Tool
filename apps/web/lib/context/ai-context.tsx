@@ -48,8 +48,9 @@ export function AIContextProvider({ children }: { children: React.ReactNode }) {
     const [isOpen, setIsOpen] = useState(false)
 
     // Permission check - AI is optional
+    // Visibility is controlled by ai_enabled flag from org settings
+    // Backend enforces use_ai_assistant permission on API calls (returns 403 if missing)
     const isAIEnabled = user?.ai_enabled ?? false
-    // TODO: Check use_ai_assistant permission when user permissions are available
     const canUseAI = isAIEnabled
 
     // Clear context on route change if navigating away from entity pages
