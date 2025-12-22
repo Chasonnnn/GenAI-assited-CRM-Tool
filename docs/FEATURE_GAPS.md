@@ -42,6 +42,7 @@
   - Status update notification
   - Matching proposal introduction
   - Contract ready for signature
+  - Referral programs
 
 **Effort:** Medium (1 week)
 
@@ -51,7 +52,7 @@
 **Status:** Not started (may have partial backend)
 
 **Requirements:**
-- Dedicated "Notifications" tab (under Tasks or standalone)
+- Dedicated "Notifications" tab under Tasks
 - Bell icon in header with unread count badge
 - Notification types:
   - Task assigned/due
@@ -143,21 +144,7 @@
 
 ## 🟡 MEDIUM PRIORITY GAPS (Uncompleted)
 
-### 2. CSV Import Format Handling ⚠️
-**Status:** Basic mapping, edge cases not handled
 
-**Issues:**
-- Extra columns in CSV not handled gracefully
-- Lead form changes break imports
-- No schema versioning
-
-**Requirements:**
-- Flexible column mapping with unmapped column storage
-- Custom field support for extra columns
-- Import template generation
-- Show warnings for unknown columns
-
-**Effort:** Medium (1 week)
 
 ---
 
