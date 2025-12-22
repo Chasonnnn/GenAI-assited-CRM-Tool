@@ -38,6 +38,8 @@ class ChatResponse:
             "gpt-4o-mini": {"input": Decimal("0.15"), "output": Decimal("0.60")},
             "gpt-4o": {"input": Decimal("2.50"), "output": Decimal("10.00")},
             # Gemini
+            "gemini-3-flash-preview": {"input": Decimal("0.10"), "output": Decimal("0.40")},  # Gemini 3.0 Flash
+            "gemini-2.0-flash-exp": {"input": Decimal("0.075"), "output": Decimal("0.30")},
             "gemini-1.5-flash": {"input": Decimal("0.075"), "output": Decimal("0.30")},
             "gemini-1.5-pro": {"input": Decimal("1.25"), "output": Decimal("5.00")},
         }
@@ -128,7 +130,7 @@ class OpenAIProvider(AIProvider):
 class GeminiProvider(AIProvider):
     """Google Gemini API provider."""
     
-    def __init__(self, api_key: str, default_model: str = "gemini-1.5-flash"):
+    def __init__(self, api_key: str, default_model: str = "gemini-3-flash-preview"):
         self.api_key = api_key
         self.default_model = default_model
         self.base_url = "https://generativelanguage.googleapis.com/v1beta"
@@ -215,6 +217,6 @@ def get_provider(provider_name: str, api_key: str, model: str | None = None) -> 
     if provider_name == "openai":
         return OpenAIProvider(api_key, default_model=model or "gpt-4o-mini")
     elif provider_name == "gemini":
-        return GeminiProvider(api_key, default_model=model or "gemini-1.5-flash")
+        return GeminiProvider(api_key, default_model=model or "gemini-3-flash-preview")
     else:
         raise ValueError(f"Unknown provider: {provider_name}")
