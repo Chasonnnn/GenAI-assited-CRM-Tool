@@ -1,8 +1,8 @@
 # Surrogacy CRM Platform
 
-**Version:** 0.12.01 | **Format:** a.bc.de (major.feature.patch)
+**Version:** 0.13.00 | **Format:** a.bc.de (major.feature.patch)
 
-A modern, multi-tenant CRM and case management platform built for surrogacy agencies. Features lead pipeline management with **customizable stages**, intended parent profiles, case workflow tracking, AI-assisted insights, and enterprise audit/versioning.
+A modern, multi-tenant CRM and case management platform built for surrogacy agencies. Features lead pipeline management with **customizable stages**, intended parent profiles, case workflow tracking, AI-assisted insights, **appointment scheduling with public booking**, and enterprise audit/versioning.
 
 ## Tech Stack
 
@@ -31,18 +31,20 @@ AI is an **optional** capability designed to be safe, auditable, and tenant-conf
 │   │   ├── app/
 │   │   │   ├── core/           # Config, security, dependencies, case_access
 │   │   │   ├── db/             # Models (36: +PipelineStage), enums, session
-│   │   │   ├── routers/        # API endpoints (21 modules + stage CRUD)
+│   │   │   ├── routers/        # API endpoints (23 modules)
 │   │   │   │   ├── auth, cases, tasks, notes, notifications
 │   │   │   │   ├── intended_parents, email_templates, pipelines, queues
 │   │   │   │   ├── ai, analytics, audit, admin_versions, metadata
 │   │   │   │   ├── integrations, webhooks, ops, jobs
+│   │   │   │   ├── appointments, booking  # Scheduling
 │   │   │   │   └── dev, internal, websocket
 │   │   │   ├── schemas/        # Pydantic DTOs
-│   │   │   ├── services/       # Business logic (33 services: +queue_service)
+│   │   │   ├── services/       # Business logic (35 services)
 │   │   │   │   ├── auth, user, org, case, task, note, queue
 │   │   │   │   ├── ai_*, email, pipeline, version
 │   │   │   │   ├── meta_*, import, audit, analytics
-│   │   │   │   └── notification, oauth, gmail, pii_anonymizer
+│   │   │   │   ├── notification, oauth, gmail, pii_anonymizer
+│   │   │   │   └── appointment_service, appointment_email_service, calendar_service
 │   │   │   ├── utils/          # Helpers (normalization, pagination)
 │   │   │   ├── cli.py          # CLI commands
 │   │   │   └── main.py         # FastAPI app entry
@@ -51,14 +53,16 @@ AI is an **optional** capability designed to be safe, auditable, and tenant-conf
 │   │   └── requirements.txt
 │   │
 │   └── web/                    # Next.js frontend
-│       ├── app/
 │       │   ├── (app)/          # Authenticated routes
 │       │   │   ├── dashboard, cases, tasks, leads
 │       │   │   ├── intended-parents, reports, settings
 │       │   │   │   ├── audit/   # Audit log viewer (managers)
-│       │   │   │   └── queues/  # Queue management (managers)
+│       │   │   │   ├── queues/  # Queue management (managers)
+│       │   │   │   └── appointments/  # Availability config
+│       │   │   ├── appointments/  # Pending/upcoming appointments
 │       │   │   ├── ai-assistant, notifications, automation
 │       │   │   └── analytics, ops-console
+│       │   ├── book/           # Public booking pages
 │       │   ├── login/          # Public login page
 │       │   └── layout.tsx
 │       ├── components/         # Shared UI (inline-edit-field, etc.)
