@@ -58,7 +58,6 @@ def db(db_engine) -> Generator:
     """
     from sqlalchemy import event
     from app.db.session import SessionLocal
-    
     connection = db_engine.connect()
     transaction = connection.begin()
     session = SessionLocal(bind=connection)
@@ -74,7 +73,7 @@ def db(db_engine) -> Generator:
             session_.begin_nested()
     
     yield session
-    
+
     session.close()
     transaction.rollback()
     connection.close()
@@ -208,18 +207,18 @@ async def client(db) -> AsyncGenerator:
     from httpx import AsyncClient, ASGITransport
     from app.main import app
     from app.core.deps import get_db
-    
+
     def override_get_db():
         yield db
 
     app.dependency_overrides[get_db] = override_get_db
-    
+
     async with AsyncClient(
-        transport=ASGITransport(app=app), 
+        transport=ASGITransport(app=app),
         base_url="https://test"
     ) as c:
         yield c
-    
+
     app.dependency_overrides.clear()
 
 
@@ -231,18 +230,18 @@ async def authed_client(db, test_auth) -> AsyncGenerator:
     from httpx import AsyncClient, ASGITransport
     from app.main import app
     from app.core.deps import get_db
-    
+
     def override_get_db():
         yield db
 
     app.dependency_overrides[get_db] = override_get_db
-    
+
     async with AsyncClient(
-        transport=ASGITransport(app=app), 
+        transport=ASGITransport(app=app),
         base_url="https://test",
         cookies={test_auth.cookie_name: test_auth.token},
         headers={"X-Requested-With": "XMLHttpRequest"},
     ) as c:
         yield c
-    
+
     app.dependency_overrides.clear()

@@ -85,7 +85,7 @@ describe('CasesPage', () => {
         render(<CasesPage />)
         // We expect the loader icon (lucide-react) or a card with loading spinner
         // Since we can't easily query by icon, we'll check if the main content area is present
-        // or check for implicit loading indicators. 
+        // or check for implicit loading indicators.
         // In the code: <LoaderIcon /> is rendered.
         // simpler check: "Cases" header should be present
         expect(screen.getByText('Cases')).toBeInTheDocument()

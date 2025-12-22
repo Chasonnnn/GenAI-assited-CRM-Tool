@@ -12,6 +12,18 @@ vi.mock('@/lib/hooks/use-audit', () => ({
     useEventTypes: () => ({ data: ['user_login', 'pipeline_updated'] }),
     useAuditExports: () => mockUseAuditExports(),
     useCreateAuditExport: () => ({ mutateAsync: mockCreateExport, isPending: false }),
+    useAIAuditActivity: () => ({
+        data: {
+            counts: {
+                ai_action_approved: 0,
+                ai_action_rejected: 0,
+                ai_action_failed: 0,
+                ai_action_denied: 0,
+            },
+            recent: [],
+        },
+        isLoading: false,
+    }),
 }))
 
 vi.mock('@/lib/auth-context', () => ({

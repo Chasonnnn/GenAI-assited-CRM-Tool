@@ -3,6 +3,47 @@ import { cleanup } from '@testing-library/react'
 import * as matchers from '@testing-library/jest-dom/matchers'
 import '@testing-library/jest-dom'
 
+// Mock React Query
+vi.mock('@tanstack/react-query', () => ({
+    useQuery: vi.fn(() => ({
+        data: null,
+        isLoading: false,
+        error: null,
+        refetch: vi.fn(),
+    })),
+    useMutation: vi.fn(() => ({
+        mutateAsync: vi.fn(),
+        isPending: false,
+        error: null,
+    })),
+    useQueryClient: vi.fn(() => ({
+        invalidateQueries: vi.fn(),
+        setQueryData: vi.fn(),
+        getQueryData: vi.fn(),
+        removeQueries: vi.fn(),
+    })),
+    QueryClient: vi.fn(() => ({})),
+    QueryClientProvider: ({ children }: { children: any }) => children,
+}))
+
+vi.mock('@/lib/context/ai-context', () => ({
+    AIContextProvider: ({ children }: { children: any }) => children,
+    useAIContext: () => ({
+        entityType: null,
+        entityId: null,
+        entityName: null,
+        isOpen: false,
+        togglePanel: vi.fn(),
+        openPanel: vi.fn(),
+        closePanel: vi.fn(),
+        setContext: vi.fn(),
+        clearContext: vi.fn(),
+        canUseAI: false,
+        isAIEnabled: false,
+    }),
+    useSetAIContext: () => {},
+}))
+
 expect.extend(matchers)
 
 afterEach(() => {

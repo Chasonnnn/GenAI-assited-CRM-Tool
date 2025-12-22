@@ -6,6 +6,7 @@ Create Date: 2024-12-21
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import UUID
 
 
@@ -120,7 +121,7 @@ def upgrade():
         sa.Column('appointment_type_id', UUID(as_uuid=True), nullable=True),
         # Client info
         sa.Column('client_name', sa.String(255), nullable=False),
-        sa.Column('client_email', sa.Text(), nullable=False),  # CITEXT via extension
+        sa.Column('client_email', postgresql.CITEXT(), nullable=False),
         sa.Column('client_phone', sa.String(20), nullable=False),
         sa.Column('client_notes', sa.Text(), nullable=True),
         sa.Column('client_timezone', sa.String(50), nullable=False),
@@ -178,7 +179,7 @@ def upgrade():
         sa.Column('organization_id', UUID(as_uuid=True), nullable=False),
         sa.Column('appointment_id', UUID(as_uuid=True), nullable=False),
         sa.Column('email_type', sa.String(30), nullable=False),
-        sa.Column('recipient_email', sa.Text(), nullable=False),  # CITEXT via extension
+        sa.Column('recipient_email', postgresql.CITEXT(), nullable=False),
         sa.Column('subject', sa.String(255), nullable=False),
         sa.Column('status', sa.String(20), nullable=False, server_default="'pending'"),
         sa.Column('sent_at', sa.TIMESTAMP(timezone=True), nullable=True),
