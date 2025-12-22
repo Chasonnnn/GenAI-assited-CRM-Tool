@@ -38,7 +38,7 @@ class CaseStatus(str, Enum):
         → application_submitted → under_review → approved → pending_handoff/disqualified
     
     Stage B (Post-Approval, Case Manager only):
-        pending_match → meds_started → exam_passed → embryo_transferred → delivered
+        pending_match → matched → meds_started → exam_passed → embryo_transferred → delivered
     """
     # Stage A: Intake Pipeline
     NEW_UNREAD = "new_unread"
@@ -54,6 +54,7 @@ class CaseStatus(str, Enum):
     
     # Stage B: Post-Approval (Case Manager only)
     PENDING_MATCH = "pending_match"
+    MATCHED = "matched"
     MEDS_STARTED = "meds_started"
     EXAM_PASSED = "exam_passed"
     EMBRYO_TRANSFERRED = "embryo_transferred"
@@ -77,8 +78,8 @@ class CaseStatus(str, Enum):
     def case_manager_only(cls) -> list[str]:
         """Statuses only accessible by case_manager+ (Stage B)."""
         return [
-            cls.PENDING_MATCH.value, cls.MEDS_STARTED.value, cls.EXAM_PASSED.value,
-            cls.EMBRYO_TRANSFERRED.value, cls.DELIVERED.value
+            cls.PENDING_MATCH.value, cls.MATCHED.value, cls.MEDS_STARTED.value,
+            cls.EXAM_PASSED.value, cls.EMBRYO_TRANSFERRED.value, cls.DELIVERED.value
         ]
 
     @classmethod
@@ -114,6 +115,7 @@ class CaseActivityType(str, Enum):
     NOTE_ADDED = "note_added"
     NOTE_DELETED = "note_deleted"
     EMAIL_SENT = "email_sent"  # Email sent to case contact
+    TASK_CREATED = "task_created"  # Task created for case
     MATCH_PROPOSED = "match_proposed"  # New match proposed
     MATCH_REVIEWING = "match_reviewing"  # Match entered review
     MATCH_ACCEPTED = "match_accepted"  # Match accepted

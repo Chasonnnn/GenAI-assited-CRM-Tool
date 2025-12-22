@@ -211,6 +211,7 @@ def get_me(
         org_id=org.id,
         org_name=org.name,
         org_slug=org.slug,
+        org_timezone=org.timezone,
         role=session.role,
         ai_enabled=org.ai_enabled if org else False,
     )
@@ -251,6 +252,7 @@ def update_me(
         org_id=org.id,
         org_name=org.name,
         org_slug=org.slug,
+        org_timezone=org.timezone,
         role=session.role,
         ai_enabled=org.ai_enabled if org else False,
     )

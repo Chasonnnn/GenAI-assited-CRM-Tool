@@ -49,10 +49,10 @@ import { format, addDays, startOfDay, parseISO, isSameDay } from "date-fns"
 
 // Timezone options
 const TIMEZONE_OPTIONS = [
+    { value: "America/Los_Angeles", label: "Pacific Time (PT)" },
     { value: "America/New_York", label: "Eastern Time (ET)" },
     { value: "America/Chicago", label: "Central Time (CT)" },
     { value: "America/Denver", label: "Mountain Time (MT)" },
-    { value: "America/Los_Angeles", label: "Pacific Time (PT)" },
     { value: "America/Phoenix", label: "Arizona (AZ)" },
     { value: "Pacific/Honolulu", label: "Hawaii (HI)" },
     { value: "America/Anchorage", label: "Alaska (AK)" },
@@ -652,7 +652,7 @@ export function PublicBookingPage({ publicSlug }: { publicSlug: string }) {
     const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
     const [showForm, setShowForm] = useState(false)
     const [isConfirmed, setIsConfirmed] = useState(false)
-    const [timezone, setTimezone] = useState("America/New_York")
+    const [timezone, setTimezone] = useState("America/Los_Angeles")
 
     // Auto-detect timezone
     useEffect(() => {
@@ -669,6 +669,12 @@ export function PublicBookingPage({ publicSlug }: { publicSlug: string }) {
 
     // Queries
     const { data: pageData, isLoading: isLoadingPage, error: pageError } = usePublicBookingPage(publicSlug)
+
+    useEffect(() => {
+        if (pageData?.org_timezone && timezone === "America/Los_Angeles") {
+            setTimezone(pageData.org_timezone)
+        }
+    }, [pageData?.org_timezone, timezone])
 
     const dateRange = useMemo(() => {
         const start = format(new Date(), "yyyy-MM-dd")

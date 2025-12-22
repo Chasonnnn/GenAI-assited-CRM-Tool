@@ -414,6 +414,14 @@ export default function AuditLogPage() {
                                 {auditData?.items.map((entry) => {
                                     const config = getEventConfig(entry.event_type)
                                     const Icon = config.icon
+                                    const actorName = entry.actor_name || "System"
+                                    const aiActorText: Record<string, string> = {
+                                        ai_action_approved: `AI-generated • Approved by ${actorName}`,
+                                        ai_action_rejected: `AI-generated • Rejected by ${actorName}`,
+                                        ai_action_denied: `AI-generated • Denied by ${actorName}`,
+                                        ai_action_failed: `AI-generated • Failed after approval by ${actorName}`,
+                                    }
+                                    const aiSummary = aiActorText[entry.event_type]
 
                                     return (
                                         <div
@@ -433,7 +441,9 @@ export default function AuditLogPage() {
                                                     )}
                                                 </div>
                                                 <p className="text-sm text-muted-foreground mt-1">
-                                                    {entry.actor_name ? (
+                                                    {aiSummary ? (
+                                                        <span className="font-medium text-foreground">{aiSummary}</span>
+                                                    ) : entry.actor_name ? (
                                                         <span className="font-medium text-foreground">{entry.actor_name}</span>
                                                     ) : (
                                                         <span className="italic">System</span>

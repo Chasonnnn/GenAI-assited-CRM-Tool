@@ -15,6 +15,7 @@ interface User {
     org_id: string;
     org_name: string;
     org_slug: string;
+    org_timezone: string;
     role: string;
     ai_enabled: boolean;
 }
@@ -28,6 +29,7 @@ const MOCK_USER: User = {
     org_id: 'd1f370ab-1680-46b3-a37d-7cff639e4a47',
     org_name: 'Test Organization',
     org_slug: 'test-org',
+    org_timezone: 'America/Los_Angeles',
     role: 'admin',
     ai_enabled: true, // Enable AI for testing
 };
@@ -104,4 +106,3 @@ export function useRequireAuth() {
 
     return { user, isLoading };
 }
-

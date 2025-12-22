@@ -38,10 +38,15 @@ export function ProposeMatchFromIPDialog({
     })
     const createMatch = useCreateMatch()
 
-    // Filter to only pending_match cases (by status_label since API uses pipeline stages)
+    // Filter to only pending_match cases (prefer stage_slug when available)
     const eligibleCases = useMemo(() => {
         if (!casesData?.items) return []
-        return casesData.items.filter(c => c.status_label?.toLowerCase() === "pending match")
+        return casesData.items.filter((c) => {
+            if (c.stage_slug) {
+                return c.stage_slug === "pending_match"
+            }
+            return c.status_label?.toLowerCase() === "pending match"
+        })
     }, [casesData])
 
     const handleSubmit = async () => {

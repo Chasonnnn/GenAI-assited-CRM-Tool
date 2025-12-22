@@ -16,6 +16,25 @@ vi.mock('next/navigation', () => ({
     useRouter: () => ({ push: mockPush }),
 }))
 
+// Mock auth context
+vi.mock('@/lib/auth-context', () => ({
+    useAuth: () => ({
+        user: { role: 'admin', id: 'user1', display_name: 'Test Admin' },
+        isLoading: false,
+    }),
+}))
+
+// Mock react-query
+vi.mock('@tanstack/react-query', async () => {
+    const actual = await vi.importActual('@tanstack/react-query')
+    return {
+        ...actual,
+        useQueryClient: () => ({
+            invalidateQueries: vi.fn(),
+        }),
+    }
+})
+
 // Mock match hooks
 const mockUseMatch = vi.fn()
 const mockUseAcceptMatch = vi.fn()
@@ -29,15 +48,24 @@ vi.mock('@/lib/hooks/use-matches', () => ({
     useRejectMatch: () => mockUseRejectMatch(),
     useCancelMatch: () => mockUseCancelMatch(),
     useUpdateMatchNotes: () => mockUseUpdateMatchNotes(),
+    matchKeys: { detail: (id: string) => ['matches', 'detail', id] },
 }))
 
 // Mock case hooks
 const mockUseCase = vi.fn()
 vi.mock('@/lib/hooks/use-cases', () => ({
     useCase: (id: string) => mockUseCase(id),
+    useChangeStatus: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useCaseNotes: () => ({ data: [] }),
     useCaseHistory: () => ({ data: [] }),
     useCaseTasks: () => ({ data: { items: [], total: 0 } }),
+    useCaseActivity: () => ({ data: { items: [], total: 0 } }),
+    caseKeys: { detail: (id: string) => ['cases', 'detail', id], lists: () => ['cases', 'list'] },
+}))
+
+// Mock notes hook
+vi.mock('@/lib/hooks/use-notes', () => ({
+    useNotes: () => ({ data: [], isLoading: false }),
 }))
 
 // Mock IP hooks
@@ -46,6 +74,32 @@ vi.mock('@/lib/hooks/use-intended-parents', () => ({
     useIntendedParent: (id: string) => mockUseIntendedParent(id),
     useIntendedParentNotes: () => ({ data: [] }),
     useIntendedParentHistory: () => ({ data: [] }),
+    intendedParentKeys: { detail: (id: string) => ['intended-parents', 'detail', id], lists: () => ['intended-parents', 'list'] },
+}))
+
+// Mock attachments hook
+vi.mock('@/lib/hooks/use-attachments', () => ({
+    useAttachments: () => ({ data: [], isLoading: false }),
+}))
+
+// Mock tasks hook
+vi.mock('@/lib/hooks/use-tasks', () => ({
+    useTasks: () => ({ data: { items: [], total: 0 }, isLoading: false }),
+}))
+
+// Mock pipelines hook
+vi.mock('@/lib/hooks/use-pipelines', () => ({
+    useDefaultPipeline: () => ({
+        data: {
+            id: 'pipeline1',
+            stages: [
+                { id: 'stage1', slug: 'pending_match', label: 'Pending Match', color: '#888', stage_type: 'intake' },
+                { id: 'stage2', slug: 'matched', label: 'Matched', color: '#22c55e', stage_type: 'post_approval' },
+                { id: 'stage3', slug: 'meds_started', label: 'Meds Started', color: '#3b82f6', stage_type: 'post_approval' },
+            ],
+        },
+        isLoading: false,
+    }),
 }))
 
 // Mock tasks

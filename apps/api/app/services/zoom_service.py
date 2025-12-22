@@ -55,7 +55,7 @@ async def create_zoom_meeting(
     topic: str,
     start_time: datetime | None = None,
     duration: int = 30,
-    timezone_name: str = "UTC",
+    timezone_name: str = "America/Los_Angeles",
 ) -> ZoomMeeting:
     """Create a Zoom meeting using the Zoom API.
     
@@ -157,7 +157,7 @@ async def schedule_zoom_meeting(
     entity_id: uuid.UUID,
     topic: str,
     start_time: datetime | None = None,
-    timezone_name: str = "UTC",
+    timezone_name: str = "America/Los_Angeles",
     duration: int = 30,
     contact_name: str | None = None,
 ) -> CreateMeetingResult:

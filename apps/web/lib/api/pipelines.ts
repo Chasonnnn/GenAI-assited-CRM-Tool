@@ -140,7 +140,7 @@ export async function reorderStages(pipelineId: string, orderedStageIds: string[
 
 export async function getPipelineVersions(id: string): Promise<PipelineVersion[]> {
     const response = await api.get<PipelineVersionsResponse>(`/settings/pipelines/${id}/versions`);
-    return response.versions;
+    return response?.versions ?? [];
 }
 
 export async function rollbackPipeline(id: string, version: number): Promise<Pipeline> {

@@ -10,6 +10,8 @@ export interface CaseListItem {
     id: string;
     case_number: string;
     stage_id: string;
+    stage_slug: string | null;
+    stage_type: string | null;
     status_label: string;
     source: CaseSource;
     full_name: string;

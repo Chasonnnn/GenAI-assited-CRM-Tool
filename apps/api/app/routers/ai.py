@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, get_current_session, require_roles, require_csrf_header, require_permission
 from app.core.case_access import check_case_access
-from app.db.enums import Role
+from app.db.enums import CaseActivityType, Role
 from app.db.models import Case, Task, UserIntegration, AIConversation
 from app.schemas.auth import UserSession
 from app.services import ai_settings_service, ai_chat_service
@@ -570,6 +570,85 @@ def approve_action(
         entity_id=conversation.entity_id,
         user_permissions=user_permissions,
     )
+
+    # Case activity log for AI-generated actions (case context only)
+    if result.get("success") and conversation.entity_type == "case":
+        from app.services import activity_service, pipeline_service
+        case_id = conversation.entity_id
+        details_base = {
+            "source": "ai",
+            "approval_id": str(approval.id),
+            "action_type": approval.action_type,
+        }
+
+        if approval.action_type == "add_note":
+            content = (
+                approval.action_payload.get("content")
+                or approval.action_payload.get("body")
+                or approval.action_payload.get("text")
+            )
+            activity_service.log_activity(
+                db=db,
+                case_id=case_id,
+                organization_id=session.org_id,
+                activity_type=CaseActivityType.NOTE_ADDED,
+                actor_user_id=session.user_id,
+                details={
+                    **details_base,
+                    "note_id": result.get("note_id"),
+                    "content": content,
+                },
+            )
+        elif approval.action_type == "send_email":
+            activity_service.log_activity(
+                db=db,
+                case_id=case_id,
+                organization_id=session.org_id,
+                activity_type=CaseActivityType.EMAIL_SENT,
+                actor_user_id=session.user_id,
+                details={
+                    **details_base,
+                    "subject": approval.action_payload.get("subject"),
+                    "provider": "gmail",
+                },
+            )
+        elif approval.action_type == "update_status":
+            old_stage_id = result.get("old_stage_id")
+            new_stage_id = result.get("new_stage_id")
+            old_label = None
+            new_label = None
+            if old_stage_id:
+                old_stage = pipeline_service.get_stage_by_id(db, uuid.UUID(old_stage_id))
+                old_label = old_stage.label if old_stage else None
+            if new_stage_id:
+                new_stage = pipeline_service.get_stage_by_id(db, uuid.UUID(new_stage_id))
+                new_label = new_stage.label if new_stage else None
+
+            activity_service.log_activity(
+                db=db,
+                case_id=case_id,
+                organization_id=session.org_id,
+                activity_type=CaseActivityType.STATUS_CHANGED,
+                actor_user_id=session.user_id,
+                details={
+                    **details_base,
+                    "from": old_label,
+                    "to": new_label,
+                },
+            )
+        elif approval.action_type == "create_task":
+            activity_service.log_activity(
+                db=db,
+                case_id=case_id,
+                organization_id=session.org_id,
+                activity_type=CaseActivityType.TASK_CREATED,
+                actor_user_id=session.user_id,
+                details={
+                    **details_base,
+                    "task_id": result.get("task_id"),
+                    "title": result.get("title"),
+                },
+            )
     
     # Audit log - only log approved if actually successful
     from app.services import audit_service

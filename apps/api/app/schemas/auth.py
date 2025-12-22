@@ -38,5 +38,6 @@ class MeResponse(BaseModel):
     org_id: UUID
     org_name: str
     org_slug: str
+    org_timezone: str
     role: Role
     ai_enabled: bool = False

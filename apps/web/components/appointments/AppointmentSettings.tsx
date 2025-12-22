@@ -53,6 +53,7 @@ import {
     MailIcon,
     ExternalLinkIcon,
 } from "lucide-react"
+import { useAuth } from "@/lib/auth-context"
 import {
     useBookingLink,
     useRegenerateBookingLink,
@@ -207,6 +208,7 @@ function BookingLinkCard() {
 // =============================================================================
 
 function AvailabilityRulesCard() {
+    const { user } = useAuth()
     const { data: rules, isLoading } = useAvailabilityRules()
     const setRulesMutation = useSetAvailabilityRules()
     const [localRules, setLocalRules] = useState<Array<{
@@ -215,7 +217,7 @@ function AvailabilityRulesCard() {
         end_time: string
         enabled: boolean
     }>>([])
-    const [timezone, setTimezone] = useState("America/New_York")
+    const [timezone, setTimezone] = useState(user?.org_timezone || "America/Los_Angeles")
     const [hasChanges, setHasChanges] = useState(false)
 
     // Initialize local rules from API data
@@ -233,9 +235,11 @@ function AvailabilityRulesCard() {
             setLocalRules(initialRules)
             if (rules.length > 0) {
                 setTimezone(rules[0].timezone)
+            } else if (user?.org_timezone) {
+                setTimezone(user.org_timezone)
             }
         }
-    }, [rules, localRules.length])
+    }, [rules, localRules.length, user?.org_timezone])
 
     const toggleDay = (dayValue: number) => {
         setLocalRules((prev) =>
@@ -353,10 +357,10 @@ function AvailabilityRulesCard() {
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
+                                <SelectItem value="America/Los_Angeles">Pacific Time</SelectItem>
                                 <SelectItem value="America/New_York">Eastern Time</SelectItem>
                                 <SelectItem value="America/Chicago">Central Time</SelectItem>
                                 <SelectItem value="America/Denver">Mountain Time</SelectItem>
-                                <SelectItem value="America/Los_Angeles">Pacific Time</SelectItem>
                                 <SelectItem value="UTC">UTC</SelectItem>
                             </SelectContent>
                         </Select>

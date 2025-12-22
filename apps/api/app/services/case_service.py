@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.db.enums import CaseSource
 from app.db.models import Case, CaseStatusHistory, User
@@ -727,7 +727,9 @@ def list_cases(
     from datetime import datetime
     from sqlalchemy import or_
     
-    query = db.query(Case).filter(Case.organization_id == org_id)
+    query = db.query(Case).options(selectinload(Case.stage)).filter(
+        Case.organization_id == org_id
+    )
     
     # Archived filter (default: exclude)
     if not include_archived:

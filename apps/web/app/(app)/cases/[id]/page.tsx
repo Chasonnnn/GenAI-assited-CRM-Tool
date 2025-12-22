@@ -121,37 +121,44 @@ function formatActivityType(type: string): string {
         handoff_denied: 'Handoff Denied',
         note_added: 'Note Added',
         note_deleted: 'Note Deleted',
+        task_created: 'Task Created',
     }
     return labels[type] || type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 }
 
 // Format activity details for display
 function formatActivityDetails(type: string, details: Record<string, unknown>): string {
+    const aiPrefix = details?.source === 'ai' ? 'AI-generated' : ''
+    const withAiPrefix = (detail: string) => (aiPrefix ? `${aiPrefix} · ${detail}` : detail)
+    const aiOnly = () => (aiPrefix ? aiPrefix : '')
+
     switch (type) {
         case 'status_changed':
-            return `${details.from} → ${details.to}${details.reason ? `: ${details.reason}` : ''}`
+            return withAiPrefix(`${details.from} → ${details.to}${details.reason ? `: ${details.reason}` : ''}`)
         case 'info_edited':
             if (details.changes && typeof details.changes === 'object') {
                 const changes = Object.entries(details.changes as Record<string, unknown>)
                     .map(([field, value]) => `${field.replace(/_/g, ' ')}: ${String(value)}`)
                     .join(', ')
-                return changes
+                return aiPrefix ? withAiPrefix(changes) : changes
             }
-            return ''
+            return aiOnly()
         case 'assigned':
-            return details.from_user_id ? 'Reassigned' : 'Assigned to user'
+            return aiPrefix ? withAiPrefix(details.from_user_id ? 'Reassigned' : 'Assigned to user') : (details.from_user_id ? 'Reassigned' : 'Assigned to user')
         case 'unassigned':
-            return 'Removed assignment'
+            return aiPrefix ? withAiPrefix('Removed assignment') : 'Removed assignment'
         case 'priority_changed':
-            return details.is_priority ? 'Marked as priority' : 'Removed priority'
+            return aiPrefix ? withAiPrefix(details.is_priority ? 'Marked as priority' : 'Removed priority') : (details.is_priority ? 'Marked as priority' : 'Removed priority')
         case 'handoff_denied':
-            return details.reason ? String(details.reason) : ''
+            return details.reason ? withAiPrefix(String(details.reason)) : aiOnly()
         case 'note_added':
-            return details.content ? String(details.content).slice(0, 100) + '...' : ''
+            return details.content ? withAiPrefix(String(details.content).slice(0, 100) + '...') : aiOnly()
         case 'note_deleted':
-            return details.preview ? String(details.preview).slice(0, 100) + '...' : ''
+            return details.preview ? withAiPrefix(String(details.preview).slice(0, 100) + '...') : aiOnly()
+        case 'task_created':
+            return details.title ? withAiPrefix(`Task: ${String(details.title)}`) : aiOnly()
         default:
-            return ''
+            return aiOnly()
     }
 }
 

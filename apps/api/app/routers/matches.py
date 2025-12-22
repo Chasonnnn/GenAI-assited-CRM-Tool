@@ -5,13 +5,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import and_
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db, require_csrf_header, require_roles
-from app.db.enums import CaseActivityType, MatchStatus, Role
-from app.db.models import Case, IntendedParent, Match, User
+from app.core.deps import get_db, require_csrf_header, require_permission
+from app.db.enums import CaseActivityType, IntendedParentStatus, MatchStatus
+from app.db.models import Case, IntendedParent, Match, IntendedParentStatusHistory
 from app.schemas.auth import UserSession
 
 router = APIRouter(prefix="/matches", tags=["Matches"])
@@ -48,6 +48,10 @@ class MatchRead(BaseModel):
     case_number: str | None = None
     case_name: str | None = None
     ip_name: str | None = None
+    # Case stage info for status sync
+    case_stage_id: str | None = None
+    case_stage_slug: str | None = None
+    case_stage_label: str | None = None
 
 
 class MatchListItem(BaseModel):
@@ -61,6 +65,10 @@ class MatchListItem(BaseModel):
     status: str
     compatibility_score: float | None
     proposed_at: str
+    # Case stage info for status sync
+    case_stage_id: str | None = None
+    case_stage_slug: str | None = None
+    case_stage_label: str | None = None
 
 
 class MatchListResponse(BaseModel):
@@ -69,6 +77,12 @@ class MatchListResponse(BaseModel):
     total: int
     page: int
     per_page: int
+
+
+class MatchStatsResponse(BaseModel):
+    """Match stats summary."""
+    total: int
+    by_status: dict[str, int]
 
 
 class MatchAcceptRequest(BaseModel):
@@ -93,14 +107,15 @@ class MatchUpdateNotesRequest(BaseModel):
 
 def _match_to_read(match: Match, db: Session, org_id: str | None = None) -> MatchRead:
     """Convert Match model to MatchRead schema with org-scoped lookups."""
-    # Org-scoped lookups for defense in depth
+    from sqlalchemy.orm import joinedload
+    # Org-scoped lookups for defense in depth, with eager load for stage
     case_filter = [Case.id == match.case_id]
     ip_filter = [IntendedParent.id == match.intended_parent_id]
     if org_id:
         case_filter.append(Case.organization_id == org_id)
         ip_filter.append(IntendedParent.organization_id == org_id)
     
-    case = db.query(Case).filter(*case_filter).first()
+    case = db.query(Case).options(joinedload(Case.stage)).filter(*case_filter).first()
     ip = db.query(IntendedParent).filter(*ip_filter).first()
     
     return MatchRead(
@@ -120,6 +135,9 @@ def _match_to_read(match: Match, db: Session, org_id: str | None = None) -> Matc
         case_number=case.case_number if case else None,
         case_name=case.full_name if case else None,
         ip_name=ip.full_name if ip else None,
+        case_stage_id=str(case.stage.id) if case and case.stage else None,
+        case_stage_slug=case.stage.slug if case and case.stage else None,
+        case_stage_label=case.stage.label if case and case.stage else None,
     )
 
 
@@ -135,6 +153,9 @@ def _match_to_list_item(match: Match, case: Case | None, ip: IntendedParent | No
         status=match.status,
         compatibility_score=float(match.compatibility_score) if match.compatibility_score else None,
         proposed_at=match.proposed_at.isoformat() if match.proposed_at else "",
+        case_stage_id=str(case.stage.id) if case and case.stage else None,
+        case_stage_slug=case.stage.slug if case and case.stage else None,
+        case_stage_label=case.stage.label if case and case.stage else None,
     )
 
 
@@ -146,7 +167,7 @@ def _match_to_list_item(match: Match, case: Case | None, ip: IntendedParent | No
 def create_match(
     data: MatchCreate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("propose_matches")),
 ) -> MatchRead:
     """
     Propose a new match between a surrogate (case) and intended parent.
@@ -235,7 +256,7 @@ def list_matches(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("view_matches")),
 ) -> MatchListResponse:
     """
     List matches with optional filters.
@@ -254,11 +275,12 @@ def list_matches(
     total = query.count()
     matches = query.order_by(Match.proposed_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
     
-    # Batch load cases and IPs (org-scoped)
+    # Batch load cases and IPs (org-scoped), with eager load for case stage
+    from sqlalchemy.orm import joinedload
     case_ids = {m.case_id for m in matches}
     ip_ids = {m.intended_parent_id for m in matches}
     
-    cases = {c.id: c for c in db.query(Case).filter(
+    cases = {c.id: c for c in db.query(Case).options(joinedload(Case.stage)).filter(
         Case.organization_id == session.org_id,
         Case.id.in_(case_ids)
     ).all()} if case_ids else {}
@@ -272,11 +294,30 @@ def list_matches(
     return MatchListResponse(items=items, total=total, page=page, per_page=per_page)
 
 
+@router.get("/stats", response_model=MatchStatsResponse)
+def get_match_stats(
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_permission("view_matches")),
+) -> MatchStatsResponse:
+    """Get match counts by status for the org."""
+    total = db.query(Match).filter(Match.organization_id == session.org_id).count()
+    
+    counts = {status.value: 0 for status in MatchStatus}
+    rows = db.query(Match.status, func.count(Match.id)).filter(
+        Match.organization_id == session.org_id
+    ).group_by(Match.status).all()
+    
+    for status, count in rows:
+        counts[status] = count
+    
+    return MatchStatsResponse(total=total, by_status=counts)
+
+
 @router.get("/{match_id}", response_model=MatchRead)
 def get_match(
     match_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("view_matches")),
 ) -> MatchRead:
     """Get match details. Auto-transitions to 'reviewing' on first view by non-proposer."""
     from app.services import activity_service
@@ -322,7 +363,7 @@ def accept_match(
     match_id: UUID,
     data: MatchAcceptRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("propose_matches")),
 ) -> MatchRead:
     """
     Accept a match.
@@ -334,7 +375,7 @@ def accept_match(
     
     Requires: Manager+ role
     """
-    from app.services import activity_service
+    from app.services import activity_service, case_service, pipeline_service
     
     match = db.query(Match).filter(
         Match.id == match_id,
@@ -348,6 +389,31 @@ def accept_match(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot accept match with status: {match.status}"
         )
+
+    # Update case stage to matched if configured
+    case = db.query(Case).filter(
+        Case.id == match.case_id,
+        Case.organization_id == session.org_id,
+    ).first()
+    if case:
+        current_stage = case.stage
+        pipeline_id = current_stage.pipeline_id if current_stage else None
+        if not pipeline_id:
+            pipeline_id = pipeline_service.get_or_create_default_pipeline(
+                db,
+                session.org_id,
+                session.user_id,
+            ).id
+        matched_stage = pipeline_service.get_stage_by_slug(db, pipeline_id, "matched")
+        if matched_stage:
+            case_service.change_status(
+                db=db,
+                case=case,
+                new_stage_id=matched_stage.id,
+                user_id=session.user_id,
+                user_role=session.role,
+                reason="Match accepted",
+            )
     
     # Accept this match
     match.status = MatchStatus.ACCEPTED.value
@@ -356,6 +422,24 @@ def accept_match(
     if data.notes:
         match.notes = (match.notes or "") + "\n\n" + data.notes
     match.updated_at = datetime.now(timezone.utc)
+
+    # Update intended parent status to matched (if not already)
+    ip = db.query(IntendedParent).filter(
+        IntendedParent.id == match.intended_parent_id,
+        IntendedParent.organization_id == session.org_id,
+    ).first()
+    if ip and ip.status != IntendedParentStatus.MATCHED.value:
+        old_status = ip.status
+        ip.status = IntendedParentStatus.MATCHED.value
+        ip.last_activity = datetime.now(timezone.utc)
+        ip.updated_at = datetime.now(timezone.utc)
+        db.add(IntendedParentStatusHistory(
+            intended_parent_id=ip.id,
+            changed_by_user_id=session.user_id,
+            old_status=old_status,
+            new_status=IntendedParentStatus.MATCHED.value,
+            reason="Match accepted",
+        ))
     
     # Cancel all other pending matches for this case
     other_matches = db.query(Match).filter(
@@ -401,7 +485,7 @@ def reject_match(
     match_id: UUID,
     data: MatchRejectRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("propose_matches")),
 ) -> MatchRead:
     """
     Reject a match with reason.
@@ -456,7 +540,7 @@ def reject_match(
 def cancel_match(
     match_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("propose_matches")),
 ) -> None:
     """
     Cancel a proposed match.
@@ -502,7 +586,7 @@ def update_match_notes(
     match_id: UUID,
     data: MatchUpdateNotesRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("propose_matches")),
 ) -> MatchRead:
     """Update match notes. Requires: Manager+ role."""
     match = db.query(Match).filter(
@@ -605,7 +689,7 @@ def list_match_events(
     person_type: str | None = Query(None, description="Filter by person type (surrogate/ip)"),
     event_type: str | None = Query(None, description="Filter by event type"),
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("view_matches")),
 ) -> list[MatchEventRead]:
     """
     List events for a match.
@@ -649,7 +733,7 @@ def create_match_event(
     match_id: UUID,
     data: MatchEventCreate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("propose_matches")),
 ) -> MatchEventRead:
     """
     Create an event for a match.
@@ -695,7 +779,7 @@ def get_match_event(
     match_id: UUID,
     event_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("view_matches")),
 ) -> MatchEventRead:
     """
     Get a specific match event.
@@ -719,7 +803,7 @@ def update_match_event(
     event_id: UUID,
     data: MatchEventUpdate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("propose_matches")),
 ) -> MatchEventRead:
     """
     Update a match event.
@@ -769,7 +853,7 @@ def delete_match_event(
     match_id: UUID,
     event_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission("propose_matches")),
 ) -> None:
     """
     Delete a match event.

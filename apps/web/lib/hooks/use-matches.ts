@@ -11,12 +11,14 @@ import {
     rejectMatch,
     cancelMatch,
     updateMatchNotes,
+    getMatchStats,
     type ListMatchesParams,
     type MatchCreate,
     type MatchAcceptRequest,
     type MatchRejectRequest,
     type MatchUpdateNotesRequest,
     type MatchListResponse,
+    type MatchStatsResponse,
     type MatchRead,
     type MatchListItem,
     type MatchStatus,
@@ -32,6 +34,7 @@ export const matchKeys = {
     list: (params: ListMatchesParams) => [...matchKeys.lists(), params] as const,
     details: () => [...matchKeys.all, 'detail'] as const,
     detail: (id: string) => [...matchKeys.details(), id] as const,
+    stats: () => [...matchKeys.all, 'stats'] as const,
 }
 
 // =============================================================================
@@ -56,6 +59,16 @@ export function useMatch(matchId: string) {
         queryKey: matchKeys.detail(matchId),
         queryFn: () => getMatch(matchId),
         enabled: !!matchId,
+    })
+}
+
+/**
+ * Get match counts by status.
+ */
+export function useMatchStats() {
+    return useQuery({
+        queryKey: matchKeys.stats(),
+        queryFn: getMatchStats,
     })
 }
 
@@ -135,7 +148,7 @@ export function useUpdateMatchNotes() {
 }
 
 // Re-export types
-export type { MatchListResponse, MatchRead, MatchListItem, MatchStatus, ListMatchesParams }
+export type { MatchListResponse, MatchStatsResponse, MatchRead, MatchListItem, MatchStatus, ListMatchesParams }
 
 // =============================================================================
 // Match Events Hooks

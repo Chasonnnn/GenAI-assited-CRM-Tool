@@ -37,10 +37,10 @@ import {
 
 // Timezone options
 const TIMEZONE_OPTIONS = [
+    { value: "America/Los_Angeles", label: "Pacific Time (PT)" },
     { value: "America/New_York", label: "Eastern Time (ET)" },
     { value: "America/Chicago", label: "Central Time (CT)" },
     { value: "America/Denver", label: "Mountain Time (MT)" },
-    { value: "America/Los_Angeles", label: "Pacific Time (PT)" },
 ]
 
 interface PageProps {
@@ -57,7 +57,7 @@ export default function ReschedulePage({ params }: PageProps) {
     const [isLoadingSlots, setIsLoadingSlots] = useState(false)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isConfirmed, setIsConfirmed] = useState(false)
-    const [timezone, setTimezone] = useState("America/New_York")
+    const [timezone, setTimezone] = useState("America/Los_Angeles")
     const [viewMonth, setViewMonth] = useState(new Date())
 
     // Auto-detect timezone
@@ -85,6 +85,12 @@ export default function ReschedulePage({ params }: PageProps) {
         }
         load()
     }, [params.token])
+
+    useEffect(() => {
+        if (appointment?.client_timezone) {
+            setTimezone(appointment.client_timezone)
+        }
+    }, [appointment?.client_timezone])
 
     // Date selection handler
     const handleDateSelect = async (date: Date) => {

@@ -80,7 +80,7 @@ class StatusChangeTriggerConfig(BaseModel):
 class ScheduledTriggerConfig(BaseModel):
     """Config for scheduled trigger."""
     cron: str = Field(description="Cron expression, e.g., '0 9 * * 1' for Mon 9am")
-    timezone: str = Field(default="America/New_York", description="IANA timezone")
+    timezone: str = Field(default="America/Los_Angeles", description="IANA timezone")
 
 
 class TaskDueTriggerConfig(BaseModel):
