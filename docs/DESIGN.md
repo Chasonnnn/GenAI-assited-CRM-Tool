@@ -511,5 +511,86 @@ class Queue(Base):
 
 ---
 
-*Last updated: 2025-12-18 (v0.09.00)*
+## Matches Module (v0.14.00)
+
+### Overview
+Matches pair Intended Parents with Surrogates (Cases), enabling coordinated case management with shared calendars, notes, and task tracking.
+
+### Data Model
+
+#### Match Table
+```sql
+id                   UUID PRIMARY KEY
+organization_id      UUID NOT NULL → organizations.id
+case_id              UUID NOT NULL → cases.id
+ip_id                UUID NOT NULL → intended_parents.id
+status               VARCHAR(50) NOT NULL  -- proposed, reviewing, accepted, rejected, cancelled
+compatibility_score  INTEGER  -- 0-100 percentage
+proposed_at          TIMESTAMP NOT NULL
+proposed_by_user_id  UUID → users.id
+accepted_at          TIMESTAMP
+rejected_at          TIMESTAMP
+cancelled_at         TIMESTAMP
+rejection_reason     TEXT
+notes_internal       TEXT
+```
+
+#### MatchEvent Table
+```sql
+id                   UUID PRIMARY KEY
+match_id             UUID NOT NULL → matches.id
+organization_id      UUID NOT NULL → organizations.id
+event_type           VARCHAR(50)  -- medical, legal, medication, milestone
+person_type          VARCHAR(50)  -- surrogate, ip, both
+title                TEXT NOT NULL
+description          TEXT
+event_date           DATE NOT NULL
+event_time           TIME
+```
+
+### Match Status Workflow
+```
+proposed ──┬──→ reviewing ──┬──→ accepted
+           │                │
+           └──→ cancelled   └──→ rejected
+```
+
+| Status | Description |
+|--------|-------------|
+| `proposed` | Initial state when match is created |
+| `reviewing` | Both parties are reviewing the match |
+| `accepted` | Match confirmed, case management begins |
+| `rejected` | Match declined with optional reason |
+| `cancelled` | Match proposal withdrawn |
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/matches` | GET | List matches (org-scoped, filters: status, case_id, ip_id) |
+| `/matches` | POST | Create match proposal |
+| `/matches/{id}` | GET | Get match by ID |
+| `/matches/{id}/accept` | POST | Accept a proposed match |
+| `/matches/{id}/reject` | POST | Reject with reason |
+| `/matches/{id}/cancel` | POST | Cancel proposal |
+| `/matches/{id}/notes` | PATCH | Update internal notes |
+| `/matches/{id}/events` | GET, POST | List/create match events |
+| `/matches/{id}/events/{event_id}` | PATCH, DELETE | Update/delete event |
+
+### Frontend Components
+
+#### Match Detail Page (`/intended-parents/matches/[id]`)
+- 3-column layout: 35% Surrogate | 35% IP | 30% Sidebar
+- Tabs: Overview, Calendar
+- Action buttons based on status
+
+#### MatchTasksCalendar Component
+- Views: Month, Week, Day
+- Filters: All, Surrogate, IP
+- Color coding: Purple (Surrogate), Green (IP)
+- Fetches tasks by `case_id`
+
+---
+
+*Last updated: 2025-12-22 (v0.14.00)*
 

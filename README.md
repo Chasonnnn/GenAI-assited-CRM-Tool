@@ -1,8 +1,8 @@
 # Surrogacy CRM Platform
 
-**Version:** 0.13.00 | **Format:** a.bc.de (major.feature.patch)
+**Version:** 0.14.00 | **Format:** a.bc.de (major.feature.patch)
 
-A modern, multi-tenant CRM and case management platform built for surrogacy agencies. Features lead pipeline management with **customizable stages**, intended parent profiles, case workflow tracking, **context-aware AI chatbot with schedule parsing**, **appointment scheduling with public booking and Google Calendar integration**, and enterprise audit/versioning.
+A modern, multi-tenant CRM and case management platform built for surrogacy agencies. Features lead pipeline management with **customizable stages**, intended parent profiles, case workflow tracking, **IP-Surrogate matching with shared calendar**, **context-aware AI chatbot with schedule parsing**, **appointment scheduling with public booking and Google Calendar integration**, and enterprise audit/versioning.
 
 ## Tech Stack
 
@@ -68,7 +68,7 @@ AI is an **optional** capability designed to be safe, auditable, and tenant-conf
 │       ├── components/         # Shared UI (inline-edit-field, etc.)
 │       ├── lib/                # API client, hooks, utils
 │       │   └── hooks/          # React Query hooks (+use-queues.ts)
-│       └── tests/              # Vitest test suite (35 tests)
+│       └── tests/              # Vitest test suite (68 tests)
 │
 ├── docs/                       # Documentation
 │   ├── agents.md               # Project spec & guidelines
@@ -285,7 +285,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ## Current Status
 
-**Version 0.13.00** — Appointment Scheduling & Tasks Calendar
+**Version 0.14.00** — Matches Module & IP-Surrogate Pairing
 
 ### Core Platform
 - [x] Project scaffolding + PostgreSQL + migrations
@@ -307,7 +307,13 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 - [x] **AI Assistant v1** — BYOK, summarize-case, draft-email, analyze-dashboard
 - [x] **Analytics Dashboard** — Pie charts, funnel visualization, US map
 
-### Recent Changes (v0.13.00)
+### Recent Changes (v0.14.00)
+- **Matches Module**: IP-Surrogate matching with propose/accept/reject workflow
+- **Match Detail Page**: 3-column layout (35% Surrogate | 35% IP | 30% Notes/Files/Tasks)
+- **Match Tasks Calendar**: Month/week/day views with color-coded tasks per person
+- **Comprehensive Tests**: 33 new frontend tests for Matches functionality
+
+### v0.13.00 Changes
 - **Appointment Scheduling**: Public booking, timezone support, and meeting types
 - **Tasks Calendar**: FullCalendar integration with drag-and-drop rescheduling
 - **Invitation System**: Email-based team invites with expiration and revocation
@@ -315,7 +321,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 - **PDF Reports**: Native PDF export for analytics dashboards
 
 ### Data Models (43 tables)
-`Organization`, `User`, `Membership`, `AuthIdentity`, `OrgInvite`, `Case`, `CaseStatusHistory`, `CaseActivityLog`, `Task`, `MetaLead`, `MetaPageMapping`, `Job`, `EmailTemplate`, `EmailLog`, `IntendedParent`, `IntendedParentStatusHistory`, `EntityNote`, `Notification`, `UserNotificationSettings`, `IntegrationHealth`, `IntegrationErrorRollup`, `SystemAlert`, `RequestMetricsRollup`, `AISettings`, `AIConversation`, `AIMessage`, `AIActionApproval`, `AIEntitySummary`, `AIUsageLog`, `UserIntegration`, `AuditLog`, `CaseImport`, `Pipeline`, `PipelineStage`, `EntityVersion`, `RolePermission`, `Appointment`, `AppointmentType`, `AvailabilityRule`, `AvailabilityOverride`, `BookingLink`, `AppointmentEmailLog`, `ZoomMeeting`
+`Organization`, `User`, `Membership`, `AuthIdentity`, `OrgInvite`, `Case`, `CaseStatusHistory`, `CaseActivityLog`, `Task`, `MetaLead`, `MetaPageMapping`, `Job`, `EmailTemplate`, `EmailLog`, `IntendedParent`, `IntendedParentStatusHistory`, `EntityNote`, `Notification`, `UserNotificationSettings`, `IntegrationHealth`, `IntegrationErrorRollup`, `SystemAlert`, `RequestMetricsRollup`, `AISettings`, `AIConversation`, `AIMessage`, `AIActionApproval`, `AIEntitySummary`, `AIUsageLog`, `UserIntegration`, `AuditLog`, `CaseImport`, `Pipeline`, `PipelineStage`, `EntityVersion`, `RolePermission`, `Appointment`, `AppointmentType`, `AvailabilityRule`, `AvailabilityOverride`, `BookingLink`, `AppointmentEmailLog`, `ZoomMeeting`, `Match`, `MatchEvent`
 
 
 ## Documentation
@@ -339,6 +345,7 @@ Features exposed as **modules** (enabled per org) and **tabs** (shown per role).
 - **Cases** (case workflow, notes, attachments)
 - **Intended Parents** (profiles management)
 - **Tasks** (task list + unified calendar with Google Calendar integration)
+- **Matches** (IP-Surrogate pairing, 3-column detail view, shared tasks calendar)
 - **Appointments** (scheduling with public booking links, availability config)
 - **Reports** (analytics dashboards)
 - **Notifications** (in-app alerts)

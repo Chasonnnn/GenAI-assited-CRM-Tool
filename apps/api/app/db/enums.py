@@ -135,6 +135,36 @@ class MatchStatus(str, Enum):
     CANCELLED = "cancelled"  # Proposal withdrawn
 
 
+class MatchEventType(str, Enum):
+    """
+    Types of events for Match calendar.
+    
+    Color coding:
+    - 🟠 Orange: Medications
+    - 🔵 Blue: Medical exams
+    - 🟡 Yellow: Legal milestones
+    - 🔴 Red: Delivery/critical dates
+    - ⚪ Gray: Custom/other
+    """
+    MEDICATION = "medication"
+    MEDICAL_EXAM = "medical_exam"
+    LEGAL = "legal"
+    DELIVERY = "delivery"
+    CUSTOM = "custom"
+
+
+class MatchEventPerson(str, Enum):
+    """
+    Who the match event is for.
+    
+    Color coding:
+    - 🟢 Green: IP events
+    - 🟣 Purple: Surrogate events
+    """
+    SURROGATE = "surrogate"
+    IP = "ip"
+
+
 class NotificationType(str, Enum):
     """Types of in-app notifications."""
     CASE_ASSIGNED = "case_assigned"

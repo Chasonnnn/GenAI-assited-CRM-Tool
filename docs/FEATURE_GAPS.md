@@ -2,11 +2,13 @@
 
 **Last Updated:** 2025-12-22  
 **Purpose:** Identify features that need development to be fully functional  
-**Test Coverage:** ✅ **132/132 tests passing** - Frontend: 35/35, Backend: 97/97
+**Test Coverage:** ✅ **165/165 tests passing** - Frontend: 68/68, Backend: 97/97
 
 > **Pipeline Phase 2 Complete ✅** — Custom stages, stage CRUD, soft-delete, versioning, frontend editor all functional.
 > 
 > **Sprint Complete ✅** — File Attachments, Invitation System, Tasks Calendar, Appointment Scheduling, Google Calendar Display, and Context-Aware Chatbot all implemented.
+>
+> **Matches Module Complete ✅** — IP-Surrogate matching with propose/accept/reject workflow, 3-column Match Detail page, Match Tasks Calendar with filtering and color-coding.
 
 ---
 
@@ -83,43 +85,44 @@
 
 ---
 
-### 4. Matched Tab (IP + Surrogate Pairs) ❌
-**Status:** Not started
+### 4. Matched Tab (IP + Surrogate Pairs) ✅ COMPLETE
+**Status:** Fully implemented
 
-**Requirements:**
-- New "Matched" tab showing paired cases
-- Side-by-side view:
-  - Left: Intended Parents profile
-  - Right: Surrogate profile
-- Shared information:
-  - Status history
-  - Notes
-  - Files/attachments
-  - Communication log
-- **Match Calendar:**
-  - Events for BOTH Surrogate AND IP
-  - Color coding by person:
-    - 🟢 Green: IP events
-    - 🟣 Purple: Surrogate events
-  - Color coding by event type:
-    - 🟠 Orange: Medications
-    - 🔵 Blue: Medical exams
-    - 🟡 Yellow: Legal milestones
-    - 🔴 Red: Delivery/critical dates
-  - Event types:
-    - Medications schedule
-    - Medical exams
-    - Legal milestones
-    - Estimated delivery date
-    - Custom date types
-- Calendar view similar to appointments calendar
+**What was built:**
+- **Matches List Page** (`/intended-parents/matches`):
+  - Status cards (proposed, reviewing, accepted, rejected)
+  - Filterable/sortable table view
+  - Compatibility score display
+  - Links to Match detail pages
 
-**Data Model:**
-- `Match` table linking IP case + Surrogate case
-- `MatchEvent` table for important dates (with person + type fields)
-- Match status (pending, active, completed)
+- **Match Detail Page** (`/intended-parents/matches/[id]`):
+  - 3-column layout (35% Surrogate | 35% IP | 30% Notes/Files/Tasks)
+  - Full profile data for both Surrogate and IP
+  - Action buttons: Accept, Reject, Cancel (based on status)
+  - Status workflow with badges
+  - Notes/Files/Tasks/Activity tabs in sidebar
 
-**Effort:** Large (2 weeks)
+- **Match Tasks Calendar** (`MatchTasksCalendar.tsx`):
+  - Month/Week/Day view toggle
+  - All/Surrogate/IP task filter
+  - Color-coded tasks:
+    - 🟣 Purple: Surrogate tasks
+    - 🟢 Green: IP tasks
+  - Navigation and Today button
+  - Task display on calendar cells
+
+- **Backend API:**
+  - `Match` and `MatchEvent` data models
+  - Match CRUD endpoints
+  - Propose, accept, reject, cancel workflow
+  - Notes update endpoint
+
+- **Tests (33 new tests):**
+  - `matches-page.test.tsx` (9 tests)
+  - `match-detail.test.tsx` (9 tests)
+  - `match-tasks-calendar.test.tsx` (15 tests)
+
+**Effort:** Completed
 
 ---
 

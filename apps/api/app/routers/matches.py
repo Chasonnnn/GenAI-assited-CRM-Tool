@@ -146,7 +146,7 @@ def _match_to_list_item(match: Match, case: Case | None, ip: IntendedParent | No
 def create_match(
     data: MatchCreate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])),
 ) -> MatchRead:
     """
     Propose a new match between a surrogate (case) and intended parent.
@@ -208,7 +208,7 @@ def create_match(
     db.flush()
     
     # Log activity
-    activity_service.log_case_activity(
+    activity_service.log_activity(
         db=db,
         case_id=data.case_id,
         organization_id=session.org_id,
@@ -299,7 +299,7 @@ def get_match(
         match.updated_at = datetime.now(timezone.utc)
         
         # Log review start
-        activity_service.log_case_activity(
+        activity_service.log_activity(
             db=db,
             case_id=match.case_id,
             organization_id=session.org_id,
@@ -369,7 +369,7 @@ def accept_match(
         other.updated_at = datetime.now(timezone.utc)
     
     # Log activity
-    activity_service.log_case_activity(
+    activity_service.log_activity(
         db=db,
         case_id=match.case_id,
         organization_id=session.org_id,
@@ -433,7 +433,7 @@ def reject_match(
     match.updated_at = datetime.now(timezone.utc)
     
     # Log activity
-    activity_service.log_case_activity(
+    activity_service.log_activity(
         db=db,
         case_id=match.case_id,
         organization_id=session.org_id,
@@ -482,7 +482,7 @@ def cancel_match(
     
     # Log activity
     from app.services import activity_service
-    activity_service.log_case_activity(
+    activity_service.log_activity(
         db=db,
         case_id=match.case_id,
         organization_id=session.org_id,
@@ -519,3 +519,270 @@ def update_match_notes(
     db.refresh(match)
     
     return _match_to_read(match, db, str(session.org_id))
+
+
+# =============================================================================
+# Match Events (Calendar) Endpoints
+# =============================================================================
+
+class MatchEventCreate(BaseModel):
+    """Request to create a match event."""
+    person_type: str = Field(..., pattern="^(surrogate|ip)$")
+    event_type: str = Field(..., pattern="^(medication|medical_exam|legal|delivery|custom)$")
+    title: str = Field(..., min_length=1, max_length=200)
+    description: str | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    timezone: str = "America/Los_Angeles"
+    all_day: bool = False
+    start_date: str | None = None  # YYYY-MM-DD for all-day events
+    end_date: str | None = None
+
+
+class MatchEventUpdate(BaseModel):
+    """Request to update a match event."""
+    person_type: str | None = Field(None, pattern="^(surrogate|ip)$")
+    event_type: str | None = Field(None, pattern="^(medication|medical_exam|legal|delivery|custom)$")
+    title: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    timezone: str | None = None
+    all_day: bool | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+
+
+class MatchEventRead(BaseModel):
+    """Match event response."""
+    id: str
+    match_id: str
+    person_type: str
+    event_type: str
+    title: str
+    description: str | None
+    starts_at: str | None
+    ends_at: str | None
+    timezone: str
+    all_day: bool
+    start_date: str | None
+    end_date: str | None
+    created_by_user_id: str | None
+    created_at: str
+    updated_at: str
+
+
+from app.db.models import MatchEvent
+from datetime import date as date_type
+
+
+def _event_to_read(event: MatchEvent) -> MatchEventRead:
+    """Convert MatchEvent model to read schema."""
+    return MatchEventRead(
+        id=str(event.id),
+        match_id=str(event.match_id),
+        person_type=event.person_type,
+        event_type=event.event_type,
+        title=event.title,
+        description=event.description,
+        starts_at=event.starts_at.isoformat() if event.starts_at else None,
+        ends_at=event.ends_at.isoformat() if event.ends_at else None,
+        timezone=event.timezone,
+        all_day=event.all_day,
+        start_date=event.start_date.isoformat() if event.start_date else None,
+        end_date=event.end_date.isoformat() if event.end_date else None,
+        created_by_user_id=str(event.created_by_user_id) if event.created_by_user_id else None,
+        created_at=event.created_at.isoformat(),
+        updated_at=event.updated_at.isoformat(),
+    )
+
+
+@router.get("/{match_id}/events", response_model=list[MatchEventRead])
+def list_match_events(
+    match_id: UUID,
+    from_date: str | None = Query(None, description="Filter events from this date (YYYY-MM-DD)"),
+    to_date: str | None = Query(None, description="Filter events until this date (YYYY-MM-DD)"),
+    person_type: str | None = Query(None, description="Filter by person type (surrogate/ip)"),
+    event_type: str | None = Query(None, description="Filter by event type"),
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])),
+) -> list[MatchEventRead]:
+    """
+    List events for a match.
+    
+    Requires: Case Manager+ role
+    """
+    # Verify match exists and belongs to org
+    match = db.query(Match).filter(
+        Match.id == match_id,
+        Match.organization_id == session.org_id,
+    ).first()
+    if not match:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
+    
+    query = db.query(MatchEvent).filter(MatchEvent.match_id == match_id)
+    
+    if person_type:
+        query = query.filter(MatchEvent.person_type == person_type)
+    if event_type:
+        query = query.filter(MatchEvent.event_type == event_type)
+    
+    # Date filtering for timed events
+    if from_date:
+        from_dt = datetime.fromisoformat(from_date).replace(tzinfo=timezone.utc)
+        query = query.filter(
+            (MatchEvent.starts_at >= from_dt) | (MatchEvent.start_date >= from_dt.date())
+        )
+    if to_date:
+        to_dt = datetime.fromisoformat(to_date).replace(tzinfo=timezone.utc)
+        query = query.filter(
+            (MatchEvent.starts_at <= to_dt) | (MatchEvent.start_date <= to_dt.date())
+        )
+    
+    events = query.order_by(MatchEvent.starts_at, MatchEvent.start_date).all()
+    
+    return [_event_to_read(e) for e in events]
+
+
+@router.post("/{match_id}/events", response_model=MatchEventRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_csrf_header)])
+def create_match_event(
+    match_id: UUID,
+    data: MatchEventCreate,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])),
+) -> MatchEventRead:
+    """
+    Create an event for a match.
+    
+    Requires: Case Manager+ role
+    """
+    # Verify match exists and belongs to org
+    match = db.query(Match).filter(
+        Match.id == match_id,
+        Match.organization_id == session.org_id,
+    ).first()
+    if not match:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
+    
+    # Parse dates for all-day events
+    start_date = date_type.fromisoformat(data.start_date) if data.start_date else None
+    end_date = date_type.fromisoformat(data.end_date) if data.end_date else None
+    
+    event = MatchEvent(
+        organization_id=session.org_id,
+        match_id=match_id,
+        person_type=data.person_type,
+        event_type=data.event_type,
+        title=data.title,
+        description=data.description,
+        starts_at=data.starts_at,
+        ends_at=data.ends_at,
+        timezone=data.timezone,
+        all_day=data.all_day,
+        start_date=start_date,
+        end_date=end_date,
+        created_by_user_id=session.user_id,
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    
+    return _event_to_read(event)
+
+
+@router.get("/{match_id}/events/{event_id}", response_model=MatchEventRead)
+def get_match_event(
+    match_id: UUID,
+    event_id: UUID,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])),
+) -> MatchEventRead:
+    """
+    Get a specific match event.
+    
+    Requires: Case Manager+ role
+    """
+    event = db.query(MatchEvent).filter(
+        MatchEvent.id == event_id,
+        MatchEvent.match_id == match_id,
+        MatchEvent.organization_id == session.org_id,
+    ).first()
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+    
+    return _event_to_read(event)
+
+
+@router.put("/{match_id}/events/{event_id}", response_model=MatchEventRead, dependencies=[Depends(require_csrf_header)])
+def update_match_event(
+    match_id: UUID,
+    event_id: UUID,
+    data: MatchEventUpdate,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])),
+) -> MatchEventRead:
+    """
+    Update a match event.
+    
+    Requires: Case Manager+ role
+    """
+    event = db.query(MatchEvent).filter(
+        MatchEvent.id == event_id,
+        MatchEvent.match_id == match_id,
+        MatchEvent.organization_id == session.org_id,
+    ).first()
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+    
+    # Update fields
+    if data.person_type is not None:
+        event.person_type = data.person_type
+    if data.event_type is not None:
+        event.event_type = data.event_type
+    if data.title is not None:
+        event.title = data.title
+    if data.description is not None:
+        event.description = data.description
+    if data.starts_at is not None:
+        event.starts_at = data.starts_at
+    if data.ends_at is not None:
+        event.ends_at = data.ends_at
+    if data.timezone is not None:
+        event.timezone = data.timezone
+    if data.all_day is not None:
+        event.all_day = data.all_day
+    if data.start_date is not None:
+        event.start_date = date_type.fromisoformat(data.start_date)
+    if data.end_date is not None:
+        event.end_date = date_type.fromisoformat(data.end_date)
+    
+    event.updated_at = datetime.now(timezone.utc)
+    
+    db.commit()
+    db.refresh(event)
+    
+    return _event_to_read(event)
+
+
+@router.delete("/{match_id}/events/{event_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_csrf_header)])
+def delete_match_event(
+    match_id: UUID,
+    event_id: UUID,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])),
+) -> None:
+    """
+    Delete a match event.
+    
+    Requires: Case Manager+ role
+    """
+    event = db.query(MatchEvent).filter(
+        MatchEvent.id == event_id,
+        MatchEvent.match_id == match_id,
+        MatchEvent.organization_id == session.org_id,
+    ).first()
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+    
+    db.delete(event)
+    db.commit()

@@ -135,3 +135,99 @@ export async function cancelMatch(matchId: string): Promise<void> {
 export async function updateMatchNotes(matchId: string, data: MatchUpdateNotesRequest): Promise<MatchRead> {
     return api.patch<MatchRead>(`/matches/${matchId}/notes`, data)
 }
+
+// =============================================================================
+// Match Events Types
+// =============================================================================
+
+export type MatchEventPersonType = 'surrogate' | 'ip'
+export type MatchEventType = 'medication' | 'medical_exam' | 'legal' | 'delivery' | 'custom'
+
+export interface MatchEventCreate {
+    person_type: MatchEventPersonType
+    event_type: MatchEventType
+    title: string
+    description?: string | null
+    starts_at?: string | null
+    ends_at?: string | null
+    timezone?: string
+    all_day?: boolean
+    start_date?: string | null
+    end_date?: string | null
+}
+
+export interface MatchEventUpdate extends Partial<MatchEventCreate> { }
+
+export interface MatchEventRead {
+    id: string
+    match_id: string
+    person_type: MatchEventPersonType
+    event_type: MatchEventType
+    title: string
+    description: string | null
+    starts_at: string | null
+    ends_at: string | null
+    timezone: string
+    all_day: boolean
+    start_date: string | null
+    end_date: string | null
+    created_by_user_id: string | null
+    created_at: string
+    updated_at: string
+}
+
+// =============================================================================
+// Match Events API Functions
+// =============================================================================
+
+/**
+ * List events for a match.
+ */
+export async function listMatchEvents(matchId: string): Promise<MatchEventRead[]> {
+    return api.get<MatchEventRead[]>(`/matches/${matchId}/events`)
+}
+
+/**
+ * Get a specific match event.
+ */
+export async function getMatchEvent(matchId: string, eventId: string): Promise<MatchEventRead> {
+    return api.get<MatchEventRead>(`/matches/${matchId}/events/${eventId}`)
+}
+
+/**
+ * Create a match event.
+ */
+export async function createMatchEvent(matchId: string, data: MatchEventCreate): Promise<MatchEventRead> {
+    return api.post<MatchEventRead>(`/matches/${matchId}/events`, data)
+}
+
+/**
+ * Update a match event.
+ */
+export async function updateMatchEvent(matchId: string, eventId: string, data: MatchEventUpdate): Promise<MatchEventRead> {
+    return api.put<MatchEventRead>(`/matches/${matchId}/events/${eventId}`, data)
+}
+
+/**
+ * Delete a match event.
+ */
+export async function deleteMatchEvent(matchId: string, eventId: string): Promise<void> {
+    await api.delete(`/matches/${matchId}/events/${eventId}`)
+}
+
+// =============================================================================
+// Color Utilities
+// =============================================================================
+
+export const EVENT_TYPE_COLORS: Record<MatchEventType, string> = {
+    medication: '#f97316',
+    medical_exam: '#3b82f6',
+    legal: '#eab308',
+    delivery: '#ef4444',
+    custom: '#6b7280',
+}
+
+export const PERSON_TYPE_COLORS: Record<MatchEventPersonType, string> = {
+    surrogate: '#a855f7',
+    ip: '#22c55e',
+}

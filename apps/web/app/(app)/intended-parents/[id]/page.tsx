@@ -44,6 +44,7 @@ import {
     ArchiveIcon,
     ArchiveRestoreIcon,
     Trash2Icon,
+    HeartHandshakeIcon,
 } from "lucide-react"
 import {
     useIntendedParent,
@@ -58,6 +59,7 @@ import {
     useDeleteIntendedParentNote,
 } from "@/lib/hooks/use-intended-parents"
 import { useSetAIContext } from "@/lib/context/ai-context"
+import { ProposeMatchFromIPDialog } from "@/components/matches/ProposeMatchFromIPDialog"
 import type { IntendedParentStatus } from "@/lib/types/intended-parent"
 
 const STATUS_LABELS: Record<IntendedParentStatus, string> = {
@@ -89,6 +91,7 @@ export default function IntendedParentDetailPage() {
         budget: "",
         notes_internal: "",
     })
+    const [proposeMatchOpen, setProposeMatchOpen] = useState(false)
 
     // Queries
     const { data: ip, isLoading } = useIntendedParent(id)
@@ -226,6 +229,15 @@ export default function IntendedParentDetailPage() {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setProposeMatchOpen(true)}
+                            disabled={ip.is_archived}
+                        >
+                            <HeartHandshakeIcon className="size-4 mr-2" />
+                            Propose Match
+                        </Button>
                         <Badge className={STATUS_COLORS[ip.status as IntendedParentStatus]}>
                             {STATUS_LABELS[ip.status as IntendedParentStatus]}
                         </Badge>
@@ -505,6 +517,14 @@ export default function IntendedParentDetailPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Propose Match Dialog */}
+            <ProposeMatchFromIPDialog
+                open={proposeMatchOpen}
+                onOpenChange={setProposeMatchOpen}
+                intendedParentId={ip.id}
+                ipName={ip.full_name}
+            />
         </div>
     )
 }
