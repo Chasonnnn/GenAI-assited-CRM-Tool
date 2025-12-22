@@ -6,7 +6,7 @@
  * Unified view showing tasks and appointments with list/calendar toggle.
  */
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -18,7 +18,7 @@ import { PlusIcon, LoaderIcon, ListIcon, CalendarIcon } from "lucide-react"
 import { UnifiedCalendar } from "@/components/appointments"
 import { TaskEditModal } from "@/components/tasks/TaskEditModal"
 import { useTasks, useCompleteTask, useUncompleteTask, useUpdateTask } from "@/lib/hooks/use-tasks"
-import { useSetAIContext } from "@/lib/context/ai-context"
+import { useAIContext } from "@/lib/context/ai-context"
 import type { TaskListItem } from "@/lib/types/task"
 
 // Get initials from name
@@ -140,8 +140,21 @@ export default function TasksPage() {
     const uncompleteTask = useUncompleteTask()
     const updateTask = useUpdateTask()
 
-    // Clear AI context for list views
-    useSetAIContext(null)
+    // Set AI context when editing a task, clear when not
+    const { setContext: setAIContext, clearContext: clearAIContext } = useAIContext()
+
+    // Effect to update AI context when editing task changes
+    useEffect(() => {
+        if (editingTask) {
+            setAIContext({
+                entityType: "task" as const,
+                entityId: editingTask.id,
+                entityName: editingTask.title,
+            })
+        } else {
+            clearAIContext()
+        }
+    }, [editingTask, setAIContext, clearAIContext])
 
     const handleTaskToggle = async (taskId: string, isCompleted: boolean) => {
         if (isCompleted) {

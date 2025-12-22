@@ -23,7 +23,7 @@ import { useConversation, useSendMessage, useApproveAction, useRejectAction } fr
 import type { ProposedAction } from "@/lib/api/ai"
 
 interface AIChatPanelProps {
-    entityType?: "case" | null  // null/undefined = global mode
+    entityType?: "case" | "task" | null  // null/undefined = global mode
     entityId?: string | null
     entityName?: string | null
     canApproveActions?: boolean
