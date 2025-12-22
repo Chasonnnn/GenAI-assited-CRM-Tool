@@ -2,7 +2,7 @@
 
 **Version:** 0.13.00 | **Format:** a.bc.de (major.feature.patch)
 
-A modern, multi-tenant CRM and case management platform built for surrogacy agencies. Features lead pipeline management with **customizable stages**, intended parent profiles, case workflow tracking, AI-assisted insights, **appointment scheduling with public booking**, and enterprise audit/versioning.
+A modern, multi-tenant CRM and case management platform built for surrogacy agencies. Features lead pipeline management with **customizable stages**, intended parent profiles, case workflow tracking, **context-aware AI chatbot with schedule parsing**, **appointment scheduling with public booking and Google Calendar integration**, and enterprise audit/versioning.
 
 ## Tech Stack
 
@@ -49,7 +49,7 @@ AI is an **optional** capability designed to be safe, auditable, and tenant-conf
 │   │   │   ├── cli.py          # CLI commands
 │   │   │   └── main.py         # FastAPI app entry
 │   │   ├── alembic/            # Database migrations (37: +pipeline_stages, +cutover)
-│   │   ├── tests/              # pytest test suite (65 tests)
+│   │   ├── tests/              # pytest test suite (97 tests)
 │   │   └── requirements.txt
 │   │
 │   └── web/                    # Next.js frontend
@@ -68,7 +68,7 @@ AI is an **optional** capability designed to be safe, auditable, and tenant-conf
 │       ├── components/         # Shared UI (inline-edit-field, etc.)
 │       ├── lib/                # API client, hooks, utils
 │       │   └── hooks/          # React Query hooks (+use-queues.ts)
-│       └── tests/              # Vitest test suite (30 tests)
+│       └── tests/              # Vitest test suite (35 tests)
 │
 ├── docs/                       # Documentation
 │   ├── agents.md               # Project spec & guidelines
