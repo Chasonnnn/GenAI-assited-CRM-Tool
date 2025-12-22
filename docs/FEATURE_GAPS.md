@@ -21,101 +21,7 @@
 
 ---
 
-## RECENTLY COMPLETED ✅
-
-### 1. File Attachments on Cases ✅ COMPLETE
-**Status:** Fully implemented
-
-**What was built:**
-- `Attachment` model with security fields (checksum, scan status, quarantine)
-- S3/local storage with signed URLs (5-min expiry)
-- Virus scan job (`scan_attachment.py`) with ClamAV integration
-- EXIF stripping for privacy (`strip_exif_data()`)
-- `FileUploadZone.tsx` component with drag-drop
-- Attachments integrated into Case Notes UI
-- Soft-delete with audit logging
-
-**Security features:**
-- SHA-256 checksum verification
-- File type + MIME type validation
-- Quarantine until scan completes
-- Access control (case-level + uploader/Manager+ for delete)
-
----
-
-### 2. Invitation System ✅ COMPLETE
-**Status:** Full stack complete
-
-**What was built:**
-- **Backend:**
-  - `OrgInvite` model with resend tracking, revocation
-  - Rate limiting (50 pending per org)
-  - Resend cooldown (5 min, 3/day max)
-  - Gmail integration for invite emails (HTML template)
-  - Email domain validation (`ALLOWED_EMAIL_DOMAINS`)
-  - Accept invite API (creates membership)
-
-- **Frontend:**
-  - `/settings/team/page.tsx` with pending invites table
-  - Invite modal with role selection
-  - Status badges (pending/expired/accepted/revoked)
-  - Resend button with cooldown timer
-  - `/invite/[id]/page.tsx` accept page
-
-**Email flow:**
-- Inviter must have Gmail connected
-- Professional HTML email with accept button
-- Domain validation before sending
-
----
-
-### 3. Tasks Calendar View ✅ COMPLETE
-**Status:** Fully implemented
-
-**What was built:**
-- FullCalendar integration with month/week/day views
-- List/Calendar view toggle with localStorage persistence
-- Drag-drop rescheduling with API persistence
-- Time preservation on date-only moves
-- Revert on failed reschedule
-- `TaskEditModal.tsx` for click-to-edit
-
----
-
-### 4. Appointment Scheduling System ✅ COMPLETE
-**Status:** Full stack complete
-
-**What was built:**
-- **Backend (6 new tables):**
-  - `AppointmentType` - customizable meeting templates per user
-  - `AvailabilityRule` - weekly availability (Mon-Sun, 9am-5pm etc.)
-  - `AvailabilityOverride` - date-specific exceptions (vacations, meetings)
-  - `BookingLink` - secure public URLs for self-service booking
-  - `Appointment` - booked appointments with status workflow
-  - `AppointmentEmailLog` - email tracking
-
-- **Booking Flow:**
-  - Public booking page (`/book/{slug}`)
-  - Time slot calculation respecting buffers, existing appointments
-  - Pending → Confirmed → Completed status workflow
-  - Self-service reschedule/cancel via secure tokens
-  - Rate limiting on booking endpoints
-
-- **Email Notifications:**
-  - Request received, Confirmed, Rescheduled, Cancelled templates
-  - Client timezone support (default: Pacific)
-  - Professional HTML email design
-
-- **Frontend:**
-  - Unified Tasks page with Calendar/List view toggle
-  - `/appointments` - pending/upcoming/past management
-  - `/settings/appointments` - availability configuration
-  - Appointment type management (duration, buffers, meeting mode)
-  - Weekly availability grid with timezone selector
-
----
-
-## HIGH PRIORITY GAPS — Remaining
+## 🔴 HIGH PRIORITY GAPS (Uncompleted)
 
 ### 1. Context-Aware Floating Chatbot ❌
 **Status:** Not integrated with AI Assistant
@@ -134,6 +40,8 @@
 **Effort:** Medium (1 week)
 
 ---
+
+## 🟡 MEDIUM PRIORITY GAPS (Uncompleted)
 
 ### 2. CSV Import Format Handling ⚠️
 **Status:** Basic mapping, edge cases not handled
@@ -192,6 +100,8 @@
 
 ---
 
+## 🟢 LOW PRIORITY GAPS (Uncompleted)
+
 ### 5. Smart Task Creation from AI ❌
 **Status:** Not started
 
@@ -231,68 +141,110 @@
 
 ---
 
-## SECURITY & INFRASTRUCTURE ISSUES
-
-### 🔴 High Priority
-
-#### CSRF on Queue/Invite Mutations ✅ FIXED
-**Files:** `apps/api/app/routers/queues.py`, `apps/api/app/routers/invites.py`
-
-Queue and invite mutation endpoints (create/update/delete/claim/release/assign) now enforce CSRF tokens.
-
-**Fixed:** Added `require_csrf_header` dependency to all mutation endpoints.
-
----
-
-#### WebSocket Auth Cookie Mismatch ✅ FIXED
-**Files:** `apps/api/app/routers/websocket.py`
-
-WebSocket auth now correctly uses `crm_session` independent of the REST API auth name.
-
-**Fixed:** Imported and used `COOKIE_NAME` from deps.py.
-
----
-
-### 🟡 Medium Priority
-
-#### CORS Missing PUT Method ✅ FIXED
-**File:** `apps/api/app/main.py:89`
-
-CORS middleware now allows PUT methods.
-**Fixed:** Added PUT to `allow_methods`.
-
----
-
-#### WebSocket/REST URL Environment Mismatch ✅ FIXED
-**Files:** `apps/web/lib/hooks/use-notification-socket.ts`
-
-Standardized on `NEXT_PUBLIC_API_BASE_URL` for both REST and WebSocket connections.
-
-**Fixed:** Standardized to use `NEXT_PUBLIC_API_BASE_URL`.
-
----
-
-#### Settings Save Buttons (Profile & Org) ✅ FIXED
-**Files:** `apps/web/app/(app)/settings/page.tsx`, `apps/api/app/routers/auth.py`, `apps/api/app/routers/settings.py`
-
-Implemented logic for saving Profile and Organization settings via `PATCH /auth/me` and `PATCH /settings/organization`.
-
-**Fixed:** Added PATCH /auth/me for profile and PATCH /settings/organization for org settings.
-
----
-
-### 🟢 Low Priority
-
-#### Version Drift in Docs
+### 7. Version Drift in Docs ⚠️
 **Files:** `README.md:3`, `apps/api/app/core/config.py:15`
 
 Version numbers in docs don't match backend settings.
 
 ---
 
-## RECENTLY COMPLETED
+## ✅ COMPLETED FEATURES & FIXES
 
-### Reports PDF Export ✅ COMPLETE
+### Recently Completed Features
+
+#### 1. File Attachments on Cases ✅ COMPLETE
+**Status:** Fully implemented
+
+**What was built:**
+- `Attachment` model with security fields (checksum, scan status, quarantine)
+- S3/local storage with signed URLs (5-min expiry)
+- Virus scan job (`scan_attachment.py`) with ClamAV integration
+- EXIF stripping for privacy (`strip_exif_data()`)
+- `FileUploadZone.tsx` component with drag-drop
+- Attachments integrated into Case Notes UI
+- Soft-delete with audit logging
+
+**Security features:**
+- SHA-256 checksum verification
+- File type + MIME type validation
+- Quarantine until scan completes
+- Access control (case-level + uploader/Manager+ for delete)
+
+---
+
+#### 2. Invitation System ✅ COMPLETE
+**Status:** Full stack complete
+
+**What was built:**
+- **Backend:**
+  - `OrgInvite` model with resend tracking, revocation
+  - Rate limiting (50 pending per org)
+  - Resend cooldown (5 min, 3/day max)
+  - Gmail integration for invite emails (HTML template)
+  - Email domain validation (`ALLOWED_EMAIL_DOMAINS`)
+  - Accept invite API (creates membership)
+
+- **Frontend:**
+  - `/settings/team/page.tsx` with pending invites table
+  - Invite modal with role selection
+  - Status badges (pending/expired/accepted/revoked)
+  - Resend button with cooldown timer
+  - `/invite/[id]/page.tsx` accept page
+
+**Email flow:**
+- Inviter must have Gmail connected
+- Professional HTML email with accept button
+- Domain validation before sending
+
+---
+
+#### 3. Tasks Calendar View ✅ COMPLETE
+**Status:** Fully implemented
+
+**What was built:**
+- FullCalendar integration with month/week/day views
+- List/Calendar view toggle with localStorage persistence
+- Drag-drop rescheduling with API persistence
+- Time preservation on date-only moves
+- Revert on failed reschedule
+- `TaskEditModal.tsx` for click-to-edit
+
+---
+
+#### 4. Appointment Scheduling System ✅ COMPLETE
+**Status:** Full stack complete
+
+**What was built:**
+- **Backend (6 new tables):**
+  - `AppointmentType` - customizable meeting templates per user
+  - `AvailabilityRule` - weekly availability (Mon-Sun, 9am-5pm etc.)
+  - `AvailabilityOverride` - date-specific exceptions (vacations, meetings)
+  - `BookingLink` - secure public URLs for self-service booking
+  - `Appointment` - booked appointments with status workflow
+  - `AppointmentEmailLog` - email tracking
+
+- **Booking Flow:**
+  - Public booking page (`/book/{slug}`)
+  - Time slot calculation respecting buffers, existing appointments
+  - Pending → Confirmed → Completed status workflow
+  - Self-service reschedule/cancel via secure tokens
+  - Rate limiting on booking endpoints
+
+- **Email Notifications:**
+  - Request received, Confirmed, Rescheduled, Cancelled templates
+  - Client timezone support (default: Pacific)
+  - Professional HTML email design
+
+- **Frontend:**
+  - Unified Tasks page with Calendar/List view toggle
+  - `/appointments` - pending/upcoming/past management
+  - `/settings/appointments` - availability configuration
+  - Appointment type management (duration, buffers, meeting mode)
+  - Weekly availability grid with timezone selector
+
+---
+
+#### 5. Reports PDF Export ✅ COMPLETE
 **Status:** Fully functional with native charts
 
 **What was built:**
@@ -304,21 +256,36 @@ Version numbers in docs don't match backend settings.
 
 ---
 
-## ENTERPRISE POLISH SUGGESTIONS
+### Fixed Security & Infrastructure Issues
 
-1. **Gate auth bypass** with environment flags and wire login + invite flows to backend OAuth (or implement Duo), including return-to handling and session cookie creation.
+#### CSRF on Queue/Invite Mutations ✅ FIXED
+**Files:** `apps/api/app/routers/queues.py`, `apps/api/app/routers/invites.py`
+Queue and invite mutation endpoints (create/update/delete/claim/release/assign) now enforce CSRF tokens.
+**Fixed:** Added `require_csrf_header` dependency to all mutation endpoints.
 
-2. **Enforce CSRF globally** via middleware; align WebSocket auth to `crm_session` and add origin checks or token-based WS auth.
+#### WebSocket Auth Cookie Mismatch ✅ FIXED
+**Files:** `apps/api/app/routers/websocket.py`
+WebSocket auth now correctly uses `crm_session` independent of the REST API auth name.
+**Fixed:** Imported and used `COOKIE_NAME` from deps.py.
 
-3. **Standardize API/WS base URLs** (e.g., `NEXT_PUBLIC_API_BASE_URL` + `NEXT_PUBLIC_API_WS_URL`).
+#### CORS Missing PUT Method ✅ FIXED
+**File:** `apps/api/app/main.py:89`
+CORS middleware now allows PUT methods.
+**Fixed:** Added PUT to `allow_methods`.
 
-4. **Finish Settings APIs** (profile/org preferences) with audit logging and permissions; add server-side validation for enterprise governance.
+#### WebSocket/REST URL Environment Mismatch ✅ FIXED
+**Files:** `apps/web/lib/hooks/use-notification-socket.ts`
+Standardized on `NEXT_PUBLIC_API_BASE_URL` for both REST and WebSocket connections.
+**Fixed:** Standardized to use `NEXT_PUBLIC_API_BASE_URL`.
 
-5. **Implement AI usage dashboards/budgets** and persist conversation history server-side.
+#### Settings Save Buttons (Profile & Org) ✅ FIXED
+**Files:** `apps/web/app/(app)/settings/page.tsx`, `apps/api/app/routers/auth.py`, `apps/api/app/routers/settings.py`
+Implemented logic for saving Profile and Organization settings via `PATCH /auth/me` and `PATCH /settings/organization`.
+**Fixed:** Added PATCH /auth/me for profile and PATCH /settings/organization for org settings.
 
 ---
 
-## EXISTING FEATURES — Reference
+## EXISTING FEATURES — Reference (Previously Completed)
 
 ### Complete ✅
 - Cases, Intended Parents, Tasks, Dashboard
@@ -327,9 +294,16 @@ Version numbers in docs don't match backend settings.
 - Automation Engine, Activity Feed
 - Zoom Integration, Matching System
 - Compliance/HIPAA exports
-- **File Attachments** (NEW)
-- **Invitation System** (NEW)
-- **Tasks Calendar** (NEW)
+
+---
+
+## ENTERPRISE POLISH SUGGESTIONS
+
+1. **Gate auth bypass** with environment flags and wire login + invite flows to backend OAuth (or implement Duo), including return-to handling and session cookie creation.
+2. **Enforce CSRF globally** via middleware; align WebSocket auth to `crm_session` and add origin checks or token-based WS auth.
+3. **Standardize API/WS base URLs** (e.g., `NEXT_PUBLIC_API_BASE_URL` + `NEXT_PUBLIC_API_WS_URL`).
+4. **Finish Settings APIs** (profile/org preferences) with audit logging and permissions; add server-side validation for enterprise governance.
+5. **Implement AI usage dashboards/budgets** and persist conversation history server-side.
 
 ---
 
@@ -373,4 +347,3 @@ Version numbers in docs don't match backend settings.
 **Features/Fixes Completed This Session:** 6 ✅  
 **Total Remaining Gaps:** 5 features  
 **Total Remaining Effort:** ~4 weeks
-
