@@ -1,5 +1,11 @@
 "use client"
 
+/**
+ * Tasks Page - /tasks
+ * 
+ * Unified view showing tasks and appointments with list/calendar toggle.
+ */
+
 import { useState } from "react"
 import Link from "next/link"
 import { Card } from "@/components/ui/card"
@@ -9,7 +15,7 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { PlusIcon, LoaderIcon, ListIcon, CalendarIcon } from "lucide-react"
-import { TasksCalendar } from "@/components/tasks/TasksCalendar"
+import { UnifiedCalendar } from "@/components/appointments"
 import { TaskEditModal } from "@/components/tasks/TaskEditModal"
 import { useTasks, useCompleteTask, useUncompleteTask, useUpdateTask } from "@/lib/hooks/use-tasks"
 import { useSetAIContext } from "@/lib/context/ai-context"
@@ -88,9 +94,9 @@ export default function TasksPage() {
     const [showCompleted, setShowCompleted] = useState(false)
     const [view, setView] = useState<"list" | "calendar">(() => {
         if (typeof window !== "undefined") {
-            return (localStorage.getItem("tasks-view") as "list" | "calendar") || "list"
+            return (localStorage.getItem("tasks-view") as "list" | "calendar") || "calendar"
         }
-        return "list"
+        return "calendar"
     })
 
     const handleViewChange = (newView: "list" | "calendar") => {
@@ -109,7 +115,6 @@ export default function TasksPage() {
     }
 
     const handleSaveTask = async (taskId: string, data: Partial<TaskListItem>) => {
-        // Convert null to undefined for fields that don't accept null in TaskCreatePayload
         const payload: Record<string, unknown> = {}
         for (const [key, value] of Object.entries(data)) {
             payload[key] = value === null ? undefined : value
@@ -135,7 +140,7 @@ export default function TasksPage() {
     const uncompleteTask = useUncompleteTask()
     const updateTask = useUpdateTask()
 
-    // Clear AI context for list views (use global mode)
+    // Clear AI context for list views
     useSetAIContext(null)
 
     const handleTaskToggle = async (taskId: string, isCompleted: boolean) => {
@@ -244,7 +249,11 @@ export default function TasksPage() {
             </div>
 
             {/* Main Content */}
-            <div className="flex-1 space-y-4 p-6">
+            <div className="flex-1 p-6 space-y-6">
+                <p className="text-sm text-muted-foreground">
+                    Manage your tasks and appointments in one unified view.
+                </p>
+
                 {/* Filters Row */}
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex gap-2">
@@ -295,24 +304,7 @@ export default function TasksPage() {
 
                 {/* Calendar View */}
                 {!isLoading && view === "calendar" && (
-                    <TasksCalendar
-                        tasks={(incompleteTasks?.items || []).map((task: TaskListItem) => ({
-                            id: task.id,
-                            title: task.title,
-                            due_date: task.due_date,
-                            due_time: task.due_time || null,
-                            is_completed: task.is_completed,
-                            task_type: task.task_type,
-                            case_id: task.case_id,
-                        }))}
-                        onTaskClick={handleTaskClick}
-                        onTaskReschedule={async (taskId, newDate, newTime) => {
-                            await updateTask.mutateAsync({
-                                taskId,
-                                data: { due_date: newDate, due_time: newTime ?? undefined },
-                            })
-                        }}
-                    />
+                    <UnifiedCalendar />
                 )}
 
                 {/* List View */}
@@ -362,24 +354,24 @@ export default function TasksPage() {
                         </div>
                     </Card>
                 )}
-            </div>
 
-            {/* Edit Modal */}
-            <TaskEditModal
-                task={editingTask ? {
-                    id: editingTask.id,
-                    title: editingTask.title,
-                    description: editingTask.description ?? null,
-                    task_type: editingTask.task_type,
-                    due_date: editingTask.due_date,
-                    due_time: editingTask.due_time ?? null,
-                    is_completed: editingTask.is_completed,
-                    case_id: editingTask.case_id,
-                } : null}
-                open={!!editingTask}
-                onClose={() => setEditingTask(null)}
-                onSave={(taskId, data) => handleSaveTask(taskId, data as Partial<TaskListItem>)}
-            />
+                {/* Edit Modal */}
+                <TaskEditModal
+                    task={editingTask ? {
+                        id: editingTask.id,
+                        title: editingTask.title,
+                        description: editingTask.description ?? null,
+                        task_type: editingTask.task_type,
+                        due_date: editingTask.due_date,
+                        due_time: editingTask.due_time ?? null,
+                        is_completed: editingTask.is_completed,
+                        case_id: editingTask.case_id,
+                    } : null}
+                    open={!!editingTask}
+                    onClose={() => setEditingTask(null)}
+                    onSave={(taskId, data) => handleSaveTask(taskId, data as Partial<TaskListItem>)}
+                />
+            </div>
         </div>
     )
 }

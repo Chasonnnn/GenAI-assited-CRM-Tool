@@ -432,3 +432,44 @@ class AuditEventType(str, Enum):
     ATTACHMENT_UPLOADED = "attachment_uploaded"
     ATTACHMENT_DOWNLOADED = "attachment_downloaded"
     ATTACHMENT_DELETED = "attachment_deleted"
+
+
+# =============================================================================
+# Appointments & Scheduling
+# =============================================================================
+
+class MeetingMode(str, Enum):
+    """Meeting mode for appointments."""
+    ZOOM = "zoom"
+    PHONE = "phone"
+    IN_PERSON = "in_person"
+
+
+class AppointmentStatus(str, Enum):
+    """
+    Appointment lifecycle status.
+    
+    Flow: pending → confirmed → completed
+              ↘ cancelled
+              ↘ no_show
+              ↘ expired
+    """
+    PENDING = "pending"      # Awaiting approval
+    CONFIRMED = "confirmed"  # Approved, scheduled
+    COMPLETED = "completed"  # Meeting took place
+    CANCELLED = "cancelled"  # Cancelled by client or staff
+    NO_SHOW = "no_show"      # Client didn't show up
+    EXPIRED = "expired"      # Pending request expired before approval
+
+
+class AppointmentEmailType(str, Enum):
+    """Types of emails sent for appointments."""
+    REQUEST_RECEIVED = "request_received"
+    CONFIRMED = "confirmed"
+    RESCHEDULED = "rescheduled"
+    CANCELLED = "cancelled"
+    REMINDER = "reminder"
+
+
+# Default appointment status
+DEFAULT_APPOINTMENT_STATUS = AppointmentStatus.PENDING

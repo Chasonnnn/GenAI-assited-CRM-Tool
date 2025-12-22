@@ -47,6 +47,8 @@ import {
     Zap,
     Bot,
     ChevronRightIcon,
+    CalendarIcon,
+    CalendarDays,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { NotificationBell } from "@/components/notification-bell"
@@ -69,11 +71,6 @@ const navigation = [
         icon: Users,
     },
     {
-        title: "Tasks",
-        url: "/tasks",
-        icon: CheckSquare,
-    },
-    {
         title: "Reports",
         url: "/reports",
         icon: BarChart3,
@@ -84,6 +81,11 @@ const aiNavigation = {
     title: "AI Assistant",
     url: "/ai-assistant",
     icon: Bot,
+}
+
+const tasksNavigation = {
+    title: "Tasks & Scheduling",
+    icon: CheckSquare,
 }
 
 const settingsNavigation = {
@@ -111,6 +113,18 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const activeSettingsTab = searchParams.get("tab")
     const activeAutomationTab = searchParams.get("tab")
 
+    // Controlled collapsible state to avoid hydration warning
+    const [automationOpen, setAutomationOpen] = React.useState(false)
+    const [settingsOpen, setSettingsOpen] = React.useState(false)
+    const [tasksOpen, setTasksOpen] = React.useState(false)
+
+    // Sync collapsible state with pathname on mount/navigation
+    React.useEffect(() => {
+        if (pathname?.startsWith("/automation")) setAutomationOpen(true)
+        if (pathname?.startsWith("/settings")) setSettingsOpen(true)
+        if (pathname?.startsWith("/tasks") || pathname?.startsWith("/appointments")) setTasksOpen(true)
+    }, [pathname])
+
     const settingsItems: Array<{ title: string; url: string; tab?: string | null }> = [
         { title: "General", url: "/settings", tab: null },
         { title: "Notifications", url: "/settings?tab=notifications", tab: "notifications" },
@@ -126,6 +140,12 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const automationItems: Array<{ title: string; url: string; tab?: string | null }> = [
         { title: "Workflows", url: "/automation", tab: null },
         { title: "Email Templates", url: "/automation?tab=email-templates", tab: "email-templates" },
+    ]
+
+    const tasksItems: Array<{ title: string; url: string }> = [
+        { title: "My Tasks", url: "/tasks" },
+        { title: "Appointments", url: "/appointments" },
+        { title: "Appointment Settings", url: "/settings/appointments" },
     ]
 
     const isSettingsItemActive = (item: { url: string; tab?: string | null }) => {
@@ -229,7 +249,8 @@ export function AppSidebar({ children }: AppSidebarProps) {
                             ))}
                             {/* Automation with sub-menu */}
                             <Collapsible
-                                open={pathname?.startsWith("/automation") || undefined}
+                                open={automationOpen}
+                                onOpenChange={setAutomationOpen}
                                 className="group/collapsible"
                             >
                                 <SidebarMenuItem>
@@ -261,6 +282,41 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                     </CollapsibleContent>
                                 </SidebarMenuItem>
                             </Collapsible>
+                            {/* Tasks & Scheduling with sub-menu */}
+                            <Collapsible
+                                open={tasksOpen}
+                                onOpenChange={setTasksOpen}
+                                className="group/collapsible"
+                            >
+                                <SidebarMenuItem>
+                                    <CollapsibleTrigger
+                                        render={
+                                            <SidebarMenuButton
+                                                isActive={pathname?.startsWith("/tasks") || pathname?.startsWith("/appointments") || pathname === "/settings/appointments"}
+                                                tooltip={tasksNavigation.title}
+                                            >
+                                                <tasksNavigation.icon />
+                                                <span>{tasksNavigation.title}</span>
+                                                <ChevronRightIcon className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                                            </SidebarMenuButton>
+                                        }
+                                    />
+                                    <CollapsibleContent>
+                                        <SidebarMenuSub>
+                                            {tasksItems.map((subItem) => (
+                                                <SidebarMenuSubItem key={subItem.url}>
+                                                    <SidebarMenuSubButton
+                                                        href={subItem.url}
+                                                        isActive={pathname === subItem.url || pathname?.startsWith(subItem.url + "/")}
+                                                    >
+                                                        <span>{subItem.title}</span>
+                                                    </SidebarMenuSubButton>
+                                                </SidebarMenuSubItem>
+                                            ))}
+                                        </SidebarMenuSub>
+                                    </CollapsibleContent>
+                                </SidebarMenuItem>
+                            </Collapsible>
                             {/* AI Assistant - only shown if enabled for org */}
                             {user?.ai_enabled && (
                                 <SidebarMenuItem>
@@ -277,7 +333,8 @@ export function AppSidebar({ children }: AppSidebarProps) {
                             )}
                             {/* Settings with sub-menu */}
                             <Collapsible
-                                defaultOpen={pathname?.startsWith("/settings") ?? false}
+                                open={settingsOpen}
+                                onOpenChange={setSettingsOpen}
                                 className="group/collapsible"
                             >
                                 <SidebarMenuItem>

@@ -200,6 +200,14 @@ app.include_router(invites.router, tags=["invites"])
 from app.routers import settings as settings_router
 app.include_router(settings_router.router, tags=["settings"])
 
+# Appointments (internal, authenticated)
+from app.routers import appointments
+app.include_router(appointments.router, prefix="/appointments", tags=["appointments"])
+
+# Public Booking (unauthenticated)
+from app.routers import booking
+app.include_router(booking.router, prefix="/book", tags=["booking"])
+
 # Dev router (ONLY mounted in dev mode)
 if settings.ENV == "dev":
     from app.routers import dev
