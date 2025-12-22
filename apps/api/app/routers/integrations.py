@@ -278,6 +278,7 @@ class GoogleCalendarEventRead(BaseModel):
 async def get_google_calendar_events(
     date_start: str,  # ISO date (YYYY-MM-DD)
     date_end: str,    # ISO date (YYYY-MM-DD)
+    timezone: str | None = None,  # Optional: client timezone (e.g., "America/New_York")
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
 ) -> list[GoogleCalendarEventRead]:
@@ -290,8 +291,10 @@ async def get_google_calendar_events(
     Query params:
     - date_start: Start date (ISO format YYYY-MM-DD)
     - date_end: End date (ISO format YYYY-MM-DD)
+    - timezone: Optional client timezone (e.g., "America/New_York") for accurate day boundaries
     """
-    from datetime import datetime as dt, timezone as tz
+    from datetime import datetime as dt, timezone as tz, time as tm
+    from zoneinfo import ZoneInfo
     from app.services import calendar_service
     
     # Parse dates
@@ -311,9 +314,17 @@ async def get_google_calendar_events(
             detail="date_end must be greater than or equal to date_start.",
         )
     
-    # Convert to datetime with timezone (start of day to end of day)
-    time_min = dt.combine(start_date.date(), dt.min.time(), tzinfo=tz.utc)
-    time_max = dt.combine(end_date.date(), dt.max.time(), tzinfo=tz.utc)
+    # Determine timezone for day boundaries
+    try:
+        client_tz = ZoneInfo(timezone) if timezone else tz.utc
+    except Exception:
+        # Invalid timezone, fall back to UTC
+        client_tz = tz.utc
+    
+    # Convert to datetime with timezone (start of day to end of day in client TZ)
+    # Then convert to UTC for the API call
+    time_min = dt.combine(start_date.date(), tm.min, tzinfo=client_tz)
+    time_max = dt.combine(end_date.date(), tm(23, 59, 59, 999999), tzinfo=client_tz)
     
     # Fetch events - returns empty list if not connected
     events = await calendar_service.get_user_calendar_events(
