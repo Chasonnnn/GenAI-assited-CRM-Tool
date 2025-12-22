@@ -188,47 +188,42 @@ export default function MatchDetailPage() {
         id: string
         event_type: string
         description: string
+        actor_name: string | null
         created_at: string
         source: 'case' | 'ip' | 'match'
     }
     const combinedActivity = useMemo<CombinedActivity[]>(() => {
         const activities: CombinedActivity[] = []
-        // Case activity
+        // Case activity (includes actor_name)
         for (const a of caseActivity?.items || []) {
             activities.push({
                 id: a.id,
                 event_type: a.activity_type,
                 description: (a.details?.description as string) || a.activity_type,
+                actor_name: a.actor_name,
                 created_at: a.created_at,
                 source: 'case'
             })
         }
-        // IP history
+        // IP history (no actor name available yet in API)
         for (const h of ipHistory || []) {
             activities.push({
                 id: h.id,
                 event_type: 'Status Change',
                 description: `Status: ${h.old_status || 'new'} → ${h.new_status}${h.reason ? ` (${h.reason})` : ''}`,
+                actor_name: null, // TODO: Add changed_by_name to IP history API
                 created_at: h.changed_at,
                 source: 'ip'
             })
         }
-        // Match events (proposed, reviewed)
+        // Match proposed event only (accept/reject already appears in case activity)
         if (match?.proposed_at) {
             activities.push({
                 id: 'match-proposed',
                 event_type: 'Match Proposed',
                 description: 'Match was proposed',
+                actor_name: null,
                 created_at: match.proposed_at,
-                source: 'match' as const
-            })
-        }
-        if (match?.reviewed_at) {
-            activities.push({
-                id: 'match-reviewed',
-                event_type: match.status === 'accepted' ? 'Match Accepted' : match.status === 'rejected' ? 'Match Rejected' : 'Match Reviewed',
-                description: match.rejection_reason ? `Rejected: ${match.rejection_reason}` : `Match ${match.status}`,
-                created_at: match.reviewed_at,
                 source: 'match' as const
             })
         }
@@ -732,16 +727,16 @@ export default function MatchDetailPage() {
                                                 filteredActivity.map((activity) => (
                                                     <div key={activity.id} className="flex gap-2">
                                                         <div className={`h-2 w-2 rounded-full mt-1.5 flex-shrink-0 ${activity.source === 'case' ? 'bg-green-500' :
-                                                                activity.source === 'ip' ? 'bg-blue-500' :
-                                                                    'bg-purple-500'
+                                                            activity.source === 'ip' ? 'bg-blue-500' :
+                                                                'bg-purple-500'
                                                             }`}></div>
                                                         <div className="flex-1 min-w-0">
                                                             <div className="flex items-center gap-1 mb-0.5">
                                                                 <Badge
                                                                     variant="outline"
                                                                     className={`text-[10px] px-1 py-0 ${activity.source === 'case' ? 'border-green-500 text-green-600' :
-                                                                            activity.source === 'ip' ? 'border-blue-500 text-blue-600' :
-                                                                                'border-purple-500 text-purple-600'
+                                                                        activity.source === 'ip' ? 'border-blue-500 text-blue-600' :
+                                                                            'border-purple-500 text-purple-600'
                                                                         }`}
                                                                 >
                                                                     {activity.source === 'case' ? 'Case' :
@@ -750,7 +745,10 @@ export default function MatchDetailPage() {
                                                             </div>
                                                             <p className="text-sm font-medium">{activity.event_type}</p>
                                                             <p className="text-xs text-muted-foreground">{activity.description}</p>
-                                                            <p className="text-xs text-muted-foreground">{formatDateTime(activity.created_at)}</p>
+                                                            <p className="text-xs text-muted-foreground">
+                                                                {formatDateTime(activity.created_at)}
+                                                                {activity.actor_name && <span className="ml-1">by {activity.actor_name}</span>}
+                                                            </p>
                                                         </div>
                                                     </div>
                                                 ))
