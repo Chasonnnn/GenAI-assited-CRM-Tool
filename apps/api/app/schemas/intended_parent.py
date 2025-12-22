@@ -118,6 +118,7 @@ class IntendedParentStatusHistoryItem(BaseModel):
     new_status: str
     reason: str | None
     changed_by_user_id: UUID | None
+    changed_by_name: str | None = None  # Resolved user name
     changed_at: datetime
 
 

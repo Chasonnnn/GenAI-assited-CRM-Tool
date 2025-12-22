@@ -205,13 +205,13 @@ export default function MatchDetailPage() {
                 source: 'case'
             })
         }
-        // IP history (no actor name available yet in API)
+        // IP history
         for (const h of ipHistory || []) {
             activities.push({
                 id: h.id,
                 event_type: 'Status Change',
                 description: `Status: ${h.old_status || 'new'} → ${h.new_status}${h.reason ? ` (${h.reason})` : ''}`,
-                actor_name: null, // TODO: Add changed_by_name to IP history API
+                actor_name: h.changed_by_name,
                 created_at: h.changed_at,
                 source: 'ip'
             })
