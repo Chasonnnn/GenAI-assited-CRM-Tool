@@ -73,6 +73,7 @@ export interface IntendedParentStatusHistoryItem {
     new_status: string
     reason: string | null
     changed_by_user_id: string | null
+    changed_by_name: string | null
     changed_at: string
 }
 

@@ -253,11 +253,33 @@ def get_status_history(
     session: dict = Depends(get_current_session),
 ):
     """Get status history for an intended parent."""
+    from app.db.models import User
+    
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
     
-    return ip_service.get_ip_status_history(db, ip_id)
+    history = ip_service.get_ip_status_history(db, ip_id)
+    
+    # Resolve user names
+    result = []
+    for h in history:
+        changed_by_name = None
+        if h.changed_by_user_id:
+            user = db.query(User).filter(User.id == h.changed_by_user_id).first()
+            changed_by_name = user.display_name if user else None
+        
+        result.append(IntendedParentStatusHistoryItem(
+            id=h.id,
+            old_status=h.old_status,
+            new_status=h.new_status,
+            reason=h.reason,
+            changed_by_user_id=h.changed_by_user_id,
+            changed_by_name=changed_by_name,
+            changed_at=h.changed_at,
+        ))
+    
+    return result
 
 
 # =============================================================================
