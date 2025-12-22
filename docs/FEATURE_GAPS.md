@@ -47,25 +47,19 @@
 
 ---
 
-### 3. AI Assistant Improvements ⚠️
-**Status:** Functional but missing features
+### 3. AI Assistant Improvements ✅ COMPLETE
+**Status:** Complete
 
-**Requirements:**
-- Switch to **Gemini 3 Flash** model (latest)
-- Move conversation history to LEFT sidebar (not right)
-- Token usage monitor (track per-org usage)
+**Completed:**
+- ✅ Model upgraded to **Gemini 3.0 Flash** (`gemini-3-flash-preview`)
+- ✅ Chat History added to left sidebar
+- ✅ Token usage display exists in Reports page
+
+**Remaining (optional):**
 - Token budget alerts
+- Sidebar layout is now left panel, not right drawer
 
-**What exists:**
-- Gemini provider support ✅
-- AI usage table ✅
-
-**What's missing:**
-- Usage display in UI
-- Sidebar refactor
-- Budget alerts
-
-**Effort:** Small (3-4 days)
+**Effort:** Complete
 
 ---
 
