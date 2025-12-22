@@ -498,25 +498,144 @@ function BookingForm({
     )
 }
 
-// =============================================================================
-// Confirmation View
-// =============================================================================
+// Generate ICS file for calendar download
+function generateICSFile(
+    appointmentType: AppointmentType,
+    startTime: string,
+    timezone: string,
+    staffName: string,
+): string {
+    const start = new Date(startTime)
+    const end = new Date(start.getTime() + appointmentType.duration_minutes * 60 * 1000)
 
-function ConfirmationView({ appointmentType }: { appointmentType: AppointmentType }) {
+    // Format dates for ICS (YYYYMMDDTHHMMSSZ in UTC)
+    const formatICSDate = (date: Date) => {
+        return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+    }
+
+    const meetingModeLabel = MEETING_MODES[appointmentType.meeting_mode as keyof typeof MEETING_MODES]?.label || appointmentType.meeting_mode
+
+    const ics = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//CRM Platform//Booking//EN',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        'BEGIN:VEVENT',
+        `DTSTART:${formatICSDate(start)}`,
+        `DTEND:${formatICSDate(end)}`,
+        `SUMMARY:${appointmentType.name} with ${staffName}`,
+        `DESCRIPTION:Meeting type: ${meetingModeLabel}\\nDuration: ${appointmentType.duration_minutes} minutes\\n\\nThis appointment is pending approval. You will receive a confirmation email once approved.`,
+        'STATUS:TENTATIVE',
+        `UID:${Date.now()}@crm-platform`,
+        'END:VEVENT',
+        'END:VCALENDAR',
+    ].join('\r\n')
+
+    return ics
+}
+
+function ConfirmationView({
+    appointmentType,
+    selectedSlot,
+    timezone,
+    staffName,
+}: {
+    appointmentType: AppointmentType
+    selectedSlot: TimeSlot
+    timezone: string
+    staffName: string
+}) {
+    const meetingMode = MEETING_MODES[appointmentType.meeting_mode as keyof typeof MEETING_MODES]
+    const ModeIcon = meetingMode?.icon || VideoIcon
+
+    const handleDownloadICS = () => {
+        const ics = generateICSFile(appointmentType, selectedSlot.start, timezone, staffName)
+        const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `appointment-${format(parseISO(selectedSlot.start), 'yyyy-MM-dd')}.ics`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+    }
+
     return (
-        <div className="text-center py-8">
+        <div className="text-center py-6">
+            {/* Success Animation */}
             <div className="mb-6">
-                <div className="size-16 mx-auto rounded-full bg-green-500/10 flex items-center justify-center">
-                    <CheckCircleIcon className="size-8 text-green-600" />
+                <div className="size-20 mx-auto rounded-full bg-green-500/10 flex items-center justify-center animate-[pulse_2s_ease-in-out_1]">
+                    <CheckCircleIcon className="size-10 text-green-600" />
                 </div>
             </div>
+
             <h2 className="text-2xl font-semibold mb-2">Request Submitted!</h2>
-            <p className="text-muted-foreground max-w-md mx-auto mb-6">
-                Your appointment request for <strong>{appointmentType.name}</strong> has been submitted.
-                You will receive an email confirmation once your request is approved.
+            <p className="text-muted-foreground mb-6">
+                Your appointment request has been submitted successfully.
             </p>
-            <p className="text-sm text-muted-foreground">
-                You can close this page now.
+
+            {/* Appointment Summary Card */}
+            <div className="bg-muted/50 rounded-lg p-4 mb-6 text-left">
+                <h3 className="font-medium mb-3 text-sm text-muted-foreground uppercase tracking-wide">
+                    Appointment Details
+                </h3>
+                <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                        <CalendarIcon className="size-5 text-muted-foreground flex-shrink-0" />
+                        <div>
+                            <p className="font-medium">{formatDateInZone(parseISO(selectedSlot.start), timezone)}</p>
+                            <p className="text-sm text-muted-foreground">
+                                {formatTimeInZone(parseISO(selectedSlot.start), timezone)} ({timezone.split('/')[1]?.replace('_', ' ') || timezone})
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <ClockIcon className="size-5 text-muted-foreground flex-shrink-0" />
+                        <div>
+                            <p className="font-medium">{appointmentType.name}</p>
+                            <p className="text-sm text-muted-foreground">{appointmentType.duration_minutes} minutes</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <ModeIcon className="size-5 text-muted-foreground flex-shrink-0" />
+                        <p className="font-medium">{meetingMode?.label || appointmentType.meeting_mode}</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Add to Calendar Button */}
+            <Button
+                variant="outline"
+                onClick={handleDownloadICS}
+                className="w-full mb-6"
+            >
+                <CalendarIcon className="size-4 mr-2" />
+                Add to Calendar
+            </Button>
+
+            {/* What's Next Section */}
+            <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4 text-left">
+                <h3 className="font-medium text-blue-700 dark:text-blue-400 mb-2">What&apos;s Next?</h3>
+                <ol className="text-sm text-muted-foreground space-y-2">
+                    <li className="flex gap-2">
+                        <span className="font-medium text-blue-600 dark:text-blue-400">1.</span>
+                        <span>Our team will review your request</span>
+                    </li>
+                    <li className="flex gap-2">
+                        <span className="font-medium text-blue-600 dark:text-blue-400">2.</span>
+                        <span>You&apos;ll receive an email confirmation once approved</span>
+                    </li>
+                    <li className="flex gap-2">
+                        <span className="font-medium text-blue-600 dark:text-blue-400">3.</span>
+                        <span>Meeting details will be included in the confirmation</span>
+                    </li>
+                </ol>
+            </div>
+
+            <p className="text-xs text-muted-foreground mt-6">
+                You can safely close this page now.
             </p>
         </div>
     )
@@ -630,13 +749,18 @@ export function PublicBookingPage({ publicSlug }: { publicSlug: string }) {
     }
 
     // Confirmed state
-    if (isConfirmed && selectedType) {
+    if (isConfirmed && selectedType && selectedSlot) {
         return (
             <div className="min-h-screen bg-background py-12">
                 <div className="max-w-lg mx-auto px-4">
                     <Card>
                         <CardContent className="pt-6">
-                            <ConfirmationView appointmentType={selectedType} />
+                            <ConfirmationView
+                                appointmentType={selectedType}
+                                selectedSlot={selectedSlot}
+                                timezone={timezone}
+                                staffName={pageData?.staff?.display_name || "Staff Member"}
+                            />
                         </CardContent>
                     </Card>
                 </div>
