@@ -1,12 +1,12 @@
 # Feature Completeness Evaluation — Current State
 
-**Last Updated:** 2025-12-21  
+**Last Updated:** 2025-12-22  
 **Purpose:** Identify features that need development to be fully functional  
-**Test Coverage:** ✅ **112/112 tests passing** - Frontend: 36/36, Backend: 76/76
+**Test Coverage:** ✅ **132/132 tests passing** - Frontend: 35/35, Backend: 97/97
 
 > **Pipeline Phase 2 Complete ✅** — Custom stages, stage CRUD, soft-delete, versioning, frontend editor all functional.
 > 
-> **Sprint Complete ✅** — File Attachments, Invitation System, Tasks Calendar, and Appointment Scheduling all implemented.
+> **Sprint Complete ✅** — File Attachments, Invitation System, Tasks Calendar, Appointment Scheduling, Google Calendar Display, and Context-Aware Chatbot all implemented.
 
 ---
 
@@ -23,21 +23,7 @@
 
 ## 🔴 HIGH PRIORITY GAPS (Uncompleted)
 
-### 1. Context-Aware Floating Chatbot ❌
-**Status:** Not integrated with AI Assistant
-
-**Requirements:**
-- Floating chatbot widget accessible from all pages
-- Page-aware context (knows current case, task, etc.)
-- Integrate with existing AI Assistant service
-- Parse medication/exam schedules → auto-create tasks (upon approval)
-
-**Integration points:**
-- AI Assistant BYOK keys
-- Task creation from chat
-- Case context injection
-
-**Effort:** Medium (1 week)
+*No high-priority gaps remaining.*
 
 ---
 
@@ -151,6 +137,45 @@ Version numbers in docs don't match backend settings.
 ## ✅ COMPLETED FEATURES & FIXES
 
 ### Recently Completed Features
+
+#### 5. Context-Aware Floating Chatbot ✅ COMPLETE
+**Status:** Full stack complete
+
+**What was built:**
+- **Backend (ai_chat_service.py):**
+  - `TASK_SYSTEM_PROMPT` with schedule parsing instructions
+  - `get_task_context()` - loads task with related case
+  - `_build_task_context()` - builds context string for AI
+  - `chat()` handles `entity_type='task'`
+  - AI parses medication/exam schedules → proposes create_task actions
+
+- **Frontend:**
+  - Updated EntityContext and ChatRequest types to include 'task'
+  - AIChatPanel/AIChatDrawer support task context
+  - Tasks page dynamically sets AI context when editing
+  - Green pulse indicates active task context
+  - Context clears when modal closes
+
+---
+
+#### 6. Google Calendar Event Display ✅ COMPLETE
+**Status:** Full stack complete
+
+**What was built:**
+- **Backend:**
+  - `get_google_events()` with pagination, all-day handling, singleEvents=true
+  - `GET /integrations/google/calendar/events` endpoint
+  - Date range validation (400 for reversed ranges)
+  - Returns event id, summary, start, end, html_link, is_all_day
+
+- **Frontend:**
+  - `GoogleEventItem` component with gray styling
+  - Google events displayed in Month, Week, and Day views
+  - All-day events use direct date string extraction (no TZ shift)
+  - Click-through opens event in Google Calendar
+  - Legend includes Google Calendar indicator
+
+---
 
 #### 1. File Attachments on Cases ✅ COMPLETE
 **Status:** Fully implemented
