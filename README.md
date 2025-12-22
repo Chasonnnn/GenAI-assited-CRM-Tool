@@ -329,29 +329,35 @@ The long-term goal is to keep a **general, open-source-ready core** while suppor
 - Shared core entities and APIs (org-scoped, role-scoped)
 - Per-organization settings for pipelines/statuses, templates, rubrics, and (optional) AI policies/keys
 
-## Tabs & Modules (V1 vs Later)
+## Current Tabs & Modules
 
-We will likely expose features as **modules** (enabled per org) and **tabs** (shown per role).
+Features exposed as **modules** (enabled per org) and **tabs** (shown per role).
 
-Recommended V1 tabs:
-- Home (calendar + quick actions + my work)
-- Work Queue (monitor leads/cases with filters + assignments)
-- Leads
-- Cases
-- Reports
-- Settings
+### Implemented Tabs
+- **Dashboard** (analytics, quick stats, recent activity)
+- **Leads** (pipeline management with customizable stages)
+- **Cases** (case workflow, notes, attachments)
+- **Intended Parents** (profiles management)
+- **Tasks** (task list + unified calendar with Google Calendar integration)
+- **Appointments** (scheduling with public booking links, availability config)
+- **Reports** (analytics dashboards)
+- **Notifications** (in-app alerts)
+- **AI Assistant** (context-aware chatbot, schedule parsing)
+- **Settings** (general, team, queues, audit log, compliance, integrations, alerts)
 
-Useful V1-lite tabs (simple early versions):
-- Inbox/Notifications
-- Tasks
-- Activity
+### Implemented Modules
+- **Automation** (workflow rules, email templates)
+- **Integrations** (Gmail, Google Calendar, Zoom)
+- **File Attachments** (S3/local storage, virus scanning)
+- **Invitation System** (team onboarding)
+- **Audit Logging** (compliance tracking)
+- **Version Control** (entity versioning)
 
-Later/optional modules:
-- Templates (email/snippets/checklists)
-- Automation (follow-up rules, SLAs, assignment rules)
-- Integrations (Meta Lead Ads, email providers, calendar, SMS/telephony)
-- Import/Export and Dedupe
-- Contacts/Directory
+### Future/Roadmap
+- Import/Export and Dedupe enhancements
+- SMS/Telephony integrations
+- Meta Lead Ads sync
+- Advanced SLA automation
 
 ## License
 
