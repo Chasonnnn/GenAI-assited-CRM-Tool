@@ -235,19 +235,19 @@
 
 ### 🔴 High Priority
 
-#### ~~CSRF Missing on Queue/Invite Mutations~~ ✅ FIXED
+#### CSRF on Queue/Invite Mutations ✅ FIXED
 **Files:** `apps/api/app/routers/queues.py`, `apps/api/app/routers/invites.py`
 
-~~Queue and invite mutation endpoints (create/update/delete/claim/release/assign) lack CSRF checks despite using cookie auth, leaving a CSRF attack surface.~~
+Queue and invite mutation endpoints (create/update/delete/claim/release/assign) now enforce CSRF tokens.
 
 **Fixed:** Added `require_csrf_header` dependency to all mutation endpoints.
 
 ---
 
-#### ~~WebSocket Auth Cookie Mismatch~~ ✅ FIXED
+#### WebSocket Auth Cookie Mismatch ✅ FIXED
 **Files:** `apps/api/app/routers/websocket.py`
 
-~~WebSocket auth reads `cookie` session but the server sets `crm_session`, so notification sockets won't authenticate in production.~~
+WebSocket auth now correctly uses `crm_session` independent of the REST API auth name.
 
 **Fixed:** Imported and used `COOKIE_NAME` from deps.py.
 
@@ -255,27 +255,27 @@
 
 ### 🟡 Medium Priority
 
-#### ~~CORS Missing PUT Method~~ ✅ FIXED
+#### CORS Missing PUT Method ✅ FIXED
 **File:** `apps/api/app/main.py:89`
 
-~~CORS did not allow PUT, blocking match accept/reject from browser.~~
+CORS middleware now allows PUT methods.
 **Fixed:** Added PUT to `allow_methods`.
 
 ---
 
-#### ~~WebSocket/REST URL Environment Mismatch~~ ✅ FIXED
+#### WebSocket/REST URL Environment Mismatch ✅ FIXED
 **Files:** `apps/web/lib/hooks/use-notification-socket.ts`
 
-~~WebSocket client uses `NEXT_PUBLIC_API_URL` while REST uses `NEXT_PUBLIC_API_BASE_URL`, so WS can point at wrong host in production.~~
+Standardized on `NEXT_PUBLIC_API_BASE_URL` for both REST and WebSocket connections.
 
 **Fixed:** Standardized to use `NEXT_PUBLIC_API_BASE_URL`.
 
 ---
 
-#### ~~Settings Save Buttons Non-Functional~~ ✅ FIXED
+#### Settings Save Buttons (Profile & Org) ✅ FIXED
 **Files:** `apps/web/app/(app)/settings/page.tsx`, `apps/api/app/routers/auth.py`, `apps/api/app/routers/settings.py`
 
-~~Settings "Save Changes" buttons are not wired to any API; profile/org fields are non-functional.~~
+Implemented logic for saving Profile and Organization settings via `PATCH /auth/me` and `PATCH /settings/organization`.
 
 **Fixed:** Added PATCH /auth/me for profile and PATCH /settings/organization for org settings.
 
