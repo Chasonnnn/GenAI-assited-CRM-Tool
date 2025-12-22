@@ -14,8 +14,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 from app.db.enums import (
     DEFAULT_CASE_SOURCE, DEFAULT_JOB_STATUS, DEFAULT_EMAIL_STATUS,
-    DEFAULT_IP_STATUS, CaseSource, TaskType, JobType, JobStatus, EmailStatus,
-    IntendedParentStatus, EntityType, OwnerType
+    DEFAULT_IP_STATUS, DEFAULT_APPOINTMENT_STATUS,
+    CaseSource, TaskType, JobType, JobStatus, EmailStatus,
+    IntendedParentStatus, EntityType, OwnerType,
+    MeetingMode, AppointmentStatus, AppointmentEmailType
 )
 
 
@@ -2667,3 +2669,436 @@ class Attachment(Base):
     case: Mapped["Case"] = relationship()
     uploaded_by: Mapped["User"] = relationship(foreign_keys=[uploaded_by_user_id])
     deleted_by: Mapped["User | None"] = relationship(foreign_keys=[deleted_by_user_id])
+
+
+# =============================================================================
+# Appointments & Scheduling Models
+# =============================================================================
+
+class AppointmentType(Base):
+    """
+    Appointment type template (e.g., "Initial Consultation", "Follow-up").
+    
+    Defines duration, meeting mode, buffer times, and reminder settings.
+    Each user can have multiple appointment types.
+    """
+    __tablename__ = "appointment_types"
+    __table_args__ = (
+        UniqueConstraint("user_id", "slug", name="uq_appointment_type_slug"),
+        Index("idx_appointment_types_user", "user_id", "is_active"),
+        Index("idx_appointment_types_org", "organization_id"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # Type details
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), nullable=False)  # URL-safe identifier
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    # Scheduling
+    duration_minutes: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
+    buffer_before_minutes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    buffer_after_minutes: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
+    
+    # Meeting mode
+    meeting_mode: Mapped[str] = mapped_column(
+        String(20),
+        server_default=text(f"'{MeetingMode.ZOOM.value}'"),
+        nullable=False
+    )
+    
+    # Notifications
+    reminder_hours_before: Mapped[int] = mapped_column(Integer, default=24, nullable=False)
+    
+    # Status
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("TRUE"),
+        nullable=False
+    )
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        onupdate=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    user: Mapped["User"] = relationship()
+
+
+class AvailabilityRule(Base):
+    """
+    Weekly availability rule (e.g., "Monday 9am-5pm").
+    
+    Uses ISO weekday: Monday=0, Sunday=6.
+    Multiple rules per user (one per day or multiple time blocks per day).
+    """
+    __tablename__ = "availability_rules"
+    __table_args__ = (
+        Index("idx_availability_rules_user", "user_id"),
+        Index("idx_availability_rules_org", "organization_id"),
+        CheckConstraint("day_of_week >= 0 AND day_of_week <= 6", name="ck_valid_day_of_week"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # Day of week (ISO: Monday=0, Sunday=6)
+    day_of_week: Mapped[int] = mapped_column(Integer, nullable=False)
+    
+    # Time range (in user's timezone, stored as time)
+    start_time: Mapped[time] = mapped_column(Time, nullable=False)
+    end_time: Mapped[time] = mapped_column(Time, nullable=False)
+    
+    # User's timezone for interpretation
+    timezone: Mapped[str] = mapped_column(String(50), default="America/New_York", nullable=False)
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        onupdate=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    user: Mapped["User"] = relationship()
+
+
+class AvailabilityOverride(Base):
+    """
+    Date-specific override for availability.
+    
+    Can mark a day as unavailable or provide custom hours.
+    """
+    __tablename__ = "availability_overrides"
+    __table_args__ = (
+        UniqueConstraint("user_id", "override_date", name="uq_availability_override_date"),
+        Index("idx_availability_overrides_user", "user_id"),
+        Index("idx_availability_overrides_org", "organization_id"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # Date being overridden
+    override_date: Mapped[date] = mapped_column(Date, nullable=False)
+    
+    # If unavailable, both times are NULL. If custom hours, both are set.
+    is_unavailable: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("TRUE"),
+        nullable=False
+    )
+    start_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    end_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    
+    # Reason (optional, e.g., "Holiday", "Vacation")
+    reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    user: Mapped["User"] = relationship()
+
+
+class BookingLink(Base):
+    """
+    Secure public booking link for a user.
+    
+    Public slug is used in URLs (/book/{public_slug}).
+    Can be regenerated to invalidate old links.
+    """
+    __tablename__ = "booking_links"
+    __table_args__ = (
+        UniqueConstraint("public_slug", name="uq_booking_link_slug"),
+        UniqueConstraint("user_id", name="uq_booking_link_user"),
+        Index("idx_booking_links_org", "organization_id"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # Public URL slug (cryptographically random)
+    public_slug: Mapped[str] = mapped_column(String(32), nullable=False)
+    
+    # Status
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("TRUE"),
+        nullable=False
+    )
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        onupdate=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    user: Mapped["User"] = relationship()
+
+
+class Appointment(Base):
+    """
+    Booked appointment.
+    
+    Lifecycle: pending → confirmed → completed/cancelled/no_show
+    Includes tokens for client self-service (reschedule/cancel).
+    """
+    __tablename__ = "appointments"
+    __table_args__ = (
+        Index("idx_appointments_user_date", "user_id", "scheduled_start"),
+        Index("idx_appointments_org_status", "organization_id", "status"),
+        Index("idx_appointments_type", "appointment_type_id"),
+        Index(
+            "idx_appointments_pending_expiry",
+            "pending_expires_at",
+            postgresql_where=text("status = 'pending'")
+        ),
+        UniqueConstraint("idempotency_key", name="uq_appointment_idempotency"),
+        UniqueConstraint("reschedule_token", name="uq_appointment_reschedule_token"),
+        UniqueConstraint("cancel_token", name="uq_appointment_cancel_token"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    appointment_type_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("appointment_types.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    
+    # Client info
+    client_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    client_email: Mapped[str] = mapped_column(CITEXT, nullable=False)
+    client_phone: Mapped[str] = mapped_column(String(20), nullable=False)
+    client_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    client_timezone: Mapped[str] = mapped_column(String(50), nullable=False)
+    
+    # Scheduling (stored in UTC)
+    scheduled_start: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    scheduled_end: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    
+    # Meeting mode (snapshot from appointment type)
+    meeting_mode: Mapped[str] = mapped_column(String(20), nullable=False)
+    
+    # Status
+    status: Mapped[str] = mapped_column(
+        String(20),
+        server_default=text(f"'{AppointmentStatus.PENDING.value}'"),
+        nullable=False
+    )
+    
+    # Pending expiry (60 min TTL for unapproved requests)
+    pending_expires_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True
+    )
+    
+    # Approval tracking
+    approved_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True
+    )
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    
+    # Cancellation tracking
+    cancelled_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True
+    )
+    cancelled_by_client: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("FALSE"),
+        nullable=False
+    )
+    cancellation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    # Integration IDs
+    google_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    zoom_meeting_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    zoom_join_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    
+    # Self-service tokens (one-time use tokens for client actions)
+    reschedule_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    cancel_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    reschedule_token_expires_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True
+    )
+    cancel_token_expires_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True
+    )
+    
+    # Idempotency (prevent duplicate bookings)
+    idempotency_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        onupdate=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+    appointment_type: Mapped["AppointmentType | None"] = relationship()
+    approved_by: Mapped["User | None"] = relationship(foreign_keys=[approved_by_user_id])
+    email_logs: Mapped[list["AppointmentEmailLog"]] = relationship(
+        back_populates="appointment",
+        cascade="all, delete-orphan"
+    )
+
+
+class AppointmentEmailLog(Base):
+    """
+    Log of emails sent for an appointment.
+    
+    Tracks: request received, confirmed, rescheduled, cancelled, reminder.
+    """
+    __tablename__ = "appointment_email_logs"
+    __table_args__ = (
+        Index("idx_appointment_email_logs_appt", "appointment_id"),
+        Index("idx_appointment_email_logs_org", "organization_id"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    appointment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("appointments.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # Email details
+    email_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    recipient_email: Mapped[str] = mapped_column(CITEXT, nullable=False)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    
+    # Status
+    status: Mapped[str] = mapped_column(
+        String(20),
+        server_default=text("'pending'"),
+        nullable=False
+    )  # pending, sent, failed
+    sent_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True
+    )
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    # External ID from email service
+    external_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    appointment: Mapped["Appointment"] = relationship(back_populates="email_logs")
