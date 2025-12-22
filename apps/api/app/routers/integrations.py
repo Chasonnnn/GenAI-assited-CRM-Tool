@@ -260,6 +260,85 @@ def gmail_connection_status(
 
 
 # ============================================================================
+# Google Calendar Events
+# ============================================================================
+
+class GoogleCalendarEventRead(BaseModel):
+    """A Google Calendar event for display."""
+    id: str
+    summary: str
+    start: str  # ISO datetime
+    end: str    # ISO datetime
+    html_link: str
+    is_all_day: bool = False
+    source: str = "google"
+
+
+@router.get("/google/calendar/events", response_model=list[GoogleCalendarEventRead])
+async def get_google_calendar_events(
+    date_start: str,  # ISO date (YYYY-MM-DD)
+    date_end: str,    # ISO date (YYYY-MM-DD)
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+) -> list[GoogleCalendarEventRead]:
+    """
+    Get user's Google Calendar events for a date range.
+    
+    Returns empty list if Google is not connected (no error).
+    Events are fetched from the user's primary calendar only.
+    
+    Query params:
+    - date_start: Start date (ISO format YYYY-MM-DD)
+    - date_end: End date (ISO format YYYY-MM-DD)
+    """
+    from datetime import datetime as dt, timezone as tz
+    from app.services import calendar_service
+    
+    # Parse dates
+    try:
+        start_date = dt.fromisoformat(date_start)
+        end_date = dt.fromisoformat(date_end)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid date format. Use YYYY-MM-DD.",
+        )
+    
+    # Validate date range
+    if end_date < start_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="date_end must be greater than or equal to date_start.",
+        )
+    
+    # Convert to datetime with timezone (start of day to end of day)
+    time_min = dt.combine(start_date.date(), dt.min.time(), tzinfo=tz.utc)
+    time_max = dt.combine(end_date.date(), dt.max.time(), tzinfo=tz.utc)
+    
+    # Fetch events - returns empty list if not connected
+    events = await calendar_service.get_user_calendar_events(
+        db=db,
+        user_id=session.user_id,
+        time_min=time_min,
+        time_max=time_max,
+        calendar_id="primary",
+    )
+    
+    return [
+        GoogleCalendarEventRead(
+            id=e["id"],
+            summary=e["summary"],
+            start=e["start"].isoformat(),
+            end=e["end"].isoformat(),
+            html_link=e["html_link"],
+            is_all_day=e["is_all_day"],
+            source="google",
+        )
+        for e in events
+    ]
+
+
+# ============================================================================
 # Zoom OAuth
 # ============================================================================
 

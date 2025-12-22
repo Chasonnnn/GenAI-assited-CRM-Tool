@@ -39,9 +39,9 @@ import {
     UserIcon,
     LoaderIcon,
 } from "lucide-react"
-import { useAppointments, useRescheduleAppointment } from "@/lib/hooks/use-appointments"
+import { useAppointments, useRescheduleAppointment, useGoogleCalendarEvents } from "@/lib/hooks/use-appointments"
 import { useTasks } from "@/lib/hooks/use-tasks"
-import type { AppointmentListItem } from "@/lib/api/appointments"
+import type { AppointmentListItem, GoogleCalendarEvent } from "@/lib/api/appointments"
 import type { TaskListItem } from "@/lib/api/tasks"
 import {
     format,
@@ -70,6 +70,9 @@ const STATUS_COLORS = {
 
 // Task color
 const TASK_COLOR = "bg-purple-500"
+
+// Google Calendar event color
+const GOOGLE_EVENT_COLOR = "bg-slate-400"
 
 // Meeting mode icons
 const MEETING_MODE_ICONS = {
@@ -112,6 +115,54 @@ function TaskItem({
             {task.case_number && (
                 <p className="text-xs text-muted-foreground">Case #{task.case_number}</p>
             )}
+        </div>
+    )
+}
+
+// =============================================================================
+// Google Calendar Event Component
+// =============================================================================
+
+function GoogleEventItem({
+    event,
+    compact = false,
+}: {
+    event: GoogleCalendarEvent
+    compact?: boolean
+}) {
+    const time = event.is_all_day
+        ? "All day"
+        : format(parseISO(event.start), "h:mm a")
+
+    const handleClick = () => {
+        if (event.html_link) {
+            window.open(event.html_link, "_blank", "noopener,noreferrer")
+        }
+    }
+
+    if (compact) {
+        return (
+            <div
+                onClick={handleClick}
+                className={`w-full text-left px-2 py-1 rounded text-xs truncate ${GOOGLE_EVENT_COLOR} text-white cursor-pointer hover:opacity-90`}
+                title="Click to open in Google Calendar"
+            >
+                {time} - 🌐 {event.summary}
+            </div>
+        )
+    }
+
+    return (
+        <div
+            onClick={handleClick}
+            className={`w-full text-left p-2 rounded-lg border-l-4 border-slate-400 bg-muted/50 cursor-pointer hover:bg-muted`}
+            title="Click to open in Google Calendar"
+        >
+            <p className="font-medium text-sm truncate flex items-center gap-1">
+                🌐 {event.summary}
+            </p>
+            <p className="text-xs text-muted-foreground">{time}</p>
+            <p className="text-xs text-muted-foreground/70">Google Calendar</p>
         </div>
     )
 }
@@ -256,6 +307,7 @@ function AppointmentDetailDialog({
 function MonthView({
     currentDate,
     appointments,
+    googleEvents = [],
     onEventClick,
     onDragStart,
     onDrop,
@@ -265,6 +317,7 @@ function MonthView({
 }: {
     currentDate: Date
     appointments: AppointmentListItem[]
+    googleEvents?: GoogleCalendarEvent[]
     onEventClick: (appt: AppointmentListItem) => void
     onDragStart?: (e: React.DragEvent, appointment: AppointmentListItem) => void
     onDrop?: (e: React.DragEvent, date: Date) => void
@@ -291,6 +344,20 @@ function MonthView({
         return map
     }, [appointments])
 
+    const googleEventsByDate = useMemo(() => {
+        const map = new Map<string, GoogleCalendarEvent[]>()
+        googleEvents.forEach((event) => {
+            // For all-day events, extract date directly from ISO string to avoid TZ shift
+            // All-day: "2025-01-15" vs timed: "2025-01-15T10:00:00+00:00"
+            const dateStr = event.is_all_day
+                ? event.start.slice(0, 10)  // Extract YYYY-MM-DD directly
+                : format(parseISO(event.start), "yyyy-MM-dd")
+            if (!map.has(dateStr)) map.set(dateStr, [])
+            map.get(dateStr)!.push(event)
+        })
+        return map
+    }, [googleEvents])
+
     return (
         <div className="border border-border rounded-lg overflow-hidden">
             {/* Day Headers */}
@@ -307,6 +374,8 @@ function MonthView({
                 {days.map((day, i) => {
                     const dateStr = format(day, "yyyy-MM-dd")
                     const dayAppointments = appointmentsByDate.get(dateStr) || []
+                    const dayGoogleEvents = googleEventsByDate.get(dateStr) || []
+                    const totalEvents = dayAppointments.length + dayGoogleEvents.length
                     const isCurrentMonth = isSameMonth(day, currentDate)
                     const isCurrentDay = isToday(day)
                     const isDropTarget = dragOverDate === dateStr
@@ -329,7 +398,8 @@ function MonthView({
                                 {format(day, "d")}
                             </div>
                             <div className="space-y-1 mt-1">
-                                {dayAppointments.slice(0, 3).map((appt) => (
+                                {/* CRM Appointments */}
+                                {dayAppointments.slice(0, 2).map((appt) => (
                                     <EventItem
                                         key={appt.id}
                                         appointment={appt}
@@ -339,9 +409,17 @@ function MonthView({
                                         onDragStart={onDragStart}
                                     />
                                 ))}
-                                {dayAppointments.length > 3 && (
+                                {/* Google Calendar Events */}
+                                {dayGoogleEvents.slice(0, Math.max(0, 3 - dayAppointments.length)).map((event) => (
+                                    <GoogleEventItem
+                                        key={`gcal-${event.id}`}
+                                        event={event}
+                                        compact
+                                    />
+                                ))}
+                                {totalEvents > 3 && (
                                     <p className="text-xs text-muted-foreground text-center">
-                                        +{dayAppointments.length - 3} more
+                                        +{totalEvents - 3} more
                                     </p>
                                 )}
                             </div>
@@ -360,10 +438,12 @@ function MonthView({
 function WeekView({
     currentDate,
     appointments,
+    googleEvents = [],
     onEventClick,
 }: {
     currentDate: Date
     appointments: AppointmentListItem[]
+    googleEvents?: GoogleCalendarEvent[]
     onEventClick: (appt: AppointmentListItem) => void
 }) {
     const days = useMemo(() => {
@@ -382,11 +462,25 @@ function WeekView({
         return map
     }, [appointments])
 
+    const googleEventsByDate = useMemo(() => {
+        const map = new Map<string, GoogleCalendarEvent[]>()
+        googleEvents.forEach((event) => {
+            const dateStr = event.is_all_day
+                ? event.start.slice(0, 10)
+                : format(parseISO(event.start), "yyyy-MM-dd")
+            if (!map.has(dateStr)) map.set(dateStr, [])
+            map.get(dateStr)!.push(event)
+        })
+        return map
+    }, [googleEvents])
+
     return (
         <div className="grid grid-cols-7 gap-2">
             {days.map((day) => {
                 const dateStr = format(day, "yyyy-MM-dd")
                 const dayAppointments = appointmentsByDate.get(dateStr) || []
+                const dayGoogleEvents = googleEventsByDate.get(dateStr) || []
+                const hasEvents = dayAppointments.length > 0 || dayGoogleEvents.length > 0
                 const isCurrentDay = isToday(day)
 
                 return (
@@ -403,8 +497,14 @@ function WeekView({
                                     onClick={() => onEventClick(appt)}
                                 />
                             ))}
-                            {dayAppointments.length === 0 && (
-                                <p className="text-xs text-muted-foreground text-center py-4">No appointments</p>
+                            {dayGoogleEvents.map((event) => (
+                                <GoogleEventItem
+                                    key={`gcal-${event.id}`}
+                                    event={event}
+                                />
+                            ))}
+                            {!hasEvents && (
+                                <p className="text-xs text-muted-foreground text-center py-4">No events</p>
                             )}
                         </div>
                     </div>
@@ -421,18 +521,33 @@ function WeekView({
 function DayView({
     currentDate,
     appointments,
+    googleEvents = [],
     onEventClick,
 }: {
     currentDate: Date
     appointments: AppointmentListItem[]
+    googleEvents?: GoogleCalendarEvent[]
     onEventClick: (appt: AppointmentListItem) => void
 }) {
+    const dateStr = format(currentDate, "yyyy-MM-dd")
+
     const dayAppointments = useMemo(() => {
-        const dateStr = format(currentDate, "yyyy-MM-dd")
         return appointments.filter((appt) =>
             format(parseISO(appt.scheduled_start), "yyyy-MM-dd") === dateStr
         ).sort((a, b) => a.scheduled_start.localeCompare(b.scheduled_start))
-    }, [currentDate, appointments])
+    }, [dateStr, appointments])
+
+    const dayGoogleEvents = useMemo(() => {
+        return googleEvents.filter((event) => {
+            const eventDate = event.is_all_day
+                ? event.start.slice(0, 10)
+                : format(parseISO(event.start), "yyyy-MM-dd")
+            return eventDate === dateStr
+        })
+    }, [dateStr, googleEvents])
+
+    const allDayEvents = dayGoogleEvents.filter(e => e.is_all_day)
+    const timedGoogleEvents = dayGoogleEvents.filter(e => !e.is_all_day)
 
     // Time slots (8am - 8pm)
     const hours = Array.from({ length: 13 }, (_, i) => i + 8)
@@ -442,11 +557,26 @@ function DayView({
             <div className="p-3 bg-muted border-b border-border text-center">
                 <p className="font-medium">{format(currentDate, "EEEE, MMMM d, yyyy")}</p>
             </div>
+            {/* All-day events section */}
+            {allDayEvents.length > 0 && (
+                <div className="p-2 bg-muted/50 border-b border-border">
+                    <p className="text-xs text-muted-foreground mb-1">All day</p>
+                    <div className="space-y-1">
+                        {allDayEvents.map((event) => (
+                            <GoogleEventItem key={`gcal-${event.id}`} event={event} compact />
+                        ))}
+                    </div>
+                </div>
+            )}
             <div className="divide-y divide-border">
                 {hours.map((hour) => {
                     const hourAppointments = dayAppointments.filter((appt) => {
                         const apptHour = parseISO(appt.scheduled_start).getHours()
                         return apptHour === hour
+                    })
+                    const hourGoogleEvents = timedGoogleEvents.filter((event) => {
+                        const eventHour = parseISO(event.start).getHours()
+                        return eventHour === hour
                     })
 
                     return (
@@ -460,6 +590,12 @@ function DayView({
                                         key={appt.id}
                                         appointment={appt}
                                         onClick={() => onEventClick(appt)}
+                                    />
+                                ))}
+                                {hourGoogleEvents.map((event) => (
+                                    <GoogleEventItem
+                                        key={`gcal-${event.id}`}
+                                        event={event}
                                     />
                                 ))}
                             </div>
@@ -504,6 +640,13 @@ export function UnifiedCalendar() {
     })
 
     const appointments = data?.items || []
+
+    // Fetch Google Calendar events
+    const { data: googleEventsData } = useGoogleCalendarEvents(
+        dateRange.date_start,
+        dateRange.date_end
+    )
+    const googleEvents = googleEventsData || []
 
     // Navigation
     const navigate = (direction: "prev" | "next") => {
@@ -616,6 +759,7 @@ export function UnifiedCalendar() {
                             <MonthView
                                 currentDate={currentDate}
                                 appointments={appointments}
+                                googleEvents={googleEvents}
                                 onEventClick={handleEventClick}
                                 onDragStart={handleDragStart}
                                 onDrop={handleDrop}
@@ -628,6 +772,7 @@ export function UnifiedCalendar() {
                             <WeekView
                                 currentDate={currentDate}
                                 appointments={appointments}
+                                googleEvents={googleEvents}
                                 onEventClick={handleEventClick}
                             />
                         )}
@@ -635,6 +780,7 @@ export function UnifiedCalendar() {
                             <DayView
                                 currentDate={currentDate}
                                 appointments={appointments}
+                                googleEvents={googleEvents}
                                 onEventClick={handleEventClick}
                             />
                         )}
@@ -650,6 +796,10 @@ export function UnifiedCalendar() {
                             <span className="text-xs capitalize">{status.replace("_", " ")}</span>
                         </div>
                     ))}
+                    <div className="flex items-center gap-1.5">
+                        <div className={`size-3 rounded-full ${GOOGLE_EVENT_COLOR}`} />
+                        <span className="text-xs">🌐 Google Calendar</span>
+                    </div>
                     <span className="text-xs text-muted-foreground ml-auto">
                         💡 Drag pending/confirmed appointments to reschedule
                     </span>

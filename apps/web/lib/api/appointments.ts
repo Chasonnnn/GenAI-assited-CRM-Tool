@@ -379,3 +379,29 @@ export function cancelByToken(
         body: JSON.stringify({ reason }),
     });
 }
+
+// =============================================================================
+// Google Calendar Events
+// =============================================================================
+
+export interface GoogleCalendarEvent {
+    id: string;
+    summary: string;
+    start: string;  // ISO datetime
+    end: string;    // ISO datetime
+    html_link: string;
+    is_all_day: boolean;
+    source: 'google';
+}
+
+export function getGoogleCalendarEvents(
+    dateStart: string,
+    dateEnd: string
+): Promise<GoogleCalendarEvent[]> {
+    const params = new URLSearchParams({
+        date_start: dateStart,
+        date_end: dateEnd,
+    });
+    return api.get<GoogleCalendarEvent[]>(`/integrations/google/calendar/events?${params}`);
+}
+

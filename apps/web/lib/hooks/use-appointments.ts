@@ -302,3 +302,23 @@ export function useCreateBooking() {
         }) => appointmentsApi.createBooking(publicSlug, data),
     });
 }
+
+// =============================================================================
+// Google Calendar Events
+// =============================================================================
+
+export const calendarKeys = {
+    googleEvents: (dateStart: string, dateEnd: string) =>
+        ['google-calendar', 'events', { dateStart, dateEnd }] as const,
+};
+
+export function useGoogleCalendarEvents(dateStart: string, dateEnd: string) {
+    return useQuery({
+        queryKey: calendarKeys.googleEvents(dateStart, dateEnd),
+        queryFn: () => appointmentsApi.getGoogleCalendarEvents(dateStart, dateEnd),
+        enabled: !!dateStart && !!dateEnd,
+        // Cache for 5 minutes to reduce API calls
+        staleTime: 5 * 60 * 1000,
+    });
+}
+
