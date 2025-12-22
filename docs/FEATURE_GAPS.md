@@ -241,6 +241,7 @@ Version numbers in docs don't match backend settings.
   - `/settings/appointments` - availability configuration
   - Appointment type management (duration, buffers, meeting mode)
   - Weekly availability grid with timezone selector
+  - **Google Calendar event display** - External calendar events shown in unified calendar view (gray styling, click-through to Google)
 
 ---
 

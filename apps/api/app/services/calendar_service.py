@@ -36,6 +36,7 @@ class CalendarEvent(TypedDict):
     start: datetime
     end: datetime
     html_link: str
+    is_all_day: bool
 
 
 # =============================================================================
@@ -151,7 +152,132 @@ async def get_google_busy_slots(
 
 
 # =============================================================================
-# Event Management
+# Event Fetching (Read)
+# =============================================================================
+
+async def get_google_events(
+    access_token: str,
+    calendar_id: str,
+    time_min: datetime,
+    time_max: datetime,
+    max_results_per_page: int = 250,
+    max_total_results: int = 500,
+) -> list[CalendarEvent]:
+    """
+    Fetch events from Google Calendar for display.
+    
+    Features:
+    - singleEvents=true: Expands recurring events into individual instances
+    - Handles pagination via nextPageToken
+    - Detects all-day events (date vs dateTime)
+    - Caps total results to prevent runaway loops
+    
+    Returns empty list if API fails.
+    """
+    events: list[CalendarEvent] = []
+    page_token: str | None = None
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            while len(events) < max_total_results:
+                params = {
+                    "timeMin": time_min.isoformat(),
+                    "timeMax": time_max.isoformat(),
+                    "singleEvents": "true",  # Expand recurring events
+                    "showDeleted": "false",
+                    "orderBy": "startTime",
+                    "maxResults": str(min(max_results_per_page, max_total_results - len(events))),
+                }
+                if page_token:
+                    params["pageToken"] = page_token
+                
+                response = await client.get(
+                    f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    params=params,
+                )
+                
+                if response.status_code != 200:
+                    break
+                
+                data = response.json()
+                items = data.get("items", [])
+                
+                for item in items:
+                    if len(events) >= max_total_results:
+                        break
+                    
+                    # Parse start/end - handle all-day vs timed events
+                    start_data = item.get("start", {})
+                    end_data = item.get("end", {})
+                    
+                    is_all_day = "date" in start_data and "dateTime" not in start_data
+                    
+                    if is_all_day:
+                        # All-day event: date only, convert to datetime at midnight UTC
+                        start_str = start_data.get("date", "")
+                        end_str = end_data.get("date", "")
+                        try:
+                            start_dt = datetime.fromisoformat(start_str).replace(tzinfo=timezone.utc)
+                            end_dt = datetime.fromisoformat(end_str).replace(tzinfo=timezone.utc)
+                        except ValueError:
+                            continue
+                    else:
+                        # Timed event
+                        start_str = start_data.get("dateTime", "")
+                        end_str = end_data.get("dateTime", "")
+                        try:
+                            start_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+                            end_dt = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+                        except ValueError:
+                            continue
+                    
+                    events.append(CalendarEvent(
+                        id=item.get("id", ""),
+                        summary=item.get("summary", "(No title)"),
+                        start=start_dt,
+                        end=end_dt,
+                        html_link=item.get("htmlLink", ""),
+                        is_all_day=is_all_day,
+                    ))
+                
+                # Check for more pages
+                page_token = data.get("nextPageToken")
+                if not page_token:
+                    break
+                    
+    except Exception:
+        pass
+    
+    return events
+
+
+async def get_user_calendar_events(
+    db: Session,
+    user_id: UUID,
+    time_min: datetime,
+    time_max: datetime,
+    calendar_id: str = "primary",
+) -> list[CalendarEvent]:
+    """
+    Convenience wrapper to fetch calendar events for a user.
+    
+    Returns empty list if Google is not connected.
+    """
+    access_token = await get_google_access_token(db, user_id)
+    if not access_token:
+        return []
+    
+    return await get_google_events(
+        access_token=access_token,
+        calendar_id=calendar_id,
+        time_min=time_min,
+        time_max=time_max,
+    )
+
+
+# =============================================================================
+# Event Management (Write)
 # =============================================================================
 
 async def create_google_event(
