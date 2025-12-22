@@ -347,7 +347,7 @@ Features exposed as **modules** (enabled per org) and **tabs** (shown per role).
 
 ### Implemented Modules
 - **Automation** (workflow rules, email templates)
-- **Integrations** (Gmail, Google Calendar, Zoom)
+- **Integrations** (Gmail, Google Calendar, Zoom, Meta Lead Ads)
 - **File Attachments** (S3/local storage, virus scanning)
 - **Invitation System** (team onboarding)
 - **Audit Logging** (compliance tracking)
@@ -356,7 +356,6 @@ Features exposed as **modules** (enabled per org) and **tabs** (shown per role).
 ### Future/Roadmap
 - Import/Export and Dedupe enhancements
 - SMS/Telephony integrations
-- Meta Lead Ads sync
 - Advanced SLA automation
 
 ## License
