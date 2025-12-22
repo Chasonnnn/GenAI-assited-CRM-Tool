@@ -23,7 +23,121 @@
 
 ## 🔴 HIGH PRIORITY GAPS (Uncompleted)
 
-*No high-priority gaps remaining.*
+### 1. Default Automated Workflows & Email Templates ❌
+**Status:** Not started
+
+**Requirements:**
+- **Default Workflows:**
+  - New Lead Follow-up (auto-assign tasks, send welcome email)
+  - Application Review Workflow (checklist, status progression)
+  - Matching Process Workflow (IP ↔ Surrogate pairing)
+  - Medical Clearance Workflow (appointment reminders, document collection)
+  - Contract & Legal Workflow (signature requests, deadline tracking)
+
+- **Email Templates:**
+  - Welcome email for new leads
+  - Application next steps
+  - Document request template
+  - Appointment reminder (24h, 1h before)
+  - Status update notification
+  - Matching proposal introduction
+  - Contract ready for signature
+
+**Effort:** Medium (1 week)
+
+---
+
+### 2. Notification Center ❌
+**Status:** Not started (may have partial backend)
+
+**Requirements:**
+- Dedicated "Notifications" tab (under Tasks or standalone)
+- Bell icon in header with unread count badge
+- Notification types:
+  - Task assigned/due
+  - Case status changes
+  - New lead assigned
+  - Appointment requests
+  - AI action approvals needed
+  - System alerts
+- Mark as read/unread
+- Filter by type
+- Click to navigate to source
+
+**Effort:** Medium (1 week)
+
+---
+
+### 3. Email Signature Setup ❌
+**Status:** Not started
+
+**Requirements:**
+- Add signature editor in Email Templates tab
+- Rich text signature (name, title, phone, logo)
+- Per-user signature storage
+- Auto-append to outgoing emails
+- Preview before save
+
+**Effort:** Small (2-3 days)
+
+---
+
+### 4. Matched Tab (IP + Surrogate Pairs) ❌
+**Status:** Not started
+
+**Requirements:**
+- New "Matched" tab showing paired cases
+- Side-by-side view:
+  - Left: Intended Parents profile
+  - Right: Surrogate profile
+- Shared information:
+  - Status history
+  - Notes
+  - Files/attachments
+  - Communication log
+- **Match Calendar:**
+  - Important dates only (not regular appointments)
+  - Medications schedule
+  - Medical exams
+  - Legal milestones
+  - Estimated delivery date
+  - Custom date types
+- Calendar view similar to appointments calendar
+
+**Data Model:**
+- `Match` table linking IP case + Surrogate case
+- `MatchEvent` table for important dates
+- Match status (pending, active, completed)
+
+**Effort:** Large (2 weeks)
+
+---
+
+### 5. UI/UX Improvements ⚠️
+**Status:** Issues identified via screenshots
+
+**Issues to fix:**
+
+1. **Appointments Tab - Empty space above tabs**
+   - Large blank area between description and tab bar
+   - Should remove or add useful content
+   
+2. **Cases Tab - Filter label visibility**
+   - "all" text in dropdowns hard to read
+   - Labels should be more descriptive (e.g., "All Statuses", "All Assignees")
+   - Consider placeholder text styling
+
+3. **Case Detail - Notes section styling**
+   - Notes input area looks minimal
+   - Activity section could be more compact
+   - Bottom area has excess padding
+
+**Reference screenshots** (see artifacts):
+- `ui_issue_appointments.png`
+- `ui_issue_cases_filters.png`  
+- `ui_issue_case_detail.png`
+
+**Effort:** Small (1-2 days)
 
 ---
 
