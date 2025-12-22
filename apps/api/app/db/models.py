@@ -2583,6 +2583,94 @@ class Match(Base):
     intended_parent: Mapped["IntendedParent"] = relationship()
     proposed_by: Mapped["User"] = relationship(foreign_keys=[proposed_by_user_id])
     reviewed_by: Mapped["User"] = relationship(foreign_keys=[reviewed_by_user_id])
+    
+    # Match events relationship
+    events: Mapped[list["MatchEvent"]] = relationship(
+        back_populates="match",
+        cascade="all, delete-orphan",
+        order_by="MatchEvent.starts_at",
+    )
+
+
+class MatchEvent(Base):
+    """
+    Calendar events for a match between surrogate and intended parents.
+    
+    Tracks important dates like medications, medical exams, legal milestones,
+    and delivery dates with color coding for person type and event type.
+    
+    Timezone-safe: stores starts_at/ends_at in UTC with timezone string for display.
+    For all-day events, use start_date/end_date (date only, no timezone conversion).
+    """
+    __tablename__ = "match_events"
+    __table_args__ = (
+        Index("ix_match_events_match_starts", "match_id", "starts_at"),
+        Index("ix_match_events_org_starts", "organization_id", "starts_at"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    match_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("matches.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # Who and what
+    person_type: Mapped[str] = mapped_column(
+        String(20),  # "surrogate" or "ip"
+        nullable=False
+    )
+    event_type: Mapped[str] = mapped_column(
+        String(20),  # medication, medical_exam, legal, delivery, custom
+        nullable=False
+    )
+    
+    # Event details
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    # Timezone-aware datetime (for timed events)
+    starts_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    ends_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    timezone: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="America/Los_Angeles"
+    )
+    
+    # All-day events (date only, no timezone conversion)
+    all_day: Mapped[bool] = mapped_column(nullable=False, default=False)
+    start_date: Mapped[date | None] = mapped_column(nullable=True)
+    end_date: Mapped[date | None] = mapped_column(nullable=True)
+    
+    # Audit
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    match: Mapped["Match"] = relationship(back_populates="events")
+    created_by: Mapped["User"] = relationship()
 
 
 # =============================================================================

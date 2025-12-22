@@ -32,6 +32,7 @@ import {
     SparklesIcon,
     MailIcon,
     BrainIcon,
+    HeartHandshakeIcon,
 } from "lucide-react"
 import { InlineEditField } from "@/components/inline-edit-field"
 import { FileUploadZone } from "@/components/FileUploadZone"
@@ -408,13 +409,14 @@ export default function CaseDetailPage() {
                     )}
 
                     {/* Propose Match Button - only for manager+ on active cases */}
-                    {user?.role && ['admin', 'developer'].includes(user.role) && !caseData.is_archived && (
+                    {user?.role && ['case_manager', 'admin', 'developer'].includes(user.role) && !caseData.is_archived && (
                         <Button
                             variant="outline"
                             size="sm"
                             onClick={() => setProposeMatchOpen(true)}
                         >
-                            👥 Propose Match
+                            <HeartHandshakeIcon className="size-4 mr-2" />
+                            Propose Match
                         </Button>
                     )}
 

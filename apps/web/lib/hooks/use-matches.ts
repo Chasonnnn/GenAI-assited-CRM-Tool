@@ -136,3 +136,86 @@ export function useUpdateMatchNotes() {
 
 // Re-export types
 export type { MatchListResponse, MatchRead, MatchListItem, MatchStatus, ListMatchesParams }
+
+// =============================================================================
+// Match Events Hooks
+// =============================================================================
+
+import {
+    listMatchEvents,
+    getMatchEvent,
+    createMatchEvent,
+    updateMatchEvent,
+    deleteMatchEvent,
+    type MatchEventCreate,
+    type MatchEventUpdate,
+    type MatchEventRead,
+    type MatchEventType,
+    type MatchEventPersonType,
+    EVENT_TYPE_COLORS,
+    PERSON_TYPE_COLORS,
+} from '@/lib/api/matches'
+
+export const matchEventKeys = {
+    all: (matchId: string) => ['matches', matchId, 'events'] as const,
+    list: (matchId: string) => [...matchEventKeys.all(matchId), 'list'] as const,
+    detail: (matchId: string, eventId: string) => [...matchEventKeys.all(matchId), eventId] as const,
+}
+
+/**
+ * List events for a match.
+ */
+export function useMatchEvents(matchId: string) {
+    return useQuery({
+        queryKey: matchEventKeys.list(matchId),
+        queryFn: () => listMatchEvents(matchId),
+        enabled: !!matchId,
+    })
+}
+
+/**
+ * Create a match event.
+ */
+export function useCreateMatchEvent(matchId: string) {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (data: MatchEventCreate) => createMatchEvent(matchId, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: matchEventKeys.list(matchId) })
+        },
+    })
+}
+
+/**
+ * Update a match event.
+ */
+export function useUpdateMatchEvent(matchId: string) {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({ eventId, data }: { eventId: string; data: MatchEventUpdate }) =>
+            updateMatchEvent(matchId, eventId, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: matchEventKeys.list(matchId) })
+        },
+    })
+}
+
+/**
+ * Delete a match event.
+ */
+export function useDeleteMatchEvent(matchId: string) {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (eventId: string) => deleteMatchEvent(matchId, eventId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: matchEventKeys.list(matchId) })
+        },
+    })
+}
+
+// Re-export event types and colors
+export type { MatchEventCreate, MatchEventUpdate, MatchEventRead, MatchEventType, MatchEventPersonType }
+export { EVENT_TYPE_COLORS, PERSON_TYPE_COLORS }

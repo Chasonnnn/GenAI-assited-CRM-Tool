@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -8,47 +8,56 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircleIcon, Loader2Icon, UsersIcon } from "lucide-react"
+import { Loader2Icon, HeartHandshakeIcon, AlertCircleIcon } from "lucide-react"
 import { useCreateMatch } from "@/lib/hooks/use-matches"
-import { useIntendedParents } from "@/lib/hooks/use-intended-parents"
+import { useCases } from "@/lib/hooks/use-cases"
 
-interface ProposeMatchDialogProps {
+interface ProposeMatchFromIPDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    caseId: string
-    caseName?: string
+    intendedParentId: string
+    ipName?: string
     onSuccess?: () => void
 }
 
-export function ProposeMatchDialog({
+export function ProposeMatchFromIPDialog({
     open,
     onOpenChange,
-    caseId,
-    caseName,
+    intendedParentId,
+    ipName,
     onSuccess,
-}: ProposeMatchDialogProps) {
-    const [selectedIpId, setSelectedIpId] = useState<string>("")
+}: ProposeMatchFromIPDialogProps) {
+    const [selectedCaseId, setSelectedCaseId] = useState<string>("")
     const [compatibilityScore, setCompatibilityScore] = useState<string>("")
     const [notes, setNotes] = useState("")
     const [error, setError] = useState<string | null>(null)
 
-    const { data: ipsData, isLoading: ipsLoading } = useIntendedParents({ per_page: 100 })
+    // Only fetch cases in pending_match status
+    const { data: casesData, isLoading: casesLoading } = useCases({
+        per_page: 100
+    })
     const createMatch = useCreateMatch()
 
+    // Filter to only pending_match cases (by status_label since API uses pipeline stages)
+    const eligibleCases = useMemo(() => {
+        if (!casesData?.items) return []
+        return casesData.items.filter(c => c.status_label?.toLowerCase() === "pending match")
+    }, [casesData])
+
     const handleSubmit = async () => {
-        if (!selectedIpId) return
+        if (!selectedCaseId) return
         setError(null)
 
         try {
             await createMatch.mutateAsync({
-                case_id: caseId,
-                intended_parent_id: selectedIpId,
+                case_id: selectedCaseId,
+                intended_parent_id: intendedParentId,
                 compatibility_score: compatibilityScore ? parseFloat(compatibilityScore) : undefined,
                 notes: notes || undefined,
             })
             alert("Match proposed successfully!")
             onOpenChange(false)
-            setSelectedIpId("")
+            setSelectedCaseId("")
             setCompatibilityScore("")
             setNotes("")
             onSuccess?.()
@@ -60,21 +69,22 @@ export function ProposeMatchDialog({
 
     const handleClose = () => {
         onOpenChange(false)
-        setSelectedIpId("")
+        setSelectedCaseId("")
         setCompatibilityScore("")
         setNotes("")
+        setError(null)
     }
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-lg">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <UsersIcon className="size-5" />
+                        <HeartHandshakeIcon className="size-5" />
                         Propose Match
                     </DialogTitle>
                     <DialogDescription>
-                        {caseName ? `Create a match proposal for ${caseName}` : "Create a match proposal for this surrogate"}
+                        {ipName ? `Create a match proposal for ${ipName}` : "Create a match proposal for this intended parent"}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -85,22 +95,29 @@ export function ProposeMatchDialog({
                             <AlertDescription>{error}</AlertDescription>
                         </Alert>
                     )}
+
                     <div className="space-y-2">
-                        <Label htmlFor="ip-select">Intended Parent(s)</Label>
-                        {ipsLoading ? (
+                        <Label htmlFor="case-select">Surrogate (Pending Match Only)</Label>
+                        {casesLoading ? (
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <Loader2Icon className="size-4 animate-spin" />
-                                Loading...
+                                Loading available surrogates...
+                            </div>
+                        ) : eligibleCases.length === 0 ? (
+                            <div className="text-sm text-muted-foreground p-3 border rounded-md bg-muted/30">
+                                No surrogates are currently in "Pending Match" status.
                             </div>
                         ) : (
-                            <Select value={selectedIpId} onValueChange={(v) => setSelectedIpId(v || "")}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select intended parent(s)" />
+                            <Select value={selectedCaseId} onValueChange={(v) => setSelectedCaseId(v || "")}>
+                                <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Select a surrogate" />
                                 </SelectTrigger>
-                                <SelectContent>
-                                    {ipsData?.items.map((ip) => (
-                                        <SelectItem key={ip.id} value={ip.id}>
-                                            {ip.full_name || ip.email || "Unknown"}
+                                <SelectContent className="max-h-[300px]">
+                                    {eligibleCases.map((c) => (
+                                        <SelectItem key={c.id} value={c.id} className="py-2">
+                                            <span className="font-medium">{c.full_name || "Unknown"}</span>
+                                            <span className="text-muted-foreground ml-2">#{c.case_number}</span>
+                                            {c.state && <span className="text-muted-foreground ml-2">• {c.state}</span>}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -140,7 +157,8 @@ export function ProposeMatchDialog({
                     </Button>
                     <Button
                         onClick={handleSubmit}
-                        disabled={!selectedIpId || createMatch.isPending}
+                        disabled={!selectedCaseId || createMatch.isPending}
+                        className="bg-teal-600 hover:bg-teal-700"
                     >
                         {createMatch.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
                         Propose Match

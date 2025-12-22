@@ -49,6 +49,7 @@ import {
     ChevronRightIcon,
     CalendarIcon,
     CalendarDays,
+    HeartHandshake,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { NotificationBell } from "@/components/notification-bell"
@@ -69,6 +70,11 @@ const navigation = [
         title: "Intended Parents",
         url: "/intended-parents",
         icon: Users,
+    },
+    {
+        title: "Matches",
+        url: "/intended-parents/matches",
+        icon: HeartHandshake,
     },
     {
         title: "Reports",
