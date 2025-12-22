@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, get_current_session, require_roles, require_csrf_header, require_permission
 from app.db.enums import Role
-from app.db.models import Case, UserIntegration, AIConversation
+from app.db.models import Case, Task, UserIntegration, AIConversation
 from app.schemas.auth import UserSession
 from app.services import ai_settings_service, ai_chat_service
 
@@ -101,7 +101,7 @@ class ChatRequest(BaseModel):
     entity_type and entity_id are optional for global chat mode.
     When provided, context is injected for that specific entity.
     """
-    entity_type: str | None = Field(None, pattern="^(case|global)$")  # case or global
+    entity_type: str | None = Field(None, pattern="^(case|task|global)$")  # case, task, or global
     entity_id: uuid.UUID | None = None
     message: str = Field(..., min_length=1, max_length=10000)
 
@@ -258,7 +258,7 @@ def chat(
         # Use user_id as entity_id for global conversations
         entity_id = session.user_id
     
-    # Check if user has access to the entity (only for case type)
+    # Check if user has access to the entity
     if entity_type == "case":
         case = db.query(Case).filter(
             Case.id == entity_id,
@@ -269,6 +269,26 @@ def chat(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Case not found",
             )
+    elif entity_type == "task":
+        # Users can only access tasks they own or are assigned to
+        task = db.query(Task).filter(
+            Task.id == entity_id,
+            Task.organization_id == session.org_id,
+        ).first()
+        if not task:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Task not found",
+            )
+        # Check if user owns or is assigned to the task
+        if task.created_by_user_id != session.user_id and task.assigned_to_user_id != session.user_id:
+            # Allow managers to access any task in their org
+            is_manager = session.role in (Role.ADMIN, Role.CASE_MANAGER, Role.DEVELOPER)
+            if not is_manager:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not authorized to access this task",
+                )
     
     # Get user's connected integrations
     integrations = db.query(UserIntegration.integration_type).filter(
@@ -302,6 +322,36 @@ def get_conversation(
     session: UserSession = Depends(require_permission("use_ai_assistant")),
 ) -> dict[str, Any]:
     """Get conversation history for an entity."""
+    # Validate entity access before fetching conversations
+    if entity_type == "case":
+        case = db.query(Case).filter(
+            Case.id == entity_id,
+            Case.organization_id == session.org_id
+        ).first()
+        if not case:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Case not found",
+            )
+    elif entity_type == "task":
+        task = db.query(Task).filter(
+            Task.id == entity_id,
+            Task.organization_id == session.org_id,
+        ).first()
+        if not task:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Task not found",
+            )
+        # Check if user owns or is assigned to the task
+        if task.created_by_user_id != session.user_id and task.assigned_to_user_id != session.user_id:
+            is_manager = session.role in (Role.ADMIN, Role.CASE_MANAGER, Role.DEVELOPER)
+            if not is_manager:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not authorized to access this task",
+                )
+    
     conversations = ai_chat_service.get_user_conversations(
         db, session.user_id, entity_type, entity_id
     )

@@ -347,13 +347,32 @@ function MonthView({
     const googleEventsByDate = useMemo(() => {
         const map = new Map<string, GoogleCalendarEvent[]>()
         googleEvents.forEach((event) => {
-            // For all-day events, extract date directly from ISO string to avoid TZ shift
-            // All-day: "2025-01-15" vs timed: "2025-01-15T10:00:00+00:00"
-            const dateStr = event.is_all_day
-                ? event.start.slice(0, 10)  // Extract YYYY-MM-DD directly
-                : format(parseISO(event.start), "yyyy-MM-dd")
-            if (!map.has(dateStr)) map.set(dateStr, [])
-            map.get(dateStr)!.push(event)
+            if (event.is_all_day) {
+                // All-day events can span multiple days. Google's end date is exclusive.
+                // Extract dates directly to avoid TZ shift
+                const startDate = event.start.slice(0, 10)  // YYYY-MM-DD
+                const endDate = event.end.slice(0, 10)      // YYYY-MM-DD (exclusive)
+
+                // Expand across all days the event spans
+                const start = parseISO(startDate)
+                const end = parseISO(endDate)
+                // End is exclusive, so we go up to but not including end
+                const daysToShow = eachDayOfInterval({
+                    start,
+                    end: new Date(end.getTime() - 86400000), // Subtract 1 day
+                })
+
+                daysToShow.forEach((day) => {
+                    const dateStr = format(day, "yyyy-MM-dd")
+                    if (!map.has(dateStr)) map.set(dateStr, [])
+                    map.get(dateStr)!.push(event)
+                })
+            } else {
+                // Timed events: use parsed date
+                const dateStr = format(parseISO(event.start), "yyyy-MM-dd")
+                if (!map.has(dateStr)) map.set(dateStr, [])
+                map.get(dateStr)!.push(event)
+            }
         })
         return map
     }, [googleEvents])
@@ -465,11 +484,25 @@ function WeekView({
     const googleEventsByDate = useMemo(() => {
         const map = new Map<string, GoogleCalendarEvent[]>()
         googleEvents.forEach((event) => {
-            const dateStr = event.is_all_day
-                ? event.start.slice(0, 10)
-                : format(parseISO(event.start), "yyyy-MM-dd")
-            if (!map.has(dateStr)) map.set(dateStr, [])
-            map.get(dateStr)!.push(event)
+            if (event.is_all_day) {
+                const startDate = event.start.slice(0, 10)
+                const endDate = event.end.slice(0, 10)
+                const start = parseISO(startDate)
+                const end = parseISO(endDate)
+                const daysToShow = eachDayOfInterval({
+                    start,
+                    end: new Date(end.getTime() - 86400000),
+                })
+                daysToShow.forEach((day) => {
+                    const dateStr = format(day, "yyyy-MM-dd")
+                    if (!map.has(dateStr)) map.set(dateStr, [])
+                    map.get(dateStr)!.push(event)
+                })
+            } else {
+                const dateStr = format(parseISO(event.start), "yyyy-MM-dd")
+                if (!map.has(dateStr)) map.set(dateStr, [])
+                map.get(dateStr)!.push(event)
+            }
         })
         return map
     }, [googleEvents])
@@ -539,10 +572,16 @@ function DayView({
 
     const dayGoogleEvents = useMemo(() => {
         return googleEvents.filter((event) => {
-            const eventDate = event.is_all_day
-                ? event.start.slice(0, 10)
-                : format(parseISO(event.start), "yyyy-MM-dd")
-            return eventDate === dateStr
+            if (event.is_all_day) {
+                // Multi-day all-day events: check if dateStr falls within range
+                const startDate = event.start.slice(0, 10)
+                const endDate = event.end.slice(0, 10)  // Exclusive
+                // dateStr should be >= start and < end
+                return dateStr >= startDate && dateStr < endDate
+            } else {
+                const eventDate = format(parseISO(event.start), "yyyy-MM-dd")
+                return eventDate === dateStr
+            }
         })
     }, [dateStr, googleEvents])
 
