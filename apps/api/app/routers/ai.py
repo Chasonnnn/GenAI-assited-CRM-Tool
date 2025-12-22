@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, get_current_session, require_roles, require_csrf_header, require_permission
+from app.core.case_access import check_case_access
 from app.db.enums import Role
 from app.db.models import Case, Task, UserIntegration, AIConversation
 from app.schemas.auth import UserSession
@@ -269,6 +270,14 @@ def chat(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Case not found",
             )
+        # Use centralized case access check (owner-based + permissions)
+        check_case_access(
+            case=case,
+            user_role=session.role,
+            user_id=session.user_id,
+            db=db,
+            org_id=session.org_id,
+        )
     elif entity_type == "task":
         # Users can only access tasks they own or are assigned to
         task = db.query(Task).filter(
@@ -333,6 +342,14 @@ def get_conversation(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Case not found",
             )
+        # Use centralized case access check (owner-based + permissions)
+        check_case_access(
+            case=case,
+            user_role=session.role,
+            user_id=session.user_id,
+            db=db,
+            org_id=session.org_id,
+        )
     elif entity_type == "task":
         task = db.query(Task).filter(
             Task.id == entity_id,
