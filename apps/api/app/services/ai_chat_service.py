@@ -76,6 +76,41 @@ If the user pastes an email or describes a situation, you can help:
 - You cannot execute actions without case context
 """
 
+TASK_SYSTEM_PROMPT = """You are an AI assistant for a surrogacy agency CRM called CareFlow. You help staff manage tasks efficiently.
+
+You are viewing a specific TASK. You can:
+- Answer questions about this task
+- Suggest updates or notes to add
+- Help break down the task into sub-tasks
+- Parse schedules provided by the user into actionable tasks
+
+## Schedule Parsing
+
+When a user provides a medication schedule, exam schedule, or appointment list:
+1. Parse each item for: date, time (if specified), and description
+2. For each item, propose a `create_task` action with:
+   - title: Brief description (e.g., "Take Prenatal Vitamins")
+   - due_date: Parsed date in YYYY-MM-DD format
+   - due_time: Parsed time in HH:MM format (24h), or null if not specified
+   - description: Full details from the schedule
+3. Ask user to confirm before creating tasks
+4. Handle recurring items by creating individual tasks for a reasonable period (up to 7 days for daily items)
+
+Example input: "Prenatal vitamins daily at 9am for the next 7 days"
+→ Propose 7 individual create_task actions, one for each day
+
+Example action:
+<action>
+{"type": "create_task", "title": "Take Prenatal Vitamins", "due_date": "2024-12-21", "due_time": "09:00", "description": "Daily prenatal vitamins"}
+</action>
+
+## Guidelines
+- Be concise and professional
+- Always propose actions for approval, never auto-execute
+- Don't provide legal or medical advice
+- Keep responses focused on the current task context
+"""
+
 
 def _build_dynamic_context(
     case: Case, 
@@ -258,6 +293,64 @@ def get_case_context(
     return case, notes, tasks
 
 
+def get_task_context(
+    db: Session,
+    task_id: uuid.UUID,
+    organization_id: uuid.UUID,
+) -> tuple[Task | None, Case | None]:
+    """Load task with optional related case for context."""
+    task = db.query(Task).filter(
+        Task.id == task_id,
+        Task.organization_id == organization_id,
+    ).options(joinedload(Task.case)).first()
+    
+    if not task:
+        return None, None
+    
+    return task, task.case
+
+
+def _build_task_context(
+    task: Task,
+    case: Case | None,
+    user_integrations: list[str],
+) -> str:
+    """Build dynamic context string for the current task."""
+    lines = [
+        f"## Current Task Context",
+        f"- Title: {task.title}",
+        f"- Type: {task.task_type}",
+        f"- Status: {'Completed' if task.is_completed else 'Open'}",
+    ]
+    
+    if task.description:
+        desc = task.description[:300] + "..." if len(task.description) > 300 else task.description
+        lines.append(f"- Description: {desc}")
+    if task.due_date:
+        lines.append(f"- Due Date: {task.due_date}")
+    if task.due_time:
+        lines.append(f"- Due Time: {task.due_time}")
+    if task.priority:
+        lines.append(f"- Priority: {task.priority}")
+    
+    if case:
+        lines.append(f"\n## Related Case")
+        lines.append(f"- Case #: {case.case_number}")
+        lines.append(f"- Name: {case.full_name or 'N/A'}")
+        lines.append(f"- Status: {case.status_label or 'N/A'}")
+    
+    # Add user integrations
+    lines.append("\n## Your Connected Integrations")
+    if "gmail" in user_integrations:
+        lines.append("- ✓ Gmail (can send emails)")
+    else:
+        lines.append("- ✗ Gmail not connected (can only draft emails)")
+    if "zoom" in user_integrations:
+        lines.append("- ✓ Zoom (can create meetings)")
+    
+    return "\n".join(lines)
+
+
 def get_user_integrations(db: Session, user_id: uuid.UUID) -> list[str]:
     """Get list of connected integration types for a user."""
     integrations = db.query(UserIntegration.integration_type).filter(
@@ -328,6 +421,16 @@ def chat(
             anonymize=should_anonymize,
             pii_mapping=pii_mapping,
         )
+    elif entity_type == "task":
+        task, related_case = get_task_context(db, entity_id, organization_id)
+        if not task:
+            return {
+                "content": "Task not found.",
+                "proposed_actions": [],
+                "tokens_used": {"prompt": 0, "completion": 0, "total": 0},
+            }
+        system_prompt = TASK_SYSTEM_PROMPT
+        dynamic_context = _build_task_context(task, related_case, user_integrations)
     elif entity_type == "global":
         # Global mode - use simplified prompt
         system_prompt = GLOBAL_SYSTEM_PROMPT

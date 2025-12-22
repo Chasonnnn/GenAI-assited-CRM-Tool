@@ -73,7 +73,7 @@ export interface AIConversation {
 }
 
 export interface ChatRequest {
-    entity_type?: 'case' | 'global' | null;  // null/undefined = global mode
+    entity_type?: 'case' | 'global' | 'task' | null;  // null/undefined = global mode
     entity_id?: string | null;
     message: string;
 }
