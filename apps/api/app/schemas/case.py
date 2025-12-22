@@ -154,6 +154,8 @@ class CaseListItem(BaseModel):
     id: UUID
     case_number: str
     stage_id: UUID
+    stage_slug: str | None = None
+    stage_type: str | None = None
     status_label: str
     source: CaseSource
     full_name: str

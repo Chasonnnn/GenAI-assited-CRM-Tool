@@ -684,12 +684,15 @@ def send_zoom_meeting_invite(
     Uses the 'Zoom Meeting Invite' template (auto-created if missing).
     """
     from app.services import zoom_service
-    from app.db.models import User
+    from app.db.models import Organization, User
     
     # Get host name for template
     user = db.query(User).filter(User.id == session.user_id).first()
     host_name = user.display_name if user else "Your Host"
     
+    org = db.query(Organization).filter(Organization.id == session.org_id).first()
+    org_timezone = org.timezone if org else "America/Los_Angeles"
+
     # Build meeting object for template
     meeting = zoom_service.ZoomMeeting(
         id=request.meeting_id,
@@ -697,7 +700,7 @@ def send_zoom_meeting_invite(
         topic=request.topic,
         start_time=request.start_time,
         duration=request.duration,
-        timezone="America/New_York",
+        timezone=org_timezone,
         join_url=request.join_url,
         start_url="",  # Not needed for attendee
         password=request.password,

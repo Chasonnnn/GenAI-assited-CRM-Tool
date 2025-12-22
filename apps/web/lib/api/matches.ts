@@ -32,6 +32,10 @@ export interface MatchRead {
     case_number: string | null
     case_name: string | null
     ip_name: string | null
+    // Case stage info for status sync
+    case_stage_id: string | null
+    case_stage_slug: string | null
+    case_stage_label: string | null
 }
 
 export interface MatchListItem {
@@ -44,6 +48,10 @@ export interface MatchListItem {
     status: string
     compatibility_score: number | null
     proposed_at: string
+    // Case stage info for status sync
+    case_stage_id: string | null
+    case_stage_slug: string | null
+    case_stage_label: string | null
 }
 
 export interface MatchListResponse {
@@ -51,6 +59,11 @@ export interface MatchListResponse {
     total: number
     page: number
     per_page: number
+}
+
+export interface MatchStatsResponse {
+    total: number
+    by_status: Record<MatchStatus, number>
 }
 
 export interface MatchAcceptRequest {
@@ -92,6 +105,13 @@ export async function listMatches(params: ListMatchesParams = {}): Promise<Match
     if (params.per_page) searchParams.set('per_page', params.per_page.toString())
     const query = searchParams.toString()
     return api.get<MatchListResponse>(`/matches/${query ? `?${query}` : ''}`)
+}
+
+/**
+ * Get match counts by status.
+ */
+export async function getMatchStats(): Promise<MatchStatsResponse> {
+    return api.get<MatchStatsResponse>('/matches/stats')
 }
 
 /**

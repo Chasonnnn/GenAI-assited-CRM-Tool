@@ -115,6 +115,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const searchParams = useSearchParams()
     const { user } = useAuth()
     const isManager = user?.role && ['admin', 'developer'].includes(user.role)
+    const isAdmin = user?.role === 'admin'
     const isDeveloper = user?.role === 'developer'
     const activeSettingsTab = searchParams.get("tab")
     const activeAutomationTab = searchParams.get("tab")
@@ -135,7 +136,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
         { title: "General", url: "/settings", tab: null },
         { title: "Notifications", url: "/settings?tab=notifications", tab: "notifications" },
         ...(isManager ? [{ title: "Team", url: "/settings/team" }] : []),
-        ...(isDeveloper ? [{ title: "Pipelines", url: "/settings/pipelines" }] : []),
+        ...((isAdmin || isDeveloper) ? [{ title: "Pipelines", url: "/settings/pipelines" }] : []),
         ...(isManager ? [{ title: "Queue Management", url: "/settings/queues" }] : []),
         { title: "Audit Log", url: "/settings/audit" },
         ...(isManager ? [{ title: "Compliance", url: "/settings/compliance" }] : []),

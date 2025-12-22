@@ -91,6 +91,10 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
         "propose_matches", "Propose Matches", 
         "Create match proposals between surrogates and IPs", PermissionCategory.INTENDED_PARENTS
     ),
+    "view_matches": PermissionDef(
+        "view_matches", "View Matches",
+        "Access match list and details", PermissionCategory.INTENDED_PARENTS
+    ),
     
     # Tasks
     "view_tasks": PermissionDef(
@@ -138,8 +142,7 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
     ),
     "manage_pipelines": PermissionDef(
         "manage_pipelines", "Manage Pipelines", 
-        "Edit pipeline stages", PermissionCategory.SETTINGS,
-        developer_only=True
+        "Edit pipeline stages", PermissionCategory.SETTINGS
     ),
     "manage_queues": PermissionDef(
         "manage_queues", "Manage Queues", 
@@ -228,6 +231,7 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "view_intended_parents",
         "edit_intended_parents",
         "propose_matches",
+        "view_matches",
         "view_tasks",
         "create_tasks",
         "edit_tasks",
@@ -249,6 +253,7 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "view_intended_parents",
         "edit_intended_parents",
         "propose_matches",
+        "view_matches",
         "view_tasks",
         "create_tasks",
         "edit_tasks",
@@ -268,6 +273,7 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "view_email_templates",
         "manage_email_templates",
         "manage_ops",
+        "manage_pipelines",
     },
     "developer": set(PERMISSION_REGISTRY.keys()),  # All permissions
 }

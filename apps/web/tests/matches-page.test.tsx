@@ -13,6 +13,10 @@ const mockUseMatches = vi.fn()
 
 vi.mock('@/lib/hooks/use-matches', () => ({
     useMatches: (filters: unknown) => mockUseMatches(filters),
+    useMatchStats: () => ({
+        data: { proposed: 1, reviewing: 0, accepted: 1, rejected: 0, cancelled: 0, total: 2 },
+        isLoading: false,
+    }),
 }))
 
 describe('MatchesPage', () => {
@@ -79,7 +83,8 @@ describe('MatchesPage', () => {
         expect(screen.getByText('Case #')).toBeInTheDocument()
         expect(screen.getByText('Intended Parents')).toBeInTheDocument()
         expect(screen.getByText('Compatibility')).toBeInTheDocument()
-        expect(screen.getByText('Status')).toBeInTheDocument()
+        expect(screen.getByText('Match Status')).toBeInTheDocument()
+        expect(screen.getByText('Case Stage')).toBeInTheDocument()
 
         // Match data
         expect(screen.getByText('Jane Doe')).toBeInTheDocument()

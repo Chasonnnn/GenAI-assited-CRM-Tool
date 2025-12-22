@@ -190,7 +190,7 @@ def trigger_scheduled_workflows(db: Session, org_id: UUID) -> None:
     for workflow in workflows:
         config = workflow.trigger_config
         cron = config.get("cron", "")
-        tz = config.get("timezone", "America/New_York")
+        tz = config.get("timezone", "America/Los_Angeles")
         
         # Simple cron matching (for daily/weekly schedules)
         # Full cron parsing would require croniter library

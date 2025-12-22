@@ -73,11 +73,11 @@ def generate_public_slug() -> str:
 def _get_timezone(name: str | None) -> ZoneInfo:
     """Get a ZoneInfo timezone with safe fallback."""
     if not name:
-        return ZoneInfo("UTC")
+        return ZoneInfo("America/Los_Angeles")
     try:
         return ZoneInfo(name)
     except Exception:
-        return ZoneInfo("UTC")
+        return ZoneInfo("America/Los_Angeles")
 
 
 def _normalize_idempotency_key(org_id: UUID, user_id: UUID, key: str) -> str:
@@ -232,7 +232,7 @@ def set_availability_rules(
     user_id: UUID,
     org_id: UUID,
     rules: list[dict],
-    timezone_name: str = "America/New_York",
+    timezone_name: str = "America/Los_Angeles",
 ) -> list[AvailabilityRule]:
     """
     Replace all availability rules for a user.

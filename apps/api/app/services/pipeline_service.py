@@ -37,6 +37,7 @@ DEFAULT_COLORS = {
     "disqualified": "#EF4444",  # Red
     # Stage B: Post-Approval (darker shades)
     "pending_match": "#0EA5E9",  # Sky
+    "matched": "#6366F1",  # Indigo
     "meds_started": "#14B8A6",  # Teal
     "exam_passed": "#059669",  # Emerald
     "embryo_transferred": "#0D9488",  # Teal
@@ -57,6 +58,7 @@ STAGE_TYPE_MAP = {
     "approved": "intake",
     "pending_handoff": "intake",
     "pending_match": "post_approval",
+    "matched": "post_approval",
     "meds_started": "post_approval",
     "exam_passed": "post_approval",
     "embryo_transferred": "post_approval",
@@ -75,6 +77,7 @@ DEFAULT_STAGE_ORDER = [
     "approved",
     "pending_handoff",
     "pending_match",
+    "matched",
     "meds_started",
     "exam_passed",
     "embryo_transferred",

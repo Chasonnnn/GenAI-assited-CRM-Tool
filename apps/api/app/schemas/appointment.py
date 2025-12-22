@@ -65,7 +65,7 @@ class AvailabilityRuleInput(BaseModel):
 class AvailabilityRulesSet(BaseModel):
     """Schema for setting all availability rules."""
     rules: list[AvailabilityRuleInput]
-    timezone: str = Field("America/New_York", max_length=50)
+    timezone: str = Field("America/Los_Angeles", max_length=50)
 
 
 class AvailabilityRuleRead(BaseModel):
@@ -227,3 +227,4 @@ class PublicBookingPageRead(BaseModel):
     staff: StaffInfoRead
     appointment_types: list[AppointmentTypeRead]
     org_name: str | None
+    org_timezone: str | None

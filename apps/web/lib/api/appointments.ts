@@ -179,6 +179,7 @@ export interface PublicBookingPage {
     staff: StaffInfo;
     appointment_types: AppointmentType[];
     org_name: string | null;
+    org_timezone: string | null;
 }
 
 export interface BookingCreate {
@@ -202,6 +203,7 @@ export interface PublicAppointmentView {
     duration_minutes: number;
     meeting_mode: string;
     status: string;
+    client_timezone: string;
     zoom_join_url: string | null;
 }
 
@@ -404,4 +406,3 @@ export function getGoogleCalendarEvents(
     });
     return api.get<GoogleCalendarEvent[]>(`/integrations/google/calendar/events?${params}`);
 }
-

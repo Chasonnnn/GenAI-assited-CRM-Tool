@@ -114,6 +114,8 @@ def _case_to_list_item(case, db: Session) -> CaseListItem:
         id=case.id,
         case_number=case.case_number,
         stage_id=case.stage_id,
+        stage_slug=case.stage.slug if case.stage else None,
+        stage_type=case.stage.stage_type if case.stage else None,
         status_label=case.status_label,
         source=CaseSource(case.source),
         full_name=case.full_name,

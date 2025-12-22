@@ -23,6 +23,8 @@ router = APIRouter(prefix="/attachments", tags=["attachments"])
 # =============================================================================
 
 class AttachmentRead(BaseModel):
+    model_config = {"from_attributes": True}
+    
     id: str
     filename: str
     content_type: str
@@ -31,9 +33,6 @@ class AttachmentRead(BaseModel):
     quarantined: bool
     uploaded_by_user_id: str
     created_at: str
-    
-    class Config:
-        from_attributes = True
 
 
 class AttachmentDownloadResponse(BaseModel):

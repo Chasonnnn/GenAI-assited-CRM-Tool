@@ -49,6 +49,11 @@ class Organization(Base):
         server_default=text("now()"), 
         nullable=False
     )
+    timezone: Mapped[str] = mapped_column(
+        String(50),
+        server_default=text("'America/Los_Angeles'"),
+        nullable=False,
+    )
     # Feature flags
     ai_enabled: Mapped[bool] = mapped_column(
         default=False,
@@ -2467,7 +2472,7 @@ class ZoomMeeting(Base):
     topic: Mapped[str] = mapped_column(String(255), nullable=False)
     start_time: Mapped[datetime | None] = mapped_column(nullable=True)
     duration: Mapped[int] = mapped_column(default=30, nullable=False)  # minutes
-    timezone: Mapped[str] = mapped_column(String(100), default="UTC", nullable=False)
+    timezone: Mapped[str] = mapped_column(String(100), default="America/Los_Angeles", nullable=False)
     join_url: Mapped[str] = mapped_column(String(500), nullable=False)
     start_url: Mapped[str] = mapped_column(Text, nullable=False)  # Can be very long
     password: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -2873,7 +2878,7 @@ class AvailabilityRule(Base):
     end_time: Mapped[time] = mapped_column(Time, nullable=False)
     
     # User's timezone for interpretation
-    timezone: Mapped[str] = mapped_column(String(50), default="America/New_York", nullable=False)
+    timezone: Mapped[str] = mapped_column(String(50), default="America/Los_Angeles", nullable=False)
     
     created_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"),

@@ -75,6 +75,7 @@ def _appointment_to_public_read(appt, db: Session) -> dict:
         "duration_minutes": appt.duration_minutes,
         "meeting_mode": appt.meeting_mode,
         "status": appt.status,
+        "client_timezone": appt.client_timezone,
         "zoom_join_url": appt.zoom_join_url if appt.status == "confirmed" else None,
     }
 
@@ -105,6 +106,7 @@ def get_booking_page(
     # Get org name
     org = db.query(Organization).filter(Organization.id == link.organization_id).first()
     org_name = org.name if org else None
+    org_timezone = org.timezone if org else None
     
     # Get appointment types
     types = appointment_service.list_appointment_types(
@@ -122,6 +124,7 @@ def get_booking_page(
         ),
         appointment_types=[_type_to_read(t) for t in types],
         org_name=org_name,
+        org_timezone=org_timezone,
     )
 
 
@@ -131,7 +134,7 @@ def get_available_slots(
     appointment_type_id: UUID,
     date_start: date = Query(..., description="Start date (YYYY-MM-DD)"),
     date_end: date = Query(None, description="End date (defaults to start + 7 days)"),
-    client_timezone: str = Query("America/New_York"),
+    client_timezone: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
     """
@@ -161,6 +164,11 @@ def get_available_slots(
     if appt_type.user_id != link.user_id:
         raise HTTPException(status_code=400, detail="Appointment type mismatch")
     
+    # Default timezone to org if not provided
+    if not client_timezone:
+        org = db.query(Organization).filter(Organization.id == link.organization_id).first()
+        client_timezone = org.timezone if org else "America/Los_Angeles"
+
     # Get slots
     query = appointment_service.SlotQuery(
         user_id=link.user_id,

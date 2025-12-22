@@ -26,7 +26,7 @@ import {
     ChevronLeftIcon,
     ChevronRightIcon,
 } from "lucide-react"
-import { useMatches, type MatchStatus } from "@/lib/hooks/use-matches"
+import { useMatches, useMatchStats, type MatchStatus } from "@/lib/hooks/use-matches"
 
 const STATUS_LABELS: Record<string, string> = {
     proposed: "Proposed",
@@ -54,6 +54,7 @@ export default function MatchesPage() {
         per_page: 20,
     }
     const { data, isLoading } = useMatches(filters)
+    const { data: stats } = useMatchStats()
 
     const formatDate = (dateStr: string) => {
         return new Date(dateStr).toLocaleDateString("en-US", {
@@ -83,7 +84,7 @@ export default function MatchesPage() {
                             <CardTitle className="text-sm font-medium text-muted-foreground">Total</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">{data?.total ?? 0}</div>
+                            <div className="text-2xl font-bold">{stats?.total ?? 0}</div>
                         </CardContent>
                     </Card>
                     {(["proposed", "reviewing", "accepted", "rejected"] as const).map((status) => (
@@ -95,7 +96,7 @@ export default function MatchesPage() {
                             </CardHeader>
                             <CardContent>
                                 <div className="text-2xl font-bold">
-                                    {data?.items.filter((m) => m.status === status).length ?? 0}
+                                    {stats?.by_status?.[status] ?? 0}
                                 </div>
                             </CardContent>
                         </Card>
@@ -145,7 +146,8 @@ export default function MatchesPage() {
                                         <TableHead>Case #</TableHead>
                                         <TableHead>Intended Parents</TableHead>
                                         <TableHead>Compatibility</TableHead>
-                                        <TableHead>Status</TableHead>
+                                        <TableHead>Match Status</TableHead>
+                                        <TableHead>Case Stage</TableHead>
                                         <TableHead>Proposed</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -175,6 +177,15 @@ export default function MatchesPage() {
                                                 <Badge className={STATUS_COLORS[match.status]}>
                                                     {STATUS_LABELS[match.status]}
                                                 </Badge>
+                                            </TableCell>
+                                            <TableCell>
+                                                {match.case_stage_label ? (
+                                                    <Badge variant="outline" className="text-xs">
+                                                        {match.case_stage_label}
+                                                    </Badge>
+                                                ) : (
+                                                    <span className="text-muted-foreground">—</span>
+                                                )}
                                             </TableCell>
                                             <TableCell className="text-muted-foreground">
                                                 {formatDate(match.proposed_at)}

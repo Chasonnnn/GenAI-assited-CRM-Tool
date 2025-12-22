@@ -23,6 +23,7 @@ FUNNEL_SLUGS = [
     "contacted",
     "qualified",
     "pending_match",
+    "matched",
     "meds_started",
 ]
 
