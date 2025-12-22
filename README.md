@@ -285,7 +285,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ## Current Status
 
-**Version 0.12.01** — Base UI Migration + Analytics Improvements
+**Version 0.13.00** — Appointment Scheduling & Tasks Calendar
 
 ### Core Platform
 - [x] Project scaffolding + PostgreSQL + migrations
@@ -307,15 +307,15 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 - [x] **AI Assistant v1** — BYOK, summarize-case, draft-email, analyze-dashboard
 - [x] **Analytics Dashboard** — Pie charts, funnel visualization, US map
 
-### Recent Changes (v0.12.01)
-- Migrated from Radix UI to Base UI for all components
-- Fixed hydration mismatches with dynamic imports
-- Improved Meta analytics: separate Qualified vs Converted rates
-- Meta Performance now shows pie chart with days-to-convert insight
-- Renamed "manager" role to "admin" throughout
+### Recent Changes (v0.13.00)
+- **Appointment Scheduling**: Public booking, timezone support, and meeting types
+- **Tasks Calendar**: FullCalendar integration with drag-and-drop rescheduling
+- **Invitation System**: Email-based team invites with expiration and revocation
+- **File Attachments**: Virus scanning and secure S3 storage for case files
+- **PDF Reports**: Native PDF export for analytics dashboards
 
-### Data Models (36 tables)
-`Organization`, `User`, `Membership`, `AuthIdentity`, `OrgInvite`, `Case`, `CaseStatusHistory`, `CaseActivityLog`, `Task`, `MetaLead`, `MetaPageMapping`, `Job`, `EmailTemplate`, `EmailLog`, `IntendedParent`, `IntendedParentStatusHistory`, `EntityNote`, `Notification`, `UserNotificationSettings`, `IntegrationHealth`, `IntegrationErrorRollup`, `SystemAlert`, `RequestMetricsRollup`, `AISettings`, `AIConversation`, `AIMessage`, `AIActionApproval`, `AIEntitySummary`, `AIUsageLog`, `UserIntegration`, `AuditLog`, `CaseImport`, `Pipeline`, `PipelineStage`, `EntityVersion`, `RolePermission`
+### Data Models (43 tables)
+`Organization`, `User`, `Membership`, `AuthIdentity`, `OrgInvite`, `Case`, `CaseStatusHistory`, `CaseActivityLog`, `Task`, `MetaLead`, `MetaPageMapping`, `Job`, `EmailTemplate`, `EmailLog`, `IntendedParent`, `IntendedParentStatusHistory`, `EntityNote`, `Notification`, `UserNotificationSettings`, `IntegrationHealth`, `IntegrationErrorRollup`, `SystemAlert`, `RequestMetricsRollup`, `AISettings`, `AIConversation`, `AIMessage`, `AIActionApproval`, `AIEntitySummary`, `AIUsageLog`, `UserIntegration`, `AuditLog`, `CaseImport`, `Pipeline`, `PipelineStage`, `EntityVersion`, `RolePermission`, `Appointment`, `AppointmentType`, `AvailabilityRule`, `AvailabilityOverride`, `BookingLink`, `AppointmentEmailLog`, `ZoomMeeting`
 
 
 ## Documentation
