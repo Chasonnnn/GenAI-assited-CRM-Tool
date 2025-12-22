@@ -314,12 +314,12 @@ async def get_google_calendar_events(
             detail="date_end must be greater than or equal to date_start.",
         )
     
-    # Determine timezone for day boundaries
+    # Determine timezone for day boundaries (default to Pacific like rest of app)
     try:
-        client_tz = ZoneInfo(timezone) if timezone else tz.utc
+        client_tz = ZoneInfo(timezone) if timezone else ZoneInfo("America/Los_Angeles")
     except Exception:
-        # Invalid timezone, fall back to UTC
-        client_tz = tz.utc
+        # Invalid timezone, fall back to Pacific
+        client_tz = ZoneInfo("America/Los_Angeles")
     
     # Convert to datetime with timezone (start of day to end of day in client TZ)
     # Then convert to UTC for the API call
