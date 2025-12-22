@@ -97,17 +97,26 @@
   - Files/attachments
   - Communication log
 - **Match Calendar:**
-  - Important dates only (not regular appointments)
-  - Medications schedule
-  - Medical exams
-  - Legal milestones
-  - Estimated delivery date
-  - Custom date types
+  - Events for BOTH Surrogate AND IP
+  - Color coding by person:
+    - 🟢 Green: IP events
+    - 🟣 Purple: Surrogate events
+  - Color coding by event type:
+    - 🟠 Orange: Medications
+    - 🔵 Blue: Medical exams
+    - 🟡 Yellow: Legal milestones
+    - 🔴 Red: Delivery/critical dates
+  - Event types:
+    - Medications schedule
+    - Medical exams
+    - Legal milestones
+    - Estimated delivery date
+    - Custom date types
 - Calendar view similar to appointments calendar
 
 **Data Model:**
 - `Match` table linking IP case + Surrogate case
-- `MatchEvent` table for important dates
+- `MatchEvent` table for important dates (with person + type fields)
 - Match status (pending, active, completed)
 
 **Effort:** Large (2 weeks)
