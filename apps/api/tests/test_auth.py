@@ -2,7 +2,6 @@
 import pytest
 from httpx import AsyncClient
 
-
 @pytest.mark.asyncio
 async def test_login_redirects_to_google(client: AsyncClient):
     """GET /auth/google/login should redirect to Google."""

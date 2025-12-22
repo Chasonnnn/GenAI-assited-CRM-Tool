@@ -8,6 +8,16 @@ vi.mock('next/link', () => ({
     ),
 }))
 
+// Mock localStorage to return "list" for tasks view
+Object.defineProperty(window, 'localStorage', {
+    value: {
+        getItem: vi.fn(() => 'list'),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+    },
+    writable: true,
+})
+
 const mockUseTasks = vi.fn()
 const mockCompleteTask = vi.fn()
 const mockUncompleteTask = vi.fn()
@@ -20,30 +30,35 @@ vi.mock('@/lib/hooks/use-tasks', () => ({
     useUpdateTask: () => ({ mutateAsync: mockUpdateTask }),
 }))
 
+// Mock the UnifiedCalendar component to render nothing in tests
+vi.mock('@/components/appointments', () => ({
+    UnifiedCalendar: () => <div>Calendar View</div>,
+}))
+
 describe('TasksPage', () => {
     beforeEach(() => {
         mockUseTasks.mockImplementation((params: { is_completed?: boolean }) => {
-            if (params?.is_completed) {
-                return { data: { items: [] }, isLoading: false }
+            if (params?.is_completed === false) {
+                return {
+                    data: {
+                        items: [
+                            {
+                                id: 't1',
+                                title: 'Follow up with case',
+                                is_completed: false,
+                                due_date: null,
+                                case_id: 'c1',
+                                case_number: '12345',
+                                owner_type: 'user',
+                                owner_id: 'u1',
+                                owner_name: 'Jane Doe',
+                            },
+                        ],
+                    },
+                    isLoading: false,
+                }
             }
-            return {
-                data: {
-                    items: [
-                        {
-                            id: 't1',
-                            title: 'Follow up with case',
-                            is_completed: false,
-                            due_date: null,
-                            case_id: 'c1',
-                            case_number: '12345',
-                            owner_type: 'user',
-                            owner_id: 'u1',
-                            owner_name: 'Jane Doe',
-                        },
-                    ],
-                },
-                isLoading: false,
-            }
+            return { data: { items: [] }, isLoading: false }
         })
         mockCompleteTask.mockReset()
         mockUncompleteTask.mockReset()
