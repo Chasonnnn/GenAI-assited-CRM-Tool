@@ -251,6 +251,36 @@ export default function AIAssistantPage() {
                                 </div>
                             </Card>
                         )}
+
+                        {/* Chat History */}
+                        <Card className="gap-2 py-3 px-3">
+                            <div className="text-sm font-medium">Chat History</div>
+                            <div className="text-xs text-muted-foreground">Recent conversations</div>
+                            <div className="space-y-1 mt-1">
+                                {messages.length > 1 ? (
+                                    <div className="space-y-1">
+                                        {messages
+                                            .filter(m => m.role === 'user')
+                                            .slice(-5)
+                                            .reverse()
+                                            .map((msg, idx) => (
+                                                <div
+                                                    key={msg.id || idx}
+                                                    className="text-xs p-2 rounded-md bg-muted/50 truncate"
+                                                    title={msg.content}
+                                                >
+                                                    {msg.content.slice(0, 40)}{msg.content.length > 40 ? '...' : ''}
+                                                </div>
+                                            ))
+                                        }
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-muted-foreground italic">
+                                        No chat history yet
+                                    </p>
+                                )}
+                            </div>
+                        </Card>
                     </div>
                 </div>
 
