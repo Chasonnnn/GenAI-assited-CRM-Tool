@@ -1,12 +1,13 @@
 "use client"
 
 /**
- * Match Tasks Calendar - Calendar view for tasks related to a matched Surrogate and IP
+ * Match Tasks Calendar - Calendar view for tasks and appointments
  * 
  * Features:
  * - Month/Week/Day view toggle
- * - Filter by All/Surrogate/IP
+ * - Filter by All/Surrogate/IP/Appointments
  * - Tasks color-coded by source (purple=Surrogate, green=IP)
+ * - Appointments shown in blue
  */
 
 import { useState, useMemo } from "react"
@@ -23,12 +24,15 @@ import {
     ChevronLeftIcon,
     ChevronRightIcon,
     CheckSquareIcon,
+    CalendarIcon,
     Loader2Icon,
     UserIcon,
     UsersIcon,
 } from "lucide-react"
 import { useTasks } from "@/lib/hooks/use-tasks"
+import { useAppointments } from "@/lib/hooks/use-appointments"
 import type { TaskListItem } from "@/lib/api/tasks"
+import type { AppointmentListItem } from "@/lib/api/appointments"
 import {
     format,
     startOfMonth,
@@ -39,6 +43,7 @@ import {
     isSameMonth,
     addMonths,
     subMonths,
+    addDays,
     parseISO,
     isToday,
 } from "date-fns"
@@ -46,13 +51,24 @@ import {
 // Colors
 const SURROGATE_COLOR = "bg-purple-500"
 const IP_COLOR = "bg-green-500"
+const APPOINTMENT_COLOR = "bg-blue-500"
 
 type ViewType = "month" | "week" | "day"
-type FilterType = "all" | "surrogate" | "ip"
+type FilterType = "all" | "surrogate" | "ip" | "appointments"
 
 interface MatchTasksCalendarProps {
     caseId: string
     ipId?: string
+}
+
+// Calendar item type for unified display
+type CalendarItem = {
+    id: string
+    title: string
+    time?: string
+    date: string
+    type: "task" | "appointment"
+    source: "surrogate" | "ip" | "appointment"
 }
 
 // Task Item Component
@@ -90,15 +106,50 @@ function TaskItem({
     )
 }
 
+// Appointment Item Component
+function AppointmentItem({
+    appointment,
+    compact = false,
+}: {
+    appointment: AppointmentListItem
+    compact?: boolean
+}) {
+    const time = format(parseISO(appointment.scheduled_start), "h:mm a")
+    const typeName = appointment.appointment_type_name || "Appointment"
+
+    if (compact) {
+        return (
+            <div className={`w-full text-left px-2 py-1 rounded text-xs truncate ${APPOINTMENT_COLOR} text-white`}>
+                {time} - 📅 {appointment.client_name}
+            </div>
+        )
+    }
+
+    return (
+        <div className="w-full text-left p-2 rounded-lg border-l-4 border-blue-500 bg-muted/50">
+            <p className="font-medium text-sm truncate flex items-center gap-1">
+                <CalendarIcon className="size-3" />
+                {typeName}
+            </p>
+            <p className="text-xs text-muted-foreground">{time} - {appointment.client_name}</p>
+            <Badge variant="outline" className="text-xs mt-1">
+                {appointment.status}
+            </Badge>
+        </div>
+    )
+}
+
 // Month View
 function MonthView({
     currentDate,
     tasks,
     taskSources,
+    appointments,
 }: {
     currentDate: Date
     tasks: TaskListItem[]
     taskSources: Map<string, "surrogate" | "ip">
+    appointments: AppointmentListItem[]
 }) {
     const days = useMemo(() => {
         const monthStart = startOfMonth(currentDate)
@@ -119,6 +170,16 @@ function MonthView({
         return map
     }, [tasks])
 
+    const appointmentsByDate = useMemo(() => {
+        const map = new Map<string, AppointmentListItem[]>()
+        appointments.forEach((appt) => {
+            const dateStr = format(parseISO(appt.scheduled_start), "yyyy-MM-dd")
+            if (!map.has(dateStr)) map.set(dateStr, [])
+            map.get(dateStr)!.push(appt)
+        })
+        return map
+    }, [appointments])
+
     return (
         <div className="border border-border rounded-lg overflow-hidden">
             {/* Day Headers */}
@@ -135,8 +196,17 @@ function MonthView({
                 {days.map((day, i) => {
                     const dateStr = format(day, "yyyy-MM-dd")
                     const dayTasks = tasksByDate.get(dateStr) || []
+                    const dayAppointments = appointmentsByDate.get(dateStr) || []
+                    const totalItems = dayTasks.length + dayAppointments.length
                     const isCurrentMonth = isSameMonth(day, currentDate)
                     const isCurrentDay = isToday(day)
+
+                    // Combine and limit to 2 items for compact view
+                    const itemsToShow: { type: "task" | "appointment"; item: TaskListItem | AppointmentListItem }[] = []
+                    dayTasks.slice(0, 2).forEach(t => itemsToShow.push({ type: "task", item: t }))
+                    if (itemsToShow.length < 2) {
+                        dayAppointments.slice(0, 2 - itemsToShow.length).forEach(a => itemsToShow.push({ type: "appointment", item: a }))
+                    }
 
                     return (
                         <div
@@ -147,17 +217,25 @@ function MonthView({
                                 {format(day, "d")}
                             </div>
                             <div className="space-y-1 mt-1">
-                                {dayTasks.slice(0, 2).map((task) => (
-                                    <TaskItem
-                                        key={task.id}
-                                        task={task}
-                                        source={taskSources.get(task.id) || "surrogate"}
-                                        compact
-                                    />
-                                ))}
-                                {dayTasks.length > 2 && (
+                                {itemsToShow.map(({ type, item }) =>
+                                    type === "task" ? (
+                                        <TaskItem
+                                            key={`task-${item.id}`}
+                                            task={item as TaskListItem}
+                                            source={taskSources.get(item.id) || "surrogate"}
+                                            compact
+                                        />
+                                    ) : (
+                                        <AppointmentItem
+                                            key={`appt-${item.id}`}
+                                            appointment={item as AppointmentListItem}
+                                            compact
+                                        />
+                                    )
+                                )}
+                                {totalItems > 2 && (
                                     <p className="text-xs text-muted-foreground text-center">
-                                        +{dayTasks.length - 2} more
+                                        +{totalItems - 2} more
                                     </p>
                                 )}
                             </div>
@@ -174,10 +252,12 @@ function WeekView({
     currentDate,
     tasks,
     taskSources,
+    appointments,
 }: {
     currentDate: Date
     tasks: TaskListItem[]
     taskSources: Map<string, "surrogate" | "ip">
+    appointments: AppointmentListItem[]
 }) {
     const days = useMemo(() => {
         const weekStart = startOfWeek(currentDate)
@@ -195,12 +275,24 @@ function WeekView({
         return map
     }, [tasks])
 
+    const appointmentsByDate = useMemo(() => {
+        const map = new Map<string, AppointmentListItem[]>()
+        appointments.forEach((appt) => {
+            const dateStr = format(parseISO(appt.scheduled_start), "yyyy-MM-dd")
+            if (!map.has(dateStr)) map.set(dateStr, [])
+            map.get(dateStr)!.push(appt)
+        })
+        return map
+    }, [appointments])
+
     return (
         <div className="grid grid-cols-7 gap-2">
             {days.map((day) => {
                 const dateStr = format(day, "yyyy-MM-dd")
                 const dayTasks = tasksByDate.get(dateStr) || []
+                const dayAppointments = appointmentsByDate.get(dateStr) || []
                 const isCurrentDay = isToday(day)
+                const hasItems = dayTasks.length > 0 || dayAppointments.length > 0
 
                 return (
                     <div key={dateStr} className="border border-border rounded-lg overflow-hidden">
@@ -211,13 +303,19 @@ function WeekView({
                         <div className="p-2 space-y-2 min-h-[150px]">
                             {dayTasks.map((task) => (
                                 <TaskItem
-                                    key={task.id}
+                                    key={`task-${task.id}`}
                                     task={task}
                                     source={taskSources.get(task.id) || "surrogate"}
                                 />
                             ))}
-                            {dayTasks.length === 0 && (
-                                <p className="text-xs text-muted-foreground text-center py-4">No tasks</p>
+                            {dayAppointments.map((appt) => (
+                                <AppointmentItem
+                                    key={`appt-${appt.id}`}
+                                    appointment={appt}
+                                />
+                            ))}
+                            {!hasItems && (
+                                <p className="text-xs text-muted-foreground text-center py-4">No items</p>
                             )}
                         </div>
                     </div>
@@ -232,10 +330,12 @@ function DayView({
     currentDate,
     tasks,
     taskSources,
+    appointments,
 }: {
     currentDate: Date
     tasks: TaskListItem[]
     taskSources: Map<string, "surrogate" | "ip">
+    appointments: AppointmentListItem[]
 }) {
     const dateStr = format(currentDate, "yyyy-MM-dd")
 
@@ -245,22 +345,38 @@ function DayView({
             .sort((a, b) => (a.due_time || "").localeCompare(b.due_time || ""))
     }, [dateStr, tasks])
 
+    const dayAppointments = useMemo(() => {
+        return appointments
+            .filter((appt) => format(parseISO(appt.scheduled_start), "yyyy-MM-dd") === dateStr)
+            .sort((a, b) => a.scheduled_start.localeCompare(b.scheduled_start))
+    }, [dateStr, appointments])
+
+    const hasItems = dayTasks.length > 0 || dayAppointments.length > 0
+
     return (
         <div className="border border-border rounded-lg overflow-hidden">
             <div className="p-3 bg-muted border-b border-border text-center">
                 <p className="font-medium">{format(currentDate, "EEEE, MMMM d, yyyy")}</p>
             </div>
             <div className="p-4 space-y-2 min-h-[200px]">
-                {dayTasks.length === 0 ? (
-                    <p className="text-center text-muted-foreground py-8">No tasks for this day</p>
+                {!hasItems ? (
+                    <p className="text-center text-muted-foreground py-8">No items for this day</p>
                 ) : (
-                    dayTasks.map((task) => (
-                        <TaskItem
-                            key={task.id}
-                            task={task}
-                            source={taskSources.get(task.id) || "surrogate"}
-                        />
-                    ))
+                    <>
+                        {dayTasks.map((task) => (
+                            <TaskItem
+                                key={`task-${task.id}`}
+                                task={task}
+                                source={taskSources.get(task.id) || "surrogate"}
+                            />
+                        ))}
+                        {dayAppointments.map((appt) => (
+                            <AppointmentItem
+                                key={`appt-${appt.id}`}
+                                appointment={appt}
+                            />
+                        ))}
+                    </>
                 )}
             </div>
         </div>
@@ -272,6 +388,31 @@ export function MatchTasksCalendar({ caseId, ipId }: MatchTasksCalendarProps) {
     const [currentDate, setCurrentDate] = useState(new Date())
     const [viewType, setViewType] = useState<ViewType>("month")
     const [filter, setFilter] = useState<FilterType>("all")
+
+    // Compute date window for appointments based on view type
+    const { dateStart, dateEnd } = useMemo(() => {
+        if (viewType === "month") {
+            const monthStart = startOfMonth(currentDate)
+            const monthEnd = endOfMonth(currentDate)
+            return {
+                dateStart: format(startOfWeek(monthStart), "yyyy-MM-dd"),
+                dateEnd: format(endOfWeek(monthEnd), "yyyy-MM-dd"),
+            }
+        } else if (viewType === "week") {
+            const weekStart = startOfWeek(currentDate)
+            const weekEnd = endOfWeek(currentDate)
+            return {
+                dateStart: format(weekStart, "yyyy-MM-dd"),
+                dateEnd: format(weekEnd, "yyyy-MM-dd"),
+            }
+        } else {
+            // Day view
+            return {
+                dateStart: format(currentDate, "yyyy-MM-dd"),
+                dateEnd: format(currentDate, "yyyy-MM-dd"),
+            }
+        }
+    }, [currentDate, viewType])
 
     // Fetch tasks for Surrogate case
     const { data: surrogateTasks, isLoading: loadingSurrogate } = useTasks({
@@ -287,8 +428,15 @@ export function MatchTasksCalendar({ caseId, ipId }: MatchTasksCalendarProps) {
         per_page: 100,
     })
 
+    // Fetch appointments for the calendar window
+    const { data: appointmentsData, isLoading: loadingAppointments } = useAppointments({
+        date_start: dateStart,
+        date_end: dateEnd,
+        per_page: 100,
+    })
+
     // Build combined task list and source tracking
-    const { allTasks, taskSources } = useMemo(() => {
+    const { allTasks, taskSources, allAppointments } = useMemo(() => {
         const sources = new Map<string, "surrogate" | "ip">()
         const tasks: TaskListItem[] = []
 
@@ -311,16 +459,24 @@ export function MatchTasksCalendar({ caseId, ipId }: MatchTasksCalendarProps) {
             })
         }
 
+        // Get appointments
+        const appointments = appointmentsData?.items || []
+
         // Filter based on selection
-        let filtered = tasks
+        let filteredTasks = tasks
+        let filteredAppointments = appointments
         if (filter === "surrogate") {
-            filtered = tasks.filter((t) => sources.get(t.id) === "surrogate")
+            filteredTasks = tasks.filter((t) => sources.get(t.id) === "surrogate")
+            filteredAppointments = [] // No appointments in surrogate filter
         } else if (filter === "ip") {
-            filtered = tasks.filter((t) => sources.get(t.id) === "ip")
+            filteredTasks = tasks.filter((t) => sources.get(t.id) === "ip")
+            filteredAppointments = [] // No appointments in IP filter
+        } else if (filter === "appointments") {
+            filteredTasks = [] // Only show appointments
         }
 
-        return { allTasks: filtered, taskSources: sources }
-    }, [surrogateTasks, ipTasks, filter])
+        return { allTasks: filteredTasks, taskSources: sources, allAppointments: filteredAppointments }
+    }, [surrogateTasks, ipTasks, appointmentsData, filter])
 
     // Navigation
     const navigate = (direction: "prev" | "next") => {
@@ -335,7 +491,7 @@ export function MatchTasksCalendar({ caseId, ipId }: MatchTasksCalendarProps) {
         }
     }
 
-    const isLoading = loadingSurrogate || loadingIP
+    const isLoading = loadingSurrogate || loadingIP || loadingAppointments
 
     return (
         <div className="space-y-4">
@@ -387,6 +543,15 @@ export function MatchTasksCalendar({ caseId, ipId }: MatchTasksCalendarProps) {
                             <UsersIcon className="size-3 mr-1" />
                             IP
                         </Button>
+                        <Button
+                            variant={filter === "appointments" ? "secondary" : "ghost"}
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => setFilter("appointments")}
+                        >
+                            <CalendarIcon className="size-3 mr-1" />
+                            Appts
+                        </Button>
                     </div>
 
                     {/* View selector */}
@@ -415,6 +580,7 @@ export function MatchTasksCalendar({ caseId, ipId }: MatchTasksCalendarProps) {
                             currentDate={currentDate}
                             tasks={allTasks}
                             taskSources={taskSources}
+                            appointments={allAppointments}
                         />
                     )}
                     {viewType === "week" && (
@@ -422,6 +588,7 @@ export function MatchTasksCalendar({ caseId, ipId }: MatchTasksCalendarProps) {
                             currentDate={currentDate}
                             tasks={allTasks}
                             taskSources={taskSources}
+                            appointments={allAppointments}
                         />
                     )}
                     {viewType === "day" && (
@@ -429,6 +596,7 @@ export function MatchTasksCalendar({ caseId, ipId }: MatchTasksCalendarProps) {
                             currentDate={currentDate}
                             tasks={allTasks}
                             taskSources={taskSources}
+                            appointments={allAppointments}
                         />
                     )}
                 </>
@@ -443,6 +611,10 @@ export function MatchTasksCalendar({ caseId, ipId }: MatchTasksCalendarProps) {
                 <div className="flex items-center gap-1">
                     <div className="w-3 h-3 rounded bg-green-500"></div>
                     <span>IP Tasks</span>
+                </div>
+                <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded bg-blue-500"></div>
+                    <span>Appointments</span>
                 </div>
             </div>
         </div>

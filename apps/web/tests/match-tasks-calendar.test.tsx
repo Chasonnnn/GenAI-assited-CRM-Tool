@@ -5,9 +5,14 @@ import { MatchTasksCalendar } from '../components/matches/MatchTasksCalendar'
 import { format, addMonths, subMonths, startOfWeek } from 'date-fns'
 
 const mockUseTasks = vi.fn()
+const mockUseAppointments = vi.fn()
 
 vi.mock('@/lib/hooks/use-tasks', () => ({
     useTasks: (params: unknown) => mockUseTasks(params),
+}))
+
+vi.mock('@/lib/hooks/use-appointments', () => ({
+    useAppointments: (params: unknown) => mockUseAppointments(params),
 }))
 
 describe('MatchTasksCalendar', () => {
@@ -49,6 +54,10 @@ describe('MatchTasksCalendar', () => {
         vi.clearAllMocks()
         mockUseTasks.mockReturnValue({
             data: mockTasks,
+            isLoading: false,
+        })
+        mockUseAppointments.mockReturnValue({
+            data: { items: [], total: 0, page: 1, per_page: 100, pages: 0 },
             isLoading: false,
         })
     })
@@ -175,6 +184,10 @@ describe('MatchTasksCalendar with empty state', () => {
     beforeEach(() => {
         mockUseTasks.mockReturnValue({
             data: { items: [], total: 0, per_page: 100, page: 1 },
+            isLoading: false,
+        })
+        mockUseAppointments.mockReturnValue({
+            data: { items: [], total: 0, page: 1, per_page: 100, pages: 0 },
             isLoading: false,
         })
     })
