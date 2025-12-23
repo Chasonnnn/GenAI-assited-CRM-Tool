@@ -38,6 +38,7 @@ import {
     UserIcon,
     UsersIcon,
     TrashIcon,
+    DownloadIcon,
 } from "lucide-react"
 import { useMatch, matchKeys, useAcceptMatch, useRejectMatch } from "@/lib/hooks/use-matches"
 import { MatchTasksCalendar } from "@/components/matches/MatchTasksCalendar"
@@ -50,7 +51,7 @@ import { useNotes, useCreateNote } from "@/lib/hooks/use-notes"
 import { useIntendedParent, useIntendedParentNotes, useIntendedParentHistory, intendedParentKeys, useCreateIntendedParentNote } from "@/lib/hooks/use-intended-parents"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useTasks, useCreateTask, taskKeys } from "@/lib/hooks/use-tasks"
-import { useAttachments, useIPAttachments, useUploadAttachment, useUploadIPAttachment, useDeleteAttachment } from "@/lib/hooks/use-attachments"
+import { useAttachments, useIPAttachments, useUploadAttachment, useUploadIPAttachment, useDeleteAttachment, useDownloadAttachment } from "@/lib/hooks/use-attachments"
 import { useAuth } from "@/lib/auth-context"
 import { useQueryClient } from "@tanstack/react-query"
 
@@ -102,6 +103,7 @@ export default function MatchDetailPage() {
     const uploadAttachmentMutation = useUploadAttachment()
     const uploadIPAttachmentMutation = useUploadIPAttachment()
     const deleteAttachmentMutation = useDeleteAttachment()
+    const downloadAttachmentMutation = useDownloadAttachment()
     const createTaskMutation = useCreateTask()
 
     // Fetch full profile data for both sides
@@ -796,6 +798,16 @@ export default function MatchDetailPage() {
                                                                     {(file.file_size / 1024).toFixed(1)} KB • {formatDateTime(file.created_at)}
                                                                 </p>
                                                             </div>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="h-7 w-7 p-0 text-muted-foreground hover:text-primary"
+                                                                onClick={() => downloadAttachmentMutation.mutate(file.id)}
+                                                                disabled={downloadAttachmentMutation.isPending}
+                                                                title="Download file"
+                                                            >
+                                                                <DownloadIcon className="size-4" />
+                                                            </Button>
                                                             {(file.source === 'case' || file.source === 'ip') && (
                                                                 <Button
                                                                     variant="ghost"
@@ -803,6 +815,7 @@ export default function MatchDetailPage() {
                                                                     className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                                                                     onClick={() => handleDeleteFile(file.id, file.source as "case" | "ip")}
                                                                     disabled={deleteAttachmentMutation.isPending}
+                                                                    title="Delete file"
                                                                 >
                                                                     <TrashIcon className="size-4" />
                                                                 </Button>
