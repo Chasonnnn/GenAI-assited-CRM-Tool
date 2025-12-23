@@ -66,6 +66,7 @@ vi.mock('@/lib/hooks/use-cases', () => ({
 // Mock notes hook
 vi.mock('@/lib/hooks/use-notes', () => ({
     useNotes: () => ({ data: [], isLoading: false }),
+    useCreateNote: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 // Mock IP hooks
@@ -74,7 +75,8 @@ vi.mock('@/lib/hooks/use-intended-parents', () => ({
     useIntendedParent: (id: string) => mockUseIntendedParent(id),
     useIntendedParentNotes: () => ({ data: [] }),
     useIntendedParentHistory: () => ({ data: [] }),
-    intendedParentKeys: { detail: (id: string) => ['intended-parents', 'detail', id], lists: () => ['intended-parents', 'list'] },
+    useCreateIntendedParentNote: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    intendedParentKeys: { detail: (id: string) => ['intended-parents', 'detail', id], lists: () => ['intended-parents', 'list'], notes: (id: string) => ['intended-parents', 'notes', id] },
 }))
 
 // Mock attachments hook
