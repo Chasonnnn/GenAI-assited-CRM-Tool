@@ -4,6 +4,7 @@ import '@testing-library/jest-dom'
 import MatchDetailPage from '../app/(app)/intended-parents/matches/[id]/page'
 
 const mockPush = vi.fn()
+const mockReplace = vi.fn()
 
 vi.mock('next/link', () => ({
     default: ({ children, href }: { children: React.ReactNode; href: string }) => (
@@ -13,7 +14,12 @@ vi.mock('next/link', () => ({
 
 vi.mock('next/navigation', () => ({
     useParams: () => ({ id: 'match1' }),
-    useRouter: () => ({ push: mockPush }),
+    useRouter: () => ({ push: mockPush, replace: mockReplace }),
+    useSearchParams: () => ({
+        get: (key: string) => null,
+        toString: () => '',
+        keys: () => [] as string[],
+    }),
 }))
 
 // Mock auth context
