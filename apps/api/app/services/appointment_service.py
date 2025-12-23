@@ -786,6 +786,18 @@ def create_booking(
     db.commit()
     db.refresh(appointment)
     
+    # Notify staff about new appointment request
+    from app.services import notification_service
+    notification_service.notify_appointment_requested(
+        db=db,
+        org_id=org_id,
+        staff_user_id=user_id,
+        appointment_id=appointment.id,
+        client_name=client_name,
+        appointment_type=appt_type.name,
+        requested_time=scheduled_start.strftime("%Y-%m-%d %H:%M"),
+    )
+    
     return appointment
 
 
@@ -827,6 +839,21 @@ def approve_booking(
     
     db.commit()
     db.refresh(appointment)
+    
+    # Notify staff about confirmed appointment
+    from app.services import notification_service
+    appt_type = db.query(AppointmentType).filter(
+        AppointmentType.id == appointment.appointment_type_id
+    ).first()
+    notification_service.notify_appointment_confirmed(
+        db=db,
+        org_id=appointment.organization_id,
+        staff_user_id=appointment.user_id,
+        appointment_id=appointment.id,
+        client_name=appointment.client_name,
+        appointment_type=appt_type.name if appt_type else "Appointment",
+        confirmed_time=appointment.scheduled_start.strftime("%Y-%m-%d %H:%M"),
+    )
     
     return appointment
 
@@ -944,6 +971,21 @@ def cancel_booking(
     
     db.commit()
     db.refresh(appointment)
+    
+    # Notify staff about cancelled appointment
+    from app.services import notification_service
+    appt_type = db.query(AppointmentType).filter(
+        AppointmentType.id == appointment.appointment_type_id
+    ).first()
+    notification_service.notify_appointment_cancelled(
+        db=db,
+        org_id=appointment.organization_id,
+        staff_user_id=appointment.user_id,
+        appointment_id=appointment.id,
+        client_name=appointment.client_name,
+        appointment_type=appt_type.name if appt_type else "Appointment",
+        cancelled_time=appointment.scheduled_start.strftime("%Y-%m-%d %H:%M"),
+    )
     
     return appointment
 
