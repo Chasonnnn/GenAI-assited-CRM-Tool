@@ -114,7 +114,12 @@ function AppointmentItem({
     appointment: AppointmentListItem
     compact?: boolean
 }) {
-    const time = format(parseISO(appointment.scheduled_start), "h:mm a")
+    let time = ""
+    try {
+        time = format(parseISO(appointment.scheduled_start), "h:mm a")
+    } catch {
+        time = "--:--"
+    }
     const typeName = appointment.appointment_type_name || "Appointment"
 
     if (compact) {
@@ -550,7 +555,7 @@ export function MatchTasksCalendar({ caseId, ipId }: MatchTasksCalendarProps) {
                             onClick={() => setFilter("appointments")}
                         >
                             <CalendarIcon className="size-3 mr-1" />
-                            Appts
+                            Appointments
                         </Button>
                     </div>
 
