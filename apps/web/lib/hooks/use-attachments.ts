@@ -4,6 +4,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { attachmentsApi } from "../api/attachments"
+import { toast } from "sonner"
 
 export function useAttachments(caseId: string | null) {
     return useQuery({
@@ -32,6 +33,11 @@ export function useDownloadAttachment() {
         onSuccess: (data) => {
             // Open download URL in new tab
             window.open(data.download_url, "_blank")
+        },
+        onError: (error: Error) => {
+            toast.error("Download failed", {
+                description: error.message || "Unable to download file. Please try again.",
+            })
         },
     })
 }
