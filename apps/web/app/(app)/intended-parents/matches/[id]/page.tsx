@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { useParams } from "next/navigation"
+import { useState, useMemo, useEffect, useCallback } from "react"
+import { useParams, useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
@@ -71,6 +71,7 @@ const STATUS_COLORS: Record<string, string> = {
     cancelled: "bg-gray-500/10 text-gray-500 border-gray-500/20",
 }
 
+type TabType = "notes" | "files" | "tasks" | "activity"
 type SourceFilter = 'all' | 'case' | 'ip' | 'match'
 
 const SOURCE_OPTIONS: { value: SourceFilter; label: string }[] = [
@@ -83,17 +84,64 @@ const SOURCE_OPTIONS: { value: SourceFilter; label: string }[] = [
 const sourceLabel = (value: SourceFilter | null | undefined) =>
     SOURCE_OPTIONS.find((opt) => opt.value === value)?.label ?? "All Source"
 
+const VALID_TABS: TabType[] = ["notes", "files", "tasks", "activity"]
+const VALID_SOURCES: SourceFilter[] = ["all", "case", "ip", "match"]
+
 export default function MatchDetailPage() {
     const params = useParams()
+    const searchParams = useSearchParams()
+    const router = useRouter()
     const matchId = params.id as string
-    const [activeTab, setActiveTab] = useState<"notes" | "files" | "tasks" | "activity">("notes")
-    const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
+
+    // Read initial values from URL params
+    const urlTab = searchParams.get("tab") as TabType | null
+    const urlSource = searchParams.get("source") as SourceFilter | null
+
+    const [activeTab, setActiveTab] = useState<TabType>(
+        urlTab && VALID_TABS.includes(urlTab) ? urlTab : "notes"
+    )
+    const [sourceFilter, setSourceFilter] = useState<SourceFilter>(
+        urlSource && VALID_SOURCES.includes(urlSource) ? urlSource : "all"
+    )
     const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
     const [addNoteDialogOpen, setAddNoteDialogOpen] = useState(false)
     const [uploadFileDialogOpen, setUploadFileDialogOpen] = useState(false)
     const [addTaskDialogOpen, setAddTaskDialogOpen] = useState(false)
     const { user } = useAuth()
     const queryClient = useQueryClient()
+
+    // Sync state changes back to URL (preserving other params)
+    const updateUrlParams = useCallback((tab: TabType, source: SourceFilter) => {
+        const newParams = new URLSearchParams(searchParams.toString())
+        if (tab !== "notes") {
+            newParams.set("tab", tab)
+        } else {
+            newParams.delete("tab")
+        }
+        if (source !== "all") {
+            newParams.set("source", source)
+        } else {
+            newParams.delete("source")
+        }
+        const newUrl = newParams.toString() ? `?${newParams}` : ""
+        router.replace(`/intended-parents/matches/${matchId}${newUrl}`, { scroll: false })
+    }, [searchParams, router, matchId])
+
+    // Update URL when tab changes
+    const handleTabChange = useCallback((tab: TabType) => {
+        if (tab !== activeTab) {
+            setActiveTab(tab)
+            updateUrlParams(tab, sourceFilter)
+        }
+    }, [activeTab, sourceFilter, updateUrlParams])
+
+    // Update URL when source filter changes
+    const handleSourceFilterChange = useCallback((source: SourceFilter) => {
+        if (source !== sourceFilter) {
+            setSourceFilter(source)
+            updateUrlParams(activeTab, source)
+        }
+    }, [activeTab, sourceFilter, updateUrlParams])
 
     const { data: match, isLoading: matchLoading } = useMatch(matchId)
     const acceptMatchMutation = useAcceptMatch()
@@ -671,7 +719,7 @@ export default function MatchDetailPage() {
                                     <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30">
                                         <Select
                                             value={sourceFilter}
-                                            onValueChange={(v) => setSourceFilter(v as SourceFilter)}
+                                            onValueChange={(v) => handleSourceFilterChange(v as SourceFilter)}
                                         >
                                             <SelectTrigger className="w-[160px] h-9 text-sm">
                                                 <SelectValue placeholder="All Source">
@@ -694,7 +742,7 @@ export default function MatchDetailPage() {
                                             variant={activeTab === "notes" ? "secondary" : "ghost"}
                                             size="sm"
                                             className="h-7 text-sm px-2"
-                                            onClick={() => setActiveTab("notes")}
+                                            onClick={() => handleTabChange("notes")}
                                         >
                                             <StickyNoteIcon className="size-3.5 mr-1" />
                                             Notes
@@ -703,7 +751,7 @@ export default function MatchDetailPage() {
                                             variant={activeTab === "files" ? "secondary" : "ghost"}
                                             size="sm"
                                             className="h-7 text-sm px-2"
-                                            onClick={() => setActiveTab("files")}
+                                            onClick={() => handleTabChange("files")}
                                         >
                                             <FolderIcon className="size-3.5 mr-1" />
                                             Files
@@ -712,7 +760,7 @@ export default function MatchDetailPage() {
                                             variant={activeTab === "tasks" ? "secondary" : "ghost"}
                                             size="sm"
                                             className="h-7 text-sm px-2"
-                                            onClick={() => setActiveTab("tasks")}
+                                            onClick={() => handleTabChange("tasks")}
                                         >
                                             <CheckSquareIcon className="size-3.5 mr-1" />
                                             Tasks
@@ -721,7 +769,7 @@ export default function MatchDetailPage() {
                                             variant={activeTab === "activity" ? "secondary" : "ghost"}
                                             size="sm"
                                             className="h-7 text-sm px-2"
-                                            onClick={() => setActiveTab("activity")}
+                                            onClick={() => handleTabChange("activity")}
                                         >
                                             <HistoryIcon className="size-3.5 mr-1" />
                                             Activity
