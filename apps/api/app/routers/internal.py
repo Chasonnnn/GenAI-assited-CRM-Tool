@@ -219,3 +219,84 @@ def data_purge_schedule(x_internal_secret: str = Header(...)):
         orgs_processed=orgs_processed,
         jobs_created=jobs_created,
     )
+
+
+class TaskNotificationsResponse(BaseModel):
+    tasks_due_soon: int
+    tasks_overdue: int
+    notifications_created: int
+
+
+@router.post("/task-notifications", response_model=TaskNotificationsResponse)
+def task_notifications_sweep(x_internal_secret: str = Header(...)):
+    """
+    Daily sweep for task due/overdue notifications.
+    
+    Called by external cron (daily recommended).
+    Creates one-time notifications for:
+    - Tasks due tomorrow (TASK_DUE_SOON)
+    - Overdue tasks (TASK_OVERDUE)
+    
+    Uses dedupe keys to ensure one-time notifications per task.
+    """
+    verify_internal_secret(x_internal_secret)
+    
+    from datetime import date
+    from app.db.models import Task
+    from app.db.enums import OwnerType
+    from app.services import notification_service
+    
+    today = date.today()
+    tomorrow = today + timedelta(days=1)
+    
+    tasks_due_soon = 0
+    tasks_overdue = 0
+    notifications_created = 0
+    
+    with SessionLocal() as db:
+        # Find tasks due tomorrow (not completed)
+        due_soon_tasks = db.query(Task).filter(
+            Task.due_date == tomorrow,
+            Task.is_completed == False,
+            Task.owner_type == OwnerType.USER.value,  # Only user-owned tasks
+        ).all()
+        
+        for task in due_soon_tasks:
+            tasks_due_soon += 1
+            notification_service.notify_task_due_soon(
+                db=db,
+                task_id=task.id,
+                task_title=task.title,
+                org_id=task.organization_id,
+                assignee_id=task.owner_id,
+                due_date=task.due_date.strftime("%Y-%m-%d"),
+                case_number=task.case.case_number if task.case else None,
+            )
+            notifications_created += 1
+        
+        # Find overdue tasks (not completed, due before today)
+        overdue_tasks = db.query(Task).filter(
+            Task.due_date < today,
+            Task.is_completed == False,
+            Task.owner_type == OwnerType.USER.value,  # Only user-owned tasks
+        ).all()
+        
+        for task in overdue_tasks:
+            tasks_overdue += 1
+            notification_service.notify_task_overdue(
+                db=db,
+                task_id=task.id,
+                task_title=task.title,
+                org_id=task.organization_id,
+                assignee_id=task.owner_id,
+                due_date=task.due_date.strftime("%Y-%m-%d"),
+                case_number=task.case.case_number if task.case else None,
+            )
+            notifications_created += 1
+    
+    return TaskNotificationsResponse(
+        tasks_due_soon=tasks_due_soon,
+        tasks_overdue=tasks_overdue,
+        notifications_created=notifications_created,
+    )
+

@@ -169,13 +169,23 @@ class MatchEventPerson(str, Enum):
 
 class NotificationType(str, Enum):
     """Types of in-app notifications."""
+    # Case notifications
     CASE_ASSIGNED = "case_assigned"
     CASE_STATUS_CHANGED = "case_status_changed"
     CASE_HANDOFF_READY = "case_handoff_ready"
     CASE_HANDOFF_ACCEPTED = "case_handoff_accepted"
     CASE_HANDOFF_DENIED = "case_handoff_denied"
+    
+    # Task notifications
     TASK_ASSIGNED = "task_assigned"
-    # Future: TASK_DUE_TODAY, TASK_OVERDUE (requires worker job)
+    TASK_DUE_SOON = "task_due_soon"    # Due within 24h
+    TASK_OVERDUE = "task_overdue"      # Past due date
+    
+    # Appointment notifications
+    APPOINTMENT_REQUESTED = "appointment_requested"   # New appointment request
+    APPOINTMENT_CONFIRMED = "appointment_confirmed"   # Appointment confirmed
+    APPOINTMENT_CANCELLED = "appointment_cancelled"   # Appointment cancelled
+    APPOINTMENT_REMINDER = "appointment_reminder"     # Reminder before appointment
 
 
 # Note: is_priority is a boolean field on Case model, not an enum
