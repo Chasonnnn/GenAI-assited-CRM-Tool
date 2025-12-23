@@ -40,6 +40,7 @@ import {
     ChevronLeftIcon,
     ChevronRightIcon,
 } from "lucide-react"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
 import {
     useIntendedParents,
     useIntendedParentStats,
@@ -84,6 +85,8 @@ export default function IntendedParentsPage() {
     })
     const [page, setPage] = useState(1)
     const [isCreateOpen, setIsCreateOpen] = useState(false)
+    const [sortBy, setSortBy] = useState<string | null>(null)
+    const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
 
     // Sync state changes back to URL
     const updateUrlParams = useCallback((status: string, searchValue: string) => {
@@ -139,10 +142,21 @@ export default function IntendedParentsPage() {
         status: statusFilter !== "all" ? [statusFilter] : undefined,
         page,
         per_page: 20,
+        sort_by: sortBy || undefined,
+        sort_order: sortOrder,
     }
     const { data, isLoading } = useIntendedParents(filters)
     const { data: stats } = useIntendedParentStats()
     const createMutation = useCreateIntendedParent()
+
+    const handleSort = (column: string) => {
+        if (sortBy === column) {
+            setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+        } else {
+            setSortBy(column)
+            setSortOrder("desc")
+        }
+    }
 
     const resetForm = () => {
         setFormData({
@@ -228,18 +242,6 @@ export default function IntendedParentsPage() {
 
                 {/* Filters */}
                 <div className="flex flex-col gap-4 md:flex-row md:items-center">
-                    <div className="relative flex-1 max-w-sm">
-                        <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                            placeholder="Search name, email, phone..."
-                            value={search}
-                            onChange={(e) => {
-                                setSearch(e.target.value)
-                                setPage(1)
-                            }}
-                            className="pl-9"
-                        />
-                    </div>
                     <Select value={statusFilter} onValueChange={(v) => { if (v) handleStatusChange(v) }}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="All Statuses">
@@ -263,6 +265,19 @@ export default function IntendedParentsPage() {
                         customRange={customRange}
                         onCustomRangeChange={setCustomRange}
                     />
+                    <div className="flex-1" />
+                    <div className="relative w-full max-w-sm">
+                        <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            placeholder="Search name, email, phone..."
+                            value={search}
+                            onChange={(e) => {
+                                setSearch(e.target.value)
+                                setPage(1)
+                            }}
+                            className="pl-9"
+                        />
+                    </div>
                 </div>
 
                 {/* Table */}
@@ -287,13 +302,13 @@ export default function IntendedParentsPage() {
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>Name</TableHead>
-                                        <TableHead>Email</TableHead>
-                                        <TableHead>Phone</TableHead>
-                                        <TableHead>State</TableHead>
-                                        <TableHead>Budget</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead>Created</TableHead>
+                                        <SortableTableHead column="full_name" label="Name" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                                        <SortableTableHead column="email" label="Email" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                                        <SortableTableHead column="phone" label="Phone" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                                        <SortableTableHead column="state" label="State" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                                        <SortableTableHead column="budget" label="Budget" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                                        <SortableTableHead column="status" label="Status" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                                        <SortableTableHead column="created_at" label="Created" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>

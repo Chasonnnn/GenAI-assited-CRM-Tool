@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Checkbox } from "@/components/ui/checkbox"
 import { MoreVerticalIcon, SearchIcon, XIcon, LoaderIcon, ArchiveIcon, UserPlusIcon, UsersIcon, UploadIcon } from "lucide-react"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
 import { useCases, useArchiveCase, useRestoreCase, useUpdateCase, useAssignees, useBulkAssign, useBulkArchive } from "@/lib/hooks/use-cases"
 import { useQueues } from "@/lib/hooks/use-queues"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
@@ -144,6 +145,8 @@ export default function CasesPage() {
     const [debouncedSearch, setDebouncedSearch] = useState(urlSearch || "")
     const [page, setPage] = useState(1)
     const [selectedCases, setSelectedCases] = useState<Set<string>>(new Set())
+    const [sortBy, setSortBy] = useState<string | null>(null)
+    const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
     const perPage = 20
     const { user } = useAuth()
 
@@ -246,8 +249,19 @@ export default function CasesPage() {
         source: sourceFilter === "all" ? undefined : sourceFilter,
         q: debouncedSearch || undefined,
         queue_id: queueFilter !== "all" ? queueFilter : undefined,
+        sort_by: sortBy || undefined,
+        sort_order: sortOrder,
         ...getDateRangeParams(),
     })
+
+    const handleSort = (column: string) => {
+        if (sortBy === column) {
+            setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+        } else {
+            setSortBy(column)
+            setSortOrder("desc")
+        }
+    }
 
     const archiveMutation = useArchiveCase()
     const restoreMutation = useRestoreCase()
@@ -463,16 +477,18 @@ export default function CasesPage() {
                                                 onCheckedChange={(checked) => handleSelectAll(!!checked)}
                                             />
                                         </TableHead>
-                                        <TableHead className="w-[100px]">Case #</TableHead>
-                                        <TableHead>Name</TableHead>
-                                        <TableHead>Age</TableHead>
+                                        <SortableTableHead column="case_number" label="Case #" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} className="w-[100px]" />
+                                        <SortableTableHead column="full_name" label="Name" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                                        <SortableTableHead column="date_of_birth" label="Age" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <TableHead>BMI</TableHead>
-                                        <TableHead>Phone</TableHead>
-                                        <TableHead>Email</TableHead>
+                                        <SortableTableHead column="race" label="Race" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                                        <SortableTableHead column="state" label="State" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                                        <SortableTableHead column="phone" label="Phone" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                                        <SortableTableHead column="email" label="Email" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <TableHead>Status</TableHead>
-                                        <TableHead>Source</TableHead>
+                                        <SortableTableHead column="source" label="Source" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <TableHead>Assigned To</TableHead>
-                                        <TableHead>Created</TableHead>
+                                        <SortableTableHead column="created_at" label="Created" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <TableHead className="w-[50px]"></TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -503,6 +519,12 @@ export default function CasesPage() {
                                                 </TableCell>
                                                 <TableCell className="text-center">
                                                     {caseItem.bmi ?? "—"}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {caseItem.race || "—"}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {caseItem.state || "—"}
                                                 </TableCell>
                                                 <TableCell>
                                                     {caseItem.phone || "—"}

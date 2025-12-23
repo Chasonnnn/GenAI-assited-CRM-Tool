@@ -706,6 +706,8 @@ def list_cases(
     created_from: str | None = None,  # ISO date string
     created_to: str | None = None,    # ISO date string
     exclude_stage_types: list[str] | None = None,  # Permission-based stage filter
+    sort_by: str | None = None,
+    sort_order: str = "desc",
 ):
     """
     List cases with filters and pagination.
@@ -718,6 +720,8 @@ def list_cases(
         created_from: Filter by creation date from (ISO format YYYY-MM-DD)
         created_to: Filter by creation date to (ISO format YYYY-MM-DD)
         exclude_stage_types: Stage types to exclude (e.g. ['post_approval'] for users without permission)
+        sort_by: Column to sort by (case_number, full_name, email, state, race, source, created_at)
+        sort_order: Sort direction ('asc' or 'desc')
     
     Returns:
         (cases, total_count)
@@ -725,7 +729,7 @@ def list_cases(
     from app.db.enums import Role, OwnerType
     from app.db.models import PipelineStage
     from datetime import datetime
-    from sqlalchemy import or_
+    from sqlalchemy import or_, asc, desc
     
     query = db.query(Case).options(selectinload(Case.stage)).filter(
         Case.organization_id == org_id
@@ -810,8 +814,25 @@ def list_cases(
             )
         )
     
-    # Order by created_at desc
-    query = query.order_by(Case.created_at.desc())
+    # Dynamic sorting
+    order_func = asc if sort_order == "asc" else desc
+    sortable_columns = {
+        "case_number": Case.case_number,
+        "full_name": Case.full_name,
+        "email": Case.email,
+        "phone": Case.phone,
+        "state": Case.state,
+        "race": Case.race,
+        "source": Case.source,
+        "created_at": Case.created_at,
+        "date_of_birth": Case.date_of_birth,  # For age sorting
+    }
+    
+    if sort_by and sort_by in sortable_columns:
+        query = query.order_by(order_func(sortable_columns[sort_by]))
+    else:
+        # Default: created_at desc
+        query = query.order_by(Case.created_at.desc())
     
     # Count total
     total = query.count()

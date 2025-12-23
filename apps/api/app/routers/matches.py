@@ -253,8 +253,11 @@ def list_matches(
     status_filter: str | None = Query(None, alias="status", description="Filter by status"),
     case_id: UUID | None = Query(None, description="Filter by case ID"),
     intended_parent_id: UUID | None = Query(None, description="Filter by intended parent ID"),
+    q: str | None = Query(None, max_length=100, description="Search case/IP names"),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
+    sort_by: str | None = Query(None, description="Column to sort by"),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort direction"),
     db: Session = Depends(get_db),
     session: UserSession = Depends(require_permission("view_matches")),
 ) -> MatchListResponse:
@@ -263,6 +266,9 @@ def list_matches(
     
     Requires: Manager+ role
     """
+    from sqlalchemy import asc, desc, or_
+    from sqlalchemy.orm import joinedload
+    
     query = db.query(Match).filter(Match.organization_id == session.org_id)
     
     if status_filter:
@@ -272,11 +278,38 @@ def list_matches(
     if intended_parent_id:
         query = query.filter(Match.intended_parent_id == intended_parent_id)
     
+    # Search by case or IP name (requires join)
+    if q:
+        search_term = f"%{q}%"
+        query = query.join(Case, Match.case_id == Case.id, isouter=True).join(
+            IntendedParent, Match.intended_parent_id == IntendedParent.id, isouter=True
+        ).filter(
+            or_(
+                Case.full_name.ilike(search_term),
+                Case.case_number.ilike(search_term),
+                IntendedParent.full_name.ilike(search_term),
+            )
+        )
+    
     total = query.count()
-    matches = query.order_by(Match.proposed_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
+    
+    # Dynamic sorting
+    order_func = asc if sort_order == "asc" else desc
+    sortable_columns = {
+        "status": Match.status,
+        "compatibility_score": Match.compatibility_score,
+        "proposed_at": Match.proposed_at,
+        "created_at": Match.created_at,
+    }
+    
+    if sort_by and sort_by in sortable_columns:
+        query = query.order_by(order_func(sortable_columns[sort_by]))
+    else:
+        query = query.order_by(Match.proposed_at.desc())
+    
+    matches = query.offset((page - 1) * per_page).limit(per_page).all()
     
     # Batch load cases and IPs (org-scoped), with eager load for case stage
-    from sqlalchemy.orm import joinedload
     case_ids = {m.case_id for m in matches}
     ip_ids = {m.intended_parent_id for m in matches}
     

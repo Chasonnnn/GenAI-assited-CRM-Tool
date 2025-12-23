@@ -18,6 +18,7 @@ export interface CaseListItem {
     email: string;
     phone: string | null;
     state: string | null;
+    race: string | null;  // Added for table display
     owner_type: 'user' | 'queue' | null;
     owner_id: string | null;
     owner_name: string | null;

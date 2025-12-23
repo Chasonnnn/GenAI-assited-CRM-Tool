@@ -22,6 +22,8 @@ export interface CaseListParams {
     owner_type?: 'user' | 'queue';  // Filter by owner type
     created_from?: string;  // ISO date string
     created_to?: string;    // ISO date string
+    sort_by?: string;       // Column to sort by
+    sort_order?: 'asc' | 'desc';  // Sort direction
 }
 
 // Stats response from /cases/stats
@@ -137,6 +139,8 @@ export function getCases(params: CaseListParams = {}): Promise<CaseListResponse>
     if (params.owner_type) searchParams.set('owner_type', params.owner_type);
     if (params.created_from) searchParams.set('created_from', params.created_from);
     if (params.created_to) searchParams.set('created_to', params.created_to);
+    if (params.sort_by) searchParams.set('sort_by', params.sort_by);
+    if (params.sort_order) searchParams.set('sort_order', params.sort_order);
 
     const query = searchParams.toString();
     return api.get<CaseListResponse>(`/cases${query ? `?${query}` : ''}`);

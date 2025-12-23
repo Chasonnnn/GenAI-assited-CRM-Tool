@@ -27,6 +27,8 @@ export interface IntendedParentFilters {
     include_archived?: boolean
     page?: number
     per_page?: number
+    sort_by?: string
+    sort_order?: 'asc' | 'desc'
 }
 
 // List with filters
@@ -46,6 +48,8 @@ export async function listIntendedParents(
     if (filters.include_archived) params.set('include_archived', 'true')
     if (filters.page) params.set('page', String(filters.page))
     if (filters.per_page) params.set('per_page', String(filters.per_page))
+    if (filters.sort_by) params.set('sort_by', filters.sort_by)
+    if (filters.sort_order) params.set('sort_order', filters.sort_order)
 
     const queryString = params.toString()
     const url = queryString ? `/intended-parents?${queryString}` : '/intended-parents'
