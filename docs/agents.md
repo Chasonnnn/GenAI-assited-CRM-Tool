@@ -77,7 +77,7 @@ Fix these IMMEDIATELY when they appear:
 - Security vulnerabilities
 ```
 
-### 🟢 Backward Compatibility
+### 🟢 No-Backward Compatibility
 ```markdown
 This is an in-house project. Breaking changes are ACCEPTABLE:
 - Prioritize clean design over legacy support
