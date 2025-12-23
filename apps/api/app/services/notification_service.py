@@ -419,3 +419,165 @@ def notify_task_assigned(
         entity_id=task_id,
         dedupe_key=dedupe_key,
     )
+
+
+def notify_task_due_soon(
+    db: Session,
+    task_id: UUID,
+    task_title: str,
+    org_id: UUID,
+    assignee_id: UUID,
+    due_date: str,
+    case_number: Optional[str] = None,
+) -> None:
+    """Notify user when a task is due soon (within 24h). One-time notification."""
+    if not assignee_id:
+        return
+    
+    title = f"Task due soon: {task_title[:50]}"
+    body = f"Due: {due_date}"
+    if case_number:
+        body += f" (Case #{case_number})"
+    
+    # One-time dedupe (no time bucket - dedupe forever)
+    dedupe_key = f"task:{task_id}:due_soon"
+    create_notification(
+        db=db,
+        org_id=org_id,
+        user_id=assignee_id,
+        type=NotificationType.TASK_DUE_SOON,
+        title=title,
+        body=body,
+        entity_type="task",
+        entity_id=task_id,
+        dedupe_key=dedupe_key,
+    )
+
+
+def notify_task_overdue(
+    db: Session,
+    task_id: UUID,
+    task_title: str,
+    org_id: UUID,
+    assignee_id: UUID,
+    due_date: str,
+    case_number: Optional[str] = None,
+) -> None:
+    """Notify user when a task is overdue. One-time notification."""
+    if not assignee_id:
+        return
+    
+    title = f"Task overdue: {task_title[:50]}"
+    body = f"Was due: {due_date}"
+    if case_number:
+        body += f" (Case #{case_number})"
+    
+    # One-time dedupe (no time bucket - dedupe forever)
+    dedupe_key = f"task:{task_id}:overdue"
+    create_notification(
+        db=db,
+        org_id=org_id,
+        user_id=assignee_id,
+        type=NotificationType.TASK_OVERDUE,
+        title=title,
+        body=body,
+        entity_type="task",
+        entity_id=task_id,
+        dedupe_key=dedupe_key,
+    )
+
+
+# =============================================================================
+# Appointment Notification Triggers
+# =============================================================================
+
+
+def notify_appointment_requested(
+    db: Session,
+    org_id: UUID,
+    staff_user_id: UUID,
+    appointment_id: UUID,
+    client_name: str,
+    appointment_type: str,
+    requested_time: str,
+) -> None:
+    """Notify staff when a new appointment is requested."""
+    if not staff_user_id:
+        return
+    
+    title = f"New appointment request: {appointment_type}"
+    body = f"{client_name} requested {requested_time}"
+    
+    dedupe_key = f"apt:{appointment_id}:requested"
+    create_notification(
+        db=db,
+        org_id=org_id,
+        user_id=staff_user_id,
+        type=NotificationType.APPOINTMENT_REQUESTED,
+        title=title,
+        body=body,
+        entity_type="appointment",
+        entity_id=appointment_id,
+        dedupe_key=dedupe_key,
+    )
+
+
+def notify_appointment_confirmed(
+    db: Session,
+    org_id: UUID,
+    staff_user_id: UUID,
+    appointment_id: UUID,
+    client_name: str,
+    appointment_type: str,
+    confirmed_time: str,
+) -> None:
+    """Notify staff when an appointment is confirmed."""
+    if not staff_user_id:
+        return
+    
+    title = f"Appointment confirmed: {appointment_type}"
+    body = f"{confirmed_time} with {client_name}"
+    
+    dedupe_key = f"apt:{appointment_id}:confirmed"
+    create_notification(
+        db=db,
+        org_id=org_id,
+        user_id=staff_user_id,
+        type=NotificationType.APPOINTMENT_CONFIRMED,
+        title=title,
+        body=body,
+        entity_type="appointment",
+        entity_id=appointment_id,
+        dedupe_key=dedupe_key,
+    )
+
+
+def notify_appointment_cancelled(
+    db: Session,
+    org_id: UUID,
+    staff_user_id: UUID,
+    appointment_id: UUID,
+    client_name: str,
+    appointment_type: str,
+    cancelled_time: str,
+) -> None:
+    """Notify staff when an appointment is cancelled."""
+    if not staff_user_id:
+        return
+    
+    title = f"Appointment cancelled: {appointment_type}"
+    body = f"{cancelled_time} with {client_name} was cancelled"
+    
+    dedupe_key = f"apt:{appointment_id}:cancelled"
+    create_notification(
+        db=db,
+        org_id=org_id,
+        user_id=staff_user_id,
+        type=NotificationType.APPOINTMENT_CANCELLED,
+        title=title,
+        body=body,
+        entity_type="appointment",
+        entity_id=appointment_id,
+        dedupe_key=dedupe_key,
+    )
+
