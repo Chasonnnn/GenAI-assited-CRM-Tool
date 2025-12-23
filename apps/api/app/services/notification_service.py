@@ -47,6 +47,8 @@ def get_user_settings(
             "case_status_changed": settings.case_status_changed,
             "case_handoff": settings.case_handoff,
             "task_assigned": settings.task_assigned,
+            "task_reminders": settings.task_reminders,
+            "appointments": settings.appointments,
         }
     
     # Defaults (all ON)
@@ -55,6 +57,8 @@ def get_user_settings(
         "case_status_changed": True,
         "case_handoff": True,
         "task_assigned": True,
+        "task_reminders": True,
+        "appointments": True,
     }
 
 
@@ -94,6 +98,8 @@ def update_user_settings(
         "case_status_changed": settings.case_status_changed,
         "case_handoff": settings.case_handoff,
         "task_assigned": settings.task_assigned,
+        "task_reminders": settings.task_reminders,
+        "appointments": settings.appointments,
     }
 
 

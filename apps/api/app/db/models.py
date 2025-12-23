@@ -1328,6 +1328,8 @@ class UserNotificationSettings(Base):
     case_status_changed: Mapped[bool] = mapped_column(default=True, server_default=text("true"))
     case_handoff: Mapped[bool] = mapped_column(default=True, server_default=text("true"))
     task_assigned: Mapped[bool] = mapped_column(default=True, server_default=text("true"))
+    task_reminders: Mapped[bool] = mapped_column(default=True, server_default=text("true"))  # Due soon/overdue
+    appointments: Mapped[bool] = mapped_column(default=True, server_default=text("true"))  # New/confirmed/cancelled
     
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"),
