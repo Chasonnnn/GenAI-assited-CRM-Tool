@@ -133,3 +133,17 @@ export function uncompleteTask(taskId: string): Promise<TaskRead> {
 export function deleteTask(taskId: string): Promise<void> {
     return api.delete(`/tasks/${taskId}`);
 }
+
+// Bulk complete response type
+export interface BulkCompleteResponse {
+    completed: number;
+    failed: { task_id: string; reason: string }[];
+}
+
+/**
+ * Mark multiple tasks as completed.
+ */
+export function bulkCompleteTasks(taskIds: string[]): Promise<BulkCompleteResponse> {
+    return api.post<BulkCompleteResponse>('/tasks/bulk-complete', { task_ids: taskIds });
+}
+

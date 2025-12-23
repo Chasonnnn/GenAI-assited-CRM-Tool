@@ -114,3 +114,22 @@ export function useDeleteTask() {
         },
     });
 }
+
+/**
+ * Bulk complete multiple tasks.
+ * Invalidates all task list queries to ensure UI refreshes.
+ */
+export function useBulkCompleteTasks() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: tasksApi.bulkCompleteTasks,
+        onSuccess: () => {
+            // Invalidate all task list queries (covers both case_id and intended_parent_id)
+            queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
+            // Also invalidate dashboard stats since pending_tasks count changes
+            queryClient.invalidateQueries({ queryKey: caseKeys.stats() });
+        },
+    });
+}
+
