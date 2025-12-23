@@ -83,8 +83,9 @@ vi.mock('@/lib/hooks/use-intended-parents', () => ({
 vi.mock('@/lib/hooks/use-attachments', () => ({
     useAttachments: () => ({ data: [], isLoading: false }),
     useIPAttachments: () => ({ data: [], isLoading: false }),
-    useUploadAttachment: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useUploadIPAttachment: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useUploadAttachment: () => ({ mutateAsync: async () => ({}), isPending: false }),
+    useUploadIPAttachment: () => ({ mutateAsync: async () => ({}), isPending: false }),
+    useDeleteAttachment: () => ({ mutateAsync: async () => ({}), isPending: false }),
 }))
 
 // Mock tasks hook

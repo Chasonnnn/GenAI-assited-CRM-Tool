@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
+import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -36,6 +37,7 @@ import {
     ArrowLeftIcon,
     UserIcon,
     UsersIcon,
+    TrashIcon,
 } from "lucide-react"
 import { useMatch, matchKeys, useAcceptMatch, useRejectMatch } from "@/lib/hooks/use-matches"
 import { MatchTasksCalendar } from "@/components/matches/MatchTasksCalendar"
@@ -48,7 +50,7 @@ import { useNotes, useCreateNote } from "@/lib/hooks/use-notes"
 import { useIntendedParent, useIntendedParentNotes, useIntendedParentHistory, intendedParentKeys, useCreateIntendedParentNote } from "@/lib/hooks/use-intended-parents"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useTasks, useCreateTask, taskKeys } from "@/lib/hooks/use-tasks"
-import { useAttachments, useIPAttachments, useUploadAttachment, useUploadIPAttachment } from "@/lib/hooks/use-attachments"
+import { useAttachments, useIPAttachments, useUploadAttachment, useUploadIPAttachment, useDeleteAttachment } from "@/lib/hooks/use-attachments"
 import { useAuth } from "@/lib/auth-context"
 import { useQueryClient } from "@tanstack/react-query"
 
@@ -99,6 +101,7 @@ export default function MatchDetailPage() {
     const createIPNoteMutation = useCreateIntendedParentNote()
     const uploadAttachmentMutation = useUploadAttachment()
     const uploadIPAttachmentMutation = useUploadIPAttachment()
+    const deleteAttachmentMutation = useDeleteAttachment()
     const createTaskMutation = useCreateTask()
 
     // Fetch full profile data for both sides
@@ -329,46 +332,74 @@ export default function MatchDetailPage() {
 
     // Handle Add Note
     const handleAddNote = async (target: "case" | "ip", content: string) => {
-        if (target === "case" && match?.case_id) {
-            await createNoteMutation.mutateAsync({ caseId: match.case_id, body: content })
-            // Note: useCreateNote.onSuccess already invalidates noteKeys.forCase(caseId)
-        } else if (target === "ip" && match?.intended_parent_id) {
-            await createIPNoteMutation.mutateAsync({ id: match.intended_parent_id, data: { content } })
-            // Note: useCreateIntendedParentNote.onSuccess already invalidates intendedParentKeys.notes(id)
+        try {
+            if (target === "case" && match?.case_id) {
+                await createNoteMutation.mutateAsync({ caseId: match.case_id, body: content })
+            } else if (target === "ip" && match?.intended_parent_id) {
+                await createIPNoteMutation.mutateAsync({ id: match.intended_parent_id, data: { content } })
+            }
+            toast.success("Note added successfully")
+        } catch (error) {
+            toast.error("Failed to add note")
         }
     }
 
     // Handle File Upload
     const handleUploadFile = async (target: "case" | "ip", file: File) => {
-        if (target === "case" && match?.case_id) {
-            await uploadAttachmentMutation.mutateAsync({ caseId: match.case_id, file })
-            // useUploadAttachment.onSuccess already invalidates ["attachments", caseId]
-        } else if (target === "ip" && match?.intended_parent_id) {
-            await uploadIPAttachmentMutation.mutateAsync({ ipId: match.intended_parent_id, file })
-            // useUploadIPAttachment.onSuccess already invalidates ["ip-attachments", ipId]
+        try {
+            if (target === "case" && match?.case_id) {
+                await uploadAttachmentMutation.mutateAsync({ caseId: match.case_id, file })
+            } else if (target === "ip" && match?.intended_parent_id) {
+                await uploadIPAttachmentMutation.mutateAsync({ ipId: match.intended_parent_id, file })
+            }
+            toast.success("File uploaded successfully")
+        } catch (error) {
+            toast.error("Failed to upload file")
+        }
+    }
+
+    // Handle Delete File
+    const handleDeleteFile = async (attachmentId: string, source: "case" | "ip") => {
+        if (!confirm("Are you sure you want to delete this file?")) return
+        try {
+            const caseId = source === "case" ? match?.case_id : undefined
+            await deleteAttachmentMutation.mutateAsync({ attachmentId, caseId: caseId || "" })
+            // Invalidate the appropriate query based on source
+            if (source === "case" && match?.case_id) {
+                queryClient.invalidateQueries({ queryKey: ["attachments", match.case_id] })
+            } else if (source === "ip" && match?.intended_parent_id) {
+                queryClient.invalidateQueries({ queryKey: ["ip-attachments", match.intended_parent_id] })
+            }
+            toast.success("File deleted successfully")
+        } catch (error) {
+            toast.error("Failed to delete file")
         }
     }
 
     // Handle Add Task
     const handleAddTask = async (target: "case" | "ip", data: TaskFormData) => {
-        if (target === "case" && match?.case_id) {
-            await createTaskMutation.mutateAsync({
-                title: data.title,
-                description: data.description,
-                task_type: data.task_type,
-                due_date: data.due_date,
-                case_id: match.case_id,
-            })
+        try {
+            if (target === "case" && match?.case_id) {
+                await createTaskMutation.mutateAsync({
+                    title: data.title,
+                    description: data.description,
+                    task_type: data.task_type,
+                    due_date: data.due_date,
+                    case_id: match.case_id,
+                })
+            } else if (target === "ip" && match?.intended_parent_id) {
+                await createTaskMutation.mutateAsync({
+                    title: data.title,
+                    description: data.description,
+                    task_type: data.task_type,
+                    due_date: data.due_date,
+                    intended_parent_id: match.intended_parent_id,
+                })
+            }
             queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
-        } else if (target === "ip" && match?.intended_parent_id) {
-            await createTaskMutation.mutateAsync({
-                title: data.title,
-                description: data.description,
-                task_type: data.task_type,
-                due_date: data.due_date,
-                intended_parent_id: match.intended_parent_id,
-            })
-            queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
+            toast.success("Task created successfully")
+        } catch (error) {
+            toast.error("Failed to create task")
         }
     }
 
@@ -765,6 +796,17 @@ export default function MatchDetailPage() {
                                                                     {(file.file_size / 1024).toFixed(1)} KB • {formatDateTime(file.created_at)}
                                                                 </p>
                                                             </div>
+                                                            {(file.source === 'case' || file.source === 'ip') && (
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                                                                    onClick={() => handleDeleteFile(file.id, file.source as "case" | "ip")}
+                                                                    disabled={deleteAttachmentMutation.isPending}
+                                                                >
+                                                                    <TrashIcon className="size-4" />
+                                                                </Button>
+                                                            )}
                                                         </div>
                                                     ))
                                                 ) : (
