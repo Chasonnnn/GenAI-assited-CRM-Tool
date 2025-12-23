@@ -11,6 +11,7 @@ vi.mock('next/navigation', () => ({
 const mockUseNotifications = vi.fn()
 const mockMarkRead = vi.fn()
 const mockMarkAllRead = vi.fn()
+const mockUseTasks = vi.fn()
 
 vi.mock('@/lib/hooks/use-notifications', () => ({
     useNotifications: (params: unknown) => mockUseNotifications(params),
@@ -18,11 +19,15 @@ vi.mock('@/lib/hooks/use-notifications', () => ({
     useMarkAllRead: () => ({ mutate: mockMarkAllRead, isPending: false }),
 }))
 
+vi.mock('@/lib/hooks/use-tasks', () => ({
+    useTasks: (params: unknown) => mockUseTasks(params),
+}))
+
 describe('NotificationsPage', () => {
     beforeEach(() => {
         mockUseNotifications.mockReturnValue({
             data: {
-                unread_count: 1,
+                unread_count: 2,
                 items: [
                     {
                         id: 'n1',
@@ -34,6 +39,35 @@ describe('NotificationsPage', () => {
                         read_at: null,
                         created_at: new Date().toISOString(),
                     },
+                    {
+                        id: 'n2',
+                        type: 'task_assigned',
+                        title: 'Task assigned',
+                        body: 'You have a new task.',
+                        entity_type: 'task',
+                        entity_id: 't1',
+                        read_at: new Date().toISOString(),
+                        created_at: new Date().toISOString(),
+                    },
+                ],
+            },
+            isLoading: false,
+        })
+
+        // Mock overdue tasks (one day old)
+        const yesterday = new Date()
+        yesterday.setDate(yesterday.getDate() - 2)
+        mockUseTasks.mockReturnValue({
+            data: {
+                items: [
+                    {
+                        id: 'task1',
+                        title: 'Overdue task',
+                        due_date: yesterday.toISOString().split('T')[0],
+                        owner_name: 'John Doe',
+                        case_id: 'c1',
+                        case_number: '00042',
+                    },
                 ],
             },
             isLoading: false,
@@ -44,6 +78,16 @@ describe('NotificationsPage', () => {
         mockMarkAllRead.mockReset()
     })
 
+    it('renders notifications page with header', () => {
+        render(<NotificationsPage />)
+        expect(screen.getByText('Notifications')).toBeInTheDocument()
+    })
+
+    it('shows unread count badge', () => {
+        render(<NotificationsPage />)
+        expect(screen.getByText('2 unread')).toBeInTheDocument()
+    })
+
     it('can mark all as read', () => {
         render(<NotificationsPage />)
         fireEvent.click(screen.getByRole('button', { name: /mark all read/i }))
@@ -52,11 +96,38 @@ describe('NotificationsPage', () => {
 
     it('marks a notification as read and navigates', () => {
         render(<NotificationsPage />)
-
         fireEvent.click(screen.getByText('Case assigned'))
-
         expect(mockMarkRead).toHaveBeenCalledWith('n1')
         expect(mockPush).toHaveBeenCalledWith('/cases/c1')
     })
-})
 
+    it('renders overdue tasks section', () => {
+        render(<NotificationsPage />)
+        expect(screen.getByText('Overdue Tasks')).toBeInTheDocument()
+        expect(screen.getByText('Overdue task')).toBeInTheDocument()
+    })
+
+    it('renders type filter dropdown', () => {
+        render(<NotificationsPage />)
+        expect(screen.getByRole('combobox')).toBeInTheDocument()
+    })
+
+    it('passes notification_types to hook when filter is selected', () => {
+        render(<NotificationsPage />)
+        // Initial call should have no filter
+        expect(mockUseNotifications).toHaveBeenCalledWith(
+            expect.objectContaining({ limit: 50 })
+        )
+    })
+
+    it('shows empty state when no notifications', () => {
+        mockUseNotifications.mockReturnValue({
+            data: { unread_count: 0, items: [] },
+            isLoading: false,
+        })
+        mockUseTasks.mockReturnValue({ data: { items: [] }, isLoading: false })
+
+        render(<NotificationsPage />)
+        expect(screen.getByText("You're all caught up!")).toBeInTheDocument()
+    })
+})

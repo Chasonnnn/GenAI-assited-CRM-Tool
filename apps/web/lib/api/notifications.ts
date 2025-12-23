@@ -34,11 +34,15 @@ export async function getNotifications(options?: {
     unread_only?: boolean
     limit?: number
     offset?: number
+    notification_types?: string[]  // Filter by notification types
 }): Promise<NotificationListResponse> {
     const params = new URLSearchParams()
     if (options?.unread_only) params.set('unread_only', 'true')
     if (options?.limit) params.set('limit', String(options.limit))
     if (options?.offset) params.set('offset', String(options.offset))
+    if (options?.notification_types?.length) {
+        params.set('notification_types', options.notification_types.join(','))
+    }
 
     const query = params.toString() ? `?${params.toString()}` : ''
     return api.get(`/me/notifications${query}`)
