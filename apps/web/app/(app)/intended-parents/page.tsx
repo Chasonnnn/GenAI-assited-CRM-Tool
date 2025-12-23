@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback, useEffect } from "react"
 import Link from "next/link"
+import { useSearchParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -61,9 +62,21 @@ const STATUS_COLORS: Record<IntendedParentStatus, string> = {
     inactive: "bg-gray-500/10 text-gray-500 border-gray-500/20",
 }
 
+const VALID_STATUSES = ["all", "new", "in_review", "matched", "inactive"]
+
 export default function IntendedParentsPage() {
-    const [search, setSearch] = useState("")
-    const [statusFilter, setStatusFilter] = useState<string>("all")
+    const searchParams = useSearchParams()
+    const router = useRouter()
+
+    // Read initial values from URL params
+    const urlStatus = searchParams.get("status")
+    const urlSearch = searchParams.get("q")
+
+    const [search, setSearch] = useState(urlSearch || "")
+    const [debouncedSearch, setDebouncedSearch] = useState(urlSearch || "")
+    const [statusFilter, setStatusFilter] = useState<string>(
+        urlStatus && VALID_STATUSES.includes(urlStatus) ? urlStatus : "all"
+    )
     const [dateRange, setDateRange] = useState<DateRangePreset>('all')
     const [customRange, setCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
         from: undefined,
@@ -71,6 +84,44 @@ export default function IntendedParentsPage() {
     })
     const [page, setPage] = useState(1)
     const [isCreateOpen, setIsCreateOpen] = useState(false)
+
+    // Sync state changes back to URL
+    const updateUrlParams = useCallback((status: string, searchValue: string) => {
+        const newParams = new URLSearchParams(searchParams.toString())
+        if (status !== "all") {
+            newParams.set("status", status)
+        } else {
+            newParams.delete("status")
+        }
+        if (searchValue) {
+            newParams.set("q", searchValue)
+        } else {
+            newParams.delete("q")
+        }
+        const newUrl = newParams.toString() ? `?${newParams}` : ""
+        router.replace(`/intended-parents${newUrl}`, { scroll: false })
+    }, [searchParams, router])
+
+    // Handle status filter change
+    const handleStatusChange = useCallback((status: string) => {
+        setStatusFilter(status)
+        setPage(1)
+        updateUrlParams(status, debouncedSearch)
+    }, [debouncedSearch, updateUrlParams])
+
+    // Debounce search input
+    useEffect(() => {
+        const timer = setTimeout(() => setDebouncedSearch(search), 300)
+        return () => clearTimeout(timer)
+    }, [search])
+
+    // Sync debouncedSearch to URL
+    useEffect(() => {
+        const urlSearch = searchParams.get("q")
+        if (debouncedSearch !== (urlSearch || "")) {
+            updateUrlParams(statusFilter, debouncedSearch)
+        }
+    }, [debouncedSearch]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Form state
     const [formData, setFormData] = useState({
@@ -84,7 +135,7 @@ export default function IntendedParentsPage() {
 
     // Queries
     const filters = {
-        q: search || undefined,
+        q: debouncedSearch || undefined,
         status: statusFilter !== "all" ? [statusFilter] : undefined,
         page,
         per_page: 20,
@@ -189,7 +240,7 @@ export default function IntendedParentsPage() {
                             className="pl-9"
                         />
                     </div>
-                    <Select value={statusFilter} onValueChange={(v) => { if (v) { setStatusFilter(v); setPage(1) } }}>
+                    <Select value={statusFilter} onValueChange={(v) => { if (v) handleStatusChange(v) }}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="All Statuses">
                                 {(value: string | null) => {

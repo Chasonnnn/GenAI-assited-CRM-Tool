@@ -8,6 +8,18 @@ vi.mock('next/link', () => ({
     ),
 }))
 
+// Mock Next.js navigation
+vi.mock('next/navigation', () => ({
+    useSearchParams: () => ({
+        get: () => null,
+        toString: () => '',
+    }),
+    useRouter: () => ({
+        push: vi.fn(),
+        replace: vi.fn(),
+    }),
+}))
+
 // Mock localStorage to return "list" for tasks view
 Object.defineProperty(window, 'localStorage', {
     value: {
