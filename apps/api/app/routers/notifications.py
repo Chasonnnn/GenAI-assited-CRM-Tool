@@ -55,6 +55,8 @@ class NotificationSettingsRead(BaseModel):
     case_status_changed: bool
     case_handoff: bool
     task_assigned: bool
+    task_reminders: bool
+    appointments: bool
 
 
 class NotificationSettingsUpdate(BaseModel):
@@ -63,6 +65,8 @@ class NotificationSettingsUpdate(BaseModel):
     case_status_changed: bool | None = None
     case_handoff: bool | None = None
     task_assigned: bool | None = None
+    task_reminders: bool | None = None
+    appointments: bool | None = None
 
 
 # =============================================================================

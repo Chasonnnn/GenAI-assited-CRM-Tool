@@ -93,6 +93,32 @@ function NotificationsSettingsCard() {
               disabled={updateMutation.isPending}
             />
           </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="task_reminders">Task due date reminders</Label>
+              <p className="text-sm text-muted-foreground">Get notified when tasks are due soon or overdue</p>
+            </div>
+            <Switch
+              id="task_reminders"
+              checked={settings?.task_reminders ?? true}
+              onCheckedChange={(checked) => handleToggle("task_reminders", checked)}
+              disabled={updateMutation.isPending}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="appointments">Appointment updates</Label>
+              <p className="text-sm text-muted-foreground">Get notified for new, confirmed, and cancelled appointments</p>
+            </div>
+            <Switch
+              id="appointments"
+              checked={settings?.appointments ?? true}
+              onCheckedChange={(checked) => handleToggle("appointments", checked)}
+              disabled={updateMutation.isPending}
+            />
+          </div>
         </div>
       </CardContent>
     </Card>
