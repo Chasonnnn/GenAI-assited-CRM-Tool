@@ -22,6 +22,7 @@ import {
     useMarkAllRead,
 } from "@/lib/hooks/use-notifications"
 import { useNotificationSocket } from "@/lib/hooks/use-notification-socket"
+import { useBrowserNotifications } from "@/lib/hooks/use-browser-notifications"
 import type { Notification } from "@/lib/api/notifications"
 
 export function NotificationBell() {
@@ -32,7 +33,31 @@ export function NotificationBell() {
     const markAllRead = useMarkAllRead()
 
     // Real-time WebSocket connection
-    const { isConnected, unreadCount: wsUnreadCount } = useNotificationSocket()
+    const { isConnected, lastNotification, unreadCount: wsUnreadCount } = useNotificationSocket()
+
+    // Browser notifications
+    const { permission, showNotification } = useBrowserNotifications()
+    const lastNotificationIdRef = React.useRef<string | null>(null)
+
+    // Show browser notification when new message arrives (only if tab not focused)
+    React.useEffect(() => {
+        if (
+            lastNotification &&
+            lastNotification.id &&
+            lastNotification.id !== lastNotificationIdRef.current &&
+            permission === 'granted' &&
+            typeof document !== 'undefined' &&
+            document.hidden // Only show if tab is not focused
+        ) {
+            lastNotificationIdRef.current = lastNotification.id
+            showNotification(lastNotification.title || 'New notification', {
+                body: lastNotification.body,
+                tag: lastNotification.id, // Prevent duplicates
+                entityType: lastNotification.type,
+                entityId: lastNotification.id,
+            })
+        }
+    }, [lastNotification, permission, showNotification])
 
     // Prefer WebSocket count when connected, fall back to polling
     const unreadCount = wsUnreadCount ?? countData?.count ?? 0
