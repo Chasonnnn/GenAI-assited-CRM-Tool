@@ -10,10 +10,66 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { CameraIcon, MonitorIcon, SmartphoneIcon, LoaderIcon, CheckIcon } from "lucide-react"
+import { CameraIcon, MonitorIcon, SmartphoneIcon, LoaderIcon, CheckIcon, BellRingIcon } from "lucide-react"
 import { useNotificationSettings, useUpdateNotificationSettings } from "@/lib/hooks/use-notifications"
+import { useBrowserNotifications } from "@/lib/hooks/use-browser-notifications"
 import { useAuth } from "@/lib/auth-context"
 import { updateProfile, updateOrgSettings } from "@/lib/api/settings"
+
+// Browser Notifications Card - handles permission request
+function BrowserNotificationsCard() {
+  const { isSupported, permission, requestPermission } = useBrowserNotifications()
+  const [isRequesting, setIsRequesting] = useState(false)
+
+  const handleRequestPermission = async () => {
+    setIsRequesting(true)
+    await requestPermission()
+    setIsRequesting(false)
+  }
+
+  if (!isSupported) {
+    return null // Don't show on unsupported browsers
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <BellRingIcon className="size-5" />
+          Browser Notifications
+        </CardTitle>
+        <CardDescription>Get desktop notifications when new updates arrive</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label>Desktop push notifications</Label>
+            <p className="text-sm text-muted-foreground">
+              {permission === 'granted'
+                ? 'Enabled - you will receive push notifications'
+                : permission === 'denied'
+                  ? 'Blocked - enable in browser settings'
+                  : 'Enable to receive notifications when tab is not focused'}
+            </p>
+          </div>
+          {permission === 'granted' ? (
+            <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Enabled</Badge>
+          ) : permission === 'denied' ? (
+            <Badge variant="secondary">Blocked</Badge>
+          ) : (
+            <Button onClick={handleRequestPermission} disabled={isRequesting} size="sm">
+              {isRequesting ? (
+                <><LoaderIcon className="mr-2 size-4 animate-spin" /> Requesting...</>
+              ) : (
+                'Enable'
+              )}
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
 
 // Notification Settings Card - wired to real API
 function NotificationsSettingsCard() {
@@ -404,7 +460,12 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {activeTab === "notifications" && <NotificationsSettingsCard />}
+        {activeTab === "notifications" && (
+          <div className="space-y-6">
+            <BrowserNotificationsCard />
+            <NotificationsSettingsCard />
+          </div>
+        )}
       </div>
     </div>
   )
