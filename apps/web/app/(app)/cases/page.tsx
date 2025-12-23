@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
+import { useSearchParams, useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -116,21 +117,78 @@ function FloatingActionBar({
     )
 }
 
+const VALID_SOURCES: (CaseSource | "all")[] = ["all", "manual", "meta", "website", "referral"]
+const VALID_DATE_RANGES: DateRangePreset[] = ["all", "today", "week", "month", "custom"]
+
 export default function CasesPage() {
-    const [stageFilter, setStageFilter] = useState<string>("all")
-    const [sourceFilter, setSourceFilter] = useState<CaseSource | "all">("all")
-    const [queueFilter, setQueueFilter] = useState<string>("all")  // Queue filter
+    const searchParams = useSearchParams()
+    const router = useRouter()
+
+    // Read initial values from URL params
+    const urlStage = searchParams.get("stage")
+    const urlSource = searchParams.get("source") as CaseSource | "all" | null
+    const urlQueue = searchParams.get("queue")
+    const urlSearch = searchParams.get("q")
+
+    const [stageFilter, setStageFilter] = useState<string>(urlStage || "all")
+    const [sourceFilter, setSourceFilter] = useState<CaseSource | "all">(
+        urlSource && VALID_SOURCES.includes(urlSource) ? urlSource : "all"
+    )
+    const [queueFilter, setQueueFilter] = useState<string>(urlQueue || "all")
     const [dateRange, setDateRange] = useState<DateRangePreset>('all')
     const [customRange, setCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
         from: undefined,
         to: undefined,
     })
-    const [searchQuery, setSearchQuery] = useState("")
-    const [debouncedSearch, setDebouncedSearch] = useState("")
+    const [searchQuery, setSearchQuery] = useState(urlSearch || "")
+    const [debouncedSearch, setDebouncedSearch] = useState(urlSearch || "")
     const [page, setPage] = useState(1)
     const [selectedCases, setSelectedCases] = useState<Set<string>>(new Set())
     const perPage = 20
     const { user } = useAuth()
+
+    // Sync state changes back to URL (preserving other params)
+    const updateUrlParams = useCallback((stage: string, source: CaseSource | "all", queue: string, search: string) => {
+        const newParams = new URLSearchParams(searchParams.toString())
+        if (stage !== "all") {
+            newParams.set("stage", stage)
+        } else {
+            newParams.delete("stage")
+        }
+        if (source !== "all") {
+            newParams.set("source", source)
+        } else {
+            newParams.delete("source")
+        }
+        if (queue !== "all") {
+            newParams.set("queue", queue)
+        } else {
+            newParams.delete("queue")
+        }
+        if (search) {
+            newParams.set("q", search)
+        } else {
+            newParams.delete("q")
+        }
+        const newUrl = newParams.toString() ? `?${newParams}` : ""
+        router.replace(`/cases${newUrl}`, { scroll: false })
+    }, [searchParams, router])
+
+    // Update URL when filters change
+    const handleStageChange = useCallback((stage: string) => {
+        setStageFilter(stage)
+        updateUrlParams(stage, sourceFilter, queueFilter, debouncedSearch)
+    }, [sourceFilter, queueFilter, debouncedSearch, updateUrlParams])
+
+    const handleSourceChange = useCallback((source: CaseSource | "all") => {
+        setSourceFilter(source)
+        updateUrlParams(stageFilter, source, queueFilter, debouncedSearch)
+    }, [stageFilter, queueFilter, debouncedSearch, updateUrlParams])
+
+    const handleQueueChange = useCallback((queue: string) => {
+        setQueueFilter(queue)
+        updateUrlParams(stageFilter, sourceFilter, queue, debouncedSearch)
+    }, [stageFilter, sourceFilter, debouncedSearch, updateUrlParams])
 
     // Fetch queues for filter dropdown (case_manager+ only)
     const canSeeQueues = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
@@ -144,6 +202,15 @@ export default function CasesPage() {
         const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300)
         return () => clearTimeout(timer)
     }, [searchQuery])
+
+    // Sync debouncedSearch to URL (separate effect to avoid circular updates)
+    useEffect(() => {
+        // Only sync if this is from a user search, not initial load
+        const urlSearch = searchParams.get("q")
+        if (debouncedSearch !== (urlSearch || "")) {
+            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch)
+        }
+    }, [debouncedSearch]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Reset page when filters change
     useEffect(() => {
@@ -194,7 +261,9 @@ export default function CasesPage() {
         setQueueFilter("all")
         setSearchQuery("")
         setSelectedCases(new Set())
-    }, [])
+        // Clear URL params
+        router.replace('/cases', { scroll: false })
+    }, [router])
 
     // Multi-select handlers
     const handleSelectAll = (checked: boolean) => {
@@ -253,7 +322,7 @@ export default function CasesPage() {
 
                 {/* Filters Row */}
                 <div className="flex flex-wrap items-center gap-3">
-                    <Select value={stageFilter} onValueChange={(value) => setStageFilter(value || "all")}>
+                    <Select value={stageFilter} onValueChange={(value) => handleStageChange(value || "all")}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="All Stages">
                                 {(value: string | null) => {
@@ -273,7 +342,7 @@ export default function CasesPage() {
                         </SelectContent>
                     </Select>
 
-                    <Select value={sourceFilter} onValueChange={(value) => setSourceFilter((value || "all") as CaseSource | "all")}>
+                    <Select value={sourceFilter} onValueChange={(value) => handleSourceChange((value || "all") as CaseSource | "all")}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="All Sources">
                                 {(value: string | null) => {
@@ -306,7 +375,7 @@ export default function CasesPage() {
 
                     {/* Queue Filter (case_manager+ only) */}
                     {canSeeQueues && queues && queues.length > 0 && (
-                        <Select value={queueFilter} onValueChange={(value) => setQueueFilter(value || "all")}>
+                        <Select value={queueFilter} onValueChange={(value) => handleQueueChange(value || "all")}>
                             <SelectTrigger className="w-[180px]">
                                 <UsersIcon className="h-4 w-4 mr-2" />
                                 <SelectValue placeholder="All Queues">

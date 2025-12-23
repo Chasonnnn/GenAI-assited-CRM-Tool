@@ -13,6 +13,18 @@ vi.mock('next/link', () => ({
     ),
 }))
 
+// Mock Next.js navigation
+vi.mock('next/navigation', () => ({
+    useSearchParams: () => ({
+        get: () => null,
+        toString: () => '',
+    }),
+    useRouter: () => ({
+        push: vi.fn(),
+        replace: vi.fn(),
+    }),
+}))
+
 // Mock API hooks
 const mockUseCases = vi.fn()
 const mockUseArchiveCase = vi.fn()

@@ -6,8 +6,9 @@
  * Unified view showing tasks and appointments with list/calendar toggle.
  */
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
+import { useSearchParams, useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -89,8 +90,19 @@ const categoryColors: Record<DueCategory, { text: string; badge: string }> = {
     'no-date': { text: 'text-muted-foreground', badge: 'bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20' },
 }
 
+type FilterType = "all" | "my_tasks"
+const VALID_FILTERS: FilterType[] = ["all", "my_tasks"]
+
 export default function TasksPage() {
-    const [filter, setFilter] = useState<"all" | "my_tasks">("my_tasks")
+    const searchParams = useSearchParams()
+    const router = useRouter()
+
+    // Read initial values from URL params
+    const urlFilter = searchParams.get("filter") as FilterType | null
+
+    const [filter, setFilter] = useState<FilterType>(
+        urlFilter && VALID_FILTERS.includes(urlFilter) ? urlFilter : "my_tasks"
+    )
     const [showCompleted, setShowCompleted] = useState(false)
     const [view, setView] = useState<"list" | "calendar">(() => {
         if (typeof window !== "undefined") {
@@ -98,6 +110,24 @@ export default function TasksPage() {
         }
         return "calendar"
     })
+
+    // Sync state changes back to URL
+    const updateUrlParams = useCallback((filterValue: FilterType) => {
+        const newParams = new URLSearchParams(searchParams.toString())
+        if (filterValue !== "my_tasks") {
+            newParams.set("filter", filterValue)
+        } else {
+            newParams.delete("filter")
+        }
+        const newUrl = newParams.toString() ? `?${newParams}` : ""
+        router.replace(`/tasks${newUrl}`, { scroll: false })
+    }, [searchParams, router])
+
+    // Handle filter change
+    const handleFilterChange = useCallback((newFilter: FilterType) => {
+        setFilter(newFilter)
+        updateUrlParams(newFilter)
+    }, [updateUrlParams])
 
     const handleViewChange = (newView: "list" | "calendar") => {
         setView(newView)
@@ -273,14 +303,14 @@ export default function TasksPage() {
                         <Button
                             variant={filter === "my_tasks" ? "secondary" : "ghost"}
                             size="sm"
-                            onClick={() => setFilter("my_tasks")}
+                            onClick={() => handleFilterChange("my_tasks")}
                         >
                             My Tasks
                         </Button>
                         <Button
                             variant={filter === "all" ? "secondary" : "ghost"}
                             size="sm"
-                            onClick={() => setFilter("all")}
+                            onClick={() => handleFilterChange("all")}
                         >
                             All Tasks
                         </Button>
