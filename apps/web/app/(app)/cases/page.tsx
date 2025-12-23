@@ -255,7 +255,13 @@ export default function CasesPage() {
                 <div className="flex flex-wrap items-center gap-3">
                     <Select value={stageFilter} onValueChange={(value) => setStageFilter(value || "all")}>
                         <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="All Stages" />
+                            <SelectValue placeholder="All Stages">
+                                {(value: string | null) => {
+                                    if (!value || value === "all") return "All Stages"
+                                    const stage = stageOptions.find(s => s.id === value)
+                                    return stage?.label ?? value
+                                }}
+                            </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All Stages</SelectItem>
@@ -269,7 +275,18 @@ export default function CasesPage() {
 
                     <Select value={sourceFilter} onValueChange={(value) => setSourceFilter((value || "all") as CaseSource | "all")}>
                         <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="All Sources" />
+                            <SelectValue placeholder="All Sources">
+                                {(value: string | null) => {
+                                    if (!value || value === "all") return "All Sources"
+                                    const labels: Record<string, string> = {
+                                        manual: "Manual",
+                                        meta: "Meta",
+                                        website: "Website",
+                                        referral: "Referral",
+                                    }
+                                    return labels[value] ?? value
+                                }}
+                            </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All Sources</SelectItem>
@@ -292,7 +309,13 @@ export default function CasesPage() {
                         <Select value={queueFilter} onValueChange={(value) => setQueueFilter(value || "all")}>
                             <SelectTrigger className="w-[180px]">
                                 <UsersIcon className="h-4 w-4 mr-2" />
-                                <SelectValue placeholder="All Queues" />
+                                <SelectValue placeholder="All Queues">
+                                    {(value: string | null) => {
+                                        if (!value || value === "all") return "All Queues"
+                                        const queue = queues?.find(q => q.id === value)
+                                        return queue?.name ?? value
+                                    }}
+                                </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">All Queues</SelectItem>

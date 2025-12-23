@@ -62,6 +62,7 @@ export interface TaskCreatePayload {
     description?: string;
     task_type?: TaskType;
     case_id?: string;
+    intended_parent_id?: string;
     owner_type?: 'user' | 'queue';
     owner_id?: string;
     due_date?: string;

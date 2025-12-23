@@ -41,12 +41,14 @@ import { useMatch, matchKeys, useAcceptMatch, useRejectMatch } from "@/lib/hooks
 import { MatchTasksCalendar } from "@/components/matches/MatchTasksCalendar"
 import { RejectMatchDialog } from "@/components/matches/RejectMatchDialog"
 import { AddNoteDialog } from "@/components/matches/AddNoteDialog"
+import { UploadFileDialog } from "@/components/matches/UploadFileDialog"
+import { AddTaskDialog, type TaskFormData } from "@/components/matches/AddTaskDialog"
 import { useCase, useChangeStatus, useCaseActivity, caseKeys } from "@/lib/hooks/use-cases"
 import { useNotes, useCreateNote } from "@/lib/hooks/use-notes"
 import { useIntendedParent, useIntendedParentNotes, useIntendedParentHistory, intendedParentKeys, useCreateIntendedParentNote } from "@/lib/hooks/use-intended-parents"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
-import { useTasks } from "@/lib/hooks/use-tasks"
-import { useAttachments, useIPAttachments } from "@/lib/hooks/use-attachments"
+import { useTasks, useCreateTask, taskKeys } from "@/lib/hooks/use-tasks"
+import { useAttachments, useIPAttachments, useUploadAttachment, useUploadIPAttachment } from "@/lib/hooks/use-attachments"
 import { useAuth } from "@/lib/auth-context"
 import { useQueryClient } from "@tanstack/react-query"
 
@@ -66,13 +68,27 @@ const STATUS_COLORS: Record<string, string> = {
     cancelled: "bg-gray-500/10 text-gray-500 border-gray-500/20",
 }
 
+type SourceFilter = 'all' | 'case' | 'ip' | 'match'
+
+const SOURCE_OPTIONS: { value: SourceFilter; label: string }[] = [
+    { value: "all", label: "All Source" },
+    { value: "case", label: "Case" },
+    { value: "ip", label: "Intended Parent" },
+    { value: "match", label: "Match" },
+]
+
+const sourceLabel = (value: SourceFilter | null | undefined) =>
+    SOURCE_OPTIONS.find((opt) => opt.value === value)?.label ?? "All Source"
+
 export default function MatchDetailPage() {
     const params = useParams()
     const matchId = params.id as string
     const [activeTab, setActiveTab] = useState<"notes" | "files" | "tasks" | "activity">("notes")
-    const [sourceFilter, setSourceFilter] = useState<'all' | 'case' | 'ip' | 'match'>('all')
+    const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
     const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
     const [addNoteDialogOpen, setAddNoteDialogOpen] = useState(false)
+    const [uploadFileDialogOpen, setUploadFileDialogOpen] = useState(false)
+    const [addTaskDialogOpen, setAddTaskDialogOpen] = useState(false)
     const { user } = useAuth()
     const queryClient = useQueryClient()
 
@@ -81,6 +97,9 @@ export default function MatchDetailPage() {
     const rejectMatchMutation = useRejectMatch()
     const createNoteMutation = useCreateNote()
     const createIPNoteMutation = useCreateIntendedParentNote()
+    const uploadAttachmentMutation = useUploadAttachment()
+    const uploadIPAttachmentMutation = useUploadIPAttachment()
+    const createTaskMutation = useCreateTask()
 
     // Fetch full profile data for both sides
     const { data: caseData, isLoading: caseLoading } = useCase(match?.case_id || "")
@@ -316,6 +335,40 @@ export default function MatchDetailPage() {
         } else if (target === "ip" && match?.intended_parent_id) {
             await createIPNoteMutation.mutateAsync({ id: match.intended_parent_id, data: { content } })
             // Note: useCreateIntendedParentNote.onSuccess already invalidates intendedParentKeys.notes(id)
+        }
+    }
+
+    // Handle File Upload
+    const handleUploadFile = async (target: "case" | "ip", file: File) => {
+        if (target === "case" && match?.case_id) {
+            await uploadAttachmentMutation.mutateAsync({ caseId: match.case_id, file })
+            // useUploadAttachment.onSuccess already invalidates ["attachments", caseId]
+        } else if (target === "ip" && match?.intended_parent_id) {
+            await uploadIPAttachmentMutation.mutateAsync({ ipId: match.intended_parent_id, file })
+            // useUploadIPAttachment.onSuccess already invalidates ["ip-attachments", ipId]
+        }
+    }
+
+    // Handle Add Task
+    const handleAddTask = async (target: "case" | "ip", data: TaskFormData) => {
+        if (target === "case" && match?.case_id) {
+            await createTaskMutation.mutateAsync({
+                title: data.title,
+                description: data.description,
+                task_type: data.task_type,
+                due_date: data.due_date,
+                case_id: match.case_id,
+            })
+            queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
+        } else if (target === "ip" && match?.intended_parent_id) {
+            await createTaskMutation.mutateAsync({
+                title: data.title,
+                description: data.description,
+                task_type: data.task_type,
+                due_date: data.due_date,
+                intended_parent_id: match.intended_parent_id,
+            })
+            queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
         }
     }
 
@@ -583,14 +636,21 @@ export default function MatchDetailPage() {
                                 <div className="border rounded-lg flex flex-col overflow-hidden">
                                     {/* Source Filter - above tabs */}
                                     <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30">
-                                        <Select value={sourceFilter} onValueChange={(v) => setSourceFilter(v as typeof sourceFilter)}>
-                                            <SelectTrigger className="w-[140px] h-7 text-sm">
-                                                <SelectValue placeholder="All Sources" />
+                                        <Select
+                                            value={sourceFilter}
+                                            onValueChange={(v) => setSourceFilter(v as SourceFilter)}
+                                        >
+                                            <SelectTrigger className="w-[160px] h-9 text-sm">
+                                                <SelectValue placeholder="All Source">
+                                                    {(value: string | null) => sourceLabel(value as SourceFilter)}
+                                                </SelectValue>
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="all" label="All Sources">All Sources</SelectItem>
-                                                <SelectItem value="case" label="Case">Case</SelectItem>
-                                                <SelectItem value="ip" label="Intended Parent">Intended Parent</SelectItem>
+                                                {SOURCE_OPTIONS.map((opt) => (
+                                                    <SelectItem key={opt.value} value={opt.value}>
+                                                        {opt.label}
+                                                    </SelectItem>
+                                                ))}
                                             </SelectContent>
                                         </Select>
                                     </div>
@@ -834,6 +894,26 @@ export default function MatchDetailPage() {
                 onOpenChange={setAddNoteDialogOpen}
                 onSubmit={handleAddNote}
                 isPending={createNoteMutation.isPending || createIPNoteMutation.isPending}
+                caseName={caseData?.full_name || "Surrogate Case"}
+                ipName={ipData?.full_name || "Intended Parent"}
+            />
+
+            {/* Upload File Dialog */}
+            <UploadFileDialog
+                open={uploadFileDialogOpen}
+                onOpenChange={setUploadFileDialogOpen}
+                onUpload={handleUploadFile}
+                isPending={uploadAttachmentMutation.isPending || uploadIPAttachmentMutation.isPending}
+                caseName={caseData?.full_name || "Surrogate Case"}
+                ipName={ipData?.full_name || "Intended Parent"}
+            />
+
+            {/* Add Task Dialog */}
+            <AddTaskDialog
+                open={addTaskDialogOpen}
+                onOpenChange={setAddTaskDialogOpen}
+                onSubmit={handleAddTask}
+                isPending={createTaskMutation.isPending}
                 caseName={caseData?.full_name || "Surrogate Case"}
                 ipName={ipData?.full_name || "Intended Parent"}
             />

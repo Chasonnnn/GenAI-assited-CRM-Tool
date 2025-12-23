@@ -83,11 +83,15 @@ vi.mock('@/lib/hooks/use-intended-parents', () => ({
 vi.mock('@/lib/hooks/use-attachments', () => ({
     useAttachments: () => ({ data: [], isLoading: false }),
     useIPAttachments: () => ({ data: [], isLoading: false }),
+    useUploadAttachment: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useUploadIPAttachment: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 // Mock tasks hook
 vi.mock('@/lib/hooks/use-tasks', () => ({
     useTasks: () => ({ data: { items: [], total: 0 }, isLoading: false }),
+    useCreateTask: () => ({ mutateAsync: async () => ({}), isPending: false }),
+    taskKeys: { lists: () => ['tasks', 'list'] },
 }))
 
 // Mock pipelines hook
@@ -103,11 +107,6 @@ vi.mock('@/lib/hooks/use-pipelines', () => ({
         },
         isLoading: false,
     }),
-}))
-
-// Mock tasks
-vi.mock('@/lib/hooks/use-tasks', () => ({
-    useTasks: () => ({ data: { items: [], total: 0 }, isLoading: false }),
 }))
 
 // Mock toast
