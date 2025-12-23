@@ -172,6 +172,8 @@ export function useAppointments(params: {
     status?: string;
     date_start?: string;
     date_end?: string;
+    case_id?: string;
+    intended_parent_id?: string;
 }) {
     return useQuery({
         queryKey: appointmentKeys.list(params),
