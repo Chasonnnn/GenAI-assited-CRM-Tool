@@ -14,6 +14,7 @@ class TaskCreate(BaseModel):
     description: str | None = Field(None, max_length=2000)
     task_type: TaskType = TaskType.OTHER
     case_id: UUID | None = None
+    intended_parent_id: UUID | None = None
     # New owner model
     owner_type: str | None = Field(None, description="'user' or 'queue'")
     owner_id: UUID | None = Field(None, description="User or Queue ID")
@@ -27,6 +28,7 @@ class TaskUpdate(BaseModel):
     title: str | None = Field(None, min_length=1, max_length=255)
     description: str | None = None
     task_type: TaskType | None = None
+    intended_parent_id: UUID | None = None
     # New owner model
     owner_type: str | None = Field(None, description="'user' or 'queue'")
     owner_id: UUID | None = Field(None, description="User or Queue ID")

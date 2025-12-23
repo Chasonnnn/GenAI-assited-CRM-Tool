@@ -128,6 +128,7 @@ def list_tasks(
     q: str | None = Query(None, description="Search in title and description"),
     owner_id: UUID | None = None,
     case_id: UUID | None = None,
+    intended_parent_id: UUID | None = None,
     is_completed: bool | None = None,
     task_type: TaskType | None = None,
     due_before: str | None = Query(None, description="Due date before (YYYY-MM-DD)"),
@@ -148,6 +149,16 @@ def list_tasks(
         if case:
             check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
     
+    # If filtering by intended_parent_id, verify existence
+    if intended_parent_id:
+        from app.db.models import IntendedParent
+        ip = db.query(IntendedParent).filter(
+            IntendedParent.id == intended_parent_id,
+            IntendedParent.organization_id == session.org_id,
+        ).first()
+        if not ip:
+            raise HTTPException(status_code=404, detail="Intended parent not found")
+    
     tasks, total = task_service.list_tasks(
         db=db,
         org_id=session.org_id,
@@ -157,6 +168,7 @@ def list_tasks(
         q=q,
         owner_id=owner_id,
         case_id=case_id,
+        intended_parent_id=intended_parent_id,
         is_completed=is_completed,
         task_type=task_type,
         due_before=due_before,

@@ -51,4 +51,23 @@ export const attachmentsApi = {
      */
     delete: (attachmentId: string) =>
         api.delete(`/attachments/${attachmentId}`),
+
+    /**
+     * List attachments for an Intended Parent
+     */
+    listForIP: (ipId: string) =>
+        api.get<Attachment[]>(`/attachments/intended-parents/${ipId}/attachments`),
+
+    /**
+     * Upload a file attachment for an Intended Parent
+     */
+    uploadForIP: async (ipId: string, file: File): Promise<Attachment> => {
+        const formData = new FormData()
+        formData.append("file", file)
+
+        return api.upload<Attachment>(
+            `/attachments/intended-parents/${ipId}/attachments`,
+            formData
+        )
+    },
 }

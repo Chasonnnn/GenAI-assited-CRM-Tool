@@ -80,6 +80,7 @@ vi.mock('@/lib/hooks/use-intended-parents', () => ({
 // Mock attachments hook
 vi.mock('@/lib/hooks/use-attachments', () => ({
     useAttachments: () => ({ data: [], isLoading: false }),
+    useIPAttachments: () => ({ data: [], isLoading: false }),
 }))
 
 // Mock tasks hook

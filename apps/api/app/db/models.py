@@ -681,6 +681,7 @@ class Task(Base):
             "organization_id", "due_date",
             postgresql_where=text("is_completed = FALSE")
         ),
+        Index("idx_tasks_intended_parent", "intended_parent_id"),
     )
     
     id: Mapped[uuid.UUID] = mapped_column(
@@ -696,6 +697,11 @@ class Task(Base):
     case_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("cases.id", ondelete="CASCADE"),
+        nullable=True
+    )
+    intended_parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("intended_parents.id", ondelete="CASCADE"),
         nullable=True
     )
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(
@@ -2701,6 +2707,7 @@ class Attachment(Base):
             "case_id",
             postgresql_where=text("deleted_at IS NULL AND quarantined = FALSE")
         ),
+        Index("idx_attachments_intended_parent", "intended_parent_id"),
     )
     
     id: Mapped[uuid.UUID] = mapped_column(
@@ -2716,7 +2723,12 @@ class Attachment(Base):
     case_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("cases.id", ondelete="CASCADE"),
-        nullable=True  # Future: intended_parent_id
+        nullable=True
+    )
+    intended_parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("intended_parents.id", ondelete="CASCADE"),
+        nullable=True
     )
     uploaded_by_user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
