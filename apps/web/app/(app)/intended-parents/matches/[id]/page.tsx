@@ -44,7 +44,7 @@ import { useNotes } from "@/lib/hooks/use-notes"
 import { useIntendedParent, useIntendedParentNotes, useIntendedParentHistory, intendedParentKeys } from "@/lib/hooks/use-intended-parents"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useTasks } from "@/lib/hooks/use-tasks"
-import { useAttachments } from "@/lib/hooks/use-attachments"
+import { useAttachments, useIPAttachments } from "@/lib/hooks/use-attachments"
 import { useAuth } from "@/lib/auth-context"
 import { useQueryClient } from "@tanstack/react-query"
 
@@ -84,11 +84,13 @@ export default function MatchDetailPage() {
     const { data: caseNotes = [] } = useNotes(match?.case_id || "")
     const { data: ipNotes = [] } = useIntendedParentNotes(match?.intended_parent_id || "")
 
-    // Fetch files/attachments from Case
+    // Fetch files/attachments from Case and IP
     const { data: caseFiles = [] } = useAttachments(match?.case_id || null)
+    const { data: ipFiles = [] } = useIPAttachments(match?.intended_parent_id || null)
 
-    // Fetch tasks from Case (tasks have case_id filter)
+    // Fetch tasks from Case and IP
     const { data: caseTasks } = useTasks({ case_id: match?.case_id || undefined })
+    const { data: ipTasks } = useTasks({ intended_parent_id: match?.intended_parent_id || undefined })
 
     // Fetch activity from Case and IP
     const { data: caseActivity } = useCaseActivity(match?.case_id || "", 1, 50)
@@ -150,10 +152,13 @@ export default function MatchDetailPage() {
         for (const f of caseFiles) {
             files.push({ id: f.id, filename: f.filename, file_size: f.file_size, created_at: f.created_at, source: 'case' })
         }
-        // IP and Match don't have separate file storage yet
+        // IP files
+        for (const f of ipFiles) {
+            files.push({ id: f.id, filename: f.filename, file_size: f.file_size, created_at: f.created_at, source: 'ip' })
+        }
         files.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         return files
-    }, [caseFiles])
+    }, [caseFiles, ipFiles])
 
     const filteredFiles = useMemo(() => {
         if (sourceFilter === 'all') return combinedFiles
@@ -174,9 +179,12 @@ export default function MatchDetailPage() {
         for (const t of caseTasks?.items || []) {
             tasks.push({ id: t.id, title: t.title, due_date: t.due_date, is_completed: t.is_completed, source: 'case' })
         }
-        // Match-specific tasks could be added here
+        // IP tasks
+        for (const t of ipTasks?.items || []) {
+            tasks.push({ id: t.id, title: t.title, due_date: t.due_date, is_completed: t.is_completed, source: 'ip' })
+        }
         return tasks
-    }, [caseTasks])
+    }, [caseTasks, ipTasks])
 
     const filteredTasks = useMemo(() => {
         if (sourceFilter === 'all') return combinedTasks

@@ -47,3 +47,24 @@ export function useDeleteAttachment() {
         },
     })
 }
+
+// IP Attachment hooks
+export function useIPAttachments(ipId: string | null) {
+    return useQuery({
+        queryKey: ["ip-attachments", ipId],
+        queryFn: () => attachmentsApi.listForIP(ipId!),
+        enabled: !!ipId,
+    })
+}
+
+export function useUploadIPAttachment() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({ ipId, file }: { ipId: string; file: File }) =>
+            attachmentsApi.uploadForIP(ipId, file),
+        onSuccess: (data, variables) => {
+            queryClient.invalidateQueries({ queryKey: ["ip-attachments", variables.ipId] })
+        },
+    })
+}

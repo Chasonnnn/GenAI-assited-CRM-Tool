@@ -97,12 +97,12 @@ async def upload_attachment(
         attachment = attachment_service.upload_attachment(
             db=db,
             org_id=case.organization_id,
-            case_id=case.id,
             user_id=session.user_id,
             filename=file.filename or "untitled",
             content_type=file.content_type or "application/octet-stream",
             file=file_obj,
             file_size=file_size,
+            case_id=case.id,
         )
         db.commit()
         
@@ -151,6 +151,97 @@ async def list_attachments(
     ]
 
 
+# =============================================================================
+# Intended Parent Attachment Endpoints
+# =============================================================================
+
+def _get_ip_with_access(db: Session, ip_id: UUID, session: UserSession):
+    """Get intended parent and verify org access."""
+    from app.db.models import IntendedParent
+    ip = db.query(IntendedParent).filter(
+        IntendedParent.id == ip_id,
+        IntendedParent.organization_id == session.org_id,
+    ).first()
+    if not ip:
+        raise HTTPException(status_code=404, detail="Intended parent not found")
+    return ip
+
+
+@router.get("/intended-parents/{ip_id}/attachments", response_model=list[AttachmentRead])
+async def list_ip_attachments(
+    ip_id: UUID,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+):
+    """List attachments for an intended parent."""
+    ip = _get_ip_with_access(db, ip_id, session)
+    
+    attachments = attachment_service.list_attachments(
+        db=db,
+        org_id=ip.organization_id,
+        intended_parent_id=ip.id,
+        include_quarantined=False,
+    )
+    
+    return [
+        AttachmentRead(
+            id=str(a.id),
+            filename=a.filename,
+            content_type=a.content_type,
+            file_size=a.file_size,
+            scan_status=a.scan_status,
+            quarantined=a.quarantined,
+            uploaded_by_user_id=str(a.uploaded_by_user_id),
+            created_at=a.created_at.isoformat(),
+        )
+        for a in attachments
+    ]
+
+
+@router.post("/intended-parents/{ip_id}/attachments", response_model=AttachmentRead)
+async def upload_ip_attachment(
+    ip_id: UUID,
+    file: Annotated[UploadFile, File()],
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+    _: str = Depends(require_csrf_header),
+):
+    """Upload a file attachment to an intended parent."""
+    ip = _get_ip_with_access(db, ip_id, session)
+    
+    content = await file.read()
+    file_size = len(content)
+    
+    from io import BytesIO
+    file_obj = BytesIO(content)
+    
+    try:
+        attachment = attachment_service.upload_attachment(
+            db=db,
+            org_id=ip.organization_id,
+            intended_parent_id=ip.id,
+            user_id=session.user_id,
+            filename=file.filename or "untitled",
+            content_type=file.content_type or "application/octet-stream",
+            file=file_obj,
+            file_size=file_size,
+        )
+        db.commit()
+        
+        return AttachmentRead(
+            id=str(attachment.id),
+            filename=attachment.filename,
+            content_type=attachment.content_type,
+            file_size=attachment.file_size,
+            scan_status=attachment.scan_status,
+            quarantined=attachment.quarantined,
+            uploaded_by_user_id=str(attachment.uploaded_by_user_id),
+            created_at=attachment.created_at.isoformat(),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.get("/{attachment_id}/download", response_model=AttachmentDownloadResponse)
 async def download_attachment(
     attachment_id: UUID,
@@ -171,8 +262,12 @@ async def download_attachment(
     if attachment.quarantined:
         raise HTTPException(status_code=403, detail="File is pending virus scan")
     
-    # Verify case access
-    _get_case_with_access(db, attachment.case_id, session)
+    # Verify access: case attachment requires case access, IP attachment uses org-wide access
+    if attachment.case_id:
+        _get_case_with_access(db, attachment.case_id, session)
+    elif attachment.intended_parent_id:
+        # IP attachments use org-wide access (already verified by get_attachment org_id filter)
+        _get_ip_with_access(db, attachment.intended_parent_id, session)
     
     url = attachment_service.get_download_url(
         db=db,
@@ -255,8 +350,11 @@ async def download_local_attachment(
     if attachment.quarantined:
         raise HTTPException(status_code=403, detail="File is pending virus scan")
 
+    # Verify access: case attachment requires case access, IP attachment uses org-wide access
     if attachment.case_id:
         _get_case_with_access(db, attachment.case_id, session)
+    elif attachment.intended_parent_id:
+        _get_ip_with_access(db, attachment.intended_parent_id, session)
 
     file_path = f"{_get_local_storage_path()}/{storage_key}"
     return FileResponse(

@@ -195,17 +195,19 @@ def delete_file(storage_key: str) -> None:
 def upload_attachment(
     db: Session,
     org_id: uuid.UUID,
-    case_id: uuid.UUID,
     user_id: uuid.UUID,
     filename: str,
     content_type: str,
     file: BinaryIO,
     file_size: int,
+    case_id: uuid.UUID | None = None,
+    intended_parent_id: uuid.UUID | None = None,
 ) -> Attachment:
     """
     Upload and store an attachment.
     
     File is quarantined until virus scan passes.
+    Either case_id or intended_parent_id should be provided.
     """
     # Validate
     is_valid, error = validate_file(filename, content_type, file_size)
@@ -223,7 +225,8 @@ def upload_attachment(
     # Generate storage key
     attachment_id = uuid.uuid4()
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    storage_key = f"{org_id}/{case_id}/{attachment_id}.{ext}"
+    entity_id = case_id or intended_parent_id
+    storage_key = f"{org_id}/{entity_id}/{attachment_id}.{ext}"
     
     # Store file
     store_file(storage_key, processed_file)
@@ -233,6 +236,7 @@ def upload_attachment(
         id=attachment_id,
         organization_id=org_id,
         case_id=case_id,
+        intended_parent_id=intended_parent_id,
         uploaded_by_user_id=user_id,
         filename=filename,
         storage_key=storage_key,
@@ -253,7 +257,8 @@ def upload_attachment(
         target_type="attachment",
         target_id=attachment_id,
         details={
-            "case_id": str(case_id),
+            "case_id": str(case_id) if case_id else None,
+            "intended_parent_id": str(intended_parent_id) if intended_parent_id else None,
             "file_ext": ext,
             "file_size": file_size,
         },
@@ -280,15 +285,20 @@ def upload_attachment(
 def list_attachments(
     db: Session,
     org_id: uuid.UUID,
-    case_id: uuid.UUID,
+    case_id: uuid.UUID | None = None,
+    intended_parent_id: uuid.UUID | None = None,
     include_quarantined: bool = False,
 ) -> list[Attachment]:
-    """List attachments for a case (excludes deleted)."""
+    """List attachments for a case or intended parent (excludes deleted)."""
     query = db.query(Attachment).filter(
         Attachment.organization_id == org_id,
-        Attachment.case_id == case_id,
         Attachment.deleted_at.is_(None),
     )
+    
+    if case_id:
+        query = query.filter(Attachment.case_id == case_id)
+    elif intended_parent_id:
+        query = query.filter(Attachment.intended_parent_id == intended_parent_id)
     
     if not include_quarantined:
         query = query.filter(Attachment.quarantined == False)  # noqa: E712
@@ -331,6 +341,7 @@ def get_download_url(
         target_id=attachment_id,
         details={
             "case_id": str(attachment.case_id) if attachment.case_id else None,
+            "intended_parent_id": str(attachment.intended_parent_id) if attachment.intended_parent_id else None,
             "file_ext": ext,
             "file_size": attachment.file_size,
         },

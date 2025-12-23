@@ -31,6 +31,7 @@ def create_task(
         organization_id=org_id,
         created_by_user_id=user_id,
         case_id=data.case_id,
+        intended_parent_id=data.intended_parent_id,
         owner_type=owner_type,
         owner_id=owner_id,
         title=data.title,
@@ -191,6 +192,7 @@ def list_tasks(
     q: str | None = None,
     owner_id: UUID | None = None,
     case_id: UUID | None = None,
+    intended_parent_id: UUID | None = None,
     is_completed: bool | None = None,
     task_type: TaskType | None = None,
     due_before: str | None = None,
@@ -266,6 +268,10 @@ def list_tasks(
     # Case filter
     if case_id:
         query = query.filter(Task.case_id == case_id)
+    
+    # Intended Parent filter
+    if intended_parent_id:
+        query = query.filter(Task.intended_parent_id == intended_parent_id)
     
     # Completion filter
     if is_completed is not None:
