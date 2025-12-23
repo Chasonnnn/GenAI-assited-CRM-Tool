@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
     Table,
     TableBody,
@@ -25,6 +26,7 @@ import {
     LoaderIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
+    SearchIcon,
 } from "lucide-react"
 import { useMatches, useMatchStats, type MatchStatus } from "@/lib/hooks/use-matches"
 
@@ -47,9 +49,18 @@ const STATUS_COLORS: Record<string, string> = {
 export default function MatchesPage() {
     const [statusFilter, setStatusFilter] = useState<string>("all")
     const [page, setPage] = useState(1)
+    const [search, setSearch] = useState("")
+    const [debouncedSearch, setDebouncedSearch] = useState("")
+
+    // Debounce search input
+    useEffect(() => {
+        const timer = setTimeout(() => setDebouncedSearch(search), 300)
+        return () => clearTimeout(timer)
+    }, [search])
 
     const filters = {
         status: statusFilter !== "all" ? statusFilter as MatchStatus : undefined,
+        q: debouncedSearch || undefined,
         page,
         per_page: 20,
     }
@@ -123,6 +134,19 @@ export default function MatchesPage() {
                             <SelectItem value="cancelled">Cancelled</SelectItem>
                         </SelectContent>
                     </Select>
+                    <div className="flex-1" />
+                    <div className="relative w-full max-w-sm">
+                        <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            placeholder="Search case or IP name..."
+                            value={search}
+                            onChange={(e) => {
+                                setSearch(e.target.value)
+                                setPage(1)
+                            }}
+                            className="pl-9"
+                        />
+                    </div>
                 </div>
 
                 {/* Table */}

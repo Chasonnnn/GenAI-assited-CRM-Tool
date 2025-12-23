@@ -38,6 +38,8 @@ def list_intended_parents(
     include_archived: bool = False,
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
+    sort_by: str | None = Query(None, description="Column to sort by"),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort direction"),
     db: Session = Depends(get_db),
     session: dict = Depends(get_current_session),
 ):
@@ -54,6 +56,8 @@ def list_intended_parents(
         include_archived=include_archived,
         page=page,
         per_page=per_page,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
     pages = (total + per_page - 1) // per_page  # ceiling division
     return {

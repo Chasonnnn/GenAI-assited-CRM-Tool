@@ -89,8 +89,11 @@ export interface ListMatchesParams {
     status?: MatchStatus
     case_id?: string
     intended_parent_id?: string
+    q?: string  // Search case/IP names
     page?: number
     per_page?: number
+    sort_by?: string
+    sort_order?: 'asc' | 'desc'
 }
 
 /**
@@ -101,8 +104,11 @@ export async function listMatches(params: ListMatchesParams = {}): Promise<Match
     if (params.status) searchParams.set('status', params.status)
     if (params.case_id) searchParams.set('case_id', params.case_id)
     if (params.intended_parent_id) searchParams.set('intended_parent_id', params.intended_parent_id)
+    if (params.q) searchParams.set('q', params.q)
     if (params.page) searchParams.set('page', params.page.toString())
     if (params.per_page) searchParams.set('per_page', params.per_page.toString())
+    if (params.sort_by) searchParams.set('sort_by', params.sort_by)
+    if (params.sort_order) searchParams.set('sort_order', params.sort_order)
     const query = searchParams.toString()
     return api.get<MatchListResponse>(`/matches/${query ? `?${query}` : ''}`)
 }

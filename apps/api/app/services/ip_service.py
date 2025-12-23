@@ -28,12 +28,16 @@ def list_intended_parents(
     include_archived: bool = False,
     page: int = 1,
     per_page: int = 20,
+    sort_by: str | None = None,
+    sort_order: str = "desc",
 ) -> tuple[list[IntendedParent], int]:
     """
     List intended parents with filters and pagination.
     
     Returns (items, total_count).
     """
+    from sqlalchemy import asc, desc
+    
     query = db.query(IntendedParent).filter(IntendedParent.organization_id == org_id)
     
     # Archive filter
@@ -72,10 +76,27 @@ def list_intended_parents(
     # Get total count before pagination
     total = query.count()
     
-    # Pagination and ordering
+    # Dynamic sorting
+    order_func = asc if sort_order == "asc" else desc
+    sortable_columns = {
+        "full_name": IntendedParent.full_name,
+        "email": IntendedParent.email,
+        "phone": IntendedParent.phone,
+        "state": IntendedParent.state,
+        "budget": IntendedParent.budget,
+        "status": IntendedParent.status,
+        "created_at": IntendedParent.created_at,
+    }
+    
+    if sort_by and sort_by in sortable_columns:
+        query = query.order_by(order_func(sortable_columns[sort_by]))
+    else:
+        query = query.order_by(IntendedParent.created_at.desc())
+    
+    # Pagination
     per_page = min(per_page, 100)  # Cap at 100
     offset = (page - 1) * per_page
-    items = query.order_by(IntendedParent.created_at.desc()).offset(offset).limit(per_page).all()
+    items = query.offset(offset).limit(per_page).all()
     
     return items, total
 

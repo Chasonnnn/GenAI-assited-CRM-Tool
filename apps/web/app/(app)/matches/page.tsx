@@ -1,13 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Loader2Icon, UsersIcon, CheckCircleIcon, XCircleIcon, ArrowRightIcon, PlusIcon } from "lucide-react"
+import { Loader2Icon, UsersIcon, CheckCircleIcon, XCircleIcon, ArrowRightIcon, PlusIcon, SearchIcon } from "lucide-react"
 import { useMatches, type MatchStatus, type MatchListItem } from "@/lib/hooks/use-matches"
 import { formatDistanceToNow } from "date-fns"
 
@@ -72,8 +73,8 @@ function MatchRow({ match }: { match: MatchListItem }) {
     )
 }
 
-function MatchTable({ status }: { status?: MatchStatus }) {
-    const { data, isLoading, isError } = useMatches({ status, per_page: 50 })
+function MatchTable({ status, search }: { status?: MatchStatus; search?: string }) {
+    const { data, isLoading, isError } = useMatches({ status, q: search || undefined, per_page: 50 })
 
     if (isLoading) {
         return (
@@ -123,6 +124,14 @@ function MatchTable({ status }: { status?: MatchStatus }) {
 
 export default function MatchesPage() {
     const [activeTab, setActiveTab] = useState<string>("proposed")
+    const [search, setSearch] = useState("")
+    const [debouncedSearch, setDebouncedSearch] = useState("")
+
+    // Debounce search input
+    useEffect(() => {
+        const timer = setTimeout(() => setDebouncedSearch(search), 300)
+        return () => clearTimeout(timer)
+    }, [search])
 
     const { data: proposedData } = useMatches({ status: 'proposed' })
     const { data: reviewingData } = useMatches({ status: 'reviewing' })
@@ -176,8 +185,21 @@ export default function MatchesPage() {
             {/* Tabs */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Match Pipeline</CardTitle>
-                    <CardDescription>View and manage match proposals</CardDescription>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <CardTitle>Match Pipeline</CardTitle>
+                            <CardDescription>View and manage match proposals</CardDescription>
+                        </div>
+                        <div className="relative w-full max-w-sm">
+                            <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                                placeholder="Search case or IP name..."
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                className="pl-9"
+                            />
+                        </div>
+                    </div>
                 </CardHeader>
                 <CardContent>
                     <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -190,19 +212,19 @@ export default function MatchesPage() {
                         </TabsList>
 
                         <TabsContent value="proposed">
-                            <MatchTable status="proposed" />
+                            <MatchTable status="proposed" search={debouncedSearch} />
                         </TabsContent>
                         <TabsContent value="reviewing">
-                            <MatchTable status="reviewing" />
+                            <MatchTable status="reviewing" search={debouncedSearch} />
                         </TabsContent>
                         <TabsContent value="accepted">
-                            <MatchTable status="accepted" />
+                            <MatchTable status="accepted" search={debouncedSearch} />
                         </TabsContent>
                         <TabsContent value="rejected">
-                            <MatchTable status="rejected" />
+                            <MatchTable status="rejected" search={debouncedSearch} />
                         </TabsContent>
                         <TabsContent value="all">
-                            <MatchTable />
+                            <MatchTable search={debouncedSearch} />
                         </TabsContent>
                     </Tabs>
                 </CardContent>

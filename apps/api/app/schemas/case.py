@@ -162,6 +162,7 @@ class CaseListItem(BaseModel):
     email: str
     phone: str | None
     state: str | None
+    race: str | None = None  # Added for table display
     owner_type: str | None = None
     owner_id: UUID | None = None
     owner_name: str | None = None

@@ -199,6 +199,8 @@ def list_cases(
     owner_type: str | None = Query(None, pattern="^(user|queue)$"),
     created_from: str | None = Query(None, description="Filter by creation date from (ISO format)"),
     created_to: str | None = Query(None, description="Filter by creation date to (ISO format)"),
+    sort_by: str | None = Query(None, description="Column to sort by"),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort direction"),
 ):
     """
     List cases with filters and pagination.
@@ -238,6 +240,8 @@ def list_cases(
         created_from=created_from,
         created_to=created_to,
         exclude_stage_types=exclude_stage_types if exclude_stage_types else None,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
     
     pages = (total + per_page - 1) // per_page if per_page > 0 else 0
