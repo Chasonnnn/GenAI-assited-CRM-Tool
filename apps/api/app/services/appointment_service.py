@@ -1014,10 +1014,16 @@ def list_appointments(
     status: str | None = None,
     date_start: date | None = None,
     date_end: date | None = None,
+    case_id: UUID | None = None,
+    intended_parent_id: UUID | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[Appointment], int]:
-    """List appointments for a user with pagination."""
+    """List appointments for a user with pagination.
+    
+    When case_id and/or intended_parent_id are provided, filters to appointments
+    matching EITHER the case_id OR the intended_parent_id (used for match-scoped views).
+    """
     expire_pending_appointments(db, org_id=org_id, user_id=user_id)
     query = db.query(Appointment).filter(
         Appointment.user_id == user_id,
@@ -1034,6 +1040,19 @@ def list_appointments(
     if date_end:
         end_dt = datetime.combine(date_end, time.max, tzinfo=timezone.utc)
         query = query.filter(Appointment.scheduled_start <= end_dt)
+    
+    # Filter by case_id OR intended_parent_id (for match-scoped views)
+    if case_id and intended_parent_id:
+        query = query.filter(
+            or_(
+                Appointment.case_id == case_id,
+                Appointment.intended_parent_id == intended_parent_id,
+            )
+        )
+    elif case_id:
+        query = query.filter(Appointment.case_id == case_id)
+    elif intended_parent_id:
+        query = query.filter(Appointment.intended_parent_id == intended_parent_id)
     
     total = query.count()
     appointments = query.order_by(

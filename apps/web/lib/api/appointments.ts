@@ -281,6 +281,8 @@ export function getAppointments(params: {
     status?: string;
     date_start?: string;
     date_end?: string;
+    case_id?: string;
+    intended_parent_id?: string;
 }): Promise<AppointmentListResponse> {
     const searchParams = new URLSearchParams();
     if (params.page) searchParams.append('page', String(params.page));
@@ -288,6 +290,8 @@ export function getAppointments(params: {
     if (params.status) searchParams.append('status', params.status);
     if (params.date_start) searchParams.append('date_start', params.date_start);
     if (params.date_end) searchParams.append('date_end', params.date_end);
+    if (params.case_id) searchParams.append('case_id', params.case_id);
+    if (params.intended_parent_id) searchParams.append('intended_parent_id', params.intended_parent_id);
     const query = searchParams.toString() ? `?${searchParams}` : '';
     return api.get<AppointmentListResponse>(`/appointments${query}`);
 }

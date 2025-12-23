@@ -433,8 +433,14 @@ def list_appointments(
     status: str | None = None,
     date_start: date | None = None,
     date_end: date | None = None,
+    case_id: UUID | None = None,
+    intended_parent_id: UUID | None = None,
 ):
-    """List appointments for the current user."""
+    """List appointments for the current user.
+    
+    Optionally filter by case_id and/or intended_parent_id for match-scoped views.
+    When both are provided, returns appointments matching EITHER.
+    """
     offset = (page - 1) * per_page
     appointments, total = appointment_service.list_appointments(
         db=db,
@@ -443,6 +449,8 @@ def list_appointments(
         status=status,
         date_start=date_start,
         date_end=date_end,
+        case_id=case_id,
+        intended_parent_id=intended_parent_id,
         limit=per_page,
         offset=offset,
     )

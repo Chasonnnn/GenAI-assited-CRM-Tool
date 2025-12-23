@@ -3028,6 +3028,8 @@ class Appointment(Base):
         Index("idx_appointments_user_date", "user_id", "scheduled_start"),
         Index("idx_appointments_org_status", "organization_id", "status"),
         Index("idx_appointments_type", "appointment_type_id"),
+        Index("idx_appointments_case", "case_id"),
+        Index("idx_appointments_ip", "intended_parent_id"),
         Index(
             "idx_appointments_pending_expiry",
             "pending_expires_at",
@@ -3056,6 +3058,18 @@ class Appointment(Base):
     appointment_type_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("appointment_types.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    
+    # Optional link to case/IP for match-scoped filtering
+    case_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cases.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    intended_parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("intended_parents.id", ondelete="SET NULL"),
         nullable=True
     )
     

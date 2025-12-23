@@ -433,10 +433,12 @@ export function MatchTasksCalendar({ caseId, ipId }: MatchTasksCalendarProps) {
         per_page: 100,
     })
 
-    // Fetch appointments for the calendar window
+    // Fetch appointments for the calendar window (scoped to this match)
     const { data: appointmentsData, isLoading: loadingAppointments } = useAppointments({
         date_start: dateStart,
         date_end: dateEnd,
+        case_id: caseId,
+        intended_parent_id: ipId,
         per_page: 100,
     })
 
