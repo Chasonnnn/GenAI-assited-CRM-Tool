@@ -73,17 +73,24 @@ class NotificationSettingsUpdate(BaseModel):
 @router.get("/notifications", response_model=NotificationListResponse)
 def list_notifications(
     unread_only: bool = Query(False),
+    notification_types: str | None = Query(None, description="Comma-separated notification types"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """Get user's notifications."""
+    # Parse types filter
+    types_list = None
+    if notification_types:
+        types_list = [t.strip() for t in notification_types.split(",") if t.strip()]
+    
     notifications = notification_service.get_notifications(
         db=db,
         user_id=session.user_id,
         org_id=session.org_id,
         unread_only=unread_only,
+        notification_types=types_list,
         limit=limit,
         offset=offset,
     )

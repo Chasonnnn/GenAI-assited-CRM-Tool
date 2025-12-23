@@ -163,6 +163,7 @@ def get_notifications(
     user_id: UUID,
     org_id: UUID,
     unread_only: bool = False,
+    notification_types: list[str] | None = None,
     limit: int = 20,
     offset: int = 0,
 ) -> list[Notification]:
@@ -174,6 +175,9 @@ def get_notifications(
     
     if unread_only:
         query = query.filter(Notification.read_at.is_(None))
+    
+    if notification_types:
+        query = query.filter(Notification.type.in_(notification_types))
     
     return query.order_by(Notification.created_at.desc()).offset(offset).limit(limit).all()
 

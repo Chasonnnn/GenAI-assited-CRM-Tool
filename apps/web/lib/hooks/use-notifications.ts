@@ -25,7 +25,7 @@ export const notificationKeys = {
 
 // Hooks
 
-export function useNotifications(options?: { unread_only?: boolean; limit?: number }) {
+export function useNotifications(options?: { unread_only?: boolean; limit?: number; notification_types?: string[] }) {
     return useQuery<NotificationListResponse>({
         queryKey: notificationKeys.list(options),
         queryFn: () => getNotifications(options),
