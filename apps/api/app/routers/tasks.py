@@ -16,6 +16,8 @@ from app.db.enums import TaskType, ROLES_CAN_ARCHIVE, OwnerType
 from app.db.models import Case, User, Queue
 from app.schemas.auth import UserSession
 from app.schemas.task import (
+    BulkCompleteResponse,
+    BulkTaskComplete,
     TaskCreate,
     TaskListItem,
     TaskListResponse,
@@ -352,6 +354,57 @@ def uncomplete_task(
     
     task = task_service.uncomplete_task(db, task)
     return _task_to_read(task, db)
+
+
+@router.post("/bulk-complete", response_model=BulkCompleteResponse, dependencies=[Depends(require_csrf_header)])
+def bulk_complete_tasks(
+    data: BulkTaskComplete,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """
+    Mark multiple tasks as completed.
+    
+    Processes each task individually, checking permissions for each.
+    Returns count of successfully completed tasks and list of failures.
+    
+    Requires: creator, owner, or manager+ for each task
+    """
+    results = {"completed": 0, "failed": []}
+    
+    for task_id in data.task_ids:
+        try:
+            task = task_service.get_task(db, task_id, session.org_id)
+            if not task:
+                results["failed"].append({"task_id": str(task_id), "reason": "Task not found"})
+                continue
+            
+            # Access control: check case access if task is linked to a case
+            try:
+                _check_task_case_access(task, session, db)
+            except HTTPException as e:
+                results["failed"].append({"task_id": str(task_id), "reason": e.detail})
+                continue
+            
+            # Permission: creator, owner, or manager+
+            if not is_owner_or_assignee_or_manager(
+                session, task.created_by_user_id, task.owner_type, task.owner_id
+            ):
+                results["failed"].append({"task_id": str(task_id), "reason": "Not authorized"})
+                continue
+            
+            # Already completed? Skip but count as success
+            if task.is_completed:
+                results["completed"] += 1
+                continue
+            
+            task_service.complete_task(db, task, session.user_id)
+            results["completed"] += 1
+            
+        except Exception as e:
+            results["failed"].append({"task_id": str(task_id), "reason": str(e)})
+    
+    return BulkCompleteResponse(completed=results["completed"], failed=results["failed"])
 
 
 @router.delete("/{task_id}", status_code=204, dependencies=[Depends(require_csrf_header)])

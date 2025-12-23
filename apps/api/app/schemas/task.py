@@ -91,3 +91,15 @@ class TaskListResponse(BaseModel):
     page: int
     per_page: int
     pages: int
+
+
+class BulkTaskComplete(BaseModel):
+    """Request to complete multiple tasks."""
+    task_ids: list[UUID] = Field(..., min_length=1, max_length=100)
+
+
+class BulkCompleteResponse(BaseModel):
+    """Response for bulk task completion."""
+    completed: int
+    failed: list[dict]  # [{"task_id": str, "reason": str}]
+
