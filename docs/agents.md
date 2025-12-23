@@ -56,7 +56,55 @@ psql postgresql://user:pass@localhost:5432/crm_dev
 
 ---
 
-## 2) Tech Stack
+## 2) Boundaries (Non-Negotiable)
+
+### 🔴 NEVER
+| Rule | Reason |
+|------|--------|
+| **Never commit secrets** | Use `.env` files, keep `.env.example` updated |
+| **Never log raw PII** | Mask sensitive data in logs |
+| **Never expose API keys in responses** | Keys are write-only |
+| **Never auto-send AI messages** | Require human review |
+| **Never skip org scoping** | Every query must filter by `organization_id` |
+
+### 🟡 Zero-Tolerance Policy
+```markdown
+Fix these IMMEDIATELY when they appear:
+- Build warnings (TypeScript, lint, deprecations)
+- Test failures
+- Runtime warnings (React hooks, Next.js)
+- Performance issues (N+1 queries, memory leaks)
+- Security vulnerabilities
+```
+
+### 🟢 Backward Compatibility
+```markdown
+This is an in-house project. Breaking changes are ACCEPTABLE:
+- Prioritize clean design over legacy support
+- Make the best architectural choice, not the compatible one
+- Users can re-migrate/re-sync as needed
+```
+
+### Production-Quality Standard
+```markdown
+Build FULLY FUNCTIONAL, POLISHED features — not MVPs.
+
+✅ Required:
+- Complete error handling & loading states
+- Validation & edge cases covered
+- Accessibility (keyboard nav, screen readers)
+- Visual polish (consistent styling, transitions)
+
+❌ Forbidden:
+- "Basic" or "minimal" implementations
+- Missing error/loading states
+- "TODO: Add feature X later" comments
+- Placeholder text instead of functionality
+```
+
+---
+
+## 3) Tech Stack
 
 ### Frontend
 | Technology | Purpose |
@@ -79,7 +127,7 @@ psql postgresql://user:pass@localhost:5432/crm_dev
 
 ---
 
-## 3) Project Structure
+## 4) Project Structure
 
 ```
 /apps
@@ -108,7 +156,7 @@ psql postgresql://user:pass@localhost:5432/crm_dev
 
 ---
 
-## 4) Code Style
+## 5) Code Style
 
 ### Backend Patterns
 ```python
@@ -164,7 +212,7 @@ const sidebarOpen = useUIStore(s => s.sidebarOpen)
 
 ---
 
-## 5) Testing
+## 6) Testing
 
 ### Backend Tests
 ```python
@@ -209,7 +257,7 @@ cd apps/web && pnpm test --run tests/cases.test.tsx
 
 ---
 
-## 6) Git Workflow
+## 7) Git Workflow
 
 ### Commit Message Format
 ```
@@ -238,54 +286,6 @@ git add -A && git commit -m "feat: Description"
 - [ ] No lint warnings
 - [ ] `.env.example` updated if new vars
 - [ ] Docs updated if behavior changes
-
----
-
-## 7) Boundaries (Non-Negotiable)
-
-### 🔴 NEVER
-| Rule | Reason |
-|------|--------|
-| **Never commit secrets** | Use `.env` files, keep `.env.example` updated |
-| **Never log raw PII** | Mask sensitive data in logs |
-| **Never expose API keys in responses** | Keys are write-only |
-| **Never auto-send AI messages** | Require human review |
-| **Never skip org scoping** | Every query must filter by `organization_id` |
-
-### 🟡 Zero-Tolerance Policy
-```markdown
-Fix these IMMEDIATELY when they appear:
-- Build warnings (TypeScript, lint, deprecations)
-- Test failures
-- Runtime warnings (React hooks, Next.js)
-- Performance issues (N+1 queries, memory leaks)
-- Security vulnerabilities
-```
-
-### 🟢 Backward Compatibility
-```markdown
-This is an in-house project. Breaking changes are ACCEPTABLE:
-- Prioritize clean design over legacy support
-- Make the best architectural choice, not the compatible one
-- Users can re-migrate/re-sync as needed
-```
-
-### Production-Quality Standard
-```markdown
-Build FULLY FUNCTIONAL, POLISHED features — not MVPs.
-
-✅ Required:
-- Complete error handling & loading states
-- Validation & edge cases covered
-- Accessibility (keyboard nav, screen readers)
-- Visual polish (consistent styling, transitions)
-
-❌ Forbidden:
-- "Basic" or "minimal" implementations
-- Missing error/loading states
-- "TODO: Add feature X later" comments
-- Placeholder text instead of functionality
-```
 
 ---
 
