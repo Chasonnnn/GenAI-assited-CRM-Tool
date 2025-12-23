@@ -107,7 +107,12 @@ export default function MatchesPage() {
                 <div className="flex flex-col gap-4 md:flex-row md:items-center">
                     <Select value={statusFilter} onValueChange={(v) => { if (v) { setStatusFilter(v); setPage(1) } }}>
                         <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="All Statuses" />
+                            <SelectValue placeholder="All Statuses">
+                                {(value: string | null) => {
+                                    if (!value || value === "all") return "All Statuses"
+                                    return STATUS_LABELS[value] ?? value
+                                }}
+                            </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All Statuses</SelectItem>

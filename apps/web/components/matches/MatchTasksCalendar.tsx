@@ -280,19 +280,34 @@ export function MatchTasksCalendar({ caseId, ipId }: MatchTasksCalendarProps) {
         per_page: 100,
     })
 
-    // Note: IP tasks would need a separate endpoint or we use all tasks and filter
-    // For now, we'll just show surrogate tasks since tasks are tied to cases
-    // TODO: When IP task support is added, fetch those separately
+    // Fetch tasks for IP (now supported via intended_parent_id filter)
+    const { data: ipTasks, isLoading: loadingIP } = useTasks({
+        intended_parent_id: ipId || undefined,
+        is_completed: false,
+        per_page: 100,
+    })
 
     // Build combined task list and source tracking
     const { allTasks, taskSources } = useMemo(() => {
         const sources = new Map<string, "surrogate" | "ip">()
         const tasks: TaskListItem[] = []
 
+        // Add surrogate tasks
         if (surrogateTasks?.items) {
             surrogateTasks.items.forEach((task) => {
                 sources.set(task.id, "surrogate")
                 tasks.push(task)
+            })
+        }
+
+        // Add IP tasks
+        if (ipTasks?.items) {
+            ipTasks.items.forEach((task) => {
+                // Avoid duplicates (a task could theoretically have both case_id and intended_parent_id)
+                if (!sources.has(task.id)) {
+                    sources.set(task.id, "ip")
+                    tasks.push(task)
+                }
             })
         }
 
@@ -305,7 +320,7 @@ export function MatchTasksCalendar({ caseId, ipId }: MatchTasksCalendarProps) {
         }
 
         return { allTasks: filtered, taskSources: sources }
-    }, [surrogateTasks, filter])
+    }, [surrogateTasks, ipTasks, filter])
 
     // Navigation
     const navigate = (direction: "prev" | "next") => {
@@ -320,7 +335,7 @@ export function MatchTasksCalendar({ caseId, ipId }: MatchTasksCalendarProps) {
         }
     }
 
-    const isLoading = loadingSurrogate
+    const isLoading = loadingSurrogate || loadingIP
 
     return (
         <div className="space-y-4">
