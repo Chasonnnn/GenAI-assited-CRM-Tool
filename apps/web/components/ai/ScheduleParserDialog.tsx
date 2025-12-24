@@ -75,9 +75,18 @@ export function ScheduleParserDialog({
     const [warnings, setWarnings] = useState<string[]>([])
     const [metadata, setMetadata] = useState<{ timezone: string; refDate: string } | null>(null)
     const [step, setStep] = useState<"input" | "review" | "success">("input")
+    const [bulkRequestId, setBulkRequestId] = useState<string | null>(null)
 
     const parseSchedule = useParseSchedule()
     const createBulkTasks = useCreateBulkTasks()
+
+    const makeId = () => {
+        // crypto.randomUUID is supported in modern browsers; the fallback keeps tests/older envs happy.
+        if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+            return crypto.randomUUID()
+        }
+        return `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    }
 
     // Build entity ID payload based on type
     const getEntityPayload = () => {
@@ -91,41 +100,50 @@ export function ScheduleParserDialog({
 
     const handleParse = async () => {
         if (!scheduleText.trim()) return
+        setErrorMessage(null)
 
-        const result = await parseSchedule.mutateAsync({
-            text: scheduleText,
-            ...getEntityPayload(),
-            user_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        })
+        try {
+            const result = await parseSchedule.mutateAsync({
+                text: scheduleText,
+                ...getEntityPayload(),
+                user_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            })
 
-        if (result.proposed_tasks.length === 0 && result.warnings.length > 0) {
+            if (result.proposed_tasks.length === 0 && result.warnings.length > 0) {
+                setWarnings(result.warnings)
+                return
+            }
+
+            // Convert to editable tasks
+            const tasks: EditableTask[] = result.proposed_tasks.map((task) => ({
+                ...task,
+                selected: true,
+                id: makeId(),
+            }))
+
+            setEditableTasks(tasks)
             setWarnings(result.warnings)
-            return
+            setMetadata({
+                timezone: result.assumed_timezone,
+                refDate: result.assumed_reference_date,
+            })
+            setBulkRequestId(null) // new parse = new payload, reset idempotency key
+            setStep("review")
+        } catch (e) {
+            const message = e instanceof Error ? e.message : "Failed to parse schedule"
+            setErrorMessage(message || "Failed to parse schedule")
         }
-
-        // Convert to editable tasks
-        const tasks: EditableTask[] = result.proposed_tasks.map((task) => ({
-            ...task,
-            selected: true,
-            id: crypto.randomUUID(),
-        }))
-
-        setEditableTasks(tasks)
-        setWarnings(result.warnings)
-        setMetadata({
-            timezone: result.assumed_timezone,
-            refDate: result.assumed_reference_date,
-        })
-        setStep("review")
     }
 
     const handleTaskChange = (id: string, field: keyof EditableTask, value: any) => {
+        setBulkRequestId(null) // task edits change the payload; reset idempotency key
         setEditableTasks((prev) =>
             prev.map((task) => (task.id === id ? { ...task, [field]: value } : task))
         )
     }
 
     const handleSelectAll = (checked: boolean) => {
+        setBulkRequestId(null) // selection changes change the payload; reset idempotency key
         setEditableTasks((prev) => prev.map((task) => ({ ...task, selected: checked })))
     }
 
@@ -137,23 +155,31 @@ export function ScheduleParserDialog({
         }
         setErrorMessage(null)
 
-        const result = await createBulkTasks.mutateAsync({
-            request_id: crypto.randomUUID(),
-            ...getEntityPayload(),
-            tasks: selectedTasks.map((t) => ({
-                title: t.title,
-                description: t.description,
-                due_date: t.due_date,
-                due_time: t.due_time,
-                task_type: t.task_type,
-                dedupe_key: t.dedupe_key,
-            })),
-        })
+        const requestId = bulkRequestId ?? makeId()
+        if (!bulkRequestId) setBulkRequestId(requestId)
 
-        if (result.success) {
-            setStep("success")
-        } else {
-            setErrorMessage(result.error || "Failed to create tasks")
+        try {
+            const result = await createBulkTasks.mutateAsync({
+                request_id: requestId,
+                ...getEntityPayload(),
+                tasks: selectedTasks.map((t) => ({
+                    title: t.title,
+                    description: t.description,
+                    due_date: t.due_date,
+                    due_time: t.due_time,
+                    task_type: t.task_type,
+                    dedupe_key: t.dedupe_key,
+                })),
+            })
+
+            if (result.success) {
+                setStep("success")
+            } else {
+                setErrorMessage(result.error || "Failed to create tasks")
+            }
+        } catch (e) {
+            const message = e instanceof Error ? e.message : "Failed to create tasks"
+            setErrorMessage(message || "Failed to create tasks")
         }
     }
 
@@ -163,6 +189,8 @@ export function ScheduleParserDialog({
         setWarnings([])
         setMetadata(null)
         setStep("input")
+        setErrorMessage(null)
+        setBulkRequestId(null)
         onOpenChange(false)
     }
 
@@ -176,7 +204,12 @@ export function ScheduleParserDialog({
     }
 
     return (
-        <Dialog open={open} onOpenChange={handleClose}>
+        <Dialog
+            open={open}
+            onOpenChange={(nextOpen) => {
+                if (!nextOpen) handleClose()
+            }}
+        >
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
@@ -189,6 +222,13 @@ export function ScheduleParserDialog({
                         )}
                     </DialogDescription>
                 </DialogHeader>
+
+                {errorMessage && (
+                    <Alert variant="destructive">
+                        <AlertTriangleIcon className="size-4" />
+                        <AlertDescription>{errorMessage}</AlertDescription>
+                    </Alert>
+                )}
 
                 {step === "input" && (
                     <div className="space-y-4">

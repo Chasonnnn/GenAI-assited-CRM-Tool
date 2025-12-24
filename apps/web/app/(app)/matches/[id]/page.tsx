@@ -300,14 +300,16 @@ export default function MatchReviewPage({ params }: { params: { id: string } }) 
                 </DialogContent>
             </Dialog>
 
-            {/* Schedule Parser Dialog */}
-            <ScheduleParserDialog
-                open={showScheduleParser}
-                onOpenChange={setShowScheduleParser}
-                entityType="match"
-                entityId={params.id}
-                entityName={`${match.case_name} & ${match.ip_name}`}
-            />
+            {/* Schedule Parser Dialog (mount only when open to avoid unnecessary hooks) */}
+            {showScheduleParser && (
+                <ScheduleParserDialog
+                    open={showScheduleParser}
+                    onOpenChange={setShowScheduleParser}
+                    entityType="match"
+                    entityId={params.id}
+                    entityName={`${match.case_name} & ${match.ip_name}`}
+                />
+            )}
         </div>
     )
 }
