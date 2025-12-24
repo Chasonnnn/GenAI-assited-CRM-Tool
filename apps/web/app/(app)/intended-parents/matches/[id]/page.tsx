@@ -571,15 +571,17 @@ export default function MatchDetailPage() {
                                 <TabsTrigger value="overview">Overview</TabsTrigger>
                                 <TabsTrigger value="calendar">Calendar</TabsTrigger>
                             </TabsList>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-xs gap-1"
-                                onClick={() => setShowScheduleParser(true)}
-                            >
-                                <CalendarPlusIcon className="size-3" />
-                                Parse Schedule
-                            </Button>
+                            {user?.ai_enabled && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-xs gap-1"
+                                    onClick={() => setShowScheduleParser(true)}
+                                >
+                                    <CalendarPlusIcon className="size-3" />
+                                    Parse Schedule
+                                </Button>
+                            )}
                         </div>
 
                         <TabsContent value="overview" className="h-[calc(100vh-145px)]">

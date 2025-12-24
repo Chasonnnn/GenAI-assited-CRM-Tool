@@ -13,6 +13,7 @@ import Link from "next/link"
 import { useMatch, useAcceptMatch, useRejectMatch } from "@/lib/hooks/use-matches"
 import { formatDistanceToNow } from "date-fns"
 import { ScheduleParserDialog } from "@/components/ai/ScheduleParserDialog"
+import { useAuth } from "@/lib/auth-context"
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
     proposed: { label: "Proposed", color: "bg-blue-100 text-blue-700" },
@@ -32,6 +33,7 @@ export default function MatchReviewPage({ params }: { params: { id: string } }) 
     const [rejectReason, setRejectReason] = useState("")
     const [showRejectDialog, setShowRejectDialog] = useState(false)
     const [showScheduleParser, setShowScheduleParser] = useState(false)
+    const { user } = useAuth()
 
     if (isLoading) {
         return (
@@ -99,15 +101,17 @@ export default function MatchReviewPage({ params }: { params: { id: string } }) 
                         Proposed {formatDistanceToNow(new Date(match.proposed_at), { addSuffix: true })}
                     </p>
                 </div>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowScheduleParser(true)}
-                    className="gap-1"
-                >
-                    <CalendarPlusIcon className="h-4 w-4" />
-                    Parse Schedule
-                </Button>
+                {user?.ai_enabled && (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowScheduleParser(true)}
+                        className="gap-1"
+                    >
+                        <CalendarPlusIcon className="h-4 w-4" />
+                        Parse Schedule
+                    </Button>
+                )}
             </div>
 
             {/* Profile Cards */}
