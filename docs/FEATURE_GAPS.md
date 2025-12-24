@@ -143,13 +143,16 @@
   - Action buttons: Accept, Reject, Cancel (based on status)
   - Status workflow with badges
   - Notes/Files/Tasks/Activity tabs in sidebar
+  - **Parse Schedule button** next to Overview/Calendar tabs
+  - **AI Assistant context-aware** (shows match name instead of Global Mode)
 
 - **Match Tasks Calendar** (`MatchTasksCalendar.tsx`):
   - Month/Week/Day view toggle
-  - All/Surrogate/IP task filter
+  - All/Surrogate/IP/Appointments filter
   - Color-coded tasks:
     - 🟣 Purple: Surrogate tasks
     - 🟢 Green: IP tasks
+    - 🔵 Blue: Appointments (MatchEvents)
   - Navigation and Today button
   - Task display on calendar cells
 
@@ -248,21 +251,33 @@
 ## 🟢 LOW PRIORITY GAPS (Uncompleted)
 
 ### 5. Smart Task Creation from AI ✅ COMPLETE
-**Status:** Implemented
+**Status:** Fully implemented with match integration
 
 **What was built:**
-- ✅ AI-powered schedule parser (`/ai/parse-schedule` endpoint)
-- ✅ Bulk task creation with all-or-nothing transaction (`/ai/create-bulk-tasks`)
-- ✅ Expanded TaskType enum: medication, exam, appointment
-- ✅ Idempotency via request_id
-- ✅ ScheduleParserDialog frontend component with 3-step flow
-- ✅ Editable task proposals with confidence scores
-- ✅ Links tasks to intended_parent_id only
-- ✅ User timezone detection
 
-**Files:**
-- Backend: `schedule_parser.py`, `ai.py` endpoints
-- Frontend: `ScheduleParserDialog.tsx`, `schedule-parser.ts`, `use-schedule-parser.ts`
+- **Backend (`apps/api/app/routers/ai.py`):**
+  - `/ai/parse-schedule` - AI-powered schedule text parser
+  - `/ai/create-bulk-tasks` - All-or-nothing bulk task creation
+  - Expanded TaskType enum: `medication`, `exam`, `appointment`
+  - Flexible entity linking: case_id, surrogate_id, intended_parent_id, match_id
+  - Match tasks auto-link to case and intended_parent
+  - Idempotency via request_id
+  - User timezone detection
+
+- **Frontend:**
+  - `ScheduleParserDialog.tsx` - 3-step flow (Paste → Review → Create)
+  - Editable task proposals with confidence scores
+  - Entity type selection (case, surrogate, IP, match)
+  - `schedule-parser.ts`, `use-schedule-parser.ts` API hooks
+
+- **Match Integration:**
+  - Parse Schedule button on match detail page (next to tabs)
+  - AI Assistant context-aware for match pages
+  - Tasks linked to both case and IP when created from match
+
+- **AI Assistant Integration:**
+  - "Parse Schedule" quick action in AI chat panel (case context)
+  - Match entity type added to AI context system
 
 **Effort:** Complete
 
@@ -528,7 +543,7 @@ Implemented logic for saving Profile and Organization settings via `PATCH /auth/
 | AI Assistant Improvements | 3-4 days | Medium | ⚠️ |
 | UI Consistency | 1-2 days | Medium | ⚠️ |
 | CSV Import | 1 week | Medium | ⚠️ |
-| Smart Task Creation | 1 week | Low | ❌ |
+| Smart Task Creation | 1 week | Low | ✅ Done |
 | AI Weekly Reports | 1-2 weeks | Low | ❌ |
 
 **Features/Fixes Completed This Session:** 6 ✅  
