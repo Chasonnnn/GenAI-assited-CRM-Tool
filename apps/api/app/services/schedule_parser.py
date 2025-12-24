@@ -7,15 +7,16 @@ import hashlib
 import json
 import logging
 import re
-from datetime import date, time
+from datetime import date, datetime, time
 from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from zoneinfo import ZoneInfo
 
 from app.db.enums import TaskType
-from app.db.models import AISettings, Organization
+from app.db.models import Organization
 from app.services.ai_provider import ChatMessage, get_provider
 
 logger = logging.getLogger(__name__)
@@ -111,19 +112,42 @@ async def parse_schedule_text(
     Returns:
         ParseScheduleResult with proposed tasks and metadata
     """
-    from app.services.ai_settings_service import get_decrypted_api_key
+    from app.services import ai_settings_service
     
     # Get organization timezone
     org = db.query(Organization).filter(Organization.id == org_id).first()
     timezone = user_timezone or (org.timezone if org else "UTC")
-    reference_date = date.today()
+    warnings: list[str] = []
+
+    # Validate timezone and compute reference date in that timezone
+    try:
+        tzinfo = ZoneInfo(timezone)
+    except Exception:
+        warnings.append(f"Invalid timezone '{timezone}', using UTC")
+        timezone = "UTC"
+        tzinfo = ZoneInfo("UTC")
+    reference_date = datetime.now(tzinfo).date()
     
     # Get AI settings
-    ai_settings = db.query(AISettings).filter(AISettings.organization_id == org_id).first()
+    ai_settings = ai_settings_service.get_ai_settings(db, org_id)
     if not ai_settings or not ai_settings.is_enabled:
         return ParseScheduleResult(
             proposed_tasks=[],
-            warnings=["AI is not enabled for this organization"],
+            warnings=warnings + ["AI is not enabled for this organization"],
+            assumed_timezone=timezone,
+            assumed_reference_date=reference_date,
+        )
+    if ai_settings_service.is_consent_required(ai_settings):
+        return ParseScheduleResult(
+            proposed_tasks=[],
+            warnings=warnings + ["AI consent not accepted"],
+            assumed_timezone=timezone,
+            assumed_reference_date=reference_date,
+        )
+    if not ai_settings.api_key_encrypted:
+        return ParseScheduleResult(
+            proposed_tasks=[],
+            warnings=warnings + ["AI API key is not configured"],
             assumed_timezone=timezone,
             assumed_reference_date=reference_date,
         )
@@ -134,16 +158,16 @@ async def parse_schedule_text(
     # Log metadata only (no PII)
     logger.info(f"Parsing schedule: {len(text)} chars, org_id={org_id}")
     
-    warnings: list[str] = []
     proposed_tasks: list[ProposedTask] = []
     
     try:
-        # Get decrypted API key
-        api_key = get_decrypted_api_key(ai_settings.encrypted_api_key)
-        if not api_key:
+        # Decrypt API key
+        try:
+            api_key = ai_settings_service.decrypt_api_key(ai_settings.api_key_encrypted)
+        except Exception:
             return ParseScheduleResult(
                 proposed_tasks=[],
-                warnings=["AI API key is not configured"],
+                warnings=warnings + ["AI API key could not be decrypted"],
                 assumed_timezone=timezone,
                 assumed_reference_date=reference_date,
             )
