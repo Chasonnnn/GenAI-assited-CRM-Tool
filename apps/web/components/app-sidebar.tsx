@@ -76,12 +76,13 @@ const navigation = [
         url: "/intended-parents/matches",
         icon: HeartHandshake,
     },
-    {
-        title: "Reports",
-        url: "/reports",
-        icon: BarChart3,
-    },
 ]
+
+const reportsNavigation = {
+    title: "Reports",
+    url: "/reports",
+    icon: BarChart3,
+}
 
 const aiNavigation = {
     title: "AI Assistant",
@@ -256,41 +257,6 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                     </Link>
                                 </SidebarMenuItem>
                             ))}
-                            {/* Automation with sub-menu */}
-                            <Collapsible
-                                open={automationOpen}
-                                onOpenChange={setAutomationOpen}
-                                className="group/collapsible"
-                            >
-                                <SidebarMenuItem>
-                                    <CollapsibleTrigger
-                                        render={
-                                            <SidebarMenuButton
-                                                isActive={pathname?.startsWith("/automation")}
-                                                tooltip={automationNavigation.title}
-                                            >
-                                                <automationNavigation.icon />
-                                                <span>{automationNavigation.title}</span>
-                                                <ChevronRightIcon className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                                            </SidebarMenuButton>
-                                        }
-                                    />
-                                    <CollapsibleContent>
-                                        <SidebarMenuSub>
-                                            {automationItems.map((subItem) => (
-                                                <SidebarMenuSubItem key={subItem.url}>
-                                                    <SidebarMenuSubButton
-                                                        href={subItem.url}
-                                                        isActive={isAutomationItemActive(subItem)}
-                                                    >
-                                                        <span>{subItem.title}</span>
-                                                    </SidebarMenuSubButton>
-                                                </SidebarMenuSubItem>
-                                            ))}
-                                        </SidebarMenuSub>
-                                    </CollapsibleContent>
-                                </SidebarMenuItem>
-                            </Collapsible>
                             {/* Tasks & Scheduling with sub-menu */}
                             <Collapsible
                                 open={tasksOpen}
@@ -326,6 +292,53 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                     </CollapsibleContent>
                                 </SidebarMenuItem>
                             </Collapsible>
+                            {/* Automation with sub-menu */}
+                            <Collapsible
+                                open={automationOpen}
+                                onOpenChange={setAutomationOpen}
+                                className="group/collapsible"
+                            >
+                                <SidebarMenuItem>
+                                    <CollapsibleTrigger
+                                        render={
+                                            <SidebarMenuButton
+                                                isActive={pathname?.startsWith("/automation")}
+                                                tooltip={automationNavigation.title}
+                                            >
+                                                <automationNavigation.icon />
+                                                <span>{automationNavigation.title}</span>
+                                                <ChevronRightIcon className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                                            </SidebarMenuButton>
+                                        }
+                                    />
+                                    <CollapsibleContent>
+                                        <SidebarMenuSub>
+                                            {automationItems.map((subItem) => (
+                                                <SidebarMenuSubItem key={subItem.url}>
+                                                    <SidebarMenuSubButton
+                                                        href={subItem.url}
+                                                        isActive={isAutomationItemActive(subItem)}
+                                                    >
+                                                        <span>{subItem.title}</span>
+                                                    </SidebarMenuSubButton>
+                                                </SidebarMenuSubItem>
+                                            ))}
+                                        </SidebarMenuSub>
+                                    </CollapsibleContent>
+                                </SidebarMenuItem>
+                            </Collapsible>
+                            {/* Reports */}
+                            <SidebarMenuItem>
+                                <Link href={reportsNavigation.url}>
+                                    <SidebarMenuButton
+                                        isActive={pathname === reportsNavigation.url || pathname?.startsWith(reportsNavigation.url + "/")}
+                                        tooltip={reportsNavigation.title}
+                                    >
+                                        <reportsNavigation.icon />
+                                        <span>{reportsNavigation.title}</span>
+                                    </SidebarMenuButton>
+                                </Link>
+                            </SidebarMenuItem>
                             {/* AI Assistant - only shown if enabled for org */}
                             {user?.ai_enabled && (
                                 <SidebarMenuItem>

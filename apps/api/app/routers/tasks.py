@@ -398,7 +398,7 @@ def bulk_complete_tasks(
                 results["completed"] += 1
                 continue
             
-            task_service.complete_task(db, task, session.user_id)
+            task_service.complete_task(db, task, session.user_id, commit=False)
             results["completed"] += 1
             
         except Exception as e:
@@ -406,6 +406,9 @@ def bulk_complete_tasks(
             import logging
             logging.error(f"Bulk complete failed for task {task_id}: {e}")
             results["failed"].append({"task_id": str(task_id), "reason": "An unexpected error occurred"})
+    
+    # Commit all changes once at the end for efficiency
+    db.commit()
     
     return BulkCompleteResponse(completed=results["completed"], failed=results["failed"])
 

@@ -145,16 +145,28 @@ def complete_task(
     db: Session,
     task: Task,
     user_id: UUID,
+    commit: bool = True,
 ) -> Task:
-    """Mark task as completed."""
+    """
+    Mark task as completed.
+    
+    Args:
+        commit: If False, uses flush instead of commit (for batch operations).
+                Caller is responsible for committing the transaction.
+    """
     if task.is_completed:
         return task
     
     task.is_completed = True
     task.completed_at = datetime.now(timezone.utc)
     task.completed_by_user_id = user_id
-    db.commit()
-    db.refresh(task)
+    
+    if commit:
+        db.commit()
+        db.refresh(task)
+    else:
+        db.flush()
+    
     return task
 
 

@@ -26,7 +26,7 @@ from app.schemas.appointment import (
     StaffInfoRead,
     PublicBookingPageRead,
 )
-from app.main import limiter
+from app.core.rate_limit import limiter
 from app.services import appointment_service, appointment_email_service
 from app.core.config import settings
 

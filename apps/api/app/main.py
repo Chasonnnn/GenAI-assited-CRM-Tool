@@ -35,32 +35,9 @@ if settings.SENTRY_DSN and settings.ENV != "dev":
 # Rate Limiting
 # ============================================================================
 
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
-
-# Configure rate limiter with Redis for multi-worker support
-# Falls back to in-memory if Redis is not available (dev/test mode)
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-IS_TESTING = os.getenv("TESTING", "").lower() in ("1", "true", "yes")
-
-if IS_TESTING:
-    # Use in-memory storage for tests (no Redis dependency)
-    limiter = Limiter(key_func=get_remote_address, storage_uri="memory://")
-else:
-    # Try Redis, fall back to memory if connection fails
-    try:
-        import redis
-        # Test connection upfront
-        r = redis.from_url(REDIS_URL, socket_connect_timeout=1)
-        r.ping()
-        limiter = Limiter(
-            key_func=get_remote_address,
-            storage_uri=REDIS_URL,
-        )
-    except Exception as e:
-        logging.warning(f"Redis unavailable for rate limiting, using in-memory: {e}")
-        limiter = Limiter(key_func=get_remote_address, storage_uri="memory://")
+from app.core.rate_limit import limiter
 
 
 
@@ -167,7 +144,7 @@ app.include_router(matches.router)
 
 # Automation Workflows (Manager+)
 from app.routers import workflows
-app.include_router(workflows.router, prefix="/workflows", tags=["workflows"])
+app.include_router(workflows.router)  # Router already has prefix="/workflows"
 
 # Campaigns (Bulk email sends - Manager+)
 from app.routers import campaigns
