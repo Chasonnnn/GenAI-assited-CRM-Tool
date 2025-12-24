@@ -129,6 +129,13 @@ def update_campaign(
     if data.description is not None:
         campaign.description = data.description
     if data.email_template_id is not None:
+        # SECURITY: Validate template belongs to org before updating
+        template = db.query(EmailTemplate).filter(
+            EmailTemplate.id == data.email_template_id,
+            EmailTemplate.organization_id == org_id
+        ).first()
+        if not template:
+            raise ValueError("Email template not found")
         campaign.email_template_id = data.email_template_id
     if data.recipient_type is not None:
         campaign.recipient_type = data.recipient_type
@@ -177,7 +184,12 @@ def _build_recipient_query(
             query = query.filter(Case.stage_id.in_([UUID(s) for s in criteria.stage_ids]))
         
         if criteria.stage_slugs:
-            stage_ids = db.query(PipelineStage.id).filter(
+            # IMPORTANT: Scope stages to org's pipelines to prevent cross-tenant leakage
+            from app.db.models import Pipeline
+            stage_ids = db.query(PipelineStage.id).join(
+                Pipeline, PipelineStage.pipeline_id == Pipeline.id
+            ).filter(
+                Pipeline.organization_id == org_id,
                 PipelineStage.slug.in_(criteria.stage_slugs)
             ).all()
             query = query.filter(Case.stage_id.in_([s.id for s in stage_ids]))
@@ -230,10 +242,11 @@ def preview_recipients(
     total_count = query.count()
     entities = query.limit(limit).all()
     
-    # Get suppressed emails for this org
-    suppressed = {s.email.lower() for s in db.query(EmailSuppression.email).filter(
+    # Get suppressed emails for this org (handle SA 2.0 Row objects)
+    suppression_rows = db.query(EmailSuppression.email).filter(
         EmailSuppression.organization_id == org_id
-    ).all()}
+    ).all()
+    suppressed = {row[0].lower() for row in suppression_rows if row[0]}
     
     recipients = []
     for entity in entities:

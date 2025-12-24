@@ -337,230 +337,153 @@ export default function AutomationPage() {
 
             {/* Main Content */}
             <div className="flex-1 p-6">
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                    <TabsList>
-                        <TabsTrigger value="workflows">Workflows</TabsTrigger>
-                        <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
-                        <TabsTrigger value="email-templates">Email Templates</TabsTrigger>
-                    </TabsList>
-
-                    {/* Campaigns Tab */}
-                    <TabsContent value="campaigns" className="space-y-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <h2 className="text-2xl font-semibold">Email Campaigns</h2>
-                                <p className="text-muted-foreground">Send bulk emails to filtered recipients</p>
-                            </div>
-                            <Button asChild>
-                                <a href="/automation/campaigns">
-                                    <MailIcon className="w-4 h-4 mr-2" />
-                                    Manage Campaigns
-                                </a>
-                            </Button>
-                        </div>
+                <div className="space-y-6">
+                    {/* Stats Cards */}
+                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                         <Card>
-                            <CardContent className="pt-6">
-                                <div className="text-center py-8">
-                                    <MailIcon className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                                    <h3 className="text-lg font-medium mb-2">Bulk Email Campaigns</h3>
-                                    <p className="text-muted-foreground mb-4 max-w-md mx-auto">
-                                        Create targeted email campaigns to reach cases or intended parents based on filters like status, state, or custom criteria.
-                                    </p>
-                                    <Button asChild>
-                                        <a href="/automation/campaigns">Go to Campaigns</a>
-                                    </Button>
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-sm font-medium text-muted-foreground">Total Workflows</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-3xl font-bold">
+                                    {statsLoading ? "-" : stats?.total_workflows ?? 0}
                                 </div>
                             </CardContent>
                         </Card>
-                    </TabsContent>
 
-                    {/* Workflows Tab */}
-                    <TabsContent value="workflows" className="space-y-6">
-                        {/* Stats Cards */}
-                        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                            <Card>
-                                <CardHeader className="pb-3">
-                                    <CardTitle className="text-sm font-medium text-muted-foreground">Total Workflows</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="text-3xl font-bold">
-                                        {statsLoading ? "-" : stats?.total_workflows ?? 0}
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            <Card>
-                                <CardHeader className="pb-3">
-                                    <CardTitle className="text-sm font-medium text-muted-foreground">Enabled</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="text-3xl font-bold">
-                                        {statsLoading ? "-" : stats?.enabled_workflows ?? 0}
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            <Card>
-                                <CardHeader className="pb-3">
-                                    <CardTitle className="text-sm font-medium text-muted-foreground">Success Rate 24h</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="flex items-baseline gap-2">
-                                        <div className="text-3xl font-bold">
-                                            {statsLoading ? "-" : `${stats?.success_rate_24h?.toFixed(1) ?? 0}%`}
-                                        </div>
-                                        {stats?.success_rate_24h && stats.success_rate_24h > 95 && (
-                                            <div className="flex items-center text-xs font-medium text-green-600">
-                                                <TrendingUpIcon className="mr-1 h-3 w-3" />
-                                                Good
-                                            </div>
-                                        )}
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            <Card>
-                                <CardHeader className="pb-3">
-                                    <CardTitle className="text-sm font-medium text-muted-foreground">Executions 24h</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="text-3xl font-bold">
-                                        {statsLoading ? "-" : stats?.total_executions_24h ?? 0}
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </div>
-
-                        {/* Workflow List */}
-                        <div className="space-y-4">
-                            <h2 className="text-xl font-semibold">Workflows</h2>
-
-                            {workflowsLoading ? (
-                                <div className="flex items-center justify-center py-12">
-                                    <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-sm font-medium text-muted-foreground">Enabled</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-3xl font-bold">
+                                    {statsLoading ? "-" : stats?.enabled_workflows ?? 0}
                                 </div>
-                            ) : !workflows?.length ? (
-                                <Card>
-                                    <CardContent className="flex flex-col items-center justify-center py-12">
-                                        <WorkflowIcon className="size-12 text-muted-foreground/50" />
-                                        <h3 className="mt-4 text-lg font-medium">No workflows yet</h3>
-                                        <p className="mt-1 text-sm text-muted-foreground">
-                                            Create your first workflow to automate repetitive tasks
-                                        </p>
-                                        <Button className="mt-4" onClick={() => setShowCreateModal(true)}>
-                                            <PlusIcon className="mr-2 size-4" />
-                                            Create Workflow
-                                        </Button>
-                                    </CardContent>
-                                </Card>
-                            ) : (
-                                workflows.map((workflow: WorkflowListItem) => {
-                                    const IconComponent = triggerIcons[workflow.trigger_type] || WorkflowIcon
-                                    return (
-                                        <Card key={workflow.id}>
-                                            <CardContent className="flex items-center justify-between p-6">
-                                                <div className="flex items-start gap-4">
-                                                    <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-teal-500/10 text-teal-500">
-                                                        <IconComponent className="size-6" />
-                                                    </div>
+                            </CardContent>
+                        </Card>
 
-                                                    <div className="flex-1">
-                                                        <h3 className="font-semibold">{workflow.name}</h3>
-                                                        <p className="text-sm text-muted-foreground">{workflow.description || "No description"}</p>
-                                                        <div className="mt-2 flex items-center gap-3">
-                                                            <Badge variant="secondary" className="text-xs">
-                                                                {triggerLabels[workflow.trigger_type] || workflow.trigger_type}
-                                                            </Badge>
-                                                            <span className="text-xs text-muted-foreground">
-                                                                {workflow.run_count} runs • Last run {formatRelativeTime(workflow.last_run_at)}
-                                                            </span>
-                                                            {workflow.last_error && (
-                                                                <Badge variant="destructive" className="text-xs">Has Error</Badge>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-sm font-medium text-muted-foreground">Success Rate 24h</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="flex items-baseline gap-2">
+                                    <div className="text-3xl font-bold">
+                                        {statsLoading ? "-" : `${stats?.success_rate_24h?.toFixed(1) ?? 0}%`}
+                                    </div>
+                                    {stats?.success_rate_24h && stats.success_rate_24h > 95 && (
+                                        <div className="flex items-center text-xs font-medium text-green-600">
+                                            <TrendingUpIcon className="mr-1 h-3 w-3" />
+                                            Good
+                                        </div>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
 
-                                                <div className="flex items-center gap-3">
-                                                    <Switch
-                                                        checked={workflow.is_enabled}
-                                                        onCheckedChange={() => handleToggle(workflow.id)}
-                                                        disabled={toggleWorkflow.isPending}
-                                                    />
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger>
-                                                            <Button variant="ghost" size="sm" className="size-8 p-0">
-                                                                <MoreVerticalIcon className="size-4" />
-                                                                <span className="sr-only">Open menu</span>
-                                                            </Button>
-                                                        </DropdownMenuTrigger>
-                                                        <DropdownMenuContent align="end">
-                                                            <DropdownMenuItem onClick={() => handleEdit(workflow.id)}>Edit</DropdownMenuItem>
-                                                            <DropdownMenuItem onClick={() => handleDuplicate(workflow.id)}>
-                                                                Duplicate
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem onClick={() => handleViewHistory(workflow.id)}>
-                                                                View History
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem onClick={() => handleTest(workflow.id)}>
-                                                                Test Workflow
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem
-                                                                className="text-destructive"
-                                                                onClick={() => handleDelete(workflow.id)}
-                                                            >
-                                                                Delete
-                                                            </DropdownMenuItem>
-                                                        </DropdownMenuContent>
-                                                    </DropdownMenu>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    )
-                                })
-                            )}
-                        </div>
-                    </TabsContent>
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-sm font-medium text-muted-foreground">Executions 24h</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-3xl font-bold">
+                                    {statsLoading ? "-" : stats?.total_executions_24h ?? 0}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
 
-                    {/* Email Templates Tab */}
-                    <TabsContent value="email-templates" className="space-y-4">
-                        {templatesLoading ? (
+                    {/* Workflow List */}
+                    <div className="space-y-4">
+                        <h2 className="text-xl font-semibold">Workflows</h2>
+
+                        {workflowsLoading ? (
                             <div className="flex items-center justify-center py-12">
                                 <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
                             </div>
-                        ) : !emailTemplates?.length ? (
+                        ) : !workflows?.length ? (
                             <Card>
                                 <CardContent className="flex flex-col items-center justify-center py-12">
-                                    <MailIcon className="size-12 text-muted-foreground/50" />
-                                    <h3 className="mt-4 text-lg font-medium">No email templates yet</h3>
+                                    <WorkflowIcon className="size-12 text-muted-foreground/50" />
+                                    <h3 className="mt-4 text-lg font-medium">No workflows yet</h3>
                                     <p className="mt-1 text-sm text-muted-foreground">
-                                        Create templates to use in workflow email actions
+                                        Create your first workflow to automate repetitive tasks
                                     </p>
-                                    <Button className="mt-4" onClick={() => handleOpenTemplateModal()}>
+                                    <Button className="mt-4" onClick={() => setShowCreateModal(true)}>
                                         <PlusIcon className="mr-2 size-4" />
-                                        Create Template
+                                        Create Workflow
                                     </Button>
                                 </CardContent>
                             </Card>
                         ) : (
-                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                {emailTemplates.map((template: EmailTemplateListItem) => (
-                                    <Card key={template.id} className="cursor-pointer hover:bg-muted/50" onClick={() => handleOpenTemplateModal(template)}>
-                                        <CardHeader>
-                                            <CardTitle className="text-base">{template.name}</CardTitle>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <p className="text-sm text-muted-foreground line-clamp-2">{template.subject}</p>
+                            workflows.map((workflow: WorkflowListItem) => {
+                                const IconComponent = triggerIcons[workflow.trigger_type] || WorkflowIcon
+                                return (
+                                    <Card key={workflow.id}>
+                                        <CardContent className="flex items-center justify-between p-6">
+                                            <div className="flex items-start gap-4">
+                                                <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-teal-500/10 text-teal-500">
+                                                    <IconComponent className="size-6" />
+                                                </div>
+
+                                                <div className="flex-1">
+                                                    <h3 className="font-semibold">{workflow.name}</h3>
+                                                    <p className="text-sm text-muted-foreground">{workflow.description || "No description"}</p>
+                                                    <div className="mt-2 flex items-center gap-3">
+                                                        <Badge variant="secondary" className="text-xs">
+                                                            {triggerLabels[workflow.trigger_type] || workflow.trigger_type}
+                                                        </Badge>
+                                                        <span className="text-xs text-muted-foreground">
+                                                            {workflow.run_count} runs • Last run {formatRelativeTime(workflow.last_run_at)}
+                                                        </span>
+                                                        {workflow.last_error && (
+                                                            <Badge variant="destructive" className="text-xs">Has Error</Badge>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-3">
+                                                <Switch
+                                                    checked={workflow.is_enabled}
+                                                    onCheckedChange={() => handleToggle(workflow.id)}
+                                                    disabled={toggleWorkflow.isPending}
+                                                />
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger>
+                                                        <Button variant="ghost" size="sm" className="size-8 p-0">
+                                                            <MoreVerticalIcon className="size-4" />
+                                                            <span className="sr-only">Open menu</span>
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem onClick={() => handleEdit(workflow.id)}>Edit</DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => handleDuplicate(workflow.id)}>
+                                                            Duplicate
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => handleViewHistory(workflow.id)}>
+                                                            View History
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => handleTest(workflow.id)}>
+                                                            Test Workflow
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem
+                                                            className="text-destructive"
+                                                            onClick={() => handleDelete(workflow.id)}
+                                                        >
+                                                            Delete
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            </div>
                                         </CardContent>
                                     </Card>
-                                ))}
-                            </div>
+                                )
+                            })
                         )}
-                    </TabsContent>
-                </Tabs>
+                    </div>
+                </div>
             </div>
-
-            {/* Create Workflow Modal */}
             <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
                 <DialogContent className="max-w-2xl">
                     <DialogHeader>
@@ -1066,6 +989,6 @@ export default function AutomationPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
+        </div >
     )
 }

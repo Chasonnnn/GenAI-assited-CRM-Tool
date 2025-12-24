@@ -25,7 +25,7 @@ from app.services.google_oauth import (
 )
 
 # Rate limiting
-from app.main import limiter
+from app.core.rate_limit import limiter
 
 router = APIRouter()
 

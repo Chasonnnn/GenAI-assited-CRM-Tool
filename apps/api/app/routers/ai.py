@@ -19,7 +19,7 @@ from app.schemas.auth import UserSession
 from app.services import ai_settings_service, ai_chat_service
 
 # Rate limiting
-from app.main import limiter
+from app.core.rate_limit import limiter
 
 router = APIRouter(prefix="/ai", tags=["AI"])
 

@@ -15,7 +15,7 @@ from app.db.enums import JobType
 from app.services import job_service, meta_api
 
 # Rate limiting
-from app.main import limiter
+from app.core.rate_limit import limiter
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
