@@ -156,7 +156,18 @@
 
 ## 🟡 MEDIUM PRIORITY GAPS (Uncompleted)
 
+### 1. Automation & Campaigns Future Enhancements ❌
+**Status:** Not started (planned for future sprints)
 
+| Feature | Value | Priority |
+|---------|-------|----------|
+| Workflow execution dashboard | Monitor workflow runs/failures in real-time | High |
+| Email open/click tracking | Campaign analytics and engagement metrics | High |
+| A/B testing for campaigns | Optimize outreach with split testing | Medium |
+| Workflow template marketplace | Share common automations between orgs | Medium |
+| Rate limiting for triggers | Prevent runaway automation and spam | High |
+
+**Effort:** Large (2-4 weeks)
 
 ---
 
