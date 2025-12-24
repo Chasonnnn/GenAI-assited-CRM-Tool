@@ -997,6 +997,7 @@ export default function MatchDetailPage() {
                                 <MatchTasksCalendar
                                     caseId={match.case_id}
                                     ipId={match.intended_parent_id}
+                                    onAddTask={() => setAddTaskDialogOpen(true)}
                                 />
                             )}
                         </TabsContent>

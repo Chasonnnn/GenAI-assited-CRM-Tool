@@ -28,6 +28,7 @@ import {
     Loader2Icon,
     UserIcon,
     UsersIcon,
+    PlusIcon,
 } from "lucide-react"
 import { useTasks } from "@/lib/hooks/use-tasks"
 import { useAppointments } from "@/lib/hooks/use-appointments"
@@ -59,6 +60,7 @@ type FilterType = "all" | "surrogate" | "ip" | "appointments"
 interface MatchTasksCalendarProps {
     caseId: string
     ipId?: string
+    onAddTask?: () => void
 }
 
 // Calendar item type for unified display
@@ -389,7 +391,7 @@ function DayView({
 }
 
 // Main Component
-export function MatchTasksCalendar({ caseId, ipId }: MatchTasksCalendarProps) {
+export function MatchTasksCalendar({ caseId, ipId, onAddTask }: MatchTasksCalendarProps) {
     const [currentDate, setCurrentDate] = useState(new Date())
     const [viewType, setViewType] = useState<ViewType>("month")
     const [filter, setFilter] = useState<FilterType>("all")
@@ -519,6 +521,12 @@ export function MatchTasksCalendar({ caseId, ipId }: MatchTasksCalendarProps) {
                     <Button variant="ghost" size="sm" onClick={() => setCurrentDate(new Date())}>
                         Today
                     </Button>
+                    {onAddTask && (
+                        <Button variant="default" size="sm" onClick={onAddTask} className="gap-1">
+                            <PlusIcon className="size-3" />
+                            Add Task
+                        </Button>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-2">
