@@ -242,22 +242,24 @@
 
 ## 🟢 LOW PRIORITY GAPS (Uncompleted)
 
-### 5. Smart Task Creation from AI ❌
-**Status:** Not started
+### 5. Smart Task Creation from AI ✅ COMPLETE
+**Status:** Implemented
 
-**Requirements:**
-- User pastes medication/exam schedule to AI
-- AI parses and extracts dates/events
-- Propose tasks with dates/times
-- Manual approval before creation
-- Associate tasks with selected case
+**What was built:**
+- ✅ AI-powered schedule parser (`/ai/parse-schedule` endpoint)
+- ✅ Bulk task creation with all-or-nothing transaction (`/ai/create-bulk-tasks`)
+- ✅ Expanded TaskType enum: medication, exam, appointment
+- ✅ Idempotency via request_id
+- ✅ ScheduleParserDialog frontend component with 3-step flow
+- ✅ Editable task proposals with confidence scores
+- ✅ Links tasks to intended_parent_id only
+- ✅ User timezone detection
 
-**Integration:**
-- AI Assistant
-- Task service
-- Case context
+**Files:**
+- Backend: `schedule_parser.py`, `ai.py` endpoints
+- Frontend: `ScheduleParserDialog.tsx`, `schedule-parser.ts`, `use-schedule-parser.ts`
 
-**Effort:** Medium (1 week)
+**Effort:** Complete
 
 ---
 
