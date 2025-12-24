@@ -1314,3 +1314,182 @@ Focus on:
         recommendations=parsed.get("recommendations", []),
         stats=stats,
     )
+
+
+# ============================================================================
+# AI Workflow Generation Endpoints
+# ============================================================================
+
+class GenerateWorkflowRequest(BaseModel):
+    """Request to generate a workflow from natural language."""
+    description: str = Field(..., min_length=10, max_length=2000)
+
+
+class GenerateWorkflowResponse(BaseModel):
+    """Response from workflow generation."""
+    success: bool
+    workflow: dict[str, Any] | None = None
+    explanation: str | None = None
+    validation_errors: list[str] = []
+    warnings: list[str] = []
+
+
+class ValidateWorkflowRequest(BaseModel):
+    """Request to validate a workflow configuration."""
+    workflow: dict[str, Any]
+
+
+class ValidateWorkflowResponse(BaseModel):
+    """Response from workflow validation."""
+    valid: bool
+    errors: list[str] = []
+    warnings: list[str] = []
+
+
+class SaveWorkflowRequest(BaseModel):
+    """Request to save an approved workflow."""
+    workflow: dict[str, Any]
+
+
+class SaveWorkflowResponse(BaseModel):
+    """Response from workflow save."""
+    success: bool
+    workflow_id: str | None = None
+    error: str | None = None
+
+
+@router.post(
+    "/workflows/generate", 
+    response_model=GenerateWorkflowResponse,
+    dependencies=[Depends(require_csrf_header)]
+)
+@limiter.limit("10/minute")
+def generate_workflow(
+    request: Request,
+    body: GenerateWorkflowRequest,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+) -> GenerateWorkflowResponse:
+    """
+    Generate a workflow configuration from natural language description.
+    
+    The generated workflow is returned for user review before saving.
+    Restricted to Manager/Developer roles for safety.
+    """
+    from app.services import ai_workflow_service
+    
+    result = ai_workflow_service.generate_workflow(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        description=body.description,
+    )
+    
+    return GenerateWorkflowResponse(
+        success=result.success,
+        workflow=result.workflow.model_dump() if result.workflow else None,
+        explanation=result.explanation,
+        validation_errors=result.validation_errors,
+        warnings=result.warnings,
+    )
+
+
+@router.post(
+    "/workflows/validate", 
+    response_model=ValidateWorkflowResponse,
+    dependencies=[Depends(require_csrf_header)]
+)
+def validate_workflow(
+    body: ValidateWorkflowRequest,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+) -> ValidateWorkflowResponse:
+    """
+    Validate a workflow configuration.
+    
+    Used to check if an AI-generated or user-modified workflow is valid
+    before saving.
+    """
+    from app.services import ai_workflow_service
+    from app.services.ai_workflow_service import GeneratedWorkflow
+    
+    try:
+        workflow = GeneratedWorkflow(**body.workflow)
+    except Exception as e:
+        return ValidateWorkflowResponse(
+            valid=False,
+            errors=[f"Invalid workflow format: {str(e)}"],
+        )
+    
+    result = ai_workflow_service.validate_workflow(db, session.org_id, workflow)
+    
+    return ValidateWorkflowResponse(
+        valid=result.valid,
+        errors=result.errors,
+        warnings=result.warnings,
+    )
+
+
+@router.post(
+    "/workflows/save", 
+    response_model=SaveWorkflowResponse,
+    dependencies=[Depends(require_csrf_header)]
+)
+def save_ai_workflow(
+    body: SaveWorkflowRequest,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+) -> SaveWorkflowResponse:
+    """
+    Save an approved AI-generated workflow.
+    
+    The workflow must pass validation before saving.
+    Created workflows are disabled by default for safety.
+    """
+    from app.services import ai_workflow_service, audit_service
+    from app.services.ai_workflow_service import GeneratedWorkflow
+    
+    try:
+        workflow_data = GeneratedWorkflow(**body.workflow)
+    except Exception as e:
+        return SaveWorkflowResponse(
+            success=False,
+            error=f"Invalid workflow format: {str(e)}",
+        )
+    
+    try:
+        saved = ai_workflow_service.save_workflow(
+            db=db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+            workflow=workflow_data,
+        )
+        
+        # Audit log for AI-generated workflow
+        audit_service.log_ai_workflow_created(
+            db=db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+            workflow_id=saved.id,
+            workflow_name=saved.name,
+        )
+        
+        db.commit()
+        
+        return SaveWorkflowResponse(
+            success=True,
+            workflow_id=str(saved.id),
+        )
+        
+    except ValueError as e:
+        return SaveWorkflowResponse(
+            success=False,
+            error=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Failed to save AI workflow: {e}")
+        return SaveWorkflowResponse(
+            success=False,
+            error="Failed to save workflow",
+        )
+

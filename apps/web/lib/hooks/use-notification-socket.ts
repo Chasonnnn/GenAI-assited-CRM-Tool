@@ -23,6 +23,9 @@ export interface NotificationSocketMessage {
         body?: string
         type?: string
         count?: number
+        // Entity data for deep-linking
+        entity_type?: string
+        entity_id?: string
     }
 }
 

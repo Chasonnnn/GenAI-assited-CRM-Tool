@@ -440,6 +440,10 @@ def notify_task_due_soon(
     if not assignee_id:
         return
     
+    # Respect user settings for task reminders
+    if not should_notify(db, assignee_id, org_id, "task_reminders"):
+        return
+    
     title = f"Task due soon: {task_title[:50]}"
     body = f"Due: {due_date}"
     if case_number:
@@ -471,6 +475,10 @@ def notify_task_overdue(
 ) -> None:
     """Notify user when a task is overdue. One-time notification."""
     if not assignee_id:
+        return
+    
+    # Respect user settings for task reminders
+    if not should_notify(db, assignee_id, org_id, "task_reminders"):
         return
     
     title = f"Task overdue: {task_title[:50]}"
@@ -511,6 +519,10 @@ def notify_appointment_requested(
     if not staff_user_id:
         return
     
+    # Respect user settings for appointments
+    if not should_notify(db, staff_user_id, org_id, "appointments"):
+        return
+    
     title = f"New appointment request: {appointment_type}"
     body = f"{client_name} requested {requested_time}"
     
@@ -541,6 +553,10 @@ def notify_appointment_confirmed(
     if not staff_user_id:
         return
     
+    # Respect user settings for appointments
+    if not should_notify(db, staff_user_id, org_id, "appointments"):
+        return
+    
     title = f"Appointment confirmed: {appointment_type}"
     body = f"{confirmed_time} with {client_name}"
     
@@ -569,6 +585,10 @@ def notify_appointment_cancelled(
 ) -> None:
     """Notify staff when an appointment is cancelled."""
     if not staff_user_id:
+        return
+    
+    # Respect user settings for appointments
+    if not should_notify(db, staff_user_id, org_id, "appointments"):
         return
     
     title = f"Appointment cancelled: {appointment_type}"

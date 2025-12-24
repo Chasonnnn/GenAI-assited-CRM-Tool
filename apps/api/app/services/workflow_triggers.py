@@ -4,7 +4,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.db.models import Case, Task
+from app.db.models import Case, Task, Match, Attachment, EntityNote, Appointment
 from app.db.enums import WorkflowTriggerType, WorkflowEventSource
 from app.services.workflow_engine import engine
 
@@ -310,6 +310,182 @@ def trigger_task_overdue_sweep(db: Session, org_id: UUID) -> None:
     
     for task in overdue_tasks:
         trigger_task_overdue(db, task)
+
+
+# =============================================================================
+# Match Triggers (called from match_service.py)
+# =============================================================================
+
+def trigger_match_proposed(db: Session, match: Match) -> None:
+    """Trigger workflows when a match is proposed."""
+    engine.trigger(
+        db=db,
+        trigger_type=WorkflowTriggerType.MATCH_PROPOSED,
+        entity_type="match",
+        entity_id=match.id,
+        event_data={
+            "match_id": str(match.id),
+            "case_id": str(match.case_id),
+            "intended_parent_id": str(match.intended_parent_id) if match.intended_parent_id else None,
+            "status": match.status,
+        },
+        org_id=match.organization_id,
+        source=WorkflowEventSource.USER,
+    )
+
+
+def trigger_match_accepted(db: Session, match: Match) -> None:
+    """Trigger workflows when a match is accepted."""
+    engine.trigger(
+        db=db,
+        trigger_type=WorkflowTriggerType.MATCH_ACCEPTED,
+        entity_type="match",
+        entity_id=match.id,
+        event_data={
+            "match_id": str(match.id),
+            "case_id": str(match.case_id),
+            "intended_parent_id": str(match.intended_parent_id) if match.intended_parent_id else None,
+            "status": match.status,
+            "accepted_at": match.accepted_at.isoformat() if match.accepted_at else None,
+        },
+        org_id=match.organization_id,
+        source=WorkflowEventSource.USER,
+    )
+
+
+def trigger_match_rejected(db: Session, match: Match) -> None:
+    """Trigger workflows when a match is rejected."""
+    engine.trigger(
+        db=db,
+        trigger_type=WorkflowTriggerType.MATCH_REJECTED,
+        entity_type="match",
+        entity_id=match.id,
+        event_data={
+            "match_id": str(match.id),
+            "case_id": str(match.case_id),
+            "intended_parent_id": str(match.intended_parent_id) if match.intended_parent_id else None,
+            "status": match.status,
+        },
+        org_id=match.organization_id,
+        source=WorkflowEventSource.USER,
+    )
+
+
+# =============================================================================
+# Document Triggers (called from attachment_service.py AFTER scan passes)
+# =============================================================================
+
+def trigger_document_uploaded(db: Session, attachment: Attachment) -> None:
+    """
+    Trigger workflows when a document is uploaded and passed virus scan.
+    
+    Note: Only call this after scan_status = 'clean', not on initial upload.
+    Skip if file is quarantined.
+    """
+    # Get org_id from the related entity
+    org_id = None
+    case_id = None
+    
+    if attachment.case_id:
+        case = db.query(Case).filter(Case.id == attachment.case_id).first()
+        if case:
+            org_id = case.organization_id
+            case_id = case.id
+    
+    if not org_id:
+        return
+    
+    engine.trigger(
+        db=db,
+        trigger_type=WorkflowTriggerType.DOCUMENT_UPLOADED,
+        entity_type="attachment",
+        entity_id=attachment.id,
+        event_data={
+            "attachment_id": str(attachment.id),
+            "filename": attachment.filename,
+            "content_type": attachment.content_type,
+            "case_id": str(case_id) if case_id else None,
+            "uploaded_by": str(attachment.uploaded_by_user_id) if attachment.uploaded_by_user_id else None,
+        },
+        org_id=org_id,
+        source=WorkflowEventSource.USER,
+    )
+
+
+# =============================================================================
+# Note Triggers (called from note_service.py)
+# High-volume trigger - consider throttling
+# =============================================================================
+
+def trigger_note_added(db: Session, note: EntityNote) -> None:
+    """
+    Trigger workflows when a note is added to an entity.
+    
+    Warning: This is a high-volume trigger. Workflows using this trigger
+    should have conditions to avoid excessive execution.
+    """
+    engine.trigger(
+        db=db,
+        trigger_type=WorkflowTriggerType.NOTE_ADDED,
+        entity_type="note",
+        entity_id=note.id,
+        event_data={
+            "note_id": str(note.id),
+            "entity_type": note.entity_type,
+            "entity_id": str(note.entity_id),
+            "is_pinned": note.is_pinned,
+            "created_by": str(note.created_by_user_id) if note.created_by_user_id else None,
+        },
+        org_id=note.organization_id,
+        source=WorkflowEventSource.USER,
+    )
+
+
+# =============================================================================
+# Appointment Triggers (called from appointment_service.py)
+# =============================================================================
+
+def trigger_appointment_scheduled(db: Session, appointment: Appointment) -> None:
+    """Trigger workflows when an appointment is scheduled/approved."""
+    engine.trigger(
+        db=db,
+        trigger_type=WorkflowTriggerType.APPOINTMENT_SCHEDULED,
+        entity_type="appointment",
+        entity_id=appointment.id,
+        event_data={
+            "appointment_id": str(appointment.id),
+            "case_id": str(appointment.case_id) if appointment.case_id else None,
+            "intended_parent_id": str(appointment.intended_parent_id) if appointment.intended_parent_id else None,
+            "user_id": str(appointment.user_id),
+            "start_time": appointment.start_time.isoformat() if appointment.start_time else None,
+            "end_time": appointment.end_time.isoformat() if appointment.end_time else None,
+            "appointment_type": appointment.appointment_type.name if appointment.appointment_type else None,
+            "status": appointment.status,
+        },
+        org_id=appointment.organization_id,
+        source=WorkflowEventSource.USER,
+    )
+
+
+def trigger_appointment_completed(db: Session, appointment: Appointment) -> None:
+    """Trigger workflows when an appointment is marked as completed."""
+    engine.trigger(
+        db=db,
+        trigger_type=WorkflowTriggerType.APPOINTMENT_COMPLETED,
+        entity_type="appointment",
+        entity_id=appointment.id,
+        event_data={
+            "appointment_id": str(appointment.id),
+            "case_id": str(appointment.case_id) if appointment.case_id else None,
+            "intended_parent_id": str(appointment.intended_parent_id) if appointment.intended_parent_id else None,
+            "user_id": str(appointment.user_id),
+            "start_time": appointment.start_time.isoformat() if appointment.start_time else None,
+            "end_time": appointment.end_time.isoformat() if appointment.end_time else None,
+            "status": appointment.status,
+        },
+        org_id=appointment.organization_id,
+        source=WorkflowEventSource.USER,
+    )
 
 
 def _should_run_cron(cron: str, now, tz: str) -> bool:

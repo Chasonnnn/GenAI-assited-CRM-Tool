@@ -984,6 +984,21 @@ class EmailTemplate(Base):
         nullable=False
     )
     
+    # System template fields (idempotent seeding/upgrades)
+    is_system_template: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("FALSE"),
+        nullable=False
+    )
+    system_key: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True
+    )  # Unique key for system templates, e.g. 'welcome_new_lead'
+    category: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True
+    )  # 'welcome', 'reminder', 'status', 'match', 'appointment'
+    
     # Version control
     current_version: Mapped[int] = mapped_column(default=1, nullable=False)
     
@@ -2298,6 +2313,45 @@ class AutomationWorkflow(Base):
     last_run_at: Mapped[datetime | None] = mapped_column(nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     
+    # Recurrence settings
+    recurrence_mode: Mapped[str] = mapped_column(
+        String(20),
+        server_default=text("'one_time'"),
+        nullable=False
+    )  # 'one_time' | 'recurring'
+    recurrence_interval_hours: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True
+    )  # 24 = daily, 168 = weekly
+    recurrence_stop_on_status: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True
+    )  # Stop when entity reaches this status
+    
+    # System workflow fields
+    is_system_workflow: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("FALSE"),
+        nullable=False
+    )
+    system_key: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True
+    )  # Unique key for system workflows
+    
+    # First-run review tracking
+    requires_review: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("FALSE"),
+        nullable=False
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    
     # Audit
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -3223,3 +3277,260 @@ class AppointmentEmailLog(Base):
     # Relationships
     organization: Mapped["Organization"] = relationship()
     appointment: Mapped["Appointment"] = relationship(back_populates="email_logs")
+
+
+# =============================================================================
+# Campaigns Module
+# =============================================================================
+
+class Campaign(Base):
+    """
+    Bulk email campaign definition.
+    
+    Allows sending targeted emails to groups of cases or intended parents
+    with filtering, scheduling, and tracking.
+    """
+    __tablename__ = "campaigns"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "name", name="uq_campaign_name"),
+        Index("idx_campaigns_org_status", "organization_id", "status"),
+        Index("idx_campaigns_org_created", "organization_id", "created_at"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # Campaign details
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    # Template
+    email_template_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("email_templates.id", ondelete="RESTRICT"),
+        nullable=False
+    )
+    
+    # Recipient filtering
+    recipient_type: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False
+    )  # 'case' | 'intended_parent'
+    filter_criteria: Mapped[dict] = mapped_column(
+        JSONB,
+        default=dict,
+        server_default="{}",
+        nullable=False
+    )  # {stage_id, state, created_after, tags, etc.}
+    
+    # Scheduling
+    scheduled_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True
+    )
+    
+    # Status
+    status: Mapped[str] = mapped_column(
+        String(20),
+        server_default=text("'draft'"),
+        nullable=False
+    )  # 'draft' | 'scheduled' | 'sending' | 'completed' | 'cancelled' | 'failed'
+    
+    # Audit
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        onupdate=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    email_template: Mapped["EmailTemplate"] = relationship()
+    created_by: Mapped["User | None"] = relationship()
+    runs: Mapped[list["CampaignRun"]] = relationship(
+        back_populates="campaign",
+        cascade="all, delete-orphan",
+        order_by="CampaignRun.started_at.desc()"
+    )
+
+
+class CampaignRun(Base):
+    """
+    Execution record for a campaign send.
+    
+    Tracks the progress and results of a campaign execution.
+    """
+    __tablename__ = "campaign_runs"
+    __table_args__ = (
+        Index("idx_campaign_runs_campaign", "campaign_id", "started_at"),
+        Index("idx_campaign_runs_org", "organization_id", "started_at"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    campaign_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("campaigns.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # Execution timing
+    started_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        server_default=text("now()"),
+        nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True
+    )
+    
+    # Status
+    status: Mapped[str] = mapped_column(
+        String(20),
+        server_default=text("'running'"),
+        nullable=False
+    )  # 'running' | 'completed' | 'failed'
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    # Counts
+    total_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    sent_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    skipped_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    campaign: Mapped["Campaign"] = relationship(back_populates="runs")
+    recipients: Mapped[list["CampaignRecipient"]] = relationship(
+        back_populates="run",
+        cascade="all, delete-orphan"
+    )
+
+
+class CampaignRecipient(Base):
+    """
+    Per-recipient status for a campaign run.
+    
+    Tracks the delivery status of each email sent.
+    """
+    __tablename__ = "campaign_recipients"
+    __table_args__ = (
+        Index("idx_campaign_recipients_run", "run_id"),
+        Index("idx_campaign_recipients_entity", "entity_type", "entity_id"),
+        UniqueConstraint("run_id", "entity_type", "entity_id", name="uq_campaign_recipient"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("campaign_runs.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # Recipient reference
+    entity_type: Mapped[str] = mapped_column(String(30), nullable=False)  # 'case' | 'intended_parent'
+    entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    recipient_email: Mapped[str] = mapped_column(CITEXT, nullable=False)
+    recipient_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    
+    # Status
+    status: Mapped[str] = mapped_column(
+        String(20),
+        server_default=text("'pending'"),
+        nullable=False
+    )  # 'pending' | 'sent' | 'delivered' | 'failed' | 'skipped'
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    skip_reason: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    
+    # Timing
+    sent_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True
+    )
+    
+    # External ID from email service
+    external_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    run: Mapped["CampaignRun"] = relationship(back_populates="recipients")
+
+
+class EmailSuppression(Base):
+    """
+    Suppression list for opt-out, bounced, and archived emails.
+    
+    Prevents sending emails to addresses that have opted out or are invalid.
+    """
+    __tablename__ = "email_suppressions"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "email", name="uq_email_suppression"),
+        Index("idx_email_suppressions_org", "organization_id"),
+        Index("idx_email_suppressions_email", "email"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # Suppressed email
+    email: Mapped[str] = mapped_column(CITEXT, nullable=False)
+    
+    # Reason
+    reason: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False
+    )  # 'opt_out' | 'bounced' | 'archived' | 'complaint'
+    
+    # Optional source reference
+    source_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    organization: Mapped["Organization"] = relationship()

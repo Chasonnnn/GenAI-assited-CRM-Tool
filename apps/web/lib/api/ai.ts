@@ -229,3 +229,63 @@ export interface AIUsageSummary {
 export async function getAIUsageSummary(days: number = 30): Promise<AIUsageSummary> {
     return api.get<AIUsageSummary>(`/ai/usage/summary?days=${days}`);
 }
+
+// ============================================================================
+// AI Workflow Generation API
+// ============================================================================
+
+export interface GeneratedWorkflow {
+    name: string;
+    description: string | null;
+    icon: string;
+    trigger_type: string;
+    trigger_config: Record<string, unknown>;
+    conditions: Array<{ field: string; operator: string; value: unknown }>;
+    condition_logic: string;
+    actions: Array<{ action_type: string;[key: string]: unknown }>;
+}
+
+export interface GenerateWorkflowRequest {
+    description: string;
+}
+
+export interface GenerateWorkflowResponse {
+    success: boolean;
+    workflow: GeneratedWorkflow | null;
+    explanation: string | null;
+    validation_errors: string[];
+    warnings: string[];
+}
+
+export interface ValidateWorkflowRequest {
+    workflow: GeneratedWorkflow;
+}
+
+export interface ValidateWorkflowResponse {
+    valid: boolean;
+    errors: string[];
+    warnings: string[];
+}
+
+export interface SaveWorkflowRequest {
+    workflow: GeneratedWorkflow;
+}
+
+export interface SaveWorkflowResponse {
+    success: boolean;
+    workflow_id: string | null;
+    error: string | null;
+}
+
+export async function generateWorkflow(description: string): Promise<GenerateWorkflowResponse> {
+    return api.post<GenerateWorkflowResponse>('/ai/workflows/generate', { description });
+}
+
+export async function validateWorkflow(workflow: GeneratedWorkflow): Promise<ValidateWorkflowResponse> {
+    return api.post<ValidateWorkflowResponse>('/ai/workflows/validate', { workflow });
+}
+
+export async function saveAIWorkflow(workflow: GeneratedWorkflow): Promise<SaveWorkflowResponse> {
+    return api.post<SaveWorkflowResponse>('/ai/workflows/save', { workflow });
+}
+
