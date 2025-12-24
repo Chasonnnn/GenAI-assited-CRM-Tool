@@ -121,6 +121,35 @@ class User(Base):
         nullable=False
     )
     
+    # Email signature (per-user)
+    signature_name: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
+    signature_title: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
+    signature_company: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
+    signature_phone: Mapped[str | None] = mapped_column(
+        String(50), nullable=True
+    )
+    signature_email: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
+    signature_address: Mapped[str | None] = mapped_column(
+        String(500), nullable=True
+    )
+    signature_website: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
+    signature_logo_url: Mapped[str | None] = mapped_column(
+        String(500), nullable=True
+    )
+    signature_html: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    
     # Relationships
     membership: Mapped["Membership | None"] = relationship(
         back_populates="user", 

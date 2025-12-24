@@ -109,17 +109,21 @@
 ---
 
 
-### 3. Email Signature Setup ❌
-**Status:** Not started
+### 3. Email Signature Setup ✅ COMPLETE (Pending Logo)
+**Status:** Implemented - awaiting organization logo
 
-**Requirements:**
-- Add signature editor in Email Templates tab
-- Rich text signature (name, title, phone, logo)
-- Per-user signature storage
-- Auto-append to outgoing emails
-- Preview before save
+**What was built:**
+- ✅ Signature editor in dedicated Email Templates page (`/automation/email-templates`)
+- ✅ Per-user signature storage (8 fields: name, title, company, phone, email, address, website)
+- ✅ Live preview before save
+- ✅ Backend API: `GET/PUT /auth/me/signature`
+- ✅ Custom HTML signature option
 
-**Effort:** Small (2-3 days)
+**Pending:**
+- ⚠️ **Add organization logo** - Place logo file at `/apps/web/public/logo.png`
+- Future: Auto-append signature to outgoing emails (requires email sending integration)
+
+**Effort:** Complete
 
 ---
 

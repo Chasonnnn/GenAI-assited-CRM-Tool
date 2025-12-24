@@ -148,7 +148,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const automationItems: Array<{ title: string; url: string; tab?: string | null }> = [
         { title: "Workflows", url: "/automation", tab: null },
         { title: "Campaigns", url: "/automation/campaigns" },
-        { title: "Email Templates", url: "/automation?tab=email-templates", tab: "email-templates" },
+        { title: "Email Templates", url: "/automation/email-templates" },
         { title: "AI Builder", url: "/automation/ai-builder" },
     ]
 
