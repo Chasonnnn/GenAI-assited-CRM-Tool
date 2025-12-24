@@ -592,5 +592,40 @@ proposed ──┬──→ reviewing ──┬──→ accepted
 
 ---
 
-*Last updated: 2025-12-22 (v0.14.00)*
+## Automation System
 
+> For comprehensive automation documentation, see [automation.md](./automation.md).
+
+### Overview
+
+The automation system provides:
+- **Workflows**: Event-driven automation (triggers → conditions → actions)
+- **Campaigns**: Bulk email sends with recipient filtering
+- **Templates**: Email templates with variable substitution
+
+### Key Tables
+
+| Table | Purpose |
+|-------|---------|
+| `automation_workflows` | Workflow definitions |
+| `workflow_executions` | Execution history |
+| `email_templates` | Email templates |
+| `campaigns` | Bulk email campaigns |
+| `campaign_runs` | Campaign send runs |
+| `campaign_recipients` | Per-recipient tracking |
+| `email_suppressions` | Org-scoped suppression list |
+
+### Trigger Integration
+
+Triggers fire from service layer:
+```python
+# In case_service.create_case()
+trigger_case_created(db, case, org_id)
+
+# In case_service.update_case() for status change
+trigger_status_changed(db, case, old_status, new_status, org_id)
+```
+
+---
+
+*Last updated: 2025-12-24 (v0.15.00)*

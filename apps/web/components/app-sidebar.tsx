@@ -281,7 +281,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                             {tasksItems.map((subItem) => (
                                                 <SidebarMenuSubItem key={subItem.url}>
                                                     <SidebarMenuSubButton
-                                                        href={subItem.url}
+                                                        render={<Link href={subItem.url} />}
                                                         isActive={pathname === subItem.url || pathname?.startsWith(subItem.url + "/")}
                                                     >
                                                         <span>{subItem.title}</span>
@@ -316,7 +316,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                             {automationItems.map((subItem) => (
                                                 <SidebarMenuSubItem key={subItem.url}>
                                                     <SidebarMenuSubButton
-                                                        href={subItem.url}
+                                                        render={<Link href={subItem.url} />}
                                                         isActive={isAutomationItemActive(subItem)}
                                                     >
                                                         <span>{subItem.title}</span>
@@ -377,7 +377,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                             {settingsItems.map((subItem) => (
                                                 <SidebarMenuSubItem key={subItem.url}>
                                                     <SidebarMenuSubButton
-                                                        href={subItem.url}
+                                                        render={<Link href={subItem.url} />}
                                                         isActive={isSettingsItemActive(subItem)}
                                                     >
                                                         <span>{subItem.title}</span>
