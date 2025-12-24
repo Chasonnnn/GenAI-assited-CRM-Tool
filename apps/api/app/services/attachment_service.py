@@ -404,5 +404,9 @@ def mark_attachment_scanned(
     
     if scan_result == "clean":
         attachment.quarantined = False
+        # Trigger workflow after scan passes (document is now accessible)
+        from app.services.workflow_triggers import trigger_document_uploaded
+        db.flush()  # Ensure attachment is saved before trigger
+        trigger_document_uploaded(db, attachment)
     
     db.flush()

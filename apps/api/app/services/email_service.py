@@ -254,6 +254,63 @@ def build_case_template_variables(db: Session, case: Case) -> dict[str, str]:
     }
 
 
+def build_appointment_template_variables(
+    db: Session,
+    appointment,
+    case: Case | None = None,
+) -> dict[str, str]:
+    """
+    Build template variables for an appointment context.
+    
+    Formats appointment times in the client's timezone (or org timezone fallback).
+    Uses client_timezone from the appointment for user-facing display.
+    """
+    from zoneinfo import ZoneInfo
+    from app.db.models import Organization
+    
+    # Get org for fallback timezone
+    org = db.query(Organization).filter(
+        Organization.id == appointment.organization_id
+    ).first()
+    
+    # Use appointment's client_timezone, fall back to org timezone
+    tz_name = getattr(appointment, 'client_timezone', None) or (org.timezone if org else 'America/Los_Angeles')
+    try:
+        local_tz = ZoneInfo(tz_name)
+    except Exception:
+        local_tz = ZoneInfo('America/Los_Angeles')
+    
+    # Convert UTC times to local timezone
+    local_start = appointment.scheduled_start.astimezone(local_tz)
+    
+    # Format date and time in user-friendly format
+    appointment_date = local_start.strftime("%A, %B %d, %Y")  # "Monday, December 25, 2024"
+    appointment_time = local_start.strftime("%I:%M %p %Z")    # "2:30 PM PST"
+    
+    # Get location (virtual link or physical address)
+    location = ""
+    if hasattr(appointment, 'video_link') and appointment.video_link:
+        location = appointment.video_link
+    elif hasattr(appointment, 'location') and appointment.location:
+        location = appointment.location
+    else:
+        location = "To be confirmed"
+    
+    variables = {
+        "appointment_date": appointment_date,
+        "appointment_time": appointment_time,
+        "appointment_location": location,
+        "org_name": org.name if org else "",
+    }
+    
+    # Merge in case variables if provided
+    if case:
+        case_vars = build_case_template_variables(db, case)
+        variables.update(case_vars)
+    
+    return variables
+
+
 def send_email(
     db: Session,
     org_id: UUID,

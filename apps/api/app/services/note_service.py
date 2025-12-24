@@ -50,6 +50,11 @@ def create_note(
     db.add(note)
     db.commit()
     db.refresh(note)
+    
+    # Trigger workflow automation after successful commit
+    from app.services.workflow_triggers import trigger_note_added
+    trigger_note_added(db, note)
+    
     return note
 
 
