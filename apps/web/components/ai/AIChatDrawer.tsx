@@ -14,10 +14,12 @@ export function AIChatDrawer() {
     }
 
     // Determine props for AIChatPanel
-    // Support case and task context, otherwise works in global mode
+    // Support case, task, and match context - otherwise works in global mode
     const getChatProps = () => {
-        if ((entityType === "case" || entityType === "task") && entityId && entityName) {
-            return { entityType: entityType as "case" | "task", entityId, entityName }
+        if ((entityType === "case" || entityType === "task" || entityType === "match") && entityId && entityName) {
+            // Map match to case for the chat API (match tasks link to case)
+            const chatEntityType = entityType === "match" ? "case" : entityType
+            return { entityType: chatEntityType as "case" | "task", entityId, entityName }
         }
         return { entityType: null, entityId: null, entityName: null }
     }
