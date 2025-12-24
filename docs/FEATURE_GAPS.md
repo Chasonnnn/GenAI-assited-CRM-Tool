@@ -182,6 +182,11 @@
    - Activity section could be more compact
    - Bottom area has excess padding
 
+3. **Match Calendar - No task creation UI** ⚠️
+   - No way to manually add tasks directly on the match calendar
+   - Workaround: Use "Parse Schedule" button to bulk create tasks from pasted text
+   - Long-term: Add "Add Task" button/modal to match calendar
+
 **Reference screenshots** (see artifacts):
 - `ui_issue_appointments.png` 
 - `ui_issue_case_detail.png`
