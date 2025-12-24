@@ -1505,11 +1505,12 @@ class ParseScheduleRequest(BaseModel):
     case_id: uuid.UUID | None = None
     surrogate_id: uuid.UUID | None = None
     intended_parent_id: uuid.UUID | None = None
+    match_id: uuid.UUID | None = None
     user_timezone: str | None = None
     
     def model_post_init(self, __context):
-        if not any([self.case_id, self.surrogate_id, self.intended_parent_id]):
-            raise ValueError("At least one of case_id, surrogate_id, or intended_parent_id must be provided")
+        if not any([self.case_id, self.surrogate_id, self.intended_parent_id, self.match_id]):
+            raise ValueError("At least one of case_id, surrogate_id, intended_parent_id, or match_id must be provided")
 
 
 class ParseScheduleResponse(BaseModel):
@@ -1535,10 +1536,10 @@ async def parse_schedule(
     """
     Parse schedule text using AI and extract task proposals.
     
-    At least one of case_id, surrogate_id, or intended_parent_id must be provided.
+    At least one of case_id, surrogate_id, intended_parent_id, or match_id must be provided.
     User reviews and approves before tasks are created.
     """
-    from app.db.models import Case, Surrogate, IntendedParent
+    from app.db.models import Case, Surrogate, IntendedParent, Match
     from app.services.schedule_parser import parse_schedule_text
     
     # Verify entity exists and belongs to org
@@ -1572,6 +1573,15 @@ async def parse_schedule(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intended parent not found")
         entity_type = "intended_parent"
         entity_id = body.intended_parent_id
+    elif body.match_id:
+        match = db.query(Match).filter(
+            Match.id == body.match_id,
+            Match.organization_id == session.org_id,
+        ).first()
+        if not match:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
+        entity_type = "match"
+        entity_id = body.match_id
     
     # Log metadata only (no PII from schedule text)
     logger.info(
@@ -1612,11 +1622,12 @@ class BulkTaskCreateRequest(BaseModel):
     case_id: uuid.UUID | None = None
     surrogate_id: uuid.UUID | None = None
     intended_parent_id: uuid.UUID | None = None
+    match_id: uuid.UUID | None = None
     tasks: list[BulkTaskItem] = Field(..., min_length=1, max_length=50)
     
     def model_post_init(self, __context):
-        if not any([self.case_id, self.surrogate_id, self.intended_parent_id]):
-            raise ValueError("At least one of case_id, surrogate_id, or intended_parent_id must be provided")
+        if not any([self.case_id, self.surrogate_id, self.intended_parent_id, self.match_id]):
+            raise ValueError("At least one of case_id, surrogate_id, intended_parent_id, or match_id must be provided")
 
 
 class BulkTaskCreateResponse(BaseModel):
@@ -1644,10 +1655,10 @@ async def create_bulk_tasks(
     Create multiple tasks in a single transaction (all-or-nothing).
     
     Uses request_id for idempotency - same request_id returns cached result.
-    Tasks can be linked to case, surrogate, or intended parent.
+    Tasks can be linked to case, surrogate, intended parent, or match.
     """
     from datetime import date, time
-    from app.db.models import Case, Surrogate, IntendedParent, Task
+    from app.db.models import Case, Surrogate, IntendedParent, Match, Task
     from app.db.enums import TaskType
     from app.services import activity_service
     
@@ -1688,6 +1699,15 @@ async def create_bulk_tasks(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intended parent not found")
         entity_type = "intended_parent"
         entity_id = body.intended_parent_id
+    elif body.match_id:
+        match = db.query(Match).filter(
+            Match.id == body.match_id,
+            Match.organization_id == session.org_id,
+        ).first()
+        if not match:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
+        entity_type = "match"
+        entity_id = body.match_id
     
     # All-or-nothing: create all tasks in single transaction
     created_tasks: list[dict] = []
@@ -1716,12 +1736,27 @@ async def create_bulk_tasks(
             except ValueError:
                 task_type = TaskType.OTHER
             
+            # Resolve entity links for task - Task model only has case_id and intended_parent_id
+            task_case_id = body.case_id
+            task_ip_id = body.intended_parent_id
+            
+            # If creating from match, link to both case and intended_parent from the match
+            if body.match_id and entity_type == "match":
+                task_case_id = match.case_id
+                task_ip_id = match.intended_parent_id
+            
+            # If creating from surrogate, link to their case if available
+            if body.surrogate_id and entity_type == "surrogate":
+                # Surrogate tasks link via intended_parent_id (which maps to the surrogate)
+                # The Tasks model doesn't have surrogate_id, so we leave both None
+                # and let the activity log track the surrogate association
+                pass
+            
             # Create task with appropriate entity link
             task = Task(
                 organization_id=session.org_id,
-                case_id=body.case_id,
-                surrogate_id=body.surrogate_id,
-                intended_parent_id=body.intended_parent_id,
+                case_id=task_case_id,
+                intended_parent_id=task_ip_id,
                 title=task_item.title,
                 description=task_item.description,
                 task_type=task_type,
