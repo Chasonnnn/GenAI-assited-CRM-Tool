@@ -198,6 +198,9 @@ class TaskType(str, Enum):
     FOLLOW_UP = "follow_up"
     CONTACT = "contact"
     REVIEW = "review"
+    MEDICATION = "medication"  # For medication schedules
+    EXAM = "exam"              # For medical exams
+    APPOINTMENT = "appointment"  # For appointments
     OTHER = "other"
 
 

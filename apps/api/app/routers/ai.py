@@ -1493,3 +1493,292 @@ def save_ai_workflow(
             error="Failed to save workflow",
         )
 
+
+# ============================================================================
+# Schedule Parsing Endpoints
+# ============================================================================
+
+class ParseScheduleRequest(BaseModel):
+    """Request to parse a schedule text."""
+    text: str = Field(..., min_length=1, max_length=10000)
+    # At least one entity ID must be provided
+    case_id: uuid.UUID | None = None
+    surrogate_id: uuid.UUID | None = None
+    intended_parent_id: uuid.UUID | None = None
+    user_timezone: str | None = None
+    
+    def model_post_init(self, __context):
+        if not any([self.case_id, self.surrogate_id, self.intended_parent_id]):
+            raise ValueError("At least one of case_id, surrogate_id, or intended_parent_id must be provided")
+
+
+class ParseScheduleResponse(BaseModel):
+    """Response with proposed tasks."""
+    proposed_tasks: list[dict]
+    warnings: list[str]
+    assumed_timezone: str
+    assumed_reference_date: str
+
+
+@router.post(
+    "/parse-schedule",
+    response_model=ParseScheduleResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+@limiter.limit("10/minute")
+async def parse_schedule(
+    request: Request,
+    body: ParseScheduleRequest,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_permission("use_ai_assistant")),
+) -> ParseScheduleResponse:
+    """
+    Parse schedule text using AI and extract task proposals.
+    
+    At least one of case_id, surrogate_id, or intended_parent_id must be provided.
+    User reviews and approves before tasks are created.
+    """
+    from app.db.models import Case, Surrogate, IntendedParent
+    from app.services.schedule_parser import parse_schedule_text
+    
+    # Verify entity exists and belongs to org
+    entity_type = None
+    entity_id = None
+    
+    if body.case_id:
+        case = db.query(Case).filter(
+            Case.id == body.case_id,
+            Case.organization_id == session.org_id,
+        ).first()
+        if not case:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+        entity_type = "case"
+        entity_id = body.case_id
+    elif body.surrogate_id:
+        surrogate = db.query(Surrogate).filter(
+            Surrogate.id == body.surrogate_id,
+            Surrogate.organization_id == session.org_id,
+        ).first()
+        if not surrogate:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Surrogate not found")
+        entity_type = "surrogate"
+        entity_id = body.surrogate_id
+    elif body.intended_parent_id:
+        parent = db.query(IntendedParent).filter(
+            IntendedParent.id == body.intended_parent_id,
+            IntendedParent.organization_id == session.org_id,
+        ).first()
+        if not parent:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intended parent not found")
+        entity_type = "intended_parent"
+        entity_id = body.intended_parent_id
+    
+    # Log metadata only (no PII from schedule text)
+    logger.info(
+        f"Parse schedule request: user={session.user_id}, "
+        f"entity_type={entity_type}, entity_id={entity_id}, text_len={len(body.text)}"
+    )
+    
+    # Parse using AI
+    result = await parse_schedule_text(
+        db=db,
+        org_id=session.org_id,
+        text=body.text,
+        user_timezone=body.user_timezone,
+    )
+    
+    return ParseScheduleResponse(
+        proposed_tasks=[task.model_dump() for task in result.proposed_tasks],
+        warnings=result.warnings,
+        assumed_timezone=result.assumed_timezone,
+        assumed_reference_date=result.assumed_reference_date.isoformat(),
+    )
+
+
+class BulkTaskItem(BaseModel):
+    """A single task to create."""
+    title: str = Field(..., min_length=1, max_length=255)
+    description: str | None = None
+    due_date: str | None = None  # ISO format
+    due_time: str | None = None  # HH:MM format
+    task_type: str = "other"
+    dedupe_key: str | None = None
+
+
+class BulkTaskCreateRequest(BaseModel):
+    """Request to create multiple tasks."""
+    request_id: uuid.UUID  # Idempotency key
+    # At least one entity ID must be provided
+    case_id: uuid.UUID | None = None
+    surrogate_id: uuid.UUID | None = None
+    intended_parent_id: uuid.UUID | None = None
+    tasks: list[BulkTaskItem] = Field(..., min_length=1, max_length=50)
+    
+    def model_post_init(self, __context):
+        if not any([self.case_id, self.surrogate_id, self.intended_parent_id]):
+            raise ValueError("At least one of case_id, surrogate_id, or intended_parent_id must be provided")
+
+
+class BulkTaskCreateResponse(BaseModel):
+    """Response from bulk task creation."""
+    success: bool
+    created: list[dict]  # [{task_id, title}]
+    error: str | None = None
+
+
+# Simple in-memory cache for idempotency (in production, use Redis)
+_idempotency_cache: dict[str, BulkTaskCreateResponse] = {}
+
+
+@router.post(
+    "/create-bulk-tasks",
+    response_model=BulkTaskCreateResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+async def create_bulk_tasks(
+    body: BulkTaskCreateRequest,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_permission("manage_tasks")),
+) -> BulkTaskCreateResponse:
+    """
+    Create multiple tasks in a single transaction (all-or-nothing).
+    
+    Uses request_id for idempotency - same request_id returns cached result.
+    Tasks can be linked to case, surrogate, or intended parent.
+    """
+    from datetime import date, time
+    from app.db.models import Case, Surrogate, IntendedParent, Task
+    from app.db.enums import TaskType
+    from app.services import activity_service
+    
+    # Check idempotency cache
+    cache_key = str(body.request_id)
+    if cache_key in _idempotency_cache:
+        logger.info(f"Returning cached result for request_id={body.request_id}")
+        return _idempotency_cache[cache_key]
+    
+    # Verify entity exists and belongs to org
+    entity_type = None
+    entity_id = None
+    
+    if body.case_id:
+        case = db.query(Case).filter(
+            Case.id == body.case_id,
+            Case.organization_id == session.org_id,
+        ).first()
+        if not case:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+        entity_type = "case"
+        entity_id = body.case_id
+    elif body.surrogate_id:
+        surrogate = db.query(Surrogate).filter(
+            Surrogate.id == body.surrogate_id,
+            Surrogate.organization_id == session.org_id,
+        ).first()
+        if not surrogate:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Surrogate not found")
+        entity_type = "surrogate"
+        entity_id = body.surrogate_id
+    elif body.intended_parent_id:
+        parent = db.query(IntendedParent).filter(
+            IntendedParent.id == body.intended_parent_id,
+            IntendedParent.organization_id == session.org_id,
+        ).first()
+        if not parent:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intended parent not found")
+        entity_type = "intended_parent"
+        entity_id = body.intended_parent_id
+    
+    # All-or-nothing: create all tasks in single transaction
+    created_tasks: list[dict] = []
+    
+    try:
+        for task_item in body.tasks:
+            # Parse date
+            due_date = None
+            if task_item.due_date:
+                try:
+                    due_date = date.fromisoformat(task_item.due_date)
+                except ValueError:
+                    raise ValueError(f"Invalid date format: {task_item.due_date}")
+            
+            # Parse time
+            due_time = None
+            if task_item.due_time:
+                try:
+                    due_time = time.fromisoformat(task_item.due_time)
+                except ValueError:
+                    raise ValueError(f"Invalid time format: {task_item.due_time}")
+            
+            # Parse task type
+            try:
+                task_type = TaskType(task_item.task_type.lower())
+            except ValueError:
+                task_type = TaskType.OTHER
+            
+            # Create task with appropriate entity link
+            task = Task(
+                organization_id=session.org_id,
+                case_id=body.case_id,
+                surrogate_id=body.surrogate_id,
+                intended_parent_id=body.intended_parent_id,
+                title=task_item.title,
+                description=task_item.description,
+                task_type=task_type,
+                due_date=due_date,
+                due_time=due_time,
+                owner_type="user",
+                owner_id=session.user_id,
+                created_by_user_id=session.user_id,
+            )
+            db.add(task)
+            db.flush()  # Get task ID
+            
+            created_tasks.append({
+                "task_id": str(task.id),
+                "title": task.title,
+            })
+        
+        # Log single activity for bulk creation
+        activity_service.log_activity(
+            db=db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+            activity_type=CaseActivityType.TASK_CREATED,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            summary=f"Created {len(created_tasks)} tasks from AI schedule parsing",
+        )
+        
+        db.commit()
+        
+        result = BulkTaskCreateResponse(
+            success=True,
+            created=created_tasks,
+        )
+        
+        # Cache for idempotency
+        _idempotency_cache[cache_key] = result
+        
+        logger.info(
+            f"Created {len(created_tasks)} tasks for {entity_type} {entity_id} "
+            f"by user {session.user_id}"
+        )
+        
+        return result
+        
+    except ValueError as e:
+        db.rollback()
+        return BulkTaskCreateResponse(
+            success=False,
+            created=[],
+            error=str(e),
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Bulk task creation failed: {e}")
+        return BulkTaskCreateResponse(
+            success=False,
+            created=[],
+            error="Failed to create tasks",
+        )
