@@ -724,3 +724,29 @@ def log_user_role_changed(
         details={"old_role": old_role, "new_role": new_role},
         request=request,
     )
+
+
+# =============================================================================
+# AI Workflow Events
+# =============================================================================
+
+def log_ai_workflow_created(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    workflow_id: UUID,
+    workflow_name: str,
+    request: Request | None = None,
+) -> AuditLog:
+    """Log AI-generated workflow creation."""
+    return log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.AI_ACTION_APPROVED,  # Reuse existing event type
+        actor_user_id=user_id,
+        target_type="workflow",
+        target_id=workflow_id,
+        details={"action": "ai_workflow_created", "workflow_name": workflow_name},
+        request=request,
+    )
+

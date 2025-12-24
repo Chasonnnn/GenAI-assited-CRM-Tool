@@ -336,6 +336,23 @@ class WorkflowTriggerType(str, Enum):
     TASK_OVERDUE = "task_overdue"
     SCHEDULED = "scheduled"
     INACTIVITY = "inactivity"
+    # Match triggers
+    MATCH_PROPOSED = "match_proposed"
+    MATCH_ACCEPTED = "match_accepted"
+    MATCH_REJECTED = "match_rejected"
+    # Document trigger
+    DOCUMENT_UPLOADED = "document_uploaded"  # Fires after scan_status = 'clean'
+    # Note trigger (high-volume, requires condition to activate)
+    NOTE_ADDED = "note_added"
+    # Appointment triggers
+    APPOINTMENT_SCHEDULED = "appointment_scheduled"
+    APPOINTMENT_COMPLETED = "appointment_completed"
+
+
+class RecurrenceMode(str, Enum):
+    """Recurrence mode for workflows."""
+    ONE_TIME = "one_time"      # Fire once per entity per trigger event
+    RECURRING = "recurring"     # Fire on schedule until resolved/stopped
 
 
 class WorkflowActionType(str, Enum):
@@ -375,6 +392,33 @@ class WorkflowEventSource(str, Enum):
     USER = "user"
     SYSTEM = "system"
     WORKFLOW = "workflow"
+
+
+class CampaignStatus(str, Enum):
+    """Status of a campaign."""
+    DRAFT = "draft"
+    SCHEDULED = "scheduled"
+    SENDING = "sending"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    FAILED = "failed"
+
+
+class CampaignRecipientStatus(str, Enum):
+    """Status of a campaign recipient."""
+    PENDING = "pending"
+    SENT = "sent"
+    DELIVERED = "delivered"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+class SuppressionReason(str, Enum):
+    """Reason for email suppression."""
+    OPT_OUT = "opt_out"
+    BOUNCED = "bounced"
+    ARCHIVED = "archived"
+    COMPLAINT = "complaint"
 
 
 # =============================================================================

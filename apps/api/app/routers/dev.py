@@ -246,3 +246,88 @@ def get_all_meta_leads(
             for lead in leads
         ],
     }
+
+
+# =============================================================================
+# System Templates & Workflows Seeding
+# =============================================================================
+
+@router.post("/seed-templates", dependencies=[Depends(_verify_dev_secret)])
+def seed_system_templates(
+    org_id: UUID | None = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Seed system email templates and default workflows for an organization.
+    
+    If org_id is provided, seeds only that org.
+    Otherwise, seeds all organizations.
+    
+    Idempotent - skips templates/workflows that already exist.
+    """
+    from app.services.template_seeder import seed_all
+    
+    results = []
+    
+    if org_id:
+        # Seed specific org
+        org = db.query(Organization).filter(Organization.id == org_id).first()
+        if not org:
+            raise HTTPException(status_code=404, detail="Organization not found")
+        
+        result = seed_all(db, org.id)
+        results.append({
+            "org_id": str(org.id),
+            "org_name": org.name,
+            **result,
+        })
+    else:
+        # Seed all orgs
+        orgs = db.query(Organization).all()
+        for org in orgs:
+            result = seed_all(db, org.id)
+            results.append({
+                "org_id": str(org.id),
+                "org_name": org.name,
+                **result,
+            })
+    
+    db.commit()
+    
+    total_templates = sum(r["templates_created"] for r in results)
+    total_workflows = sum(r["workflows_created"] for r in results)
+    
+    return {
+        "status": "seeded",
+        "total_templates_created": total_templates,
+        "total_workflows_created": total_workflows,
+        "orgs": results,
+    }
+
+
+@router.post("/seed-templates/{org_id}", dependencies=[Depends(_verify_dev_secret)])
+def seed_org_templates(
+    org_id: UUID,
+    db: Session = Depends(get_db),
+):
+    """
+    Seed system email templates and workflows for a specific organization.
+    
+    Convenience endpoint with org_id in path.
+    """
+    from app.services.template_seeder import seed_all
+    
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    
+    result = seed_all(db, org.id)
+    db.commit()
+    
+    return {
+        "status": "seeded",
+        "org_id": str(org.id),
+        "org_name": org.name,
+        **result,
+    }
+

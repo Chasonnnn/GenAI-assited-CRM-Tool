@@ -169,6 +169,10 @@ app.include_router(matches.router)
 from app.routers import workflows
 app.include_router(workflows.router, prefix="/workflows", tags=["workflows"])
 
+# Campaigns (Bulk email sends - Manager+)
+from app.routers import campaigns
+app.include_router(campaigns.router, prefix="/campaigns", tags=["campaigns"])
+
 from app.routers import admin_meta
 app.include_router(admin_meta.router)  # Already has prefix in router definition
 
