@@ -103,7 +103,9 @@ function formatRelativeTime(dateString: string | null): string {
 
 export default function AutomationPage() {
     const searchParams = useSearchParams()
-    const initialTab = searchParams.get("tab") === "email-templates" ? "email-templates" : "workflows"
+    const validTabs = ["workflows", "email-templates", "campaigns"]
+    const tabParam = searchParams.get("tab")
+    const initialTab = tabParam && validTabs.includes(tabParam) ? tabParam : "workflows"
     const [activeTab, setActiveTab] = useState(initialTab)
 
     // Workflow state
@@ -338,18 +340,39 @@ export default function AutomationPage() {
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
                     <TabsList>
                         <TabsTrigger value="workflows">Workflows</TabsTrigger>
+                        <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
                         <TabsTrigger value="email-templates">Email Templates</TabsTrigger>
                     </TabsList>
 
-                    {/* Quick link to Campaigns */}
-                    <div className="flex items-center gap-2 -mt-4 mb-4">
-                        <a
-                            href="/automation/campaigns"
-                            className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
-                        >
-                            → View Campaigns (Bulk Email)
-                        </a>
-                    </div>
+                    {/* Campaigns Tab */}
+                    <TabsContent value="campaigns" className="space-y-6">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-2xl font-semibold">Email Campaigns</h2>
+                                <p className="text-muted-foreground">Send bulk emails to filtered recipients</p>
+                            </div>
+                            <Button asChild>
+                                <a href="/automation/campaigns">
+                                    <MailIcon className="w-4 h-4 mr-2" />
+                                    Manage Campaigns
+                                </a>
+                            </Button>
+                        </div>
+                        <Card>
+                            <CardContent className="pt-6">
+                                <div className="text-center py-8">
+                                    <MailIcon className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                                    <h3 className="text-lg font-medium mb-2">Bulk Email Campaigns</h3>
+                                    <p className="text-muted-foreground mb-4 max-w-md mx-auto">
+                                        Create targeted email campaigns to reach cases or intended parents based on filters like status, state, or custom criteria.
+                                    </p>
+                                    <Button asChild>
+                                        <a href="/automation/campaigns">Go to Campaigns</a>
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
 
                     {/* Workflows Tab */}
                     <TabsContent value="workflows" className="space-y-6">
