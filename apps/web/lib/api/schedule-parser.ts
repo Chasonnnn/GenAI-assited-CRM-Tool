@@ -21,6 +21,7 @@ export interface ParseScheduleRequest {
     case_id?: string
     surrogate_id?: string
     intended_parent_id?: string
+    match_id?: string
     user_timezone?: string
 }
 
@@ -46,6 +47,7 @@ export interface BulkTaskCreateRequest {
     case_id?: string
     surrogate_id?: string
     intended_parent_id?: string
+    match_id?: string
     tasks: BulkTaskItem[]
 }
 
