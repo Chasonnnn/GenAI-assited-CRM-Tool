@@ -271,8 +271,8 @@ export function AIChatPanel({
                 </div>
             </div>
 
-            {/* Schedule Parser Dialog */}
-            {entityType === "case" && entityId && (
+            {/* Schedule Parser Dialog (mount only when open to avoid unnecessary hooks) */}
+            {scheduleParserOpen && entityType === "case" && entityId && (
                 <ScheduleParserDialog
                     open={scheduleParserOpen}
                     onOpenChange={setScheduleParserOpen}

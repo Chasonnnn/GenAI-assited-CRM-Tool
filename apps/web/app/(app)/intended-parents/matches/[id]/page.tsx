@@ -158,9 +158,10 @@ export default function MatchDetailPage() {
     const downloadAttachmentMutation = useDownloadAttachment()
     const createTaskMutation = useCreateTask()
 
-    // Set AI context for this match (enables context-aware AI assistant)
+    // Set AI context for this page.
+    // NOTE: The chat API currently supports case/task/global. For match pages, we attach AI to the case.
     const matchName = match ? `${match.case_name} & ${match.ip_name}` : ""
-    useSetAIContext(match ? { entityType: "match", entityId: matchId, entityName: matchName } : null)
+    useSetAIContext(match?.case_id ? { entityType: "case", entityId: match.case_id, entityName: matchName } : null)
 
     // Fetch full profile data for both sides
     const { data: caseData, isLoading: caseLoading } = useCase(match?.case_id || "")
@@ -1043,14 +1044,16 @@ export default function MatchDetailPage() {
                 ipName={ipData?.full_name || "Intended Parent"}
             />
 
-            {/* Schedule Parser Dialog */}
-            <ScheduleParserDialog
-                open={showScheduleParser}
-                onOpenChange={setShowScheduleParser}
-                entityType="match"
-                entityId={matchId}
-                entityName={matchName}
-            />
+            {/* Schedule Parser Dialog (mount only when open to avoid unnecessary hooks in tests) */}
+            {showScheduleParser && (
+                <ScheduleParserDialog
+                    open={showScheduleParser}
+                    onOpenChange={setShowScheduleParser}
+                    entityType="match"
+                    entityId={matchId}
+                    entityName={matchName}
+                />
+            )}
         </>
     )
 }

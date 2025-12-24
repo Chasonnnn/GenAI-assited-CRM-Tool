@@ -457,53 +457,49 @@ function AppointmentsTabContent({
 
 export function AppointmentsList() {
     return (
-        <Card>
-            <CardContent className="pt-6">
-                <Tabs defaultValue="pending" className="w-full">
-                    <TabsList>
-                        <TabsTrigger value="pending">Pending</TabsTrigger>
-                        <TabsTrigger value="confirmed">Upcoming</TabsTrigger>
-                        <TabsTrigger value="completed">Past</TabsTrigger>
-                        <TabsTrigger value="cancelled">Cancelled</TabsTrigger>
-                        <TabsTrigger value="expired">Expired</TabsTrigger>
-                    </TabsList>
+        <Tabs defaultValue="pending" className="w-full">
+            <TabsList>
+                <TabsTrigger value="pending">Pending</TabsTrigger>
+                <TabsTrigger value="confirmed">Upcoming</TabsTrigger>
+                <TabsTrigger value="completed">Past</TabsTrigger>
+                <TabsTrigger value="cancelled">Cancelled</TabsTrigger>
+                <TabsTrigger value="expired">Expired</TabsTrigger>
+            </TabsList>
 
-                    <TabsContent value="pending" className="mt-4">
-                        <AppointmentsTabContent
-                            status="pending"
-                            emptyMessage="No pending requests. New booking requests will appear here."
-                        />
-                    </TabsContent>
+            <TabsContent value="pending" className="mt-4">
+                <AppointmentsTabContent
+                    status="pending"
+                    emptyMessage="No pending requests. New booking requests will appear here."
+                />
+            </TabsContent>
 
-                    <TabsContent value="confirmed" className="mt-4">
-                        <AppointmentsTabContent
-                            status="confirmed"
-                            emptyMessage="No upcoming appointments."
-                        />
-                    </TabsContent>
+            <TabsContent value="confirmed" className="mt-4">
+                <AppointmentsTabContent
+                    status="confirmed"
+                    emptyMessage="No upcoming appointments."
+                />
+            </TabsContent>
 
-                    <TabsContent value="completed" className="mt-4">
-                        <AppointmentsTabContent
-                            status="completed"
-                            emptyMessage="No past appointments."
-                        />
-                    </TabsContent>
+            <TabsContent value="completed" className="mt-4">
+                <AppointmentsTabContent
+                    status="completed"
+                    emptyMessage="No past appointments."
+                />
+            </TabsContent>
 
-                    <TabsContent value="cancelled" className="mt-4">
-                        <AppointmentsTabContent
-                            status="cancelled"
-                            emptyMessage="No cancelled appointments."
-                        />
-                    </TabsContent>
+            <TabsContent value="cancelled" className="mt-4">
+                <AppointmentsTabContent
+                    status="cancelled"
+                    emptyMessage="No cancelled appointments."
+                />
+            </TabsContent>
 
-                    <TabsContent value="expired" className="mt-4">
-                        <AppointmentsTabContent
-                            status="expired"
-                            emptyMessage="No expired requests."
-                        />
-                    </TabsContent>
-                </Tabs>
-            </CardContent>
-        </Card>
+            <TabsContent value="expired" className="mt-4">
+                <AppointmentsTabContent
+                    status="expired"
+                    emptyMessage="No expired requests."
+                />
+            </TabsContent>
+        </Tabs>
     )
 }
