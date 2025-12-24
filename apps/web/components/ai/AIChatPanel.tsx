@@ -18,9 +18,11 @@ import {
     ListTodoIcon,
     StickyNoteIcon,
     ArrowRightIcon,
+    CalendarPlusIcon,
 } from "lucide-react"
 import { useConversation, useSendMessage, useApproveAction, useRejectAction } from "@/lib/hooks/use-ai"
 import type { ProposedAction } from "@/lib/api/ai"
+import { ScheduleParserDialog, type EntityType } from "@/components/ai/ScheduleParserDialog"
 
 interface AIChatPanelProps {
     entityType?: "case" | "task" | null  // null/undefined = global mode
@@ -54,6 +56,7 @@ export function AIChatPanel({
     onClose,
 }: AIChatPanelProps) {
     const [message, setMessage] = useState("")
+    const [scheduleParserOpen, setScheduleParserOpen] = useState(false)
     const scrollContainerRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLInputElement>(null)
 
@@ -230,6 +233,15 @@ export function AIChatPanel({
                     >
                         Draft Email
                     </QuickActionButton>
+                    {entityType === "case" && entityId && (
+                        <QuickActionButton
+                            onClick={() => setScheduleParserOpen(true)}
+                            disabled={sendMessage.isPending}
+                        >
+                            <CalendarPlusIcon className="mr-1 h-3 w-3" />
+                            Parse Schedule
+                        </QuickActionButton>
+                    )}
                 </div>
             </div>
 
@@ -258,6 +270,17 @@ export function AIChatPanel({
                     </Button>
                 </div>
             </div>
+
+            {/* Schedule Parser Dialog */}
+            {entityType === "case" && entityId && (
+                <ScheduleParserDialog
+                    open={scheduleParserOpen}
+                    onOpenChange={setScheduleParserOpen}
+                    entityType="case"
+                    entityId={entityId}
+                    entityName={entityName || undefined}
+                />
+            )}
         </div>
     )
 }
