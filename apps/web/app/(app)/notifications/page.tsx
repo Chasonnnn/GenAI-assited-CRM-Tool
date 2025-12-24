@@ -29,7 +29,7 @@ const TYPE_GROUPS: Record<string, string[]> = {
     all: [],
     case: ["case_assigned", "case_status_changed", "case_handoff_ready", "case_handoff_accepted", "case_handoff_denied"],
     task: ["task_assigned", "task_due_soon", "task_overdue"],
-    appointment: ["appointment_requested", "appointment_updated"],
+    appointment: ["appointment_requested", "appointment_confirmed", "appointment_cancelled", "appointment_reminder"],
 }
 
 const typeIcons: Record<string, typeof FileTextIcon> = {
@@ -87,6 +87,8 @@ export default function NotificationsPage() {
             router.push(`/cases/${notification.entity_id}`)
         } else if (notification.entity_type === "task" && notification.entity_id) {
             router.push(`/tasks`)
+        } else if (notification.entity_type === "appointment" && notification.entity_id) {
+            router.push(`/appointments/${notification.entity_id}`)
         }
     }
 

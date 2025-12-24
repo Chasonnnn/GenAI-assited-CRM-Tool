@@ -53,8 +53,9 @@ export function NotificationBell() {
             showNotification(lastNotification.title || 'New notification', {
                 body: lastNotification.body,
                 tag: lastNotification.id, // Prevent duplicates
-                entityType: lastNotification.type,
-                entityId: lastNotification.id,
+                // Use the actual entity_type and entity_id for deep-linking
+                entityType: lastNotification.entity_type,
+                entityId: lastNotification.entity_id,
             })
         }
     }, [lastNotification, permission, showNotification])
@@ -74,6 +75,11 @@ export function NotificationBell() {
             router.push(`/cases/${notification.entity_id}`)
         } else if (notification.entity_type === "task" && notification.entity_id) {
             router.push(`/tasks`)
+        } else if (notification.entity_type === "appointment" && notification.entity_id) {
+            router.push(`/appointments/${notification.entity_id}`)
+        } else {
+            // Fallback: go to notifications page
+            router.push('/notifications')
         }
     }
 

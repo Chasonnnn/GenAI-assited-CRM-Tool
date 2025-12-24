@@ -341,6 +341,16 @@ export default function AutomationPage() {
                         <TabsTrigger value="email-templates">Email Templates</TabsTrigger>
                     </TabsList>
 
+                    {/* Quick link to Campaigns */}
+                    <div className="flex items-center gap-2 -mt-4 mb-4">
+                        <a
+                            href="/automation/campaigns"
+                            className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
+                        >
+                            → View Campaigns (Bulk Email)
+                        </a>
+                    </div>
+
                     {/* Workflows Tab */}
                     <TabsContent value="workflows" className="space-y-6">
                         {/* Stats Cards */}
