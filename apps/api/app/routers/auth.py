@@ -258,6 +258,93 @@ def update_me(
     )
 
 
+# =============================================================================
+# Email Signature
+# =============================================================================
+
+
+class SignatureResponse(BaseModel):
+    """Email signature data."""
+    signature_name: str | None = None
+    signature_title: str | None = None
+    signature_company: str | None = None
+    signature_phone: str | None = None
+    signature_email: str | None = None
+    signature_address: str | None = None
+    signature_website: str | None = None
+    signature_logo_url: str | None = None
+    signature_html: str | None = None
+
+
+class SignatureUpdate(BaseModel):
+    """Update email signature."""
+    signature_name: str | None = None
+    signature_title: str | None = None
+    signature_company: str | None = None
+    signature_phone: str | None = None
+    signature_email: str | None = None
+    signature_address: str | None = None
+    signature_website: str | None = None
+    signature_logo_url: str | None = None
+    signature_html: str | None = None
+
+
+@router.get("/me/signature", response_model=SignatureResponse)
+def get_my_signature(
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> SignatureResponse:
+    """Get current user's email signature."""
+    user = db.query(User).filter(User.id == session.user_id).first()
+    
+    return SignatureResponse(
+        signature_name=user.signature_name,
+        signature_title=user.signature_title,
+        signature_company=user.signature_company,
+        signature_phone=user.signature_phone,
+        signature_email=user.signature_email,
+        signature_address=user.signature_address,
+        signature_website=user.signature_website,
+        signature_logo_url=user.signature_logo_url,
+        signature_html=user.signature_html,
+    )
+
+
+@router.put("/me/signature", response_model=SignatureResponse, dependencies=[Depends(require_csrf_header)])
+def update_my_signature(
+    body: SignatureUpdate,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> SignatureResponse:
+    """Update current user's email signature."""
+    user = db.query(User).filter(User.id == session.user_id).first()
+    
+    user.signature_name = body.signature_name
+    user.signature_title = body.signature_title
+    user.signature_company = body.signature_company
+    user.signature_phone = body.signature_phone
+    user.signature_email = body.signature_email
+    user.signature_address = body.signature_address
+    user.signature_website = body.signature_website
+    user.signature_logo_url = body.signature_logo_url
+    user.signature_html = body.signature_html
+    
+    db.commit()
+    db.refresh(user)
+    
+    return SignatureResponse(
+        signature_name=user.signature_name,
+        signature_title=user.signature_title,
+        signature_company=user.signature_company,
+        signature_phone=user.signature_phone,
+        signature_email=user.signature_email,
+        signature_address=user.signature_address,
+        signature_website=user.signature_website,
+        signature_logo_url=user.signature_logo_url,
+        signature_html=user.signature_html,
+    )
+
+
 @router.post("/logout", dependencies=[Depends(require_csrf_header)])
 def logout(
     request: Request,

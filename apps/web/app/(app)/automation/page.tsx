@@ -451,10 +451,10 @@ export default function AutomationPage() {
                                                 />
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger>
-                                                        <Button variant="ghost" size="sm" className="size-8 p-0">
+                                                        <span className="inline-flex items-center justify-center size-8 p-0 rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer">
                                                             <MoreVerticalIcon className="size-4" />
                                                             <span className="sr-only">Open menu</span>
-                                                        </Button>
+                                                        </span>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end">
                                                         <DropdownMenuItem onClick={() => handleEdit(workflow.id)}>Edit</DropdownMenuItem>
