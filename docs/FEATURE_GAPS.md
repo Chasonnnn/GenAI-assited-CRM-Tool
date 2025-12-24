@@ -542,7 +542,7 @@ Implemented logic for saving Profile and Organization settings via `PATCH /auth/
 | Context-Aware Chatbot | 1 week | High | ❌ |
 | AI Assistant Improvements | 3-4 days | Medium | ⚠️ |
 | UI Consistency | 1-2 days | Medium | ⚠️ |
-| CSV Import | 1 week | Medium | ⚠️ |
+| CSV Import | 1 week | Medium | ✅ Done |
 | Smart Task Creation | 1 week | Low | ✅ Done |
 | AI Weekly Reports | 1-2 weeks | Low | ❌ |
 
