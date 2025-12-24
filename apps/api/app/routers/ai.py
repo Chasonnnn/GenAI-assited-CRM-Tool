@@ -2,13 +2,14 @@
 
 Endpoints for AI settings, chat, and actions.
 """
+import logging
 import uuid
 from datetime import datetime
 from enum import Enum
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, get_current_session, require_roles, require_csrf_header, require_permission
@@ -22,6 +23,7 @@ from app.services import ai_settings_service, ai_chat_service
 from app.core.rate_limit import limiter
 
 router = APIRouter(prefix="/ai", tags=["AI"])
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -1507,10 +1509,12 @@ class ParseScheduleRequest(BaseModel):
     intended_parent_id: uuid.UUID | None = None
     match_id: uuid.UUID | None = None
     user_timezone: str | None = None
-    
-    def model_post_init(self, __context):
+
+    @model_validator(mode="after")
+    def _validate_entity_ids(self):
         if not any([self.case_id, self.surrogate_id, self.intended_parent_id, self.match_id]):
             raise ValueError("At least one of case_id, surrogate_id, intended_parent_id, or match_id must be provided")
+        return self
 
 
 class ParseScheduleResponse(BaseModel):
@@ -1539,31 +1543,40 @@ async def parse_schedule(
     At least one of case_id, surrogate_id, intended_parent_id, or match_id must be provided.
     User reviews and approves before tasks are created.
     """
-    from app.db.models import Case, Surrogate, IntendedParent, Match
+    from app.db.models import Case, IntendedParent, Match
     from app.services.schedule_parser import parse_schedule_text
+
+    # Enforce AI consent (consistent with /chat)
+    settings = ai_settings_service.get_ai_settings(db, session.org_id)
+    if settings and ai_settings_service.is_consent_required(settings):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="AI consent not accepted. A manager must accept the data processing consent before using AI.",
+        )
     
     # Verify entity exists and belongs to org
     entity_type = None
     entity_id = None
-    
-    if body.case_id:
+
+    # NOTE: surrogate_id is treated as a case_id alias (the CRM uses Case as the surrogate record)
+    case_id = body.case_id or body.surrogate_id
+    if case_id:
         case = db.query(Case).filter(
-            Case.id == body.case_id,
+            Case.id == case_id,
             Case.organization_id == session.org_id,
         ).first()
         if not case:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+        # Enforce case access (owner/role-based)
+        check_case_access(
+            case=case,
+            user_role=session.role,
+            user_id=session.user_id,
+            db=db,
+            org_id=session.org_id,
+        )
         entity_type = "case"
-        entity_id = body.case_id
-    elif body.surrogate_id:
-        surrogate = db.query(Surrogate).filter(
-            Surrogate.id == body.surrogate_id,
-            Surrogate.organization_id == session.org_id,
-        ).first()
-        if not surrogate:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Surrogate not found")
-        entity_type = "surrogate"
-        entity_id = body.surrogate_id
+        entity_id = case_id
     elif body.intended_parent_id:
         parent = db.query(IntendedParent).filter(
             IntendedParent.id == body.intended_parent_id,
@@ -1580,6 +1593,20 @@ async def parse_schedule(
         ).first()
         if not match:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
+        # Enforce access to the associated case
+        if match.case_id:
+            case = db.query(Case).filter(
+                Case.id == match.case_id,
+                Case.organization_id == session.org_id,
+            ).first()
+            if case:
+                check_case_access(
+                    case=case,
+                    user_role=session.role,
+                    user_id=session.user_id,
+                    db=db,
+                    org_id=session.org_id,
+                )
         entity_type = "match"
         entity_id = body.match_id
     
@@ -1624,10 +1651,12 @@ class BulkTaskCreateRequest(BaseModel):
     intended_parent_id: uuid.UUID | None = None
     match_id: uuid.UUID | None = None
     tasks: list[BulkTaskItem] = Field(..., min_length=1, max_length=50)
-    
-    def model_post_init(self, __context):
+
+    @model_validator(mode="after")
+    def _validate_entity_ids(self):
         if not any([self.case_id, self.surrogate_id, self.intended_parent_id, self.match_id]):
             raise ValueError("At least one of case_id, surrogate_id, intended_parent_id, or match_id must be provided")
+        return self
 
 
 class BulkTaskCreateResponse(BaseModel):
@@ -1658,12 +1687,12 @@ async def create_bulk_tasks(
     Tasks can be linked to case, surrogate, intended parent, or match.
     """
     from datetime import date, time
-    from app.db.models import Case, Surrogate, IntendedParent, Match, Task
+    from app.db.models import Case, IntendedParent, Match, Task
     from app.db.enums import TaskType
     from app.services import activity_service
     
     # Check idempotency cache
-    cache_key = str(body.request_id)
+    cache_key = f"{session.org_id}:{session.user_id}:{body.request_id}"
     if cache_key in _idempotency_cache:
         logger.info(f"Returning cached result for request_id={body.request_id}")
         return _idempotency_cache[cache_key]
@@ -1671,25 +1700,21 @@ async def create_bulk_tasks(
     # Verify entity exists and belongs to org
     entity_type = None
     entity_id = None
+    match: Match | None = None
+    case_for_access: Case | None = None
     
-    if body.case_id:
+    # NOTE: surrogate_id is treated as a case_id alias (the CRM uses Case as the surrogate record)
+    case_id = body.case_id or body.surrogate_id
+    if case_id:
         case = db.query(Case).filter(
-            Case.id == body.case_id,
+            Case.id == case_id,
             Case.organization_id == session.org_id,
         ).first()
         if not case:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+        case_for_access = case
         entity_type = "case"
-        entity_id = body.case_id
-    elif body.surrogate_id:
-        surrogate = db.query(Surrogate).filter(
-            Surrogate.id == body.surrogate_id,
-            Surrogate.organization_id == session.org_id,
-        ).first()
-        if not surrogate:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Surrogate not found")
-        entity_type = "surrogate"
-        entity_id = body.surrogate_id
+        entity_id = case_id
     elif body.intended_parent_id:
         parent = db.query(IntendedParent).filter(
             IntendedParent.id == body.intended_parent_id,
@@ -1708,6 +1733,23 @@ async def create_bulk_tasks(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
         entity_type = "match"
         entity_id = body.match_id
+
+        # Enforce access to the associated case (when present)
+        if match.case_id:
+            case_for_access = db.query(Case).filter(
+                Case.id == match.case_id,
+                Case.organization_id == session.org_id,
+            ).first()
+
+    # Case access enforcement (owner/role-based). For IP-only tasks, there may be no case to check.
+    if case_for_access:
+        check_case_access(
+            case=case_for_access,
+            user_role=session.role,
+            user_id=session.user_id,
+            db=db,
+            org_id=session.org_id,
+        )
     
     # All-or-nothing: create all tasks in single transaction
     created_tasks: list[dict] = []
@@ -1737,20 +1779,16 @@ async def create_bulk_tasks(
                 task_type = TaskType.OTHER
             
             # Resolve entity links for task - Task model only has case_id and intended_parent_id
-            task_case_id = body.case_id
+            task_case_id = case_id
             task_ip_id = body.intended_parent_id
             
             # If creating from match, link to both case and intended_parent from the match
             if body.match_id and entity_type == "match":
-                task_case_id = match.case_id
-                task_ip_id = match.intended_parent_id
-            
-            # If creating from surrogate, link to their case if available
-            if body.surrogate_id and entity_type == "surrogate":
-                # Surrogate tasks link via intended_parent_id (which maps to the surrogate)
-                # The Tasks model doesn't have surrogate_id, so we leave both None
-                # and let the activity log track the surrogate association
-                pass
+                task_case_id = match.case_id if match else None
+                task_ip_id = match.intended_parent_id if match else None
+
+            if not task_case_id and not task_ip_id:
+                raise ValueError("Each task must be linked to a case_id or intended_parent_id")
             
             # Create task with appropriate entity link
             task = Task(
@@ -1774,16 +1812,29 @@ async def create_bulk_tasks(
                 "title": task.title,
             })
         
-        # Log single activity for bulk creation
-        activity_service.log_activity(
-            db=db,
-            org_id=session.org_id,
-            user_id=session.user_id,
-            activity_type=CaseActivityType.TASK_CREATED,
-            entity_type=entity_type,
-            entity_id=entity_id,
-            summary=f"Created {len(created_tasks)} tasks from AI schedule parsing",
-        )
+        # Log single case activity for bulk creation (when a case is available)
+        case_id_for_activity = None
+        if entity_type == "match" and match and match.case_id:
+            case_id_for_activity = match.case_id
+        elif entity_type == "case" and case_id:
+            case_id_for_activity = case_id
+
+        if case_id_for_activity:
+            activity_service.log_activity(
+                db=db,
+                case_id=case_id_for_activity,
+                organization_id=session.org_id,
+                activity_type=CaseActivityType.TASK_CREATED,
+                actor_user_id=session.user_id,
+                details={
+                    "description": f"Created {len(created_tasks)} tasks from AI schedule parsing",
+                    "source": "ai",
+                    "request_id": str(body.request_id),
+                    "task_ids": [t["task_id"] for t in created_tasks],
+                    "entity_type": entity_type,
+                    "entity_id": str(entity_id) if entity_id else None,
+                },
+            )
         
         db.commit()
         
