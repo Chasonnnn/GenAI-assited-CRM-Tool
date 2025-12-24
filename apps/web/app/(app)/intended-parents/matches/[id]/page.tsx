@@ -39,6 +39,7 @@ import {
     UsersIcon,
     TrashIcon,
     DownloadIcon,
+    CalendarPlusIcon,
 } from "lucide-react"
 import { useMatch, matchKeys, useAcceptMatch, useRejectMatch } from "@/lib/hooks/use-matches"
 import { MatchTasksCalendar } from "@/components/matches/MatchTasksCalendar"
@@ -54,6 +55,8 @@ import { useTasks, useCreateTask, taskKeys } from "@/lib/hooks/use-tasks"
 import { useAttachments, useIPAttachments, useUploadAttachment, useUploadIPAttachment, useDeleteAttachment, useDownloadAttachment } from "@/lib/hooks/use-attachments"
 import { useAuth } from "@/lib/auth-context"
 import { useQueryClient } from "@tanstack/react-query"
+import { ScheduleParserDialog } from "@/components/ai/ScheduleParserDialog"
+import { useSetAIContext } from "@/lib/context/ai-context"
 
 const STATUS_LABELS: Record<string, string> = {
     proposed: "Proposed",
@@ -107,6 +110,7 @@ export default function MatchDetailPage() {
     const [addNoteDialogOpen, setAddNoteDialogOpen] = useState(false)
     const [uploadFileDialogOpen, setUploadFileDialogOpen] = useState(false)
     const [addTaskDialogOpen, setAddTaskDialogOpen] = useState(false)
+    const [showScheduleParser, setShowScheduleParser] = useState(false)
     const { user } = useAuth()
     const queryClient = useQueryClient()
 
@@ -153,6 +157,10 @@ export default function MatchDetailPage() {
     const deleteAttachmentMutation = useDeleteAttachment()
     const downloadAttachmentMutation = useDownloadAttachment()
     const createTaskMutation = useCreateTask()
+
+    // Set AI context for this match (enables context-aware AI assistant)
+    const matchName = match ? `${match.case_name} & ${match.ip_name}` : ""
+    useSetAIContext(match ? { entityType: "match", entityId: matchId, entityName: matchName } : null)
 
     // Fetch full profile data for both sides
     const { data: caseData, isLoading: caseLoading } = useCase(match?.case_id || "")
@@ -558,10 +566,21 @@ export default function MatchDetailPage() {
                 {/* Main Content */}
                 <div className="flex-1 p-4">
                     <Tabs defaultValue="overview" className="w-full">
-                        <TabsList className="mb-3">
-                            <TabsTrigger value="overview">Overview</TabsTrigger>
-                            <TabsTrigger value="calendar">Calendar</TabsTrigger>
-                        </TabsList>
+                        <div className="flex items-center justify-between mb-3">
+                            <TabsList>
+                                <TabsTrigger value="overview">Overview</TabsTrigger>
+                                <TabsTrigger value="calendar">Calendar</TabsTrigger>
+                            </TabsList>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs gap-1"
+                                onClick={() => setShowScheduleParser(true)}
+                            >
+                                <CalendarPlusIcon className="size-3" />
+                                Parse Schedule
+                            </Button>
+                        </div>
 
                         <TabsContent value="overview" className="h-[calc(100vh-145px)]">
                             {/* 3-Column Horizontal Layout: 35% | 35% | 30% */}
@@ -1019,6 +1038,15 @@ export default function MatchDetailPage() {
                 isPending={createTaskMutation.isPending}
                 caseName={caseData?.full_name || "Surrogate Case"}
                 ipName={ipData?.full_name || "Intended Parent"}
+            />
+
+            {/* Schedule Parser Dialog */}
+            <ScheduleParserDialog
+                open={showScheduleParser}
+                onOpenChange={setShowScheduleParser}
+                entityType="match"
+                entityId={matchId}
+                entityName={matchName}
             />
         </>
     )
