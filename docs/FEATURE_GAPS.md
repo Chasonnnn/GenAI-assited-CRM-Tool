@@ -69,26 +69,45 @@
 ---
 
 
-### 2. Notification Center ❌
-**Status:** Not started (may have partial backend)
+### 2. Notification Center ✅ COMPLETE
+**Status:** Fully implemented
 
-**Requirements:**
-- Dedicated "Notifications" tab under Tasks
-- Bell icon in header with unread count badge
-- Notification types:
-  - Task assigned/due
-  - Case status changes
-  - New lead assigned
-  - Appointment requests
-  - AI action approvals needed
-  - System alerts
-- Mark as read/unread
-- Filter by type
-- Click to navigate to source
+**What was built:**
 
-**Effort:** Medium (1 week)
+- **Backend (notification_service.py):**
+  - 15+ trigger functions for different notification types
+  - User notification settings (per-type opt-in/out)
+  - Deduplication with 1-hour window
+  - Mark read/unread, mark all read
+  - Type-based filtering
+
+- **Notification Types:**
+  - ✅ Task assigned/due/overdue
+  - ✅ Case status changes
+  - ✅ Case assigned (new lead)
+  - ✅ Appointment requests/confirmed/cancelled
+  - ✅ Case handoff ready/accepted/denied
+  - ❌ AI action approvals (future)
+
+- **Frontend:**
+  - Bell icon in header with unread count badge
+  - Dropdown with recent notifications
+  - Click-to-navigate to source entity
+  - `/notifications` page with full list
+  - WebSocket real-time updates
+  - Browser push notifications
+
+- **API Endpoints:**
+  - `GET /me/notifications` - paginated list
+  - `GET /me/notifications/count` - unread count
+  - `POST /me/notifications/{id}/read` - mark read
+  - `POST /me/notifications/read-all` - mark all read
+  - WebSocket at `/ws/notifications`
+
+**Effort:** Complete
 
 ---
+
 
 ### 3. Email Signature Setup ❌
 **Status:** Not started
@@ -160,8 +179,7 @@
    - Bottom area has excess padding
 
 **Reference screenshots** (see artifacts):
-- `ui_issue_appointments.png`
-- `ui_issue_cases_filters.png`  
+- `ui_issue_appointments.png` 
 - `ui_issue_case_detail.png`
 
 **Effort:** Small (1-2 days)
