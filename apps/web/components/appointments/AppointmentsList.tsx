@@ -468,35 +468,35 @@ export function AppointmentsList() {
                         <TabsTrigger value="expired">Expired</TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="pending" className="mt-6">
+                    <TabsContent value="pending" className="mt-4">
                         <AppointmentsTabContent
                             status="pending"
                             emptyMessage="No pending requests. New booking requests will appear here."
                         />
                     </TabsContent>
 
-                    <TabsContent value="confirmed" className="mt-6">
+                    <TabsContent value="confirmed" className="mt-4">
                         <AppointmentsTabContent
                             status="confirmed"
                             emptyMessage="No upcoming appointments."
                         />
                     </TabsContent>
 
-                    <TabsContent value="completed" className="mt-6">
+                    <TabsContent value="completed" className="mt-4">
                         <AppointmentsTabContent
                             status="completed"
                             emptyMessage="No past appointments."
                         />
                     </TabsContent>
 
-                    <TabsContent value="cancelled" className="mt-6">
+                    <TabsContent value="cancelled" className="mt-4">
                         <AppointmentsTabContent
                             status="cancelled"
                             emptyMessage="No cancelled appointments."
                         />
                     </TabsContent>
 
-                    <TabsContent value="expired" className="mt-6">
+                    <TabsContent value="expired" className="mt-4">
                         <AppointmentsTabContent
                             status="expired"
                             emptyMessage="No expired requests."
