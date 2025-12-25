@@ -171,30 +171,43 @@
 
 ---
 
-### 5. UI/UX Improvements ⚠️
-**Status:** Issues identified via screenshots
+### 5. UI/UX Improvements ✅ MOSTLY COMPLETE
+**Status:** Major issues fixed (2025-12-24)
 
-**Issues to fix:**
+**Completed Fixes:**
 
-1. **Appointments Tab - Empty space above tabs**
-   - Large blank area between description and tab bar
-   - Should remove or add useful content
+1. ✅ **Appointments Tab - Empty space above tabs**
+   - Reduced header height (h-16 → h-14)
+   - Removed redundant description text
+   - Reduced TabsContent margins (mt-6 → mt-4)
 
-2. **Case Detail - Notes section styling**
-   - Notes input area looks minimal
-   - Activity section could be more compact
-   - Bottom area has excess padding
+2. ✅ **Case Detail - Notes section styling**
+   - Added CardHeader with note count badge
+   - Bordered input section with subtle background
+   - Individual note cards with borders and hover effects
+   - Better avatar styling with primary colors
 
-3. **Match Calendar - No task creation UI** ⚠️
-   - No way to manually add tasks directly on the match calendar
-   - Workaround: Use "Parse Schedule" button to bulk create tasks from pasted text
-   - Long-term: Add "Add Task" button/modal to match calendar
+3. ✅ **Match Calendar - Add Task button**
+   - Added "Add Task" button next to "Today" in calendar header
+   - Opens AddTaskDialog modal for manual task creation
 
-**Reference screenshots** (see artifacts):
-- `ui_issue_appointments.png` 
-- `ui_issue_case_detail.png`
+4. ✅ **Table spacing issues**
+   - Added `py-0` override to Card wrappers on list pages
+   - Fixed on: cases, intended-parents, intended-parents/matches, campaigns
 
-**Effort:** Small (1-2 days)
+5. ✅ **Activity log HTML display**
+   - Added `stripHtml()` helper to show plain text in activity log
+   - Notes and note_deleted entries now show readable text
+
+6. ✅ **Notes HTML rendering**
+   - Fixed intended-parents/[id] and match detail pages
+   - Now use `dangerouslySetInnerHTML` to render rich text properly
+
+**Bug Fixes (2025-12-24):**
+- ✅ Notes API 500 error - Fixed wrong attribute names in `workflow_triggers.py`
+  - Changed `note.is_pinned` and `note.created_by_user_id` to `note.author_id`
+
+**Effort:** Completed
 
 ---
 

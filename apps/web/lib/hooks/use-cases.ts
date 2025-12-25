@@ -19,12 +19,14 @@ export const caseKeys = {
 
 /**
  * Fetch case statistics for dashboard.
+ * Auto-refreshes every 60 seconds for real-time updates.
  */
 export function useCaseStats() {
     return useQuery({
         queryKey: caseKeys.stats(),
         queryFn: casesApi.getCaseStats,
         staleTime: 30 * 1000, // 30 seconds
+        refetchInterval: 60 * 1000, // Auto-refresh every 60 seconds
     });
 }
 

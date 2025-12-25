@@ -806,40 +806,49 @@ export default function MatchDetailPage() {
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
-                                                    className="w-full h-7 text-xs mb-2"
+                                                    className="w-full h-8 text-xs mb-3"
                                                     onClick={() => setAddNoteDialogOpen(true)}
                                                 >
-                                                    <StickyNoteIcon className="size-3 mr-1" />
+                                                    <StickyNoteIcon className="size-3.5 mr-1.5" />
                                                     Add Note
                                                 </Button>
                                                 {filteredNotes.length > 0 ? (
-                                                    filteredNotes.map((note) => (
-                                                        <div key={note.id} className="p-2 rounded bg-muted/30">
-                                                            <div className="flex items-center gap-1 mb-1">
-                                                                <Badge
-                                                                    variant="outline"
-                                                                    className={`text-[9px] px-1 py-0 ${note.source === 'case' ? 'border-green-500 text-green-600' :
-                                                                        note.source === 'ip' ? 'border-blue-500 text-blue-600' :
-                                                                            'border-purple-500 text-purple-600'
-                                                                        }`}
-                                                                >
-                                                                    {note.source === 'case' ? 'Case' :
-                                                                        note.source === 'ip' ? 'IP' : 'Match'}
-                                                                </Badge>
-                                                                {note.author_name && (
-                                                                    <span className="text-xs text-muted-foreground">by {note.author_name}</span>
-                                                                )}
+                                                    <div className="space-y-2">
+                                                        {filteredNotes.map((note) => (
+                                                            <div
+                                                                key={note.id}
+                                                                className="p-3 rounded-lg border border-border bg-card hover:bg-accent/30 transition-colors"
+                                                            >
+                                                                <div className="flex items-center gap-1.5 mb-2">
+                                                                    <Badge
+                                                                        variant="outline"
+                                                                        className={`text-[10px] px-1.5 py-0 ${note.source === 'case' ? 'border-green-500/50 text-green-600 bg-green-500/5' :
+                                                                            note.source === 'ip' ? 'border-blue-500/50 text-blue-600 bg-blue-500/5' :
+                                                                                'border-purple-500/50 text-purple-600 bg-purple-500/5'
+                                                                            }`}
+                                                                    >
+                                                                        {note.source === 'case' ? 'Case' :
+                                                                            note.source === 'ip' ? 'IP' : 'Match'}
+                                                                    </Badge>
+                                                                    {note.author_name && (
+                                                                        <span className="text-xs text-muted-foreground">by {note.author_name}</span>
+                                                                    )}
+                                                                </div>
+                                                                <div
+                                                                    className="text-sm prose prose-sm max-w-none dark:prose-invert whitespace-pre-wrap leading-relaxed"
+                                                                    dangerouslySetInnerHTML={{ __html: note.content }}
+                                                                />
+                                                                <p className="text-xs text-muted-foreground mt-2">
+                                                                    {formatDateTime(note.created_at)}
+                                                                </p>
                                                             </div>
-                                                            <p className="text-sm whitespace-pre-wrap">{note.content}</p>
-                                                            <p className="text-xs text-muted-foreground mt-1">
-                                                                {formatDateTime(note.created_at)}
-                                                            </p>
-                                                        </div>
-                                                    ))
+                                                        ))}
+                                                    </div>
                                                 ) : (
-                                                    <p className="text-sm text-muted-foreground italic text-center py-4">
-                                                        No notes yet
-                                                    </p>
+                                                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                                                        <StickyNoteIcon className="size-8 text-muted-foreground/40 mb-2" />
+                                                        <p className="text-sm text-muted-foreground">No notes yet</p>
+                                                    </div>
                                                 )}
                                             </div>
                                         )}

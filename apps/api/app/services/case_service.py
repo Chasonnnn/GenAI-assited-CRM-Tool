@@ -905,13 +905,16 @@ def get_case_stats(db: Session, org_id: UUID) -> dict:
     Get aggregated case statistics for dashboard.
     
     Returns:
-        dict with total, by_status, this_week, this_month
+        dict with total, by_status, this_week, this_month, 
+        last_week, last_month, and percentage changes
     """
     from datetime import timedelta
     
     now = datetime.now(timezone.utc)
     week_ago = now - timedelta(days=7)
+    two_weeks_ago = now - timedelta(days=14)
     month_ago = now - timedelta(days=30)
+    two_months_ago = now - timedelta(days=60)
     
     # Base query for non-archived cases
     base = db.query(Case).filter(
@@ -933,15 +936,45 @@ def get_case_stats(db: Session, org_id: UUID) -> dict:
     
     by_status = {row.status_label: row.count for row in status_counts}
     
-    # This week
+    # This week vs last week
     this_week = base.filter(Case.created_at >= week_ago).count()
+    last_week = base.filter(
+        Case.created_at >= two_weeks_ago,
+        Case.created_at < week_ago
+    ).count()
     
-    # This month
+    # This month vs last month
     this_month = base.filter(Case.created_at >= month_ago).count()
+    last_month = base.filter(
+        Case.created_at >= two_months_ago,
+        Case.created_at < month_ago
+    ).count()
+    
+    # Calculate percentage changes (handle division by zero)
+    def calc_change_pct(current: int, previous: int) -> float | None:
+        if previous == 0:
+            return 100.0 if current > 0 else 0.0
+        return round(((current - previous) / previous) * 100, 1)
+    
+    week_change_pct = calc_change_pct(this_week, last_week)
+    month_change_pct = calc_change_pct(this_month, last_month)
+    
+    # Pending tasks count (for dashboard)
+    from app.db.models import Task
+    pending_tasks = db.query(func.count(Task.id)).filter(
+        Task.organization_id == org_id,
+        Task.is_completed == False,
+    ).scalar() or 0
     
     return {
         "total": total,
         "by_status": by_status,
         "this_week": this_week,
+        "last_week": last_week,
+        "week_change_pct": week_change_pct,
         "this_month": this_month,
+        "last_month": last_month,
+        "month_change_pct": month_change_pct,
+        "pending_tasks": pending_tasks,
     }
+

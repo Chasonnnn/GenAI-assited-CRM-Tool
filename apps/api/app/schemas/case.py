@@ -213,12 +213,16 @@ class CaseStatusHistoryRead(BaseModel):
 
 
 class CaseStats(BaseModel):
-    """Dashboard aggregation stats."""
+    """Dashboard aggregation stats with period comparisons."""
     total: int
     by_status: dict[str, int]
     this_week: int
+    last_week: int = 0
+    week_change_pct: float | None = None
     this_month: int
-    pending_tasks: int = 0  # Cross-module, filled by router
+    last_month: int = 0
+    month_change_pct: float | None = None
+    pending_tasks: int = 0
 
 
 class CaseHandoffDeny(BaseModel):

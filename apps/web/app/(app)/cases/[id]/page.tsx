@@ -126,6 +126,11 @@ function formatActivityType(type: string): string {
     return labels[type] || type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 }
 
+// Strip HTML tags for plain text display
+function stripHtml(html: string): string {
+    return html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
+}
+
 // Format activity details for display
 function formatActivityDetails(type: string, details: Record<string, unknown>): string {
     const aiPrefix = details?.source === 'ai' ? 'AI-generated' : ''
@@ -151,10 +156,14 @@ function formatActivityDetails(type: string, details: Record<string, unknown>): 
             return aiPrefix ? withAiPrefix(details.is_priority ? 'Marked as priority' : 'Removed priority') : (details.is_priority ? 'Marked as priority' : 'Removed priority')
         case 'handoff_denied':
             return details.reason ? withAiPrefix(String(details.reason)) : aiOnly()
-        case 'note_added':
-            return details.content ? withAiPrefix(String(details.content).slice(0, 100) + '...') : aiOnly()
-        case 'note_deleted':
-            return details.preview ? withAiPrefix(String(details.preview).slice(0, 100) + '...') : aiOnly()
+        case 'note_added': {
+            const content = details.content ? stripHtml(String(details.content)) : ''
+            return content ? withAiPrefix(content.slice(0, 100) + (content.length > 100 ? '...' : '')) : aiOnly()
+        }
+        case 'note_deleted': {
+            const preview = details.preview ? stripHtml(String(details.preview)) : ''
+            return preview ? withAiPrefix(preview.slice(0, 100) + (preview.length > 100 ? '...' : '')) : aiOnly()
+        }
         case 'task_created':
             return details.title ? withAiPrefix(`Task: ${String(details.title)}`) : aiOnly()
         default:
@@ -613,49 +622,73 @@ export default function CaseDetailPage() {
                     {/* NOTES TAB */}
                     <TabsContent value="notes" className="space-y-4">
                         <Card>
-                            <CardContent className="pt-6">
-                                <div className="space-y-4">
+                            <CardHeader className="pb-4">
+                                <CardTitle className="flex items-center gap-2">
+                                    Notes
+                                    {notes && notes.length > 0 && (
+                                        <Badge variant="secondary" className="text-xs">
+                                            {notes.length}
+                                        </Badge>
+                                    )}
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-6">
+                                {/* Add Note Section */}
+                                <div className="rounded-lg border border-border bg-muted/30 p-4">
+                                    <h4 className="text-sm font-medium mb-3 text-muted-foreground">Add a note</h4>
                                     <RichTextEditor
-                                        placeholder="Add a note..."
+                                        placeholder="Write your note here..."
                                         onSubmit={handleAddNote}
                                         submitLabel="Add Note"
                                         isSubmitting={createNoteMutation.isPending}
                                     />
+                                </div>
 
-                                    {notes && notes.length > 0 ? (
-                                        <div className="space-y-4 border-t pt-4">
-                                            {notes.map((note) => (
-                                                <div key={note.id} className="flex gap-3 group">
-                                                    <Avatar className="h-8 w-8">
-                                                        <AvatarFallback>{getInitials(note.author_name)}</AvatarFallback>
+                                {/* Notes List */}
+                                {notes && notes.length > 0 ? (
+                                    <div className="space-y-3">
+                                        {notes.map((note) => (
+                                            <div
+                                                key={note.id}
+                                                className="group rounded-lg border border-border bg-card p-4 transition-colors hover:bg-accent/30"
+                                            >
+                                                <div className="flex items-start gap-3">
+                                                    <Avatar className="h-9 w-9 flex-shrink-0">
+                                                        <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                                                            {getInitials(note.author_name)}
+                                                        </AvatarFallback>
                                                     </Avatar>
-                                                    <div className="flex-1 space-y-1">
-                                                        <div className="flex items-center justify-between">
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center justify-between gap-2">
                                                             <div className="flex items-center gap-2">
                                                                 <span className="text-sm font-medium">{note.author_name || 'Unknown'}</span>
-                                                                <span className="text-xs text-muted-foreground">{formatDateTime(note.created_at)}</span>
+                                                                <span className="text-xs text-muted-foreground">
+                                                                    {formatDateTime(note.created_at)}
+                                                                </span>
                                                             </div>
                                                             <Button
                                                                 variant="ghost"
                                                                 size="icon"
-                                                                className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                                                                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
                                                                 onClick={() => handleDeleteNote(note.id)}
                                                             >
-                                                                <TrashIcon className="h-3 w-3" />
+                                                                <TrashIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
                                                             </Button>
                                                         </div>
                                                         <div
-                                                            className="text-sm text-muted-foreground prose prose-sm max-w-none"
+                                                            className="mt-2 text-sm prose prose-sm max-w-none dark:prose-invert"
                                                             dangerouslySetInnerHTML={{ __html: note.body }}
                                                         />
                                                     </div>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <p className="text-sm text-muted-foreground text-center py-4">No notes yet. Add the first note above.</p>
-                                    )}
-                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-8">
+                                        <p className="text-sm text-muted-foreground">No notes yet. Add the first note above.</p>
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
                         <Card>

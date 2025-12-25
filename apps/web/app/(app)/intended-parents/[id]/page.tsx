@@ -360,7 +360,10 @@ export default function IntendedParentDetailPage() {
                                     <div className="space-y-3">
                                         {notes.map((note) => (
                                             <div key={note.id} className="rounded-lg border p-3">
-                                                <p className="text-sm">{note.content}</p>
+                                                <div
+                                                    className="text-sm prose prose-sm max-w-none dark:prose-invert"
+                                                    dangerouslySetInnerHTML={{ __html: note.content }}
+                                                />
                                                 <p className="mt-2 text-xs text-muted-foreground">
                                                     {formatDate(note.created_at)}
                                                 </p>

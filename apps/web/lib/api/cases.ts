@@ -26,12 +26,16 @@ export interface CaseListParams {
     sort_order?: 'asc' | 'desc';  // Sort direction
 }
 
-// Stats response from /cases/stats
+// Stats response from /cases/stats with period comparisons
 export interface CaseStats {
     total: number;
     by_status: Record<string, number>;
     this_week: number;
+    last_week: number;
+    week_change_pct: number | null;
     this_month: number;
+    last_month: number;
+    month_change_pct: number | null;
     pending_tasks: number;
 }
 

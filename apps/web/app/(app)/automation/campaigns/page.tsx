@@ -236,7 +236,7 @@ export default function CampaignsPage() {
                                 </CardContent>
                             </Card>
                         ) : (
-                            <Card>
+                            <Card className="py-0">
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
