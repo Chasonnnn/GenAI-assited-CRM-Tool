@@ -217,6 +217,7 @@ class JobType(str, Enum):
     CSV_IMPORT = "csv_import"  # Background CSV imports for large files
     EXPORT_GENERATION = "export_generation"
     DATA_PURGE = "data_purge"
+    CAMPAIGN_SEND = "campaign_send"  # Bulk email campaign execution
 
 
 class JobStatus(str, Enum):
