@@ -214,18 +214,18 @@
 ## 🟡 MEDIUM PRIORITY GAPS (Uncompleted)
 
 ### 1. Automation & Campaigns Future Enhancements ⚠️
-**Status:** Partially complete
+**Status:** Mostly complete
 
 | Feature | Value | Priority | Status |
 |---------|-------|----------|--------|
 | Workflow execution dashboard | Monitor workflow runs/failures in real-time | High | ✅ Complete (2025-12-25) |
 | Dashboard real-time updates | WebSocket + polling for KPI cards | High | ✅ Complete (2025-12-24) |
+| Rate limiting for triggers | Prevent runaway automation and spam | High | ✅ Complete (2025-12-25) |
+| Workflow template marketplace | Share common automations between orgs | Medium | ✅ Complete (2025-12-25) |
 | Email open/click tracking | Campaign analytics and engagement metrics | High | ❌ Not started |
 | A/B testing for campaigns | Optimize outreach with split testing | Medium | ❌ Not started |
-| Workflow template marketplace | Share common automations between orgs | Medium | ❌ Not started |
-| Rate limiting for triggers | Prevent runaway automation and spam | High | ❌ Not started |
 
-**Effort:** Remaining: Medium (1-2 weeks)
+**Effort:** Remaining: Small (3-5 days for email tracking + A/B)
 
 ---
 
