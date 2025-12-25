@@ -29,12 +29,14 @@ export function useAnalyticsSummary(params: DateRangeParams = {}) {
 
 /**
  * Fetch cases by status.
+ * Auto-refreshes every 60 seconds for real-time updates.
  */
 export function useCasesByStatus() {
     return useQuery({
         queryKey: analyticsKeys.byStatus(),
         queryFn: analyticsApi.getCasesByStatus,
         staleTime: 60 * 1000,
+        refetchInterval: 60 * 1000, // Auto-refresh every 60 seconds
     });
 }
 
@@ -51,12 +53,14 @@ export function useCasesByAssignee() {
 
 /**
  * Fetch cases trend over time.
+ * Auto-refreshes every 60 seconds for real-time updates.
  */
 export function useCasesTrend(params: TrendParams = {}) {
     return useQuery({
         queryKey: analyticsKeys.trend(params),
         queryFn: () => analyticsApi.getCasesTrend(params),
         staleTime: 60 * 1000,
+        refetchInterval: 60 * 1000, // Auto-refresh every 60 seconds
     });
 }
 

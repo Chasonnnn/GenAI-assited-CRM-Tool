@@ -21,6 +21,7 @@ import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-ta
 import { useCasesTrend, useCasesByStatus } from "@/lib/hooks/use-analytics"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useAuth } from "@/lib/auth-context"
+import { useDashboardSocket } from "@/lib/hooks/use-dashboard-socket"
 import type { TaskListItem } from "@/lib/types/task"
 
 // Format relative time
@@ -86,6 +87,9 @@ export default function DashboardPage() {
   const completeTask = useCompleteTask()
   const uncompleteTask = useUncompleteTask()
 
+  // WebSocket for real-time updates (falls back to polling if disconnected)
+  useDashboardSocket()
+
   const handleTaskToggle = async (taskId: string, isCompleted: boolean) => {
     if (isCompleted) {
       await uncompleteTask.mutateAsync(taskId)
@@ -144,10 +148,12 @@ export default function DashboardPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-medium text-muted-foreground">Active Cases</CardTitle>
-              <div className="flex items-center gap-1 text-xs font-medium text-green-600">
-                <TrendingUpIcon className="h-3 w-3" />
-                +{stats?.this_week || 0}
-              </div>
+              {stats?.week_change_pct !== null && stats?.week_change_pct !== undefined && (
+                <div className={`flex items-center gap-1 text-xs font-medium ${(stats.week_change_pct || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {(stats.week_change_pct || 0) >= 0 ? <TrendingUpIcon className="h-3 w-3" /> : <TrendingDownIcon className="h-3 w-3" />}
+                  {(stats.week_change_pct || 0) >= 0 ? '+' : ''}{stats.week_change_pct}%
+                </div>
+              )}
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -158,10 +164,11 @@ export default function DashboardPage() {
                 <div className="text-3xl font-bold">{stats?.total || 0}</div>
                 <div className="space-y-1">
                   <div className="flex items-center gap-1 text-sm font-medium">
-                    {(stats?.this_week || 0) > 0 ? 'Growing this week' : 'Steady volume'}
-                    <ArrowUpIcon className="h-3 w-3" />
+                    {stats?.this_week || 0} new this week
                   </div>
-                  <p className="text-xs text-muted-foreground">{stats?.this_week || 0} new this week</p>
+                  <p className="text-xs text-muted-foreground">
+                    vs {stats?.last_week || 0} last week
+                  </p>
                 </div>
               </>
             )}
@@ -210,10 +217,12 @@ export default function DashboardPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-medium text-muted-foreground">New Leads (30d)</CardTitle>
-              <div className="flex items-center gap-1 text-xs font-medium text-green-600">
-                <TrendingUpIcon className="h-3 w-3" />
-                +{stats?.this_month || 0}
-              </div>
+              {stats?.month_change_pct !== null && stats?.month_change_pct !== undefined && (
+                <div className={`flex items-center gap-1 text-xs font-medium ${(stats.month_change_pct || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {(stats.month_change_pct || 0) >= 0 ? <TrendingUpIcon className="h-3 w-3" /> : <TrendingDownIcon className="h-3 w-3" />}
+                  {(stats.month_change_pct || 0) >= 0 ? '+' : ''}{stats.month_change_pct}%
+                </div>
+              )}
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -227,7 +236,9 @@ export default function DashboardPage() {
                     Monthly intake volume
                     <UsersIcon className="h-3 w-3" />
                   </div>
-                  <p className="text-xs text-muted-foreground">Last 30 days</p>
+                  <p className="text-xs text-muted-foreground">
+                    vs {stats?.last_month || 0} last month
+                  </p>
                 </div>
               </>
             )}

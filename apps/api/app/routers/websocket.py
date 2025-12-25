@@ -29,16 +29,22 @@ async def websocket_notifications(
     1. JWT token in query parameter (?token=...)
     2. Or session cookie (for browser clients)
     
-    Once connected, the server pushes notifications in real-time.
+    Once connected, the server pushes:
+    - notifications (type: 'notification')
+    - unread counts (type: 'count_update')
+    - dashboard stats (type: 'stats_update')
     """
     # Try to authenticate
     user_id = None
+    org_id = None
     
     # Try token from query param first
     if token:
         try:
             payload = decode_session_token(token)
             user_id = UUID(payload["sub"])
+            if "org_id" in payload:
+                org_id = UUID(payload["org_id"])
         except Exception:
             await websocket.close(code=4001, reason="Invalid token")
             return
@@ -50,6 +56,8 @@ async def websocket_notifications(
             try:
                 payload = decode_session_token(cookie)
                 user_id = UUID(payload["sub"])
+                if "org_id" in payload:
+                    org_id = UUID(payload["org_id"])
             except Exception:
                 pass
     
@@ -57,8 +65,8 @@ async def websocket_notifications(
         await websocket.close(code=4001, reason="Authentication required")
         return
     
-    # Register connection
-    await manager.connect(websocket, user_id)
+    # Register connection with org tracking
+    await manager.connect(websocket, user_id, org_id)
     
     try:
         # Keep connection alive, handle incoming messages (heartbeat/pings)
@@ -90,4 +98,12 @@ async def push_notification_count(user_id: UUID, count: int):
     await manager.send_to_user(user_id, {
         "type": "count_update",
         "data": {"count": count},
+    })
+
+
+async def push_dashboard_stats(org_id: UUID, stats: dict):
+    """Push updated dashboard stats to all connected users in an organization."""
+    await manager.send_to_org(org_id, {
+        "type": "stats_update",
+        "data": stats,
     })
