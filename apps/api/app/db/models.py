@@ -2357,6 +2357,16 @@ class AutomationWorkflow(Base):
         nullable=True
     )  # Stop when entity reaches this status
     
+    # Rate limiting (None = unlimited)
+    rate_limit_per_hour: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True
+    )  # Max executions per hour globally
+    rate_limit_per_entity_per_day: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True
+    )  # Max times can run on same entity per 24h
+    
     # System workflow fields
     is_system_workflow: Mapped[bool] = mapped_column(
         Boolean,
@@ -2512,6 +2522,81 @@ class UserWorkflowPreference(Base):
     # Relationships
     user: Mapped["User"] = relationship()
     workflow: Mapped["AutomationWorkflow"] = relationship(back_populates="user_preferences")
+
+
+# =============================================================================
+# Workflow Templates (Marketplace)
+# =============================================================================
+
+class WorkflowTemplate(Base):
+    """
+    Reusable workflow templates for the template marketplace.
+    
+    Templates can be global (system-provided) or organization-specific.
+    Users can create workflows from templates via "Use Template".
+    """
+    __tablename__ = "workflow_templates"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "name", name="uq_template_name"),
+        Index("idx_template_org", "organization_id"),
+        Index("idx_template_category", "category"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
+    
+    # Metadata
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    icon: Mapped[str] = mapped_column(String(50), default="template")
+    category: Mapped[str] = mapped_column(
+        String(50),
+        default="general"
+    )  # "onboarding", "follow-up", "notifications", "compliance", "general"
+    
+    # Workflow configuration (template content)
+    trigger_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    trigger_config: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    conditions: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
+    condition_logic: Mapped[str] = mapped_column(String(10), default="AND")
+    actions: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
+    
+    # Scope
+    is_global: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("FALSE"),
+        nullable=False
+    )  # True = system template, False = org-specific
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=True  # Null for global templates
+    )
+    
+    # Usage tracking
+    usage_count: Mapped[int] = mapped_column(default=0)
+    
+    # Audit
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    organization: Mapped["Organization | None"] = relationship()
+    created_by: Mapped["User | None"] = relationship()
 
 
 # =============================================================================

@@ -159,6 +159,30 @@ class WorkflowEngine:
         if dedupe_key and self._is_duplicate(db, dedupe_key):
             return None
         
+        # Check rate limits
+        rate_limit_error = self._check_rate_limits(db, workflow, entity_id)
+        if rate_limit_error:
+            execution = WorkflowExecution(
+                organization_id=workflow.organization_id,
+                workflow_id=workflow.id,
+                event_id=event_id,
+                depth=depth,
+                event_source=source.value,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                trigger_event=event_data,
+                dedupe_key=dedupe_key,
+                matched_conditions=False,
+                actions_executed=[],
+                status=WorkflowExecutionStatus.SKIPPED.value,
+                error_message=rate_limit_error,
+                duration_ms=int((time.time() - start_time) * 1000),
+            )
+            db.add(execution)
+            db.commit()
+            logger.info(f"Workflow {workflow.id} rate limited: {rate_limit_error}")
+            return execution
+        
         # Get entity for condition evaluation
         entity = self._get_entity(db, entity_type, entity_id)
         if not entity:
@@ -266,6 +290,49 @@ class WorkflowEngine:
             WorkflowExecution.dedupe_key == dedupe_key
         ).first()
         return existing is not None
+    
+    def _check_rate_limits(
+        self,
+        db: Session,
+        workflow: AutomationWorkflow,
+        entity_id: UUID,
+    ) -> str | None:
+        """
+        Check if workflow execution would exceed rate limits.
+        
+        Returns error message if rate limited, None if OK to proceed.
+        """
+        from datetime import timedelta
+        from sqlalchemy import func
+        
+        now = datetime.now(timezone.utc)
+        
+        # Check per-hour limit (global for this workflow)
+        if workflow.rate_limit_per_hour:
+            hour_ago = now - timedelta(hours=1)
+            executions_this_hour = db.query(func.count(WorkflowExecution.id)).filter(
+                WorkflowExecution.workflow_id == workflow.id,
+                WorkflowExecution.executed_at >= hour_ago,
+                WorkflowExecution.status != WorkflowExecutionStatus.SKIPPED.value,
+            ).scalar() or 0
+            
+            if executions_this_hour >= workflow.rate_limit_per_hour:
+                return f"Rate limit exceeded: {executions_this_hour}/{workflow.rate_limit_per_hour} per hour"
+        
+        # Check per-entity-per-day limit
+        if workflow.rate_limit_per_entity_per_day:
+            day_ago = now - timedelta(hours=24)
+            executions_for_entity = db.query(func.count(WorkflowExecution.id)).filter(
+                WorkflowExecution.workflow_id == workflow.id,
+                WorkflowExecution.entity_id == entity_id,
+                WorkflowExecution.executed_at >= day_ago,
+                WorkflowExecution.status != WorkflowExecutionStatus.SKIPPED.value,
+            ).scalar() or 0
+            
+            if executions_for_entity >= workflow.rate_limit_per_entity_per_day:
+                return f"Entity rate limit exceeded: {executions_for_entity}/{workflow.rate_limit_per_entity_per_day} per day for this entity"
+        
+        return None
     
     def _get_entity(self, db: Session, entity_type: str, entity_id: UUID) -> Any:
         """Get entity by type and ID."""
