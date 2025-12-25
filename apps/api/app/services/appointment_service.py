@@ -594,10 +594,13 @@ def _build_day_slots(
                 break
         
         # Check for conflicts with tasks
+        # Tasks store due_time as local time (user's timezone), not UTC
         if not has_conflict:
             for task in tasks:
                 if task.due_date == slot_date and task.due_time and task.duration_minutes:
-                    task_start = datetime.combine(task.due_date, task.due_time, tzinfo=timezone.utc)
+                    # Task time is in user's local timezone, convert to UTC for comparison
+                    task_start_local = datetime.combine(task.due_date, task.due_time, tzinfo=user_tz)
+                    task_start = task_start_local.astimezone(timezone.utc)
                     task_end = task_start + timedelta(minutes=task.duration_minutes)
                     if not (slot_end <= task_start or slot_start >= task_end):
                         has_conflict = True
@@ -809,6 +812,7 @@ def approve_booking(
     """
     Approve a pending appointment.
     
+    - Re-validates slot availability to prevent double-booking
     - Sets status to confirmed
     - Clears pending expiry
     - (Future: Create Zoom meeting, add to Google Calendar)
@@ -824,6 +828,24 @@ def approve_booking(
         appointment.cancel_token_expires_at = None
         db.commit()
         raise ValueError("Appointment request has expired")
+    
+    # Re-validate slot availability to prevent double-booking
+    # Another appointment/task may have been created since the request
+    if appointment.appointment_type_id:
+        slot_query = SlotQuery(
+            user_id=appointment.user_id,
+            org_id=appointment.organization_id,
+            appointment_type_id=appointment.appointment_type_id,
+            date_start=appointment.scheduled_start.date(),
+            date_end=appointment.scheduled_start.date(),
+            client_timezone=appointment.client_timezone or "UTC",
+        )
+        available_slots = get_available_slots(
+            db, slot_query,
+            exclude_appointment_id=appointment.id,  # Exclude this pending appt itself
+        )
+        if not any(slot.start == appointment.scheduled_start for slot in available_slots):
+            raise ValueError("This time slot is no longer available - another appointment or task has been scheduled")
     
     appointment.status = AppointmentStatus.CONFIRMED.value
     appointment.approved_at = datetime.now(timezone.utc)

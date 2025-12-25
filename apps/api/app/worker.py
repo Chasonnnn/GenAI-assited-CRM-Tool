@@ -189,6 +189,9 @@ async def process_job(db, job) -> None:
 
     elif job.job_type == JobType.DATA_PURGE.value:
         await process_data_purge(db, job)
+    
+    elif job.job_type == JobType.CAMPAIGN_SEND.value:
+        await process_campaign_send(db, job)
         
     else:
         raise Exception(f"Unknown job type: {job.job_type}")
@@ -692,6 +695,48 @@ async def process_workflow_sweep(db, job) -> None:
             db.rollback()
     
     logger.info(f"Workflow sweep finished for {len(orgs)} organizations")
+
+
+async def process_campaign_send(db, job) -> None:
+    """
+    Process a CAMPAIGN_SEND job - execute bulk email campaign.
+    
+    Payload:
+        - campaign_id: UUID of the campaign
+        - run_id: UUID of the campaign run
+        - user_id: UUID of user who triggered the send
+    """
+    from uuid import UUID
+    from app.services import campaign_service
+    
+    payload = job.payload or {}
+    campaign_id = payload.get("campaign_id")
+    run_id = payload.get("run_id")
+    user_id = payload.get("user_id")
+    
+    if not campaign_id or not run_id:
+        raise Exception("Missing campaign_id or run_id in campaign send job")
+    
+    logger.info(f"Starting campaign send: campaign={campaign_id}, run={run_id}")
+    
+    try:
+        # Execute the campaign send
+        result = campaign_service.execute_campaign_run(
+            db=db,
+            org_id=job.organization_id,
+            campaign_id=UUID(campaign_id),
+            run_id=UUID(run_id),
+        )
+        
+        logger.info(
+            f"Campaign send completed: campaign={campaign_id}, "
+            f"sent={result.get('sent_count', 0)}, "
+            f"failed={result.get('failed_count', 0)}, "
+            f"skipped={result.get('skipped_count', 0)}"
+        )
+    except Exception as e:
+        logger.error(f"Campaign send failed: campaign={campaign_id} - {str(e)}")
+        raise
 
 
 def main() -> None:
