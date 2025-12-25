@@ -359,6 +359,104 @@ def list_executions(
     return items, total
 
 
+def list_org_executions(
+    db: Session,
+    org_id: UUID,
+    status: str | None = None,
+    workflow_id: UUID | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> tuple[list[dict], int]:
+    """
+    List all workflow executions for an organization with filters.
+    
+    Returns executions with workflow name joined for display.
+    """
+    query = db.query(WorkflowExecution).join(
+        AutomationWorkflow, WorkflowExecution.workflow_id == AutomationWorkflow.id
+    ).filter(
+        WorkflowExecution.organization_id == org_id
+    )
+    
+    if status:
+        query = query.filter(WorkflowExecution.status == status)
+    
+    if workflow_id:
+        query = query.filter(WorkflowExecution.workflow_id == workflow_id)
+    
+    total = query.count()
+    items = query.order_by(WorkflowExecution.executed_at.desc()).offset(offset).limit(limit).all()
+    
+    # Build response with workflow name
+    result = []
+    for exec in items:
+        workflow = db.query(AutomationWorkflow).filter(
+            AutomationWorkflow.id == exec.workflow_id
+        ).first()
+        
+        result.append({
+            "id": exec.id,
+            "workflow_id": exec.workflow_id,
+            "workflow_name": workflow.name if workflow else "Unknown",
+            "status": exec.status,
+            "entity_type": exec.entity_type,
+            "entity_id": exec.entity_id,
+            "action_count": len(exec.actions_executed) if exec.actions_executed else 0,
+            "duration_ms": exec.duration_ms or 0,
+            "executed_at": exec.executed_at.isoformat(),
+            "trigger_event": exec.trigger_event,
+            "actions_executed": exec.actions_executed or [],
+            "error_message": exec.error_message,
+            "skip_reason": None if exec.matched_conditions else "Conditions not met",
+        })
+    
+    return result, total
+
+
+def get_execution_stats(db: Session, org_id: UUID) -> dict:
+    """Get execution statistics for the dashboard."""
+    now = datetime.now(timezone.utc)
+    day_ago = now - timedelta(hours=24)
+    
+    # Total in last 24h
+    total_24h = db.query(func.count(WorkflowExecution.id)).filter(
+        WorkflowExecution.organization_id == org_id,
+        WorkflowExecution.executed_at >= day_ago,
+    ).scalar() or 0
+    
+    # Failed in last 24h
+    failed_24h = db.query(func.count(WorkflowExecution.id)).filter(
+        WorkflowExecution.organization_id == org_id,
+        WorkflowExecution.executed_at >= day_ago,
+        WorkflowExecution.status == WorkflowExecutionStatus.FAILED.value,
+    ).scalar() or 0
+    
+    # Success rate
+    if total_24h > 0:
+        successes = db.query(func.count(WorkflowExecution.id)).filter(
+            WorkflowExecution.organization_id == org_id,
+            WorkflowExecution.executed_at >= day_ago,
+            WorkflowExecution.status == WorkflowExecutionStatus.SUCCESS.value,
+        ).scalar() or 0
+        success_rate = round(successes / total_24h * 100, 1)
+    else:
+        success_rate = 0.0
+    
+    # Average duration
+    avg_duration = db.query(func.avg(WorkflowExecution.duration_ms)).filter(
+        WorkflowExecution.organization_id == org_id,
+        WorkflowExecution.executed_at >= day_ago,
+        WorkflowExecution.duration_ms.isnot(None),
+    ).scalar() or 0
+    
+    return {
+        "total_24h": total_24h,
+        "failed_24h": failed_24h,
+        "success_rate": success_rate,
+        "avg_duration_ms": int(avg_duration),
+    }
+
+
 # =============================================================================
 # User Preferences
 # =============================================================================
