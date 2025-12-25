@@ -406,6 +406,48 @@ class Queue(Base):
     
     # Relationships
     organization: Mapped["Organization"] = relationship()
+    members: Mapped[list["QueueMember"]] = relationship(
+        back_populates="queue",
+        cascade="all, delete-orphan",
+    )
+
+
+class QueueMember(Base):
+    """
+    Queue membership - assigns users to specific queues.
+    
+    Only members of a queue can claim cases from that queue.
+    If a queue has no members, it's open to all case_manager+ users.
+    """
+    __tablename__ = "queue_members"
+    __table_args__ = (
+        UniqueConstraint("queue_id", "user_id", name="uq_queue_member"),
+        Index("idx_queue_members_user", "user_id"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    queue_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("queues.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    queue: Mapped["Queue"] = relationship(back_populates="members")
+    user: Mapped["User"] = relationship()
 
 
 # =============================================================================

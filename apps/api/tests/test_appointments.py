@@ -423,3 +423,135 @@ class TestEmailTemplates:
                 if var.startswith("#") or var.startswith("/"):
                     continue
                 assert var in valid_vars, f"Unknown variable {{{{{var}}}}} in {email_type.value} template"
+
+
+# =============================================================================
+# Approval Conflict Re-validation Tests
+# =============================================================================
+
+class TestApprovalConflictCheck:
+    """Tests for appointment approval double-booking prevention."""
+
+    def test_approve_revalidates_slot_availability(self, db, test_org, test_user, appointment_type, booking_link, availability_rules):
+        """Approving should fail if a confirmed appointment exists in that slot."""
+        from app.services.appointment_service import approve_booking, get_available_slots, SlotQuery
+        
+        today = datetime.now(timezone.utc).date()
+        days_until_monday = (7 - today.weekday()) % 7
+        if days_until_monday == 0:
+            days_until_monday = 7
+        target_date = today + timedelta(days=days_until_monday)
+        
+        query = SlotQuery(
+            user_id=test_user.id,
+            org_id=test_org.id,
+            appointment_type_id=appointment_type.id,
+            date_start=target_date,
+            date_end=target_date,
+            client_timezone="America/New_York",
+        )
+        slots = get_available_slots(db, query)
+        
+        if len(slots) < 1:
+            pytest.skip("No available slots for testing")
+        
+        # Create a confirmed appointment at slot 0
+        confirmed_appt = Appointment(
+            id=uuid4(),
+            organization_id=test_org.id,
+            user_id=test_user.id,
+            appointment_type_id=appointment_type.id,
+            client_name="Confirmed Client",
+            client_email="confirmed@example.com",
+            client_phone="555-111-1111",
+            client_timezone="America/New_York",
+            scheduled_start=slots[0].start,
+            scheduled_end=slots[0].end,
+            duration_minutes=appointment_type.duration_minutes,
+            meeting_mode=appointment_type.meeting_mode,
+            status=AppointmentStatus.CONFIRMED.value,
+        )
+        db.add(confirmed_appt)
+        db.flush()
+        
+        # Create a pending appointment at same time (simulating race condition)
+        pending_appt = Appointment(
+            id=uuid4(),
+            organization_id=test_org.id,
+            user_id=test_user.id,
+            appointment_type_id=appointment_type.id,
+            client_name="Pending Client",
+            client_email="pending@example.com",
+            client_phone="555-222-2222",
+            client_timezone="America/New_York",
+            scheduled_start=slots[0].start,
+            scheduled_end=slots[0].end,
+            duration_minutes=appointment_type.duration_minutes,
+            meeting_mode=appointment_type.meeting_mode,
+            status=AppointmentStatus.PENDING.value,
+            pending_expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        )
+        db.add(pending_appt)
+        db.flush()
+        
+        # Try to approve the pending one - this should FAIL due to conflict with confirmed
+        with pytest.raises(ValueError, match="no longer available"):
+            approve_booking(db, pending_appt, test_user.id)
+
+
+# =============================================================================
+# Task Timezone Conflict Tests
+# =============================================================================
+
+class TestTaskTimezoneConflict:
+    """Tests for task conflict detection with proper timezone handling."""
+
+    def test_task_conflict_uses_user_timezone(self, db, test_org, test_user, appointment_type, booking_link, availability_rules):
+        """Task conflicts should interpret task time in user's timezone, not UTC."""
+        from app.services.appointment_service import get_available_slots, SlotQuery
+        from app.db.models import Task
+        from app.db.enums import OwnerType
+        
+        today = datetime.now(timezone.utc).date()
+        days_until_monday = (7 - today.weekday()) % 7
+        if days_until_monday == 0:
+            days_until_monday = 7
+        target_date = today + timedelta(days=days_until_monday)
+        
+        # Get slots before adding task
+        query = SlotQuery(
+            user_id=test_user.id,
+            org_id=test_org.id,
+            appointment_type_id=appointment_type.id,
+            date_start=target_date,
+            date_end=target_date,
+            client_timezone="America/New_York",
+        )
+        slots_before = get_available_slots(db, query)
+        
+        if not slots_before:
+            pytest.skip("No available slots for testing")
+        
+        # Add a task at 10:00 AM (user's timezone - America/New_York from availability rules)
+        task = Task(
+            id=uuid4(),
+            organization_id=test_org.id,
+            created_by_user_id=test_user.id,
+            owner_type=OwnerType.USER.value,
+            owner_id=test_user.id,
+            title="Blocking Task",
+            due_date=target_date,
+            due_time=time(10, 0),  # 10:00 AM in user's timezone
+            duration_minutes=60,  # 1 hour
+            is_completed=False,
+        )
+        db.add(task)
+        db.flush()
+        
+        # Get slots after adding task
+        slots_after = get_available_slots(db, query)
+        
+        # There should be fewer slots now due to the task blocking 10:00-11:00
+        assert len(slots_after) < len(slots_before), \
+            "Task should block some slots - timezone handling may be incorrect"
+

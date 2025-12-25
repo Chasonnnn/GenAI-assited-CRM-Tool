@@ -28,10 +28,29 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { PlusIcon, MoreVerticalIcon, LoaderIcon, UsersIcon } from "lucide-react"
-import { useQueues, useCreateQueue, useUpdateQueue, useDeleteQueue, type Queue, type QueueCreatePayload } from "@/lib/hooks/use-queues"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+import { PlusIcon, MoreVerticalIcon, LoaderIcon, UsersIcon, XIcon, UserPlusIcon } from "lucide-react"
+import {
+    useQueues,
+    useCreateQueue,
+    useUpdateQueue,
+    useDeleteQueue,
+    useQueueMembers,
+    useAddQueueMember,
+    useRemoveQueueMember,
+    type Queue,
+    type QueueCreatePayload
+} from "@/lib/hooks/use-queues"
+import { useMembers } from "@/lib/hooks/use-permissions"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 
 export default function QueuesSettingsPage() {
     const router = useRouter()
@@ -43,8 +62,19 @@ export default function QueuesSettingsPage() {
 
     const [createDialogOpen, setCreateDialogOpen] = React.useState(false)
     const [editDialogOpen, setEditDialogOpen] = React.useState(false)
+    const [membersDialogOpen, setMembersDialogOpen] = React.useState(false)
     const [editingQueue, setEditingQueue] = React.useState<Queue | null>(null)
+    const [managingQueue, setManagingQueue] = React.useState<Queue | null>(null)
     const [formData, setFormData] = React.useState<QueueCreatePayload>({ name: "", description: "" })
+    const [selectedUserId, setSelectedUserId] = React.useState<string>("")
+
+    // Fetch org members for selector
+    const { data: orgMembers } = useMembers()
+
+    // Fetch queue members when managing
+    const { data: queueMembers, isLoading: loadingMembers } = useQueueMembers(managingQueue?.id || null)
+    const addMemberMutation = useAddQueueMember()
+    const removeMemberMutation = useRemoveQueueMember()
 
     // Check if user is a manager
     const isManager = user?.role && ['admin', 'developer'].includes(user.role)
@@ -95,6 +125,38 @@ export default function QueuesSettingsPage() {
         setFormData({ name: queue.name, description: queue.description || "" })
         setEditDialogOpen(true)
     }
+
+    const openMembersDialog = (queue: Queue) => {
+        setManagingQueue(queue)
+        setSelectedUserId("")
+        setMembersDialogOpen(true)
+    }
+
+    const handleAddMember = async () => {
+        if (!managingQueue || !selectedUserId) return
+        try {
+            await addMemberMutation.mutateAsync({ queueId: managingQueue.id, userId: selectedUserId })
+            setSelectedUserId("")
+            toast.success("Member added to queue")
+        } catch (error: any) {
+            toast.error(error?.message || "Failed to add member")
+        }
+    }
+
+    const handleRemoveMember = async (userId: string) => {
+        if (!managingQueue) return
+        try {
+            await removeMemberMutation.mutateAsync({ queueId: managingQueue.id, userId })
+            toast.success("Member removed from queue")
+        } catch (error: any) {
+            toast.error(error?.message || "Failed to remove member")
+        }
+    }
+
+    // Filter out users already in queue
+    const availableMembers = orgMembers?.filter(
+        m => !queueMembers?.some(qm => qm.user_id === m.user_id)
+    ) || []
 
     if (!isManager) {
         return (
@@ -166,6 +228,7 @@ export default function QueuesSettingsPage() {
                                 <TableRow>
                                     <TableHead>Name</TableHead>
                                     <TableHead>Description</TableHead>
+                                    <TableHead>Members</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead className="w-[50px]"></TableHead>
                                 </TableRow>
@@ -176,6 +239,12 @@ export default function QueuesSettingsPage() {
                                         <TableCell className="font-medium">{queue.name}</TableCell>
                                         <TableCell className="text-muted-foreground max-w-[300px] truncate">
                                             {queue.description || "—"}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className="cursor-pointer" onClick={() => openMembersDialog(queue)}>
+                                                <UsersIcon className="size-3 mr-1" />
+                                                {queue.member_ids?.length || 0}
+                                            </Badge>
                                         </TableCell>
                                         <TableCell>
                                             <Badge variant={queue.is_active ? "default" : "secondary"}>
@@ -190,6 +259,9 @@ export default function QueuesSettingsPage() {
                                                 <DropdownMenuContent align="end">
                                                     <DropdownMenuItem onClick={() => openEditDialog(queue)}>
                                                         Edit
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={() => openMembersDialog(queue)}>
+                                                        Manage Members
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem onClick={() => handleToggleActive(queue)}>
                                                         {queue.is_active ? "Deactivate" : "Activate"}
@@ -284,6 +356,98 @@ export default function QueuesSettingsPage() {
                             </Button>
                         </DialogFooter>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Members Dialog */}
+            <Dialog open={membersDialogOpen} onOpenChange={setMembersDialogOpen}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <UsersIcon className="size-5" />
+                            {managingQueue?.name} - Members
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        {/* Add Member */}
+                        <div className="flex gap-2">
+                            <Select value={selectedUserId} onValueChange={(v) => setSelectedUserId(v || "")}>
+                                <SelectTrigger className="flex-1">
+                                    <SelectValue placeholder="Select a user to add..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {availableMembers.length === 0 ? (
+                                        <div className="py-2 px-3 text-sm text-muted-foreground">
+                                            All users are already members
+                                        </div>
+                                    ) : (
+                                        availableMembers.map((member) => (
+                                            <SelectItem key={member.user_id} value={member.user_id}>
+                                                {member.display_name || member.email}
+                                            </SelectItem>
+                                        ))
+                                    )}
+                                </SelectContent>
+                            </Select>
+                            <Button
+                                onClick={handleAddMember}
+                                disabled={!selectedUserId || addMemberMutation.isPending}
+                                size="icon"
+                            >
+                                <UserPlusIcon className="size-4" />
+                            </Button>
+                        </div>
+
+                        {/* Member List */}
+                        <div className="space-y-2">
+                            <Label className="text-muted-foreground text-xs uppercase tracking-wider">
+                                Current Members ({queueMembers?.length || 0})
+                            </Label>
+                            {loadingMembers ? (
+                                <div className="flex items-center justify-center py-4">
+                                    <LoaderIcon className="size-4 animate-spin" />
+                                </div>
+                            ) : queueMembers?.length === 0 ? (
+                                <div className="text-center py-4 text-sm text-muted-foreground">
+                                    No members assigned. Queue is open to all case managers.
+                                </div>
+                            ) : (
+                                <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                                    {queueMembers?.map((member) => (
+                                        <div
+                                            key={member.id}
+                                            className="flex items-center justify-between p-2 rounded-md bg-muted/50"
+                                        >
+                                            <div>
+                                                <div className="font-medium text-sm">{member.user_name || "Unknown"}</div>
+                                                <div className="text-xs text-muted-foreground">{member.user_email}</div>
+                                            </div>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="size-7 text-muted-foreground hover:text-destructive"
+                                                onClick={() => handleRemoveMember(member.user_id)}
+                                                disabled={removeMemberMutation.isPending}
+                                            >
+                                                <XIcon className="size-4" />
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Help text */}
+                        <p className="text-xs text-muted-foreground">
+                            When a queue has members, only those members can claim cases from it.
+                            If no members are assigned, any case manager can claim from the queue.
+                        </p>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setMembersDialogOpen(false)}>
+                            Done
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>

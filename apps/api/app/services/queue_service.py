@@ -5,7 +5,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
-from app.db.models import Queue, Case
+from app.db.models import Queue, Case, QueueMember
 from app.db.enums import CaseActivityType
 from app.db.enums import OwnerType
 from app.services import activity_service
@@ -38,6 +38,11 @@ class CaseNotInQueueError(QueueServiceError):
 
 class DuplicateQueueNameError(QueueServiceError):
     """Queue name already exists in org."""
+    pass
+
+
+class NotQueueMemberError(QueueServiceError):
+    """User is not a member of the queue."""
     pass
 
 
@@ -203,6 +208,15 @@ def claim_case(
         raise CaseAlreadyClaimedError(
             f"Case is already owned by a user, not in a queue"
         )
+    
+    # Check if user is a member of the queue (if queue has members)
+    queue = db.query(Queue).filter(Queue.id == case.owner_id).first()
+    if queue and queue.members:
+        is_member = any(m.user_id == claimer_user_id for m in queue.members)
+        if not is_member:
+            raise NotQueueMemberError(
+                f"You are not a member of queue '{queue.name}' and cannot claim cases from it"
+            )
     
     old_queue_id = case.owner_id
     

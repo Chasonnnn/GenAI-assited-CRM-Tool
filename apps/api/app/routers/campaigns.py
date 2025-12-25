@@ -16,6 +16,7 @@ from app.schemas.campaign import (
     CampaignRunResponse,
     CampaignRecipientResponse,
     CampaignPreviewResponse,
+    PreviewFiltersRequest,
     CampaignSendRequest,
     CampaignSendResponse,
     SuppressionCreate,
@@ -119,6 +120,30 @@ def delete_campaign(
 # =============================================================================
 # Preview & Send
 # =============================================================================
+
+@router.post("/preview-filters", response_model=CampaignPreviewResponse)
+def preview_filters(
+    data: PreviewFiltersRequest,
+    limit: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db),
+    session = Depends(require_permission("manage_email_templates")),
+):
+    """
+    Preview recipients that match filter criteria BEFORE creating a campaign.
+    
+    Returns total count and sample recipients.
+    """
+    # Convert FilterCriteria to dict for service call
+    filter_dict = data.filter_criteria.model_dump(exclude_none=True) if data.filter_criteria else {}
+    
+    return campaign_service.preview_recipients(
+        db,
+        org_id=session.org_id,
+        recipient_type=data.recipient_type,
+        filter_criteria=filter_dict,
+        limit=limit,
+    )
+
 
 @router.get("/{campaign_id}/preview", response_model=CampaignPreviewResponse)
 def preview_recipients(

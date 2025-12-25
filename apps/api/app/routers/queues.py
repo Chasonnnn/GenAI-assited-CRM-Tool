@@ -15,6 +15,7 @@ from app.services.queue_service import (
     CaseAlreadyClaimedError,
     CaseNotInQueueError,
     DuplicateQueueNameError,
+    NotQueueMemberError,
 )
 
 router = APIRouter()
@@ -41,8 +42,24 @@ class QueueResponse(BaseModel):
     name: str
     description: str | None
     is_active: bool
+    member_ids: list[UUID] = []
 
     model_config = {"from_attributes": True}
+
+
+class QueueMemberResponse(BaseModel):
+    id: UUID
+    queue_id: UUID
+    user_id: UUID
+    user_name: str | None = None
+    user_email: str | None = None
+    created_at: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class QueueMemberAdd(BaseModel):
+    user_id: UUID = Field(..., description="User ID to add to queue")
 
 
 class ClaimRequest(BaseModel):
@@ -70,7 +87,7 @@ def list_queues(
 ):
     """List all queues for the organization."""
     queues = queue_service.list_queues(db, session.org_id, include_inactive)
-    return queues
+    return [_queue_to_response(q) for q in queues]
 
 
 @router.get("/{queue_id}", response_model=QueueResponse)
@@ -83,7 +100,7 @@ def get_queue(
     queue = queue_service.get_queue(db, session.org_id, queue_id)
     if not queue:
         raise HTTPException(status_code=404, detail="Queue not found")
-    return queue
+    return _queue_to_response(queue)
 
 
 @router.post("", response_model=QueueResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_csrf_header)])
@@ -179,6 +196,8 @@ def claim_case(
         raise HTTPException(status_code=404, detail="Case not found")
     except CaseAlreadyClaimedError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    except NotQueueMemberError as e:
+        raise HTTPException(status_code=403, detail=str(e))
 
 
 @router.post("/cases/{case_id}/release", response_model=dict, dependencies=[Depends(require_csrf_header)])
@@ -234,3 +253,118 @@ def assign_case_to_queue(
         raise HTTPException(status_code=404, detail="Case not found")
     except QueueNotFoundError:
         raise HTTPException(status_code=404, detail="Queue not found or inactive")
+
+
+# =============================================================================
+# Queue Member Management
+# =============================================================================
+
+@router.get("/{queue_id}/members", response_model=list[QueueMemberResponse])
+def list_queue_members(
+    queue_id: UUID,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """List members of a queue."""
+    queue = queue_service.get_queue(db, session.org_id, queue_id)
+    if not queue:
+        raise HTTPException(status_code=404, detail="Queue not found")
+    
+    return [
+        QueueMemberResponse(
+            id=m.id,
+            queue_id=m.queue_id,
+            user_id=m.user_id,
+            user_name=m.user.full_name if m.user else None,
+            user_email=m.user.email if m.user else None,
+            created_at=m.created_at.isoformat() if m.created_at else None,
+        )
+        for m in queue.members
+    ]
+
+
+@router.post("/{queue_id}/members", response_model=QueueMemberResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_csrf_header)])
+def add_queue_member(
+    queue_id: UUID,
+    data: QueueMemberAdd,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """Add a user to a queue. Manager+ only."""
+    if session.role not in [Role.ADMIN.value, Role.DEVELOPER.value]:
+        raise HTTPException(status_code=403, detail="Manager role required")
+    
+    queue = queue_service.get_queue(db, session.org_id, queue_id)
+    if not queue:
+        raise HTTPException(status_code=404, detail="Queue not found")
+    
+    # Check user exists and is in same org
+    from app.db.models import User, QueueMember
+    user = db.query(User).filter(
+        User.id == data.user_id,
+        User.organization_id == session.org_id,
+    ).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Check if already a member
+    existing = db.query(QueueMember).filter(
+        QueueMember.queue_id == queue_id,
+        QueueMember.user_id == data.user_id,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="User is already a member of this queue")
+    
+    member = QueueMember(queue_id=queue_id, user_id=data.user_id)
+    db.add(member)
+    db.commit()
+    db.refresh(member)
+    
+    return QueueMemberResponse(
+        id=member.id,
+        queue_id=member.queue_id,
+        user_id=member.user_id,
+        user_name=user.full_name,
+        user_email=user.email,
+        created_at=member.created_at.isoformat() if member.created_at else None,
+    )
+
+
+@router.delete("/{queue_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_csrf_header)])
+def remove_queue_member(
+    queue_id: UUID,
+    user_id: UUID,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """Remove a user from a queue. Manager+ only."""
+    if session.role not in [Role.ADMIN.value, Role.DEVELOPER.value]:
+        raise HTTPException(status_code=403, detail="Manager role required")
+    
+    from app.db.models import QueueMember
+    result = db.query(QueueMember).filter(
+        QueueMember.queue_id == queue_id,
+        QueueMember.user_id == user_id,
+    ).delete()
+    
+    if not result:
+        raise HTTPException(status_code=404, detail="Member not found")
+    
+    db.commit()
+
+
+# =============================================================================
+# Helpers
+# =============================================================================
+
+def _queue_to_response(queue) -> QueueResponse:
+    """Convert queue model to response with member_ids."""
+    return QueueResponse(
+        id=queue.id,
+        organization_id=queue.organization_id,
+        name=queue.name,
+        description=queue.description,
+        is_active=queue.is_active,
+        member_ids=[m.user_id for m in queue.members] if hasattr(queue, 'members') else [],
+    )
+

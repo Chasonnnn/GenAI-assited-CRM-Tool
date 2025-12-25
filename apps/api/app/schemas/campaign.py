@@ -144,6 +144,12 @@ class CampaignPreviewResponse(BaseModel):
     sample_recipients: list[RecipientPreview]
 
 
+class PreviewFiltersRequest(BaseModel):
+    """Request to preview recipients matching filter criteria."""
+    recipient_type: str = Field(..., pattern="^(case|intended_parent)$")
+    filter_criteria: FilterCriteria = Field(default_factory=FilterCriteria)
+
+
 # =============================================================================
 # Send
 # =============================================================================
