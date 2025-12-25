@@ -24,6 +24,13 @@ vi.mock('@/lib/hooks/use-queues', () => ({
     useCreateQueue: () => ({ mutateAsync: mockCreateQueue, isPending: false }),
     useUpdateQueue: () => ({ mutateAsync: mockUpdateQueue, isPending: false }),
     useDeleteQueue: () => ({ mutateAsync: mockDeleteQueue, isPending: false }),
+    useQueueMembers: () => ({ data: [], isLoading: false }),
+    useAddQueueMember: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useRemoveQueueMember: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}))
+
+vi.mock('@/lib/hooks/use-permissions', () => ({
+    useMembers: () => ({ data: [] }),
 }))
 
 describe('QueuesSettingsPage', () => {

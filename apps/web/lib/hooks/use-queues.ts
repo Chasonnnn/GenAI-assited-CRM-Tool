@@ -16,6 +16,16 @@ export interface Queue {
     name: string;
     description: string | null;
     is_active: boolean;
+    member_ids: string[];
+}
+
+export interface QueueMember {
+    id: string;
+    queue_id: string;
+    user_id: string;
+    user_name: string | null;
+    user_email: string | null;
+    created_at: string | null;
 }
 
 export interface QueueCreatePayload {
@@ -197,3 +207,67 @@ export function useAssignToQueue() {
         },
     });
 }
+
+// =============================================================================
+// Queue Members API
+// =============================================================================
+
+async function getQueueMembers(queueId: string): Promise<QueueMember[]> {
+    return api.get<QueueMember[]>(`/queues/${queueId}/members`);
+}
+
+async function addQueueMember(queueId: string, userId: string): Promise<QueueMember> {
+    return api.post<QueueMember>(`/queues/${queueId}/members`, { user_id: userId });
+}
+
+async function removeQueueMember(queueId: string, userId: string): Promise<void> {
+    return api.delete(`/queues/${queueId}/members/${userId}`);
+}
+
+// =============================================================================
+// Queue Members Hooks
+// =============================================================================
+
+/**
+ * Fetch members of a queue.
+ */
+export function useQueueMembers(queueId: string | null) {
+    return useQuery({
+        queryKey: [...queueKeys.detail(queueId || ''), 'members'],
+        queryFn: () => getQueueMembers(queueId!),
+        enabled: !!queueId,
+    });
+}
+
+/**
+ * Add a member to a queue.
+ */
+export function useAddQueueMember() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ queueId, userId }: { queueId: string; userId: string }) =>
+            addQueueMember(queueId, userId),
+        onSuccess: (_, { queueId }) => {
+            queryClient.invalidateQueries({ queryKey: [...queueKeys.detail(queueId), 'members'] });
+            queryClient.invalidateQueries({ queryKey: queueKeys.lists() });
+        },
+    });
+}
+
+/**
+ * Remove a member from a queue.
+ */
+export function useRemoveQueueMember() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ queueId, userId }: { queueId: string; userId: string }) =>
+            removeQueueMember(queueId, userId),
+        onSuccess: (_, { queueId }) => {
+            queryClient.invalidateQueries({ queryKey: [...queueKeys.detail(queueId), 'members'] });
+            queryClient.invalidateQueries({ queryKey: queueKeys.lists() });
+        },
+    });
+}
+

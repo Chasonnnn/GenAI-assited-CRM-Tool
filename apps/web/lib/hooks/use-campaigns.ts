@@ -10,6 +10,7 @@ import {
     deleteCampaign,
     duplicateCampaign,
     previewRecipients,
+    previewFilters,
     sendCampaign,
     cancelCampaign,
     listCampaignRuns,
@@ -22,6 +23,7 @@ import {
     type CampaignUpdate,
     type Campaign,
     type CampaignListItem,
+    type FilterCriteria,
 } from "@/lib/api/campaigns";
 
 // =============================================================================
@@ -75,6 +77,24 @@ export function useCampaignPreview(id: string | undefined) {
         queryFn: () => previewRecipients(id!),
         enabled: !!id,
         staleTime: 30000, // 30 seconds
+    });
+}
+
+/**
+ * Preview recipients matching filter criteria BEFORE creating a campaign.
+ * Use as a mutation since filters are provided dynamically.
+ */
+export function usePreviewFilters() {
+    return useMutation({
+        mutationFn: ({
+            recipientType,
+            filterCriteria,
+            limit,
+        }: {
+            recipientType: "case" | "intended_parent";
+            filterCriteria: FilterCriteria;
+            limit?: number;
+        }) => previewFilters(recipientType, filterCriteria, limit),
     });
 }
 

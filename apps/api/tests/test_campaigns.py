@@ -233,3 +233,104 @@ def test_add_to_suppression(db, test_org, test_user):
     assert result is not None
     assert result.email == "newsuppressed@example.com"
     assert result.reason == "opt_out"
+
+
+# =============================================================================
+# Job Type Tests
+# =============================================================================
+
+def test_campaign_send_job_type_exists():
+    """CAMPAIGN_SEND should exist in JobType enum."""
+    from app.db.enums import JobType
+    
+    # This was the critical bug - job type was missing
+    assert hasattr(JobType, 'CAMPAIGN_SEND')
+    assert JobType.CAMPAIGN_SEND.value == "campaign_send"
+
+
+def test_campaign_send_job_creation(db, test_org, test_user, test_campaign):
+    """Enqueuing campaign send should create a job with correct type."""
+    from app.services import campaign_service
+    from app.db.models import Job
+    from app.db.enums import JobType
+    
+    # Enqueue campaign
+    message, run_id, scheduled_at = campaign_service.enqueue_campaign_send(
+        db=db,
+        org_id=test_org.id,
+        campaign_id=test_campaign.id,
+        user_id=test_user.id,
+        send_now=True,
+    )
+    
+    assert run_id is not None
+    assert "queued" in message.lower()
+    
+    # Verify job was created with correct type
+    job = db.query(Job).filter(
+        Job.organization_id == test_org.id,
+        Job.job_type == JobType.CAMPAIGN_SEND.value,
+    ).first()
+    
+    assert job is not None
+    assert job.payload["campaign_id"] == str(test_campaign.id)
+    assert job.payload["run_id"] == str(run_id)
+
+
+# =============================================================================
+# Campaign Execution Tests
+# =============================================================================
+
+def test_execute_campaign_run_function_exists():
+    """execute_campaign_run function should exist."""
+    from app.services import campaign_service
+    
+    assert hasattr(campaign_service, 'execute_campaign_run')
+    assert callable(campaign_service.execute_campaign_run)
+
+
+def test_execute_campaign_run_with_no_recipients(db, test_org, test_user, test_template):
+    """Executing campaign with no matching recipients should complete without errors."""
+    from app.services import campaign_service
+    from app.schemas.campaign import CampaignCreate
+    from app.db.models import CampaignRun
+    from uuid import uuid4
+    
+    # Create campaign with filter that matches nothing
+    create_data = CampaignCreate(
+        name="Empty Campaign",
+        email_template_id=test_template.id,
+        recipient_type="case",
+        filter_criteria={"stage_ids": [str(uuid4())]},  # Non-existent stage
+    )
+    
+    campaign = campaign_service.create_campaign(
+        db, test_org.id, test_user.id, create_data
+    )
+    
+    # Create a run
+    run = CampaignRun(
+        id=uuid4(),
+        organization_id=test_org.id,
+        campaign_id=campaign.id,
+        status="pending",
+        total_count=0,
+        sent_count=0,
+        failed_count=0,
+        skipped_count=0,
+    )
+    db.add(run)
+    db.flush()
+    
+    # Execute
+    result = campaign_service.execute_campaign_run(
+        db=db,
+        org_id=test_org.id,
+        campaign_id=campaign.id,
+        run_id=run.id,
+    )
+    
+    assert result["sent_count"] == 0
+    assert result["failed_count"] == 0
+    assert result["total_count"] == 0
+

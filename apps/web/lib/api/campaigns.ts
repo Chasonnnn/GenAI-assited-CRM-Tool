@@ -175,6 +175,22 @@ export async function previewRecipients(
     return api.get<CampaignPreview>(`/campaigns/${campaignId}/preview${query}`)
 }
 
+/**
+ * Preview recipients matching filter criteria BEFORE creating a campaign.
+ * Use this in Step 4 of campaign creation to show recipient count.
+ */
+export async function previewFilters(
+    recipientType: "case" | "intended_parent",
+    filterCriteria: FilterCriteria,
+    limit?: number
+): Promise<CampaignPreview> {
+    const query = limit ? `?limit=${limit}` : ""
+    return api.post<CampaignPreview>(`/campaigns/preview-filters${query}`, {
+        recipient_type: recipientType,
+        filter_criteria: filterCriteria,
+    })
+}
+
 export async function sendCampaign(
     campaignId: string,
     sendNow = true
