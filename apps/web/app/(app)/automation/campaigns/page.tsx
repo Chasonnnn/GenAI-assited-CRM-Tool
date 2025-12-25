@@ -55,6 +55,8 @@ import {
     useCampaignPreview,
 } from "@/lib/hooks/use-campaigns"
 import { useEmailTemplates } from "@/lib/hooks/use-email-templates"
+import { getDefaultPipeline } from "@/lib/api/pipelines"
+import { useQuery } from "@tanstack/react-query"
 import type { CampaignListItem } from "@/lib/api/campaigns"
 
 // Status badge styles
@@ -103,6 +105,13 @@ export default function CampaignsPage() {
     const duplicateCampaign = useDuplicateCampaign()
     const sendCampaign = useSendCampaign()
 
+    // Fetch pipeline stages for status filter
+    const { data: pipeline } = useQuery({
+        queryKey: ["defaultPipeline"],
+        queryFn: getDefaultPipeline,
+    })
+    const pipelineStages = pipeline?.stages || []
+
     // Filtered campaigns
     const filteredCampaigns = campaigns || []
 
@@ -133,7 +142,7 @@ export default function CampaignsPage() {
                 email_template_id: selectedTemplateId,
                 recipient_type: recipientType,
                 filter_criteria: {
-                    stage_slugs: selectedStages.length > 0 ? selectedStages : undefined,
+                    stage_ids: selectedStages.length > 0 ? selectedStages : undefined,
                     states: selectedStates.length > 0 ? selectedStates : undefined,
                 },
                 scheduled_at: scheduleFor === "later" && scheduledDate ? new Date(scheduledDate).toISOString() : undefined,
@@ -449,22 +458,23 @@ export default function CampaignsPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Filter by Status</Label>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {["active", "application_review", "matched", "qualified", "new_lead"].map((stage) => (
-                                            <div key={stage} className="flex items-center space-x-2">
+                                    <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                                        {pipelineStages.filter(s => s.is_active).map((stage) => (
+                                            <div key={stage.id} className="flex items-center space-x-2">
                                                 <Checkbox
-                                                    id={stage}
-                                                    checked={selectedStages.includes(stage)}
+                                                    id={stage.id}
+                                                    checked={selectedStages.includes(stage.id)}
                                                     onCheckedChange={(checked) => {
                                                         if (checked) {
-                                                            setSelectedStages([...selectedStages, stage])
+                                                            setSelectedStages([...selectedStages, stage.id])
                                                         } else {
-                                                            setSelectedStages(selectedStages.filter((s) => s !== stage))
+                                                            setSelectedStages(selectedStages.filter((s) => s !== stage.id))
                                                         }
                                                     }}
                                                 />
-                                                <Label htmlFor={stage} className="text-sm capitalize">
-                                                    {stage.replace(/_/g, " ")}
+                                                <Label htmlFor={stage.id} className="text-sm">
+                                                    <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: stage.color }} />
+                                                    {stage.label}
                                                 </Label>
                                             </div>
                                         ))}
@@ -499,11 +509,31 @@ export default function CampaignsPage() {
                                             <span className="font-medium capitalize">{recipientType.replace(/_/g, " ")}s</span>
                                         </div>
                                         {selectedStages.length > 0 && (
-                                            <div className="flex justify-between">
-                                                <span className="text-muted-foreground">Filtered by:</span>
-                                                <span className="font-medium">{selectedStages.length} stages</span>
+                                            <div className="flex justify-between items-start">
+                                                <span className="text-muted-foreground">Filtered by Status:</span>
+                                                <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
+                                                    {selectedStages.map((stageId) => {
+                                                        const stage = pipelineStages.find(s => s.id === stageId)
+                                                        return stage ? (
+                                                            <Badge key={stageId} variant="secondary" className="text-xs">
+                                                                <span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: stage.color }} />
+                                                                {stage.label}
+                                                            </Badge>
+                                                        ) : null
+                                                    })}
+                                                </div>
                                             </div>
                                         )}
+                                    </CardContent>
+                                </Card>
+
+                                <Card className="bg-blue-50 dark:bg-blue-950/20 border-blue-200">
+                                    <CardContent className="py-4 flex items-center gap-3">
+                                        <UsersIcon className="size-5 text-blue-600" />
+                                        <span className="text-sm text-blue-700 dark:text-blue-400">
+                                            Recipient count will be calculated when the campaign is created.
+                                            Each recipient receives an individual email (no CC list exposure).
+                                        </span>
                                     </CardContent>
                                 </Card>
 
