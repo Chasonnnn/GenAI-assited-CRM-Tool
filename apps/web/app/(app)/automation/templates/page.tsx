@@ -74,26 +74,16 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
     "alert-circle": AlertCircleIcon,
 }
 
-// API functions
+// API functions using the shared api module
+import api from "@/lib/api"
+
 async function fetchTemplates(category?: string): Promise<Template[]> {
-    const params = category && category !== "all" ? `?category=${category}` : ""
-    const res = await fetch(`/api/templates${params}`, { credentials: "include" })
-    if (!res.ok) throw new Error("Failed to fetch templates")
-    return res.json()
+    const params = category ? `?category=${category}` : ""
+    return api.get<Template[]>(`/templates${params}`)
 }
 
-async function useTemplate(templateId: string, data: UseTemplateFormData) {
-    const res = await fetch(`/api/templates/${templateId}/use`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": "1" },
-        credentials: "include",
-        body: JSON.stringify(data),
-    })
-    if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.detail || "Failed to use template")
-    }
-    return res.json()
+async function useTemplateApi(templateId: string, data: UseTemplateFormData) {
+    return api.post(`/templates/${templateId}/use`, data)
 }
 
 export default function TemplatesPage() {
@@ -112,7 +102,7 @@ export default function TemplatesPage() {
     })
 
     const useTemplateMutation = useMutation({
-        mutationFn: () => useTemplate(selectedTemplate!.id, formData),
+        mutationFn: () => useTemplateApi(selectedTemplate!.id, formData),
         onSuccess: () => {
             toast.success("Workflow created from template!")
             queryClient.invalidateQueries({ queryKey: ["workflows"] })
