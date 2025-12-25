@@ -150,6 +150,10 @@ app.include_router(workflows.router)  # Router already has prefix="/workflows"
 from app.routers import campaigns
 app.include_router(campaigns.router, prefix="/campaigns", tags=["campaigns"])
 
+# Workflow Templates (Marketplace - Manager+)
+from app.routers import templates
+app.include_router(templates.router)
+
 from app.routers import admin_meta
 app.include_router(admin_meta.router)  # Already has prefix in router definition
 

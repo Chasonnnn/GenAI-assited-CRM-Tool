@@ -191,6 +191,9 @@ class WorkflowCreate(BaseModel):
     condition_logic: Literal["AND", "OR"] = "AND"
     actions: list[dict] = Field(min_length=1)  # Validated per action_type
     is_enabled: bool = True
+    # Rate limits (None = unlimited)
+    rate_limit_per_hour: int | None = Field(default=None, ge=1, le=1000)
+    rate_limit_per_entity_per_day: int | None = Field(default=None, ge=1, le=100)
 
 
 class WorkflowUpdate(BaseModel):
@@ -204,6 +207,9 @@ class WorkflowUpdate(BaseModel):
     condition_logic: Literal["AND", "OR"] | None = None
     actions: list[dict] | None = None
     is_enabled: bool | None = None
+    # Rate limits (None = unlimited)
+    rate_limit_per_hour: int | None = Field(default=None, ge=1, le=1000)
+    rate_limit_per_entity_per_day: int | None = Field(default=None, ge=1, le=100)
 
 
 class WorkflowRead(BaseModel):
@@ -222,6 +228,9 @@ class WorkflowRead(BaseModel):
     run_count: int
     last_run_at: datetime | None
     last_error: str | None
+    # Rate limits
+    rate_limit_per_hour: int | None = None
+    rate_limit_per_entity_per_day: int | None = None
     created_by_name: str | None = None
     updated_by_name: str | None = None
     created_at: datetime

@@ -1,0 +1,273 @@
+"""Template service for workflow template marketplace."""
+
+from datetime import datetime, timezone
+from uuid import UUID
+
+from sqlalchemy import or_
+from sqlalchemy.orm import Session
+
+from app.db.models import WorkflowTemplate, AutomationWorkflow, User
+
+
+def list_templates(
+    db: Session,
+    org_id: UUID,
+    category: str | None = None,
+) -> list[WorkflowTemplate]:
+    """
+    List available templates (global + org-specific).
+    
+    Returns templates visible to the organization.
+    """
+    query = db.query(WorkflowTemplate).filter(
+        or_(
+            WorkflowTemplate.is_global == True,
+            WorkflowTemplate.organization_id == org_id,
+        )
+    )
+    
+    if category:
+        query = query.filter(WorkflowTemplate.category == category)
+    
+    return query.order_by(
+        WorkflowTemplate.is_global.desc(),
+        WorkflowTemplate.usage_count.desc(),
+        WorkflowTemplate.name,
+    ).all()
+
+
+def get_template(
+    db: Session,
+    template_id: UUID,
+    org_id: UUID,
+) -> WorkflowTemplate | None:
+    """Get a template by ID if accessible to the org."""
+    return db.query(WorkflowTemplate).filter(
+        WorkflowTemplate.id == template_id,
+        or_(
+            WorkflowTemplate.is_global == True,
+            WorkflowTemplate.organization_id == org_id,
+        )
+    ).first()
+
+
+def create_template(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    name: str,
+    description: str | None,
+    category: str,
+    trigger_type: str,
+    trigger_config: dict,
+    conditions: list,
+    condition_logic: str,
+    actions: list,
+    icon: str = "template",
+) -> WorkflowTemplate:
+    """Create a new org-specific template."""
+    template = WorkflowTemplate(
+        organization_id=org_id,
+        created_by_user_id=user_id,
+        name=name,
+        description=description,
+        icon=icon,
+        category=category,
+        trigger_type=trigger_type,
+        trigger_config=trigger_config,
+        conditions=conditions,
+        condition_logic=condition_logic,
+        actions=actions,
+        is_global=False,
+        usage_count=0,
+    )
+    db.add(template)
+    db.commit()
+    db.refresh(template)
+    return template
+
+
+def create_template_from_workflow(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    workflow_id: UUID,
+    name: str,
+    description: str | None,
+    category: str = "general",
+) -> WorkflowTemplate:
+    """Create a template from an existing workflow."""
+    workflow = db.query(AutomationWorkflow).filter(
+        AutomationWorkflow.id == workflow_id,
+        AutomationWorkflow.organization_id == org_id,
+    ).first()
+    
+    if not workflow:
+        raise ValueError("Workflow not found")
+    
+    return create_template(
+        db=db,
+        org_id=org_id,
+        user_id=user_id,
+        name=name,
+        description=description or workflow.description,
+        category=category,
+        trigger_type=workflow.trigger_type,
+        trigger_config=workflow.trigger_config,
+        conditions=workflow.conditions,
+        condition_logic=workflow.condition_logic,
+        actions=workflow.actions,
+        icon=workflow.icon,
+    )
+
+
+def use_template(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    template_id: UUID,
+    workflow_name: str,
+    workflow_description: str | None = None,
+    is_enabled: bool = True,
+) -> AutomationWorkflow:
+    """Create a workflow from a template."""
+    template = get_template(db, template_id, org_id)
+    if not template:
+        raise ValueError("Template not found")
+    
+    # Create workflow copy
+    workflow = AutomationWorkflow(
+        organization_id=org_id,
+        name=workflow_name,
+        description=workflow_description or template.description,
+        icon=template.icon,
+        trigger_type=template.trigger_type,
+        trigger_config=template.trigger_config,
+        conditions=template.conditions,
+        condition_logic=template.condition_logic,
+        actions=template.actions,
+        is_enabled=is_enabled,
+        created_by_user_id=user_id,
+        updated_by_user_id=user_id,
+    )
+    db.add(workflow)
+    
+    # Update template usage count
+    template.usage_count += 1
+    
+    db.commit()
+    db.refresh(workflow)
+    return workflow
+
+
+def delete_template(
+    db: Session,
+    org_id: UUID,
+    template_id: UUID,
+) -> bool:
+    """Delete an org-specific template (cannot delete global templates)."""
+    template = db.query(WorkflowTemplate).filter(
+        WorkflowTemplate.id == template_id,
+        WorkflowTemplate.organization_id == org_id,
+        WorkflowTemplate.is_global == False,
+    ).first()
+    
+    if not template:
+        return False
+    
+    db.delete(template)
+    db.commit()
+    return True
+
+
+def seed_global_templates(db: Session) -> int:
+    """Seed default global templates."""
+    templates_data = [
+        {
+            "name": "Welcome New Lead",
+            "description": "Send a welcome email when a new lead is created",
+            "category": "onboarding",
+            "icon": "mail",
+            "trigger_type": "case_created",
+            "trigger_config": {},
+            "conditions": [],
+            "condition_logic": "AND",
+            "actions": [
+                {"action_type": "send_email", "template_id": None}  # User selects template
+            ],
+        },
+        {
+            "name": "Follow Up After Inactivity",
+            "description": "Create a task when a case has no activity for 7 days",
+            "category": "follow-up",
+            "icon": "clock",
+            "trigger_type": "inactivity",
+            "trigger_config": {"days": 7},
+            "conditions": [],
+            "condition_logic": "AND",
+            "actions": [
+                {"action_type": "create_task", "title": "Follow up on inactive case", "due_days": 1}
+            ],
+        },
+        {
+            "name": "Owner Assignment Notification",
+            "description": "Notify user when a case is assigned to them",
+            "category": "notifications",
+            "icon": "bell",
+            "trigger_type": "case_assigned",
+            "trigger_config": {},
+            "conditions": [],
+            "condition_logic": "AND",
+            "actions": [
+                {"action_type": "send_notification", "title": "New case assigned", "recipients": "owner"}
+            ],
+        },
+        {
+            "name": "Status Change Alert",
+            "description": "Notify managers when a case status changes",
+            "category": "notifications",
+            "icon": "activity",
+            "trigger_type": "status_changed",
+            "trigger_config": {},
+            "conditions": [],
+            "condition_logic": "AND",
+            "actions": [
+                {"action_type": "send_notification", "title": "Case status updated", "recipients": "all_managers"}
+            ],
+        },
+        {
+            "name": "Task Due Reminder",
+            "description": "Send notification when a task is due today",
+            "category": "compliance",
+            "icon": "alert-circle",
+            "trigger_type": "task_due",
+            "trigger_config": {"hours_before": 24},
+            "conditions": [],
+            "condition_logic": "AND",
+            "actions": [
+                {"action_type": "send_notification", "title": "Task due soon", "recipients": "owner"}
+            ],
+        },
+    ]
+    
+    created = 0
+    for data in templates_data:
+        existing = db.query(WorkflowTemplate).filter(
+            WorkflowTemplate.is_global == True,
+            WorkflowTemplate.name == data["name"],
+        ).first()
+        
+        if not existing:
+            template = WorkflowTemplate(
+                is_global=True,
+                organization_id=None,
+                created_by_user_id=None,
+                **data,
+            )
+            db.add(template)
+            created += 1
+    
+    if created > 0:
+        db.commit()
+    
+    return created
