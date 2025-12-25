@@ -150,6 +150,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
         { title: "Campaigns", url: "/automation/campaigns" },
         { title: "Email Templates", url: "/automation/email-templates" },
         { title: "AI Builder", url: "/automation/ai-builder" },
+        ...(isManager || isDeveloper ? [{ title: "Executions", url: "/automation/executions" }] : []),
     ]
 
     const tasksItems: Array<{ title: string; url: string }> = [

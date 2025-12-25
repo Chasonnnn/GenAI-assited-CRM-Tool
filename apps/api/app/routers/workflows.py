@@ -61,6 +61,45 @@ def get_workflow_stats(
     return workflow_service.get_workflow_stats(db, session.org_id)
 
 
+# =============================================================================
+# Org-wide Execution Dashboard (Manager+Dev only)
+# =============================================================================
+
+@router.get("/executions")
+def list_org_executions(
+    status: str | None = None,
+    workflow_id: UUID | None = None,
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, le=100),
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_permission("manage_automation")),
+):
+    """
+    List all workflow executions for the organization.
+    
+    Manager/Developer only. Shows all executions across the org.
+    """
+    offset = (page - 1) * per_page
+    items, total = workflow_service.list_org_executions(
+        db=db,
+        org_id=session.org_id,
+        status=status,
+        workflow_id=workflow_id,
+        limit=per_page,
+        offset=offset,
+    )
+    return {"items": items, "total": total}
+
+
+@router.get("/executions/stats")
+def get_execution_stats(
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_permission("manage_automation")),
+):
+    """Get execution statistics for the dashboard (last 24h)."""
+    return workflow_service.get_execution_stats(db, session.org_id)
+
+
 @router.post("", response_model=WorkflowRead, dependencies=[Depends(require_csrf_header)])
 def create_workflow(
     data: WorkflowCreate,
