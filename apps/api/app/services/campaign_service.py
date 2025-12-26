@@ -536,6 +536,14 @@ def execute_campaign_run(
     if not template:
         raise Exception(f"Email template {campaign.email_template_id} not found")
     
+    if run.status == "completed":
+        return {
+            "sent_count": run.sent_count,
+            "failed_count": run.failed_count,
+            "skipped_count": run.skipped_count,
+            "total_count": run.total_count,
+        }
+
     # Mark campaign as sending
     campaign.status = CampaignStatus.SENDING.value
     run.status = "running"
@@ -549,13 +557,13 @@ def execute_campaign_run(
         campaign.filter_criteria or {}
     ).all()
     
+    recipients.sort(key=lambda r: ((r.email or "").lower(), str(r.id)))
+    
     run.total_count = len(recipients)
     db.commit()
-    
-    sent_count = 0
-    failed_count = 0
-    skipped_count = 0
-    
+
+    seen_emails: dict[str, str | None] = {}
+
     for recipient in recipients:
         # Get email and name
         if campaign.recipient_type == "case":
@@ -567,27 +575,65 @@ def execute_campaign_run(
             name = recipient.full_name or recipient.first_name
             entity_id = recipient.id
         
-        # Skip if no email
         if not email:
-            skipped_count += 1
+            continue
+
+        email_norm = email.strip().lower()
+        if not email_norm:
+            continue
+        
+        existing = db.query(CampaignRecipient).filter(
+            CampaignRecipient.run_id == run_id,
+            CampaignRecipient.entity_type == campaign.recipient_type,
+            CampaignRecipient.entity_id == entity_id,
+        ).first()
+        
+        if email_norm in seen_emails:
+            skip_reason = seen_emails[email_norm] or "duplicate_email"
+            if not existing:
+                existing = CampaignRecipient(
+                    organization_id=org_id,
+                    run_id=run_id,
+                    entity_type=campaign.recipient_type,
+                    entity_id=entity_id,
+                    recipient_email=email,
+                    recipient_name=name,
+                )
+                db.add(existing)
+                db.flush()
+            if existing.status not in (
+                CampaignRecipientStatus.SENT.value,
+                CampaignRecipientStatus.SKIPPED.value,
+            ):
+                existing.status = CampaignRecipientStatus.SKIPPED.value
+                existing.skip_reason = skip_reason
+                db.commit()
             continue
         
         # Check suppression
-        if is_email_suppressed(db, org_id, email):
-            # Record as skipped
-            cr = CampaignRecipient(
-                organization_id=org_id,
-                run_id=run_id,
-                entity_type=campaign.recipient_type,
-                entity_id=entity_id,
-                recipient_email=email,
-                recipient_name=name,
-                status=CampaignRecipientStatus.SKIPPED.value,
-                skip_reason="suppressed",
-            )
-            db.add(cr)
-            skipped_count += 1
+        if is_email_suppressed(db, org_id, email_norm):
+            seen_emails[email_norm] = "suppressed"
+            if not existing:
+                existing = CampaignRecipient(
+                    organization_id=org_id,
+                    run_id=run_id,
+                    entity_type=campaign.recipient_type,
+                    entity_id=entity_id,
+                    recipient_email=email,
+                    recipient_name=name,
+                )
+                db.add(existing)
+                db.flush()
+            if existing.status not in (
+                CampaignRecipientStatus.SENT.value,
+                CampaignRecipientStatus.SKIPPED.value,
+            ):
+                existing.status = CampaignRecipientStatus.SKIPPED.value
+                existing.skip_reason = "suppressed"
+                db.commit()
             continue
+
+        seen_emails[email_norm] = None
         
         # Build email from template with variable substitution
         subject = template.subject
@@ -606,17 +652,24 @@ def execute_campaign_run(
             body = body.replace(placeholder, str(value) if value else "")
         
         # Create recipient record
-        cr = CampaignRecipient(
-            organization_id=org_id,
-            run_id=run_id,
-            entity_type=campaign.recipient_type,
-            entity_id=entity_id,
-            recipient_email=email,
-            recipient_name=name,
-            status=CampaignRecipientStatus.PENDING.value,
-        )
-        db.add(cr)
-        db.flush()
+        cr = existing
+        if not cr:
+            cr = CampaignRecipient(
+                organization_id=org_id,
+                run_id=run_id,
+                entity_type=campaign.recipient_type,
+                entity_id=entity_id,
+                recipient_email=email,
+                recipient_name=name,
+                status=CampaignRecipientStatus.PENDING.value,
+            )
+            db.add(cr)
+            db.flush()
+        elif cr.status in (
+            CampaignRecipientStatus.SENT.value,
+            CampaignRecipientStatus.SKIPPED.value,
+        ):
+            continue
         
         try:
             # Send email (synchronously for now, could be async)
@@ -630,32 +683,40 @@ def execute_campaign_run(
             )
             cr.status = CampaignRecipientStatus.SENT.value
             cr.sent_at = datetime.now(timezone.utc)
-            sent_count += 1
         except Exception as e:
             cr.status = CampaignRecipientStatus.FAILED.value
             cr.error = str(e)[:500]
-            failed_count += 1
         
         db.commit()
     
     # Update run and campaign status
-    run.sent_count = sent_count
-    run.failed_count = failed_count
-    run.skipped_count = skipped_count
+    status_rows = db.query(
+        CampaignRecipient.status,
+        func.count(CampaignRecipient.id)
+    ).filter(
+        CampaignRecipient.run_id == run_id
+    ).group_by(
+        CampaignRecipient.status
+    ).all()
+    status_counts = {status: count for status, count in status_rows}
+    
+    run.sent_count = status_counts.get(CampaignRecipientStatus.SENT.value, 0)
+    run.failed_count = status_counts.get(CampaignRecipientStatus.FAILED.value, 0)
+    run.skipped_count = status_counts.get(CampaignRecipientStatus.SKIPPED.value, 0)
     run.completed_at = datetime.now(timezone.utc)
-    run.status = "completed" if failed_count == 0 else "completed_with_errors"
+    run.status = "completed" if run.failed_count == 0 else "completed_with_errors"
     
     campaign.status = CampaignStatus.COMPLETED.value
-    campaign.sent_count = sent_count
-    campaign.failed_count = failed_count
-    campaign.skipped_count = skipped_count
+    campaign.sent_count = run.sent_count
+    campaign.failed_count = run.failed_count
+    campaign.skipped_count = run.skipped_count
     campaign.total_recipients = run.total_count
     
     db.commit()
     
     return {
-        "sent_count": sent_count,
-        "failed_count": failed_count,
-        "skipped_count": skipped_count,
+        "sent_count": run.sent_count,
+        "failed_count": run.failed_count,
+        "skipped_count": run.skipped_count,
         "total_count": run.total_count,
     }

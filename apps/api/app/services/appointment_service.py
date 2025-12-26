@@ -428,6 +428,9 @@ def get_available_slots(
     query: SlotQuery,
     slot_interval_minutes: int = 30,
     exclude_appointment_id: UUID | None = None,
+    duration_minutes: int | None = None,
+    buffer_before_minutes: int | None = None,
+    buffer_after_minutes: int | None = None,
 ) -> list[TimeSlot]:
     """
     Calculate available time slots for booking.
@@ -447,9 +450,9 @@ def get_available_slots(
     if not appt_type or not appt_type.is_active:
         return []
     
-    duration = appt_type.duration_minutes
-    buffer_before = appt_type.buffer_before_minutes
-    buffer_after = appt_type.buffer_after_minutes
+    duration = duration_minutes if duration_minutes is not None else appt_type.duration_minutes
+    buffer_before = buffer_before_minutes if buffer_before_minutes is not None else appt_type.buffer_before_minutes
+    buffer_after = buffer_after_minutes if buffer_after_minutes is not None else appt_type.buffer_after_minutes
     
     client_tz = _get_timezone(query.client_timezone)
 
@@ -593,8 +596,10 @@ def _build_day_slots(
         has_conflict = False
         for appt in appointments:
             # Include buffer in conflict check
-            appt_block_start = appt.scheduled_start - timedelta(minutes=buffer_before)
-            appt_block_end = appt.scheduled_end + timedelta(minutes=buffer_after)
+            appt_buffer_before = appt.buffer_before_minutes if appt.buffer_before_minutes is not None else buffer_before
+            appt_buffer_after = appt.buffer_after_minutes if appt.buffer_after_minutes is not None else buffer_after
+            appt_block_start = appt.scheduled_start - timedelta(minutes=appt_buffer_before)
+            appt_block_end = appt.scheduled_end + timedelta(minutes=appt_buffer_after)
             
             if not (slot_end <= appt_block_start or slot_start >= appt_block_end):
                 has_conflict = True
@@ -783,6 +788,8 @@ def create_booking(
         scheduled_start=scheduled_start,
         scheduled_end=scheduled_end,
         duration_minutes=appt_type.duration_minutes,
+        buffer_before_minutes=appt_type.buffer_before_minutes,
+        buffer_after_minutes=appt_type.buffer_after_minutes,
         meeting_mode=appt_type.meeting_mode,
         status=AppointmentStatus.PENDING.value,
         pending_expires_at=pending_expires,
@@ -858,6 +865,9 @@ def approve_booking(
         available_slots = get_available_slots(
             db, slot_query,
             exclude_appointment_id=appointment.id,  # Exclude this pending appt itself
+            duration_minutes=appointment.duration_minutes,
+            buffer_before_minutes=appointment.buffer_before_minutes,
+            buffer_after_minutes=appointment.buffer_after_minutes,
         )
         if not any(slot.start == appointment.scheduled_start for slot in available_slots):
             raise ValueError("This time slot is no longer available - another appointment or task has been scheduled")
@@ -948,6 +958,9 @@ def reschedule_booking(
         db,
         slot_query,
         exclude_appointment_id=appointment.id,
+        duration_minutes=appointment.duration_minutes,
+        buffer_before_minutes=appointment.buffer_before_minutes,
+        buffer_after_minutes=appointment.buffer_after_minutes,
     )
     if not any(slot.start == new_start for slot in slots):
         raise ValueError("Selected time is no longer available")

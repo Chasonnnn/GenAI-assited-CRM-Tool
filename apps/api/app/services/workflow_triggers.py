@@ -195,15 +195,7 @@ def trigger_scheduled_workflows(db: Session, org_id: UUID) -> None:
         # Simple cron matching (for daily/weekly schedules)
         # Full cron parsing would require croniter library
         if _should_run_cron(cron, now, tz):
-            # For scheduled workflows, we need to run against all active cases
-            # This is expensive - consider limiting or using pagination
-            from app.db.models import Case
-            cases = db.query(Case).filter(
-                Case.organization_id == org_id,
-                Case.is_archived == False,
-            ).limit(1000).all()
-            
-            for case in cases:
+            for case in _iter_cases(db, org_id):
                 engine.trigger(
                     db=db,
                     trigger_type=WorkflowTriggerType.SCHEDULED,
@@ -237,13 +229,7 @@ def trigger_inactivity_workflows(db: Session, org_id: UUID) -> None:
         
         # Find cases with no activity since threshold
         # Using updated_at as proxy for activity
-        inactive_cases = db.query(Case).filter(
-            Case.organization_id == org_id,
-            Case.is_archived == False,
-            Case.updated_at < threshold,
-        ).limit(500).all()
-        
-        for case in inactive_cases:
+        for case in _iter_cases(db, org_id, updated_before=threshold):
             engine.trigger(
                 db=db,
                 trigger_type=WorkflowTriggerType.INACTIVITY,
@@ -256,6 +242,33 @@ def trigger_inactivity_workflows(db: Session, org_id: UUID) -> None:
                 org_id=org_id,
                 source=WorkflowEventSource.SYSTEM,
             )
+
+
+def _iter_cases(
+    db: Session,
+    org_id: UUID,
+    updated_before: "datetime | None" = None,
+    batch_size: int = 500,
+):
+    """Iterate through active cases in batches to avoid truncating large orgs."""
+    from app.db.models import Case
+    
+    last_id = None
+    while True:
+        query = db.query(Case).filter(
+            Case.organization_id == org_id,
+            Case.is_archived == False,
+        )
+        if updated_before is not None:
+            query = query.filter(Case.updated_at < updated_before)
+        if last_id:
+            query = query.filter(Case.id > last_id)
+        batch = query.order_by(Case.id).limit(batch_size).all()
+        if not batch:
+            break
+        for case in batch:
+            yield case
+        last_id = batch[-1].id
 
 
 def trigger_task_due_sweep(db: Session, org_id: UUID) -> None:

@@ -12,6 +12,7 @@ Coverage:
 
 import pytest
 from datetime import datetime, timedelta, timezone, time
+from zoneinfo import ZoneInfo
 from uuid import uuid4
 
 from app.db.models import (
@@ -179,6 +180,77 @@ class TestConflictDetection:
                 client_timezone="America/New_York",
                 scheduled_start=confirmed_appointment.scheduled_start,
             )
+
+    def test_existing_buffers_block_nearby_slots(self, db, test_org, test_user, availability_rules):
+        """Existing appointment buffers should block adjacent slots."""
+        from app.db.models import AppointmentType, Appointment
+        from app.db.enums import MeetingMode
+        from app.services.appointment_service import get_available_slots, SlotQuery
+
+        appt_type = AppointmentType(
+            id=uuid4(),
+            organization_id=test_org.id,
+            user_id=test_user.id,
+            slug="no-buffer",
+            name="No Buffer",
+            description="No buffers",
+            duration_minutes=30,
+            buffer_before_minutes=0,
+            buffer_after_minutes=0,
+            meeting_mode=MeetingMode.ZOOM.value,
+            is_active=True,
+            reminder_hours_before=24,
+        )
+        db.add(appt_type)
+        db.flush()
+
+        today = datetime.now(timezone.utc).date()
+        days_until_monday = (7 - today.weekday()) % 7
+        if days_until_monday == 0:
+            days_until_monday = 7
+        target_date = today + timedelta(days=days_until_monday)
+
+        user_tz = ZoneInfo("America/New_York")
+        existing_start_local = datetime.combine(target_date, time(10, 0), tzinfo=user_tz)
+        existing_start = existing_start_local.astimezone(timezone.utc)
+        existing_end = existing_start + timedelta(minutes=30)
+
+        existing = Appointment(
+            id=uuid4(),
+            organization_id=test_org.id,
+            user_id=test_user.id,
+            appointment_type_id=appt_type.id,
+            client_name="Buffered Client",
+            client_email="buffered@example.com",
+            client_phone="555-333-2222",
+            client_timezone="America/New_York",
+            scheduled_start=existing_start,
+            scheduled_end=existing_end,
+            duration_minutes=30,
+            buffer_before_minutes=0,
+            buffer_after_minutes=30,
+            meeting_mode=MeetingMode.ZOOM.value,
+            status=AppointmentStatus.CONFIRMED.value,
+        )
+        db.add(existing)
+        db.flush()
+
+        query = SlotQuery(
+            user_id=test_user.id,
+            org_id=test_org.id,
+            appointment_type_id=appt_type.id,
+            date_start=target_date,
+            date_end=target_date,
+            client_timezone="America/New_York",
+        )
+        slots = get_available_slots(db, query)
+        slot_times_local = [
+            slot.start.astimezone(user_tz).time() for slot in slots
+            if slot.start.astimezone(user_tz).date() == target_date
+        ]
+
+        assert time(10, 30) not in slot_times_local
+        assert time(11, 0) in slot_times_local
 
 
 # =============================================================================
@@ -554,4 +626,3 @@ class TestTaskTimezoneConflict:
         # There should be fewer slots now due to the task blocking 10:00-11:00
         assert len(slots_after) < len(slots_before), \
             "Task should block some slots - timezone handling may be incorrect"
-

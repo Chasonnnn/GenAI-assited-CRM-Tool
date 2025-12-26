@@ -53,8 +53,17 @@ def record_request(
         status_5xx=status_5xx,
         total_duration_ms=duration_ms,
         request_count=1,
-    ).on_conflict_do_update(
-        constraint="uq_request_metrics_rollup",
+    )
+    
+    conflict_target = {"constraint": "uq_request_metrics_rollup"}
+    if org_id is None:
+        conflict_target = {
+            "index_elements": ["period_start", "route", "method"],
+            "index_where": RequestMetricsRollup.organization_id.is_(None),
+        }
+    
+    stmt = stmt.on_conflict_do_update(
+        **conflict_target,
         set_={
             "status_2xx": RequestMetricsRollup.status_2xx + status_2xx,
             "status_4xx": RequestMetricsRollup.status_4xx + status_4xx,
