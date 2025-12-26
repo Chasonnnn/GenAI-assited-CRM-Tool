@@ -11,7 +11,7 @@ export interface Attachment {
     file_size: number
     scan_status: "pending" | "clean" | "infected" | "error"
     quarantined: boolean
-    uploaded_by_user_id: string
+    uploaded_by_user_id: string | null
     created_at: string
 }
 

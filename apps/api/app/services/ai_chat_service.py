@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any
 
 import nh3
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import (
@@ -250,7 +251,19 @@ def get_or_create_conversation(
         entity_id=entity_id,
     )
     db.add(conversation)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        conversation = db.query(AIConversation).filter(
+            AIConversation.organization_id == organization_id,
+            AIConversation.user_id == user_id,
+            AIConversation.entity_type == entity_type,
+            AIConversation.entity_id == entity_id,
+        ).first()
+        if conversation:
+            return conversation
+        raise
     db.refresh(conversation)
     return conversation
 

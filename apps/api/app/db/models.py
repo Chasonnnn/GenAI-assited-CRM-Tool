@@ -498,8 +498,6 @@ class Case(Base):
             "organization_id", "meta_form_id",
             postgresql_where=text("meta_form_id IS NOT NULL")
         ),
-        # Ownership indexes
-        Index("idx_cases_org_owner", "organization_id", "owner_type", "owner_id"),
     )
     
     id: Mapped[uuid.UUID] = mapped_column(
@@ -517,7 +515,7 @@ class Case(Base):
     # Workflow (v2: pipeline stages)
     stage_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("pipeline_stages.id", ondelete="SET NULL"),
+        ForeignKey("pipeline_stages.id", ondelete="RESTRICT"),
         nullable=False
     )
     status_label: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -1463,6 +1461,13 @@ class IntegrationHealth(Base):
     
     __table_args__ = (
         Index("ix_integration_health_org_type", "organization_id", "integration_type"),
+        Index(
+            "uq_integration_health_org_type_null_key",
+            "organization_id",
+            "integration_type",
+            unique=True,
+            postgresql_where=text("integration_key IS NULL"),
+        ),
         UniqueConstraint("organization_id", "integration_type", "integration_key", name="uq_integration_health_org_type_key"),
     )
 
@@ -1495,6 +1500,14 @@ class IntegrationErrorRollup(Base):
     
     __table_args__ = (
         Index("ix_integration_error_rollup_lookup", "organization_id", "integration_type", "period_start"),
+        Index(
+            "uq_integration_error_rollup_null_key",
+            "organization_id",
+            "integration_type",
+            "period_start",
+            unique=True,
+            postgresql_where=text("integration_key IS NULL"),
+        ),
         UniqueConstraint("organization_id", "integration_type", "integration_key", "period_start", name="uq_integration_error_rollup"),
     )
 
@@ -1576,6 +1589,14 @@ class RequestMetricsRollup(Base):
     
     __table_args__ = (
         Index("ix_request_metrics_period", "period_start", "period_type"),
+        Index(
+            "uq_request_metrics_rollup_null_org",
+            "period_start",
+            "route",
+            "method",
+            unique=True,
+            postgresql_where=text("organization_id IS NULL"),
+        ),
         UniqueConstraint("organization_id", "period_start", "route", "method", name="uq_request_metrics_rollup"),
     )
 
@@ -1662,6 +1683,13 @@ class AIConversation(Base):
     __table_args__ = (
         Index("ix_ai_conversations_entity", "organization_id", "entity_type", "entity_id"),
         Index("ix_ai_conversations_user", "user_id", "entity_type", "entity_id"),
+        UniqueConstraint(
+            "organization_id",
+            "user_id",
+            "entity_type",
+            "entity_id",
+            name="uq_ai_conversations_user_entity",
+        ),
     )
 
 
@@ -1686,7 +1714,7 @@ class AIMessage(Base):
     )
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    proposed_actions: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    proposed_actions: Mapped[list[dict] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     
     # Relationships
@@ -2942,10 +2970,10 @@ class Attachment(Base):
         ForeignKey("intended_parents.id", ondelete="CASCADE"),
         nullable=True
     )
-    uploaded_by_user_id: Mapped[uuid.UUID] = mapped_column(
+    uploaded_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=False
+        nullable=True
     )
     
     # File metadata
@@ -2984,7 +3012,7 @@ class Attachment(Base):
     # Relationships
     organization: Mapped["Organization"] = relationship()
     case: Mapped["Case"] = relationship()
-    uploaded_by: Mapped["User"] = relationship(foreign_keys=[uploaded_by_user_id])
+    uploaded_by: Mapped["User | None"] = relationship(foreign_keys=[uploaded_by_user_id])
     deleted_by: Mapped["User | None"] = relationship(foreign_keys=[deleted_by_user_id])
 
 
@@ -3296,6 +3324,18 @@ class Appointment(Base):
     scheduled_start: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     scheduled_end: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    buffer_before_minutes: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        server_default=text("0"),
+        nullable=False
+    )
+    buffer_after_minutes: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        server_default=text("0"),
+        nullable=False
+    )
     
     # Meeting mode (snapshot from appointment type)
     meeting_mode: Mapped[str] = mapped_column(String(20), nullable=False)

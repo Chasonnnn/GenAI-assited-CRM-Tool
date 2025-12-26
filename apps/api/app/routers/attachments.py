@@ -31,7 +31,7 @@ class AttachmentRead(BaseModel):
     file_size: int
     scan_status: str
     quarantined: bool
-    uploaded_by_user_id: str
+    uploaded_by_user_id: str | None
     created_at: str
 
 
@@ -113,7 +113,7 @@ async def upload_attachment(
             file_size=attachment.file_size,
             scan_status=attachment.scan_status,
             quarantined=attachment.quarantined,
-            uploaded_by_user_id=str(attachment.uploaded_by_user_id),
+            uploaded_by_user_id=str(attachment.uploaded_by_user_id) if attachment.uploaded_by_user_id else None,
             created_at=attachment.created_at.isoformat(),
         )
     except ValueError as e:
@@ -144,7 +144,7 @@ async def list_attachments(
             file_size=a.file_size,
             scan_status=a.scan_status,
             quarantined=a.quarantined,
-            uploaded_by_user_id=str(a.uploaded_by_user_id),
+            uploaded_by_user_id=str(a.uploaded_by_user_id) if a.uploaded_by_user_id else None,
             created_at=a.created_at.isoformat(),
         )
         for a in attachments
@@ -191,7 +191,7 @@ async def list_ip_attachments(
             file_size=a.file_size,
             scan_status=a.scan_status,
             quarantined=a.quarantined,
-            uploaded_by_user_id=str(a.uploaded_by_user_id),
+            uploaded_by_user_id=str(a.uploaded_by_user_id) if a.uploaded_by_user_id else None,
             created_at=a.created_at.isoformat(),
         )
         for a in attachments
@@ -235,7 +235,7 @@ async def upload_ip_attachment(
             file_size=attachment.file_size,
             scan_status=attachment.scan_status,
             quarantined=attachment.quarantined,
-            uploaded_by_user_id=str(attachment.uploaded_by_user_id),
+            uploaded_by_user_id=str(attachment.uploaded_by_user_id) if attachment.uploaded_by_user_id else None,
             created_at=attachment.created_at.isoformat(),
         )
     except ValueError as e:

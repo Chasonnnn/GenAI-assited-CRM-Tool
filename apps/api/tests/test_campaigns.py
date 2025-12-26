@@ -367,3 +367,67 @@ def test_execute_campaign_run_with_no_recipients(db, test_org, test_user, test_t
     assert result["sent_count"] == 0
     assert result["failed_count"] == 0
     assert result["total_count"] == 0
+
+
+def test_campaign_run_skips_existing_recipient(db, test_org, test_user, test_template, default_stage):
+    """Runs should be idempotent when a recipient already exists."""
+    from app.db.models import Case, CampaignRun, CampaignRecipient
+    from app.schemas.campaign import CampaignCreate
+    from app.services import campaign_service
+
+    case = Case(
+        id=uuid4(),
+        organization_id=test_org.id,
+        stage_id=default_stage.id,
+        full_name="Case One",
+        status_label=default_stage.label,
+        email="idempotent@example.com",
+        source="manual",
+        case_number=f"C-{uuid4().hex[:6]}",
+        owner_type="user",
+        owner_id=test_user.id,
+    )
+    db.add(case)
+    db.flush()
+
+    create_data = CampaignCreate(
+        name="Idempotent Campaign",
+        email_template_id=test_template.id,
+        recipient_type="case",
+        filter_criteria={"stage_ids": [str(default_stage.id)]},
+    )
+    campaign = campaign_service.create_campaign(db, test_org.id, test_user.id, create_data)
+
+    run = CampaignRun(
+        id=uuid4(),
+        organization_id=test_org.id,
+        campaign_id=campaign.id,
+        status="pending",
+        total_count=0,
+        sent_count=0,
+        failed_count=0,
+        skipped_count=0,
+    )
+    db.add(run)
+    db.flush()
+
+    existing = CampaignRecipient(
+        run_id=run.id,
+        entity_type="case",
+        entity_id=case.id,
+        recipient_email=case.email,
+        recipient_name=case.full_name,
+        status="sent",
+    )
+    db.add(existing)
+    db.flush()
+
+    result = campaign_service.execute_campaign_run(
+        db=db,
+        org_id=test_org.id,
+        campaign_id=campaign.id,
+        run_id=run.id,
+    )
+
+    assert result["total_count"] == 1
+    assert result["sent_count"] == 1
