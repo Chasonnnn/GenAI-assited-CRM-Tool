@@ -372,6 +372,7 @@ def get_or_create_booking_link(
     """Get or create a booking link for a user."""
     existing = db.query(BookingLink).filter(
         BookingLink.user_id == user_id,
+        BookingLink.organization_id == org_id,
     ).first()
     
     if existing:

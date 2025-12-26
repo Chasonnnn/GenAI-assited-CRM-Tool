@@ -153,14 +153,16 @@ export default function CampaignsPage() {
 
             toast.success("Campaign created successfully")
 
-            if (scheduleFor === "now") {
-                // Send immediately
-                try {
-                    await sendCampaign.mutateAsync({ id: campaign.id, sendNow: true })
+            // Always call sendCampaign - sendNow=true for immediate, sendNow=false for scheduled
+            try {
+                await sendCampaign.mutateAsync({ id: campaign.id, sendNow: scheduleFor === "now" })
+                if (scheduleFor === "now") {
                     toast.success("Campaign queued for sending")
-                } catch {
-                    toast.error("Campaign created but failed to start sending")
+                } else {
+                    toast.success("Campaign scheduled successfully")
                 }
+            } catch {
+                toast.error("Campaign created but failed to start")
             }
 
             resetWizard()

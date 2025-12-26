@@ -68,6 +68,7 @@ class UseTemplateRequest(BaseModel):
     name: str = Field(max_length=100)
     description: str | None = None
     is_enabled: bool = True
+    action_overrides: dict[str, dict] | None = None
 
 
 TEMPLATE_CATEGORIES = [

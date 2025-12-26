@@ -129,11 +129,44 @@ def use_template(
     workflow_name: str,
     workflow_description: str | None = None,
     is_enabled: bool = True,
-) -> AutomationWorkflow:
-    """Create a workflow from a template."""
+    action_overrides: dict | None = None,
+) -> tuple[AutomationWorkflow, list[str]]:
+    """Create a workflow from a template.
+    
+    Returns tuple of (workflow, warnings).
+    If actions have missing required fields, a validation error is raised.
+    """
     template = get_template(db, template_id, org_id)
     if not template:
         raise ValueError("Template not found")
+    
+    # Apply action overrides if provided
+    actions = template.actions.copy() if template.actions else []
+    if action_overrides:
+        for idx_str, overrides in action_overrides.items():
+            idx = int(idx_str)
+            if 0 <= idx < len(actions):
+                actions[idx] = {**actions[idx], **overrides}
+    
+    # Validate actions for missing required fields
+    warnings = []
+    for i, action in enumerate(actions):
+        action_type = action.get("action_type")
+        if action_type == "send_email" and not action.get("template_id"):
+            warnings.append(f"Action {i+1} (send_email) missing email template")
+    if warnings:
+        raise ValueError("; ".join(warnings))
+    
+    from app.services import workflow_service
+    from app.db.enums import WorkflowTriggerType
+    workflow_service._validate_trigger_config(
+        WorkflowTriggerType(template.trigger_type),
+        template.trigger_config or {},
+    )
+    for action in actions:
+        workflow_service._validate_action_config(db, org_id, action)
+    
+    effective_enabled = is_enabled
     
     # Create workflow copy
     workflow = AutomationWorkflow(
@@ -145,8 +178,8 @@ def use_template(
         trigger_config=template.trigger_config,
         conditions=template.conditions,
         condition_logic=template.condition_logic,
-        actions=template.actions,
-        is_enabled=is_enabled,
+        actions=actions,
+        is_enabled=effective_enabled,
         created_by_user_id=user_id,
         updated_by_user_id=user_id,
     )
@@ -157,7 +190,7 @@ def use_template(
     
     db.commit()
     db.refresh(workflow)
-    return workflow
+    return workflow, warnings
 
 
 def delete_template(

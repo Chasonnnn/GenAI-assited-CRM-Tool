@@ -720,6 +720,18 @@ async def process_campaign_send(db, job) -> None:
     logger.info(f"Starting campaign send: campaign={campaign_id}, run={run_id}")
     
     try:
+        # Check if campaign was cancelled before executing
+        from app.db.models import Campaign
+        from app.db.enums import CampaignStatus
+        
+        campaign = db.query(Campaign).filter(Campaign.id == UUID(campaign_id)).first()
+        if not campaign:
+            raise Exception(f"Campaign {campaign_id} not found")
+        
+        if campaign.status == CampaignStatus.CANCELLED.value:
+            logger.info(f"Campaign {campaign_id} was cancelled, skipping execution")
+            return  # Don't execute cancelled campaigns
+        
         # Execute the campaign send
         result = campaign_service.execute_campaign_run(
             db=db,

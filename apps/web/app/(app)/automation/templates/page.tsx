@@ -31,28 +31,40 @@ import {
     PlayIcon,
 } from "lucide-react"
 import { toast } from "sonner"
+import { useEmailTemplates } from "@/lib/hooks/use-email-templates"
+import { EmailTemplateListItem } from "@/lib/api/email-templates"
 
 // Types
-interface Template {
+interface TemplateAction {
+    action_type?: string
+    template_id?: string | null
+    [key: string]: unknown
+}
+
+interface WorkflowTemplateListItem {
     id: string
     name: string
     description: string | null
     icon: string
     category: string
     trigger_type: string
-    trigger_config: Record<string, unknown>
-    conditions: Record<string, unknown>[]
-    condition_logic: string
-    actions: Record<string, unknown>[]
     is_global: boolean
     usage_count: number
     created_at: string
+}
+
+interface WorkflowTemplateDetail extends WorkflowTemplateListItem {
+    trigger_config: Record<string, unknown>
+    conditions: Record<string, unknown>[]
+    condition_logic: string
+    actions: TemplateAction[]
 }
 
 interface UseTemplateFormData {
     name: string
     description: string
     is_enabled: boolean
+    action_overrides?: Record<string, { template_id: string }>
 }
 
 // Category config
@@ -77,9 +89,13 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
 // API functions using the shared api module
 import api from "@/lib/api"
 
-async function fetchTemplates(category?: string): Promise<Template[]> {
+async function fetchTemplates(category?: string): Promise<WorkflowTemplateListItem[]> {
     const params = category ? `?category=${category}` : ""
-    return api.get<Template[]>(`/templates${params}`)
+    return api.get<WorkflowTemplateListItem[]>(`/templates${params}`)
+}
+
+async function fetchTemplate(templateId: string): Promise<WorkflowTemplateDetail> {
+    return api.get<WorkflowTemplateDetail>(`/templates/${templateId}`)
 }
 
 async function useTemplateApi(templateId: string, data: UseTemplateFormData) {
@@ -89,16 +105,23 @@ async function useTemplateApi(templateId: string, data: UseTemplateFormData) {
 export default function TemplatesPage() {
     const queryClient = useQueryClient()
     const [categoryFilter, setCategoryFilter] = useState("all")
-    const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null)
+    const [selectedTemplate, setSelectedTemplate] = useState<WorkflowTemplateListItem | null>(null)
     const [formData, setFormData] = useState<UseTemplateFormData>({
         name: "",
         description: "",
         is_enabled: true,
+        action_overrides: {},
     })
+    const { data: emailTemplates = [], isLoading: isLoadingEmailTemplates } = useEmailTemplates(true)
 
     const { data: templates = [], isLoading } = useQuery({
         queryKey: ["templates", categoryFilter],
         queryFn: () => fetchTemplates(categoryFilter === "all" ? undefined : categoryFilter),
+    })
+    const { data: selectedTemplateDetail, isLoading: isLoadingTemplateDetail } = useQuery({
+        queryKey: ["template", selectedTemplate?.id],
+        queryFn: () => fetchTemplate(selectedTemplate!.id),
+        enabled: !!selectedTemplate?.id,
     })
 
     const useTemplateMutation = useMutation({
@@ -107,24 +130,49 @@ export default function TemplatesPage() {
             toast.success("Workflow created from template!")
             queryClient.invalidateQueries({ queryKey: ["workflows"] })
             setSelectedTemplate(null)
-            setFormData({ name: "", description: "", is_enabled: true })
+            setFormData({ name: "", description: "", is_enabled: true, action_overrides: {} })
         },
         onError: (err: Error) => {
             toast.error(err.message)
         },
     })
 
-    const handleSelectTemplate = (template: Template) => {
+    const handleSelectTemplate = (template: WorkflowTemplateListItem) => {
         setSelectedTemplate(template)
         setFormData({
             name: template.name,
             description: template.description || "",
             is_enabled: true,
+            action_overrides: {},
         })
     }
 
     const globalTemplates = templates.filter((t) => t.is_global)
     const orgTemplates = templates.filter((t) => !t.is_global)
+    const missingEmailActions =
+        selectedTemplate && selectedTemplateDetail?.actions
+            ? selectedTemplateDetail.actions
+                  .map((action, index) => {
+                      const actionType = typeof action.action_type === "string" ? action.action_type : ""
+                      const templateId =
+                          typeof action.template_id === "string" ? action.template_id : null
+                      return { action, actionType, templateId, index }
+                  })
+                  .filter(({ actionType, templateId }) => actionType === "send_email" && !templateId)
+            : []
+    const hasMissingEmailTemplates = missingEmailActions.length > 0
+    const hasAllEmailSelections =
+        !hasMissingEmailTemplates ||
+        missingEmailActions.every(
+            ({ index }) => formData.action_overrides?.[String(index)]?.template_id
+        )
+    const isTemplateDetailLoading =
+        !!selectedTemplate && (isLoadingTemplateDetail || !selectedTemplateDetail)
+    const canCreateWorkflow =
+        !!formData.name &&
+        !useTemplateMutation.isPending &&
+        hasAllEmailSelections &&
+        !isTemplateDetailLoading
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-6">
@@ -241,6 +289,77 @@ export default function TemplatesPage() {
                             />
                         </div>
 
+                        {isTemplateDetailLoading && (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <LoaderIcon className="h-4 w-4 animate-spin" />
+                                Loading template details...
+                            </div>
+                        )}
+
+                        {hasMissingEmailTemplates && (
+                            <div className="space-y-3 rounded-lg border border-dashed border-muted-foreground/40 p-3">
+                                <div className="flex items-center gap-2 text-sm font-medium">
+                                    <MailIcon className="h-4 w-4 text-teal-500" />
+                                    Select email templates for this workflow
+                                </div>
+                                {isLoadingEmailTemplates ? (
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <LoaderIcon className="h-4 w-4 animate-spin" />
+                                        Loading email templates...
+                                    </div>
+                                ) : emailTemplates.length === 0 ? (
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <AlertCircleIcon className="h-4 w-4" />
+                                        Create an email template before using this workflow template.
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {missingEmailActions.map(({ action, index }) => {
+                                            const override =
+                                                formData.action_overrides?.[String(index)]?.template_id ?? ""
+                                            const actionLabel =
+                                                typeof action.name === "string"
+                                                    ? action.name
+                                                    : `Email action ${index + 1}`
+                                            return (
+                                                <div key={`email-action-${index}`} className="space-y-2">
+                                                    <Label className="text-sm">{actionLabel}</Label>
+                                                    <Select
+                                                        value={override}
+                                                        onValueChange={(value) =>
+                                                            setFormData((prev) => ({
+                                                                ...prev,
+                                                                action_overrides: {
+                                                                    ...(prev.action_overrides ?? {}),
+                                                                    [String(index)]: { template_id: value },
+                                                                },
+                                                            }))
+                                                        }
+                                                    >
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="Choose an email template" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {emailTemplates.map(
+                                                                (template: EmailTemplateListItem) => (
+                                                                    <SelectItem
+                                                                        key={template.id}
+                                                                        value={template.id}
+                                                                    >
+                                                                        {template.name}
+                                                                    </SelectItem>
+                                                                )
+                                                            )}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         <div className="flex items-center gap-2">
                             <input
                                 type="checkbox"
@@ -259,7 +378,7 @@ export default function TemplatesPage() {
                         </Button>
                         <Button
                             onClick={() => useTemplateMutation.mutate()}
-                            disabled={!formData.name || useTemplateMutation.isPending}
+                            disabled={!canCreateWorkflow}
                         >
                             {useTemplateMutation.isPending ? (
                                 <LoaderIcon className="mr-2 h-4 w-4 animate-spin" />
@@ -280,7 +399,7 @@ function TemplateCard({
     template,
     onSelect,
 }: {
-    template: Template
+    template: WorkflowTemplateListItem
     onSelect: () => void
 }) {
     const IconComponent = iconMap[template.icon] || LayoutTemplateIcon
