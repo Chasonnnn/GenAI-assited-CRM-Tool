@@ -14,8 +14,28 @@ function DropdownMenuPortal({ ...props }: MenuPrimitive.Portal.Props) {
   return <MenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />
 }
 
-function DropdownMenuTrigger({ ...props }: MenuPrimitive.Trigger.Props) {
-  return <MenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />
+function DropdownMenuTrigger({
+  children,
+  render,
+  ...props
+}: MenuPrimitive.Trigger.Props) {
+  // Support both patterns:
+  // 1. render prop provided directly (used in app-sidebar)
+  // 2. children as single element (used in campaigns page) - convert to render prop
+  const renderProp = render ?? (
+    React.isValidElement(children) ? children : undefined
+  )
+
+  return (
+    <MenuPrimitive.Trigger
+      data-slot="dropdown-menu-trigger"
+      render={renderProp}
+      {...props}
+    >
+      {/* Only pass children if render wasn't derived from it */}
+      {render ? children : null}
+    </MenuPrimitive.Trigger>
+  )
 }
 
 function DropdownMenuContent({
@@ -41,7 +61,7 @@ function DropdownMenuContent({
       >
         <MenuPrimitive.Popup
           data-slot="dropdown-menu-content"
-          className={cn("data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 ring-foreground/5 bg-popover text-popover-foreground min-w-48 rounded-2xl p-1 shadow-2xl ring-1 duration-100 z-50 max-h-(--available-height) w-(--anchor-width) origin-(--transform-origin) overflow-x-hidden overflow-y-auto outline-none data-closed:overflow-hidden", className )}
+          className={cn("data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 ring-foreground/5 bg-popover text-popover-foreground min-w-48 rounded-2xl p-1 shadow-2xl ring-1 duration-100 z-50 max-h-(--available-height) w-(--anchor-width) origin-(--transform-origin) overflow-x-hidden overflow-y-auto outline-none data-closed:overflow-hidden", className)}
           {...props}
         />
       </MenuPrimitive.Positioner>

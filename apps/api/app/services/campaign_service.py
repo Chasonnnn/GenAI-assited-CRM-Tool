@@ -672,8 +672,8 @@ def execute_campaign_run(
             continue
         
         try:
-            # Send email (synchronously for now, could be async)
-            email_service.send_email(
+            # Queue email (actual send happens in background job)
+            email_log, _job = email_service.send_email(
                 db=db,
                 org_id=org_id,
                 template_id=template.id,
@@ -681,8 +681,8 @@ def execute_campaign_run(
                 subject=subject,
                 body=body,
             )
-            cr.status = CampaignRecipientStatus.SENT.value
-            cr.sent_at = datetime.now(timezone.utc)
+            cr.status = CampaignRecipientStatus.PENDING.value
+            cr.external_message_id = str(email_log.id)
         except Exception as e:
             cr.status = CampaignRecipientStatus.FAILED.value
             cr.error = str(e)[:500]
@@ -700,17 +700,23 @@ def execute_campaign_run(
     ).all()
     status_counts = {status: count for status, count in status_rows}
     
+    pending_count = status_counts.get(CampaignRecipientStatus.PENDING.value, 0)
     run.sent_count = status_counts.get(CampaignRecipientStatus.SENT.value, 0)
     run.failed_count = status_counts.get(CampaignRecipientStatus.FAILED.value, 0)
     run.skipped_count = status_counts.get(CampaignRecipientStatus.SKIPPED.value, 0)
-    run.completed_at = datetime.now(timezone.utc)
-    run.status = "completed" if run.failed_count == 0 else "completed_with_errors"
+    run.completed_at = datetime.now(timezone.utc) if pending_count == 0 else None
+    run.status = "completed" if pending_count == 0 and run.failed_count == 0 else (
+        "failed" if pending_count == 0 else "running"
+    )
     
-    campaign.status = CampaignStatus.COMPLETED.value
     campaign.sent_count = run.sent_count
     campaign.failed_count = run.failed_count
     campaign.skipped_count = run.skipped_count
     campaign.total_recipients = run.total_count
+    if pending_count == 0:
+        campaign.status = CampaignStatus.COMPLETED.value if run.failed_count == 0 else CampaignStatus.FAILED.value
+    else:
+        campaign.status = CampaignStatus.SENDING.value
     
     db.commit()
     

@@ -4,10 +4,13 @@ Notification Service - handles in-app notifications.
 Provides CRUD for notifications and trigger functions for case/task events.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
+import asyncio
+import logging
+import threading
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -19,7 +22,9 @@ from app.db.models import (
     Membership,
     User,
 )
+from app.core.websocket import manager
 
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Notification Settings
@@ -129,21 +134,25 @@ def create_notification(
     entity_type: Optional[str] = None,
     entity_id: Optional[UUID] = None,
     dedupe_key: Optional[str] = None,
+    dedupe_window_hours: int | None = 1,
 ) -> Optional[Notification]:
     """
     Create a notification.
     
-    Dedupes by dedupe_key + org_id + user_id within 1 hour window.
+    Dedupes by dedupe_key + org_id + user_id within a time window
+    (or forever when dedupe_window_hours is None).
     """
     # Check dedupe (scoped by org and user for safety)
     if dedupe_key:
-        one_hour_ago = datetime.utcnow() - timedelta(hours=1)
-        existing = db.query(Notification).filter(
+        query = db.query(Notification).filter(
             Notification.dedupe_key == dedupe_key,
             Notification.organization_id == org_id,
             Notification.user_id == user_id,
-            Notification.created_at > one_hour_ago,
-        ).first()
+        )
+        if dedupe_window_hours is not None:
+            window_start = datetime.now(timezone.utc) - timedelta(hours=dedupe_window_hours)
+            query = query.filter(Notification.created_at > window_start)
+        existing = query.first()
         
         if existing:
             return None  # Already notified
@@ -161,6 +170,10 @@ def create_notification(
     db.add(notification)
     db.commit()
     db.refresh(notification)
+
+    # Best-effort realtime push for connected clients.
+    unread_count = get_unread_count(db, user_id, org_id)
+    _schedule_ws_send(_send_ws_updates(user_id, notification, unread_count))
     return notification
 
 
@@ -215,9 +228,11 @@ def mark_read(
     ).first()
     
     if notification and not notification.read_at:
-        notification.read_at = datetime.utcnow()
+        notification.read_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(notification)
+        unread_count = get_unread_count(db, user_id, org_id)
+        _schedule_ws_send(_send_ws_count_update(user_id, unread_count))
     
     return notification
 
@@ -232,9 +247,62 @@ def mark_all_read(
         Notification.user_id == user_id,
         Notification.organization_id == org_id,
         Notification.read_at.is_(None),
-    ).update({"read_at": datetime.utcnow()})
+    ).update({"read_at": datetime.now(timezone.utc)})
     db.commit()
+    unread_count = get_unread_count(db, user_id, org_id)
+    _schedule_ws_send(_send_ws_count_update(user_id, unread_count))
     return count
+
+
+def _schedule_ws_send(coro: asyncio.Future) -> None:
+    """Schedule websocket sends without blocking the request cycle."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        loop.create_task(coro)
+        return
+
+    def _runner() -> None:
+        try:
+            asyncio.run(coro)
+        except Exception:
+            logger.exception("Failed to push websocket notification")
+
+    threading.Thread(target=_runner, daemon=True).start()
+
+
+async def _send_ws_updates(user_id: UUID, notification: Notification, unread_count: int) -> None:
+    """Send realtime notification + unread count to websocket clients."""
+    payload = {
+        "id": str(notification.id),
+        "type": notification.type,
+        "title": notification.title,
+        "body": notification.body,
+        "entity_type": notification.entity_type,
+        "entity_id": str(notification.entity_id) if notification.entity_id else None,
+        "read_at": notification.read_at.isoformat() if notification.read_at else None,
+        "created_at": notification.created_at.isoformat(),
+    }
+
+    await manager.send_to_user(user_id, {
+        "type": "notification",
+        "data": payload,
+    })
+    await manager.send_to_user(user_id, {
+        "type": "count_update",
+        "data": {"count": unread_count},
+    })
+
+
+async def _send_ws_count_update(user_id: UUID, unread_count: int) -> None:
+    """Send unread count updates to websocket clients."""
+    await manager.send_to_user(user_id, {
+        "type": "count_update",
+        "data": {"count": unread_count},
+    })
 
 
 # =============================================================================
@@ -461,6 +529,7 @@ def notify_task_due_soon(
         entity_type="task",
         entity_id=task_id,
         dedupe_key=dedupe_key,
+        dedupe_window_hours=None,
     )
 
 
@@ -498,6 +567,7 @@ def notify_task_overdue(
         entity_type="task",
         entity_id=task_id,
         dedupe_key=dedupe_key,
+        dedupe_window_hours=None,
     )
 
 
@@ -606,4 +676,3 @@ def notify_appointment_cancelled(
         entity_id=appointment_id,
         dedupe_key=dedupe_key,
     )
-
