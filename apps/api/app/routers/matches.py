@@ -1,11 +1,11 @@
 """Matches router - API endpoints for matching surrogates with intended parents."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -754,18 +754,35 @@ def list_match_events(
     if event_type:
         query = query.filter(MatchEvent.event_type == event_type)
     
-    # Date filtering for timed events
-    if from_date:
-        from_dt = datetime.fromisoformat(from_date).replace(tzinfo=timezone.utc)
-        query = query.filter(
-            (MatchEvent.starts_at >= from_dt) | (MatchEvent.start_date >= from_dt.date())
+    # Date filtering (timed events + overlapping all-day events)
+    if from_date or to_date:
+        from_dt = datetime.fromisoformat(from_date).replace(tzinfo=timezone.utc) if from_date else None
+        to_dt = (
+            datetime.fromisoformat(to_date).replace(tzinfo=timezone.utc) + timedelta(days=1)
+            if to_date
+            else None
         )
-    if to_date:
-        # Use start of next day to include events on the to_date itself
-        to_dt = datetime.fromisoformat(to_date).replace(tzinfo=timezone.utc) + timedelta(days=1)
-        query = query.filter(
-            (MatchEvent.starts_at < to_dt) | (MatchEvent.start_date < to_dt.date())
-        )
+        from_day = date_type.fromisoformat(from_date) if from_date else None
+        to_day = date_type.fromisoformat(to_date) if to_date else None
+
+        date_filters = []
+
+        timed_filters = []
+        if from_dt:
+            timed_filters.append(MatchEvent.starts_at >= from_dt)
+        if to_dt:
+            timed_filters.append(MatchEvent.starts_at < to_dt)
+        if timed_filters:
+            date_filters.append(and_(MatchEvent.starts_at.isnot(None), *timed_filters))
+
+        all_day_filters = [MatchEvent.all_day.is_(True), MatchEvent.start_date.isnot(None)]
+        if to_day:
+            all_day_filters.append(MatchEvent.start_date <= to_day)
+        if from_day:
+            all_day_filters.append(func.coalesce(MatchEvent.end_date, MatchEvent.start_date) >= from_day)
+        date_filters.append(and_(*all_day_filters))
+
+        query = query.filter(or_(*date_filters))
     
     events = query.order_by(MatchEvent.starts_at, MatchEvent.start_date).all()
     
@@ -792,9 +809,24 @@ def create_match_event(
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
     
-    # Parse dates for all-day events
-    start_date = date_type.fromisoformat(data.start_date) if data.start_date else None
-    end_date = date_type.fromisoformat(data.end_date) if data.end_date else None
+    if data.all_day:
+        if not data.start_date:
+            raise HTTPException(status_code=400, detail="start_date is required for all-day events")
+        start_date = date_type.fromisoformat(data.start_date)
+        end_date = date_type.fromisoformat(data.end_date) if data.end_date else None
+        if end_date and end_date < start_date:
+            raise HTTPException(status_code=400, detail="end_date must be on or after start_date")
+        starts_at = None
+        ends_at = None
+    else:
+        if not data.starts_at:
+            raise HTTPException(status_code=400, detail="starts_at is required for timed events")
+        if data.ends_at and data.ends_at < data.starts_at:
+            raise HTTPException(status_code=400, detail="ends_at must be on or after starts_at")
+        start_date = None
+        end_date = None
+        starts_at = data.starts_at
+        ends_at = data.ends_at
     
     event = MatchEvent(
         organization_id=session.org_id,
@@ -803,8 +835,8 @@ def create_match_event(
         event_type=data.event_type,
         title=data.title,
         description=data.description,
-        starts_at=data.starts_at,
-        ends_at=data.ends_at,
+        starts_at=starts_at,
+        ends_at=ends_at,
         timezone=data.timezone,
         all_day=data.all_day,
         start_date=start_date,
@@ -862,6 +894,26 @@ def update_match_event(
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
     
+    next_all_day = data.all_day if data.all_day is not None else event.all_day
+    if next_all_day:
+        next_start_date = (
+            date_type.fromisoformat(data.start_date) if data.start_date is not None else event.start_date
+        )
+        next_end_date = (
+            date_type.fromisoformat(data.end_date) if data.end_date is not None else event.end_date
+        )
+        if not next_start_date:
+            raise HTTPException(status_code=400, detail="start_date is required for all-day events")
+        if next_end_date and next_end_date < next_start_date:
+            raise HTTPException(status_code=400, detail="end_date must be on or after start_date")
+    else:
+        next_starts_at = data.starts_at if data.starts_at is not None else event.starts_at
+        next_ends_at = data.ends_at if data.ends_at is not None else event.ends_at
+        if not next_starts_at:
+            raise HTTPException(status_code=400, detail="starts_at is required for timed events")
+        if next_ends_at and next_ends_at < next_starts_at:
+            raise HTTPException(status_code=400, detail="ends_at must be on or after starts_at")
+
     # Update fields
     if data.person_type is not None:
         event.person_type = data.person_type
@@ -871,18 +923,19 @@ def update_match_event(
         event.title = data.title
     if data.description is not None:
         event.description = data.description
-    if data.starts_at is not None:
-        event.starts_at = data.starts_at
-    if data.ends_at is not None:
-        event.ends_at = data.ends_at
     if data.timezone is not None:
         event.timezone = data.timezone
-    if data.all_day is not None:
-        event.all_day = data.all_day
-    if data.start_date is not None:
-        event.start_date = date_type.fromisoformat(data.start_date)
-    if data.end_date is not None:
-        event.end_date = date_type.fromisoformat(data.end_date)
+    event.all_day = next_all_day
+    if next_all_day:
+        event.start_date = next_start_date
+        event.end_date = next_end_date
+        event.starts_at = None
+        event.ends_at = None
+    else:
+        event.start_date = None
+        event.end_date = None
+        event.starts_at = next_starts_at
+        event.ends_at = next_ends_at
     
     event.updated_at = datetime.now(timezone.utc)
     

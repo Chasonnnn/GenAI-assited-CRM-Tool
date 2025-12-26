@@ -1678,7 +1678,7 @@ _idempotency_cache: dict[str, BulkTaskCreateResponse] = {}
 async def create_bulk_tasks(
     body: BulkTaskCreateRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("manage_tasks")),
+    session: UserSession = Depends(require_permission("create_tasks")),
 ) -> BulkTaskCreateResponse:
     """
     Create multiple tasks in a single transaction (all-or-nothing).
