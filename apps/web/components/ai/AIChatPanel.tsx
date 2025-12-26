@@ -45,7 +45,7 @@ const ACTION_LABELS: Record<string, string> = {
     send_email: "Send Email",
     create_task: "Create Task",
     add_note: "Add Note",
-    update_status: "Update Status",
+    update_status: "Update Stage",
 }
 
 export function AIChatPanel({

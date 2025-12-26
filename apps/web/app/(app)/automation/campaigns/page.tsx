@@ -462,7 +462,7 @@ export default function CampaignsPage() {
                                     </Select>
                                 </div>
                                 <div className="space-y-2">
-                                    <Label>Filter by Status</Label>
+                                    <Label>Filter by Stage</Label>
                                     <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
                                         {pipelineStages.filter(s => s.is_active).map((stage) => (
                                             <div key={stage.id} className="flex items-center space-x-2">
@@ -515,7 +515,7 @@ export default function CampaignsPage() {
                                         </div>
                                         {selectedStages.length > 0 && (
                                             <div className="flex justify-between items-start">
-                                                <span className="text-muted-foreground">Filtered by Status:</span>
+                                                <span className="text-muted-foreground">Filtered by Stage:</span>
                                                 <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
                                                     {selectedStages.map((stageId) => {
                                                         const stage = pipelineStages.find(s => s.id === stageId)

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { Fragment, useState } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -20,6 +20,7 @@ import {
     LoaderIcon,
 } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
+import api from "@/lib/api"
 
 // Types for executions
 interface ExecutionAction {
@@ -108,27 +109,29 @@ async function fetchExecutions(params: {
     if (params.workflow_id && params.workflow_id !== "all") searchParams.set("workflow_id", params.workflow_id)
     if (params.page) searchParams.set("page", String(params.page))
 
-    const res = await fetch(`/api/workflows/executions?${searchParams.toString()}`, {
-        credentials: "include",
-    })
-    if (!res.ok) throw new Error("Failed to fetch executions")
-    return res.json()
+    const query = searchParams.toString()
+    return api.get<{ items: Execution[]; total: number }>(`/workflows/executions${query ? `?${query}` : ""}`)
 }
 
 async function fetchExecutionStats(): Promise<ExecutionStats> {
-    const res = await fetch("/api/workflows/executions/stats", {
-        credentials: "include",
-    })
-    if (!res.ok) throw new Error("Failed to fetch stats")
-    return res.json()
+    return api.get<ExecutionStats>("/workflows/executions/stats")
 }
 
 async function fetchWorkflows(): Promise<{ id: string; name: string }[]> {
-    const res = await fetch("/api/workflows", {
-        credentials: "include",
-    })
-    if (!res.ok) throw new Error("Failed to fetch workflows")
-    return res.json()
+    return api.get<{ id: string; name: string }[]>("/workflows")
+}
+
+function getEntityLink(entityType: string, entityId: string): string | null {
+    switch (entityType.toLowerCase()) {
+        case "case":
+            return `/cases/${entityId}`
+        case "intended_parent":
+            return `/intended-parents/${entityId}`
+        case "match":
+            return `/intended-parents/matches/${entityId}`
+        default:
+            return null
+    }
 }
 
 export default function WorkflowExecutionsPage() {
@@ -318,11 +321,11 @@ export default function WorkflowExecutionsPage() {
                                 executions.map((execution) => {
                                     const StatusIcon = statusConfig[execution.status]?.icon || AlertCircleIcon
                                     const isExpanded = expandedRows.has(execution.id)
+                                    const entityLink = getEntityLink(execution.entity_type, execution.entity_id)
 
                                     return (
-                                        <>
+                                        <Fragment key={execution.id}>
                                             <TableRow
-                                                key={execution.id}
                                                 className="cursor-pointer hover:bg-muted/50"
                                                 onClick={() => toggleRow(execution.id)}
                                             >
@@ -348,14 +351,18 @@ export default function WorkflowExecutionsPage() {
                                                 <TableCell>
                                                     {execution.entity_type === "System" ? (
                                                         <span className="text-muted-foreground">System</span>
-                                                    ) : (
+                                                    ) : entityLink ? (
                                                         <Link
-                                                            href={`/${execution.entity_type.toLowerCase()}s/${execution.entity_id}`}
+                                                            href={entityLink}
                                                             className="text-primary hover:underline"
                                                             onClick={(e) => e.stopPropagation()}
                                                         >
                                                             {execution.entity_type} #{execution.entity_id.slice(0, 8)}
                                                         </Link>
+                                                    ) : (
+                                                        <span className="text-muted-foreground">
+                                                            {execution.entity_type} #{execution.entity_id.slice(0, 8)}
+                                                        </span>
                                                     )}
                                                 </TableCell>
                                                 <TableCell>
@@ -451,7 +458,7 @@ export default function WorkflowExecutionsPage() {
                                                     </TableCell>
                                                 </TableRow>
                                             )}
-                                        </>
+                                        </Fragment>
                                     )
                                 })
                             )}

@@ -111,7 +111,7 @@ function formatActivityType(type: string): string {
     const labels: Record<string, string> = {
         case_created: 'Case Created',
         info_edited: 'Information Edited',
-        status_changed: 'Status Changed',
+        stage_changed: 'Stage Changed',
         assigned: 'Assigned',
         unassigned: 'Unassigned',
         priority_changed: 'Priority Changed',
@@ -348,7 +348,7 @@ export default function CaseDetailPage() {
                         <DropdownMenuTrigger
                             render={
                                 <Button variant="outline" size="sm" disabled={caseData.is_archived}>
-                                    Change Status
+                                    Change Stage
                                 </Button>
                             }
                         />

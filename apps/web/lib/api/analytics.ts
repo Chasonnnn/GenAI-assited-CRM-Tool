@@ -205,6 +205,29 @@ export interface MetaSpendSummary {
     total_leads: number;
     cost_per_lead: number | null;
     campaigns: CampaignSpend[];
+    time_series?: MetaSpendTimePoint[];
+    breakdowns?: MetaSpendBreakdown[];
+}
+
+export interface MetaSpendTimePoint {
+    date_start: string;
+    date_stop: string;
+    spend: number;
+    impressions: number;
+    reach: number;
+    clicks: number;
+    leads: number;
+    cost_per_lead: number | null;
+}
+
+export interface MetaSpendBreakdown {
+    breakdown_values: Record<string, string>;
+    spend: number;
+    impressions: number;
+    reach: number;
+    clicks: number;
+    leads: number;
+    cost_per_lead: number | null;
 }
 
 export async function getMetaSpend(params: DateRangeParams = {}): Promise<MetaSpendSummary> {

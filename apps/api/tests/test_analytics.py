@@ -48,6 +48,7 @@ def analytics_pipeline_stages(db, test_org):
         ("contacted", "Contacted", 2, "#10B981"),
         ("qualified", "Qualified", 3, "#8B5CF6"),
         ("applied", "Applied", 4, "#F59E0B"),
+        ("application_submitted", "Application Submitted", 5, "#8B5CF6"),
         ("approved", "Approved", 8, "#22C55E"),
     ]
     
@@ -86,7 +87,8 @@ def sample_cases(db, test_org, test_user, analytics_pipeline_stages):
     for i, (stage_slug, count) in enumerate([
         ("new_unread", 3),
         ("contacted", 2),
-        ("qualified", 4),
+        ("qualified", 2),
+        ("application_submitted", 1),
         ("approved", 1),
     ]):
         stage = stages[stage_slug]
@@ -121,12 +123,15 @@ def sample_meta_leads(db, test_org, sample_cases, analytics_pipeline_stages):
     
     # Find cases in qualified and approved stages
     qualified_case = None
+    converted_case = None
     approved_case = None
     
     for case in sample_cases:
         stage = db.query(PipelineStage).filter(PipelineStage.id == case.stage_id).first()
         if stage.slug == "qualified" and not qualified_case:
             qualified_case = case
+        if stage.slug == "application_submitted" and not converted_case:
+            converted_case = case
         if stage.slug == "approved" and not approved_case:
             approved_case = case
     
@@ -136,6 +141,7 @@ def sample_meta_leads(db, test_org, sample_cases, analytics_pipeline_stages):
         organization_id=test_org.id,
         meta_page_id="test-page",
         meta_lead_id=f"lead-{uuid.uuid4().hex[:8]}",
+        meta_created_time=datetime.utcnow() - timedelta(days=5),
         received_at=datetime.utcnow() - timedelta(days=5),
         is_converted=False,
         status="processed",
@@ -150,6 +156,7 @@ def sample_meta_leads(db, test_org, sample_cases, analytics_pipeline_stages):
             organization_id=test_org.id,
             meta_page_id="test-page",
             meta_lead_id=f"lead-{uuid.uuid4().hex[:8]}",
+            meta_created_time=datetime.utcnow() - timedelta(days=3),
             received_at=datetime.utcnow() - timedelta(days=3),
             is_converted=True,
             converted_case_id=qualified_case.id,
@@ -159,21 +166,39 @@ def sample_meta_leads(db, test_org, sample_cases, analytics_pipeline_stages):
         db.add(lead2)
         leads.append(lead2)
     
-    # Create converted lead (approved)
-    if approved_case:
+    # Create converted lead (application_submitted)
+    if converted_case:
         lead3 = MetaLead(
             id=uuid.uuid4(),
             organization_id=test_org.id,
             meta_page_id="test-page",
             meta_lead_id=f"lead-{uuid.uuid4().hex[:8]}",
+            meta_created_time=datetime.utcnow() - timedelta(days=4),
+            received_at=datetime.utcnow() - timedelta(days=4),
+            is_converted=True,
+            converted_case_id=converted_case.id,
+            converted_at=datetime.utcnow() - timedelta(days=1),
+            status="converted",
+        )
+        db.add(lead3)
+        leads.append(lead3)
+    
+    # Create converted lead (approved)
+    if approved_case:
+        lead4 = MetaLead(
+            id=uuid.uuid4(),
+            organization_id=test_org.id,
+            meta_page_id="test-page",
+            meta_lead_id=f"lead-{uuid.uuid4().hex[:8]}",
+            meta_created_time=datetime.utcnow() - timedelta(days=7),
             received_at=datetime.utcnow() - timedelta(days=7),
             is_converted=True,
             converted_case_id=approved_case.id,
             converted_at=datetime.utcnow() - timedelta(days=1),
             status="converted",
         )
-        db.add(lead3)
-        leads.append(lead3)
+        db.add(lead4)
+        leads.append(lead4)
     
     db.flush()
     return leads
@@ -307,8 +332,9 @@ class TestMetaPerformance:
         assert response.status_code == 200
         
         data = response.json()
-        # We created 3 leads, 2 converted
-        assert data["leads_received"] >= 0
+        assert data["leads_received"] == 4
+        assert data["leads_qualified"] == 3
+        assert data["leads_converted"] == 2
         assert data["qualification_rate"] >= 0
         assert data["conversion_rate"] >= 0
     
@@ -325,6 +351,62 @@ class TestMetaPerformance:
         
         data = response.json()
         assert "leads_received" in data
+
+    @pytest.mark.asyncio
+    async def test_meta_performance_prefers_meta_created_time(
+        self,
+        authed_client,
+        db,
+        test_org,
+        sample_meta_leads,
+    ):
+        """Meta performance filters by meta_created_time when available."""
+        from_date = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d")
+        to_date = datetime.utcnow().strftime("%Y-%m-%d")
+        response = await authed_client.get(
+            f"/analytics/meta/performance?from_date={from_date}&to_date={to_date}"
+        )
+        assert response.status_code == 200
+        baseline = response.json()["leads_received"]
+        
+        old_lead = MetaLead(
+            id=uuid.uuid4(),
+            organization_id=test_org.id,
+            meta_page_id="test-page",
+            meta_lead_id=f"lead-{uuid.uuid4().hex[:8]}",
+            meta_created_time=datetime.utcnow() - timedelta(days=90),
+            received_at=datetime.utcnow() - timedelta(days=1),
+            is_converted=False,
+            status="processed",
+        )
+        db.add(old_lead)
+        db.commit()
+        
+        response = await authed_client.get(
+            f"/analytics/meta/performance?from_date={from_date}&to_date={to_date}"
+        )
+        assert response.status_code == 200
+        assert response.json()["leads_received"] == baseline
+
+
+class TestMetaSpend:
+    """Tests for GET /analytics/meta/spend"""
+    
+    @pytest.mark.asyncio
+    async def test_meta_spend_with_time_series_and_breakdowns(self, authed_client, monkeypatch):
+        """Meta spend returns time series and breakdowns when requested."""
+        from app.core.config import settings
+        
+        monkeypatch.setattr(settings, "META_TEST_MODE", True)
+        
+        response = await authed_client.get("/analytics/meta/spend?time_increment=1&breakdowns=region")
+        assert response.status_code == 200
+        
+        data = response.json()
+        assert "time_series" in data
+        assert "breakdowns" in data
+        assert len(data["time_series"]) >= 1
+        assert len(data["breakdowns"]) >= 1
 
 
 class TestAnalyticsKPIs:
@@ -351,13 +433,18 @@ class TestAnalyticsFunnel:
         """Returns funnel stage data."""
         response = await authed_client.get("/analytics/funnel")
         assert response.status_code == 200
-        
+
         data = response.json()
         assert "data" in data
         assert isinstance(data["data"], list)
-        
+
         # Each stage should have stage info and counts
         for stage in data["data"]:
             assert "stage" in stage
             assert "count" in stage
             assert "percentage" in stage
+
+        by_stage = {stage["stage"]: stage for stage in data["data"]}
+        assert by_stage["new_unread"]["count"] == 9
+        assert by_stage["contacted"]["count"] == 6
+        assert by_stage["qualified"]["count"] == 4

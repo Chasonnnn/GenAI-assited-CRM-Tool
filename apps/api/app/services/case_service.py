@@ -300,7 +300,7 @@ def _maybe_send_capi_event(db: Session, case: Case, old_status: str, new_status:
     
     Triggers when:
     - Case source is META
-    - Status changes to a qualified-like status
+    - Status changes into a different Meta status bucket
     - CAPI is enabled
     """
     from app.core.config import settings
@@ -977,4 +977,3 @@ def get_case_stats(db: Session, org_id: UUID) -> dict:
         "month_change_pct": month_change_pct,
         "pending_tasks": pending_tasks,
     }
-

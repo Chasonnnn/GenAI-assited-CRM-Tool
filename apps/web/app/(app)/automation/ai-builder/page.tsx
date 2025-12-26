@@ -109,7 +109,7 @@ export default function AIWorkflowBuilderPage() {
 
             if (result.success && result.workflow_id) {
                 toast.success("Workflow saved! It's currently disabled for your review.")
-                router.push(`/automation/workflows/${result.workflow_id}`)
+                router.push("/automation?tab=workflows")
             } else {
                 toast.error(result.error || "Failed to save workflow")
             }

@@ -9,14 +9,13 @@ Note: Requires calendar.readonly and calendar.events scopes.
 """
 
 import httpx
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import TypedDict
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.db.models import UserIntegration
-from app.core.config import settings
+from app.services import oauth_service
 
 
 # =============================================================================
@@ -53,53 +52,7 @@ async def get_google_access_token(
     Refreshes the token if expired.
     Returns None if no integration exists.
     """
-    from app.core.encryption import decrypt_value
-    
-    integration = db.query(UserIntegration).filter(
-        UserIntegration.user_id == user_id,
-        UserIntegration.integration_type == "gmail",
-    ).first()
-    
-    if not integration or not integration.access_token_encrypted:
-        return None
-    
-    # Check if token is expired
-    if integration.token_expires_at and integration.token_expires_at < datetime.now(timezone.utc):
-        # Try to refresh
-        if integration.refresh_token_encrypted:
-            new_token = await _refresh_google_token(
-                decrypt_value(integration.refresh_token_encrypted)
-            )
-            if new_token:
-                from app.core.encryption import encrypt_value
-                integration.access_token_encrypted = encrypt_value(new_token["access_token"])
-                integration.token_expires_at = datetime.now(timezone.utc) + \
-                    timedelta(seconds=new_token.get("expires_in", 3600))
-                db.commit()
-                return new_token["access_token"]
-        return None
-    
-    return decrypt_value(integration.access_token_encrypted)
-
-
-async def _refresh_google_token(refresh_token: str) -> dict | None:
-    """Refresh a Google OAuth token."""
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://oauth2.googleapis.com/token",
-                data={
-                    "client_id": settings.GOOGLE_CLIENT_ID,
-                    "client_secret": settings.GOOGLE_CLIENT_SECRET,
-                    "refresh_token": refresh_token,
-                    "grant_type": "refresh_token",
-                },
-            )
-            if response.status_code == 200:
-                return response.json()
-    except Exception:
-        pass
-    return None
+    return oauth_service.get_access_token(db, user_id, "gmail")
 
 
 # =============================================================================

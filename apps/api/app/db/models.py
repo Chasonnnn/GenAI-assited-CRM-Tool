@@ -3619,6 +3619,8 @@ class CampaignRun(Base):
     sent_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     skipped_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    opened_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    clicked_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     
     # Relationships
     organization: Mapped["Organization"] = relationship()
@@ -3677,6 +3679,13 @@ class CampaignRecipient(Base):
     # External ID from email service
     external_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     
+    # Tracking
+    tracking_token: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    opened_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    open_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    clicked_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    click_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    
     created_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"),
         nullable=False
@@ -3684,6 +3693,10 @@ class CampaignRecipient(Base):
     
     # Relationships
     run: Mapped["CampaignRun"] = relationship(back_populates="recipients")
+    tracking_events: Mapped[list["CampaignTrackingEvent"]] = relationship(
+        back_populates="recipient",
+        cascade="all, delete-orphan"
+    )
 
 
 class EmailSuppression(Base):
@@ -3730,3 +3743,50 @@ class EmailSuppression(Base):
     
     # Relationships
     organization: Mapped["Organization"] = relationship()
+
+
+class CampaignTrackingEvent(Base):
+    """
+    Individual email open/click events for campaign analytics.
+    
+    Records each time an email is opened or a link is clicked,
+    capturing IP address and user agent for device analytics.
+    """
+    __tablename__ = "campaign_tracking_events"
+    __table_args__ = (
+        Index("idx_tracking_events_recipient", "recipient_id"),
+        Index("idx_tracking_events_type", "event_type"),
+    )
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    recipient_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("campaign_recipients.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # Event type
+    event_type: Mapped[str] = mapped_column(
+        String(10),
+        nullable=False
+    )  # 'open' | 'click'
+    
+    # For clicks: the URL that was clicked
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    # Analytics data
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)  # IPv6 max length
+    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        nullable=False
+    )
+    
+    # Relationships
+    recipient: Mapped["CampaignRecipient"] = relationship(back_populates="tracking_events")
+

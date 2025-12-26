@@ -83,7 +83,7 @@ describe('MatchesPage', () => {
         expect(screen.getByText('Case #')).toBeInTheDocument()
         expect(screen.getByText('Intended Parents')).toBeInTheDocument()
         expect(screen.getByText('Compatibility')).toBeInTheDocument()
-        expect(screen.getByText('Match Status')).toBeInTheDocument()
+        expect(screen.getByText('Match Stage')).toBeInTheDocument()
         expect(screen.getByText('Case Stage')).toBeInTheDocument()
 
         // Match data

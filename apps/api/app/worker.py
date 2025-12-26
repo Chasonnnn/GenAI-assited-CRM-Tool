@@ -437,9 +437,14 @@ async def process_meta_capi_event(db, job) -> None:
             db.commit()
             raise Exception(f"Token decryption failed: {e}")
     
-    success, error = await meta_capi.send_qualified_event(
+    meta_status = meta_capi.map_case_status_to_meta_status(str(case_status))
+    if not meta_status:
+        raise Exception(f"Unsupported case status for Meta CAPI: {case_status}")
+    
+    success, error = await meta_capi.send_status_event(
         meta_lead_id=str(meta_lead_id),
         case_status=str(case_status),
+        meta_status=meta_status,
         email=str(email) if email else None,
         phone=str(phone) if phone else None,
         access_token=access_token,

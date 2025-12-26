@@ -1,8 +1,8 @@
 """Meta Conversions API (CAPI) service.
 
-Sends lead quality signals back to Meta to optimize ad targeting.
-When a case reaches "approved" status, we notify Meta so they can
-train their algorithm on what high-quality leads look like.
+Sends lead status updates back to Meta to optimize ad targeting.
+When a Meta-sourced case advances, we notify Meta with the
+appropriate CRM status label so they can learn lead quality.
 
 Enterprise implementation includes:
 - Hashed email/phone for better user matching
@@ -30,10 +30,31 @@ CAPI_URL = f"https://graph.facebook.com/{settings.META_API_VERSION}"
 # HTTP client settings  
 HTTPX_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 
-# Statuses that trigger CAPI conversion events
-# "qualified" = applicant confirmed as high-quality lead
-# "approved" = full approval (also triggers if auto-transition is removed)
-CAPI_TRIGGER_STATUSES = {"qualified", "approved"}
+# Meta Ads CRM status labels (must match configured labels in Meta)
+META_STATUS_INTAKE = "Intake"
+META_STATUS_QUALIFIED = "Qualified/Converted"
+META_STATUS_DISQUALIFIED = "Not qualified/Lost"
+
+# Case status mapping (slug -> Meta status bucket)
+META_INTAKE_STATUSES = {
+    "contacted",
+    "qualified",
+    "applied",
+    "followup_scheduled",
+}
+META_CONVERTED_STATUSES = {
+    "application_submitted",
+    "under_review",
+    "approved",
+    "pending_handoff",
+    "pending_match",
+    "matched",
+    "meds_started",
+    "exam_passed",
+    "embryo_transferred",
+    "delivered",
+}
+META_DISQUALIFIED_STATUSES = {"disqualified"}
 
 
 def hash_for_capi(value: str) -> str:
@@ -143,21 +164,43 @@ async def send_lead_event(
         return False, f"Meta CAPI error: {str(e)[:200]}"
 
 
-async def send_qualified_event(
+def map_case_status_to_meta_status(case_status: str) -> str | None:
+    """Map internal case status slug to Meta Ads CRM status label."""
+    if not case_status:
+        return None
+    if case_status in META_DISQUALIFIED_STATUSES:
+        return META_STATUS_DISQUALIFIED
+    if case_status in META_CONVERTED_STATUSES:
+        return META_STATUS_QUALIFIED
+    if case_status in META_INTAKE_STATUSES:
+        return META_STATUS_INTAKE
+    return None
+
+
+def _normalize_event_id_value(value: str) -> str:
+    """Normalize text for stable event_id values (ASCII-safe)."""
+    return (
+        value.lower()
+        .replace(" ", "_")
+        .replace("/", "_")
+    )
+
+
+async def send_status_event(
     meta_lead_id: str,
     case_status: str,
+    meta_status: str,
     email: str | None = None,
     phone: str | None = None,
     access_token: str | None = None,
 ) -> tuple[bool, str | None]:
     """
-    Send a qualified lead event to Meta CAPI.
-    
-    Called when a Meta-sourced case reaches approved/qualified status.
+    Send a lead status update to Meta CAPI.
     
     Args:
         meta_lead_id: Original Meta leadgen_id
         case_status: The CRM status that triggered this
+        meta_status: Meta Ads CRM status label
         email: Optional email for hashed matching
         phone: Optional phone for hashed matching
         access_token: CAPI access token
@@ -173,14 +216,15 @@ async def send_qualified_event(
             user_data["ph"] = hash_for_capi(phone_digits)
     
     # Generate event_id for deduplication
-    event_id = f"capi_{meta_lead_id}_{case_status}"
+    meta_status_id = _normalize_event_id_value(meta_status)
+    event_id = f"capi_{meta_lead_id}_{meta_status_id}"
     
     return await send_lead_event(
         lead_id=meta_lead_id,
-        event_name="Lead",  # Standard Lead event with qualified status
+        event_name="Lead",  # Lead status update (Meta reads lead_status)
         user_data=user_data,
         custom_data={
-            "lead_status": "qualified",
+            "lead_status": meta_status,
             "crm_status": case_status,
         },
         access_token=access_token,
@@ -193,10 +237,28 @@ def should_send_capi_event(from_status: str, to_status: str) -> bool:
     Determine if this status change should trigger a CAPI event.
     
     Triggers on:
-    - Any first transition into a qualified-like status (qualified/approved)
+    - Any transition into a different Meta status bucket
     """
-    # Only trigger when entering a qualified-like status for the first time
-    if to_status in CAPI_TRIGGER_STATUSES and from_status not in CAPI_TRIGGER_STATUSES:
-        return True
-    
-    return False
+    from_meta = map_case_status_to_meta_status(from_status)
+    to_meta = map_case_status_to_meta_status(to_status)
+    if not to_meta:
+        return False
+    return from_meta != to_meta
+
+
+async def send_qualified_event(
+    meta_lead_id: str,
+    case_status: str,
+    email: str | None = None,
+    phone: str | None = None,
+    access_token: str | None = None,
+) -> tuple[bool, str | None]:
+    """Backward-compatible wrapper for qualified/converted status."""
+    return await send_status_event(
+        meta_lead_id=meta_lead_id,
+        case_status=case_status,
+        meta_status=META_STATUS_QUALIFIED,
+        email=email,
+        phone=phone,
+        access_token=access_token,
+    )

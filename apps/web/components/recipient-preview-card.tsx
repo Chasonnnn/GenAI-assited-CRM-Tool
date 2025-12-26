@@ -91,11 +91,11 @@ export function RecipientPreviewCard({
                                 {sampleRecipients.length} of {totalCount}
                             </Badge>
                         </div>
-                        <div className="flex gap-2 overflow-x-auto pb-1">
+                        <div className="flex flex-wrap gap-2">
                             {sampleRecipients.slice(0, 5).map((recipient, index) => (
                                 <div
                                     key={index}
-                                    className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 min-w-fit"
+                                    className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 flex-shrink-0 max-w-[200px]"
                                 >
                                     <Avatar className="size-7">
                                         <AvatarFallback className="text-xs bg-primary/10 text-primary">

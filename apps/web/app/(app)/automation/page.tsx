@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -212,8 +212,9 @@ export default function AutomationPage() {
     // Fetch full workflow when editing
     const { data: editingWorkflow } = useWorkflow(editingWorkflowId || "")
 
-    // Populate form when editing workflow data is loaded
-    if (editingWorkflow && editingWorkflowId && workflowName === "" && showCreateModal) {
+    useEffect(() => {
+        if (!editingWorkflow || !editingWorkflowId || !showCreateModal) return
+        if (workflowName !== "") return
         setWorkflowName(editingWorkflow.name)
         setWorkflowDescription(editingWorkflow.description || "")
         setTriggerType(editingWorkflow.trigger_type)
@@ -221,7 +222,7 @@ export default function AutomationPage() {
         setConditions(editingWorkflow.conditions || [])
         setConditionLogic((editingWorkflow.condition_logic || "AND") as "AND" | "OR")
         setActions(editingWorkflow.actions || [])
-    }
+    }, [editingWorkflow, editingWorkflowId, showCreateModal, workflowName])
 
     const handleSaveWorkflow = () => {
         if (!workflowName || !triggerType || actions.length === 0) return
