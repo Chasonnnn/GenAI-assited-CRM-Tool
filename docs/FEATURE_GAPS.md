@@ -246,20 +246,25 @@
 
 ---
 
-### 4. UI Consistency Audit ⚠️
-**Status:** Inconsistencies identified
+### 4. UI Consistency Audit ✅ COMPLETE
+**Status:** Audited 2025-12-26 - Layouts are already consistent
 
-**Issues:**
-- Cases tab: search on RIGHT
-- Intended Parents tab: search on LEFT
-- Other potential inconsistencies TBD
+**Audit Results:**
+- ✅ **Cases page**: Filters LEFT, Search RIGHT (`ml-auto`)
+- ✅ **Intended Parents page**: Filters LEFT, Search RIGHT (`flex-1` spacer)
+- ✅ **Matches page**: Filters LEFT, Search RIGHT (`flex-1` spacer)
+- ✅ **Campaigns page**: Status filter LEFT, actions RIGHT
+- ✅ **All pages use** `py-0` Card wrapper for consistent table spacing
+- ✅ **Consistent pagination** placement at bottom
 
-**Requirements:**
-- Audit all list pages
-- Standardize search, filters, pagination placement
-- Document design system rules
+**Design System Rules (Documented):**
+1. Filter dropdowns: LEFT side, multiple allowed
+2. DateRangePicker: After filters, before spacer
+3. Search input: RIGHT side (pushed via `ml-auto` or `flex-1` spacer)
+4. Primary action button: Header RIGHT (e.g., "Import CSV", "New Intended Parent")
+5. Table Card: `className="py-0"` to remove extra padding
 
-**Effort:** Small (1-2 days)
+**Effort:** Complete
 
 ---
 
@@ -318,10 +323,12 @@
 
 ---
 
-### 7. Version Drift in Docs ⚠️
+### 7. Version Drift in Docs ✅ FIXED
 **Files:** `README.md:3`, `apps/api/app/core/config.py:15`
 
-Version numbers in docs don't match backend settings.
+~~Version numbers in docs don't match backend settings.~~
+
+**Fixed 2025-12-26:** Synced config.py VERSION from `0.09.00` → `0.15.00` to match README.md.
 
 ---
 

@@ -9,6 +9,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { caseKeys } from './use-cases';
+import { useAuth } from '@/lib/auth-context';
 
 const WS_URL = process.env.NEXT_PUBLIC_API_BASE_URL?.replace('http', 'ws') || 'ws://localhost:8000';
 const MAX_RECONNECT_DELAY = 30000; // 30 seconds max
@@ -30,13 +31,15 @@ interface WebSocketMessage {
  */
 export function useDashboardSocket(enabled: boolean = true) {
     const queryClient = useQueryClient();
+    const { user } = useAuth();
     const wsRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const reconnectDelayRef = useRef(INITIAL_RECONNECT_DELAY);
+    const errorLoggedRef = useRef(false);
     const [isConnected, setIsConnected] = useState(false);
 
     const connect = useCallback(() => {
-        if (!enabled || wsRef.current?.readyState === WebSocket.OPEN) {
+        if (!enabled || !user || wsRef.current?.readyState === WebSocket.OPEN) {
             return;
         }
 
@@ -47,28 +50,43 @@ export function useDashboardSocket(enabled: boolean = true) {
                 console.log('[Dashboard WS] Connected');
                 setIsConnected(true);
                 reconnectDelayRef.current = INITIAL_RECONNECT_DELAY; // Reset delay on successful connect
+                errorLoggedRef.current = false;
             };
 
             ws.onmessage = (event) => {
+                if (event.data === 'pong') {
+                    return;
+                }
+
+                if (typeof event.data !== 'string') {
+                    return;
+                }
+
+                const trimmed = event.data.trim();
+                if (!trimmed || (trimmed[0] !== '{' && trimmed[0] !== '[')) {
+                    return;
+                }
+
+                let parsed: unknown
                 try {
-                    const message: WebSocketMessage = JSON.parse(event.data);
+                    parsed = JSON.parse(trimmed)
+                } catch {
+                    return
+                }
 
-                    if (message.type === 'stats_update') {
-                        // Update React Query cache with new stats
-                        queryClient.setQueryData(caseKeys.stats(), message.data);
-                    }
+                if (!parsed || typeof parsed !== 'object') {
+                    return
+                }
 
-                    // Handle pong response (for keepalive)
-                    if (event.data === 'pong') {
-                        return;
-                    }
-                } catch (e) {
-                    console.error('[Dashboard WS] Failed to parse message:', e);
+                const message = parsed as WebSocketMessage
+                if (message.type === 'stats_update') {
+                    // Update React Query cache with new stats
+                    queryClient.setQueryData(caseKeys.stats(), message.data)
                 }
             };
 
-            ws.onerror = (error) => {
-                console.error('[Dashboard WS] Error:', error);
+            ws.onerror = () => {
+                errorLoggedRef.current = true;
             };
 
             ws.onclose = (event) => {
@@ -98,7 +116,7 @@ export function useDashboardSocket(enabled: boolean = true) {
         } catch (e) {
             console.error('[Dashboard WS] Failed to connect:', e);
         }
-    }, [enabled, queryClient]);
+    }, [enabled, user, queryClient]);
 
     // Keep connection alive with periodic pings
     useEffect(() => {
@@ -115,7 +133,7 @@ export function useDashboardSocket(enabled: boolean = true) {
 
     // Connect on mount, disconnect on unmount
     useEffect(() => {
-        if (enabled) {
+        if (enabled && user) {
             connect();
         }
 
@@ -128,7 +146,7 @@ export function useDashboardSocket(enabled: boolean = true) {
                 wsRef.current = null;
             }
         };
-    }, [enabled, connect]);
+    }, [enabled, user, connect]);
 
     return {
         isConnected,

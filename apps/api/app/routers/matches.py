@@ -756,14 +756,17 @@ def list_match_events(
     
     # Date filtering (timed events + overlapping all-day events)
     if from_date or to_date:
-        from_dt = datetime.fromisoformat(from_date).replace(tzinfo=timezone.utc) if from_date else None
-        to_dt = (
-            datetime.fromisoformat(to_date).replace(tzinfo=timezone.utc) + timedelta(days=1)
-            if to_date
-            else None
-        )
-        from_day = date_type.fromisoformat(from_date) if from_date else None
-        to_day = date_type.fromisoformat(to_date) if to_date else None
+        try:
+            from_dt = datetime.fromisoformat(from_date).replace(tzinfo=timezone.utc) if from_date else None
+            to_dt = (
+                datetime.fromisoformat(to_date).replace(tzinfo=timezone.utc) + timedelta(days=1)
+                if to_date
+                else None
+            )
+            from_day = date_type.fromisoformat(from_date) if from_date else None
+            to_day = date_type.fromisoformat(to_date) if to_date else None
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
 
         date_filters = []
 

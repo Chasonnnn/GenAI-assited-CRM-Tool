@@ -241,62 +241,72 @@ def task_notifications_sweep(x_internal_secret: str = Header(...)):
     """
     verify_internal_secret(x_internal_secret)
     
-    from datetime import date
-    from app.db.models import Task
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from app.db.models import Task, Organization
     from app.db.enums import OwnerType
     from app.services import notification_service
-    
-    today = date.today()
-    tomorrow = today + timedelta(days=1)
     
     tasks_due_soon = 0
     tasks_overdue = 0
     notifications_created = 0
     
     with SessionLocal() as db:
-        # Find tasks due tomorrow (not completed)
-        due_soon_tasks = db.query(Task).filter(
-            Task.due_date == tomorrow,
-            Task.is_completed == False,
-            Task.owner_type == OwnerType.USER.value,  # Only user-owned tasks
-        ).all()
-        
-        for task in due_soon_tasks:
-            tasks_due_soon += 1
-            notification_service.notify_task_due_soon(
-                db=db,
-                task_id=task.id,
-                task_title=task.title,
-                org_id=task.organization_id,
-                assignee_id=task.owner_id,
-                due_date=task.due_date.strftime("%Y-%m-%d"),
-                case_number=task.case.case_number if task.case else None,
-            )
-            notifications_created += 1
-        
-        # Find overdue tasks (not completed, due before today)
-        overdue_tasks = db.query(Task).filter(
-            Task.due_date < today,
-            Task.is_completed == False,
-            Task.owner_type == OwnerType.USER.value,  # Only user-owned tasks
-        ).all()
-        
-        for task in overdue_tasks:
-            tasks_overdue += 1
-            notification_service.notify_task_overdue(
-                db=db,
-                task_id=task.id,
-                task_title=task.title,
-                org_id=task.organization_id,
-                assignee_id=task.owner_id,
-                due_date=task.due_date.strftime("%Y-%m-%d"),
-                case_number=task.case.case_number if task.case else None,
-            )
-            notifications_created += 1
+        orgs = db.query(Organization).all()
+        for org in orgs:
+            tz_name = org.timezone or "UTC"
+            try:
+                org_tz = ZoneInfo(tz_name)
+            except Exception:
+                org_tz = ZoneInfo("UTC")
+
+            today = datetime.now(org_tz).date()
+            tomorrow = today + timedelta(days=1)
+
+            # Find tasks due tomorrow (not completed)
+            due_soon_tasks = db.query(Task).filter(
+                Task.organization_id == org.id,
+                Task.due_date == tomorrow,
+                Task.is_completed == False,
+                Task.owner_type == OwnerType.USER.value,  # Only user-owned tasks
+            ).all()
+            
+            for task in due_soon_tasks:
+                tasks_due_soon += 1
+                notification_service.notify_task_due_soon(
+                    db=db,
+                    task_id=task.id,
+                    task_title=task.title,
+                    org_id=task.organization_id,
+                    assignee_id=task.owner_id,
+                    due_date=task.due_date.strftime("%Y-%m-%d"),
+                    case_number=task.case.case_number if task.case else None,
+                )
+                notifications_created += 1
+            
+            # Find overdue tasks (not completed, due before today)
+            overdue_tasks = db.query(Task).filter(
+                Task.organization_id == org.id,
+                Task.due_date < today,
+                Task.is_completed == False,
+                Task.owner_type == OwnerType.USER.value,  # Only user-owned tasks
+            ).all()
+            
+            for task in overdue_tasks:
+                tasks_overdue += 1
+                notification_service.notify_task_overdue(
+                    db=db,
+                    task_id=task.id,
+                    task_title=task.title,
+                    org_id=task.organization_id,
+                    assignee_id=task.owner_id,
+                    due_date=task.due_date.strftime("%Y-%m-%d"),
+                    case_number=task.case.case_number if task.case else None,
+                )
+                notifications_created += 1
     
     return TaskNotificationsResponse(
         tasks_due_soon=tasks_due_soon,
         tasks_overdue=tasks_overdue,
         notifications_created=notifications_created,
     )
-

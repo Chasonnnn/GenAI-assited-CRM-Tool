@@ -6,7 +6,7 @@ Each action type has its own executor that performs the actual work.
 import logging
 import uuid
 from abc import ABC, abstractmethod
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.db.models import (
     Case, EntityNote, Task, AIActionApproval
 )
-from app.db.enums import TaskType
+from app.db.enums import TaskType, OwnerType
 
 logger = logging.getLogger(__name__)
 
@@ -66,22 +66,25 @@ class AddNoteExecutor(ActionExecutor):
         content = payload.get("content") or payload.get("body") or payload.get("text")
         
         # Create note (EntityNote uses entity_type, entity_id, content)
+        from app.services import note_service, workflow_triggers
+        clean_content = note_service.sanitize_html(content)
         note = EntityNote(
             entity_type="case",
             entity_id=entity_id,
             organization_id=org_id,
             author_id=user_id,
-            content=content,
+            content=clean_content,
         )
         db.add(note)
         
         # Update case last_contacted
         case = db.query(Case).filter(Case.id == entity_id).first()
         if case:
-            case.last_contacted_at = datetime.utcnow()
+            case.last_contacted_at = datetime.now(timezone.utc)
             case.last_contact_method = "note"
         
         db.flush()
+        workflow_triggers.trigger_note_added(db, note)
         
         return {
             "action": "add_note",
@@ -118,6 +121,8 @@ class CreateTaskExecutor(ActionExecutor):
         task = Task(
             organization_id=org_id,
             case_id=entity_id,
+            owner_type=OwnerType.USER.value,
+            owner_id=user_id,
             title=title,
             description=description,
             due_date=due_date_val,
@@ -219,7 +224,7 @@ class SendEmailExecutor(ActionExecutor):
             UserIntegration.integration_type == "gmail"
         ).first()
         
-        if not integration:
+        if not integration or not integration.access_token_encrypted:
             return False, "Gmail not connected. Please connect your Gmail account in settings."
         
         return True, None
@@ -253,23 +258,26 @@ class SendEmailExecutor(ActionExecutor):
 
 {body}
 """
+        from app.services import note_service, workflow_triggers
+        clean_content = note_service.sanitize_html(email_content)
         
         note = EntityNote(
             entity_type="case",
             entity_id=entity_id,
             organization_id=org_id,
             author_id=user_id,
-            content=email_content,
+            content=clean_content,
         )
         db.add(note)
         
         # Update case last_contacted
         case = db.query(Case).filter(Case.id == entity_id).first()
         if case:
-            case.last_contacted_at = datetime.utcnow()
+            case.last_contacted_at = datetime.now(timezone.utc)
             case.last_contact_method = "email"
         
         db.flush()
+        workflow_triggers.trigger_note_added(db, note)
         
         if result.get("success"):
             return {
@@ -347,7 +355,7 @@ def execute_action(
         error_msg = "You don't have permission to execute AI actions"
         approval.status = "failed"
         approval.error_message = error_msg
-        approval.executed_at = datetime.utcnow()
+        approval.executed_at = datetime.now(timezone.utc)
         logger.warning(f"AI action denied: user {user_id} lacks approve_ai_actions permission")
         return {"success": False, "error": error_msg, "error_code": "permission_denied"}
     
@@ -358,7 +366,7 @@ def execute_action(
             error_msg = f"You don't have permission to {approval.action_type.replace('_', ' ')}"
             approval.status = "failed"
             approval.error_message = error_msg
-            approval.executed_at = datetime.utcnow()
+            approval.executed_at = datetime.now(timezone.utc)
             logger.warning(f"AI action denied: user {user_id} lacks {required_permission} permission for {approval.action_type}")
             return {"success": False, "error": error_msg, "error_code": "permission_denied"}
     
@@ -367,7 +375,7 @@ def execute_action(
     if not executor:
         approval.status = "failed"
         approval.error_message = f"Unknown action type: {approval.action_type}"
-        approval.executed_at = datetime.utcnow()
+        approval.executed_at = datetime.now(timezone.utc)
         return {"success": False, "error": approval.error_message, "error_code": "unknown_action"}
     
     # 4. Validate
@@ -375,14 +383,14 @@ def execute_action(
     if not is_valid:
         approval.status = "failed"
         approval.error_message = error
-        approval.executed_at = datetime.utcnow()
+        approval.executed_at = datetime.now(timezone.utc)
         return {"success": False, "error": error, "error_code": "invalid_payload"}
     
     # 5. Execute
     try:
         result = executor.execute(approval.action_payload, db, user_id, org_id, entity_id)
         approval.status = "executed" if result.get("success") else "failed"
-        approval.executed_at = datetime.utcnow()
+        approval.executed_at = datetime.now(timezone.utc)
         if not result.get("success"):
             approval.error_message = result.get("error")
             if "error_code" not in result:
@@ -394,5 +402,5 @@ def execute_action(
         logger.exception(f"Action execution failed: {e}")
         approval.status = "failed"
         approval.error_message = str(e)
-        approval.executed_at = datetime.utcnow()
+        approval.executed_at = datetime.now(timezone.utc)
         return {"success": False, "error": str(e), "error_code": "execution_failed"}

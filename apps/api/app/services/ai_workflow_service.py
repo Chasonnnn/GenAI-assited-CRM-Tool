@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.db.enums import WorkflowTriggerType
 from app.db.models import AISettings, AutomationWorkflow, EmailTemplate, User, Pipeline, PipelineStage
 from app.services import ai_settings_service, workflow_service
+from app.schemas.workflow import ALLOWED_CONDITION_FIELDS
 
 
 logger = logging.getLogger(__name__)
@@ -95,11 +96,11 @@ AVAILABLE_ACTIONS = {
     "create_task": {
         "description": "Create a task",
         "required_fields": ["title"],
-        "optional_fields": ["description", "due_days", "priority", "assignee_type", "assignee_id"],
+        "optional_fields": ["description", "due_days", "priority", "assignee"],
     },
     "assign_case": {
         "description": "Assign the case to a user or queue",
-        "required_fields": ["assignee_type", "assignee_id"],
+        "required_fields": ["owner_type", "owner_id"],
     },
     "update_status": {
         "description": "Update the case status to a specific stage",
@@ -112,8 +113,8 @@ AVAILABLE_ACTIONS = {
     },
     "send_notification": {
         "description": "Send an in-app notification",
-        "required_fields": ["user_id", "title"],
-        "optional_fields": ["body"],
+        "required_fields": ["title"],
+        "optional_fields": ["body", "recipients", "user_id"],
     },
 }
 
@@ -151,7 +152,7 @@ Your task is to generate a workflow configuration JSON based on the user's natur
 equals, not_equals, contains, not_contains, greater_than, less_than, is_empty, is_not_empty, in_list, not_in_list
 
 ## Condition Fields
-status, status_label, stage_id, state, source, is_priority, email, phone, full_name, days_inactive
+status_label, stage_id, source, is_priority, state, created_at, owner_type, owner_id, email, phone, full_name
 
 ## User Request
 {user_input}
@@ -177,8 +178,9 @@ Respond with ONLY a valid JSON object (no markdown, no explanation) in this exac
 1. Only use triggers from the available list
 2. Only use actions from the available list
 3. For send_email action, use a real template_id from the list
-4. For assign_case actions, use a real user_id from the list or "owner" for case owner
-5. For update_status actions, use a real stage_id from the list
+4. For assign_case actions, use owner_type ("user" or "queue") and a real owner_id from the list
+5. For send_notification actions, use recipients ("owner", "creator", "all_managers") or a list of user_ids
+6. For update_status actions, use a real stage_id from the list
 6. Keep the workflow simple and focused on the user's request
 7. Add conditions only when the user specifies filtering criteria
 8. Use descriptive but concise names
@@ -222,14 +224,14 @@ def _get_context_for_prompt(db: Session, org_id: UUID) -> dict[str, str]:
     
     # Get pipeline stages
     pipelines = db.query(Pipeline).filter(
-        Pipeline.organization_id == org_id,
-        Pipeline.is_active == True
+        Pipeline.organization_id == org_id
     ).all()
     stages_text = ""
     for pipeline in pipelines:
         stages = db.query(PipelineStage).filter(
-            PipelineStage.pipeline_id == pipeline.id
-        ).order_by(PipelineStage.sort_order).all()
+            PipelineStage.pipeline_id == pipeline.id,
+            PipelineStage.is_active == True,
+        ).order_by(PipelineStage.order).all()
         for stage in stages:
             stages_text += f"- {stage.id}: {stage.label} ({pipeline.name})\n"
     stages_text = stages_text.strip() or "No stages available"
@@ -271,7 +273,12 @@ def generate_workflow(
         )
     
     # Get API key
-    api_key = ai_settings_service.get_decrypted_key(settings)
+    api_key = None
+    if settings.api_key_encrypted:
+        try:
+            api_key = ai_settings_service.decrypt_api_key(settings.api_key_encrypted)
+        except Exception:
+            api_key = None
     if not api_key:
         return WorkflowGenerationResponse(
             success=False,
@@ -294,15 +301,26 @@ def generate_workflow(
         provider = get_provider(settings.provider, api_key, settings.model)
         
         import asyncio
-        response = asyncio.get_event_loop().run_until_complete(
-            provider.chat([
-                ChatMessage(
-                    role="system",
-                    content="You are a workflow configuration generator. Always respond with ONLY valid JSON, no markdown or explanation."
-                ),
-                ChatMessage(role="user", content=prompt),
-            ], temperature=0.3)
-        )
+        import concurrent.futures
+        
+        async def _run_chat():
+            return await provider.chat(
+                [
+                    ChatMessage(
+                        role="system",
+                        content="You are a workflow configuration generator. Always respond with ONLY valid JSON, no markdown or explanation."
+                    ),
+                    ChatMessage(role="user", content=prompt),
+                ],
+                temperature=0.3,
+            )
+        
+        try:
+            loop = asyncio.get_running_loop()
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                response = pool.submit(asyncio.run, _run_chat()).result()
+        except RuntimeError:
+            response = asyncio.run(_run_chat())
         
         # Parse response
         content = response.content.strip()
@@ -394,6 +412,8 @@ def validate_workflow(
     for i, cond in enumerate(workflow.conditions):
         if "field" not in cond:
             errors.append(f"Condition {i+1} missing 'field'")
+        elif cond["field"] not in ALLOWED_CONDITION_FIELDS:
+            errors.append(f"Condition {i+1} has invalid field: {cond['field']}")
         if "operator" not in cond:
             errors.append(f"Condition {i+1} missing 'operator'")
         elif cond["operator"] not in CONDITION_OPERATORS:
@@ -441,15 +461,74 @@ def validate_workflow(
             if not stage:
                 errors.append(f"Action {i+1}: Stage ID does not exist: {action['stage_id']}")
         
-        # Validate assignee_id for notifications
-        if action_type == "send_notification" and "user_id" in action:
-            from app.db.models import Membership
-            member = db.query(Membership).filter(
-                Membership.user_id == action["user_id"],
-                Membership.organization_id == org_id
-            ).first()
-            if not member:
-                errors.append(f"Action {i+1}: User ID does not exist: {action['user_id']}")
+        # Validate assign_case owner
+        if action_type == "assign_case":
+            owner_type = action.get("owner_type")
+            owner_id = action.get("owner_id")
+            if owner_type not in ("user", "queue"):
+                errors.append(f"Action {i+1}: owner_type must be 'user' or 'queue'")
+            elif not owner_id:
+                errors.append(f"Action {i+1}: owner_id is required")
+            elif owner_type == "user":
+                from app.db.models import Membership
+                try:
+                    owner_id = UUID(str(owner_id))
+                except (TypeError, ValueError):
+                    errors.append(f"Action {i+1}: Invalid user_id format: {owner_id}")
+                    owner_id = None
+                member = db.query(Membership).filter(
+                    Membership.user_id == owner_id,
+                    Membership.organization_id == org_id
+                ).first()
+                if not member:
+                    errors.append(f"Action {i+1}: User ID does not exist: {owner_id}")
+            elif owner_type == "queue":
+                from app.db.models import Queue
+                try:
+                    owner_id = UUID(str(owner_id))
+                except (TypeError, ValueError):
+                    errors.append(f"Action {i+1}: Invalid queue_id format: {owner_id}")
+                    owner_id = None
+                queue = db.query(Queue).filter(
+                    Queue.id == owner_id,
+                    Queue.organization_id == org_id
+                ).first()
+                if not queue:
+                    errors.append(f"Action {i+1}: Queue ID does not exist: {owner_id}")
+
+        # Validate create_task assignee
+        if action_type == "create_task" and "assignee" in action:
+            assignee = action.get("assignee")
+            if isinstance(assignee, str) and assignee not in ("owner", "creator", "manager"):
+                try:
+                    UUID(str(assignee))
+                except (TypeError, ValueError):
+                    errors.append(f"Action {i+1}: assignee must be owner, creator, manager, or a user_id")
+
+        # Validate send_notification recipients
+        if action_type == "send_notification":
+            if "recipients" not in action and "user_id" not in action:
+                errors.append(f"Action {i+1}: recipients or user_id is required")
+            if "recipients" not in action and "user_id" in action:
+                action["recipients"] = [action["user_id"]]
+            recipients = action.get("recipients")
+            if isinstance(recipients, str):
+                if recipients not in ("owner", "creator", "all_managers"):
+                    errors.append(f"Action {i+1}: invalid recipients value: {recipients}")
+            elif isinstance(recipients, list):
+                from app.db.models import Membership
+                for user_id in recipients:
+                    try:
+                        user_uuid = UUID(str(user_id))
+                    except (TypeError, ValueError):
+                        errors.append(f"Action {i+1}: Invalid user_id format: {user_id}")
+                        continue
+                    member = db.query(Membership).filter(
+                        Membership.user_id == user_uuid,
+                        Membership.organization_id == org_id
+                    ).first()
+                    if not member:
+                        errors.append(f"Action {i+1}: User ID does not exist: {user_uuid}")
     
     return WorkflowValidationResponse(
         valid=len(errors) == 0,

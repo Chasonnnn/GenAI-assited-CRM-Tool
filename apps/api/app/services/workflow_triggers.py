@@ -274,9 +274,16 @@ def _iter_cases(
 def trigger_task_due_sweep(db: Session, org_id: UUID) -> None:
     """Find and trigger task_due workflows for tasks due soon."""
     from datetime import datetime, timezone, timedelta
-    from app.db.models import AutomationWorkflow, Task, Case
+    from zoneinfo import ZoneInfo
+    from app.db.models import AutomationWorkflow, Task, Case, Organization
     
-    now = datetime.now(timezone.utc)
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    tz_name = org.timezone if org and org.timezone else "UTC"
+    try:
+        org_tz = ZoneInfo(tz_name)
+    except Exception:
+        org_tz = ZoneInfo("UTC")
+    now = datetime.now(org_tz)
     
     workflows = db.query(AutomationWorkflow).filter(
         AutomationWorkflow.organization_id == org_id,
@@ -300,7 +307,7 @@ def trigger_task_due_sweep(db: Session, org_id: UUID) -> None:
             if task.due_date:
                 from datetime import datetime as dt
                 due_dt = dt.combine(task.due_date, task.due_time or dt.min.time())
-                due_dt = due_dt.replace(tzinfo=timezone.utc)
+                due_dt = due_dt.replace(tzinfo=org_tz)
                 
                 if window_start <= due_dt <= window_end:
                     trigger_task_due(db, task)
@@ -309,9 +316,16 @@ def trigger_task_due_sweep(db: Session, org_id: UUID) -> None:
 def trigger_task_overdue_sweep(db: Session, org_id: UUID) -> None:
     """Find and trigger task_overdue workflows for overdue tasks."""
     from datetime import datetime, timezone
-    from app.db.models import Task, Case
+    from zoneinfo import ZoneInfo
+    from app.db.models import Task, Case, Organization
     
-    now = datetime.now(timezone.utc)
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    tz_name = org.timezone if org and org.timezone else "UTC"
+    try:
+        org_tz = ZoneInfo(tz_name)
+    except Exception:
+        org_tz = ZoneInfo("UTC")
+    now = datetime.now(org_tz)
     today = now.date()
     
     overdue_tasks = db.query(Task).join(Case).filter(

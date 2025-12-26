@@ -7,6 +7,7 @@ import re
 from datetime import datetime, timezone
 from uuid import UUID
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.models import EmailTemplate, EmailLog, Job, Case
@@ -396,6 +397,7 @@ def mark_email_sent(db: Session, email_log: EmailLog) -> EmailLog:
     email_log.error = None
     db.commit()
     db.refresh(email_log)
+    _sync_campaign_recipient(db, email_log, EmailStatus.SENT.value)
     return email_log
 
 
@@ -405,6 +407,7 @@ def mark_email_failed(db: Session, email_log: EmailLog, error: str) -> EmailLog:
     email_log.error = error
     db.commit()
     db.refresh(email_log)
+    _sync_campaign_recipient(db, email_log, EmailStatus.FAILED.value, error=error)
     return email_log
 
 
@@ -430,3 +433,78 @@ def list_email_logs(
     if status:
         query = query.filter(EmailLog.status == status.value)
     return query.order_by(EmailLog.created_at.desc()).limit(limit).all()
+
+
+def _sync_campaign_recipient(
+    db: Session,
+    email_log: EmailLog,
+    status: str,
+    error: str | None = None,
+) -> None:
+    """Update campaign recipient/run stats when an email log changes."""
+    from app.db.models import CampaignRecipient, CampaignRun, Campaign
+    from app.db.enums import CampaignRecipientStatus, CampaignStatus
+
+    cr = db.query(CampaignRecipient).filter(
+        CampaignRecipient.external_message_id == str(email_log.id)
+    ).first()
+    if not cr:
+        return
+
+    if status == EmailStatus.SENT.value:
+        cr.status = CampaignRecipientStatus.SENT.value
+        if not cr.sent_at:
+            cr.sent_at = datetime.now(timezone.utc)
+        cr.error = None
+    else:
+        cr.status = CampaignRecipientStatus.FAILED.value
+        cr.error = (error or email_log.error or "Send failed")[:500]
+
+    db.commit()
+
+    run = db.query(CampaignRun).filter(
+        CampaignRun.id == cr.run_id
+    ).first()
+    if not run:
+        return
+
+    status_rows = db.query(
+        CampaignRecipient.status,
+        func.count(CampaignRecipient.id)
+    ).filter(
+        CampaignRecipient.run_id == run.id
+    ).group_by(
+        CampaignRecipient.status
+    ).all()
+    status_counts = {status: count for status, count in status_rows}
+
+    run.sent_count = status_counts.get(CampaignRecipientStatus.SENT.value, 0)
+    run.failed_count = status_counts.get(CampaignRecipientStatus.FAILED.value, 0)
+    run.skipped_count = status_counts.get(CampaignRecipientStatus.SKIPPED.value, 0)
+    pending_count = status_counts.get(CampaignRecipientStatus.PENDING.value, 0)
+
+    if pending_count == 0:
+        run.completed_at = datetime.now(timezone.utc)
+        run.status = "completed" if run.failed_count == 0 else "failed"
+    else:
+        run.status = "running"
+        run.completed_at = None
+
+    campaign = db.query(Campaign).filter(
+        Campaign.id == run.campaign_id
+    ).first()
+    if campaign:
+        campaign.sent_count = run.sent_count
+        campaign.failed_count = run.failed_count
+        campaign.skipped_count = run.skipped_count
+        campaign.total_recipients = run.total_count
+        if pending_count == 0:
+            campaign.status = (
+                CampaignStatus.COMPLETED.value
+                if run.failed_count == 0
+                else CampaignStatus.FAILED.value
+            )
+        else:
+            campaign.status = CampaignStatus.SENDING.value
+
+    db.commit()
