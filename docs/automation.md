@@ -1,6 +1,6 @@
 # Automation System Documentation
 
-**Last Updated:** 2025-12-24  
+**Last Updated:** 2025-12-25  
 **Version:** 0.15.00
 
 This document describes the automation system for the CRM platform, including workflows, campaigns, and email templates.
@@ -65,9 +65,13 @@ AutomationWorkflow:
 | `task_overdue` | Task passes due date | None |
 | `scheduled` | Recurring schedule | `{cron: "0 9 * * 1"}` |
 | `inactivity` | No activity on case | `{days: 7}` |
-| `appointment_scheduled` | Appointment created | None |
-| `note_added` | Note added to case | None |
+| `appointment_scheduled` | Appointment is confirmed | None |
+| `appointment_completed` | Appointment marked complete | None |
+| `note_added` | Note added to entity | None |
 | `document_uploaded` | File uploaded to case | None |
+| `match_proposed` | New match is proposed | None |
+| `match_accepted` | Match is accepted | None |
+| `match_rejected` | Match is rejected | None |
 
 ### Where Triggers Fire
 
@@ -76,7 +80,10 @@ Triggers are called from service layer functions:
 - `case_service.update_case()` → `status_changed`, `case_updated`, `case_assigned`
 - `note_service.create_note()` → `note_added`
 - `attachment_service.mark_attachment_scanned()` → `document_uploaded`
-- `appointment_service.create_appointment()` → `appointment_scheduled`
+- `appointment_service.approve_booking()` → `appointment_scheduled`
+- `matches.py:create_match()` → `match_proposed`
+- `matches.py:accept_match()` → `match_accepted`
+- `matches.py:reject_match()` → `match_rejected`
 
 ---
 
@@ -141,6 +148,21 @@ Actions can have optional delay:
   "delay_minutes": 60
 }
 ```
+
+### Entity-Type Restrictions
+
+Some actions only work with Case or Task entities:
+
+| Action | Supported Entity Types |
+|--------|------------------------|
+| `send_email` | Case, Task |
+| `create_task` | Case, Task |
+| `assign_case` | Case, Task |
+| `update_field` | Case, Task |
+| `add_note` | Case, Task |
+| `send_notification` | All entities |
+
+If a workflow triggers on non-Case entities (match, appointment, note, document), only `send_notification` will execute; other actions return a validation error.
 
 ---
 
@@ -293,4 +315,4 @@ Org-scoped suppression list for:
 
 ---
 
-*Last updated: 2025-12-24*
+*Last updated: 2025-12-25*

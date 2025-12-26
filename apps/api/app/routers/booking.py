@@ -257,6 +257,63 @@ def get_appointment_for_reschedule(
     return _appointment_to_public_read(appt, db)
 
 
+@router.get("/self-service/reschedule/{token}/slots")
+def get_reschedule_slots(
+    token: str,
+    date_start: date = Query(..., description="Start date (YYYY-MM-DD)"),
+    date_end: date = Query(None, description="End date (defaults to start date)"),
+    client_timezone: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Get available time slots for rescheduling.
+    
+    Uses the appointment's existing settings to determine availability.
+    """
+    appt = appointment_service.get_appointment_by_token(db, token, "reschedule")
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    
+    if not appt.appointment_type_id:
+        raise HTTPException(status_code=400, detail="Appointment type not found")
+    
+    # Default to single day
+    if not date_end:
+        date_end = date_start
+    
+    # Limit range to 14 days
+    if (date_end - date_start).days > 14:
+        date_end = date_start + timedelta(days=14)
+    
+    # Use client timezone from request or fallback to appointment's timezone
+    tz = client_timezone or appt.client_timezone or "America/Los_Angeles"
+    
+    # Get slots using appointment's user and type
+    query = appointment_service.SlotQuery(
+        user_id=appt.user_id,
+        org_id=appt.organization_id,
+        appointment_type_id=appt.appointment_type_id,
+        date_start=date_start,
+        date_end=date_end,
+        client_timezone=tz,
+    )
+    
+    slots = appointment_service.get_available_slots(
+        db, query,
+        exclude_appointment_id=appt.id,  # Exclude this appointment from conflict check
+    )
+    
+    # Get appointment type for response
+    appt_type = appointment_service.get_appointment_type(
+        db, appt.appointment_type_id, appt.organization_id
+    )
+    
+    return AvailableSlotsResponse(
+        slots=[TimeSlotRead(start=s.start, end=s.end) for s in slots],
+        appointment_type=_type_to_read(appt_type) if appt_type else None,
+    )
+
+
 @router.post("/self-service/reschedule/{token}")
 @limiter.limit("10/minute")
 def reschedule_by_token(

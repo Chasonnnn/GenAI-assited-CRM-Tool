@@ -399,6 +399,6 @@ new_unread → contacted → qualified → applied → under_review → approved
 
 ## 13) Current Status
 
-- **Version:** 0.09.00+
-- **Completed:** Auth, cases, IPs, matches, tasks, notes, attachments, notifications, calendar, bulk operations, filter persistence
+- **Version:** 0.15.00
+- **Completed:** Auth, cases, IPs, matches, tasks, notes, attachments, notifications, calendar, bulk operations, filter persistence, automation workflows, campaigns, queue management
 - **Stack:** Next.js 16, React 19, FastAPI, PostgreSQL, SQLAlchemy 2.0

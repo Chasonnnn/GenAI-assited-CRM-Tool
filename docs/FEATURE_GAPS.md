@@ -1,8 +1,8 @@
 # Feature Completeness Evaluation — Current State
 
-**Last Updated:** 2025-12-24  
+**Last Updated:** 2025-12-25  
 **Purpose:** Identify features that need development to be fully functional  
-**Test Coverage:** ✅ **165/165 tests passing** - Frontend: 68/68, Backend: 97/97
+**Test Coverage:** ✅ **114/114 tests passing** - Frontend: 74/74, Backend: 40/40
 
 > **Pipeline Phase 2 Complete ✅** — Custom stages, stage CRUD, soft-delete, versioning, frontend editor all functional.
 > 
@@ -33,10 +33,11 @@
 **What was built:**
 
 - **Workflow Engine:**
-  - Trigger types: case_created, status_changed, case_assigned, case_updated, task_due, task_overdue, scheduled, inactivity, appointment_scheduled, note_added, document_uploaded
+  - Trigger types: case_created, status_changed, case_assigned, case_updated, task_due, task_overdue, scheduled, inactivity, appointment_scheduled, appointment_completed, note_added, document_uploaded, match_proposed, match_accepted, match_rejected
   - Condition operators: equals, not_equals, contains, in, greater_than, less_than, is_empty, is_not_empty
   - Action types: send_email, create_task, assign_case, send_notification, update_field, add_note
   - Condition logic: AND / OR support
+  - **Entity-type restrictions**: Case-only actions validated before execution
   
 - **10 Default Email Templates (auto-seeded):**
   - Welcome New Lead
@@ -553,13 +554,13 @@ Implemented logic for saving Profile and Organization settings via `PATCH /auth/
 | CORS PUT Method | 5 min | Medium | ✅ Fixed |
 | WS/REST URL Mismatch | 5 min | Medium | ✅ Fixed |
 | Settings Save APIs | 2-3 days | Medium | ✅ Fixed |
-| Context-Aware Chatbot | 1 week | High | ❌ |
+| Context-Aware Chatbot | 1 week | High | ✅ Done |
 | AI Assistant Improvements | 3-4 days | Medium | ⚠️ |
 | UI Consistency | 1-2 days | Medium | ⚠️ |
 | CSV Import | 1 week | Medium | ✅ Done |
 | Smart Task Creation | 1 week | Low | ✅ Done |
 | AI Weekly Reports | 1-2 weeks | Low | ❌ |
 
-**Features/Fixes Completed This Session:** 6 ✅  
-**Total Remaining Gaps:** 5 features  
-**Total Remaining Effort:** ~4 weeks
+**Features/Fixes Completed This Session:** 12+ ✅  
+**Total Remaining Gaps:** 4 features  
+**Total Remaining Effort:** ~3 weeks

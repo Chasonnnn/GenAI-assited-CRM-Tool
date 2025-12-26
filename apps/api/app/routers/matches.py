@@ -13,6 +13,7 @@ from app.core.deps import get_db, require_csrf_header, require_permission
 from app.db.enums import CaseActivityType, IntendedParentStatus, MatchStatus
 from app.db.models import Case, IntendedParent, Match, IntendedParentStatusHistory
 from app.schemas.auth import UserSession
+from app.services import workflow_triggers
 
 router = APIRouter(prefix="/matches", tags=["Matches"])
 
@@ -244,6 +245,9 @@ def create_match(
     
     db.commit()
     db.refresh(match)
+    
+    # Fire workflow trigger for match proposed
+    workflow_triggers.trigger_match_proposed(db, match)
     
     return _match_to_read(match, db, str(session.org_id))
 
@@ -510,6 +514,9 @@ def accept_match(
     
     db.refresh(match)
     
+    # Fire workflow trigger for match accepted
+    workflow_triggers.trigger_match_accepted(db, match)
+    
     return _match_to_read(match, db, str(session.org_id))
 
 
@@ -565,6 +572,9 @@ def reject_match(
     
     db.commit()
     db.refresh(match)
+    
+    # Fire workflow trigger for match rejected
+    workflow_triggers.trigger_match_rejected(db, match)
     
     return _match_to_read(match, db, str(session.org_id))
 
@@ -751,9 +761,10 @@ def list_match_events(
             (MatchEvent.starts_at >= from_dt) | (MatchEvent.start_date >= from_dt.date())
         )
     if to_date:
-        to_dt = datetime.fromisoformat(to_date).replace(tzinfo=timezone.utc)
+        # Use start of next day to include events on the to_date itself
+        to_dt = datetime.fromisoformat(to_date).replace(tzinfo=timezone.utc) + timedelta(days=1)
         query = query.filter(
-            (MatchEvent.starts_at <= to_dt) | (MatchEvent.start_date <= to_dt.date())
+            (MatchEvent.starts_at < to_dt) | (MatchEvent.start_date < to_dt.date())
         )
     
     events = query.order_by(MatchEvent.starts_at, MatchEvent.start_date).all()
