@@ -360,6 +360,20 @@ export function getAppointmentForReschedule(
     return publicRequest<PublicAppointmentView>(`/book/self-service/reschedule/${token}`);
 }
 
+export function getRescheduleSlotsByToken(
+    token: string,
+    dateStart: string,
+    dateEnd?: string,
+    clientTimezone?: string
+): Promise<AvailableSlotsResponse> {
+    const params = new URLSearchParams({ date_start: dateStart });
+    if (dateEnd) params.append('date_end', dateEnd);
+    if (clientTimezone) params.append('client_timezone', clientTimezone);
+    return publicRequest<AvailableSlotsResponse>(
+        `/book/self-service/reschedule/${token}/slots?${params}`
+    );
+}
+
 export function rescheduleByToken(
     token: string,
     scheduledStart: string

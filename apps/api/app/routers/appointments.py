@@ -370,6 +370,7 @@ def delete_availability_override(
         db=db,
         override_id=override_id,
         user_id=session.user_id,
+        org_id=session.org_id,
     )
     if not success:
         raise HTTPException(status_code=404, detail="Override not found")

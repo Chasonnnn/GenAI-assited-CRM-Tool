@@ -267,6 +267,13 @@ def get_workflow_options(db: Session, org_id: UUID) -> WorkflowOptions:
         {"value": "task_overdue", "label": "Task Overdue", "description": "When a task becomes overdue"},
         {"value": "scheduled", "label": "Scheduled", "description": "On a recurring schedule"},
         {"value": "inactivity", "label": "Inactivity", "description": "When case has no activity"},
+        {"value": "match_proposed", "label": "Match Proposed", "description": "When a match is proposed"},
+        {"value": "match_accepted", "label": "Match Accepted", "description": "When a match is accepted"},
+        {"value": "match_rejected", "label": "Match Rejected", "description": "When a match is rejected"},
+        {"value": "appointment_scheduled", "label": "Appointment Scheduled", "description": "When an appointment is scheduled"},
+        {"value": "appointment_completed", "label": "Appointment Completed", "description": "When an appointment is completed"},
+        {"value": "note_added", "label": "Note Added", "description": "When a note is added to a case"},
+        {"value": "document_uploaded", "label": "Document Uploaded", "description": "When a document is uploaded"},
     ]
     
     # Action types

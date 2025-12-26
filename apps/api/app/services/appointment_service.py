@@ -294,6 +294,7 @@ def set_availability_override(
     """Create or update an availability override for a specific date."""
     existing = db.query(AvailabilityOverride).filter(
         AvailabilityOverride.user_id == user_id,
+        AvailabilityOverride.organization_id == org_id,
         AvailabilityOverride.override_date == override_date,
     ).first()
     
@@ -325,11 +326,13 @@ def delete_availability_override(
     db: Session,
     override_id: UUID,
     user_id: UUID,
+    org_id: UUID,
 ) -> bool:
     """Delete an availability override."""
     override = db.query(AvailabilityOverride).filter(
         AvailabilityOverride.id == override_id,
         AvailabilityOverride.user_id == user_id,
+        AvailabilityOverride.organization_id == org_id,
     ).first()
     if override:
         db.delete(override)
@@ -474,9 +477,9 @@ def get_available_slots(
         exclude_appointment_id=exclude_appointment_id,
     )
     
-    # Get tasks with scheduled times
+    # Get tasks with scheduled times (use user timezone dates for consistency)
     existing_tasks = _get_conflicting_tasks(
-        db, query.user_id, query.org_id, query.date_start, query.date_end
+        db, query.user_id, query.org_id, user_date_start, user_date_end
     )
     
     # Build slots day by day
@@ -573,7 +576,10 @@ def _build_day_slots(
     
     # Start from now if today
     if day_start < now:
-        day_start = now.replace(minute=(now.minute // interval_minutes + 1) * interval_minutes, second=0, microsecond=0)
+        # Round up to next interval, using timedelta to avoid minute=60 ValueError
+        minutes_into_interval = now.minute % interval_minutes
+        minutes_to_add = interval_minutes - minutes_into_interval if minutes_into_interval else 0
+        day_start = (now.replace(second=0, microsecond=0) + timedelta(minutes=minutes_to_add))
     
     current = day_start
     total_block = buffer_before + duration_minutes + buffer_after
@@ -832,13 +838,21 @@ def approve_booking(
     # Re-validate slot availability to prevent double-booking
     # Another appointment/task may have been created since the request
     if appointment.appointment_type_id:
+        # Convert to client timezone before getting date to avoid midnight boundary issues
+        client_tz_name = appointment.client_timezone or "UTC"
+        try:
+            client_tz = ZoneInfo(client_tz_name)
+        except Exception:
+            client_tz = ZoneInfo("UTC")
+        scheduled_date_local = appointment.scheduled_start.astimezone(client_tz).date()
+        
         slot_query = SlotQuery(
             user_id=appointment.user_id,
             org_id=appointment.organization_id,
             appointment_type_id=appointment.appointment_type_id,
-            date_start=appointment.scheduled_start.date(),
-            date_end=appointment.scheduled_start.date(),
-            client_timezone=appointment.client_timezone or "UTC",
+            date_start=scheduled_date_local,
+            date_end=scheduled_date_local,
+            client_timezone=client_tz_name,
         )
         available_slots = get_available_slots(
             db, slot_query,
@@ -876,6 +890,10 @@ def approve_booking(
         appointment_type=appt_type.name if appt_type else "Appointment",
         confirmed_time=appointment.scheduled_start.strftime("%Y-%m-%d %H:%M"),
     )
+    
+    # Fire workflow trigger for appointment scheduled
+    from app.services import workflow_triggers
+    workflow_triggers.trigger_appointment_scheduled(db, appointment)
     
     return appointment
 
@@ -1188,6 +1206,6 @@ def _check_gmail_connected(db: Session, user_id: UUID) -> bool:
     """Check if user has Gmail connected."""
     integration = db.query(UserIntegration).filter(
         UserIntegration.user_id == user_id,
-        UserIntegration.provider == "google",
+        UserIntegration.integration_type == "google",
     ).first()
     return integration is not None and integration.access_token_encrypted is not None

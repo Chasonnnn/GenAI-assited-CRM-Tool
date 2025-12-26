@@ -53,11 +53,13 @@ import {
     useDuplicateCampaign,
     useSendCampaign,
     useCampaignPreview,
+    usePreviewFilters,
 } from "@/lib/hooks/use-campaigns"
 import { useEmailTemplates } from "@/lib/hooks/use-email-templates"
 import { getDefaultPipeline } from "@/lib/api/pipelines"
 import { useQuery } from "@tanstack/react-query"
 import type { CampaignListItem } from "@/lib/api/campaigns"
+import { RecipientPreviewCard } from "@/components/recipient-preview-card"
 
 // Status badge styles
 const statusStyles: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; className?: string }> = {
@@ -104,6 +106,7 @@ export default function CampaignsPage() {
     const deleteCampaign = useDeleteCampaign()
     const duplicateCampaign = useDuplicateCampaign()
     const sendCampaign = useSendCampaign()
+    const previewFilters = usePreviewFilters()
 
     // Fetch pipeline stages for status filter
     const { data: pipeline } = useQuery({
@@ -527,15 +530,25 @@ export default function CampaignsPage() {
                                     </CardContent>
                                 </Card>
 
-                                <Card className="bg-blue-50 dark:bg-blue-950/20 border-blue-200">
-                                    <CardContent className="py-4 flex items-center gap-3">
-                                        <UsersIcon className="size-5 text-blue-600" />
-                                        <span className="text-sm text-blue-700 dark:text-blue-400">
-                                            Recipient count will be calculated when the campaign is created.
-                                            Each recipient receives an individual email (no CC list exposure).
-                                        </span>
-                                    </CardContent>
-                                </Card>
+                                <RecipientPreviewCard
+                                    totalCount={previewFilters.data?.total_count || 0}
+                                    sampleRecipients={
+                                        previewFilters.data?.sample_recipients?.map(r => ({
+                                            email: r.email,
+                                            name: r.name,
+                                        })) || []
+                                    }
+                                    isLoading={previewFilters.isPending}
+                                    onRefresh={() => {
+                                        previewFilters.mutate({
+                                            recipientType,
+                                            filterCriteria: {
+                                                stage_ids: selectedStages.length > 0 ? selectedStages : undefined,
+                                                states: selectedStates.length > 0 ? selectedStates : undefined,
+                                            },
+                                        })
+                                    }}
+                                />
 
                                 <div className="space-y-2">
                                     <Label>When to send?</Label>
@@ -598,7 +611,20 @@ export default function CampaignsPage() {
                         )}
                         {wizardStep < 4 ? (
                             <Button
-                                onClick={() => setWizardStep(wizardStep + 1)}
+                                onClick={() => {
+                                    const nextStep = wizardStep + 1
+                                    setWizardStep(nextStep)
+                                    // Fetch recipient preview when entering Step 4
+                                    if (nextStep === 4) {
+                                        previewFilters.mutate({
+                                            recipientType,
+                                            filterCriteria: {
+                                                stage_ids: selectedStages.length > 0 ? selectedStages : undefined,
+                                                states: selectedStates.length > 0 ? selectedStates : undefined,
+                                            },
+                                        })
+                                    }
+                                }}
                                 disabled={
                                     (wizardStep === 1 && !campaignName) ||
                                     (wizardStep === 2 && !selectedTemplateId)

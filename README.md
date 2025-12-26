@@ -1,8 +1,8 @@
 # Surrogacy CRM Platform
 
-**Version:** 0.14.00 | **Format:** a.bc.de (major.feature.patch)
+**Version:** 0.15.00 | **Format:** a.bc.de (major.feature.patch)
 
-A modern, multi-tenant CRM and case management platform built for surrogacy agencies. Features lead pipeline management with **customizable stages**, intended parent profiles, case workflow tracking, **IP-Surrogate matching with shared calendar**, **context-aware AI chatbot with schedule parsing**, **appointment scheduling with public booking and Google Calendar integration**, and enterprise audit/versioning.
+A modern, multi-tenant CRM and case management platform built for surrogacy agencies. Features lead pipeline management with **customizable stages**, intended parent profiles, case workflow tracking, **IP-Surrogate matching with shared calendar**, **context-aware AI chatbot with schedule parsing**, **appointment scheduling with public booking and Google Calendar integration**, **powerful automation engine with workflows and campaigns**, and enterprise audit/versioning.
 
 ## Tech Stack
 
@@ -49,7 +49,7 @@ AI is an **optional** capability designed to be safe, auditable, and tenant-conf
 │   │   │   ├── cli.py          # CLI commands
 │   │   │   └── main.py         # FastAPI app entry
 │   │   ├── alembic/            # Database migrations (37: +pipeline_stages, +cutover)
-│   │   ├── tests/              # pytest test suite (97 tests)
+│   │   ├── tests/              # pytest test suite (40+ tests)
 │   │   └── requirements.txt
 │   │
 │   └── web/                    # Next.js frontend
@@ -68,7 +68,7 @@ AI is an **optional** capability designed to be safe, auditable, and tenant-conf
 │       ├── components/         # Shared UI (inline-edit-field, etc.)
 │       ├── lib/                # API client, hooks, utils
 │       │   └── hooks/          # React Query hooks (+use-queues.ts)
-│       └── tests/              # Vitest test suite (68 tests)
+│       └── tests/              # Vitest test suite (74 tests)
 │
 ├── docs/                       # Documentation
 │   ├── agents.md               # Project spec & guidelines
@@ -285,7 +285,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ## Current Status
 
-**Version 0.14.00** — Matches Module & IP-Surrogate Pairing
+**Version 0.15.00** — Automation System & Campaigns Module
 
 ### Core Platform
 - [x] Project scaffolding + PostgreSQL + migrations
@@ -320,8 +320,8 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 - **File Attachments**: Virus scanning and secure S3 storage for case files
 - **PDF Reports**: Native PDF export for analytics dashboards
 
-### Data Models (43 tables)
-`Organization`, `User`, `Membership`, `AuthIdentity`, `OrgInvite`, `Case`, `CaseStatusHistory`, `CaseActivityLog`, `Task`, `MetaLead`, `MetaPageMapping`, `Job`, `EmailTemplate`, `EmailLog`, `IntendedParent`, `IntendedParentStatusHistory`, `EntityNote`, `Notification`, `UserNotificationSettings`, `IntegrationHealth`, `IntegrationErrorRollup`, `SystemAlert`, `RequestMetricsRollup`, `AISettings`, `AIConversation`, `AIMessage`, `AIActionApproval`, `AIEntitySummary`, `AIUsageLog`, `UserIntegration`, `AuditLog`, `CaseImport`, `Pipeline`, `PipelineStage`, `EntityVersion`, `RolePermission`, `Appointment`, `AppointmentType`, `AvailabilityRule`, `AvailabilityOverride`, `BookingLink`, `AppointmentEmailLog`, `ZoomMeeting`, `Match`, `MatchEvent`
+### Data Models (50+ tables)
+`Organization`, `User`, `Membership`, `AuthIdentity`, `OrgInvite`, `Case`, `CaseStatusHistory`, `CaseActivityLog`, `Task`, `MetaLead`, `MetaPageMapping`, `Job`, `EmailTemplate`, `EmailLog`, `IntendedParent`, `IntendedParentStatusHistory`, `EntityNote`, `Notification`, `UserNotificationSettings`, `IntegrationHealth`, `IntegrationErrorRollup`, `SystemAlert`, `RequestMetricsRollup`, `AISettings`, `AIConversation`, `AIMessage`, `AIActionApproval`, `AIEntitySummary`, `AIUsageLog`, `UserIntegration`, `AuditLog`, `CaseImport`, `Pipeline`, `PipelineStage`, `EntityVersion`, `RolePermission`, `Appointment`, `AppointmentType`, `AvailabilityRule`, `AvailabilityOverride`, `BookingLink`, `AppointmentEmailLog`, `ZoomMeeting`, `Match`, `MatchEvent`, `AutomationWorkflow`, `WorkflowExecution`, `Campaign`, `CampaignRun`, `CampaignRecipient`, `EmailSuppression`
 
 
 ## Documentation

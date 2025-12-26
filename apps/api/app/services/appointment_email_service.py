@@ -304,9 +304,9 @@ def build_appointment_variables(
         # Org info
         "org_name": org.name if org else "",
         
-        # Links - use correct self-service paths
-        "reschedule_url": f"{base_url}/book/self-service/reschedule/{appointment.reschedule_token}" if appointment.reschedule_token else "",
-        "cancel_url": f"{base_url}/book/self-service/cancel/{appointment.cancel_token}" if appointment.cancel_token else "",
+        # Links - use correct self-service paths (frontend routes)
+        "reschedule_url": f"{base_url}/book/reschedule/{appointment.reschedule_token}" if appointment.reschedule_token else "",
+        "cancel_url": f"{base_url}/book/cancel/{appointment.cancel_token}" if appointment.cancel_token else "",
         
         # Zoom (if available)
         "zoom_join_url": appointment.zoom_join_url or "",

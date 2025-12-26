@@ -32,7 +32,7 @@ import type { TimeSlot, PublicAppointmentView } from "@/lib/api/appointments"
 import {
     getAppointmentForReschedule,
     rescheduleByToken,
-    getAvailableSlots as fetchAvailableSlots
+    getRescheduleSlotsByToken,
 } from "@/lib/api/appointments"
 
 // Timezone options
@@ -98,25 +98,19 @@ export default function ReschedulePage({ params }: PageProps) {
         setSelectedSlot(null)
         setIsLoadingSlots(true)
 
-        // Note: In a full implementation, we would fetch slots from the booking API
-        // For now, we'll simulate available slots
         try {
-            // Simulate loading
-            await new Promise(resolve => setTimeout(resolve, 500))
-
-            // Generate sample slots for the selected date
-            const sampleSlots: TimeSlot[] = []
-            const baseDate = format(date, "yyyy-MM-dd")
-            for (let hour = 9; hour < 17; hour++) {
-                for (let min = 0; min < 60; min += 30) {
-                    const start = `${baseDate}T${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}:00Z`
-                    const endHour = min === 30 ? hour + 1 : hour
-                    const endMin = min === 30 ? 0 : 30
-                    const end = `${baseDate}T${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}:00Z`
-                    sampleSlots.push({ start, end })
-                }
-            }
-            setSlots(sampleSlots)
+            // Fetch real availability from API
+            const dateStr = format(date, "yyyy-MM-dd")
+            const response = await getRescheduleSlotsByToken(
+                params.token,
+                dateStr,
+                dateStr,
+                timezone
+            )
+            setSlots(response.slots)
+        } catch (err: any) {
+            console.error("Failed to fetch slots:", err)
+            setSlots([])
         } finally {
             setIsLoadingSlots(false)
         }

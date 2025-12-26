@@ -446,7 +446,7 @@ Meta Lead Ads fields are mapped to Case fields:
 | **bc** | 00-99 | Feature version (major feature additions) |
 | **de** | 00-99 | Patch version (bug fixes, minor changes) |
 
-**Current:** 0.06.00
+**Current:** 0.15.00
 
 Defined in `apps/api/app/core/config.py` as `Settings.VERSION`.
 
@@ -628,4 +628,4 @@ trigger_status_changed(db, case, old_status, new_status, org_id)
 
 ---
 
-*Last updated: 2025-12-24 (v0.15.00)*
+*Last updated: 2025-12-25 (v0.15.00)*

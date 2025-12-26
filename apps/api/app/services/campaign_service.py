@@ -216,6 +216,7 @@ def _build_recipient_query(
             IntendedParent.organization_id == org_id,
             IntendedParent.email != None,
             IntendedParent.email != "",
+            IntendedParent.is_archived == False,  # Exclude archived IPs
         )
         
         if criteria.created_after:
@@ -268,7 +269,7 @@ def preview_recipients(
                 entity_type="intended_parent",
                 entity_id=entity.id,
                 email=entity.email,
-                name=f"{entity.partner1_first_name} {entity.partner1_last_name}".strip() or None,
+                name=entity.full_name,
                 stage=None,
             ))
     
@@ -339,9 +340,38 @@ def enqueue_campaign_send(
         
         return "Campaign queued for sending", run.id, None
     else:
-        # Schedule for later
+        # Schedule for later - still create the run and job, but with scheduled_for
+        run = CampaignRun(
+            organization_id=org_id,
+            campaign_id=campaign.id,
+            status="pending",
+            total_count=0,
+            sent_count=0,
+            failed_count=0,
+            skipped_count=0,
+        )
+        db.add(run)
+        db.flush()
+        
         campaign.status = CampaignStatus.SCHEDULED.value
-        return "Campaign scheduled", None, campaign.scheduled_at
+        
+        # Create job scheduled for future execution
+        job = Job(
+            organization_id=org_id,
+            job_type=JobType.CAMPAIGN_SEND.value,
+            status=JobStatus.PENDING.value,
+            payload={
+                "campaign_id": str(campaign.id),
+                "run_id": str(run.id),
+                "user_id": str(user_id),
+            },
+            idempotency_key=f"campaign:{campaign.id}:run:{run.id}",
+            scheduled_for=campaign.scheduled_at,  # Run at scheduled time
+        )
+        db.add(job)
+        db.flush()
+        
+        return "Campaign scheduled", run.id, campaign.scheduled_at
 
 
 def cancel_campaign(db: Session, org_id: UUID, campaign_id: UUID) -> bool:
@@ -593,11 +623,10 @@ def execute_campaign_run(
             email_service.send_email(
                 db=db,
                 org_id=org_id,
-                to_email=email,
-                to_name=name,
-                subject=subject,
-                html_body=body,
                 template_id=template.id,
+                recipient_email=email,
+                subject=subject,
+                body=body,
             )
             cr.status = CampaignRecipientStatus.SENT.value
             cr.sent_at = datetime.now(timezone.utc)

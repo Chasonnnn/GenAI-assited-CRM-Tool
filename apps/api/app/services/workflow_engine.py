@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import (
     AutomationWorkflow, WorkflowExecution, Case, Task, EntityNote,
-    User, Queue
+    User, Queue, Match, Appointment, Attachment
 )
 from app.db.enums import (
     WorkflowTriggerType, WorkflowActionType, WorkflowExecutionStatus,
@@ -232,6 +232,7 @@ class WorkflowEngine:
                 db=db,
                 action=action,
                 entity=entity,
+                entity_type=entity_type,
                 event_id=event_id,
                 depth=depth,
             )
@@ -340,6 +341,14 @@ class WorkflowEngine:
             return db.query(Case).filter(Case.id == entity_id).first()
         if entity_type == "task":
             return db.query(Task).filter(Task.id == entity_id).first()
+        if entity_type == "match":
+            return db.query(Match).filter(Match.id == entity_id).first()
+        if entity_type == "appointment":
+            return db.query(Appointment).filter(Appointment.id == entity_id).first()
+        if entity_type == "note":
+            return db.query(EntityNote).filter(EntityNote.id == entity_id).first()
+        if entity_type == "document":
+            return db.query(Attachment).filter(Attachment.id == entity_id).first()
         return None
     
     def _evaluate_conditions(
@@ -412,16 +421,34 @@ class WorkflowEngine:
         
         return False
     
+    # Actions that require the entity to be a Case
+    CASE_ONLY_ACTIONS = {
+        WorkflowActionType.SEND_EMAIL.value,
+        WorkflowActionType.CREATE_TASK.value,
+        WorkflowActionType.ASSIGN_CASE.value,
+        WorkflowActionType.UPDATE_FIELD.value,
+        WorkflowActionType.ADD_NOTE.value,
+    }
+    
     def _execute_action(
         self,
         db: Session,
         action: dict,
         entity: Any,
+        entity_type: str,
         event_id: UUID,
         depth: int,
     ) -> dict:
         """Execute a single action."""
         action_type = action.get("action_type")
+        
+        # Validate entity type for Case-only actions
+        if action_type in self.CASE_ONLY_ACTIONS and entity_type not in ["case", "task"]:
+            return {
+                "success": False,
+                "error": f"Action '{action_type}' only supports Case or Task entities, got '{entity_type}'",
+                "skipped": True,
+            }
         
         try:
             if action_type == WorkflowActionType.SEND_EMAIL.value:
