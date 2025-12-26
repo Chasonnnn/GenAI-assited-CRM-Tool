@@ -354,13 +354,13 @@ export default function CampaignsPage() {
                     <DialogHeader>
                         <DialogTitle>Create Campaign</DialogTitle>
                         <DialogDescription>
-                            Step {wizardStep} of 4
+                            Step {wizardStep} of 5
                         </DialogDescription>
                     </DialogHeader>
 
                     {/* Progress Indicator */}
                     <div className="flex items-center gap-2 py-4">
-                        {[1, 2, 3, 4].map((step) => (
+                        {[1, 2, 3, 4, 5].map((step) => (
                             <div key={step} className="flex items-center flex-1">
                                 <div
                                     className={`flex size-8 items-center justify-center rounded-full text-sm font-medium ${step <= wizardStep
@@ -370,7 +370,7 @@ export default function CampaignsPage() {
                                 >
                                     {step}
                                 </div>
-                                {step < 4 && (
+                                {step < 5 && (
                                     <div
                                         className={`flex-1 h-0.5 mx-2 ${step < wizardStep ? "bg-primary" : "bg-muted"
                                             }`}
@@ -498,7 +498,7 @@ export default function CampaignsPage() {
 
                         {wizardStep === 4 && (
                             <div className="space-y-4">
-                                <h3 className="font-medium">Review & Send</h3>
+                                <h3 className="font-medium">Preview Recipients</h3>
                                 <Card>
                                     <CardContent className="py-4 space-y-3">
                                         <div className="flex justify-between">
@@ -551,6 +551,12 @@ export default function CampaignsPage() {
                                         })
                                     }}
                                 />
+                            </div>
+                        )}
+
+                        {wizardStep === 5 && (
+                            <div className="space-y-4">
+                                <h3 className="font-medium">Schedule & Send</h3>
 
                                 <div className="space-y-2">
                                     <Label>When to send?</Label>
@@ -611,7 +617,7 @@ export default function CampaignsPage() {
                                 Back
                             </Button>
                         )}
-                        {wizardStep < 4 ? (
+                        {wizardStep < 5 ? (
                             <Button
                                 onClick={() => {
                                     const nextStep = wizardStep + 1
