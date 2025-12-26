@@ -123,7 +123,7 @@ def use_template(
 ):
     """Create a workflow from a template."""
     try:
-        workflow = template_service.use_template(
+        workflow, warnings = template_service.use_template(
             db=db,
             org_id=session.org_id,
             user_id=session.user_id,
@@ -131,6 +131,7 @@ def use_template(
             workflow_name=data.name,
             workflow_description=data.description,
             is_enabled=data.is_enabled,
+            action_overrides=getattr(data, 'action_overrides', None),
         )
         
         # Build response with creator name
@@ -138,9 +139,15 @@ def use_template(
         if workflow.created_by:
             result.created_by_name = workflow.created_by.display_name
         
+        # Add warnings to result if present
+        if warnings:
+            result.config_warnings = warnings
+        
         return result
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        detail = str(e)
+        status_code = 404 if detail == "Template not found" else 400
+        raise HTTPException(status_code=status_code, detail=detail)
 
 
 @router.delete("/{template_id}", dependencies=[Depends(require_csrf_header)])

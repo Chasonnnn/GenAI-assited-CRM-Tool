@@ -235,6 +235,7 @@ class WorkflowRead(BaseModel):
     updated_by_name: str | None = None
     created_at: datetime
     updated_at: datetime
+    config_warnings: list[str] | None = None  # Warnings from template usage
     
     model_config = {"from_attributes": True}
 

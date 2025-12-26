@@ -6,7 +6,7 @@
  * Includes auto-reconnect with exponential backoff.
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { caseKeys } from './use-cases';
 
@@ -33,7 +33,7 @@ export function useDashboardSocket(enabled: boolean = true) {
     const wsRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const reconnectDelayRef = useRef(INITIAL_RECONNECT_DELAY);
-    const isConnectedRef = useRef(false);
+    const [isConnected, setIsConnected] = useState(false);
 
     const connect = useCallback(() => {
         if (!enabled || wsRef.current?.readyState === WebSocket.OPEN) {
@@ -45,7 +45,7 @@ export function useDashboardSocket(enabled: boolean = true) {
 
             ws.onopen = () => {
                 console.log('[Dashboard WS] Connected');
-                isConnectedRef.current = true;
+                setIsConnected(true);
                 reconnectDelayRef.current = INITIAL_RECONNECT_DELAY; // Reset delay on successful connect
             };
 
@@ -73,7 +73,7 @@ export function useDashboardSocket(enabled: boolean = true) {
 
             ws.onclose = (event) => {
                 console.log('[Dashboard WS] Disconnected:', event.code, event.reason);
-                isConnectedRef.current = false;
+                setIsConnected(false);
                 wsRef.current = null;
 
                 // Don't reconnect if explicitly closed or disabled
@@ -131,6 +131,6 @@ export function useDashboardSocket(enabled: boolean = true) {
     }, [enabled, connect]);
 
     return {
-        isConnected: isConnectedRef.current,
+        isConnected,
     };
 }

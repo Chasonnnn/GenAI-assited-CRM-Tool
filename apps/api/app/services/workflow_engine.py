@@ -679,9 +679,11 @@ class WorkflowEngine:
                 db=db,
                 org_id=entity.organization_id,
                 user_id=user_id,
-                notification_type=NotificationType.CASE_STATUS_CHANGED,  # Generic type
-                message=f"{title}: {body}" if body else title,
-                data={"case_id": str(entity.id)},
+                type=NotificationType.CASE_STATUS_CHANGED,  # Generic type
+                title=title,
+                body=body if body else None,
+                entity_type="case",
+                entity_id=entity.id,
             )
         
         return {

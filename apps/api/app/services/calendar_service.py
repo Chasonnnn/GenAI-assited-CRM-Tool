@@ -9,7 +9,7 @@ Note: Requires calendar.readonly and calendar.events scopes.
 """
 
 import httpx
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import TypedDict
 from uuid import UUID
 
@@ -57,7 +57,7 @@ async def get_google_access_token(
     
     integration = db.query(UserIntegration).filter(
         UserIntegration.user_id == user_id,
-        UserIntegration.provider == "google",
+        UserIntegration.integration_type == "gmail",
     ).first()
     
     if not integration or not integration.access_token_encrypted:

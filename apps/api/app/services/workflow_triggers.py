@@ -392,6 +392,13 @@ def trigger_document_uploaded(db: Session, attachment: Attachment) -> None:
             org_id = case.organization_id
             case_id = case.id
     
+    # Fallback: check intended_parent_id for IP attachments
+    if not org_id and hasattr(attachment, 'intended_parent_id') and attachment.intended_parent_id:
+        from app.db.models import IntendedParent
+        ip = db.query(IntendedParent).filter(IntendedParent.id == attachment.intended_parent_id).first()
+        if ip:
+            org_id = ip.organization_id
+    
     if not org_id:
         return
     
