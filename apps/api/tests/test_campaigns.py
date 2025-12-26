@@ -277,6 +277,40 @@ def test_campaign_send_job_creation(db, test_org, test_user, test_campaign):
     assert job.payload["run_id"] == str(run_id)
 
 
+def test_campaign_send_job_scheduled_run_at(db, test_org, test_user, test_campaign):
+    """Scheduled campaigns should create a job with run_at set to scheduled_at."""
+    from datetime import datetime, timezone, timedelta
+    from app.services import campaign_service
+    from app.db.models import Job
+    from app.db.enums import JobType
+    
+    scheduled_at = datetime.now(timezone.utc) + timedelta(hours=2)
+    test_campaign.scheduled_at = scheduled_at
+    db.flush()
+    
+    message, run_id, returned_scheduled = campaign_service.enqueue_campaign_send(
+        db=db,
+        org_id=test_org.id,
+        campaign_id=test_campaign.id,
+        user_id=test_user.id,
+        send_now=False,
+    )
+    
+    assert run_id is not None
+    assert "scheduled" in message.lower()
+    assert returned_scheduled == scheduled_at
+    
+    job = db.query(Job).filter(
+        Job.organization_id == test_org.id,
+        Job.job_type == JobType.CAMPAIGN_SEND.value,
+    ).first()
+    
+    assert job is not None
+    assert job.payload["campaign_id"] == str(test_campaign.id)
+    assert job.payload["run_id"] == str(run_id)
+    assert job.run_at.replace(tzinfo=None) == scheduled_at.replace(tzinfo=None)
+
+
 # =============================================================================
 # Campaign Execution Tests
 # =============================================================================
@@ -333,4 +367,3 @@ def test_execute_campaign_run_with_no_recipients(db, test_org, test_user, test_t
     assert result["sent_count"] == 0
     assert result["failed_count"] == 0
     assert result["total_count"] == 0
-

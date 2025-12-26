@@ -1206,6 +1206,6 @@ def _check_gmail_connected(db: Session, user_id: UUID) -> bool:
     """Check if user has Gmail connected."""
     integration = db.query(UserIntegration).filter(
         UserIntegration.user_id == user_id,
-        UserIntegration.integration_type == "google",
+        UserIntegration.integration_type == "gmail",
     ).first()
     return integration is not None and integration.access_token_encrypted is not None

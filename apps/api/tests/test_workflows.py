@@ -269,3 +269,134 @@ def test_generated_workflow_model():
     assert full_workflow.condition_logic == "OR"
     assert len(full_workflow.conditions) == 1
     assert len(full_workflow.actions) == 2
+
+
+# =============================================================================
+# Workflow Engine Task Mapping
+# =============================================================================
+
+def _create_case_for_workflow(db, test_org, test_user, default_stage):
+    from app.db.models import Case
+    from app.db.enums import OwnerType
+    
+    case = Case(
+        id=uuid4(),
+        organization_id=test_org.id,
+        case_number="CASE-1001",
+        stage_id=default_stage.id,
+        status_label=default_stage.label,
+        owner_type=OwnerType.USER.value,
+        owner_id=test_user.id,
+        full_name="Test Case",
+        email="case@example.com",
+        created_by_user_id=test_user.id,
+    )
+    db.add(case)
+    db.flush()
+    return case
+
+
+def _create_task_for_workflow(db, test_org, test_user, case_id=None):
+    from app.db.models import Task
+    from app.db.enums import OwnerType
+    
+    task = Task(
+        id=uuid4(),
+        organization_id=test_org.id,
+        case_id=case_id,
+        created_by_user_id=test_user.id,
+        owner_type=OwnerType.USER.value,
+        owner_id=test_user.id,
+        title="Follow up",
+    )
+    db.add(task)
+    db.flush()
+    return task
+
+
+def test_task_triggered_workflow_maps_to_case(db, test_org, test_user, default_stage):
+    """Task-triggered actions should run against the task's case."""
+    from app.db.models import AutomationWorkflow, EntityNote
+    from app.db.enums import WorkflowTriggerType
+    from app.services.workflow_engine import engine
+    
+    case = _create_case_for_workflow(db, test_org, test_user, default_stage)
+    task = _create_task_for_workflow(db, test_org, test_user, case_id=case.id)
+    
+    workflow = AutomationWorkflow(
+        id=uuid4(),
+        organization_id=test_org.id,
+        name="Task Due -> Add Note",
+        trigger_type=WorkflowTriggerType.TASK_DUE.value,
+        trigger_config={},
+        conditions=[],
+        condition_logic="AND",
+        actions=[{"action_type": "add_note", "content": "Task is due"}],
+        is_enabled=True,
+        is_system_workflow=False,
+        created_by_user_id=test_user.id,
+    )
+    db.add(workflow)
+    db.flush()
+    
+    engine.trigger(
+        db=db,
+        trigger_type=WorkflowTriggerType.TASK_DUE,
+        entity_type="task",
+        entity_id=task.id,
+        event_data={"task_id": str(task.id), "case_id": str(case.id)},
+        org_id=test_org.id,
+    )
+    
+    note = db.query(EntityNote).filter(
+        EntityNote.organization_id == test_org.id,
+        EntityNote.entity_id == case.id,
+    ).first()
+    
+    assert note is not None
+    assert "Task is due" in note.content
+
+
+def test_task_triggered_workflow_skips_without_case(db, test_org, test_user, default_stage):
+    """Task-triggered actions should skip when no case is linked."""
+    from app.db.models import AutomationWorkflow, EntityNote
+    from app.db.enums import WorkflowTriggerType, WorkflowExecutionStatus
+    from app.services.workflow_engine import engine
+    
+    _create_case_for_workflow(db, test_org, test_user, default_stage)
+    task = _create_task_for_workflow(db, test_org, test_user, case_id=None)
+    
+    workflow = AutomationWorkflow(
+        id=uuid4(),
+        organization_id=test_org.id,
+        name="Task Due -> Add Note (No Case)",
+        trigger_type=WorkflowTriggerType.TASK_DUE.value,
+        trigger_config={},
+        conditions=[],
+        condition_logic="AND",
+        actions=[{"action_type": "add_note", "content": "Should not run"}],
+        is_enabled=True,
+        is_system_workflow=False,
+        created_by_user_id=test_user.id,
+    )
+    db.add(workflow)
+    db.flush()
+    
+    executions = engine.trigger(
+        db=db,
+        trigger_type=WorkflowTriggerType.TASK_DUE,
+        entity_type="task",
+        entity_id=task.id,
+        event_data={"task_id": str(task.id)},
+        org_id=test_org.id,
+    )
+    
+    assert len(executions) == 1
+    assert executions[0].status == WorkflowExecutionStatus.PARTIAL.value
+    assert "Task is not linked to a case" in (executions[0].error_message or "")
+    
+    note = db.query(EntityNote).filter(
+        EntityNote.organization_id == test_org.id,
+    ).first()
+    
+    assert note is None

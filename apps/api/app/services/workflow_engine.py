@@ -441,33 +441,50 @@ class WorkflowEngine:
     ) -> dict:
         """Execute a single action."""
         action_type = action.get("action_type")
-        
-        # Validate entity type for Case-only actions
-        if action_type in self.CASE_ONLY_ACTIONS and entity_type not in ["case", "task"]:
-            return {
-                "success": False,
-                "error": f"Action '{action_type}' only supports Case or Task entities, got '{entity_type}'",
-                "skipped": True,
-            }
+        action_entity = entity
+
+        # Validate entity type for Case-only actions, map tasks to cases when possible
+        if action_type in self.CASE_ONLY_ACTIONS:
+            if entity_type == "task":
+                case_id = getattr(entity, "case_id", None)
+                if not case_id:
+                    return {
+                        "success": False,
+                        "error": "Task is not linked to a case",
+                        "skipped": True,
+                    }
+                action_entity = db.query(Case).filter(Case.id == case_id).first()
+                if not action_entity:
+                    return {
+                        "success": False,
+                        "error": "Case not found for task",
+                        "skipped": True,
+                    }
+            elif entity_type != "case":
+                return {
+                    "success": False,
+                    "error": f"Action '{action_type}' only supports Case entities, got '{entity_type}'",
+                    "skipped": True,
+                }
         
         try:
             if action_type == WorkflowActionType.SEND_EMAIL.value:
-                return self._action_send_email(db, action, entity, event_id)
+                return self._action_send_email(db, action, action_entity, event_id)
             
             if action_type == WorkflowActionType.CREATE_TASK.value:
-                return self._action_create_task(db, action, entity)
+                return self._action_create_task(db, action, action_entity)
             
             if action_type == WorkflowActionType.ASSIGN_CASE.value:
-                return self._action_assign_case(db, action, entity, event_id, depth)
+                return self._action_assign_case(db, action, action_entity, event_id, depth)
             
             if action_type == WorkflowActionType.SEND_NOTIFICATION.value:
                 return self._action_send_notification(db, action, entity)
             
             if action_type == WorkflowActionType.UPDATE_FIELD.value:
-                return self._action_update_field(db, action, entity, event_id, depth)
+                return self._action_update_field(db, action, action_entity, event_id, depth)
             
             if action_type == WorkflowActionType.ADD_NOTE.value:
-                return self._action_add_note(db, action, entity)
+                return self._action_add_note(db, action, action_entity)
             
             return {"success": False, "error": f"Unknown action type: {action_type}"}
         
