@@ -340,7 +340,7 @@ def enqueue_campaign_send(
         
         return "Campaign queued for sending", run.id, None
     else:
-        # Schedule for later - still create the run and job, but with scheduled_for
+        # Schedule for later - still create the run and job, but with run_at
         run = CampaignRun(
             organization_id=org_id,
             campaign_id=campaign.id,
@@ -366,7 +366,7 @@ def enqueue_campaign_send(
                 "user_id": str(user_id),
             },
             idempotency_key=f"campaign:{campaign.id}:run:{run.id}",
-            scheduled_for=campaign.scheduled_at,  # Run at scheduled time
+            run_at=campaign.scheduled_at,  # Run at scheduled time
         )
         db.add(job)
         db.flush()
@@ -659,4 +659,3 @@ def execute_campaign_run(
         "skipped_count": skipped_count,
         "total_count": run.total_count,
     }
-
