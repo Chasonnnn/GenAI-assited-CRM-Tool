@@ -78,7 +78,7 @@ export default function MatchesPage() {
     const totalPages = data ? Math.ceil(data.total / data.per_page) : 1
 
     return (
-        <div className="flex min-h-screen flex-col">
+        <div className="flex flex-col h-full overflow-hidden">
             {/* Page Header */}
             <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <div className="flex h-16 items-center justify-between px-6">

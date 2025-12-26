@@ -262,7 +262,7 @@ def preview_recipients(
                 entity_id=entity.id,
                 email=entity.email,
                 name=entity.full_name,
-                stage=stage.name if stage else None,
+                stage=stage.label if stage else None,
             ))
         else:
             recipients.append(RecipientPreview(
