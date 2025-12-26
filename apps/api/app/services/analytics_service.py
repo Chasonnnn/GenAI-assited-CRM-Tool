@@ -153,6 +153,7 @@ def get_status_trend(
         func.coalesce(CaseStatusHistory.to_label_snapshot, "unknown").label("status_label"),
         func.count(CaseStatusHistory.id).label("count"),
     ).filter(
+        CaseStatusHistory.organization_id == organization_id,
         CaseStatusHistory.changed_at >= start_date,
         CaseStatusHistory.changed_at <= end_date,
     ).group_by(
@@ -316,13 +317,13 @@ def get_conversion_funnel(
     if end_date:
         query = query.filter(func.date(Case.created_at) <= end_date)
     
-    # Count cases that reached each stage
+    active_stages = [s for s in stages if s.is_active]
     total = query.count()
     
     funnel_data = []
     for stage in funnel_stages:
-        # Count cases currently at or past this stage
-        count = query.filter(Case.stage_id == stage.id).count()
+        eligible_stage_ids = [s.id for s in active_stages if s.order >= stage.order]
+        count = query.filter(Case.stage_id.in_(eligible_stage_ids)).count()
         funnel_data.append({
             "stage": stage.slug,
             "label": stage.label,
@@ -471,11 +472,13 @@ def get_funnel_with_filter(
     if ad_id:
         query = query.filter(Case.meta_ad_id == ad_id)
     
+    active_stages = [s for s in stages if s.is_active]
     total = query.count()
     
     funnel_data = []
     for stage in funnel_stages:
-        count = query.filter(Case.stage_id == stage.id).count()
+        eligible_stage_ids = [s.id for s in active_stages if s.order >= stage.order]
+        count = query.filter(Case.stage_id.in_(eligible_stage_ids)).count()
         funnel_data.append({
             "stage": stage.slug,
             "label": stage.label,

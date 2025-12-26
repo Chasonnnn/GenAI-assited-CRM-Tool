@@ -193,6 +193,10 @@ app.include_router(appointments.router, prefix="/appointments", tags=["appointme
 from app.routers import booking
 app.include_router(booking.router, prefix="/book", tags=["booking"])
 
+# Email Tracking (public endpoints for pixel/click tracking)
+from app.routers import tracking
+app.include_router(tracking.router)
+
 # Dev router (ONLY mounted in dev mode)
 if settings.ENV == "dev":
     from app.routers import dev

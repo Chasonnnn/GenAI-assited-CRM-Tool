@@ -151,7 +151,7 @@ def create_version(
     entity_type: str,
     entity_id: UUID,
     payload: dict[str, Any],
-    created_by_user_id: UUID,
+    created_by_user_id: UUID | None,
     comment: str | None = None,
 ) -> EntityVersion:
     """

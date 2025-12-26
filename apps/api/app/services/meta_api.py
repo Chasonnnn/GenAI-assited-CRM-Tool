@@ -214,6 +214,8 @@ async def fetch_ad_account_insights(
     date_end: str,
     level: str = "campaign",
     max_pages: int = 10,
+    time_increment: int | None = None,
+    breakdowns: list[str] | None = None,
 ) -> tuple[list[dict] | None, str | None]:
     """
     Fetch ad insights (spend, impressions, etc.) from Meta Marketing API.
@@ -225,12 +227,19 @@ async def fetch_ad_account_insights(
         date_end: End date (YYYY-MM-DD)
         level: Breakdown level (campaign, adset, ad)
         max_pages: Maximum number of pages to fetch (default 10)
+        time_increment: Time granularity in days (1, 7, 28, etc.)
+        breakdowns: Optional breakdown dimensions (region, country, dma, etc.)
         
     Returns:
         (data, error) tuple - data is list of insight objects
     """
     if settings.META_TEST_MODE:
-        return _mock_insights_data(date_start, date_end), None
+        return _mock_insights_data(
+            date_start,
+            date_end,
+            time_increment=time_increment,
+            breakdowns=breakdowns,
+        ), None
     
     if not access_token:
         return None, "No access token provided"
@@ -248,6 +257,10 @@ async def fetch_ad_account_insights(
         "time_range": f'{{"since":"{date_start}","until":"{date_end}"}}',
         "limit": 100,  # Request max per page
     }
+    if time_increment:
+        params["time_increment"] = time_increment
+    if breakdowns:
+        params["breakdowns"] = ",".join(breakdowns)
     
     all_data = []
     pages_fetched = 0
@@ -280,8 +293,14 @@ async def fetch_ad_account_insights(
         return None, f"Meta API error: {str(e)[:200]}"
 
 
-def _mock_insights_data(date_start: str, date_end: str) -> list[dict]:
+def _mock_insights_data(
+    date_start: str,
+    date_end: str,
+    time_increment: int | None = None,
+    breakdowns: list[str] | None = None,
+) -> list[dict]:
     """Return mock insights data for test mode."""
+    breakdowns = breakdowns or []
     return [
         {
             "campaign_id": "camp_001",
@@ -296,6 +315,8 @@ def _mock_insights_data(date_start: str, date_end: str) -> list[dict]:
             ],
             "date_start": date_start,
             "date_stop": date_end,
+            **({"region": "California"} if "region" in breakdowns else {}),
+            **({"country": "US"} if "country" in breakdowns else {}),
         },
         {
             "campaign_id": "camp_002", 
@@ -310,6 +331,8 @@ def _mock_insights_data(date_start: str, date_end: str) -> list[dict]:
             ],
             "date_start": date_start,
             "date_stop": date_end,
+            **({"region": "Texas"} if "region" in breakdowns else {}),
+            **({"country": "US"} if "country" in breakdowns else {}),
         },
         {
             "campaign_id": "camp_003",
@@ -324,5 +347,7 @@ def _mock_insights_data(date_start: str, date_end: str) -> list[dict]:
             ],
             "date_start": date_start,
             "date_stop": date_end,
+            **({"region": "Florida"} if "region" in breakdowns else {}),
+            **({"country": "US"} if "country" in breakdowns else {}),
         },
     ]

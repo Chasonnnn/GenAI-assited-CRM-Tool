@@ -118,15 +118,15 @@ export default function MatchesPage() {
                 <div className="flex flex-col gap-4 md:flex-row md:items-center">
                     <Select value={statusFilter} onValueChange={(v) => { if (v) { setStatusFilter(v); setPage(1) } }}>
                         <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="All Statuses">
+                            <SelectValue placeholder="All Stages">
                                 {(value: string | null) => {
-                                    if (!value || value === "all") return "All Statuses"
+                                    if (!value || value === "all") return "All Stages"
                                     return STATUS_LABELS[value] ?? value
                                 }}
                             </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all">All Statuses</SelectItem>
+                            <SelectItem value="all">All Stages</SelectItem>
                             <SelectItem value="proposed">Proposed</SelectItem>
                             <SelectItem value="reviewing">Reviewing</SelectItem>
                             <SelectItem value="accepted">Accepted</SelectItem>
@@ -175,7 +175,7 @@ export default function MatchesPage() {
                                         <TableHead>Case #</TableHead>
                                         <TableHead>Intended Parents</TableHead>
                                         <TableHead>Compatibility</TableHead>
-                                        <TableHead>Match Status</TableHead>
+                                        <TableHead>Match Stage</TableHead>
                                         <TableHead>Case Stage</TableHead>
                                         <TableHead>Proposed</TableHead>
                                     </TableRow>

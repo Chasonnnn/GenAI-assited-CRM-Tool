@@ -7,11 +7,11 @@ from datetime import datetime, timezone, timedelta
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db, require_permission
+from app.core.deps import get_db, require_permission
 
 from app.db.models import Case, MetaLead
 from app.services import pipeline_service
@@ -68,12 +68,35 @@ class CampaignSpend(BaseModel):
     cost_per_lead: Optional[float]
 
 
+class MetaSpendTimePoint(BaseModel):
+    date_start: str
+    date_stop: str
+    spend: float
+    impressions: int
+    reach: int
+    clicks: int
+    leads: int
+    cost_per_lead: Optional[float]
+
+
+class MetaSpendBreakdown(BaseModel):
+    breakdown_values: dict[str, str]
+    spend: float
+    impressions: int
+    reach: int
+    clicks: int
+    leads: int
+    cost_per_lead: Optional[float]
+
+
 class MetaSpendSummary(BaseModel):
     total_spend: float
     total_impressions: int
     total_leads: int
     cost_per_lead: Optional[float]
     campaigns: list[CampaignSpend]
+    time_series: list[MetaSpendTimePoint] = Field(default_factory=list)
+    breakdowns: list[MetaSpendBreakdown] = Field(default_factory=list)
 
 
 # =============================================================================
@@ -273,8 +296,8 @@ def get_meta_performance(
     """
     Get Meta Lead Ads performance metrics.
     
-    Conversion = Lead was converted to a case AND case was contacted.
-    Conversion = Lead's case reached the "Approved" stage.
+    Qualified = Lead's case reached the "Qualified" stage or later.
+    Converted = Lead's case reached the "Application Submitted" stage or later.
     """
     start, end = parse_date_range(from_date, to_date)
     org_id = session.org_id
@@ -283,28 +306,29 @@ def get_meta_performance(
     pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
     stages = pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
     
-    # Get qualified and approved stage IDs
+    # Get qualified and converted stage IDs
     qualified_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "qualified")
-    approved_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "approved")
+    converted_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "application_submitted")
     
     # Build stage ID lists
     qualified_or_later_ids = []
-    approved_or_later_ids = []
+    converted_or_later_ids = []
     
     if qualified_stage:
         qualified_or_later_ids = [
             s.id for s in stages if s.order >= qualified_stage.order and s.is_active
         ]
-    if approved_stage:
-        approved_or_later_ids = [
-            s.id for s in stages if s.order >= approved_stage.order and s.is_active
+    if converted_stage:
+        converted_or_later_ids = [
+            s.id for s in stages if s.order >= converted_stage.order and s.is_active
         ]
     
     # Total leads received
+    lead_time = func.coalesce(MetaLead.meta_created_time, MetaLead.received_at)
     leads_received = db.query(MetaLead).filter(
         MetaLead.organization_id == org_id,
-        MetaLead.received_at >= start,
-        MetaLead.received_at < end,
+        lead_time >= start,
+        lead_time < end,
     ).count()
     
     # Leads qualified = case reached "Qualified" stage or later
@@ -316,49 +340,49 @@ def get_meta_performance(
                 FROM meta_leads ml
                 JOIN cases c ON ml.converted_case_id = c.id
                 WHERE ml.organization_id = :org_id
-                  AND ml.received_at >= :start
-                  AND ml.received_at < :end
+                  AND COALESCE(ml.meta_created_time, ml.received_at) >= :start
+                  AND COALESCE(ml.meta_created_time, ml.received_at) < :end
                   AND ml.is_converted = true
                   AND c.stage_id = ANY(:stage_ids)
             """),
             {"org_id": org_id, "start": start, "end": end, "stage_ids": qualified_or_later_ids}
         ).scalar() or 0
     
-    # Leads converted = case reached "Approved" stage or later
+    # Leads converted = case reached "Application Submitted" stage or later
     leads_converted = 0
-    if approved_or_later_ids:
+    if converted_or_later_ids:
         leads_converted = db.execute(
             text("""
                 SELECT COUNT(*) 
                 FROM meta_leads ml
                 JOIN cases c ON ml.converted_case_id = c.id
                 WHERE ml.organization_id = :org_id
-                  AND ml.received_at >= :start
-                  AND ml.received_at < :end
+                  AND COALESCE(ml.meta_created_time, ml.received_at) >= :start
+                  AND COALESCE(ml.meta_created_time, ml.received_at) < :end
                   AND ml.is_converted = true
                   AND c.stage_id = ANY(:stage_ids)
             """),
-            {"org_id": org_id, "start": start, "end": end, "stage_ids": approved_or_later_ids}
+            {"org_id": org_id, "start": start, "end": end, "stage_ids": converted_or_later_ids}
         ).scalar() or 0
     
     qualification_rate = (leads_qualified / leads_received * 100) if leads_received > 0 else 0.0
     conversion_rate = (leads_converted / leads_received * 100) if leads_received > 0 else 0.0
     
-    # Avg time to convert (in hours) - from lead received to case reaching approved
+    # Avg time to convert (in hours) - from lead created to case reaching application_submitted
     result = None
-    if approved_stage:
+    if converted_stage:
         result = db.execute(
             text("""
-                SELECT AVG(EXTRACT(EPOCH FROM (csh.changed_at - ml.received_at)) / 3600) as avg_hours
+                SELECT AVG(EXTRACT(EPOCH FROM (csh.changed_at - COALESCE(ml.meta_created_time, ml.received_at))) / 3600) as avg_hours
                 FROM meta_leads ml
                 JOIN cases c ON ml.converted_case_id = c.id
-                JOIN case_status_history csh ON c.id = csh.case_id AND csh.to_stage_id = :approved_stage_id
+                JOIN case_status_history csh ON c.id = csh.case_id AND csh.to_stage_id = :converted_stage_id
                 WHERE ml.organization_id = :org_id
-                  AND ml.received_at >= :start
-                  AND ml.received_at < :end
+                  AND COALESCE(ml.meta_created_time, ml.received_at) >= :start
+                  AND COALESCE(ml.meta_created_time, ml.received_at) < :end
                   AND ml.is_converted = true
             """),
-            {"org_id": org_id, "start": start, "end": end, "approved_stage_id": approved_stage.id}
+            {"org_id": org_id, "start": start, "end": end, "converted_stage_id": converted_stage.id}
         )
     row = result.fetchone() if result else None
     avg_hours = round(row[0], 1) if row and row[0] else None
@@ -377,6 +401,16 @@ def get_meta_performance(
 async def get_meta_spend(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
+    time_increment: Optional[int] = Query(
+        None,
+        description="Time increment in days for time series (e.g. 1, 7, 28)",
+        ge=1,
+        le=90,
+    ),
+    breakdowns: Optional[str] = Query(
+        None,
+        description="Comma-separated breakdowns (e.g. region,country)",
+    ),
     session: UserSession = Depends(require_permission("view_reports")),
     db: Session = Depends(get_db),
 ):
@@ -384,7 +418,8 @@ async def get_meta_spend(
     Get Meta Ads spend data from Marketing API.
     
     Returns total spend, impressions, leads and cost per lead,
-    broken down by campaign.
+    broken down by campaign. Optional time series and breakdowns
+    are included when requested via query params.
     """
     import logging
     from app.core.config import settings
@@ -413,6 +448,9 @@ async def get_meta_spend(
             campaigns=[],
         )
     
+    breakdown_list = [item.strip() for item in breakdowns.split(",")] if breakdowns else []
+    breakdown_list = [item for item in breakdown_list if item]
+    
     # Fetch insights from Meta API
     insights, error = await meta_api.fetch_ad_account_insights(
         ad_account_id=ad_account_id or "act_mock",
@@ -420,6 +458,8 @@ async def get_meta_spend(
         date_start=date_start,
         date_end=date_end,
         level="campaign",
+        time_increment=time_increment,
+        breakdowns=breakdown_list or None,
     )
     
     if error:
@@ -453,10 +493,12 @@ async def get_meta_spend(
     LEAD_ACTION_TYPES = {"lead", "leadgen", "onsite_conversion.lead_grouped", "offsite_conversion.fb_pixel_lead"}
     
     # Process insights data
-    campaigns = []
+    campaigns_by_id: dict[str, dict[str, float | int | str]] = {}
     total_spend = 0.0
     total_impressions = 0
     total_leads = 0
+    time_series: dict[tuple[str, str], dict[str, float | int]] = {}
+    breakdown_totals: dict[tuple[str, ...], dict[str, float | int | dict[str, str]]] = {}
     
     for insight in insights:
         spend = safe_float(insight.get("spend"))
@@ -472,24 +514,122 @@ async def get_meta_spend(
             if action_type in LEAD_ACTION_TYPES:
                 leads += safe_int(action.get("value"))
         
-        cpl = round(spend / leads, 2) if leads > 0 else None
-        
-        campaigns.append(CampaignSpend(
-            campaign_id=insight.get("campaign_id", ""),
-            campaign_name=insight.get("campaign_name", "Unknown"),
-            spend=spend,
-            impressions=impressions,
-            reach=reach,
-            clicks=clicks,
-            leads=leads,
-            cost_per_lead=cpl,
-        ))
+        campaign_id = insight.get("campaign_id", "") or "unknown"
+        campaign_name = insight.get("campaign_name", "Unknown")
+        campaign_totals = campaigns_by_id.get(campaign_id)
+        if not campaign_totals:
+            campaign_totals = {
+                "campaign_id": campaign_id,
+                "campaign_name": campaign_name,
+                "spend": 0.0,
+                "impressions": 0,
+                "reach": 0,
+                "clicks": 0,
+                "leads": 0,
+            }
+            campaigns_by_id[campaign_id] = campaign_totals
+        campaign_totals["spend"] = float(campaign_totals["spend"]) + spend
+        campaign_totals["impressions"] = int(campaign_totals["impressions"]) + impressions
+        campaign_totals["reach"] = int(campaign_totals["reach"]) + reach
+        campaign_totals["clicks"] = int(campaign_totals["clicks"]) + clicks
+        campaign_totals["leads"] = int(campaign_totals["leads"]) + leads
         
         total_spend += spend
         total_impressions += impressions
         total_leads += leads
+        
+        if time_increment:
+            date_start_value = insight.get("date_start") or date_start
+            date_stop_value = insight.get("date_stop") or date_end
+            time_key = (str(date_start_value), str(date_stop_value))
+            point = time_series.get(time_key)
+            if not point:
+                point = {
+                    "spend": 0.0,
+                    "impressions": 0,
+                    "reach": 0,
+                    "clicks": 0,
+                    "leads": 0,
+                }
+                time_series[time_key] = point
+            point["spend"] = float(point["spend"]) + spend
+            point["impressions"] = int(point["impressions"]) + impressions
+            point["reach"] = int(point["reach"]) + reach
+            point["clicks"] = int(point["clicks"]) + clicks
+            point["leads"] = int(point["leads"]) + leads
+        
+        if breakdown_list:
+            breakdown_values = {key: str(insight.get(key, "unknown")) for key in breakdown_list}
+            breakdown_key = tuple(breakdown_values.get(key, "unknown") for key in breakdown_list)
+            breakdown = breakdown_totals.get(breakdown_key)
+            if not breakdown:
+                breakdown = {
+                    "breakdown_values": breakdown_values,
+                    "spend": 0.0,
+                    "impressions": 0,
+                    "reach": 0,
+                    "clicks": 0,
+                    "leads": 0,
+                }
+                breakdown_totals[breakdown_key] = breakdown
+            breakdown["spend"] = float(breakdown["spend"]) + spend
+            breakdown["impressions"] = int(breakdown["impressions"]) + impressions
+            breakdown["reach"] = int(breakdown["reach"]) + reach
+            breakdown["clicks"] = int(breakdown["clicks"]) + clicks
+            breakdown["leads"] = int(breakdown["leads"]) + leads
     
     overall_cpl = round(total_spend / total_leads, 2) if total_leads > 0 else None
+    
+    campaigns = []
+    for campaign_totals in campaigns_by_id.values():
+        campaign_spend = float(campaign_totals["spend"])
+        campaign_leads = int(campaign_totals["leads"])
+        cpl = round(campaign_spend / campaign_leads, 2) if campaign_leads > 0 else None
+        campaigns.append(CampaignSpend(
+            campaign_id=str(campaign_totals["campaign_id"]),
+            campaign_name=str(campaign_totals["campaign_name"]),
+            spend=campaign_spend,
+            impressions=int(campaign_totals["impressions"]),
+            reach=int(campaign_totals["reach"]),
+            clicks=int(campaign_totals["clicks"]),
+            leads=campaign_leads,
+            cost_per_lead=cpl,
+        ))
+    
+    time_series_points = []
+    if time_increment:
+        for (start_key, stop_key), totals in sorted(time_series.items()):
+            point_spend = float(totals["spend"])
+            point_leads = int(totals["leads"])
+            point_cpl = round(point_spend / point_leads, 2) if point_leads > 0 else None
+            time_series_points.append(MetaSpendTimePoint(
+                date_start=start_key,
+                date_stop=stop_key,
+                spend=point_spend,
+                impressions=int(totals["impressions"]),
+                reach=int(totals["reach"]),
+                clicks=int(totals["clicks"]),
+                leads=point_leads,
+                cost_per_lead=point_cpl,
+            ))
+    
+    breakdown_points = []
+    if breakdown_list:
+        for breakdown in breakdown_totals.values():
+            breakdown_spend = float(breakdown["spend"])
+            breakdown_leads = int(breakdown["leads"])
+            breakdown_cpl = round(breakdown_spend / breakdown_leads, 2) if breakdown_leads > 0 else None
+            breakdown_points.append(MetaSpendBreakdown(
+                breakdown_values=breakdown["breakdown_values"],
+                spend=breakdown_spend,
+                impressions=int(breakdown["impressions"]),
+                reach=int(breakdown["reach"]),
+                clicks=int(breakdown["clicks"]),
+                leads=breakdown_leads,
+                cost_per_lead=breakdown_cpl,
+            ))
+    
+    breakdown_points.sort(key=lambda item: item.spend, reverse=True)
     
     return MetaSpendSummary(
         total_spend=round(total_spend, 2),
@@ -497,6 +637,8 @@ async def get_meta_spend(
         total_leads=total_leads,
         cost_per_lead=overall_cpl,
         campaigns=campaigns,
+        time_series=time_series_points,
+        breakdowns=breakdown_points,
     )
 
 
@@ -509,7 +651,7 @@ def get_cases_by_state(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
     source: Optional[str] = Query(None),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission("view_reports")),
     db: Session = Depends(get_db),
 ) -> dict:
     """Get case count by US state for map visualization."""
@@ -526,7 +668,7 @@ def get_cases_by_state(
 def get_cases_by_source(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission("view_reports")),
     db: Session = Depends(get_db),
 ) -> dict:
     """Get case count by lead source."""
@@ -543,7 +685,7 @@ def get_cases_by_source(
 def get_conversion_funnel(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission("view_reports")),
     db: Session = Depends(get_db),
 ) -> dict:
     """Get conversion funnel data."""
@@ -560,7 +702,7 @@ def get_conversion_funnel(
 def get_kpis(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission("view_reports")),
     db: Session = Depends(get_db),
 ) -> dict:
     """Get summary KPIs for dashboard cards."""
@@ -575,7 +717,7 @@ def get_kpis(
 
 @router.get("/campaigns")
 def get_campaigns(
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission("view_reports")),
     db: Session = Depends(get_db),
 ) -> dict:
     """Get campaigns for filter dropdown."""
@@ -590,7 +732,7 @@ def get_funnel_compare(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
     ad_id: Optional[str] = Query(None),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission("view_reports")),
     db: Session = Depends(get_db),
 ) -> dict:
     """Get funnel with optional campaign filter for comparison."""
@@ -611,7 +753,7 @@ def get_cases_by_state_compare(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
     ad_id: Optional[str] = Query(None),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission("view_reports")),
     db: Session = Depends(get_db),
 ) -> dict:
     """Get cases by state with optional campaign filter."""
@@ -725,7 +867,7 @@ def get_activity_feed(
 
 @router.get("/export/pdf")
 async def export_analytics_pdf(
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission("view_reports")),
     db: Session = Depends(get_db),
     from_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     to_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
@@ -799,20 +941,20 @@ async def export_analytics_pdf(
     
     # Get qualified rate
     from app.db.models import PipelineStage
-    qualified_stage = db.query(PipelineStage).filter(
-        PipelineStage.slug == "qualified"
-    ).first()
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
+    qualified_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "qualified")
     
     qualified_rate = 0.0
     if qualified_stage and total_cases > 0:
+        qualified_stage_ids = db.query(PipelineStage.id).filter(
+            PipelineStage.pipeline_id == pipeline.id,
+            PipelineStage.order >= qualified_stage.order,
+            PipelineStage.is_active == True,
+        )
         qualified_count = db.query(func.count(Case.id)).filter(
             Case.organization_id == org_id,
             Case.is_archived == False,
-            Case.stage_id.in_(
-                db.query(PipelineStage.id).filter(
-                    PipelineStage.order >= qualified_stage.order
-                )
-            )
+            Case.stage_id.in_(qualified_stage_ids),
         ).scalar() or 0
         qualified_rate = (qualified_count / total_cases) * 100
     

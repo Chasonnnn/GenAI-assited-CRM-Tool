@@ -125,10 +125,11 @@ export default function EmailTemplatesPage() {
         setIsModalOpen(true)
     }
 
-    // Populate body when full template loads
-    if (fullTemplate && editingTemplate && !templateBody && fullTemplate.body) {
-        setTemplateBody(fullTemplate.body)
-    }
+    React.useEffect(() => {
+        if (fullTemplate && editingTemplate && !templateBody && fullTemplate.body) {
+            setTemplateBody(fullTemplate.body)
+        }
+    }, [fullTemplate, editingTemplate, templateBody])
 
     const handleSave = () => {
         if (!templateName.trim() || !templateSubject.trim() || !templateBody.trim()) return

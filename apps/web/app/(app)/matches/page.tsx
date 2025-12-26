@@ -107,7 +107,7 @@ function MatchTable({ status, search }: { status?: MatchStatus; search?: string 
                 <TableRow>
                     <TableHead>Surrogate</TableHead>
                     <TableHead>Intended Parent</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>Stage</TableHead>
                     <TableHead>Score</TableHead>
                     <TableHead>Proposed</TableHead>
                     <TableHead className="text-right">Action</TableHead>

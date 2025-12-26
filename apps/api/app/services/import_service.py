@@ -167,11 +167,12 @@ def preview_import(
         seen_emails.add(email)
     preview.duplicate_emails_csv = len(duplicate_in_csv)
     
-    # Check for duplicates in DB (all cases, including archived)
+    # Check for duplicates in DB (active cases only)
     if csv_emails:
         existing = db.execute(
             select(func.lower(Case.email)).where(
                 Case.organization_id == org_id,
+                Case.is_archived == False,
                 func.lower(Case.email).in_(csv_emails)
             )
         ).scalars().all()
@@ -252,10 +253,11 @@ def execute_import(
     
     column_map = map_columns(headers)
     
-    # Get existing emails in org (for dedupe)
+    # Get existing emails in org (active cases only)
     existing_emails = set(db.execute(
         select(func.lower(Case.email)).where(
-            Case.organization_id == org_id
+            Case.organization_id == org_id,
+            Case.is_archived == False,
         )
     ).scalars().all())
     
@@ -311,7 +313,10 @@ def execute_import(
             })
     
     # Update import record
-    import_record = db.query(CaseImport).filter(CaseImport.id == import_id).first()
+    import_record = db.query(CaseImport).filter(
+        CaseImport.id == import_id,
+        CaseImport.organization_id == org_id,
+    ).first()
     if import_record:
         import_record.status = "completed"
         import_record.imported_count = result.imported

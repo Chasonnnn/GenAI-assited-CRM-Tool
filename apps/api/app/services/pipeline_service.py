@@ -375,7 +375,7 @@ def _bump_pipeline_version(
         entity_type=ENTITY_TYPE,
         entity_id=pipeline.id,
         payload=_pipeline_payload(pipeline),
-        created_by_user_id=user_id or pipeline.organization_id,
+        created_by_user_id=user_id,
         comment=comment,
     )
 

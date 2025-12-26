@@ -485,7 +485,7 @@ export default function CasesPage() {
                                         <SortableTableHead column="state" label="State" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <SortableTableHead column="phone" label="Phone" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <SortableTableHead column="email" label="Email" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                                        <TableHead>Status</TableHead>
+                                        <TableHead>Stage</TableHead>
                                         <SortableTableHead column="source" label="Source" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <TableHead>Assigned To</TableHead>
                                         <SortableTableHead column="created_at" label="Created" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
@@ -565,7 +565,7 @@ export default function CasesPage() {
                                                 </TableCell>
                                                 <TableCell>
                                                     <DropdownMenu>
-                                                        <DropdownMenuTrigger className="inline-flex items-center justify-center size-8 p-0 rounded-md hover:bg-accent hover:text-accent-foreground">
+                                                        <DropdownMenuTrigger nativeButton={false} className="inline-flex items-center justify-center size-8 p-0 rounded-md hover:bg-accent hover:text-accent-foreground">
                                                             <MoreVerticalIcon className="size-4" />
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent align="end">

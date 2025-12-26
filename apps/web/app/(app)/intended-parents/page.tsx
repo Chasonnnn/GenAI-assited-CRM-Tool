@@ -244,15 +244,15 @@ export default function IntendedParentsPage() {
                 <div className="flex flex-col gap-4 md:flex-row md:items-center">
                     <Select value={statusFilter} onValueChange={(v) => { if (v) handleStatusChange(v) }}>
                         <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="All Statuses">
+                            <SelectValue placeholder="All Stages">
                                 {(value: string | null) => {
-                                    if (!value || value === "all") return "All Statuses"
+                                    if (!value || value === "all") return "All Stages"
                                     return STATUS_LABELS[value as IntendedParentStatus] ?? value
                                 }}
                             </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all">All Statuses</SelectItem>
+                            <SelectItem value="all">All Stages</SelectItem>
                             <SelectItem value="new">New</SelectItem>
                             <SelectItem value="in_review">In Review</SelectItem>
                             <SelectItem value="matched">Matched</SelectItem>
@@ -307,7 +307,7 @@ export default function IntendedParentsPage() {
                                         <SortableTableHead column="phone" label="Phone" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <SortableTableHead column="state" label="State" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <SortableTableHead column="budget" label="Budget" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                                        <SortableTableHead column="status" label="Status" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                                        <SortableTableHead column="status" label="Stage" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <SortableTableHead column="created_at" label="Created" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                     </TableRow>
                                 </TableHeader>

@@ -507,7 +507,7 @@ export default function MatchDetailPage() {
                                 </Badge>
                             )}
                         </div>
-                        {/* Match Status Badge */}
+                        {/* Match Stage Badge */}
                         <Badge className={STATUS_COLORS[match.status]}>
                             {STATUS_LABELS[match.status]}
                         </Badge>
@@ -534,13 +534,13 @@ export default function MatchDetailPage() {
                                 </Button>
                             </>
                         )}
-                        {/* Change Status Dropdown - only for case_manager+ on accepted matches */}
+                        {/* Change Stage Dropdown - only for case_manager+ on accepted matches */}
                         {canChangeStatus && match.status === 'accepted' && postApprovalStages.length > 0 && (
                             <DropdownMenu>
                                 <DropdownMenuTrigger
                                     render={
                                         <Button variant="outline" size="sm" className="h-7 text-xs">
-                                            Change Status
+                                            Change Stage
                                         </Button>
                                     }
                                 />

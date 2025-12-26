@@ -313,7 +313,7 @@ export default function IntendedParentDetailPage() {
                         {/* Status Change */}
                         <Card>
                             <CardHeader>
-                                <CardTitle>Status</CardTitle>
+                                <CardTitle>Stage</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <Select
@@ -381,7 +381,7 @@ export default function IntendedParentDetailPage() {
                     <div className="space-y-6">
                         <Card>
                             <CardHeader>
-                                <CardTitle>Status History</CardTitle>
+                                <CardTitle>Stage History</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 {history?.length ? (

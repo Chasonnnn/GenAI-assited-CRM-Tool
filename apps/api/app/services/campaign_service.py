@@ -654,6 +654,7 @@ def execute_campaign_run(
         # Create recipient record
         cr = existing
         if not cr:
+            from app.services import tracking_service
             cr = CampaignRecipient(
                 organization_id=org_id,
                 run_id=run_id,
@@ -662,6 +663,7 @@ def execute_campaign_run(
                 recipient_email=email,
                 recipient_name=name,
                 status=CampaignRecipientStatus.PENDING.value,
+                tracking_token=tracking_service.generate_tracking_token(),
             )
             db.add(cr)
             db.flush()
@@ -671,6 +673,15 @@ def execute_campaign_run(
         ):
             continue
         
+        # Ensure tracking token exists (for retried sends)
+        if not cr.tracking_token:
+            from app.services import tracking_service
+            cr.tracking_token = tracking_service.generate_tracking_token()
+        
+        # Inject tracking pixel and wrap links
+        from app.services import tracking_service
+        tracked_body = tracking_service.prepare_email_for_tracking(body, cr.tracking_token)
+        
         try:
             # Queue email (actual send happens in background job)
             email_log, _job = email_service.send_email(
@@ -679,7 +690,7 @@ def execute_campaign_run(
                 template_id=template.id,
                 recipient_email=email,
                 subject=subject,
-                body=body,
+                body=tracked_body,
             )
             cr.status = CampaignRecipientStatus.PENDING.value
             cr.external_message_id = str(email_log.id)
