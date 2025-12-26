@@ -34,8 +34,8 @@ All notable changes to this project will be documented in this file.
 
 ### Test Coverage
 - **Frontend**: 78 tests passing
-- **Backend**: 142 tests passing
-- **Total**: 220 tests
+- **Backend**: 147 tests passing
+- **Total**: 225 tests
 
 ---
 
