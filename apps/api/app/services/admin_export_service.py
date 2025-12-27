@@ -50,6 +50,8 @@ def _serialize_csv_value(value: Any) -> str:
         return ""
     if isinstance(value, datetime):
         return value.isoformat()
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, sort_keys=True)
     return str(value)
 
 
@@ -102,6 +104,15 @@ def stream_cases_csv(db: Session, org_id: UUID) -> Iterator[str]:
         "meta_lead_external_id",
         "meta_lead_form_id",
         "meta_lead_page_id",
+        "meta_lead_status",
+        "meta_lead_fetch_error",
+        "meta_lead_conversion_error",
+        "meta_lead_is_converted",
+        "meta_lead_meta_created_time",
+        "meta_lead_received_at",
+        "meta_lead_converted_at",
+        "meta_lead_field_data",
+        "meta_lead_raw_payload",
         "meta_ad_id",
         "meta_form_id",
         "full_name",
@@ -191,6 +202,15 @@ def stream_cases_csv(db: Session, org_id: UUID) -> Iterator[str]:
             meta_lead_row.meta_lead_id if meta_lead_row else None,
             meta_lead_row.meta_form_id if meta_lead_row else None,
             meta_lead_row.meta_page_id if meta_lead_row else None,
+            meta_lead_row.status if meta_lead_row else None,
+            meta_lead_row.fetch_error if meta_lead_row else None,
+            meta_lead_row.conversion_error if meta_lead_row else None,
+            meta_lead_row.is_converted if meta_lead_row else None,
+            meta_lead_row.meta_created_time if meta_lead_row else None,
+            meta_lead_row.received_at if meta_lead_row else None,
+            meta_lead_row.converted_at if meta_lead_row else None,
+            meta_lead_row.field_data if meta_lead_row else None,
+            meta_lead_row.raw_payload if meta_lead_row else None,
             case.meta_ad_id,
             case.meta_form_id,
             case.full_name,

@@ -5,7 +5,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 
 from sqlalchemy import (
-    Boolean, CheckConstraint, Date, ForeignKey, Index, Integer, LargeBinary, 
+    BigInteger, Boolean, CheckConstraint, Date, ForeignKey, Index, Integer, LargeBinary,
     Numeric, String, TIMESTAMP, Text, Time, UniqueConstraint, text
 )
 from sqlalchemy.dialects.postgresql import CITEXT, JSONB, UUID
@@ -2148,7 +2148,7 @@ class OrgCounter(Base):
     )
     counter_type: Mapped[str] = mapped_column(String(50), primary_key=True)
     current_value: Mapped[int] = mapped_column(
-        Integer,
+        BigInteger,
         server_default=text("0"),
         nullable=False
     )
@@ -3840,4 +3840,3 @@ class CampaignTrackingEvent(Base):
     
     # Relationships
     recipient: Mapped["CampaignRecipient"] = relationship(back_populates="tracking_events")
-
