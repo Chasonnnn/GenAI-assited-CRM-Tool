@@ -86,6 +86,7 @@ class StageCreate(BaseModel):
     color: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
     stage_type: str = Field(pattern=r"^(intake|post_approval|terminal)$")
     order: int | None = None  # Auto-calculated if not provided
+    expected_version: int | None = None  # Optional optimistic locking
 
 
 class StageUpdate(BaseModel):
@@ -93,16 +94,19 @@ class StageUpdate(BaseModel):
     label: str | None = Field(None, min_length=1, max_length=100)
     color: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$")
     order: int | None = None
+    expected_version: int | None = None  # Optional optimistic locking
 
 
 class StageDelete(BaseModel):
     """Request to delete a stage with case migration."""
     migrate_to_stage_id: UUID
+    expected_version: int | None = None  # Optional optimistic locking
 
 
 class StageReorder(BaseModel):
     """Request to reorder stages."""
     ordered_stage_ids: list[UUID]
+    expected_version: int | None = None  # Optional optimistic locking
 
 
 # =============================================================================
@@ -425,6 +429,11 @@ async def list_stages(
     pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
     if not pipeline:
         raise HTTPException(404, "Pipeline not found")
+    if data.expected_version is not None:
+        try:
+            version_service.check_version(pipeline.current_version, data.expected_version)
+        except version_service.VersionConflictError as e:
+            raise HTTPException(status_code=409, detail=f"Version conflict: expected {e.expected}, got {e.actual}")
     
     return pipeline_service.get_stages(db, pipeline_id, include_inactive)
 
@@ -446,6 +455,11 @@ async def create_stage(
     pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
     if not pipeline:
         raise HTTPException(404, "Pipeline not found")
+    if data.expected_version is not None:
+        try:
+            version_service.check_version(pipeline.current_version, data.expected_version)
+        except version_service.VersionConflictError as e:
+            raise HTTPException(status_code=409, detail=f"Version conflict: expected {e.expected}, got {e.actual}")
     
     try:
         stage = pipeline_service.create_stage(
@@ -482,6 +496,11 @@ async def update_stage(
     pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
     if not pipeline:
         raise HTTPException(404, "Pipeline not found")
+    if data.expected_version is not None:
+        try:
+            version_service.check_version(pipeline.current_version, data.expected_version)
+        except version_service.VersionConflictError as e:
+            raise HTTPException(status_code=409, detail=f"Version conflict: expected {e.expected}, got {e.actual}")
     
     stage = pipeline_service.get_stage_by_id(db, stage_id)
     if not stage or stage.pipeline_id != pipeline_id:
@@ -518,6 +537,11 @@ async def delete_stage(
     pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
     if not pipeline:
         raise HTTPException(404, "Pipeline not found")
+    if data.expected_version is not None:
+        try:
+            version_service.check_version(pipeline.current_version, data.expected_version)
+        except version_service.VersionConflictError as e:
+            raise HTTPException(status_code=409, detail=f"Version conflict: expected {e.expected}, got {e.actual}")
     
     stage = pipeline_service.get_stage_by_id(db, stage_id)
     if not stage or stage.pipeline_id != pipeline_id:

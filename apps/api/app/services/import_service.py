@@ -243,12 +243,24 @@ def execute_import(
     Args:
         dedupe_action: "skip" = skip duplicates, "update" = update existing (future)
     
-    Uses SELECT FOR UPDATE to prevent case_number collisions under concurrency.
+    Relies on case creation retry to avoid case_number collisions under concurrency.
     """
     result = ImportResult()
     
     headers, rows = parse_csv_file(file_content)
     if not headers:
+        import_record = db.query(CaseImport).filter(
+            CaseImport.id == import_id,
+            CaseImport.organization_id == org_id,
+        ).first()
+        if import_record:
+            import_record.status = "failed"
+            import_record.imported_count = 0
+            import_record.skipped_count = 0
+            import_record.error_count = 1
+            import_record.errors = [{"row": 0, "errors": ["Empty CSV file"]}]
+            import_record.completed_at = datetime.now(timezone.utc)
+            db.commit()
         return result
     
     column_map = map_columns(headers)

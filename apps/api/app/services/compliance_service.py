@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from typing import Any, Iterable
 from uuid import UUID
 
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -714,8 +714,21 @@ def _build_retention_query(
                     ~EntityNote.entity_id.in_(case_hold_ids),
                 )
             )
-        if entity_hold_ids.get("entity_notes"):
-            query = query.filter(~EntityNote.id.in_(entity_hold_ids["entity_notes"]))
+        protected_notes = []
+        for hold_entity_type, hold_ids in entity_hold_ids.items():
+            if not hold_ids:
+                continue
+            if hold_entity_type == "entity_notes":
+                protected_notes.append(EntityNote.id.in_(hold_ids))
+            else:
+                protected_notes.append(
+                    and_(
+                        EntityNote.entity_type == hold_entity_type,
+                        EntityNote.entity_id.in_(hold_ids),
+                    )
+                )
+        if protected_notes:
+            query = query.filter(~or_(*protected_notes))
         return query
     if entity_type == "case_activity":
         query = db.query(CaseActivityLog).filter(

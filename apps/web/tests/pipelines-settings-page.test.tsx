@@ -100,6 +100,7 @@ describe('PipelinesSettingsPage', () => {
         expect(call.pipelineId).toBe('p1')
         expect(call.stageId).toBe('s1')
         expect(call.data.label).toBe('New Lead')
+        expect(call.data.expected_version).toBe(2)
     })
 
     it('reorders stages and saves using reorderStages', async () => {
@@ -127,6 +128,7 @@ describe('PipelinesSettingsPage', () => {
         expect(call.pipelineId).toBe('p1')
         // After drag: s2 is now first, s1 is second
         expect(call.orderedStageIds).toEqual(['s2', 's1'])
+        expect(call.expectedVersion).toBe(2)
     })
 
     it('updates stage color and saves', async () => {
@@ -147,6 +149,7 @@ describe('PipelinesSettingsPage', () => {
 
         const call = mockUpdateStage.mock.calls[0][0]
         expect(call.data.color).toBe('#ff0000')
+        expect(call.data.expected_version).toBe(2)
     })
 
     it('rolls back to a previous version', async () => {

@@ -23,12 +23,14 @@ export interface StageCreate {
     color: string;
     stage_type: StageType;
     order?: number;
+    expected_version?: number;
 }
 
 export interface StageUpdate {
     label?: string;
     color?: string;
     order?: number;
+    expected_version?: number;
 }
 
 export interface Pipeline {
@@ -121,16 +123,22 @@ export async function deleteStage(
     pipelineId: string,
     stageId: string,
     migrateToStageId: string,
+    expectedVersion?: number,
 ): Promise<{ deleted: boolean; migrated_cases: number }> {
     return api.delete<{ deleted: boolean; migrated_cases: number }>(
         `/settings/pipelines/${pipelineId}/stages/${stageId}`,
-        { body: { migrate_to_stage_id: migrateToStageId } }
+        { body: { migrate_to_stage_id: migrateToStageId, expected_version: expectedVersion } }
     );
 }
 
-export async function reorderStages(pipelineId: string, orderedStageIds: string[]): Promise<PipelineStage[]> {
+export async function reorderStages(
+    pipelineId: string,
+    orderedStageIds: string[],
+    expectedVersion?: number
+): Promise<PipelineStage[]> {
     return api.put<PipelineStage[]>(`/settings/pipelines/${pipelineId}/stages/reorder`, {
         ordered_stage_ids: orderedStageIds,
+        expected_version: expectedVersion,
     });
 }
 

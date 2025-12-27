@@ -234,11 +234,14 @@ export default function PipelinesSettingsPage() {
         const orderChanged = editedStages.map(stage => stage.id).join(",") !== originalStages.map(stage => stage.id).join(",")
 
         try {
+            let expectedVersion = pipeline.current_version || 1
             if (orderChanged) {
                 await reorderStages.mutateAsync({
                     pipelineId: pipeline.id,
                     orderedStageIds: editedStages.map(stage => stage.id),
+                    expectedVersion,
                 })
+                expectedVersion += 1
             }
 
             for (const stage of changedStages) {
@@ -248,8 +251,10 @@ export default function PipelinesSettingsPage() {
                     data: {
                         label: stage.label,
                         color: stage.color,
+                        expected_version: expectedVersion,
                     },
                 })
+                expectedVersion += 1
             }
 
             setEditedStages(null)
