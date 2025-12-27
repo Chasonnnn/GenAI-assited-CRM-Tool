@@ -165,6 +165,10 @@ app.include_router(admin_versions.router)
 from app.routers import admin_exports
 app.include_router(admin_exports.router)
 
+# Admin Imports (Developer-only)
+from app.routers import admin_imports
+app.include_router(admin_imports.router)
+
 # Metadata API (Picklists - any authenticated user)
 from app.routers import metadata
 app.include_router(metadata.router, prefix="/metadata", tags=["metadata"])
