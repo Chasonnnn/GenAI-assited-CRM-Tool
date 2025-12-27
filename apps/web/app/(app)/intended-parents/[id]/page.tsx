@@ -61,6 +61,7 @@ import {
 import { useSetAIContext } from "@/lib/context/ai-context"
 import { ProposeMatchFromIPDialog } from "@/components/matches/ProposeMatchFromIPDialog"
 import type { IntendedParentStatus } from "@/lib/types/intended-parent"
+import { parseDateInput } from "@/lib/utils/date"
 
 const STATUS_LABELS: Record<IntendedParentStatus, string> = {
     new: "New",
@@ -119,7 +120,9 @@ export default function IntendedParentDetailPage() {
     )
 
     const formatDate = (dateStr: string) => {
-        return new Date(dateStr).toLocaleDateString("en-US", {
+        const parsed = parseDateInput(dateStr)
+        if (Number.isNaN(parsed.getTime())) return "—"
+        return parsed.toLocaleDateString("en-US", {
             month: "short",
             day: "numeric",
             year: "numeric",

@@ -81,10 +81,10 @@ function getFirstName(displayName: string | undefined): string {
 
 export default function DashboardPage() {
   const { user } = useAuth()
-  const { data: stats, isLoading: statsLoading } = useCaseStats()
-  const { data: tasksData, isLoading: tasksLoading } = useTasks({ my_tasks: true, is_completed: false, per_page: 5 })
-  const { data: trendData, isLoading: trendLoading } = useCasesTrend({ period: 'day' })
-  const { data: statusData, isLoading: statusLoading } = useCasesByStatus()
+  const { data: stats, isLoading: statsLoading, isError: statsError } = useCaseStats()
+  const { data: tasksData, isLoading: tasksLoading, isError: tasksError } = useTasks({ my_tasks: true, is_completed: false, per_page: 5 })
+  const { data: trendData, isLoading: trendLoading, isError: trendError } = useCasesTrend({ period: 'day' })
+  const { data: statusData, isLoading: statusLoading, isError: statusError } = useCasesByStatus()
   const { data: defaultPipeline } = useDefaultPipeline()
   const completeTask = useCompleteTask()
   const uncompleteTask = useUncompleteTask()
@@ -101,8 +101,10 @@ export default function DashboardPage() {
   }
 
   // Count overdue tasks
-  const overdueCount = tasksData?.items.filter((t: TaskListItem) => !t.is_completed && isOverdue(t.due_date)).length || 0
-  const pendingTasksCount = tasksData?.items.length || 0
+  const overdueCount = tasksError
+    ? 0
+    : tasksData?.items.filter((t: TaskListItem) => !t.is_completed && isOverdue(t.due_date)).length || 0
+  const pendingTasksCount = tasksError ? 0 : tasksData?.items.length || 0
 
   // Current date for header
   const currentDate = new Date().toLocaleDateString("en-US", {
@@ -114,7 +116,7 @@ export default function DashboardPage() {
 
   // Transform trend data for chart
   const chartTrendData = trendData?.map((item: { date: string; count: number }) => ({
-    date: new Date(item.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    date: parseDateInput(item.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
     cases: item.count,
   })) || []
 
@@ -161,6 +163,11 @@ export default function DashboardPage() {
           <CardContent className="space-y-3">
             {statsLoading ? (
               <LoaderIcon className="h-6 w-6 animate-spin text-muted-foreground" />
+            ) : statsError ? (
+              <div className="flex items-center text-xs text-destructive">
+                <AlertCircleIcon className="mr-1 h-4 w-4" />
+                Unable to load
+              </div>
             ) : (
               <>
                 <div className="text-3xl font-bold">{stats?.total || 0}</div>
@@ -198,6 +205,11 @@ export default function DashboardPage() {
           <CardContent className="space-y-3">
             {statsLoading ? (
               <LoaderIcon className="h-6 w-6 animate-spin text-muted-foreground" />
+            ) : statsError ? (
+              <div className="flex items-center text-xs text-destructive">
+                <AlertCircleIcon className="mr-1 h-4 w-4" />
+                Unable to load
+              </div>
             ) : (
               <>
                 <div className="text-3xl font-bold">{stats?.pending_tasks || 0}</div>
@@ -230,6 +242,11 @@ export default function DashboardPage() {
           <CardContent className="space-y-3">
             {statsLoading ? (
               <LoaderIcon className="h-6 w-6 animate-spin text-muted-foreground" />
+            ) : statsError ? (
+              <div className="flex items-center text-xs text-destructive">
+                <AlertCircleIcon className="mr-1 h-4 w-4" />
+                Unable to load
+              </div>
             ) : (
               <>
                 <div className="text-3xl font-bold">{stats?.this_month || 0}</div>
@@ -260,6 +277,11 @@ export default function DashboardPage() {
           <CardContent className="space-y-3">
             {tasksLoading ? (
               <LoaderIcon className="h-6 w-6 animate-spin text-muted-foreground" />
+            ) : tasksError ? (
+              <div className="flex items-center text-xs text-destructive">
+                <AlertCircleIcon className="mr-1 h-4 w-4" />
+                Unable to load
+              </div>
             ) : (
               <>
                 <div className="text-3xl font-bold">{pendingTasksCount}</div>
@@ -289,6 +311,11 @@ export default function DashboardPage() {
             {trendLoading ? (
               <div className="flex items-center justify-center h-[280px]">
                 <LoaderIcon className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : trendError ? (
+              <div className="flex items-center justify-center h-[280px] text-destructive">
+                <AlertCircleIcon className="mr-2 h-4 w-4" />
+                Unable to load data
               </div>
             ) : chartTrendData.length === 0 ? (
               <div className="flex items-center justify-center h-[280px] text-muted-foreground">
@@ -344,6 +371,11 @@ export default function DashboardPage() {
             {statusLoading ? (
               <div className="flex items-center justify-center h-[280px]">
                 <LoaderIcon className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : statusError ? (
+              <div className="flex items-center justify-center h-[280px] text-destructive">
+                <AlertCircleIcon className="mr-2 h-4 w-4" />
+                Unable to load data
               </div>
             ) : chartStatusData.length === 0 ? (
               <div className="flex items-center justify-center h-[280px] text-muted-foreground">
@@ -407,6 +439,11 @@ export default function DashboardPage() {
               <div className="flex items-center justify-center py-8">
                 <LoaderIcon className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
+            ) : tasksError ? (
+              <div className="flex items-center justify-center py-8 text-destructive">
+                <AlertCircleIcon className="mr-2 h-4 w-4" />
+                Unable to load tasks
+              </div>
             ) : tasksData?.items.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">No pending tasks</p>
             ) : (
@@ -467,6 +504,11 @@ export default function DashboardPage() {
             {statsLoading ? (
               <div className="flex items-center justify-center py-8">
                 <LoaderIcon className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : statsError ? (
+              <div className="flex items-center justify-center py-8 text-destructive">
+                <AlertCircleIcon className="mr-2 h-4 w-4" />
+                Unable to load status data
               </div>
             ) : stats?.by_status && Object.keys(stats.by_status).length > 0 ? (
               Object.entries(stats.by_status).map(([status, count]) => (

@@ -154,14 +154,14 @@ export default function TasksPage() {
     }
 
     // Fetch incomplete tasks
-    const { data: incompleteTasks, isLoading: loadingIncomplete } = useTasks({
+    const { data: incompleteTasks, isLoading: loadingIncomplete, isError: incompleteError } = useTasks({
         my_tasks: filter === "my_tasks",
         is_completed: false,
         per_page: 100,
     })
 
     // Fetch completed tasks (only when shown)
-    const { data: completedTasks, isLoading: loadingCompleted } = useTasks({
+    const { data: completedTasks, isLoading: loadingCompleted, isError: completedError } = useTasks({
         my_tasks: filter === "my_tasks",
         is_completed: true,
         per_page: 50,
@@ -278,6 +278,7 @@ export default function TasksPage() {
     }
 
     const isLoading = loadingIncomplete
+    const hasError = incompleteError || completedError
 
     return (
         <div className="flex min-h-screen flex-col">
@@ -346,13 +347,20 @@ export default function TasksPage() {
                     </Card>
                 )}
 
+                {/* Error State */}
+                {!isLoading && hasError && (
+                    <Card className="flex items-center justify-center p-12 border-destructive/40 bg-destructive/5">
+                        <span className="text-destructive">Unable to load tasks. Please try again.</span>
+                    </Card>
+                )}
+
                 {/* Calendar View */}
-                {!isLoading && view === "calendar" && (
+                {!isLoading && !hasError && view === "calendar" && (
                     <UnifiedCalendar taskFilter={{ my_tasks: filter === "my_tasks" }} />
                 )}
 
                 {/* List View */}
-                {!isLoading && view === "list" && (
+                {!isLoading && !hasError && view === "list" && (
                     <Card className="p-6">
                         <div className="space-y-6">
                             {/* Task sections by due date */}
@@ -387,6 +395,8 @@ export default function TasksPage() {
                                             <div className="flex items-center justify-center py-4">
                                                 <LoaderIcon className="size-4 animate-spin text-muted-foreground" />
                                             </div>
+                                        ) : completedError ? (
+                                            <p className="text-center text-destructive py-4">Unable to load completed tasks</p>
                                         ) : completedTasks.items.length === 0 ? (
                                             <p className="text-center text-muted-foreground py-4">No completed tasks</p>
                                         ) : (
