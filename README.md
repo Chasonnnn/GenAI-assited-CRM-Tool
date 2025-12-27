@@ -2,7 +2,7 @@
 
 **Version:** 0.15.00 | **Format:** a.bc.de (major.feature.patch)
 
-A modern, multi-tenant CRM and case management platform built for surrogacy agencies. Features lead pipeline management with **customizable stages**, intended parent profiles, case workflow tracking, **IP-Surrogate matching with shared calendar**, **context-aware AI chatbot with schedule parsing**, **appointment scheduling with public booking and Google Calendar integration**, **powerful automation engine with workflows and campaigns**, and enterprise audit/versioning.
+A modern, multi-tenant CRM and case management platform built for surrogacy agencies. Features lead pipeline management with **customizable stages**, intended parent profiles, case workflow tracking, **IP-Surrogate matching with shared calendar**, **context-aware AI chatbot with schedule parsing**, **appointment scheduling with public booking and Google Calendar integration**, **powerful automation engine with workflows and campaigns**, **multi-factor authentication (TOTP + Duo)**, and enterprise audit/versioning.
 
 ## Tech Stack
 
