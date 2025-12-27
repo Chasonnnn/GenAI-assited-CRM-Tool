@@ -8,8 +8,14 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.deps import COOKIE_NAME, get_db
 from app.core.security import create_session_token
-from app.db.enums import AuthProvider, Role
-from app.db.models import AuthIdentity, Membership, Organization, User
+from app.services import (
+    dev_service,
+    membership_service,
+    meta_lead_service,
+    meta_page_service,
+    org_service,
+    user_service,
+)
 
 router = APIRouter()
 
@@ -33,60 +39,7 @@ def seed_test_data(db: Session = Depends(get_db)):
     Requires X-Dev-Secret header matching DEV_SECRET env var.
     Idempotent - returns existing data if already seeded.
     """
-    # Check if already seeded
-    existing = db.query(Organization).filter(Organization.slug == "test-org").first()
-    if existing:
-        return {"status": "already_seeded", "org_id": str(existing.id)}
-    
-    # Create test org
-    org = Organization(name="Test Organization", slug="test-org")
-    db.add(org)
-    db.flush()
-    
-    # Create test users with different roles
-    users_data = [
-        ("manager@test.com", "Test Manager", Role.ADMIN),
-        ("intake@test.com", "Test Intake", Role.INTAKE_SPECIALIST),
-        ("specialist@test.com", "Test Case Manager", Role.CASE_MANAGER),
-    ]
-    
-    created_users = []
-    for email, name, role in users_data:
-        user = User(email=email, display_name=name)
-        db.add(user)
-        db.flush()
-        
-        # Create fake auth identity
-        identity = AuthIdentity(
-            user_id=user.id,
-            provider=AuthProvider.GOOGLE.value,
-            provider_subject=f"test-sub-{email}",
-            email=email,
-        )
-        db.add(identity)
-        
-        # Create membership
-        membership = Membership(
-            user_id=user.id,
-            organization_id=org.id,
-            role=role.value,
-        )
-        db.add(membership)
-        
-        created_users.append({
-            "email": email, 
-            "user_id": str(user.id), 
-            "role": role.value
-        })
-    
-    db.commit()
-    
-    return {
-        "status": "seeded",
-        "org_id": str(org.id),
-        "org_slug": "test-org",
-        "users": created_users,
-    }
+    return dev_service.seed_test_data(db)
 
 
 @router.post("/login-as/{user_id}", dependencies=[Depends(_verify_dev_secret)])
@@ -101,14 +54,14 @@ def login_as(
     Requires X-Dev-Secret header matching DEV_SECRET env var.
     Useful for testing role-based access without real OAuth flow.
     """
-    user = db.query(User).filter(User.id == user_id).first()
+    user = user_service.get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
     if not user.is_active:
         raise HTTPException(status_code=400, detail="User is disabled")
     
-    membership = db.query(Membership).filter(Membership.user_id == user.id).first()
+    membership = membership_service.get_membership_by_user_id(db, user.id)
     if not membership:
         raise HTTPException(status_code=400, detail="User has no membership")
     
@@ -152,28 +105,10 @@ def get_meta_lead_alerts(
     
     Dev-only endpoint for monitoring Meta lead ingestion health.
     """
-    from app.db.models import MetaLead, MetaPageMapping
-    from sqlalchemy import or_
-    
-    # Get problematic leads
-    problem_leads = db.query(MetaLead).filter(
-        or_(
-            MetaLead.status.in_(["fetch_failed", "convert_failed"]),
-            MetaLead.fetch_error.isnot(None),
-            MetaLead.conversion_error.isnot(None),
-        )
-    ).order_by(MetaLead.received_at.desc()).limit(limit).all()
-    
-    # Get page mappings with recent errors
-    problem_pages = db.query(MetaPageMapping).filter(
-        MetaPageMapping.last_error.isnot(None)
-    ).all()
-    
-    # Summary stats
-    total_leads = db.query(MetaLead).count()
-    failed_leads = db.query(MetaLead).filter(
-        MetaLead.status.in_(["fetch_failed", "convert_failed"])
-    ).count()
+    problem_leads = meta_lead_service.list_problem_leads(db, limit=limit)
+    problem_pages = meta_page_service.list_problem_pages(db)
+    total_leads = meta_lead_service.count_meta_leads(db)
+    failed_leads = meta_lead_service.count_failed_meta_leads(db)
     
     return {
         "summary": {
@@ -218,14 +153,7 @@ def get_all_meta_leads(
     
     Dev-only endpoint for viewing raw lead data.
     """
-    from app.db.models import MetaLead
-    
-    query = db.query(MetaLead).order_by(MetaLead.received_at.desc())
-    
-    if status:
-        query = query.filter(MetaLead.status == status)
-    
-    leads = query.limit(limit).all()
+    leads = meta_lead_service.list_meta_leads(db, limit=limit, status=status)
     
     return {
         "count": len(leads),
@@ -271,7 +199,7 @@ def seed_system_templates(
     
     if org_id:
         # Seed specific org
-        org = db.query(Organization).filter(Organization.id == org_id).first()
+        org = org_service.get_org_by_id(db, org_id)
         if not org:
             raise HTTPException(status_code=404, detail="Organization not found")
         
@@ -283,7 +211,7 @@ def seed_system_templates(
         })
     else:
         # Seed all orgs
-        orgs = db.query(Organization).all()
+        orgs = org_service.list_orgs(db)
         for org in orgs:
             result = seed_all(db, org.id)
             results.append({
@@ -317,7 +245,7 @@ def seed_org_templates(
     """
     from app.services.template_seeder import seed_all
     
-    org = db.query(Organization).filter(Organization.id == org_id).first()
+    org = org_service.get_org_by_id(db, org_id)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
     
@@ -330,4 +258,3 @@ def seed_org_templates(
         "org_name": org.name,
         **result,
     }
-

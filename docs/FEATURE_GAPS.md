@@ -92,7 +92,6 @@
 
 | Feature | Description | Effort |
 |---------|-------------|--------|
-| **Bulk Import for IPs** | Import intended parents from CSV | 2-3 days |
 | **Advanced Search** | Full-text search across cases, notes, files | 2-3 days |
 | **Custom Fields** | User-defined fields on cases/IPs | 1 week |
 | **Reporting Builder** | Custom report generation UI | 1-2 weeks |

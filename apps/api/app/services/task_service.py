@@ -6,9 +6,10 @@ from uuid import UUID
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.db.enums import TaskType
-from app.db.models import Task
-from app.schemas.task import TaskCreate, TaskUpdate
+from app.db.enums import TaskType, OwnerType
+from app.db.models import Task, User, Queue, Case
+from app.schemas.task import TaskCreate, TaskUpdate, TaskRead, TaskListItem
+from app.services import membership_service, queue_service
 
 
 def create_task(
@@ -194,6 +195,150 @@ def delete_task(db: Session, task: Task) -> None:
     db.commit()
 
 
+def validate_task_owner(
+    db: Session,
+    org_id: UUID,
+    owner_type: str | None,
+    owner_id: UUID | None,
+    *,
+    allow_none: bool = False,
+) -> None:
+    """Validate that an owner exists within the organization."""
+    if owner_type is None:
+        if allow_none:
+            return
+        raise ValueError("Invalid owner_type")
+
+    if owner_type == OwnerType.USER.value:
+        if owner_id is None:
+            raise ValueError("Owner user not found in organization")
+        membership = membership_service.get_membership_for_org(db, org_id, owner_id)
+        if not membership:
+            raise ValueError("Owner user not found in organization")
+        return
+
+    if owner_type == OwnerType.QUEUE.value:
+        if owner_id is None:
+            raise ValueError("Queue not found or inactive")
+        queue = queue_service.get_queue(db, org_id, owner_id)
+        if not queue or not queue.is_active:
+            raise ValueError("Queue not found or inactive")
+        return
+
+    raise ValueError("Invalid owner_type")
+
+
+def get_task_context(
+    db: Session,
+    tasks: list[Task],
+) -> dict[str, dict[UUID, str | None]]:
+    """Fetch related data for tasks in bulk."""
+    if not tasks:
+        return {"user_names": {}, "queue_names": {}, "case_numbers": {}}
+
+    user_ids = set()
+    queue_ids = set()
+    case_ids = set()
+
+    for task in tasks:
+        if task.owner_type == OwnerType.USER.value:
+            user_ids.add(task.owner_id)
+        elif task.owner_type == OwnerType.QUEUE.value:
+            queue_ids.add(task.owner_id)
+        if task.created_by_user_id:
+            user_ids.add(task.created_by_user_id)
+        if task.completed_by_user_id:
+            user_ids.add(task.completed_by_user_id)
+        if task.case_id:
+            case_ids.add(task.case_id)
+
+    user_names = {}
+    if user_ids:
+        users = db.query(User).filter(User.id.in_(user_ids)).all()
+        user_names = {user.id: user.display_name for user in users}
+
+    queue_names = {}
+    if queue_ids:
+        queues = db.query(Queue).filter(Queue.id.in_(queue_ids)).all()
+        queue_names = {queue.id: queue.name for queue in queues}
+
+    case_numbers = {}
+    if case_ids:
+        cases = db.query(Case).filter(Case.id.in_(case_ids)).all()
+        case_numbers = {case.id: case.case_number for case in cases}
+
+    return {
+        "user_names": user_names,
+        "queue_names": queue_names,
+        "case_numbers": case_numbers,
+    }
+
+
+def to_task_read(task: Task, context: dict[str, dict[UUID, str | None]]) -> TaskRead:
+    """Convert Task model to TaskRead schema."""
+    owner_name = None
+    if task.owner_type == OwnerType.USER.value:
+        owner_name = context["user_names"].get(task.owner_id)
+    elif task.owner_type == OwnerType.QUEUE.value:
+        owner_name = context["queue_names"].get(task.owner_id)
+
+    created_by_name = context["user_names"].get(task.created_by_user_id)
+    completed_by_name = context["user_names"].get(task.completed_by_user_id)
+    case_number = context["case_numbers"].get(task.case_id)
+
+    return TaskRead(
+        id=task.id,
+        case_id=task.case_id,
+        case_number=case_number,
+        owner_type=task.owner_type,
+        owner_id=task.owner_id,
+        owner_name=owner_name,
+        created_by_user_id=task.created_by_user_id,
+        created_by_name=created_by_name,
+        title=task.title,
+        description=task.description,
+        task_type=TaskType(task.task_type),
+        due_date=task.due_date,
+        due_time=task.due_time,
+        duration_minutes=task.duration_minutes,
+        is_completed=task.is_completed,
+        completed_at=task.completed_at,
+        completed_by_name=completed_by_name,
+        created_at=task.created_at,
+        updated_at=task.updated_at,
+    )
+
+
+def to_task_list_item(
+    task: Task,
+    context: dict[str, dict[UUID, str | None]],
+) -> TaskListItem:
+    """Convert Task model to TaskListItem schema."""
+    owner_name = None
+    if task.owner_type == OwnerType.USER.value:
+        owner_name = context["user_names"].get(task.owner_id)
+    elif task.owner_type == OwnerType.QUEUE.value:
+        owner_name = context["queue_names"].get(task.owner_id)
+
+    case_number = context["case_numbers"].get(task.case_id)
+
+    return TaskListItem(
+        id=task.id,
+        case_id=task.case_id,
+        case_number=case_number,
+        title=task.title,
+        task_type=TaskType(task.task_type),
+        owner_type=task.owner_type,
+        owner_id=task.owner_id,
+        owner_name=owner_name,
+        due_date=task.due_date,
+        due_time=task.due_time,
+        duration_minutes=task.duration_minutes,
+        is_completed=task.is_completed,
+        created_at=task.created_at,
+    )
+
+
 def list_tasks(
     db: Session,
     org_id: UUID,
@@ -331,3 +476,56 @@ def count_pending_tasks(db: Session, org_id: UUID) -> int:
         Task.organization_id == org_id,
         Task.is_completed == False,
     ).count()
+
+
+def count_overdue_tasks(db: Session, org_id: UUID, today) -> int:
+    """Count overdue tasks for dashboard metrics."""
+    return db.query(Task).filter(
+        Task.organization_id == org_id,
+        Task.is_completed == False,
+        Task.due_date < today,
+    ).count()
+
+
+def list_open_tasks_for_case(
+    db: Session,
+    case_id: UUID,
+    limit: int = 10,
+    org_id: UUID | None = None,
+) -> list[Task]:
+    """List open tasks for a case."""
+    query = db.query(Task).filter(
+        Task.case_id == case_id,
+        Task.is_completed == False,
+    )
+    if org_id:
+        query = query.filter(Task.organization_id == org_id)
+    return query.order_by(Task.due_date.asc()).limit(limit).all()
+
+
+def list_user_tasks_due_on(
+    db: Session,
+    org_id: UUID,
+    due_date,
+) -> list[Task]:
+    """List user-owned tasks due on a specific date."""
+    return db.query(Task).filter(
+        Task.organization_id == org_id,
+        Task.due_date == due_date,
+        Task.is_completed == False,
+        Task.owner_type == OwnerType.USER.value,
+    ).all()
+
+
+def list_user_tasks_overdue(
+    db: Session,
+    org_id: UUID,
+    today,
+) -> list[Task]:
+    """List user-owned tasks overdue before a date."""
+    return db.query(Task).filter(
+        Task.organization_id == org_id,
+        Task.due_date < today,
+        Task.is_completed == False,
+        Task.owner_type == OwnerType.USER.value,
+    ).all()

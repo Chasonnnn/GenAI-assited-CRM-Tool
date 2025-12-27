@@ -5,7 +5,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -14,7 +13,7 @@ from app.core.policies import POLICIES
 from app.db.enums import CaseActivityType, IntendedParentStatus, MatchStatus
 from app.db.models import Case, IntendedParent, Match, IntendedParentStatusHistory
 from app.schemas.auth import UserSession
-from app.services import workflow_triggers, note_service
+from app.services import match_service, note_service, workflow_triggers
 
 router = APIRouter(prefix="/matches", tags=["Matches"], dependencies=[Depends(require_permission(POLICIES["matches"].default))])
 
@@ -109,16 +108,17 @@ class MatchUpdateNotesRequest(BaseModel):
 
 def _match_to_read(match: Match, db: Session, org_id: str | None = None) -> MatchRead:
     """Convert Match model to MatchRead schema with org-scoped lookups."""
-    from sqlalchemy.orm import joinedload
     # Org-scoped lookups for defense in depth, with eager load for stage
-    case_filter = [Case.id == match.case_id]
-    ip_filter = [IntendedParent.id == match.intended_parent_id]
-    if org_id:
-        case_filter.append(Case.organization_id == org_id)
-        ip_filter.append(IntendedParent.organization_id == org_id)
-    
-    case = db.query(Case).options(joinedload(Case.stage)).filter(*case_filter).first()
-    ip = db.query(IntendedParent).filter(*ip_filter).first()
+    case = match_service.get_case_with_stage(
+        db,
+        match.case_id,
+        UUID(org_id) if org_id else None,
+    )
+    ip = match_service.get_intended_parent(
+        db,
+        match.intended_parent_id,
+        UUID(org_id) if org_id else None,
+    )
     
     return MatchRead(
         id=str(match.id),
@@ -179,27 +179,22 @@ def create_match(
     from app.services import activity_service
     
     # Verify case exists and belongs to org
-    case = db.query(Case).filter(
-        Case.id == data.case_id,
-        Case.organization_id == session.org_id,
-    ).first()
+    case = match_service.get_case_with_stage(db, data.case_id, session.org_id)
     if not case:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
     
     # Verify IP exists and belongs to org
-    ip = db.query(IntendedParent).filter(
-        IntendedParent.id == data.intended_parent_id,
-        IntendedParent.organization_id == session.org_id,
-    ).first()
+    ip = match_service.get_intended_parent(db, data.intended_parent_id, session.org_id)
     if not ip:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intended parent not found")
     
     # Check if match already exists
-    existing = db.query(Match).filter(
-        Match.organization_id == session.org_id,
-        Match.case_id == data.case_id,
-        Match.intended_parent_id == data.intended_parent_id,
-    ).first()
+    existing = match_service.get_existing_match(
+        db=db,
+        org_id=session.org_id,
+        case_id=data.case_id,
+        intended_parent_id=data.intended_parent_id,
+    )
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -207,10 +202,11 @@ def create_match(
         )
     
     # Check if case already has accepted match
-    accepted_match = db.query(Match).filter(
-        Match.case_id == data.case_id,
-        Match.status == MatchStatus.ACCEPTED.value,
-    ).first()
+    accepted_match = match_service.get_accepted_match_for_case(
+        db=db,
+        org_id=session.org_id,
+        case_id=data.case_id,
+    )
     if accepted_match:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -273,61 +269,33 @@ def list_matches(
     
     Requires: Manager+ role
     """
-    from sqlalchemy import asc, desc, or_
-    from sqlalchemy.orm import joinedload
-    
-    query = db.query(Match).filter(Match.organization_id == session.org_id)
-    
-    if status_filter:
-        query = query.filter(Match.status == status_filter)
-    if case_id:
-        query = query.filter(Match.case_id == case_id)
-    if intended_parent_id:
-        query = query.filter(Match.intended_parent_id == intended_parent_id)
-    
-    # Search by case or IP name (requires join)
-    if q:
-        search_term = f"%{q}%"
-        query = query.join(Case, Match.case_id == Case.id, isouter=True).join(
-            IntendedParent, Match.intended_parent_id == IntendedParent.id, isouter=True
-        ).filter(
-            or_(
-                Case.full_name.ilike(search_term),
-                Case.case_number.ilike(search_term),
-                IntendedParent.full_name.ilike(search_term),
-            )
-        )
-    
-    total = query.count()
-    
-    # Dynamic sorting
-    order_func = asc if sort_order == "asc" else desc
-    sortable_columns = {
-        "status": Match.status,
-        "compatibility_score": Match.compatibility_score,
-        "proposed_at": Match.proposed_at,
-        "created_at": Match.created_at,
-    }
-    
-    if sort_by and sort_by in sortable_columns:
-        query = query.order_by(order_func(sortable_columns[sort_by]))
-    else:
-        query = query.order_by(Match.proposed_at.desc())
-    
-    matches = query.offset((page - 1) * per_page).limit(per_page).all()
+    matches, total = match_service.list_matches(
+        db=db,
+        org_id=session.org_id,
+        status_filter=status_filter,
+        case_id=case_id,
+        intended_parent_id=intended_parent_id,
+        q=q,
+        page=page,
+        per_page=per_page,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
     
     # Batch load cases and IPs (org-scoped), with eager load for case stage
     case_ids = {m.case_id for m in matches}
     ip_ids = {m.intended_parent_id for m in matches}
     
-    cases = {c.id: c for c in db.query(Case).options(joinedload(Case.stage)).filter(
-        Case.organization_id == session.org_id,
-        Case.id.in_(case_ids)
-    ).all()} if case_ids else {}
-    ips = {i.id: i for i in db.query(IntendedParent).filter(
-        IntendedParent.organization_id == session.org_id,
-        IntendedParent.id.in_(ip_ids)
-    ).all()} if ip_ids else {}
+    cases = match_service.get_cases_with_stage_by_ids(
+        db=db,
+        org_id=session.org_id,
+        case_ids=case_ids,
+    )
+    ips = match_service.get_intended_parents_by_ids(
+        db=db,
+        org_id=session.org_id,
+        intended_parent_ids=ip_ids,
+    )
     
     items = [_match_to_list_item(m, cases.get(m.case_id), ips.get(m.intended_parent_id)) for m in matches]
     
@@ -340,16 +308,7 @@ def get_match_stats(
     session: UserSession = Depends(get_current_session),
 ) -> MatchStatsResponse:
     """Get match counts by status for the org."""
-    total = db.query(Match).filter(Match.organization_id == session.org_id).count()
-    
-    counts = {status.value: 0 for status in MatchStatus}
-    rows = db.query(Match.status, func.count(Match.id)).filter(
-        Match.organization_id == session.org_id
-    ).group_by(Match.status).all()
-    
-    for status, count in rows:
-        counts[status] = count
-    
+    total, counts = match_service.get_match_stats(db, session.org_id)
     return MatchStatsResponse(total=total, by_status=counts)
 
 
@@ -362,10 +321,7 @@ def get_match(
     """Get match details. Auto-transitions to 'reviewing' on first view by non-proposer."""
     from app.services import activity_service
     
-    match = db.query(Match).filter(
-        Match.id == match_id,
-        Match.organization_id == session.org_id,
-    ).first()
+    match = match_service.get_match(db, match_id, session.org_id)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
     
@@ -417,10 +373,7 @@ def accept_match(
     """
     from app.services import activity_service, case_service, pipeline_service
     
-    match = db.query(Match).filter(
-        Match.id == match_id,
-        Match.organization_id == session.org_id,
-    ).first()
+    match = match_service.get_match(db, match_id, session.org_id)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
     
@@ -431,10 +384,7 @@ def accept_match(
         )
 
     # Update case stage to matched if configured
-    case = db.query(Case).filter(
-        Case.id == match.case_id,
-        Case.organization_id == session.org_id,
-    ).first()
+    case = match_service.get_case_with_stage(db, match.case_id, session.org_id)
     if case:
         current_stage = case.stage
         pipeline_id = current_stage.pipeline_id if current_stage else None
@@ -465,10 +415,7 @@ def accept_match(
     match.updated_at = datetime.now(timezone.utc)
 
     # Update intended parent status to matched (if not already)
-    ip = db.query(IntendedParent).filter(
-        IntendedParent.id == match.intended_parent_id,
-        IntendedParent.organization_id == session.org_id,
-    ).first()
+    ip = match_service.get_intended_parent(db, match.intended_parent_id, session.org_id)
     if ip and ip.status != IntendedParentStatus.MATCHED.value:
         old_status = ip.status
         ip.status = IntendedParentStatus.MATCHED.value
@@ -483,11 +430,11 @@ def accept_match(
         ))
     
     # Cancel all other pending matches for this case
-    other_matches = db.query(Match).filter(
-        Match.case_id == match.case_id,
-        Match.id != match.id,
-        Match.status.in_([MatchStatus.PROPOSED.value, MatchStatus.REVIEWING.value]),
-    ).all()
+    other_matches = match_service.list_pending_matches_for_case(
+        db=db,
+        case_id=match.case_id,
+        exclude_match_id=match.id,
+    )
     
     for other in other_matches:
         other.status = MatchStatus.CANCELLED.value
@@ -538,10 +485,7 @@ def reject_match(
     """
     from app.services import activity_service
     
-    match = db.query(Match).filter(
-        Match.id == match_id,
-        Match.organization_id == session.org_id,
-    ).first()
+    match = match_service.get_match(db, match_id, session.org_id)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
     
@@ -596,10 +540,7 @@ def cancel_match(
     Only proposed/reviewing matches can be cancelled.
     Requires: Manager+ role
     """
-    match = db.query(Match).filter(
-        Match.id == match_id,
-        Match.organization_id == session.org_id,
-    ).first()
+    match = match_service.get_match(db, match_id, session.org_id)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
     
@@ -637,10 +578,7 @@ def update_match_notes(
     session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
 ) -> MatchRead:
     """Update match notes. Requires: Manager+ role."""
-    match = db.query(Match).filter(
-        Match.id == match_id,
-        Match.organization_id == session.org_id,
-    ).first()
+    match = match_service.get_match(db, match_id, session.org_id)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
     
@@ -745,20 +683,15 @@ def list_match_events(
     Requires: Case Manager+ role
     """
     # Verify match exists and belongs to org
-    match = db.query(Match).filter(
-        Match.id == match_id,
-        Match.organization_id == session.org_id,
-    ).first()
+    match = match_service.get_match(db, match_id, session.org_id)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
-    
-    query = db.query(MatchEvent).filter(MatchEvent.match_id == match_id)
-    
-    if person_type:
-        query = query.filter(MatchEvent.person_type == person_type)
-    if event_type:
-        query = query.filter(MatchEvent.event_type == event_type)
-    
+
+    from_dt = None
+    to_dt = None
+    from_day = None
+    to_day = None
+
     # Date filtering (timed events + overlapping all-day events)
     if from_date or to_date:
         try:
@@ -773,26 +706,16 @@ def list_match_events(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
 
-        date_filters = []
-
-        timed_filters = []
-        if from_dt:
-            timed_filters.append(MatchEvent.starts_at >= from_dt)
-        if to_dt:
-            timed_filters.append(MatchEvent.starts_at < to_dt)
-        if timed_filters:
-            date_filters.append(and_(MatchEvent.starts_at.isnot(None), *timed_filters))
-
-        all_day_filters = [MatchEvent.all_day.is_(True), MatchEvent.start_date.isnot(None)]
-        if to_day:
-            all_day_filters.append(MatchEvent.start_date <= to_day)
-        if from_day:
-            all_day_filters.append(func.coalesce(MatchEvent.end_date, MatchEvent.start_date) >= from_day)
-        date_filters.append(and_(*all_day_filters))
-
-        query = query.filter(or_(*date_filters))
-    
-    events = query.order_by(MatchEvent.starts_at, MatchEvent.start_date).all()
+    events = match_service.list_match_events(
+        db=db,
+        match_id=match_id,
+        person_type=person_type,
+        event_type=event_type,
+        from_dt=from_dt,
+        to_dt=to_dt,
+        from_day=from_day,
+        to_day=to_day,
+    )
     
     return [_event_to_read(e) for e in events]
 
@@ -810,10 +733,7 @@ def create_match_event(
     Requires: Case Manager+ role
     """
     # Verify match exists and belongs to org
-    match = db.query(Match).filter(
-        Match.id == match_id,
-        Match.organization_id == session.org_id,
-    ).first()
+    match = match_service.get_match(db, match_id, session.org_id)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
     
@@ -870,11 +790,12 @@ def get_match_event(
     
     Requires: Case Manager+ role
     """
-    event = db.query(MatchEvent).filter(
-        MatchEvent.id == event_id,
-        MatchEvent.match_id == match_id,
-        MatchEvent.organization_id == session.org_id,
-    ).first()
+    event = match_service.get_match_event(
+        db=db,
+        match_id=match_id,
+        event_id=event_id,
+        org_id=session.org_id,
+    )
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
     
@@ -894,11 +815,12 @@ def update_match_event(
     
     Requires: Case Manager+ role
     """
-    event = db.query(MatchEvent).filter(
-        MatchEvent.id == event_id,
-        MatchEvent.match_id == match_id,
-        MatchEvent.organization_id == session.org_id,
-    ).first()
+    event = match_service.get_match_event(
+        db=db,
+        match_id=match_id,
+        event_id=event_id,
+        org_id=session.org_id,
+    )
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
     
@@ -965,11 +887,12 @@ def delete_match_event(
     
     Requires: Case Manager+ role
     """
-    event = db.query(MatchEvent).filter(
-        MatchEvent.id == event_id,
-        MatchEvent.match_id == match_id,
-        MatchEvent.organization_id == session.org_id,
-    ).first()
+    event = match_service.get_match_event(
+        db=db,
+        match_id=match_id,
+        event_id=event_id,
+        org_id=session.org_id,
+    )
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
     

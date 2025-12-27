@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.enums import AuditEventType
-from app.db.models import AuditLog
+from app.db.models import AuditLog, User
 
 
 def hash_email(email: str) -> str:
@@ -151,6 +151,79 @@ def log_event(
     entry.entry_hash = entry_hash
     
     return entry
+
+
+def _get_actor_names(db: Session, actor_ids: set[UUID]) -> dict[UUID, str | None]:
+    if not actor_ids:
+        return {}
+    actors = db.query(User).filter(User.id.in_(actor_ids)).all()
+    return {actor.id: actor.display_name for actor in actors}
+
+
+def list_audit_logs(
+    db: Session,
+    org_id: UUID,
+    page: int,
+    per_page: int,
+    event_type: str | None = None,
+    actor_user_id: UUID | None = None,
+    start_date: Any | None = None,
+    end_date: Any | None = None,
+) -> tuple[list[AuditLog], int, dict[UUID, str | None]]:
+    """List audit logs with optional filters and actor name lookup."""
+    query = db.query(AuditLog).filter(AuditLog.organization_id == org_id)
+
+    if event_type:
+        query = query.filter(AuditLog.event_type == event_type)
+    if actor_user_id:
+        query = query.filter(AuditLog.actor_user_id == actor_user_id)
+    if start_date:
+        query = query.filter(AuditLog.created_at >= start_date)
+    if end_date:
+        query = query.filter(AuditLog.created_at <= end_date)
+
+    total = query.count()
+    offset = (page - 1) * per_page
+    logs = query.order_by(AuditLog.created_at.desc()).offset(offset).limit(per_page).all()
+
+    actor_ids = {log.actor_user_id for log in logs if log.actor_user_id}
+    actor_names = _get_actor_names(db, actor_ids)
+    return logs, total, actor_names
+
+
+def get_ai_activity(
+    db: Session,
+    org_id: UUID,
+    hours: int,
+    limit: int,
+) -> tuple[dict[str, int], list[AuditLog], dict[UUID, str | None]]:
+    """Get recent AI activity counts and logs."""
+    from datetime import datetime, timedelta
+
+    ai_event_types = [
+        AuditEventType.AI_ACTION_APPROVED.value,
+        AuditEventType.AI_ACTION_REJECTED.value,
+        AuditEventType.AI_ACTION_FAILED.value,
+        AuditEventType.AI_ACTION_DENIED.value,
+    ]
+
+    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    counts = {}
+    for event_type in ai_event_types:
+        counts[event_type] = db.query(AuditLog).filter(
+            AuditLog.organization_id == org_id,
+            AuditLog.event_type == event_type,
+            AuditLog.created_at >= cutoff,
+        ).count()
+
+    recent_logs = db.query(AuditLog).filter(
+        AuditLog.organization_id == org_id,
+        AuditLog.event_type.in_(ai_event_types),
+    ).order_by(AuditLog.created_at.desc()).limit(limit).all()
+
+    actor_ids = {log.actor_user_id for log in recent_logs if log.actor_user_id}
+    actor_names = _get_actor_names(db, actor_ids)
+    return counts, recent_logs, actor_names
 
 
 def log_config_changed(
@@ -749,4 +822,3 @@ def log_ai_workflow_created(
         details={"action": "ai_workflow_created", "workflow_name": workflow_name},
         request=request,
     )
-

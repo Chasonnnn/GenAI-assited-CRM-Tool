@@ -15,9 +15,9 @@ from app.core.security import (
     parse_oauth_state_payload,
     verify_oauth_state,
 )
-from app.db.models import Organization, User
 from app.schemas.auth import MeResponse, UserSession
 from app.services.auth_service import resolve_user_and_create_session
+from app.services import org_service, user_service
 from app.services.google_oauth import (
     exchange_code_for_tokens,
     validate_email_domain,
@@ -200,8 +200,8 @@ def get_me(
     Returns user profile, organization details, role, and MFA status.
     Used by frontend to bootstrap auth state on page load.
     """
-    user = db.query(User).filter(User.id == session.user_id).first()
-    org = db.query(Organization).filter(Organization.id == session.org_id).first()
+    user = user_service.get_user_by_id(db, session.user_id)
+    org = org_service.get_org_by_id(db, session.org_id)
     
     return MeResponse(
         user_id=user.id,
@@ -238,14 +238,13 @@ def update_me(
     
     Updateable fields: display_name
     """
-    user = db.query(User).filter(User.id == session.user_id).first()
-    org = db.query(Organization).filter(Organization.id == session.org_id).first()
-    
-    if body.display_name is not None:
-        user.display_name = body.display_name
-    
-    db.commit()
-    db.refresh(user)
+    user = user_service.get_user_by_id(db, session.user_id)
+    org = org_service.get_org_by_id(db, session.org_id)
+    user = user_service.update_user_profile(
+        db,
+        session.user_id,
+        display_name=body.display_name,
+    )
     
     return MeResponse(
         user_id=user.id,
@@ -298,7 +297,7 @@ def get_my_signature(
     db: Session = Depends(get_db),
 ) -> SignatureResponse:
     """Get current user's email signature."""
-    user = db.query(User).filter(User.id == session.user_id).first()
+    user = user_service.get_user_by_id(db, session.user_id)
     
     return SignatureResponse(
         signature_name=user.signature_name,
@@ -320,20 +319,20 @@ def update_my_signature(
     db: Session = Depends(get_db),
 ) -> SignatureResponse:
     """Update current user's email signature."""
-    user = db.query(User).filter(User.id == session.user_id).first()
-    
-    user.signature_name = body.signature_name
-    user.signature_title = body.signature_title
-    user.signature_company = body.signature_company
-    user.signature_phone = body.signature_phone
-    user.signature_email = body.signature_email
-    user.signature_address = body.signature_address
-    user.signature_website = body.signature_website
-    user.signature_logo_url = body.signature_logo_url
-    user.signature_html = body.signature_html
-    
-    db.commit()
-    db.refresh(user)
+    user = user_service.get_user_by_id(db, session.user_id)
+    user = user_service.update_user_signature(
+        db=db,
+        user=user,
+        signature_name=body.signature_name,
+        signature_title=body.signature_title,
+        signature_company=body.signature_company,
+        signature_phone=body.signature_phone,
+        signature_email=body.signature_email,
+        signature_address=body.signature_address,
+        signature_website=body.signature_website,
+        signature_logo_url=body.signature_logo_url,
+        signature_html=body.signature_html,
+    )
     
     return SignatureResponse(
         signature_name=user.signature_name,

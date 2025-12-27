@@ -136,6 +136,14 @@ def count_alerts(
     return query.count()
 
 
+def get_alert_for_org(db: Session, org_id: UUID, alert_id: UUID) -> SystemAlert | None:
+    """Get a single alert scoped to org."""
+    return db.query(SystemAlert).filter(
+        SystemAlert.id == alert_id,
+        SystemAlert.organization_id == org_id,
+    ).first()
+
+
 def resolve_alert(
     db: Session,
     alert_id: UUID,

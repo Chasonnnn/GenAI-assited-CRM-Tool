@@ -348,3 +348,60 @@ def delete_user_overrides(
     ).delete()
     
     return count
+
+
+def list_members(
+    db: Session,
+    org_id: uuid.UUID,
+):
+    """List memberships and users for an organization."""
+    from app.db.models import Membership, User
+    return db.query(Membership, User).join(
+        User, Membership.user_id == User.id
+    ).filter(
+        Membership.organization_id == org_id
+    ).order_by(User.display_name, User.email).all()
+
+
+def get_member(
+    db: Session,
+    org_id: uuid.UUID,
+    member_id: uuid.UUID,
+):
+    """Get membership and user for a member id."""
+    from app.db.models import Membership, User
+    return db.query(Membership, User).join(
+        User, Membership.user_id == User.id
+    ).filter(
+        Membership.id == member_id,
+        Membership.organization_id == org_id,
+    ).first()
+
+
+def get_membership_for_user(
+    db: Session,
+    org_id: uuid.UUID,
+    user_id: uuid.UUID,
+):
+    """Get membership for user in org."""
+    from app.db.models import Membership
+    return db.query(Membership).filter(
+        Membership.user_id == user_id,
+        Membership.organization_id == org_id,
+    ).first()
+
+
+def get_role_overrides(
+    db: Session,
+    org_id: uuid.UUID,
+    role: str,
+) -> dict[str, bool]:
+    """Get org-level role permission overrides."""
+    from app.db.models import RolePermission
+    return {
+        rp.permission: rp.is_granted
+        for rp in db.query(RolePermission).filter(
+            RolePermission.organization_id == org_id,
+            RolePermission.role == role,
+        ).all()
+    }

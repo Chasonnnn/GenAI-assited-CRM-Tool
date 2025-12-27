@@ -17,29 +17,11 @@ from app.core.deps import (
 )
 from app.core.policies import POLICIES
 from app.core.case_access import check_case_access
-from app.db.models import User
 from app.schemas.auth import UserSession
 from app.schemas.note import NoteCreate, NoteRead
 from app.services import case_service, note_service
 
 router = APIRouter(dependencies=[Depends(require_permission(POLICIES["cases"].actions["notes_view"]))])
-
-
-def _note_to_read(note, db: Session) -> NoteRead:
-    """Convert EntityNote model to NoteRead schema."""
-    author_name = None
-    if note.author_id:
-        user = db.query(User).filter(User.id == note.author_id).first()
-        author_name = user.display_name if user else None
-    
-    return NoteRead(
-        id=note.id,
-        case_id=note.entity_id,  # EntityNote uses entity_id
-        author_id=note.author_id,
-        author_name=author_name,
-        body=note.content,  # EntityNote uses content
-        created_at=note.created_at,
-    )
 
 
 @router.get("/cases/{case_id}/notes", response_model=list[NoteRead])
@@ -58,7 +40,7 @@ def list_notes(
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
     
     notes = note_service.list_notes(db, session.org_id, "case", case_id)
-    return [_note_to_read(n, db) for n in notes]
+    return [note_service.to_note_read(n) for n in notes]
 
 
 @router.post("/cases/{case_id}/notes", response_model=NoteRead, status_code=201, dependencies=[Depends(require_csrf_header)])
@@ -98,7 +80,7 @@ def create_note(
     )
     db.commit()
     
-    return _note_to_read(note, db)
+    return note_service.to_note_read(note)
 
 
 @router.delete("/notes/{note_id}", status_code=204, dependencies=[Depends(require_csrf_header)])

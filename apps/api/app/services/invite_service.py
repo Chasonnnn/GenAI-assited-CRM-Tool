@@ -7,7 +7,7 @@ import uuid
 from sqlalchemy import and_, or_, func
 from sqlalchemy.orm import Session
 
-from app.db.models import OrgInvite, Membership, User
+from app.db.models import OrgInvite, Membership, User, Organization
 
 
 # Rate limit configuration
@@ -167,3 +167,88 @@ def get_invite(db: Session, org_id: uuid.UUID, invite_id: uuid.UUID) -> OrgInvit
         OrgInvite.id == invite_id,
         OrgInvite.organization_id == org_id,
     ).first()
+
+
+def get_invite_by_id(db: Session, invite_id: uuid.UUID) -> OrgInvite | None:
+    """Get invite by ID without org scoping."""
+    return db.query(OrgInvite).filter(OrgInvite.id == invite_id).first()
+
+
+def get_invite_details(db: Session, invite_id: uuid.UUID) -> tuple[OrgInvite | None, str, str | None]:
+    """Get invite with organization and inviter details."""
+    invite = get_invite_by_id(db, invite_id)
+    if not invite:
+        return None, "Unknown Organization", None
+
+    org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
+    org_name = org.name if org else "Unknown Organization"
+
+    inviter_name = None
+    if invite.invited_by_user_id:
+        inviter = db.query(User).filter(User.id == invite.invited_by_user_id).first()
+        inviter_name = inviter.full_name if inviter else None
+
+    return invite, org_name, inviter_name
+
+
+def accept_invite(
+    db: Session,
+    invite_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> dict:
+    """Accept an invitation and create membership."""
+    from app.db.enums import Role as RoleEnum
+
+    invite = get_invite_by_id(db, invite_id)
+    if not invite:
+        raise ValueError("Invite not found")
+
+    status = get_invite_status(invite)
+    if status == "accepted":
+        raise ValueError("Invite already accepted")
+    if status == "expired":
+        raise ValueError("Invite has expired")
+    if status == "revoked":
+        raise ValueError("Invite was revoked")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise ValueError("User not found")
+
+    if user.email.lower() != invite.email.lower():
+        raise PermissionError("This invite was sent to a different email address")
+
+    existing = db.query(Membership).filter(
+        Membership.user_id == user_id,
+        Membership.organization_id == invite.organization_id,
+    ).first()
+    if existing:
+        raise ValueError("Already a member of this organization")
+
+    role_map = {
+        "member": RoleEnum.MEMBER,
+        "admin": RoleEnum.ADMIN,
+    }
+    role = role_map.get(invite.role, RoleEnum.MEMBER)
+
+    membership = Membership(
+        user_id=user_id,
+        organization_id=invite.organization_id,
+        role=role,
+    )
+    db.add(membership)
+
+    invite.accepted_at = datetime.utcnow()
+
+    if not user.active_org_id:
+        user.active_org_id = invite.organization_id
+
+    db.commit()
+
+    org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
+    org_name = org.name if org else "Unknown"
+
+    return {
+        "organization_id": str(invite.organization_id),
+        "organization_name": org_name,
+    }

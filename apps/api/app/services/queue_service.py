@@ -5,7 +5,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
-from app.db.models import Queue, Case, QueueMember
+from app.db.models import Queue, Case, QueueMember, User
 from app.db.enums import CaseActivityType
 from app.db.enums import OwnerType
 from app.services import activity_service
@@ -43,6 +43,21 @@ class DuplicateQueueNameError(QueueServiceError):
 
 class NotQueueMemberError(QueueServiceError):
     """User is not a member of the queue."""
+    pass
+
+
+class QueueMemberExistsError(QueueServiceError):
+    """Queue member already exists."""
+    pass
+
+
+class QueueMemberNotFoundError(QueueServiceError):
+    """Queue member not found."""
+    pass
+
+
+class QueueMemberUserNotFoundError(QueueServiceError):
+    """User not found in org."""
     pass
 
 
@@ -338,3 +353,49 @@ def assign_to_queue(
     )
     
     return case
+
+
+def add_queue_member(
+    db: Session,
+    org_id: UUID,
+    queue_id: UUID,
+    user_id: UUID,
+) -> tuple[QueueMember, User]:
+    """Add a user to a queue."""
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.organization_id == org_id,
+    ).first()
+    if not user:
+        raise QueueMemberUserNotFoundError("User not found")
+
+    existing = db.query(QueueMember).filter(
+        QueueMember.queue_id == queue_id,
+        QueueMember.user_id == user_id,
+    ).first()
+    if existing:
+        raise QueueMemberExistsError("User is already a member of this queue")
+
+    member = QueueMember(queue_id=queue_id, user_id=user_id)
+    db.add(member)
+    db.commit()
+    db.refresh(member)
+
+    return member, user
+
+
+def remove_queue_member(
+    db: Session,
+    queue_id: UUID,
+    user_id: UUID,
+) -> None:
+    """Remove a user from a queue."""
+    result = db.query(QueueMember).filter(
+        QueueMember.queue_id == queue_id,
+        QueueMember.user_id == user_id,
+    ).delete()
+
+    if not result:
+        raise QueueMemberNotFoundError("Member not found")
+
+    db.commit()

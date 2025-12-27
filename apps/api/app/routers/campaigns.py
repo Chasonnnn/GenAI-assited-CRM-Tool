@@ -262,18 +262,17 @@ def list_run_recipients(
     session = Depends(get_current_session),
 ):
     """List recipients for a campaign run."""
-    from app.db.models import CampaignRecipient, CampaignRun
-    
     run = campaign_service.get_campaign_run(db, session.org_id, run_id)
     if not run or run.campaign_id != campaign_id:
         raise HTTPException(status_code=404, detail="Run not found")
     
-    query = db.query(CampaignRecipient).filter(CampaignRecipient.run_id == run_id)
-    
-    if status:
-        query = query.filter(CampaignRecipient.status == status)
-    
-    recipients = query.order_by(CampaignRecipient.created_at.desc()).offset(offset).limit(limit).all()
+    recipients = campaign_service.list_run_recipients(
+        db=db,
+        run_id=run_id,
+        status=status,
+        limit=limit,
+        offset=offset,
+    )
     
     return [CampaignRecipientResponse.model_validate(r) for r in recipients]
 
@@ -331,12 +330,8 @@ def remove_suppression(
 
 def _campaign_to_response(db: Session, campaign) -> CampaignResponse:
     """Convert campaign model to response with stats."""
-    from app.db.models import CampaignRun
-    
     # Get latest run stats
-    latest_run = db.query(CampaignRun).filter(
-        CampaignRun.campaign_id == campaign.id
-    ).order_by(CampaignRun.started_at.desc()).first()
+    latest_run = campaign_service.get_latest_run_for_campaign(db, campaign.id)
     
     return CampaignResponse(
         id=campaign.id,

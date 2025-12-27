@@ -14,8 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header
 from app.schemas.auth import UserSession
-from app.db.models import User
-from app.services import mfa_service
+from app.services import mfa_service, user_service, membership_service
 
 
 router = APIRouter()
@@ -82,7 +81,7 @@ def get_mfa_status(
     db: Session = Depends(get_db),
 ):
     """Get MFA enrollment status for the current user."""
-    user = db.query(User).filter(User.id == session.user_id).first()
+    user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -104,7 +103,7 @@ def setup_totp(
     Returns data for displaying a QR code in authenticator apps.
     User must verify with a code before TOTP is enabled.
     """
-    user = db.query(User).filter(User.id == session.user_id).first()
+    user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -143,7 +142,7 @@ def verify_totp_setup(
     
     IMPORTANT: Recovery codes are only shown once. User must save them.
     """
-    user = db.query(User).filter(User.id == session.user_id).first()
+    user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -180,7 +179,7 @@ def regenerate_recovery_codes(
     Requires MFA to be enabled. This invalidates all previous codes.
     Returns plaintext codes for one-time display.
     """
-    user = db.query(User).filter(User.id == session.user_id).first()
+    user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -208,7 +207,7 @@ def verify_mfa_code(
     This endpoint is used during login flow when MFA challenge is required.
     For recovery codes, the code is consumed (single-use).
     """
-    user = db.query(User).filter(User.id == session.user_id).first()
+    user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -227,7 +226,6 @@ def verify_mfa_code(
 from fastapi import Response
 from app.core.security import create_session_token
 from app.core.deps import COOKIE_NAME
-from app.db.models import Membership
 
 
 class MFACompleteResponse(BaseModel):
@@ -256,7 +254,7 @@ def complete_mfa_challenge(
     
     Frontend should redirect to dashboard after success.
     """
-    user = db.query(User).filter(User.id == session.user_id).first()
+    user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -274,9 +272,7 @@ def complete_mfa_challenge(
         mfa_service.consume_recovery_code(db, user, body.code)
     
     # Get membership for new token
-    membership = db.query(Membership).filter(
-        Membership.user_id == user.id
-    ).first()
+    membership = membership_service.get_membership_by_user_id(db, user.id)
     
     if not membership:
         raise HTTPException(status_code=403, detail="No organization membership")
@@ -327,7 +323,7 @@ def disable_mfa(
     Note: In production, you may want to require password or recovery code
     verification before allowing MFA disable.
     """
-    user = db.query(User).filter(User.id == session.user_id).first()
+    user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -370,7 +366,7 @@ def get_duo_status(
     db: Session = Depends(get_db),
 ):
     """Check if Duo is available and user's enrollment status."""
-    user = db.query(User).filter(User.id == session.user_id).first()
+    user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -406,7 +402,7 @@ def initiate_duo_auth(
     if not duo_service.is_available():
         raise HTTPException(status_code=503, detail="Duo is not configured")
     
-    user = db.query(User).filter(User.id == session.user_id).first()
+    user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -441,7 +437,7 @@ def verify_duo_callback(
     if not duo_service.is_available():
         raise HTTPException(status_code=503, detail="Duo is not configured")
     
-    user = db.query(User).filter(User.id == session.user_id).first()
+    user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     

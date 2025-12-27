@@ -7,10 +7,11 @@ All notes use the polymorphic EntityNote model with entity_type field.
 from uuid import UUID
 
 import nh3
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.db.enums import EntityType
 from app.db.models import EntityNote
+from app.schemas.note import NoteRead
 
 # Allowed HTML tags for TipTap rich text
 ALLOWED_TAGS = {"p", "br", "strong", "em", "ul", "ol", "li", "a", "blockquote", "h1", "h2", "h3", "code", "pre"}
@@ -67,23 +68,52 @@ def list_notes(
     """List notes for an entity, newest first."""
     type_str = entity_type.value if isinstance(entity_type, EntityType) else entity_type
     
-    return db.query(EntityNote).filter(
+    return db.query(EntityNote).options(joinedload(EntityNote.author)).filter(
         EntityNote.organization_id == org_id,
         EntityNote.entity_type == type_str,
         EntityNote.entity_id == entity_id,
     ).order_by(EntityNote.created_at.desc()).all()
 
 
+def list_notes_limited(
+    db: Session,
+    org_id: UUID,
+    entity_type: EntityType | str,
+    entity_id: UUID,
+    limit: int,
+) -> list[EntityNote]:
+    """List most recent notes for an entity with a limit."""
+    type_str = entity_type.value if isinstance(entity_type, EntityType) else entity_type
+
+    return db.query(EntityNote).options(joinedload(EntityNote.author)).filter(
+        EntityNote.organization_id == org_id,
+        EntityNote.entity_type == type_str,
+        EntityNote.entity_id == entity_id,
+    ).order_by(EntityNote.created_at.desc()).limit(limit).all()
+
+
 def get_note(db: Session, note_id: UUID, org_id: UUID) -> EntityNote | None:
     """Get a note by ID (org-scoped)."""
-    return db.query(EntityNote).filter(
+    return db.query(EntityNote).options(joinedload(EntityNote.author)).filter(
         EntityNote.id == note_id,
         EntityNote.organization_id == org_id,
     ).first()
+
+
+def to_note_read(note: EntityNote) -> NoteRead:
+    """Convert EntityNote model to NoteRead schema."""
+    author_name = note.author.display_name if note.author else None
+    return NoteRead(
+        id=note.id,
+        case_id=note.entity_id,
+        author_id=note.author_id,
+        author_name=author_name,
+        body=note.content,
+        created_at=note.created_at,
+    )
 
 
 def delete_note(db: Session, note: EntityNote) -> None:
     """Delete a note."""
     db.delete(note)
     db.commit()
-

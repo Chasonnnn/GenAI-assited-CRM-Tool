@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_session, get_db, require_permission, require_csrf_header
 from app.core.policies import POLICIES
 from app.db.enums import AlertStatus, AlertSeverity
-from app.db.models import SystemAlert
 from app.schemas.auth import UserSession
 from app.services import ops_service, alert_service
 
@@ -150,10 +149,7 @@ def resolve_alert(
 ):
     """Resolve an alert."""
     # Verify alert belongs to org
-    alert = db.query(SystemAlert).filter(
-        SystemAlert.id == alert_id,
-        SystemAlert.organization_id == session.org_id,
-    ).first()
+    alert = alert_service.get_alert_for_org(db, session.org_id, alert_id)
     
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
@@ -170,10 +166,7 @@ def acknowledge_alert(
 ):
     """Acknowledge an alert (stops notifications but keeps open)."""
     # Verify alert belongs to org
-    alert = db.query(SystemAlert).filter(
-        SystemAlert.id == alert_id,
-        SystemAlert.organization_id == session.org_id,
-    ).first()
+    alert = alert_service.get_alert_for_org(db, session.org_id, alert_id)
     
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
@@ -191,10 +184,7 @@ def snooze_alert(
 ):
     """Snooze an alert for specified hours."""
     # Verify alert belongs to org
-    alert = db.query(SystemAlert).filter(
-        SystemAlert.id == alert_id,
-        SystemAlert.organization_id == session.org_id,
-    ).first()
+    alert = alert_service.get_alert_for_org(db, session.org_id, alert_id)
     
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")

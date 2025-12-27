@@ -13,6 +13,16 @@ def get_org_by_id(db: Session, org_id: UUID) -> Organization | None:
     return db.query(Organization).filter(Organization.id == org_id).first()
 
 
+def list_orgs(db: Session) -> list[Organization]:
+    """List all organizations."""
+    return db.query(Organization).all()
+
+
+def get_org_by_slug(db: Session, slug: str) -> Organization | None:
+    """Get organization by slug."""
+    return db.query(Organization).filter(Organization.slug == slug).first()
+
+
 def get_org_by_slug(db: Session, slug: str) -> Organization | None:
     """Get organization by slug."""
     return db.query(Organization).filter(Organization.slug == slug.lower()).first()
@@ -98,6 +108,29 @@ def update_org_settings(
         comment="After settings update",
     )
     
+    db.commit()
+    db.refresh(org)
+    return org
+
+
+def update_org_contact(
+    db: Session,
+    org: Organization,
+    name: str | None = None,
+    address: str | None = None,
+    phone: str | None = None,
+    email: str | None = None,
+) -> Organization:
+    """Update organization contact settings."""
+    if name is not None:
+        org.name = name
+    if address is not None and hasattr(org, "address"):
+        org.address = address
+    if phone is not None and hasattr(org, "phone"):
+        org.phone = phone
+    if email is not None and hasattr(org, "contact_email"):
+        org.contact_email = email
+
     db.commit()
     db.refresh(org)
     return org

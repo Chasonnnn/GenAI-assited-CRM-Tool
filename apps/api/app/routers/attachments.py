@@ -10,9 +10,9 @@ from sqlalchemy.orm import Session
 from app.core.case_access import check_case_access, can_modify_case
 from app.core.deps import get_current_session, get_db, require_csrf_header
 from app.db.enums import Role
-from app.db.models import Attachment, Case
+from app.db.models import Case
 from app.schemas.auth import UserSession
-from app.services import attachment_service
+from app.services import attachment_service, case_service, ip_service
 
 
 router = APIRouter(prefix="/attachments", tags=["attachments"])
@@ -51,10 +51,7 @@ def _get_case_with_access(
     require_write: bool = False,
 ) -> Case:
     """Get case and verify user has access."""
-    case = db.query(Case).filter(
-        Case.id == case_id,
-        Case.organization_id == session.org_id,
-    ).first()
+    case = case_service.get_case(db, session.org_id, case_id)
     
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
@@ -157,11 +154,7 @@ async def list_attachments(
 
 def _get_ip_with_access(db: Session, ip_id: UUID, session: UserSession):
     """Get intended parent and verify org access."""
-    from app.db.models import IntendedParent
-    ip = db.query(IntendedParent).filter(
-        IntendedParent.id == ip_id,
-        IntendedParent.organization_id == session.org_id,
-    ).first()
+    ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
     return ip
@@ -340,11 +333,11 @@ async def download_local_attachment(
     from fastapi.responses import FileResponse
     from app.services.attachment_service import _get_local_storage_path
 
-    attachment = db.query(Attachment).filter(
-        Attachment.organization_id == session.org_id,
-        Attachment.storage_key == storage_key,
-        Attachment.deleted_at.is_(None),
-    ).first()
+    attachment = attachment_service.get_attachment_by_storage_key(
+        db=db,
+        org_id=session.org_id,
+        storage_key=storage_key,
+    )
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
     if attachment.quarantined:

@@ -165,13 +165,7 @@ def list_members(
     
     Requires: Manager+ role
     """
-    from app.db.models import Membership, User
-    
-    members = db.query(Membership, User).join(
-        User, Membership.user_id == User.id
-    ).filter(
-        Membership.organization_id == session.org_id
-    ).order_by(User.display_name, User.email).all()
+    members = permission_service.list_members(db, session.org_id)
     
     return [
         MemberRead(
@@ -198,14 +192,7 @@ def get_member(
     
     Requires: Manager+ role
     """
-    from app.db.models import Membership, User
-    
-    result = db.query(Membership, User).join(
-        User, Membership.user_id == User.id
-    ).filter(
-        Membership.id == member_id,
-        Membership.organization_id == session.org_id,
-    ).first()
+    result = permission_service.get_member(db, session.org_id, member_id)
     
     if not result:
         raise HTTPException(404, "Member not found")
@@ -259,14 +246,7 @@ def update_member(
     
     Requires: Manager+ role
     """
-    from app.db.models import Membership, User
-    
-    result = db.query(Membership, User).join(
-        User, Membership.user_id == User.id
-    ).filter(
-        Membership.id == member_id,
-        Membership.organization_id == session.org_id,
-    ).first()
+    result = permission_service.get_member(db, session.org_id, member_id)
     
     if not result:
         raise HTTPException(404, "Member not found")
@@ -349,14 +329,7 @@ def remove_member(
     
     Requires: Manager+ role
     """
-    from app.db.models import Membership, User
-    
-    result = db.query(Membership, User).join(
-        User, Membership.user_id == User.id
-    ).filter(
-        Membership.id == member_id,
-        Membership.organization_id == session.org_id,
-    ).first()
+    result = permission_service.get_member(db, session.org_id, member_id)
     
     if not result:
         raise HTTPException(404, "Member not found")
@@ -393,12 +366,7 @@ def get_effective_permissions(
     
     Requires: Manager+ role
     """
-    from app.db.models import Membership, User
-    
-    membership = db.query(Membership).filter(
-        Membership.user_id == user_id,
-        Membership.organization_id == session.org_id,
-    ).first()
+    membership = permission_service.get_membership_for_user(db, session.org_id, user_id)
     
     if not membership:
         raise HTTPException(404, "User not found in organization")
@@ -473,16 +441,7 @@ def get_role_detail(
     if role not in ROLE_DEFAULTS:
         raise HTTPException(404, f"Unknown role: {role}")
     
-    # Get org-specific overrides
-    from app.db.models import RolePermission
-    
-    org_overrides = {
-        rp.permission: rp.is_granted
-        for rp in db.query(RolePermission).filter(
-            RolePermission.organization_id == session.org_id,
-            RolePermission.role == role,
-        ).all()
-    }
+    org_overrides = permission_service.get_role_overrides(db, session.org_id, role)
     
     # Get global defaults
     global_defaults = get_role_default_permissions(role)

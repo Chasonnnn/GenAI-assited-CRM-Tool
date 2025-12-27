@@ -24,7 +24,7 @@ from app.core.security import (
     verify_oauth_state,
 )
 from app.schemas.auth import UserSession
-from app.services import oauth_service
+from app.services import oauth_service, org_service, user_service
 
 router = APIRouter(prefix="/integrations", tags=["Integrations"])
 logger = logging.getLogger(__name__)
@@ -626,17 +626,11 @@ def list_zoom_meetings(
     session: UserSession = Depends(get_current_session),
 ) -> list[ZoomMeetingRead]:
     """List user's recently created Zoom meetings."""
-    from app.db.models import ZoomMeeting as ZoomMeetingModel
-    
-    meetings = (
-        db.query(ZoomMeetingModel)
-        .filter(
-            ZoomMeetingModel.organization_id == session.org_id,
-            ZoomMeetingModel.user_id == session.user_id,
-        )
-        .order_by(ZoomMeetingModel.created_at.desc())
-        .limit(min(limit, 50))
-        .all()
+    meetings = zoom_service.list_zoom_meetings(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        limit=limit,
     )
     
     return [
@@ -684,13 +678,12 @@ def send_zoom_meeting_invite(
     Uses the 'Zoom Meeting Invite' template (auto-created if missing).
     """
     from app.services import zoom_service
-    from app.db.models import Organization, User
     
     # Get host name for template
-    user = db.query(User).filter(User.id == session.user_id).first()
+    user = user_service.get_user_by_id(db, session.user_id)
     host_name = user.display_name if user else "Your Host"
     
-    org = db.query(Organization).filter(Organization.id == session.org_id).first()
+    org = org_service.get_org_by_id(db, session.org_id)
     org_timezone = org.timezone if org else "America/Los_Angeles"
 
     # Build meeting object for template

@@ -15,7 +15,6 @@ from app.core.deps import (
 )
 from app.core.policies import POLICIES
 from app.db.enums import TaskType, ROLES_CAN_ARCHIVE, OwnerType
-from app.db.models import Case, User, Queue
 from app.schemas.auth import UserSession
 from app.schemas.task import (
     BulkCompleteResponse,
@@ -26,90 +25,10 @@ from app.schemas.task import (
     TaskRead,
     TaskUpdate,
 )
-from app.services import task_service
+from app.services import task_service, ip_service
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 
 router = APIRouter(dependencies=[Depends(require_permission(POLICIES["tasks"].default))])
-
-
-def _task_to_read(task, db: Session) -> TaskRead:
-    """Convert Task model to TaskRead schema."""
-    owner_name = None
-    if task.owner_type == OwnerType.USER.value:
-        user = db.query(User).filter(User.id == task.owner_id).first()
-        owner_name = user.display_name if user else None
-    elif task.owner_type == OwnerType.QUEUE.value:
-        queue = db.query(Queue).filter(Queue.id == task.owner_id).first()
-        owner_name = queue.name if queue else None
-    
-    created_by_name = None
-    if task.created_by_user_id:
-        user = db.query(User).filter(User.id == task.created_by_user_id).first()
-        created_by_name = user.display_name if user else None
-    
-    completed_by_name = None
-    if task.completed_by_user_id:
-        user = db.query(User).filter(User.id == task.completed_by_user_id).first()
-        completed_by_name = user.display_name if user else None
-    
-    case_number = None
-    if task.case_id:
-        case = db.query(Case).filter(Case.id == task.case_id).first()
-        case_number = case.case_number if case else None
-    
-    return TaskRead(
-        id=task.id,
-        case_id=task.case_id,
-        case_number=case_number,
-        owner_type=task.owner_type,
-        owner_id=task.owner_id,
-        owner_name=owner_name,
-        created_by_user_id=task.created_by_user_id,
-        created_by_name=created_by_name,
-        title=task.title,
-        description=task.description,
-        task_type=TaskType(task.task_type),
-        due_date=task.due_date,
-        due_time=task.due_time,
-        duration_minutes=task.duration_minutes,
-        is_completed=task.is_completed,
-        completed_at=task.completed_at,
-        completed_by_name=completed_by_name,
-        created_at=task.created_at,
-        updated_at=task.updated_at,
-    )
-
-
-def _task_to_list_item(task, db: Session) -> TaskListItem:
-    """Convert Task model to TaskListItem schema."""
-    owner_name = None
-    if task.owner_type == OwnerType.USER.value:
-        user = db.query(User).filter(User.id == task.owner_id).first()
-        owner_name = user.display_name if user else None
-    elif task.owner_type == OwnerType.QUEUE.value:
-        queue = db.query(Queue).filter(Queue.id == task.owner_id).first()
-        owner_name = queue.name if queue else None
-    
-    case_number = None
-    if task.case_id:
-        case = db.query(Case).filter(Case.id == task.case_id).first()
-        case_number = case.case_number if case else None
-    
-    return TaskListItem(
-        id=task.id,
-        case_id=task.case_id,
-        case_number=case_number,
-        title=task.title,
-        task_type=TaskType(task.task_type),
-        owner_type=task.owner_type,
-        owner_id=task.owner_id,
-        owner_name=owner_name,
-        due_date=task.due_date,
-        due_time=task.due_time,
-        duration_minutes=task.duration_minutes,
-        is_completed=task.is_completed,
-        created_at=task.created_at,
-    )
 
 
 def _check_task_case_access(task, session: "UserSession", db: Session) -> None:
@@ -155,11 +74,7 @@ def list_tasks(
     
     # If filtering by intended_parent_id, verify existence
     if intended_parent_id:
-        from app.db.models import IntendedParent
-        ip = db.query(IntendedParent).filter(
-            IntendedParent.id == intended_parent_id,
-            IntendedParent.organization_id == session.org_id,
-        ).first()
+        ip = ip_service.get_intended_parent(db, intended_parent_id, session.org_id)
         if not ip:
             raise HTTPException(status_code=404, detail="Intended parent not found")
     
@@ -182,8 +97,9 @@ def list_tasks(
     
     pages = (total + per_page - 1) // per_page if per_page > 0 else 0
     
+    context = task_service.get_task_context(db, tasks)
     return TaskListResponse(
-        items=[_task_to_list_item(t, db) for t in tasks],
+        items=[task_service.to_task_list_item(t, context) for t in tasks],
         total=total,
         page=page,
         per_page=per_page,
@@ -198,7 +114,6 @@ def create_task(
     db: Session = Depends(get_db),
 ):
     """Create a new task (respects case access control)."""
-    from app.db.models import Membership
     from app.core.case_access import check_case_access
     
     # Verify case belongs to org if specified
@@ -211,23 +126,16 @@ def create_task(
         check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
     
     # Verify owner belongs to org if specified
-    if data.owner_type == OwnerType.USER.value:
-        membership = db.query(Membership).filter(
-            Membership.user_id == data.owner_id,
-            Membership.organization_id == session.org_id,
-        ).first()
-        if not membership:
-            raise HTTPException(status_code=400, detail="Owner user not found in organization")
-    elif data.owner_type == OwnerType.QUEUE.value:
-        queue = db.query(Queue).filter(
-            Queue.id == data.owner_id,
-            Queue.organization_id == session.org_id,
-            Queue.is_active == True,
-        ).first()
-        if not queue:
-            raise HTTPException(status_code=400, detail="Queue not found or inactive")
-    elif data.owner_type is not None:
-        raise HTTPException(status_code=400, detail="Invalid owner_type")
+    try:
+        task_service.validate_task_owner(
+            db,
+            session.org_id,
+            data.owner_type,
+            data.owner_id,
+            allow_none=True,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     
     task = task_service.create_task(
         db=db,
@@ -235,7 +143,8 @@ def create_task(
         user_id=session.user_id,
         data=data,
     )
-    return _task_to_read(task, db)
+    context = task_service.get_task_context(db, [task])
+    return task_service.to_task_read(task, context)
 
 
 @router.get("/{task_id}", response_model=TaskRead)
@@ -252,7 +161,8 @@ def get_task(
     # Access control: check case access if task is linked to a case
     _check_task_case_access(task, session, db)
     
-    return _task_to_read(task, db)
+    context = task_service.get_task_context(db, [task])
+    return task_service.to_task_read(task, context)
 
 
 @router.patch("/{task_id}", response_model=TaskRead, dependencies=[Depends(require_csrf_header)])
@@ -267,8 +177,6 @@ def update_task(
     
     Requires: creator, owner, or manager+
     """
-    from app.db.models import Membership
-    
     task = task_service.get_task(db, task_id, session.org_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -286,26 +194,14 @@ def update_task(
     if "owner_type" in update_fields or "owner_id" in update_fields:
         owner_type = update_fields.get("owner_type", task.owner_type)
         owner_id = update_fields.get("owner_id", task.owner_id)
-        if owner_type == OwnerType.USER.value:
-            membership = db.query(Membership).filter(
-                Membership.user_id == owner_id,
-                Membership.organization_id == session.org_id,
-            ).first()
-            if not membership:
-                raise HTTPException(status_code=400, detail="Owner user not found in organization")
-        elif owner_type == OwnerType.QUEUE.value:
-            queue = db.query(Queue).filter(
-                Queue.id == owner_id,
-                Queue.organization_id == session.org_id,
-                Queue.is_active == True,
-            ).first()
-            if not queue:
-                raise HTTPException(status_code=400, detail="Queue not found or inactive")
-        else:
-            raise HTTPException(status_code=400, detail="Invalid owner_type")
+        try:
+            task_service.validate_task_owner(db, session.org_id, owner_type, owner_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
     
     task = task_service.update_task(db, task, data, actor_user_id=session.user_id)
-    return _task_to_read(task, db)
+    context = task_service.get_task_context(db, [task])
+    return task_service.to_task_read(task, context)
 
 
 @router.post("/{task_id}/complete", response_model=TaskRead, dependencies=[Depends(require_csrf_header)])
@@ -332,7 +228,8 @@ def complete_task(
         raise HTTPException(status_code=403, detail="Not authorized")
     
     task = task_service.complete_task(db, task, session.user_id)
-    return _task_to_read(task, db)
+    context = task_service.get_task_context(db, [task])
+    return task_service.to_task_read(task, context)
 
 
 @router.post("/{task_id}/uncomplete", response_model=TaskRead, dependencies=[Depends(require_csrf_header)])
@@ -355,7 +252,8 @@ def uncomplete_task(
         raise HTTPException(status_code=403, detail="Not authorized")
     
     task = task_service.uncomplete_task(db, task)
-    return _task_to_read(task, db)
+    context = task_service.get_task_context(db, [task])
+    return task_service.to_task_read(task, context)
 
 
 @router.post("/bulk-complete", response_model=BulkCompleteResponse, dependencies=[Depends(require_csrf_header)])

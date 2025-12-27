@@ -247,3 +247,48 @@ def _parse_bool_inverse(value) -> bool | None:
     """Parse bool and invert (for 'do you smoke' → is_non_smoker)."""
     result = _parse_bool(value)
     return not result if result is not None else None
+
+
+def list_problem_leads(db: Session, limit: int = 50) -> list[MetaLead]:
+    """List Meta leads with fetch/convert issues."""
+    from sqlalchemy import or_
+
+    return (
+        db.query(MetaLead)
+        .filter(
+            or_(
+                MetaLead.status.in_(["fetch_failed", "convert_failed"]),
+                MetaLead.fetch_error.isnot(None),
+                MetaLead.conversion_error.isnot(None),
+            )
+        )
+        .order_by(MetaLead.received_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def count_meta_leads(db: Session) -> int:
+    """Count total Meta leads."""
+    return db.query(MetaLead).count()
+
+
+def count_failed_meta_leads(db: Session) -> int:
+    """Count Meta leads with failed statuses."""
+    return db.query(MetaLead).filter(
+        MetaLead.status.in_(["fetch_failed", "convert_failed"])
+    ).count()
+
+
+def list_meta_leads(
+    db: Session,
+    limit: int = 100,
+    status: str | None = None,
+) -> list[MetaLead]:
+    """List Meta leads for debugging."""
+    query = db.query(MetaLead).order_by(MetaLead.received_at.desc())
+
+    if status:
+        query = query.filter(MetaLead.status == status)
+
+    return query.limit(limit).all()

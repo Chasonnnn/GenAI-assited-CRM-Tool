@@ -10,9 +10,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import get_db
-from app.db.models import MetaPageMapping
 from app.db.enums import JobType
-from app.services import job_service, meta_api
+from app.services import job_service, meta_api, meta_page_service
 
 # Rate limiting
 from app.core.rate_limit import limiter
@@ -103,10 +102,7 @@ async def receive_meta_webhook(
             continue
         
         # Validate page_id is mapped to an org
-        mapping = db.query(MetaPageMapping).filter(
-            MetaPageMapping.page_id == page_id,
-            MetaPageMapping.is_active == True,
-        ).first()
+        mapping = meta_page_service.get_active_mapping_by_page_id(db, page_id)
         
         if not mapping:
             logger.info(f"Meta webhook: unmapped page_id={page_id}")
@@ -177,9 +173,7 @@ async def simulate_meta_webhook(
     mock_leadgen_id = str(uuid.uuid4())
     
     # Find any active page mapping (or use mock)
-    mapping = db.query(MetaPageMapping).filter(
-        MetaPageMapping.is_active == True
-    ).first()
+    mapping = meta_page_service.get_first_active_mapping(db)
     
     page_id = mapping.page_id if mapping else "mock_page_456"
     org_id = mapping.organization_id if mapping else None

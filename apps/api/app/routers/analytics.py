@@ -8,14 +8,12 @@ from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_permission
 from app.core.policies import POLICIES
 
-from app.db.models import Case
-from app.services import pipeline_service
+from app.services import analytics_service
 from app.schemas.auth import UserSession
 
 
@@ -393,56 +391,28 @@ def get_activity_feed(
     Returns recent activities across all cases in the organization.
     Useful for managers to see what's happening across the team.
     """
-    from app.db.models import CaseActivityLog, Case, User
-    from sqlalchemy import desc
-    
-    # Build query
-    query = db.query(
-        CaseActivityLog,
-        Case.case_number,
-        Case.full_name.label("case_name"),
-        User.display_name.label("actor_name"),
-    ).join(
-        Case, CaseActivityLog.case_id == Case.id
-    ).outerjoin(
-        User, CaseActivityLog.actor_user_id == User.id
-    ).filter(
-        CaseActivityLog.organization_id == session.org_id
+    items, has_more = analytics_service.get_activity_feed(
+        db=db,
+        organization_id=session.org_id,
+        limit=limit,
+        offset=offset,
+        activity_type=activity_type,
+        user_id=user_id,
     )
-    
-    # Apply filters
-    if activity_type:
-        query = query.filter(CaseActivityLog.activity_type == activity_type)
-    
-    if user_id:
-        from uuid import UUID as PyUUID
-        try:
-            query = query.filter(CaseActivityLog.actor_user_id == PyUUID(user_id))
-        except ValueError:
-            pass  # Invalid UUID, ignore filter
-    
-    # Order and paginate
-    query = query.order_by(desc(CaseActivityLog.created_at))
-    total_query = query  # For has_more check
-    query = query.offset(offset).limit(limit + 1)  # +1 to check has_more
-    
-    results = query.all()
-    has_more = len(results) > limit
-    items = results[:limit]
     
     return ActivityFeedResponse(
         items=[
             ActivityFeedItem(
-                id=str(row.CaseActivityLog.id),
-                activity_type=row.CaseActivityLog.activity_type,
-                case_id=str(row.CaseActivityLog.case_id),
-                case_number=row.case_number,
-                case_name=row.case_name,
-                actor_name=row.actor_name,
-                details=row.CaseActivityLog.details,
-                created_at=row.CaseActivityLog.created_at.isoformat(),
+                id=item["id"],
+                activity_type=item["activity_type"],
+                case_id=item["case_id"],
+                case_number=item["case_number"],
+                case_name=item["case_name"],
+                actor_name=item["actor_name"],
+                details=item["details"],
+                created_at=item["created_at"],
             )
-            for row in items
+            for item in items
         ],
         has_more=has_more,
     )
@@ -470,7 +440,6 @@ async def export_analytics_pdf(
     - Recent trend data
     """
     from fastapi.responses import Response
-    from app.db.models import Organization, Task
     from app.services import analytics_service
     from app.services.pdf_service import create_analytics_pdf
     
@@ -502,94 +471,21 @@ async def export_analytics_pdf(
     elif to_date:
         date_range_str = f"Until {to_date}"
     
-    # Build date filter
-    date_filter = Case.is_archived == False
-    if start_dt:
-        date_filter = date_filter & (Case.created_at >= start_dt)
-    if end_dt:
-        date_filter = date_filter & (Case.created_at <= end_dt)
-    
-    # Get organization name
-    org = db.query(Organization).filter(Organization.id == org_id).first()
-    org_name = org.name if org else "Organization"
-    
-    # Get summary data
-    total_cases = db.query(func.count(Case.id)).filter(
-        Case.organization_id == org_id,
-        date_filter
-    ).scalar() or 0
-    
-    # New this period (last 7 days from end date or now)
-    period_start = (end_dt or datetime.now(timezone.utc)) - timedelta(days=7)
-    new_this_period = db.query(func.count(Case.id)).filter(
-        Case.organization_id == org_id,
-        Case.is_archived == False,
-        Case.created_at >= period_start
-    ).scalar() or 0
-    
-    # Get qualified rate
-    from app.db.models import PipelineStage
-    pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
-    qualified_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "qualified")
-    
-    qualified_rate = 0.0
-    if qualified_stage and total_cases > 0:
-        qualified_stage_ids = db.query(PipelineStage.id).filter(
-            PipelineStage.pipeline_id == pipeline.id,
-            PipelineStage.order >= qualified_stage.order,
-            PipelineStage.is_active == True,
-        )
-        qualified_count = db.query(func.count(Case.id)).filter(
-            Case.organization_id == org_id,
-            Case.is_archived == False,
-            Case.stage_id.in_(qualified_stage_ids),
-        ).scalar() or 0
-        qualified_rate = (qualified_count / total_cases) * 100
-    
-    # Task stats
-    pending_tasks = db.query(func.count(Task.id)).filter(
-        Task.organization_id == org_id,
-        Task.is_completed == False
-    ).scalar() or 0
-    
-    overdue_tasks = db.query(func.count(Task.id)).filter(
-        Task.organization_id == org_id,
-        Task.is_completed == False,
-        Task.due_date < datetime.now(timezone.utc).date()
-    ).scalar() or 0
-    
-    summary = {
-        "total_cases": total_cases,
-        "new_this_period": new_this_period,
-        "qualified_rate": qualified_rate,
-        "pending_tasks": pending_tasks,
-        "overdue_tasks": overdue_tasks,
-    }
-    
-    cases_by_status = analytics_service.get_cases_by_status(db, org_id)
-    cases_by_assignee = analytics_service.get_cases_by_assignee(
-        db, org_id, label="display_name"
-    )
-
-    trend_start = datetime.now(timezone.utc) - timedelta(days=30)
-    trend_data = analytics_service.get_cases_trend(
-        db, org_id, start=trend_start, end=datetime.now(timezone.utc), group_by="day"
-    )
-
-    meta_start = start_dt or datetime(1970, 1, 1, tzinfo=timezone.utc)
-    meta_end = end_dt or datetime.now(timezone.utc)
-    meta_performance = analytics_service.get_meta_performance(
-        db, org_id, meta_start, meta_end
+    export_data = analytics_service.get_pdf_export_data(
+        db=db,
+        organization_id=org_id,
+        start_dt=start_dt,
+        end_dt=end_dt,
     )
     
     # Generate PDF
     pdf_bytes = create_analytics_pdf(
-        summary=summary,
-        cases_by_status=cases_by_status,
-        cases_by_assignee=cases_by_assignee,
-        trend_data=trend_data,
-        meta_performance=meta_performance,
-        org_name=org_name,
+        summary=export_data["summary"],
+        cases_by_status=export_data["cases_by_status"],
+        cases_by_assignee=export_data["cases_by_assignee"],
+        trend_data=export_data["trend_data"],
+        meta_performance=export_data["meta_performance"],
+        org_name=export_data["org_name"],
         date_range=date_range_str,
     )
     

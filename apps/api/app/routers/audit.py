@@ -2,7 +2,7 @@
 
 import os
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -15,7 +15,6 @@ from app.core.config import settings
 from app.core.deps import get_current_session, get_db, require_permission
 from app.core.policies import POLICIES
 from app.db.enums import AuditEventType, Role
-from app.db.models import AuditLog, User
 from app.schemas.compliance import ExportJobCreate, ExportJobListResponse, ExportJobRead
 from app.services import audit_service, compliance_service
 from app.schemas.auth import UserSession
@@ -77,33 +76,16 @@ def list_audit_logs(
     Requires: Manager or Developer role
     Filters: event_type, actor_user_id, date range
     """
-    query = db.query(AuditLog).filter(
-        AuditLog.organization_id == session.org_id
+    logs, total, actor_names = audit_service.list_audit_logs(
+        db=db,
+        org_id=session.org_id,
+        page=page,
+        per_page=per_page,
+        event_type=event_type,
+        actor_user_id=actor_user_id,
+        start_date=start_date,
+        end_date=end_date,
     )
-    
-    # Apply filters
-    if event_type:
-        query = query.filter(AuditLog.event_type == event_type)
-    if actor_user_id:
-        query = query.filter(AuditLog.actor_user_id == actor_user_id)
-    if start_date:
-        query = query.filter(AuditLog.created_at >= start_date)
-    if end_date:
-        query = query.filter(AuditLog.created_at <= end_date)
-    
-    # Count total
-    total = query.count()
-    
-    # Paginate (newest first)
-    offset = (page - 1) * per_page
-    logs = query.order_by(AuditLog.created_at.desc()).offset(offset).limit(per_page).all()
-    
-    # Resolve actor names
-    actor_ids = {log.actor_user_id for log in logs if log.actor_user_id}
-    actor_names = {}
-    if actor_ids:
-        actors = db.query(User).filter(User.id.in_(actor_ids)).all()
-        actor_names = {actor.id: actor.display_name for actor in actors}
     
     items = [
         AuditLogRead(
@@ -144,32 +126,12 @@ def get_ai_activity(
     session: UserSession = Depends(get_current_session),
 ) -> AuditAIActivityResponse:
     """Get recent AI audit activity and counts for the specified time window."""
-    ai_event_types = [
-        AuditEventType.AI_ACTION_APPROVED.value,
-        AuditEventType.AI_ACTION_REJECTED.value,
-        AuditEventType.AI_ACTION_FAILED.value,
-        AuditEventType.AI_ACTION_DENIED.value,
-    ]
-
-    cutoff = datetime.utcnow() - timedelta(hours=hours)
-    counts = {}
-    for event_type in ai_event_types:
-        counts[event_type] = db.query(AuditLog).filter(
-            AuditLog.organization_id == session.org_id,
-            AuditLog.event_type == event_type,
-            AuditLog.created_at >= cutoff,
-        ).count()
-
-    recent_logs = db.query(AuditLog).filter(
-        AuditLog.organization_id == session.org_id,
-        AuditLog.event_type.in_(ai_event_types),
-    ).order_by(AuditLog.created_at.desc()).limit(limit).all()
-
-    actor_ids = {log.actor_user_id for log in recent_logs if log.actor_user_id}
-    actor_names = {}
-    if actor_ids:
-        actors = db.query(User).filter(User.id.in_(actor_ids)).all()
-        actor_names = {actor.id: actor.display_name for actor in actors}
+    counts, recent_logs, actor_names = audit_service.get_ai_activity(
+        db=db,
+        org_id=session.org_id,
+        hours=hours,
+        limit=limit,
+    )
 
     recent_items = [
         AuditLogRead(

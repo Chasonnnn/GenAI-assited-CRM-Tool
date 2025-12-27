@@ -16,7 +16,6 @@ from app.core.deps import (
 )
 from app.core.policies import POLICIES
 from app.db.enums import CaseSource, OwnerType
-from app.db.models import User, Queue
 from app.schemas.auth import UserSession
 from app.schemas.case import (
     CaseAssign,
@@ -33,7 +32,7 @@ from app.schemas.case import (
     CaseActivityRead,
     CaseActivityResponse,
 )
-from app.services import case_service
+from app.services import case_service, membership_service, queue_service, user_service
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 
 router = APIRouter(dependencies=[Depends(require_permission(POLICIES["cases"].default))])
@@ -43,10 +42,10 @@ def _case_to_read(case, db: Session) -> CaseRead:
     """Convert Case model to CaseRead schema with joined user names."""
     owner_name = None
     if case.owner_type == OwnerType.USER.value:
-        user = db.query(User).filter(User.id == case.owner_id).first()
+        user = user_service.get_user_by_id(db, case.owner_id)
         owner_name = user.display_name if user else None
     elif case.owner_type == OwnerType.QUEUE.value:
-        queue = db.query(Queue).filter(Queue.id == case.owner_id).first()
+        queue = queue_service.get_queue(db, case.organization_id, case.owner_id)
         owner_name = queue.name if queue else None
     
     return CaseRead(
@@ -162,23 +161,7 @@ def get_assignees(
     
     Returns users with their ID, name, and role.
     """
-    from app.db.models import Membership
-    
-    members = db.query(Membership).filter(
-        Membership.organization_id == session.org_id
-    ).all()
-    
-    result = []
-    for m in members:
-        user = db.query(User).filter(User.id == m.user_id).first()
-        if user:
-            result.append({
-                "id": str(user.id),
-                "name": user.display_name,
-                "role": m.role,
-            })
-    
-    return result
+    return case_service.list_assignees(db, session.org_id)
 
 
 @router.get("", response_model=CaseListResponse)
@@ -830,15 +813,12 @@ def assign_case(
         raise HTTPException(status_code=404, detail="Case not found")
     
     if data.owner_type == OwnerType.USER:
-        from app.db.models import Membership
-        membership = db.query(Membership).filter(
-            Membership.user_id == data.owner_id,
-            Membership.organization_id == session.org_id,
-        ).first()
+        membership = membership_service.get_membership_for_org(
+            db, session.org_id, data.owner_id
+        )
         if not membership:
             raise HTTPException(status_code=400, detail="User not found in organization")
     elif data.owner_type == OwnerType.QUEUE:
-        from app.services import queue_service
         queue = queue_service.get_queue(db, session.org_id, data.owner_id)
         if not queue or not queue.is_active:
             raise HTTPException(status_code=400, detail="Queue not found or inactive")
@@ -862,15 +842,12 @@ def bulk_assign_cases(
     """
     
     if data.owner_type == OwnerType.USER:
-        from app.db.models import Membership
-        membership = db.query(Membership).filter(
-            Membership.user_id == data.owner_id,
-            Membership.organization_id == session.org_id,
-        ).first()
+        membership = membership_service.get_membership_for_org(
+            db, session.org_id, data.owner_id
+        )
         if not membership:
             raise HTTPException(status_code=400, detail="User not found in organization")
     elif data.owner_type == OwnerType.QUEUE:
-        from app.services import queue_service
         queue = queue_service.get_queue(db, session.org_id, data.owner_id)
         if not queue or not queue.is_active:
             raise HTTPException(status_code=400, detail="Queue not found or inactive")
@@ -981,7 +958,7 @@ def get_case_history(
     for h in history:
         changed_by_name = None
         if h.changed_by_user_id:
-            user = db.query(User).filter(User.id == h.changed_by_user_id).first()
+            user = user_service.get_user_by_id(db, h.changed_by_user_id)
             changed_by_name = user.display_name if user else None
         
         result.append(CaseStatusHistoryRead(
@@ -1012,9 +989,6 @@ def get_case_activity(
     
     Includes: creates, edits, status changes, assignments, notes, etc.
     """
-    from sqlalchemy import func
-    from app.db.models import CaseActivityLog
-    
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
@@ -1022,35 +996,26 @@ def get_case_activity(
     # Access control
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
     
-    # Query activity log with pagination
-    base_query = db.query(CaseActivityLog).filter(
-        CaseActivityLog.case_id == case_id,
-        CaseActivityLog.organization_id == session.org_id,
+    items_data, total = case_service.list_case_activity(
+        db=db,
+        org_id=session.org_id,
+        case_id=case_id,
+        page=page,
+        per_page=per_page,
     )
-    
-    total = base_query.count()
     pages = (total + per_page - 1) // per_page if total > 0 else 1
-    
-    activities = base_query.order_by(
-        CaseActivityLog.created_at.desc()
-    ).offset((page - 1) * per_page).limit(per_page).all()
-    
-    # Resolve actor names
-    items = []
-    for activity in activities:
-        actor_name = None
-        if activity.actor_user_id:
-            actor = db.query(User).filter(User.id == activity.actor_user_id).first()
-            actor_name = actor.display_name if actor else None
-        
-        items.append(CaseActivityRead(
-            id=activity.id,
-            activity_type=activity.activity_type,
-            actor_user_id=activity.actor_user_id,
-            actor_name=actor_name,
-            details=activity.details,
-            created_at=activity.created_at,
-        ))
+
+    items = [
+        CaseActivityRead(
+            id=item["id"],
+            activity_type=item["activity_type"],
+            actor_user_id=item["actor_user_id"],
+            actor_name=item["actor_name"],
+            details=item["details"],
+            created_at=item["created_at"],
+        )
+        for item in items_data
+    ]
     
     return CaseActivityResponse(
         items=items,

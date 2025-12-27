@@ -16,9 +16,19 @@ from app.core.deps import get_db, get_current_session, require_roles, require_cs
 from app.core.permissions import PermissionKey as P
 from app.core.case_access import check_case_access
 from app.db.enums import CaseActivityType, Role
-from app.db.models import Case, Task, UserIntegration, AIConversation
 from app.schemas.auth import UserSession
-from app.services import ai_settings_service, ai_chat_service
+from app.services import (
+    ai_chat_service,
+    ai_service,
+    ai_settings_service,
+    case_service,
+    ip_service,
+    match_service,
+    note_service,
+    oauth_service,
+    task_service,
+    user_service,
+)
 
 # Rate limiting
 from app.core.rate_limit import limiter
@@ -264,10 +274,7 @@ def chat(
     
     # Check if user has access to the entity
     if entity_type == "case":
-        case = db.query(Case).filter(
-            Case.id == entity_id,
-            Case.organization_id == session.org_id
-        ).first()
+        case = case_service.get_case(db, session.org_id, entity_id)
         if not case:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -283,10 +290,7 @@ def chat(
         )
     elif entity_type == "task":
         # Users can only access tasks they own or are assigned to
-        task = db.query(Task).filter(
-            Task.id == entity_id,
-            Task.organization_id == session.org_id,
-        ).first()
+        task = task_service.get_task(db, entity_id, session.org_id)
         if not task:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -303,10 +307,8 @@ def chat(
                 )
     
     # Get user's connected integrations
-    integrations = db.query(UserIntegration.integration_type).filter(
-        UserIntegration.user_id == session.user_id
-    ).all()
-    user_integrations = [i[0] for i in integrations]
+    integrations = oauth_service.get_user_integrations(db, session.user_id)
+    user_integrations = [i.integration_type for i in integrations]
     
     # Process chat
     response = ai_chat_service.chat(
@@ -336,10 +338,7 @@ def get_conversation(
     """Get conversation history for an entity."""
     # Validate entity access before fetching conversations
     if entity_type == "case":
-        case = db.query(Case).filter(
-            Case.id == entity_id,
-            Case.organization_id == session.org_id
-        ).first()
+        case = case_service.get_case(db, session.org_id, entity_id)
         if not case:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -354,10 +353,7 @@ def get_conversation(
             org_id=session.org_id,
         )
     elif entity_type == "task":
-        task = db.query(Task).filter(
-            Task.id == entity_id,
-            Task.organization_id == session.org_id,
-        ).first()
+        task = task_service.get_task(db, entity_id, session.org_id)
         if not task:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -487,11 +483,12 @@ def get_all_conversations(
     session: UserSession = Depends(require_roles([Role.DEVELOPER])),
 ) -> dict[str, Any]:
     """Get all users' conversations for an entity (developer only, for audit)."""
-    conversations = db.query(AIConversation).filter(
-        AIConversation.organization_id == session.org_id,
-        AIConversation.entity_type == entity_type,
-        AIConversation.entity_id == entity_id
-    ).order_by(AIConversation.updated_at.desc()).all()
+    conversations = ai_service.list_conversations_for_entity(
+        db=db,
+        org_id=session.org_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+    )
     
     return {
         "conversations": [
@@ -529,20 +526,17 @@ def approve_action(
     
     Requires: approve_ai_actions permission (plus action-specific permissions)
     """
-    from app.db.models import AIActionApproval, AIMessage, AIConversation
     from app.services.ai_action_executor import execute_action
     
     # Get the approval with related data
-    approval = db.query(AIActionApproval).filter(AIActionApproval.id == approval_id).first()
+    approval, message, conversation = ai_service.get_approval_with_conversation(db, approval_id)
     if not approval:
         raise HTTPException(status_code=404, detail="Action not found")
     
     # Get conversation to verify org access
-    message = db.query(AIMessage).filter(AIMessage.id == approval.message_id).first()
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
     
-    conversation = db.query(AIConversation).filter(AIConversation.id == message.conversation_id).first()
     if not conversation or conversation.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Conversation not found")
     
@@ -702,19 +696,15 @@ def reject_action(
     session: UserSession = Depends(get_current_session),
 ) -> dict[str, Any]:
     """Reject a proposed action."""
-    from app.db.models import AIActionApproval, AIMessage, AIConversation
-    
     # Get the approval with related data
-    approval = db.query(AIActionApproval).filter(AIActionApproval.id == approval_id).first()
+    approval, message, conversation = ai_service.get_approval_with_conversation(db, approval_id)
     if not approval:
         raise HTTPException(status_code=404, detail="Action not found")
     
     # Get conversation to verify org access
-    message = db.query(AIMessage).filter(AIMessage.id == approval.message_id).first()
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
     
-    conversation = db.query(AIConversation).filter(AIConversation.id == message.conversation_id).first()
     if not conversation or conversation.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Conversation not found")
     
@@ -761,24 +751,13 @@ def get_pending_actions(
     session: UserSession = Depends(require_permission(P.AI_USE)),
 ) -> dict[str, Any]:
     """Get all pending actions for the current user."""
-    from app.db.models import AIActionApproval, AIMessage, AIConversation
-    
-    query = db.query(AIActionApproval).join(
-        AIMessage, AIActionApproval.message_id == AIMessage.id
-    ).join(
-        AIConversation, AIMessage.conversation_id == AIConversation.id
-    ).filter(
-        AIConversation.user_id == session.user_id,
-        AIConversation.organization_id == session.org_id,
-        AIActionApproval.status == "pending"
+    approvals = ai_service.list_pending_actions(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
     )
-    
-    if entity_type:
-        query = query.filter(AIConversation.entity_type == entity_type)
-    if entity_id:
-        query = query.filter(AIConversation.entity_id == entity_id)
-    
-    approvals = query.order_by(AIActionApproval.created_at.desc()).all()
     
     return {
         "pending_actions": [
@@ -962,24 +941,24 @@ def summarize_case(
         )
     
     # Load case with context
-    case = db.query(Case).filter(
-        Case.id == body.case_id,
-        Case.organization_id == session.org_id
-    ).first()
+    case = case_service.get_case(db, session.org_id, body.case_id)
     if not case:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
     
     # Load notes and tasks
-    from app.db.models import EntityNote, Task
-    notes = db.query(EntityNote).filter(
-        EntityNote.entity_type == "case",
-        EntityNote.entity_id == case.id
-    ).order_by(EntityNote.created_at.desc()).limit(10).all()
-    
-    tasks = db.query(Task).filter(
-        Task.case_id == case.id,
-        Task.is_completed == False
-    ).order_by(Task.due_date.asc()).limit(10).all()
+    notes = note_service.list_notes_limited(
+        db=db,
+        org_id=session.org_id,
+        entity_type="case",
+        entity_id=case.id,
+        limit=10,
+    )
+    tasks = task_service.list_open_tasks_for_case(
+        db=db,
+        case_id=case.id,
+        org_id=session.org_id,
+        limit=10,
+    )
     
     # Build context
     notes_text = "\n".join([f"- [{n.created_at.strftime('%Y-%m-%d')}] {n.content[:200]}" for n in notes]) or "No notes yet"
@@ -1091,16 +1070,12 @@ def draft_email(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="AI consent not accepted")
     
     # Load case
-    case = db.query(Case).filter(
-        Case.id == body.case_id,
-        Case.organization_id == session.org_id
-    ).first()
+    case = case_service.get_case(db, session.org_id, body.case_id)
     if not case:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
     
     # Get user name for signature
-    from app.db.models import User
-    user = db.query(User).filter(User.id == session.user_id).first()
+    user = user_service.get_user_by_id(db, session.user_id)
     sender_name = user.full_name if user else "Your Case Manager"
     
     # Build email prompt
@@ -1177,7 +1152,6 @@ def analyze_dashboard(
     from app.services import ai_settings_service
     from app.services.ai_provider import ChatMessage, get_provider
     from datetime import timedelta
-    from sqlalchemy import func
     
     # Check AI is enabled
     settings = ai_settings_service.get_ai_settings(db, session.org_id)
@@ -1189,41 +1163,14 @@ def analyze_dashboard(
     thirty_days_ago = now - timedelta(days=30)
     seven_days_ago = now - timedelta(days=7)
     
-    # Total cases
-    total_cases = db.query(func.count(Case.id)).filter(
-        Case.organization_id == session.org_id,
-        Case.is_archived == False
-    ).scalar() or 0
-    
-    # Cases by status
-    status_counts = db.query(Case.status_label, func.count(Case.id)).filter(
-        Case.organization_id == session.org_id,
-        Case.is_archived == False
-    ).group_by(Case.status_label).all()
-    
-    # New cases this week vs last week
-    cases_this_week = db.query(func.count(Case.id)).filter(
-        Case.organization_id == session.org_id,
-        Case.created_at >= seven_days_ago
-    ).scalar() or 0
-    
-    cases_last_week = db.query(func.count(Case.id)).filter(
-        Case.organization_id == session.org_id,
-        Case.created_at >= seven_days_ago - timedelta(days=7),
-        Case.created_at < seven_days_ago
-    ).scalar() or 0
-    
-    # Pending tasks
-    from app.db.models import Task
-    overdue_tasks = db.query(func.count(Task.id)).filter(
-        Task.organization_id == session.org_id,
-        Task.is_completed == False,
-        Task.due_date < now.date()
-    ).scalar() or 0
+    case_stats = case_service.get_case_stats(db, session.org_id)
+    total_cases = case_stats["total"]
+    status_summary = case_stats["by_status"]
+    cases_this_week = case_stats["this_week"]
+    cases_last_week = case_stats["last_week"]
+    overdue_tasks = task_service.count_overdue_tasks(db, session.org_id, now.date())
     
     # Build stats summary
-    status_summary = {s: c for s, c in status_counts}
-    
     stats = {
         "total_active_cases": total_cases,
         "cases_this_week": cases_this_week,
@@ -1242,7 +1189,7 @@ def analyze_dashboard(
     
     # Identify bottlenecks
     bottlenecks = []
-    for status_name, count in status_counts:
+    for status_name, count in status_summary.items():
         if count > total_cases * 0.3:  # More than 30% in one status
             bottlenecks.append({
                 "status": status_name,
@@ -1544,7 +1491,6 @@ async def parse_schedule(
     At least one of case_id, surrogate_id, intended_parent_id, or match_id must be provided.
     User reviews and approves before tasks are created.
     """
-    from app.db.models import Case, IntendedParent, Match
     from app.services.schedule_parser import parse_schedule_text
 
     # Enforce AI consent (consistent with /chat)
@@ -1562,10 +1508,7 @@ async def parse_schedule(
     # NOTE: surrogate_id is treated as a case_id alias (the CRM uses Case as the surrogate record)
     case_id = body.case_id or body.surrogate_id
     if case_id:
-        case = db.query(Case).filter(
-            Case.id == case_id,
-            Case.organization_id == session.org_id,
-        ).first()
+        case = case_service.get_case(db, session.org_id, case_id)
         if not case:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
         # Enforce case access (owner/role-based)
@@ -1579,27 +1522,18 @@ async def parse_schedule(
         entity_type = "case"
         entity_id = case_id
     elif body.intended_parent_id:
-        parent = db.query(IntendedParent).filter(
-            IntendedParent.id == body.intended_parent_id,
-            IntendedParent.organization_id == session.org_id,
-        ).first()
+        parent = ip_service.get_intended_parent(db, body.intended_parent_id, session.org_id)
         if not parent:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intended parent not found")
         entity_type = "intended_parent"
         entity_id = body.intended_parent_id
     elif body.match_id:
-        match = db.query(Match).filter(
-            Match.id == body.match_id,
-            Match.organization_id == session.org_id,
-        ).first()
+        match = match_service.get_match(db, body.match_id, session.org_id)
         if not match:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
         # Enforce access to the associated case
         if match.case_id:
-            case = db.query(Case).filter(
-                Case.id == match.case_id,
-                Case.organization_id == session.org_id,
-            ).first()
+            case = case_service.get_case(db, session.org_id, match.case_id)
             if case:
                 check_case_access(
                     case=case,
@@ -1688,7 +1622,7 @@ async def create_bulk_tasks(
     Tasks can be linked to case, surrogate, intended parent, or match.
     """
     from datetime import date, time
-    from app.db.models import Case, IntendedParent, Match, Task
+    from app.db.models import Task
     from app.db.enums import TaskType
     from app.services import activity_service
     
@@ -1701,35 +1635,26 @@ async def create_bulk_tasks(
     # Verify entity exists and belongs to org
     entity_type = None
     entity_id = None
-    match: Match | None = None
-    case_for_access: Case | None = None
+    match = None
+    case_for_access = None
     
     # NOTE: surrogate_id is treated as a case_id alias (the CRM uses Case as the surrogate record)
     case_id = body.case_id or body.surrogate_id
     if case_id:
-        case = db.query(Case).filter(
-            Case.id == case_id,
-            Case.organization_id == session.org_id,
-        ).first()
+        case = case_service.get_case(db, session.org_id, case_id)
         if not case:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
         case_for_access = case
         entity_type = "case"
         entity_id = case_id
     elif body.intended_parent_id:
-        parent = db.query(IntendedParent).filter(
-            IntendedParent.id == body.intended_parent_id,
-            IntendedParent.organization_id == session.org_id,
-        ).first()
+        parent = ip_service.get_intended_parent(db, body.intended_parent_id, session.org_id)
         if not parent:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intended parent not found")
         entity_type = "intended_parent"
         entity_id = body.intended_parent_id
     elif body.match_id:
-        match = db.query(Match).filter(
-            Match.id == body.match_id,
-            Match.organization_id == session.org_id,
-        ).first()
+        match = match_service.get_match(db, body.match_id, session.org_id)
         if not match:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
         entity_type = "match"
@@ -1737,10 +1662,7 @@ async def create_bulk_tasks(
 
         # Enforce access to the associated case (when present)
         if match.case_id:
-            case_for_access = db.query(Case).filter(
-                Case.id == match.case_id,
-                Case.organization_id == session.org_id,
-            ).first()
+            case_for_access = case_service.get_case(db, session.org_id, match.case_id)
 
     # Case access enforcement (owner/role-based). For IP-only tasks, there may be no case to check.
     if case_for_access:

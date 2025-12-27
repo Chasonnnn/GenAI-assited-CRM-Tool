@@ -11,9 +11,8 @@ from pydantic import BaseModel
 
 from app.core.config import settings
 from app.db.session import SessionLocal
-from app.db.models import MetaPageMapping
 from app.db.enums import AlertType, AlertSeverity, IntegrationType, ConfigStatus, JobType
-from app.services import alert_service, ops_service
+from app.services import alert_service, meta_page_service, ops_service, org_service, task_service
 
 
 router = APIRouter(prefix="/internal/scheduled", tags=["internal"])
@@ -56,9 +55,7 @@ def check_meta_tokens(x_internal_secret: str = Header(...)):
     
     with SessionLocal() as db:
         # Get all active page mappings
-        mappings = db.query(MetaPageMapping).filter(
-            MetaPageMapping.is_active == True
-        ).all()
+        mappings = meta_page_service.list_active_mappings(db)
         
         for mapping in mappings:
             pages_checked += 1
@@ -156,14 +153,14 @@ def workflow_sweep(
     verify_internal_secret(x_internal_secret)
     
     from app.db.enums import JobType
-    from app.db.models import Organization, Job
+    from app.db.models import Job
     from app.services import job_service
     
     orgs_processed = 0
     
     with SessionLocal() as db:
         # Get all organizations
-        orgs = db.query(Organization).all()
+        orgs = org_service.list_orgs(db)
         
         for org in orgs:
             # Schedule a sweep job for each org
@@ -196,14 +193,13 @@ def data_purge_schedule(x_internal_secret: str = Header(...)):
     """Schedule data purge jobs for all organizations."""
     verify_internal_secret(x_internal_secret)
 
-    from app.db.models import Organization
     from app.services import job_service
 
     orgs_processed = 0
     jobs_created = 0
 
     with SessionLocal() as db:
-        orgs = db.query(Organization).all()
+        orgs = org_service.list_orgs(db)
         for org in orgs:
             job_service.schedule_job(
                 db=db,
@@ -243,8 +239,6 @@ def task_notifications_sweep(x_internal_secret: str = Header(...)):
     
     from datetime import datetime
     from zoneinfo import ZoneInfo
-    from app.db.models import Task, Organization
-    from app.db.enums import OwnerType
     from app.services import notification_service
     
     tasks_due_soon = 0
@@ -252,7 +246,7 @@ def task_notifications_sweep(x_internal_secret: str = Header(...)):
     notifications_created = 0
     
     with SessionLocal() as db:
-        orgs = db.query(Organization).all()
+        orgs = org_service.list_orgs(db)
         for org in orgs:
             tz_name = org.timezone or "UTC"
             try:
@@ -264,12 +258,11 @@ def task_notifications_sweep(x_internal_secret: str = Header(...)):
             tomorrow = today + timedelta(days=1)
 
             # Find tasks due tomorrow (not completed)
-            due_soon_tasks = db.query(Task).filter(
-                Task.organization_id == org.id,
-                Task.due_date == tomorrow,
-                Task.is_completed == False,
-                Task.owner_type == OwnerType.USER.value,  # Only user-owned tasks
-            ).all()
+            due_soon_tasks = task_service.list_user_tasks_due_on(
+                db=db,
+                org_id=org.id,
+                due_date=tomorrow,
+            )
             
             for task in due_soon_tasks:
                 tasks_due_soon += 1
@@ -285,12 +278,11 @@ def task_notifications_sweep(x_internal_secret: str = Header(...)):
                 notifications_created += 1
             
             # Find overdue tasks (not completed, due before today)
-            overdue_tasks = db.query(Task).filter(
-                Task.organization_id == org.id,
-                Task.due_date < today,
-                Task.is_completed == False,
-                Task.owner_type == OwnerType.USER.value,  # Only user-owned tasks
-            ).all()
+            overdue_tasks = task_service.list_user_tasks_overdue(
+                db=db,
+                org_id=org.id,
+                today=today,
+            )
             
             for task in overdue_tasks:
                 tasks_overdue += 1

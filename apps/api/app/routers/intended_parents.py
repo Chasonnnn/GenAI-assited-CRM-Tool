@@ -19,7 +19,7 @@ from app.schemas.intended_parent import (
     IntendedParentStats,
 )
 from app.schemas.entity_note import EntityNoteCreate, EntityNoteRead, EntityNoteListItem
-from app.services import ip_service, note_service
+from app.services import ip_service, note_service, user_service
 
 router = APIRouter(
     tags=["Intended Parents"],
@@ -265,8 +265,6 @@ def get_status_history(
     session: dict = Depends(get_current_session),
 ):
     """Get status history for an intended parent."""
-    from app.db.models import User
-    
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
@@ -278,7 +276,7 @@ def get_status_history(
     for h in history:
         changed_by_name = None
         if h.changed_by_user_id:
-            user = db.query(User).filter(User.id == h.changed_by_user_id).first()
+            user = user_service.get_user_by_id(db, h.changed_by_user_id)
             changed_by_name = user.display_name if user else None
         
         result.append(IntendedParentStatusHistoryItem(

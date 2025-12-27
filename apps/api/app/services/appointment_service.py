@@ -21,8 +21,10 @@ from sqlalchemy.orm import Session
 
 from app.db.models import (
     AppointmentType, AvailabilityRule, AvailabilityOverride,
-    BookingLink, Appointment, AppointmentEmailLog, Task, UserIntegration
+    BookingLink, Appointment, AppointmentEmailLog, Task, UserIntegration,
+    Case, IntendedParent
 )
+from app.schemas.appointment import AppointmentRead, AppointmentListItem
 from app.db.enums import AppointmentStatus, AppointmentEmailType, MeetingMode
 
 
@@ -193,6 +195,116 @@ def update_appointment_type(
     db.commit()
     db.refresh(appt_type)
     return appt_type
+
+
+def get_appointment_context(
+    db: Session,
+    appointments: list[Appointment],
+) -> dict[str, dict[UUID, str | None]]:
+    """Fetch related data for appointments in bulk."""
+    if not appointments:
+        return {
+            "type_names": {},
+            "user_names": {},
+            "case_numbers": {},
+            "intended_parent_names": {},
+        }
+
+    type_ids = {a.appointment_type_id for a in appointments if a.appointment_type_id}
+    approved_by_ids = {a.approved_by_user_id for a in appointments if a.approved_by_user_id}
+    case_ids = {a.case_id for a in appointments if a.case_id}
+    ip_ids = {a.intended_parent_id for a in appointments if a.intended_parent_id}
+
+    type_names = {}
+    if type_ids:
+        types = db.query(AppointmentType).filter(AppointmentType.id.in_(type_ids)).all()
+        type_names = {t.id: t.name for t in types}
+
+    user_names = {}
+    if approved_by_ids:
+        from app.db.models import User
+        users = db.query(User).filter(User.id.in_(approved_by_ids)).all()
+        user_names = {u.id: u.display_name for u in users}
+
+    case_numbers = {}
+    if case_ids:
+        cases = db.query(Case).filter(Case.id.in_(case_ids)).all()
+        case_numbers = {c.id: c.case_number for c in cases}
+
+    intended_parent_names = {}
+    if ip_ids:
+        ips = db.query(IntendedParent).filter(IntendedParent.id.in_(ip_ids)).all()
+        intended_parent_names = {ip.id: ip.full_name for ip in ips}
+
+    return {
+        "type_names": type_names,
+        "user_names": user_names,
+        "case_numbers": case_numbers,
+        "intended_parent_names": intended_parent_names,
+    }
+
+
+def to_appointment_read(
+    appt: Appointment,
+    context: dict[str, dict[UUID, str | None]],
+) -> AppointmentRead:
+    """Convert Appointment model to read schema."""
+    return AppointmentRead(
+        id=appt.id,
+        user_id=appt.user_id,
+        appointment_type_id=appt.appointment_type_id,
+        appointment_type_name=context["type_names"].get(appt.appointment_type_id),
+        client_name=appt.client_name,
+        client_email=appt.client_email,
+        client_phone=appt.client_phone,
+        client_timezone=appt.client_timezone,
+        client_notes=appt.client_notes,
+        scheduled_start=appt.scheduled_start,
+        scheduled_end=appt.scheduled_end,
+        duration_minutes=appt.duration_minutes,
+        meeting_mode=appt.meeting_mode,
+        status=appt.status,
+        pending_expires_at=appt.pending_expires_at,
+        approved_at=appt.approved_at,
+        approved_by_user_id=appt.approved_by_user_id,
+        approved_by_name=context["user_names"].get(appt.approved_by_user_id),
+        cancelled_at=appt.cancelled_at,
+        cancelled_by_client=appt.cancelled_by_client,
+        cancellation_reason=appt.cancellation_reason,
+        zoom_join_url=appt.zoom_join_url,
+        google_event_id=appt.google_event_id,
+        case_id=appt.case_id,
+        case_number=context["case_numbers"].get(appt.case_id),
+        intended_parent_id=appt.intended_parent_id,
+        intended_parent_name=context["intended_parent_names"].get(appt.intended_parent_id),
+        created_at=appt.created_at,
+        updated_at=appt.updated_at,
+    )
+
+
+def to_appointment_list_item(
+    appt: Appointment,
+    context: dict[str, dict[UUID, str | None]],
+) -> AppointmentListItem:
+    """Convert Appointment model to list item schema."""
+    return AppointmentListItem(
+        id=appt.id,
+        appointment_type_name=context["type_names"].get(appt.appointment_type_id),
+        client_name=appt.client_name,
+        client_email=appt.client_email,
+        client_phone=appt.client_phone,
+        client_timezone=appt.client_timezone,
+        scheduled_start=appt.scheduled_start,
+        scheduled_end=appt.scheduled_end,
+        duration_minutes=appt.duration_minutes,
+        meeting_mode=appt.meeting_mode,
+        status=appt.status,
+        case_id=appt.case_id,
+        case_number=context["case_numbers"].get(appt.case_id),
+        intended_parent_id=appt.intended_parent_id,
+        intended_parent_name=context["intended_parent_names"].get(appt.intended_parent_id),
+        created_at=appt.created_at,
+    )
 
 
 def get_appointment_type(
