@@ -59,6 +59,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { ScheduleParserDialog } from "@/components/ai/ScheduleParserDialog"
 import { useSetAIContext } from "@/lib/context/ai-context"
 import { cn } from "@/lib/utils"
+import { parseDateInput } from "@/lib/utils/date"
 
 const STATUS_LABELS: Record<string, string> = {
     proposed: "Proposed",
@@ -348,16 +349,9 @@ export default function MatchDetailPage() {
     // Check if user can change case status (case_manager+)
     const canChangeStatus = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
 
-    const parseDate = (dateStr: string) => {
-        if (dateStr.includes("T")) {
-            return new Date(dateStr)
-        }
-        return new Date(`${dateStr}T00:00:00`)
-    }
-
     const formatDate = (dateStr: string | null | undefined) => {
         if (!dateStr) return "—"
-        const parsed = parseDate(dateStr)
+        const parsed = parseDateInput(dateStr)
         if (Number.isNaN(parsed.getTime())) return "—"
         return parsed.toLocaleDateString("en-US", {
             month: "short",
@@ -367,7 +361,7 @@ export default function MatchDetailPage() {
     }
 
     const formatDateTime = (dateStr: string) => {
-        const parsed = new Date(dateStr)
+        const parsed = parseDateInput(dateStr)
         if (Number.isNaN(parsed.getTime())) return "—"
         return parsed.toLocaleDateString("en-US", {
             month: "short",
