@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -14,7 +14,7 @@ import { CameraIcon, MonitorIcon, SmartphoneIcon, LoaderIcon, CheckIcon, BellRin
 import { useNotificationSettings, useUpdateNotificationSettings } from "@/lib/hooks/use-notifications"
 import { useBrowserNotifications } from "@/lib/hooks/use-browser-notifications"
 import { useAuth } from "@/lib/auth-context"
-import { updateProfile, updateOrgSettings } from "@/lib/api/settings"
+import { getOrgSettings, updateProfile, updateOrgSettings } from "@/lib/api/settings"
 
 // Browser Notifications Card - handles permission request
 function BrowserNotificationsCard() {
@@ -188,7 +188,6 @@ export default function SettingsPage() {
 
   // Profile form state
   const [profileName, setProfileName] = useState(user?.display_name || "")
-  const [profilePhone, setProfilePhone] = useState("")
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileSaved, setProfileSaved] = useState(false)
 
@@ -214,12 +213,43 @@ export default function SettingsPage() {
       .toUpperCase()
       .slice(0, 2) || "??"
 
+  useEffect(() => {
+    if (!user) return
+    if (!profileName) {
+      setProfileName(user.display_name || "")
+    }
+    if (!orgName) {
+      setOrgName(user.org_name || "")
+    }
+  }, [user, profileName, orgName])
+
+  useEffect(() => {
+    let isMounted = true
+    const loadOrgSettings = async () => {
+      try {
+        const settings = await getOrgSettings()
+        if (!isMounted) return
+        setOrgName((prev) => prev || settings.name || "")
+        setOrgAddress(settings.address || "")
+        setOrgPhone(settings.phone || "")
+        setOrgEmail(settings.email || "")
+      } catch (error) {
+        console.error("Failed to load organization settings:", error)
+      }
+    }
+    if (user?.org_id) {
+      loadOrgSettings()
+    }
+    return () => {
+      isMounted = false
+    }
+  }, [user?.org_id])
+
   const handleSaveProfile = async () => {
     setProfileSaving(true)
     try {
       await updateProfile({
         display_name: profileName || undefined,
-        phone: profilePhone || undefined,
       })
       setProfileSaved(true)
       setTimeout(() => setProfileSaved(false), 2000)
@@ -304,17 +334,6 @@ export default function SettingsPage() {
                       <Label htmlFor="email">Email</Label>
                       <Input id="email" type="email" defaultValue={user?.email || ""} disabled />
                       <p className="text-xs text-muted-foreground">Email is managed by SSO</p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">Phone</Label>
-                      <Input
-                        id="phone"
-                        type="tel"
-                        placeholder="-"
-                        value={profilePhone}
-                        onChange={(e) => setProfilePhone(e.target.value)}
-                      />
                     </div>
 
                     <div className="space-y-2">

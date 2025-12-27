@@ -267,12 +267,14 @@ export default function CasesPage() {
     const restoreMutation = useRestoreCase()
     const updateMutation = useUpdateCase()
 
-    const hasActiveFilters = stageFilter !== "all" || sourceFilter !== "all" || queueFilter !== "all" || searchQuery !== ""
+    const hasActiveFilters = stageFilter !== "all" || sourceFilter !== "all" || queueFilter !== "all" || searchQuery !== "" || dateRange !== "all"
 
     const resetFilters = useCallback(() => {
         setStageFilter("all")
         setSourceFilter("all")
         setQueueFilter("all")
+        setDateRange("all")
+        setCustomRange({ from: undefined, to: undefined })
         setSearchQuery("")
         setSelectedCases(new Set())
         // Clear URL params

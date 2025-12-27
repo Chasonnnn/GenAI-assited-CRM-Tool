@@ -92,7 +92,7 @@ def create_note(
         organization_id=session.org_id,
         actor_user_id=session.user_id,
         note_id=note.id,
-        content=data.body,
+        content=note.content,
     )
     db.commit()
     

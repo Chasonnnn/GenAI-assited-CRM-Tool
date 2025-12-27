@@ -28,34 +28,43 @@ function getInitials(name: string | null): string {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
+function parseLocalDate(dateStr: string): Date {
+    return new Date(`${dateStr}T00:00:00`)
+}
+
+function startOfToday(): Date {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate())
+}
+
 // Check if task is overdue
 function isOverdue(dueDate: string | null): boolean {
     if (!dueDate) return false
-    return new Date(dueDate) < new Date()
+    return parseLocalDate(dueDate) < startOfToday()
 }
 
 // Check if task is due today
 function isDueToday(dueDate: string | null): boolean {
     if (!dueDate) return false
-    const due = new Date(dueDate)
-    const today = new Date()
-    return due.toDateString() === today.toDateString()
+    const due = parseLocalDate(dueDate)
+    const today = startOfToday()
+    return due.getTime() === today.getTime()
 }
 
 // Check if task is due tomorrow
 function isDueTomorrow(dueDate: string | null): boolean {
     if (!dueDate) return false
-    const due = new Date(dueDate)
-    const tomorrow = new Date()
+    const due = parseLocalDate(dueDate)
+    const tomorrow = startOfToday()
     tomorrow.setDate(tomorrow.getDate() + 1)
-    return due.toDateString() === tomorrow.toDateString()
+    return due.getTime() === tomorrow.getTime()
 }
 
 // Check if task is due this week
 function isDueThisWeek(dueDate: string | null): boolean {
     if (!dueDate) return false
-    const due = new Date(dueDate)
-    const today = new Date()
+    const due = parseLocalDate(dueDate)
+    const today = startOfToday()
     const endOfWeek = new Date(today)
     endOfWeek.setDate(today.getDate() + 7)
     return due > today && due <= endOfWeek && !isDueToday(dueDate) && !isDueTomorrow(dueDate)
