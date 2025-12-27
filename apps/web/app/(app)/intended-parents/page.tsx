@@ -49,6 +49,7 @@ import {
 } from "@/lib/hooks/use-intended-parents"
 import type { IntendedParentStatus, IntendedParentListItem } from "@/lib/types/intended-parent"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
+import { parseDateInput } from "@/lib/utils/date"
 
 const STATUS_LABELS: Record<IntendedParentStatus, string> = {
     new: "New",
@@ -209,7 +210,9 @@ export default function IntendedParentsPage() {
     }
 
     const formatDate = (dateStr: string) => {
-        return new Date(dateStr).toLocaleDateString("en-US", {
+        const parsed = parseDateInput(dateStr)
+        if (Number.isNaN(parsed.getTime())) return "—"
+        return parsed.toLocaleDateString("en-US", {
             month: "short",
             day: "numeric",
             year: "numeric",

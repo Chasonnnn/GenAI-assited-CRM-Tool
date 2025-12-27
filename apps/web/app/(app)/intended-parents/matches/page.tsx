@@ -29,6 +29,7 @@ import {
     SearchIcon,
 } from "lucide-react"
 import { useMatches, useMatchStats, type MatchStatus } from "@/lib/hooks/use-matches"
+import { parseDateInput } from "@/lib/utils/date"
 
 const STATUS_LABELS: Record<string, string> = {
     proposed: "Proposed",
@@ -68,7 +69,9 @@ export default function MatchesPage() {
     const { data: stats } = useMatchStats()
 
     const formatDate = (dateStr: string) => {
-        return new Date(dateStr).toLocaleDateString("en-US", {
+        const parsed = parseDateInput(dateStr)
+        if (Number.isNaN(parsed.getTime())) return "—"
+        return parsed.toLocaleDateString("en-US", {
             month: "short",
             day: "numeric",
             year: "numeric",
