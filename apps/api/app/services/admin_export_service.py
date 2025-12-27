@@ -21,10 +21,14 @@ from app.db.models import (
     Case,
     EmailTemplate,
     Membership,
+    MetaPageMapping,
     Organization,
     Pipeline,
     PipelineStage,
     Queue,
+    QueueMember,
+    RolePermission,
+    UserPermissionOverride,
     User,
     UserIntegration,
     UserNotificationSettings,
@@ -95,6 +99,9 @@ def stream_cases_csv(db: Session, org_id: UUID) -> Iterator[str]:
         "created_by_name",
         "created_by_email",
         "meta_lead_id",
+        "meta_lead_external_id",
+        "meta_lead_form_id",
+        "meta_lead_page_id",
         "meta_ad_id",
         "meta_form_id",
         "full_name",
@@ -125,6 +132,9 @@ def stream_cases_csv(db: Session, org_id: UUID) -> Iterator[str]:
 
     yield _write_csv_row(headers)
 
+    from app.db.models import MetaLead
+    meta_lead = aliased(MetaLead)
+
     query = db.query(
         Case,
         PipelineStage,
@@ -132,6 +142,7 @@ def stream_cases_csv(db: Session, org_id: UUID) -> Iterator[str]:
         owner_queue,
         created_by,
         archived_by,
+        meta_lead,
     ).join(
         PipelineStage, Case.stage_id == PipelineStage.id
     ).outerjoin(
@@ -144,13 +155,15 @@ def stream_cases_csv(db: Session, org_id: UUID) -> Iterator[str]:
         created_by, Case.created_by_user_id == created_by.id
     ).outerjoin(
         archived_by, Case.archived_by_user_id == archived_by.id
+    ).outerjoin(
+        meta_lead, Case.meta_lead_id == meta_lead.id
     ).filter(
         Case.organization_id == org_id
     ).order_by(
         Case.created_at.asc()
     )
 
-    for case, stage, owner_user_row, owner_queue_row, created_by_row, archived_by_row in query.yield_per(500):
+    for case, stage, owner_user_row, owner_queue_row, created_by_row, archived_by_row, meta_lead_row in query.yield_per(500):
         owner_name = owner_user_row.display_name if owner_user_row else None
         owner_email = owner_user_row.email if owner_user_row else None
         owner_queue_name = owner_queue_row.name if owner_queue_row else None
@@ -175,6 +188,9 @@ def stream_cases_csv(db: Session, org_id: UUID) -> Iterator[str]:
             created_by_row.display_name if created_by_row else None,
             created_by_row.email if created_by_row else None,
             case.meta_lead_id,
+            meta_lead_row.meta_lead_id if meta_lead_row else None,
+            meta_lead_row.meta_form_id if meta_lead_row else None,
+            meta_lead_row.meta_page_id if meta_lead_row else None,
             case.meta_ad_id,
             case.meta_form_id,
             case.full_name,
@@ -301,11 +317,15 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
         Membership, Membership.user_id == User.id
     ).filter(Membership.organization_id == org_id).order_by(User.email).all()
 
-    signature_payload = [
+    user_payload = [
         {
-            "user_id": str(user.id),
+            "id": str(user.id),
             "email": user.email,
             "display_name": user.display_name,
+            "avatar_url": user.avatar_url,
+            "is_active": user.is_active,
+            "created_at": user.created_at,
+            "updated_at": user.updated_at,
             "signature_name": user.signature_name,
             "signature_title": user.signature_title,
             "signature_company": user.signature_company,
@@ -317,6 +337,44 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "signature_html": user.signature_html,
         }
         for user, _membership in members
+    ]
+
+    membership_payload = [
+        {
+            "id": str(membership.id),
+            "user_id": str(membership.user_id),
+            "organization_id": str(membership.organization_id),
+            "role": membership.role,
+            "created_at": membership.created_at,
+        }
+        for _user, membership in members
+    ]
+
+    queues = db.query(Queue).filter(Queue.organization_id == org_id).order_by(Queue.name).all()
+    queue_payload = [
+        {
+            "id": str(queue.id),
+            "organization_id": str(queue.organization_id),
+            "name": queue.name,
+            "description": queue.description,
+            "is_active": queue.is_active,
+            "created_at": queue.created_at,
+            "updated_at": queue.updated_at,
+        }
+        for queue in queues
+    ]
+
+    queue_members = db.query(QueueMember).join(
+        Queue, QueueMember.queue_id == Queue.id
+    ).filter(Queue.organization_id == org_id).all()
+    queue_member_payload = [
+        {
+            "id": str(member.id),
+            "queue_id": str(member.queue_id),
+            "user_id": str(member.user_id),
+            "created_at": member.created_at,
+        }
+        for member in queue_members
     ]
 
     notification_settings = db.query(UserNotificationSettings, User).join(
@@ -377,6 +435,59 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "updated_at": ai_settings.updated_at,
         }
 
+    role_permissions = db.query(RolePermission).filter(
+        RolePermission.organization_id == org_id
+    ).order_by(RolePermission.role, RolePermission.permission).all()
+    role_permission_payload = [
+        {
+            "id": str(permission.id),
+            "organization_id": str(permission.organization_id),
+            "role": permission.role,
+            "permission": permission.permission,
+            "is_granted": permission.is_granted,
+            "created_at": permission.created_at,
+            "updated_at": permission.updated_at,
+        }
+        for permission in role_permissions
+    ]
+
+    user_overrides = db.query(UserPermissionOverride).filter(
+        UserPermissionOverride.organization_id == org_id
+    ).order_by(UserPermissionOverride.user_id, UserPermissionOverride.permission).all()
+    user_override_payload = [
+        {
+            "id": str(override.id),
+            "organization_id": str(override.organization_id),
+            "user_id": str(override.user_id),
+            "permission": override.permission,
+            "override_type": override.override_type,
+            "created_at": override.created_at,
+            "updated_at": override.updated_at,
+        }
+        for override in user_overrides
+    ]
+
+    meta_pages = db.query(MetaPageMapping).filter(
+        MetaPageMapping.organization_id == org_id
+    ).order_by(MetaPageMapping.created_at.desc()).all()
+    meta_page_payload = [
+        {
+            "id": str(page.id),
+            "organization_id": str(page.organization_id),
+            "page_id": page.page_id,
+            "page_name": page.page_name,
+            "token_expires_at": page.token_expires_at,
+            "is_active": page.is_active,
+            "last_success_at": page.last_success_at,
+            "last_error": page.last_error,
+            "last_error_at": page.last_error_at,
+            "created_at": page.created_at,
+            "updated_at": page.updated_at,
+            "has_token": page.access_token_encrypted is not None,
+        }
+        for page in meta_pages
+    ]
+
     org_payload = None
     if org:
         org_payload = {
@@ -401,11 +512,17 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
         archive.writestr("manifest.json", _write_json(manifest))
         archive.writestr("organization.json", _write_json(org_payload))
         archive.writestr("pipelines.json", _write_json(pipeline_payload))
+        archive.writestr("users.json", _write_json(user_payload))
+        archive.writestr("memberships.json", _write_json(membership_payload))
+        archive.writestr("queues.json", _write_json(queue_payload))
+        archive.writestr("queue_members.json", _write_json(queue_member_payload))
+        archive.writestr("role_permissions.json", _write_json(role_permission_payload))
+        archive.writestr("user_permission_overrides.json", _write_json(user_override_payload))
         archive.writestr("email_templates.json", _write_json(template_payload))
-        archive.writestr("email_signatures.json", _write_json(signature_payload))
         archive.writestr("notification_settings.json", _write_json(notification_payload))
         archive.writestr("workflows.json", _write_json(workflow_payload))
         archive.writestr("integrations.json", _write_json(integration_payload))
+        archive.writestr("meta_pages.json", _write_json(meta_page_payload))
         archive.writestr("ai_settings.json", _write_json(ai_payload))
 
     buffer.seek(0)

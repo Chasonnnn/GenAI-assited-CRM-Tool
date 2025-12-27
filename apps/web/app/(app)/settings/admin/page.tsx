@@ -1,0 +1,376 @@
+"use client"
+
+import { useState, useCallback } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Separator } from "@/components/ui/separator"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+    DownloadIcon,
+    UploadIcon,
+    FileIcon,
+    DatabaseIcon,
+    BarChart3Icon,
+    Loader2Icon,
+    CheckCircleIcon,
+    AlertCircleIcon,
+    ShieldAlertIcon
+} from "lucide-react"
+import { useAuth } from "@/lib/auth-context"
+import { toast } from "sonner"
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
+
+export default function AdminDataPage() {
+    const { user } = useAuth()
+    const [isExporting, setIsExporting] = useState<string | null>(null)
+    const [isImporting, setIsImporting] = useState(false)
+    const [importResult, setImportResult] = useState<{ status: string; details: Record<string, unknown> } | null>(null)
+
+    const isDeveloper = user?.role === "developer"
+
+    const handleExport = useCallback(async (type: "cases" | "config" | "analytics") => {
+        setIsExporting(type)
+        try {
+            const response = await fetch(`${API_BASE}/admin/exports/${type}`, {
+                credentials: "include",
+                headers: { "X-Requested-With": "XMLHttpRequest" },
+            })
+
+            if (!response.ok) {
+                throw new Error(`Export failed: ${response.status}`)
+            }
+
+            const disposition = response.headers.get("content-disposition") || ""
+            const match = disposition.match(/filename="([^"]+)"/)
+            const filename = match?.[1] || `${type}_export.${type === "cases" ? "csv" : "zip"}`
+
+            const blob = await response.blob()
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement("a")
+            a.href = url
+            a.download = filename
+            document.body.appendChild(a)
+            a.click()
+            a.remove()
+            URL.revokeObjectURL(url)
+
+            toast.success("Export complete", { description: `Downloaded ${filename}` })
+        } catch (error) {
+            console.error("Export failed:", error)
+            toast.error("Export failed", {
+                description: error instanceof Error ? error.message : "Unknown error",
+            })
+        } finally {
+            setIsExporting(null)
+        }
+    }, [])
+
+    const handleImport = useCallback(async (type: "config" | "cases" | "all", files: { config?: File; cases?: File }) => {
+        setIsImporting(true)
+        setImportResult(null)
+
+        try {
+            const formData = new FormData()
+            if (type === "config" || type === "all") {
+                if (!files.config) throw new Error("Config ZIP required")
+                formData.append("config_zip", files.config)
+            }
+            if (type === "cases" || type === "all") {
+                if (!files.cases) throw new Error("Cases CSV required")
+                formData.append("cases_csv", files.cases)
+            }
+
+            const response = await fetch(`${API_BASE}/admin/imports/${type}`, {
+                method: "POST",
+                credentials: "include",
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                    "X-CSRF-Token": "1",
+                },
+                body: formData,
+            })
+
+            const data = await response.json()
+
+            if (!response.ok) {
+                throw new Error(data.detail || `Import failed: ${response.status}`)
+            }
+
+            setImportResult({ status: "success", details: data })
+            toast.success("Import complete", {
+                description: `Imported ${data.cases_imported || 0} cases`,
+            })
+        } catch (error) {
+            console.error("Import failed:", error)
+            setImportResult({
+                status: "error",
+                details: { message: error instanceof Error ? error.message : "Unknown error" }
+            })
+            toast.error("Import failed", {
+                description: error instanceof Error ? error.message : "Unknown error",
+            })
+        } finally {
+            setIsImporting(false)
+        }
+    }, [])
+
+    if (!isDeveloper) {
+        return (
+            <div className="flex min-h-screen flex-col p-6">
+                <Alert variant="destructive">
+                    <ShieldAlertIcon className="size-4" />
+                    <AlertDescription>
+                        This page is only accessible to developers.
+                    </AlertDescription>
+                </Alert>
+            </div>
+        )
+    }
+
+    return (
+        <div className="flex min-h-screen flex-col">
+            <div className="border-b border-border bg-background/95 backdrop-blur">
+                <div className="flex h-16 items-center px-6">
+                    <h1 className="text-2xl font-semibold">Data Management</h1>
+                </div>
+            </div>
+
+            <div className="flex-1 space-y-6 p-6">
+                <Alert>
+                    <ShieldAlertIcon className="size-4" />
+                    <AlertDescription>
+                        <strong>Developer Only.</strong> These tools export and import organization data for
+                        backup, restore, and development purposes. Imports are only available in dev/test environments.
+                    </AlertDescription>
+                </Alert>
+
+                <Tabs defaultValue="export" className="w-full">
+                    <TabsList>
+                        <TabsTrigger value="export">Export Data</TabsTrigger>
+                        <TabsTrigger value="import">Import Data</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="export" className="space-y-6 mt-6">
+                        <div className="grid gap-6 md:grid-cols-3">
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <DatabaseIcon className="size-5" />
+                                        Cases
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Export all cases as CSV with full profile data
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <Button
+                                        className="w-full"
+                                        onClick={() => handleExport("cases")}
+                                        disabled={isExporting !== null}
+                                    >
+                                        {isExporting === "cases" ? (
+                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                        ) : (
+                                            <DownloadIcon className="mr-2 size-4" />
+                                        )}
+                                        Export Cases CSV
+                                    </Button>
+                                </CardContent>
+                            </Card>
+
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <FileIcon className="size-5" />
+                                        Configuration
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Export org config: pipelines, templates, workflows, settings
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <Button
+                                        className="w-full"
+                                        onClick={() => handleExport("config")}
+                                        disabled={isExporting !== null}
+                                    >
+                                        {isExporting === "config" ? (
+                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                        ) : (
+                                            <DownloadIcon className="mr-2 size-4" />
+                                        )}
+                                        Export Config ZIP
+                                    </Button>
+                                </CardContent>
+                            </Card>
+
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <BarChart3Icon className="size-5" />
+                                        Analytics
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Export analytics datasets used by Reports page
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <Button
+                                        className="w-full"
+                                        onClick={() => handleExport("analytics")}
+                                        disabled={isExporting !== null}
+                                    >
+                                        {isExporting === "analytics" ? (
+                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                        ) : (
+                                            <DownloadIcon className="mr-2 size-4" />
+                                        )}
+                                        Export Analytics ZIP
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="import" className="space-y-6 mt-6">
+                        <Alert variant="destructive">
+                            <AlertCircleIcon className="size-4" />
+                            <AlertDescription>
+                                <strong>Warning:</strong> Imports only work on empty organizations in dev/test mode.
+                                This is designed for restore and development scenarios.
+                            </AlertDescription>
+                        </Alert>
+
+                        <ImportForm
+                            onImport={handleImport}
+                            isLoading={isImporting}
+                            result={importResult}
+                        />
+                    </TabsContent>
+                </Tabs>
+            </div>
+        </div>
+    )
+}
+
+function ImportForm({
+    onImport,
+    isLoading,
+    result
+}: {
+    onImport: (type: "config" | "cases" | "all", files: { config?: File; cases?: File }) => Promise<void>
+    isLoading: boolean
+    result: { status: string; details: Record<string, unknown> } | null
+}) {
+    const [configFile, setConfigFile] = useState<File | null>(null)
+    const [casesFile, setCasesFile] = useState<File | null>(null)
+
+    return (
+        <div className="space-y-6">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Import Files</CardTitle>
+                    <CardDescription>
+                        Upload exported files to restore data. Config must be imported before cases.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="config-file">Organization Config (ZIP)</Label>
+                        <Input
+                            id="config-file"
+                            type="file"
+                            accept=".zip"
+                            onChange={(e) => setConfigFile(e.target.files?.[0] || null)}
+                        />
+                        {configFile && (
+                            <p className="text-sm text-muted-foreground">
+                                Selected: {configFile.name}
+                            </p>
+                        )}
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="cases-file">Cases (CSV)</Label>
+                        <Input
+                            id="cases-file"
+                            type="file"
+                            accept=".csv"
+                            onChange={(e) => setCasesFile(e.target.files?.[0] || null)}
+                        />
+                        {casesFile && (
+                            <p className="text-sm text-muted-foreground">
+                                Selected: {casesFile.name}
+                            </p>
+                        )}
+                    </div>
+
+                    <Separator />
+
+                    <div className="flex flex-wrap gap-3">
+                        <Button
+                            onClick={() => onImport("config", { config: configFile || undefined })}
+                            disabled={isLoading || !configFile}
+                        >
+                            {isLoading ? (
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                            ) : (
+                                <UploadIcon className="mr-2 size-4" />
+                            )}
+                            Import Config Only
+                        </Button>
+
+                        <Button
+                            variant="outline"
+                            onClick={() => onImport("cases", { cases: casesFile || undefined })}
+                            disabled={isLoading || !casesFile}
+                        >
+                            {isLoading ? (
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                            ) : (
+                                <UploadIcon className="mr-2 size-4" />
+                            )}
+                            Import Cases Only
+                        </Button>
+
+                        <Button
+                            variant="secondary"
+                            onClick={() => onImport("all", { config: configFile || undefined, cases: casesFile || undefined })}
+                            disabled={isLoading || !configFile || !casesFile}
+                        >
+                            {isLoading ? (
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                            ) : (
+                                <UploadIcon className="mr-2 size-4" />
+                            )}
+                            Import All
+                        </Button>
+                    </div>
+
+                    {result && (
+                        <Alert variant={result.status === "success" ? "default" : "destructive"}>
+                            {result.status === "success" ? (
+                                <CheckCircleIcon className="size-4" />
+                            ) : (
+                                <AlertCircleIcon className="size-4" />
+                            )}
+                            <AlertDescription>
+                                {result.status === "success" ? (
+                                    <pre className="text-xs overflow-auto">
+                                        {JSON.stringify(result.details, null, 2)}
+                                    </pre>
+                                ) : (
+                                    String(result.details.message || "Import failed")
+                                )}
+                            </AlertDescription>
+                        </Alert>
+                    )}
+                </CardContent>
+            </Card>
+        </div>
+    )
+}
