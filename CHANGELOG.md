@@ -2,6 +2,64 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2025-12-26] (Evening)
+
+### Added
+- **Multi-Factor Authentication (MFA)**
+  - TOTP-based 2FA with QR code enrollment
+  - 8 single-use recovery codes (hashed storage)
+  - Duo Web SDK v4 integration
+  - MFA enforcement during login flow
+  - `/mfa/complete` endpoint upgrades session after verification
+  - Security settings page at `/settings/security`
+  
+- **Calendar Tasks Integration**
+  - UnifiedCalendar now displays tasks with due dates
+  - Month/Week/Day views show tasks alongside appointments
+  - Task filter support (My Tasks toggle)
+  - Color-coded legend for appointments vs tasks
+  
+- **Intended Parents Date Filtering**
+  - `created_after`/`created_before` API parameters
+  - Frontend date range picker on IP list page
+
+### Fixed
+- **Schema Drift Issues**
+  - MFA timestamps now use `DateTime(timezone=True)`
+  - `tracking_token` unique index properly defined in model
+  - Migration `d70f9ed6bfe6` uses `DROP INDEX IF EXISTS`
+  
+- **Base UI Button Warnings**
+  - Standardized dropdown triggers to use native buttons
+  - Replaced Button components with buttonVariants + spans
+  - No more "not rendered as native button" warnings
+  
+- **Match Detail Page**
+  - No longer fetches unfiltered tasks while loading
+  - Rejection now invalidates match queries
+  
+- **Task Date Bucketing**
+  - Uses local date parsing to avoid timezone skew
+  
+- **Cases Page**
+  - Reset button clears date range filters
+  - Shows Reset when date filter is active
+  
+- **Settings Page**
+  - Hydrates org settings + user/org names on load
+  - Removed unsupported profile phone field
+
+### Security
+- **Server-side HTML Sanitization**
+  - Notes sanitized via `note_service.sanitize_html()` (uses nh3)
+  - Match notes explicitly sanitized in create/accept/reject/update
+
+### Test Coverage
+- **Frontend**: 79 tests passing (Base UI warnings eliminated)
+- **Backend**: 241 tests passing (including 18 MFA tests)
+
+---
+
 ## [2025-12-26]
 
 ### Fixed
