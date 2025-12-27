@@ -23,11 +23,11 @@ def upgrade() -> None:
     op.add_column('users', sa.Column('mfa_enabled', sa.Boolean(), 
                                       server_default=sa.text('false'), nullable=False))
     op.add_column('users', sa.Column('totp_secret', sa.String(255), nullable=True))
-    op.add_column('users', sa.Column('totp_enabled_at', sa.TIMESTAMP(), nullable=True))
+    op.add_column('users', sa.Column('totp_enabled_at', sa.DateTime(timezone=True), nullable=True))
     op.add_column('users', sa.Column('duo_user_id', sa.String(255), nullable=True))
-    op.add_column('users', sa.Column('duo_enrolled_at', sa.TIMESTAMP(), nullable=True))
+    op.add_column('users', sa.Column('duo_enrolled_at', sa.DateTime(timezone=True), nullable=True))
     op.add_column('users', sa.Column('mfa_recovery_codes', postgresql.JSONB(), nullable=True))
-    op.add_column('users', sa.Column('mfa_required_at', sa.TIMESTAMP(), nullable=True))
+    op.add_column('users', sa.Column('mfa_required_at', sa.DateTime(timezone=True), nullable=True))
 
 
 def downgrade() -> None:
