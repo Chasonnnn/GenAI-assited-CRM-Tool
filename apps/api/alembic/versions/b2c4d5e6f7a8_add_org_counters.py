@@ -33,10 +33,18 @@ def upgrade() -> None:
     # Seed existing organizations with their current max case numbers
     op.execute("""
         INSERT INTO org_counters (organization_id, counter_type, current_value)
-        SELECT 
-            organization_id, 
-            'case_number', 
-            COALESCE(MAX(CAST(case_number AS INTEGER)), 0)
+        SELECT
+            organization_id,
+            'case_number',
+            COALESCE(
+                MAX(
+                    CASE
+                        WHEN case_number ~ '^[0-9]+$' THEN CAST(case_number AS INTEGER)
+                        ELSE NULL
+                    END
+                ),
+                0
+            )
         FROM cases
         GROUP BY organization_id
     """)

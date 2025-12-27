@@ -33,8 +33,10 @@ def generate_case_number(db: Session, org_id: UUID) -> str:
             RETURNING current_value
         """),
         {"org_id": org_id}
-    ).scalar()
-    
+    ).scalar_one_or_none()
+    if result is None:
+        raise RuntimeError("Failed to generate case number")
+
     return f"{result:05d}"
 
 

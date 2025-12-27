@@ -72,6 +72,18 @@ def _parse_datetime(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
+def _parse_json(value: str | None) -> dict | None:
+    if not value:
+        return None
+    trimmed = value.strip()
+    if not trimmed or trimmed.lower() == "null":
+        return None
+    try:
+        return json.loads(trimmed)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON payload: {exc}") from exc
+
+
 def _load_json(archive: zipfile.ZipFile, name: str, default: Any) -> Any:
     if name not in archive.namelist():
         return default
@@ -141,11 +153,12 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
         if organization_payload.get("current_version"):
             org.current_version = organization_payload["current_version"]
 
-    existing_memberships = db.query(Membership).filter(Membership.organization_id == org_id).all()
     export_user_ids = {UUID(item["id"]) for item in users_payload if item.get("id")}
-    for membership in existing_memberships:
-        if membership.user_id not in export_user_ids:
-            raise ValueError("Existing member not present in export; import requires matching user IDs.")
+    export_emails = {
+        item.get("email", "").lower()
+        for item in users_payload
+        if item.get("email")
+    }
 
     existing_users_by_id = {
         user.id: user
@@ -153,8 +166,10 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
     }
     existing_users_by_email = {
         user.email.lower(): user
-        for user in db.query(User).filter(func.lower(User.email).in_([item.get("email", "").lower() for item in users_payload])).all()
+        for user in db.query(User).filter(func.lower(User.email).in_(export_emails)).all()
     }
+
+    user_id_map: dict[UUID, UUID] = {}
 
     for user_data in users_payload:
         user_id = UUID(user_data["id"])
@@ -164,9 +179,12 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
 
         existing_by_email = existing_users_by_email.get(email)
         if existing_by_email and existing_by_email.id != user_id:
-            raise ValueError(f"User email conflict for {email}; UUID preservation requires matching IDs.")
+            user_id_map[user_id] = existing_by_email.id
+            user = existing_by_email
+        else:
+            user_id_map[user_id] = user_id
+            user = existing_users_by_id.get(user_id)
 
-        user = existing_users_by_id.get(user_id)
         if user:
             user.email = user_data.get("email", user.email)
             user.display_name = user_data.get("display_name", user.display_name)
@@ -204,17 +222,23 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
 
     db.flush()
 
+    def _map_user_id(value: UUID | None) -> UUID | None:
+        if not value:
+            return None
+        return user_id_map.get(value, value)
+
     existing_memberships_by_user = {
         membership.user_id: membership
         for membership in db.query(Membership).filter(Membership.organization_id == org_id).all()
     }
 
     for membership_data in memberships_payload:
-        user_id = UUID(membership_data["user_id"])
+        export_user_id = UUID(membership_data["user_id"])
+        user_id = _map_user_id(export_user_id)
+        if not user_id:
+            raise ValueError("Membership user_id is required")
         membership = existing_memberships_by_user.get(user_id)
         if membership:
-            if membership.id != UUID(membership_data["id"]):
-                raise ValueError("Existing membership ID does not match export; UUID preservation required.")
             membership.role = membership_data.get("role", membership.role)
         else:
             membership = Membership(
@@ -242,7 +266,7 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
         member = QueueMember(
             id=UUID(queue_member_data["id"]),
             queue_id=UUID(queue_member_data["queue_id"]),
-            user_id=UUID(queue_member_data["user_id"]),
+            user_id=_map_user_id(UUID(queue_member_data["user_id"])),
             created_at=_parse_datetime(queue_member_data.get("created_at")) or datetime.utcnow(),
         )
         db.add(member)
@@ -278,7 +302,7 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
         template = EmailTemplate(
             id=UUID(template_data["id"]),
             organization_id=org_id,
-            created_by_user_id=_parse_uuid(template_data.get("created_by_user_id")),
+            created_by_user_id=_map_user_id(_parse_uuid(template_data.get("created_by_user_id"))),
             name=template_data.get("name"),
             subject=template_data.get("subject"),
             body=template_data.get("body"),
@@ -318,9 +342,9 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             system_key=workflow_data.get("system_key"),
             requires_review=workflow_data.get("requires_review", False),
             reviewed_at=_parse_datetime(workflow_data.get("reviewed_at")),
-            reviewed_by_user_id=_parse_uuid(workflow_data.get("reviewed_by_user_id")),
-            created_by_user_id=_parse_uuid(workflow_data.get("created_by_user_id")),
-            updated_by_user_id=_parse_uuid(workflow_data.get("updated_by_user_id")),
+            reviewed_by_user_id=_map_user_id(_parse_uuid(workflow_data.get("reviewed_by_user_id"))),
+            created_by_user_id=_map_user_id(_parse_uuid(workflow_data.get("created_by_user_id"))),
+            updated_by_user_id=_map_user_id(_parse_uuid(workflow_data.get("updated_by_user_id"))),
             created_at=_parse_datetime(workflow_data.get("created_at")) or datetime.utcnow(),
             updated_at=_parse_datetime(workflow_data.get("updated_at")) or datetime.utcnow(),
         )
@@ -328,7 +352,7 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
 
     for settings_data in notification_payload:
         settings_row = UserNotificationSettings(
-            user_id=UUID(settings_data["user_id"]),
+            user_id=_map_user_id(UUID(settings_data["user_id"])),
             organization_id=org_id,
             case_assigned=settings_data.get("case_assigned", True),
             case_status_changed=settings_data.get("case_status_changed", True),
@@ -350,7 +374,7 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             context_notes_limit=ai_settings_payload.get("context_notes_limit"),
             conversation_history_limit=ai_settings_payload.get("conversation_history_limit"),
             consent_accepted_at=_parse_datetime(ai_settings_payload.get("consent_accepted_at")),
-            consent_accepted_by=_parse_uuid(ai_settings_payload.get("consent_accepted_by")),
+            consent_accepted_by=_map_user_id(_parse_uuid(ai_settings_payload.get("consent_accepted_by"))),
             anonymize_pii=ai_settings_payload.get("anonymize_pii", True),
             current_version=ai_settings_payload.get("current_version") or 1,
             api_key_encrypted=None,
@@ -396,7 +420,7 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
         override = UserPermissionOverride(
             id=UUID(override_data["id"]),
             organization_id=org_id,
-            user_id=UUID(override_data["user_id"]),
+            user_id=_map_user_id(UUID(override_data["user_id"])),
             permission=override_data.get("permission"),
             override_type=override_data.get("override_type"),
             created_at=_parse_datetime(override_data.get("created_at")) or datetime.utcnow(),
@@ -437,15 +461,71 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
             Pipeline, PipelineStage.pipeline_id == Pipeline.id
         ).filter(Pipeline.organization_id == org_id).all()
     }
-    user_ids = {user.id for user in db.query(User).join(
+    users_in_org = db.query(User).join(
         Membership, Membership.user_id == User.id
-    ).filter(Membership.organization_id == org_id).all()}
+    ).filter(Membership.organization_id == org_id).all()
+    user_ids = {user.id for user in users_in_org}
+    users_by_email = {
+        user.email.lower(): user.id
+        for user in users_in_org
+        if user.email
+    }
     queue_ids = {queue.id for queue in db.query(Queue).filter(Queue.organization_id == org_id).all()}
 
     meta_leads_to_link: list[tuple[UUID, UUID]] = []
     imported = 0
 
-    for row in reader:
+    def _resolve_user_id(user_id: UUID | None, email: str | None) -> UUID | None:
+        if user_id and user_id in user_ids:
+            return user_id
+        if email:
+            mapped = users_by_email.get(email.lower())
+            if mapped:
+                return mapped
+        return user_id
+
+    rows = list(reader)
+    created_meta_leads: set[UUID] = set()
+
+    for row in rows:
+        meta_lead_id = _parse_uuid(row.get("meta_lead_id"))
+        meta_lead_external_id = row.get("meta_lead_external_id")
+        if meta_lead_id and not meta_lead_external_id:
+            raise ValueError(f"Missing meta_lead_external_id for case {row.get('id') or 'unknown'}")
+        if not meta_lead_id or not meta_lead_external_id:
+            continue
+        if meta_lead_id in created_meta_leads:
+            continue
+        existing_meta = db.query(MetaLead).filter(MetaLead.id == meta_lead_id).first()
+        if existing_meta:
+            created_meta_leads.add(meta_lead_id)
+            continue
+
+        meta_lead_is_converted = _parse_bool(row.get("meta_lead_is_converted"))
+        meta_lead = MetaLead(
+            id=meta_lead_id,
+            organization_id=org_id,
+            meta_lead_id=meta_lead_external_id,
+            meta_form_id=row.get("meta_lead_form_id"),
+            meta_page_id=row.get("meta_lead_page_id"),
+            field_data=_parse_json(row.get("meta_lead_field_data")),
+            raw_payload=_parse_json(row.get("meta_lead_raw_payload")),
+            is_converted=meta_lead_is_converted if meta_lead_is_converted is not None else True,
+            converted_case_id=None,
+            conversion_error=row.get("meta_lead_conversion_error"),
+            status=row.get("meta_lead_status") or "converted",
+            fetch_error=row.get("meta_lead_fetch_error"),
+            meta_created_time=_parse_datetime(row.get("meta_lead_meta_created_time")),
+            received_at=_parse_datetime(row.get("meta_lead_received_at")) or datetime.utcnow(),
+            converted_at=_parse_datetime(row.get("meta_lead_converted_at")),
+        )
+        db.add(meta_lead)
+        created_meta_leads.add(meta_lead_id)
+
+    if created_meta_leads:
+        db.flush()
+
+    for row in rows:
         case_id = _parse_uuid(row.get("id"))
         if not case_id:
             raise ValueError("Case id is required")
@@ -462,26 +542,30 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
         owner_id = _parse_uuid(row.get("owner_id"))
         if not owner_id:
             raise ValueError(f"Owner id required for case {case_id}")
-        if owner_type == OwnerType.USER.value and owner_id not in user_ids:
-            raise ValueError(f"Owner user {owner_id} not found for case {case_id}")
+        if owner_type == OwnerType.USER.value:
+            owner_id = _resolve_user_id(owner_id, row.get("owner_email"))
+            if not owner_id or owner_id not in user_ids:
+                raise ValueError(f"Owner user {owner_id} not found for case {case_id}")
         if owner_type == OwnerType.QUEUE.value and owner_id not in queue_ids:
             raise ValueError(f"Owner queue {owner_id} not found for case {case_id}")
 
         meta_lead_id = _parse_uuid(row.get("meta_lead_id"))
         meta_lead_external_id = row.get("meta_lead_external_id")
-        meta_lead_form_id = row.get("meta_lead_form_id")
-        meta_lead_page_id = row.get("meta_lead_page_id")
 
         if meta_lead_id and not meta_lead_external_id:
             raise ValueError(f"Missing meta_lead_external_id for case {case_id}")
 
         created_by_user_id = _parse_uuid(row.get("created_by_user_id"))
-        if created_by_user_id and created_by_user_id not in user_ids:
-            raise ValueError(f"Created-by user {created_by_user_id} not found for case {case_id}")
+        if created_by_user_id:
+            created_by_user_id = _resolve_user_id(created_by_user_id, row.get("created_by_email"))
+            if created_by_user_id and created_by_user_id not in user_ids:
+                raise ValueError(f"Created-by user {created_by_user_id} not found for case {case_id}")
 
         archived_by_user_id = _parse_uuid(row.get("archived_by_user_id"))
-        if archived_by_user_id and archived_by_user_id not in user_ids:
-            raise ValueError(f"Archived-by user {archived_by_user_id} not found for case {case_id}")
+        if archived_by_user_id:
+            archived_by_user_id = _resolve_user_id(archived_by_user_id, row.get("archived_by_email"))
+            if archived_by_user_id and archived_by_user_id not in user_ids:
+                raise ValueError(f"Archived-by user {archived_by_user_id} not found for case {case_id}")
 
         if not row.get("case_number"):
             raise ValueError(f"Missing case_number for case {case_id}")
@@ -495,19 +579,6 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
             raise ValueError(f"Missing email for case {case_id}")
 
         if meta_lead_id and meta_lead_external_id:
-            existing_meta = db.query(MetaLead).filter(MetaLead.id == meta_lead_id).first()
-            if not existing_meta:
-                meta_lead = MetaLead(
-                    id=meta_lead_id,
-                    organization_id=org_id,
-                    meta_lead_id=meta_lead_external_id,
-                    meta_form_id=meta_lead_form_id,
-                    meta_page_id=meta_lead_page_id,
-                    is_converted=True,
-                    converted_case_id=None,
-                    status="converted",
-                )
-                db.add(meta_lead)
             meta_leads_to_link.append((meta_lead_id, case_id))
 
         case = Case(
