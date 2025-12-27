@@ -6,10 +6,17 @@ export default defineConfig({
     plugins: [react()],
     test: {
         environment: 'jsdom',
-        setupFiles: ['./tests/setup.ts'],
         globals: true,
         alias: {
             '@': path.resolve(__dirname, './'),
         },
+        // Default: unit tests with global mocks
+        setupFiles: ['./tests/setup.ts'],
+        // Exclude integration tests from default run
+        exclude: [
+            '**/node_modules/**',
+            '**/dist/**',
+            '**/integration/**',
+        ],
     },
 })
