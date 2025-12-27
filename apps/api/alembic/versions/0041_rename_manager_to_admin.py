@@ -5,7 +5,6 @@ Revises: 0040_permission_system
 Create Date: 2024-12-20
 """
 from alembic import op
-import sqlalchemy as sa
 
 
 revision = '0041_rename_manager_to_admin'

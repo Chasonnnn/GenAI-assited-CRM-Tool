@@ -1,13 +1,11 @@
 """Dashboard router - API endpoints for dashboard widgets."""
 
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db
-from app.db.enums import Role
 from app.schemas.auth import UserSession
 from app.services import dashboard_service
 

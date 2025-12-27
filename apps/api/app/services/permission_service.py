@@ -7,7 +7,6 @@ Missing permission: defaults to False (deny)
 
 import uuid
 from datetime import datetime, timezone
-from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
@@ -23,7 +22,7 @@ from app.db.enums import AuditEventType
 from app.services import audit_service
 
 if TYPE_CHECKING:
-    from app.db.models import RolePermission, UserPermissionOverride
+    from app.db.models import UserPermissionOverride
 
 
 # =============================================================================

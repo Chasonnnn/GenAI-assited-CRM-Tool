@@ -278,7 +278,6 @@ def complete_mfa_challenge(
         raise HTTPException(status_code=403, detail="No organization membership")
     
     # Issue new session with mfa_verified=True
-    from app.core.config import settings
     
     new_token = create_session_token(
         user.id,
@@ -337,7 +336,6 @@ def disable_mfa(
 # =============================================================================
 
 from app.services import duo_service
-from app.core.config import settings
 import secrets
 
 

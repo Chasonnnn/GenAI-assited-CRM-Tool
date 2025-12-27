@@ -10,13 +10,13 @@ import re
 import secrets
 from datetime import datetime, timezone
 from typing import Optional
-from urllib.parse import quote, unquote, urlencode
+from urllib.parse import quote, unquote
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.models import CampaignRecipient, CampaignRun, CampaignTrackingEvent
+from app.db.models import CampaignRecipient, CampaignTrackingEvent
 
 
 logger = logging.getLogger(__name__)

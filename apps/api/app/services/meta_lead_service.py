@@ -9,7 +9,7 @@ from app.db.enums import CaseSource
 from app.db.models import Case, MetaLead
 from app.schemas.case import CaseCreate
 from app.services import case_service
-from app.utils.normalization import normalize_email, normalize_name, normalize_phone, normalize_state
+from app.utils.normalization import normalize_phone, normalize_state
 
 
 def store_meta_lead(
@@ -179,7 +179,7 @@ def get_unconverted(db: Session, org_id: UUID) -> list[MetaLead]:
     """Get unconverted Meta leads for an org."""
     return db.query(MetaLead).filter(
         MetaLead.organization_id == org_id,
-        MetaLead.is_converted == False,
+        MetaLead.is_converted.is_(False),
     ).order_by(MetaLead.received_at.desc()).all()
 
 

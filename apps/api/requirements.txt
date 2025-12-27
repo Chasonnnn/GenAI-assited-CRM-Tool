@@ -45,8 +45,8 @@ slowapi==0.1.9
 # Error tracking (optional)
 sentry-sdk[fastapi]==1.40.0
 
-# Timezone support
-pytz==2024.1
+# Timezone support (for containers without system tzdata)
+tzdata==2024.1
 
 # Rate limiting (distributed storage for multi-worker setups)
 redis==5.0.0

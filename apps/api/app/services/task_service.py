@@ -474,7 +474,7 @@ def count_pending_tasks(db: Session, org_id: UUID) -> int:
     """Count incomplete tasks for dashboard metrics."""
     return db.query(Task).filter(
         Task.organization_id == org_id,
-        Task.is_completed == False,
+        Task.is_completed.is_(False),
     ).count()
 
 
@@ -482,7 +482,7 @@ def count_overdue_tasks(db: Session, org_id: UUID, today) -> int:
     """Count overdue tasks for dashboard metrics."""
     return db.query(Task).filter(
         Task.organization_id == org_id,
-        Task.is_completed == False,
+        Task.is_completed.is_(False),
         Task.due_date < today,
     ).count()
 
@@ -496,7 +496,7 @@ def list_open_tasks_for_case(
     """List open tasks for a case."""
     query = db.query(Task).filter(
         Task.case_id == case_id,
-        Task.is_completed == False,
+        Task.is_completed.is_(False),
     )
     if org_id:
         query = query.filter(Task.organization_id == org_id)
@@ -512,7 +512,7 @@ def list_user_tasks_due_on(
     return db.query(Task).filter(
         Task.organization_id == org_id,
         Task.due_date == due_date,
-        Task.is_completed == False,
+        Task.is_completed.is_(False),
         Task.owner_type == OwnerType.USER.value,
     ).all()
 
@@ -526,6 +526,6 @@ def list_user_tasks_overdue(
     return db.query(Task).filter(
         Task.organization_id == org_id,
         Task.due_date < today,
-        Task.is_completed == False,
+        Task.is_completed.is_(False),
         Task.owner_type == OwnerType.USER.value,
     ).all()

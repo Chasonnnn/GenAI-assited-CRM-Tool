@@ -3,7 +3,7 @@ Analytics endpoints for manager dashboards.
 
 Provides case statistics, trends, and Meta performance metrics.
 """
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Query

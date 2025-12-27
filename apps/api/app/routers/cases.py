@@ -7,10 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.core.case_access import check_case_access, can_modify_case
 from app.core.deps import (
-    CSRF_HEADER,
     get_current_session,
     get_db,
-    is_owner_or_can_manage,
     require_csrf_header,
     require_permission,
 )

@@ -14,13 +14,12 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
-from app.db.enums import TaskType, ROLES_CAN_ARCHIVE, OwnerType
+from app.db.enums import TaskType
 from app.schemas.auth import UserSession
 from app.schemas.task import (
     BulkCompleteResponse,
     BulkTaskComplete,
     TaskCreate,
-    TaskListItem,
     TaskListResponse,
     TaskRead,
     TaskUpdate,

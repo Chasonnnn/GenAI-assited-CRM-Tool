@@ -1,9 +1,8 @@
 """Campaign schemas for request/response validation."""
 from datetime import datetime
 from uuid import UUID
-from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 # =============================================================================

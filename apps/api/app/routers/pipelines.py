@@ -6,10 +6,9 @@ v2: With version control
 - Rollback endpoint (Developer-only)
 """
 
-from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 

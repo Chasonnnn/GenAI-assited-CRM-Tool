@@ -13,8 +13,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.db.enums import WorkflowTriggerType
-from app.db.models import AISettings, AutomationWorkflow, EmailTemplate, User, Pipeline, PipelineStage
+from app.db.models import AutomationWorkflow, EmailTemplate, User, Pipeline, PipelineStage
 from app.services import ai_settings_service, workflow_service
 from app.schemas.workflow import ALLOWED_CONDITION_FIELDS
 
@@ -205,7 +204,7 @@ def _get_context_for_prompt(db: Session, org_id: UUID) -> dict[str, str]:
     # Get email templates
     templates = db.query(EmailTemplate).filter(
         EmailTemplate.organization_id == org_id,
-        EmailTemplate.is_archived == False
+        EmailTemplate.is_archived.is_(False),
     ).limit(20).all()
     templates_text = "\n".join([f"- {t.id}: {t.name}" for t in templates]) or "No templates available"
     
@@ -215,7 +214,7 @@ def _get_context_for_prompt(db: Session, org_id: UUID) -> dict[str, str]:
         User, Membership.user_id == User.id
     ).filter(
         Membership.organization_id == org_id,
-        User.is_active == True
+        User.is_active.is_(True),
     ).limit(20).all()
     users_text = "\n".join([
         f"- {m.user_id}: {u.display_name or u.email}"
@@ -230,7 +229,7 @@ def _get_context_for_prompt(db: Session, org_id: UUID) -> dict[str, str]:
     for pipeline in pipelines:
         stages = db.query(PipelineStage).filter(
             PipelineStage.pipeline_id == pipeline.id,
-            PipelineStage.is_active == True,
+            PipelineStage.is_active.is_(True),
         ).order_by(PipelineStage.order).all()
         for stage in stages:
             stages_text += f"- {stage.id}: {stage.label} ({pipeline.name})\n"

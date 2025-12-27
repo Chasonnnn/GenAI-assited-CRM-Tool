@@ -11,12 +11,10 @@ import hmac
 import secrets
 from datetime import datetime, timezone
 from typing import Tuple
-from uuid import UUID
 
 import pyotp
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.db.models import User
 
 

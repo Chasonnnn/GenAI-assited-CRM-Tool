@@ -3,7 +3,6 @@ Integration health and error tracking service.
 
 Manages integration health status and hourly error rollups.
 """
-import hashlib
 from datetime import datetime, timezone, timedelta
 from uuid import UUID
 

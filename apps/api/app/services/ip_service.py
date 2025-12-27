@@ -4,10 +4,10 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func, or_, and_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.db.enums import IntendedParentStatus, EntityType
+from app.db.enums import IntendedParentStatus
 from app.db.models import IntendedParent, IntendedParentStatusHistory
 
 
@@ -44,7 +44,7 @@ def list_intended_parents(
     
     # Archive filter
     if not include_archived:
-        query = query.filter(IntendedParent.is_archived == False)
+        query = query.filter(IntendedParent.is_archived.is_(False))
     
     # Status filter (multi-select)
     if status:
@@ -327,7 +327,7 @@ def get_ip_stats(db: Session, org_id: UUID) -> dict:
         func.count(IntendedParent.id)
     ).filter(
         IntendedParent.organization_id == org_id,
-        IntendedParent.is_archived == False
+        IntendedParent.is_archived.is_(False),
     ).group_by(IntendedParent.status).all()
     
     by_status = {status: count for status, count in results}
@@ -345,5 +345,5 @@ def get_ip_by_email(db: Session, email: str, org_id: UUID) -> IntendedParent | N
     return db.query(IntendedParent).filter(
         IntendedParent.organization_id == org_id,
         IntendedParent.email == email.lower().strip(),
-        IntendedParent.is_archived == False
+        IntendedParent.is_archived.is_(False),
     ).first()

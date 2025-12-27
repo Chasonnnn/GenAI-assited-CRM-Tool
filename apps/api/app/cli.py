@@ -70,7 +70,7 @@ def create_org(name: str, slug: str, admin_email: str):
         click.echo(f"  ID: {org.id}")
         click.echo(f"  Slug: {slug}")
         click.echo(f"✓ Created invite for {admin_email} with role: manager")
-        click.echo(f"→ Admin should log in with Google using that email")
+        click.echo("→ Admin should log in with Google using that email")
         
     except Exception as e:
         db.rollback()

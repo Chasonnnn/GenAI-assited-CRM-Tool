@@ -56,7 +56,7 @@ def get_current_user(
         if mock_user:
             return mock_user
         # Fallback: get any active user
-        any_user = db.query(User).filter(User.is_active == True).first()
+        any_user = db.query(User).filter(User.is_active.is_(True)).first()
         if any_user:
             return any_user
     

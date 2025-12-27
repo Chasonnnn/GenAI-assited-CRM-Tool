@@ -1,7 +1,7 @@
 """Pagination utilities for list endpoints."""
 
 from dataclasses import dataclass
-from typing import Any, Generic, TypeVar
+from typing import Generic, TypeVar
 
 from fastapi import Query
 from sqlalchemy.orm import Query as SQLAlchemyQuery

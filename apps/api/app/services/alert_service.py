@@ -9,7 +9,6 @@ from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from sqlalchemy.dialects.postgresql import insert
 
 from app.db.models import SystemAlert
 from app.db.enums import AlertType, AlertSeverity, AlertStatus

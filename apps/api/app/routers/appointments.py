@@ -18,7 +18,6 @@ from app.core.deps import (
     get_db,
     require_csrf_header,
 )
-from app.db.enums import AppointmentStatus
 from app.schemas.auth import UserSession
 from app.schemas.appointment import (
     AppointmentTypeCreate,
@@ -30,7 +29,6 @@ from app.schemas.appointment import (
     AvailabilityOverrideRead,
     BookingLinkRead,
     AppointmentRead,
-    AppointmentListItem,
     AppointmentListResponse,
     AppointmentLinkUpdate,
     AppointmentReschedule,

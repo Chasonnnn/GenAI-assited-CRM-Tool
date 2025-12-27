@@ -3,22 +3,18 @@ Tests for AI workflow generation and action execution.
 """
 
 import uuid
-from datetime import datetime, timezone
 
-import pytest
-from sqlalchemy.orm import Session
 
-from app.db.enums import Role, TaskType
 from app.db.models import (
-    Case, EntityNote, Task, User, Membership, EmailTemplate,
-    AIActionApproval, PipelineStage, Pipeline
+    Case, EntityNote, Task, EmailTemplate,
+    PipelineStage
 )
 from app.services.ai_workflow_service import (
-    GeneratedWorkflow, validate_workflow, WorkflowValidationResponse
+    GeneratedWorkflow, validate_workflow
 )
 from app.services.ai_action_executor import (
     AddNoteExecutor, CreateTaskExecutor, UpdateStatusExecutor,
-    execute_action, get_executor, ACTION_PERMISSIONS
+    get_executor, ACTION_PERMISSIONS
 )
 
 
@@ -342,7 +338,7 @@ class TestUpdateStatusExecutor:
         assert result["new_stage_id"] == str(new_stage.id)
 
         # Check case in-memory before refresh
-        assert case.stage_id == new_stage.id, f"In-memory stage_id mismatch. Case re-queried?"
+        assert case.stage_id == new_stage.id, "In-memory stage_id mismatch. Case re-queried?"
         assert case.status_label == "In Progress"
 
 

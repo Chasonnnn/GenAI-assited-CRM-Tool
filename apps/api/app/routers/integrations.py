@@ -235,7 +235,7 @@ async def gmail_callback(
         )
         success.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
         return success
-    except Exception as e:
+    except Exception:
         error = RedirectResponse(
             f"{settings.FRONTEND_URL}/settings/integrations?error=gmail_failed",
             status_code=302,
@@ -293,7 +293,7 @@ async def get_google_calendar_events(
     - date_end: End date (ISO format YYYY-MM-DD)
     - timezone: Optional client timezone (e.g., "America/New_York") for accurate day boundaries
     """
-    from datetime import datetime as dt, timezone as tz, time as tm
+    from datetime import datetime as dt, time as tm
     from zoneinfo import ZoneInfo
     from app.services import calendar_service
     
@@ -462,7 +462,7 @@ async def zoom_callback(
         )
         success.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
         return success
-    except Exception as e:
+    except Exception:
         error = RedirectResponse(
             f"{settings.FRONTEND_URL}/settings/integrations?error=zoom_failed",
             status_code=302,
@@ -595,7 +595,6 @@ def zoom_connection_status(
     session: UserSession = Depends(get_current_session),
 ) -> dict[str, Any]:
     """Check if current user has Zoom connected."""
-    from app.services import zoom_service
     
     integration = oauth_service.get_user_integration(db, session.user_id, "zoom")
     

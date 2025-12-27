@@ -1,9 +1,8 @@
 """Campaign service for bulk email management."""
 from datetime import datetime, timezone
-from uuid import UUID, uuid4
-from typing import Sequence
+from uuid import UUID
 
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import (
@@ -12,7 +11,7 @@ from app.db.models import (
 )
 from app.db.enums import CampaignStatus, CampaignRecipientStatus, JobType, JobStatus
 from app.schemas.campaign import (
-    CampaignCreate, CampaignUpdate, CampaignResponse, CampaignListItem,
+    CampaignCreate, CampaignUpdate, CampaignListItem,
     CampaignRunResponse, CampaignPreviewResponse, RecipientPreview,
     FilterCriteria
 )
@@ -177,8 +176,8 @@ def _build_recipient_query(
     if recipient_type == "case":
         query = db.query(Case).filter(
             Case.organization_id == org_id,
-            Case.is_archived == False,
-            Case.email != None,
+            Case.is_archived.is_(False),
+            Case.email.isnot(None),
             Case.email != "",
         )
         
@@ -216,9 +215,9 @@ def _build_recipient_query(
     elif recipient_type == "intended_parent":
         query = db.query(IntendedParent).filter(
             IntendedParent.organization_id == org_id,
-            IntendedParent.email != None,
+            IntendedParent.email.isnot(None),
             IntendedParent.email != "",
-            IntendedParent.is_archived == False,  # Exclude archived IPs
+            IntendedParent.is_archived.is_(False),  # Exclude archived IPs
         )
         
         if criteria.created_after:

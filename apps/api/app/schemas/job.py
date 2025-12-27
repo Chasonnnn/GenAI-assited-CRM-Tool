@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from app.db.enums import JobStatus, JobType
+from app.db.enums import JobType
 
 
 class JobBase(BaseModel):

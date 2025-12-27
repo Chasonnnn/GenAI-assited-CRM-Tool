@@ -76,7 +76,7 @@ def list_queues(
     """List queues for an organization."""
     query = select(Queue).where(Queue.organization_id == org_id)
     if not include_inactive:
-        query = query.where(Queue.is_active == True)
+        query = query.where(Queue.is_active.is_(True))
     query = query.order_by(Queue.name)
     return list(db.execute(query).scalars().all())
 
@@ -221,7 +221,7 @@ def claim_case(
     
     if case.owner_type != OwnerType.QUEUE.value:
         raise CaseAlreadyClaimedError(
-            f"Case is already owned by a user, not in a queue"
+            "Case is already owned by a user, not in a queue"
         )
     
     # Check if user is a member of the queue (if queue has members)

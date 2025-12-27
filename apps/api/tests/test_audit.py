@@ -1,5 +1,4 @@
 """Tests for Audit Log system - Unit tests only."""
-import pytest
 
 from app.services import audit_service
 from app.services import version_service

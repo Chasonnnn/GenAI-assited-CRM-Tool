@@ -5,8 +5,6 @@ Tests token generation, link wrapping, pixel injection,
 and open/click event recording.
 """
 
-import pytest
-from datetime import datetime, timezone
 
 from app.services import tracking_service
 
@@ -151,7 +149,6 @@ def test_prepare_email_for_tracking():
 def test_record_open_creates_event(db, test_org, test_user):
     """Test that recording an open creates an event and updates counters."""
     from app.db.models import CampaignRecipient, CampaignRun, Campaign, EmailTemplate
-    from datetime import datetime, timezone
     
     # Create email template first (required by Campaign)
     template = EmailTemplate(

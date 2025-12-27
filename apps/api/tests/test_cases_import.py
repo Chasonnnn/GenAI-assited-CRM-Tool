@@ -188,7 +188,7 @@ async def test_execute_import_success(authed_client: AsyncClient, db, test_org):
 @pytest.mark.asyncio
 async def test_execute_import_skips_duplicates(authed_client: AsyncClient, db, test_org, test_user):
     """Test import queues job that will skip duplicate emails when processed."""
-    from app.db.models import Case, CaseImport, Job
+    from app.db.models import CaseImport, Job
     from app.services import case_service
     from app.schemas.case import CaseCreate
     from app.db.enums import CaseSource, JobType
@@ -266,7 +266,6 @@ async def test_execute_import_handles_validation_errors(authed_client: AsyncClie
 async def test_list_imports_returns_history(authed_client: AsyncClient, db, test_org, test_user):
     """Test listing import history."""
     from app.db.models import CaseImport
-    from datetime import datetime, timezone
     
     # Create import records
     import1 = CaseImport(

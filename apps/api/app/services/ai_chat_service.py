@@ -15,8 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import (
-    AIConversation, AIMessage, AIActionApproval, AIEntitySummary, 
-    AIUsageLog, Case, EntityNote, Task, UserIntegration
+    AIConversation, AIMessage, AIActionApproval, AIUsageLog, Case, EntityNote, Task, UserIntegration
 )
 from app.services.ai_provider import ChatMessage, ChatResponse
 from app.services import ai_settings_service
@@ -143,7 +142,7 @@ def _build_dynamic_context(
     source_value = case.source if isinstance(case.source, str) else case.source.value
     
     lines = [
-        f"## Current Case Context",
+        "## Current Case Context",
         f"- Case #: {case.case_number}",
         f"- Name: {full_name}",
         f"- Status: {status_value}",
@@ -330,7 +329,7 @@ def _build_task_context(
 ) -> str:
     """Build dynamic context string for the current task."""
     lines = [
-        f"## Current Task Context",
+        "## Current Task Context",
         f"- Title: {task.title}",
         f"- Type: {task.task_type}",
         f"- Status: {'Completed' if task.is_completed else 'Open'}",
@@ -347,7 +346,7 @@ def _build_task_context(
         lines.append(f"- Priority: {task.priority}")
     
     if case:
-        lines.append(f"\n## Related Case")
+        lines.append("\n## Related Case")
         lines.append(f"- Case #: {case.case_number}")
         lines.append(f"- Name: {case.full_name or 'N/A'}")
         lines.append(f"- Status: {case.status_label or 'N/A'}")
