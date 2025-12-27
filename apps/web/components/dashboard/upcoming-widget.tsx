@@ -5,18 +5,18 @@ import { Badge } from "@/components/ui/badge"
 import { CheckSquareIcon, VideoIcon, CalendarIcon, ArrowRightIcon, Loader2Icon } from "lucide-react"
 import Link from "next/link"
 import { useUpcoming, type UpcomingTask, type UpcomingMeeting } from "@/lib/hooks/use-dashboard"
+import { formatLocalDate } from "@/lib/utils/date"
 
 type UpcomingItem = (UpcomingTask & { type: 'task' }) | (UpcomingMeeting & { type: 'meeting' })
 
 function groupItemsByDate(tasks: UpcomingTask[], meetings: UpcomingMeeting[]) {
-    const toLocalDateKey = (date: Date) => date.toLocaleDateString('en-CA')
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    const todayStr = toLocalDateKey(today)
+    const todayStr = formatLocalDate(today)
 
     const tomorrow = new Date(today)
     tomorrow.setDate(tomorrow.getDate() + 1)
-    const tomorrowStr = toLocalDateKey(tomorrow)
+    const tomorrowStr = formatLocalDate(tomorrow)
 
     // Combine and mark with type
     const allItems: UpcomingItem[] = [

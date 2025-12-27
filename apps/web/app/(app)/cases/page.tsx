@@ -22,10 +22,11 @@ import { useAuth } from "@/lib/auth-context"
 import type { CaseSource } from "@/lib/types/case"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { cn } from "@/lib/utils"
+import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 
 // Format date for display
 function formatDate(dateString: string): string {
-    const date = new Date(dateString)
+    const date = parseDateInput(dateString)
     const now = new Date()
     const diffMs = now.getTime() - date.getTime()
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
@@ -229,8 +230,8 @@ export default function CasesPage() {
         if (dateRange === 'all') return {}
         if (dateRange === 'custom' && customRange.from) {
             return {
-                created_from: customRange.from.toISOString(),
-                created_to: customRange.to?.toISOString(),
+                created_from: formatLocalDate(customRange.from),
+                created_to: customRange.to ? formatLocalDate(customRange.to) : undefined,
             }
         }
         // For presets, calculate dates
@@ -243,10 +244,10 @@ export default function CasesPage() {
         } else if (dateRange === 'month') {
             from = new Date(now.getFullYear(), now.getMonth(), 1)
         }
-        return from ? { created_from: from.toISOString() } : {}
+        return from ? { created_from: formatLocalDate(from) } : {}
     }
 
-    const { data, isLoading, error } = useCases({
+    const { data, isLoading, isError, error } = useCases({
         page,
         per_page: perPage,
         stage_id: stageFilter === "all" ? undefined : stageFilter,
@@ -438,9 +439,12 @@ export default function CasesPage() {
             <div className="flex-1 overflow-auto p-6 pt-4">
 
                 {/* Error State */}
-                {error && (
-                    <Card className="p-6 text-center text-destructive">
-                        Error loading cases: {error.message}
+                {isError && (
+                    <Card className="p-6 text-center border-destructive/40 bg-destructive/5">
+                        <p className="text-destructive">Unable to load cases.</p>
+                        {error instanceof Error && (
+                            <p className="mt-2 text-xs text-muted-foreground">{error.message}</p>
+                        )}
                     </Card>
                 )}
 
@@ -452,7 +456,7 @@ export default function CasesPage() {
                 )}
 
                 {/* Empty State */}
-                {!isLoading && !error && data?.items.length === 0 && (
+                {!isLoading && !isError && data?.items.length === 0 && (
                     <Card className="p-12 text-center">
                         <div className="flex flex-col items-center gap-3">
                             <p className="text-muted-foreground">
@@ -471,7 +475,7 @@ export default function CasesPage() {
                 )}
 
                 {/* Cases Table */}
-                {!isLoading && !error && data && data.items.length > 0 && (
+                {!isLoading && !isError && data && data.items.length > 0 && (
                     <Card className="overflow-hidden py-0">
                         <div className="overflow-x-auto">
                             <Table>

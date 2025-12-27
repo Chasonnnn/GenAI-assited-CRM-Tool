@@ -62,6 +62,7 @@ import {
     useDeleteEmailTemplate,
 } from "@/lib/hooks/use-email-templates"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
+import { parseDateInput } from "@/lib/utils/date"
 
 // Icon mapping for trigger types
 const triggerIcons: Record<string, React.ElementType> = {
@@ -88,7 +89,7 @@ const triggerLabels: Record<string, string> = {
 
 function formatRelativeTime(dateString: string | null): string {
     if (!dateString) return "Never"
-    const date = new Date(dateString)
+    const date = parseDateInput(dateString)
     const now = new Date()
     const diffMs = now.getTime() - date.getTime()
     const diffMins = Math.floor(diffMs / 60000)
