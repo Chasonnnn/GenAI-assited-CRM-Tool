@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -46,6 +46,7 @@ import {
 } from "lucide-react"
 import { format } from "date-fns"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 import {
     useCampaigns,
     useCreateCampaign,
@@ -350,10 +351,12 @@ export default function CampaignsPage() {
                                                         </TableCell>
                                                         <TableCell>
                                                             <DropdownMenu>
-                                                                <DropdownMenuTrigger>
-                                                                    <Button variant="ghost" size="icon-sm">
+                                                                <DropdownMenuTrigger
+                                                                    className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}
+                                                                >
+                                                                    <span className="inline-flex items-center justify-center">
                                                                         <MoreVerticalIcon className="size-4" />
-                                                                    </Button>
+                                                                    </span>
                                                                 </DropdownMenuTrigger>
                                                                 <DropdownMenuContent align="end">
                                                                     <DropdownMenuItem

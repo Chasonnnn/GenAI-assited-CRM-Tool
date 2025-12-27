@@ -3666,6 +3666,7 @@ class CampaignRecipient(Base):
     __table_args__ = (
         Index("idx_campaign_recipients_run", "run_id"),
         Index("idx_campaign_recipients_entity", "entity_type", "entity_id"),
+        Index("idx_campaign_recipients_tracking_token", "tracking_token", unique=True),
         UniqueConstraint("run_id", "entity_type", "entity_id", name="uq_campaign_recipient"),
     )
     

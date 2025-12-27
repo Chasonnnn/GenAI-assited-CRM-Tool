@@ -4,7 +4,7 @@ import * as React from "react"
 import { useRouter, useParams } from "next/navigation"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -49,6 +49,7 @@ import { ProposeMatchDialog } from "@/components/matches/ProposeMatchDialog"
 import type { EmailType, SummarizeCaseResponse, DraftEmailResponse } from "@/lib/api/ai"
 import type { TaskListItem } from "@/lib/types/task"
 import { useAuth } from "@/lib/auth-context"
+import { cn } from "@/lib/utils"
 
 // Format date for display
 function formatDateTime(dateString: string): string {
@@ -346,12 +347,11 @@ export default function CaseDetailPage() {
                 <div className="flex items-center gap-2">
                     <DropdownMenu>
                         <DropdownMenuTrigger
-                            render={
-                                <Button variant="outline" size="sm" disabled={caseData.is_archived}>
-                                    Change Stage
-                                </Button>
-                            }
-                        />
+                            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                            disabled={caseData.is_archived}
+                        >
+                            <span className="inline-flex items-center">Change Stage</span>
+                        </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                             {stageOptions.map((stageOption) => (
                                 <DropdownMenuItem
@@ -440,13 +440,11 @@ export default function CaseDetailPage() {
                         Assign
                     </Button>
                     <DropdownMenu>
-                        <DropdownMenuTrigger
-                            render={
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                    <MoreVerticalIcon className="h-4 w-4" />
-                                </Button>
-                            }
-                        />
+                        <DropdownMenuTrigger className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}>
+                            <span className="inline-flex items-center justify-center">
+                                <MoreVerticalIcon className="h-4 w-4" />
+                            </span>
+                        </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => setEditDialogOpen(true)}>Edit</DropdownMenuItem>
                             {caseData.is_archived ? (

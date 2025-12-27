@@ -93,7 +93,7 @@ export function NotificationBell() {
 
     return (
         <DropdownMenu>
-            <DropdownMenuTrigger nativeButton={false}>
+            <DropdownMenuTrigger>
                 <span className="relative inline-flex items-center justify-center rounded-md text-sm font-medium h-9 w-9 hover:bg-accent hover:text-accent-foreground cursor-pointer">
                     <Bell className="h-5 w-5" />
                     {unreadCount > 0 && (

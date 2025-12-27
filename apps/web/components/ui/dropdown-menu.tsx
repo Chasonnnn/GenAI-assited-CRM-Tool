@@ -19,21 +19,13 @@ function DropdownMenuTrigger({
   render,
   ...props
 }: MenuPrimitive.Trigger.Props) {
-  // Support both patterns:
-  // 1. render prop provided directly (used in app-sidebar)
-  // 2. children as single element (used in campaigns page) - convert to render prop
-  const renderProp = render ?? (
-    React.isValidElement(children) ? children : undefined
-  )
-
   return (
     <MenuPrimitive.Trigger
       data-slot="dropdown-menu-trigger"
-      render={renderProp}
+      render={render}
       {...props}
     >
-      {/* Only pass children if render wasn't derived from it */}
-      {render ? children : null}
+      {children}
     </MenuPrimitive.Trigger>
   )
 }
