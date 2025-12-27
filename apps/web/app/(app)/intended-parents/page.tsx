@@ -126,6 +126,10 @@ export default function IntendedParentsPage() {
         }
     }, [debouncedSearch]) // eslint-disable-line react-hooks/exhaustive-deps
 
+    useEffect(() => {
+        setPage(1)
+    }, [dateRange, customRange])
+
     // Form state
     const [formData, setFormData] = useState({
         full_name: "",
@@ -137,6 +141,26 @@ export default function IntendedParentsPage() {
     })
 
     // Queries
+    const getDateRangeParams = () => {
+        if (dateRange === 'all') return {}
+        if (dateRange === 'custom' && customRange.from) {
+            return {
+                created_after: customRange.from.toISOString(),
+                created_before: customRange.to?.toISOString(),
+            }
+        }
+        const now = new Date()
+        let from: Date | undefined
+        if (dateRange === 'today') {
+            from = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+        } else if (dateRange === 'week') {
+            from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        } else if (dateRange === 'month') {
+            from = new Date(now.getFullYear(), now.getMonth(), 1)
+        }
+        return from ? { created_after: from.toISOString() } : {}
+    }
+
     const filters = {
         q: debouncedSearch || undefined,
         status: statusFilter !== "all" ? [statusFilter] : undefined,
@@ -144,6 +168,7 @@ export default function IntendedParentsPage() {
         per_page: 20,
         sort_by: sortBy || undefined,
         sort_order: sortOrder,
+        ...getDateRangeParams(),
     }
     const { data, isLoading } = useIntendedParents(filters)
     const { data: stats } = useIntendedParentStats()

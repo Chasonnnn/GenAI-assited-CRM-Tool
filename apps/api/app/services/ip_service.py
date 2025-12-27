@@ -26,6 +26,8 @@ def list_intended_parents(
     q: str | None = None,
     owner_id: UUID | None = None,
     include_archived: bool = False,
+    created_after: str | None = None,
+    created_before: str | None = None,
     page: int = 1,
     per_page: int = 20,
     sort_by: str | None = None,
@@ -72,6 +74,20 @@ def list_intended_parents(
     # Owner filter
     if owner_id:
         query = query.filter(IntendedParent.owner_id == owner_id)
+
+    # Created date range filter (ISO format)
+    if created_after:
+        try:
+            after_date = datetime.fromisoformat(created_after.replace('Z', '+00:00'))
+            query = query.filter(IntendedParent.created_at >= after_date)
+        except (ValueError, AttributeError):
+            pass
+    if created_before:
+        try:
+            before_date = datetime.fromisoformat(created_before.replace('Z', '+00:00'))
+            query = query.filter(IntendedParent.created_at <= before_date)
+        except (ValueError, AttributeError):
+            pass
     
     # Get total count before pagination
     total = query.count()

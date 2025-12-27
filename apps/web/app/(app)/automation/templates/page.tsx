@@ -64,7 +64,7 @@ interface UseTemplateFormData {
     name: string
     description: string
     is_enabled: boolean
-    action_overrides?: Record<string, { template_id: string }>
+    action_overrides?: Record<string, { template_id: string | null }>
 }
 
 interface TemplateCategory {
@@ -186,13 +186,13 @@ export default function TemplatesPage() {
     const missingEmailActions =
         selectedTemplate && selectedTemplateDetail?.actions
             ? selectedTemplateDetail.actions
-                  .map((action, index) => {
-                      const actionType = typeof action.action_type === "string" ? action.action_type : ""
-                      const templateId =
-                          typeof action.template_id === "string" ? action.template_id : null
-                      return { action, actionType, templateId, index }
-                  })
-                  .filter(({ actionType, templateId }) => actionType === "send_email" && !templateId)
+                .map((action, index) => {
+                    const actionType = typeof action.action_type === "string" ? action.action_type : ""
+                    const templateId =
+                        typeof action.template_id === "string" ? action.template_id : null
+                    return { action, actionType, templateId, index }
+                })
+                .filter(({ actionType, templateId }) => actionType === "send_email" && !templateId)
             : []
     const hasMissingEmailTemplates = missingEmailActions.length > 0
     const hasAllEmailSelections =
@@ -382,9 +382,9 @@ export default function TemplatesPage() {
                                                             setFormData((prev) => ({
                                                                 ...prev,
                                                                 action_overrides: {
-                                                                    ...(prev.action_overrides ?? {}),
+                                                                    ...((prev.action_overrides ?? {}) as Record<string, { template_id: string | null }>),
                                                                     [String(index)]: { template_id: value },
-                                                                },
+                                                                } as Record<string, { template_id: string | null }>,
                                                             }))
                                                         }
                                                     >
