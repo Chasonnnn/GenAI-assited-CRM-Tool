@@ -161,6 +161,10 @@ app.include_router(admin_meta.router)  # Already has prefix in router definition
 from app.routers import admin_versions
 app.include_router(admin_versions.router)
 
+# Admin Exports (Developer-only)
+from app.routers import admin_exports
+app.include_router(admin_exports.router)
+
 # Metadata API (Picklists - any authenticated user)
 from app.routers import metadata
 app.include_router(metadata.router, prefix="/metadata", tags=["metadata"])

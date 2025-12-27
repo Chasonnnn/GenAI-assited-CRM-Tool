@@ -2133,6 +2133,31 @@ class DataRetentionPolicy(Base):
     created_by: Mapped["User | None"] = relationship()
 
 
+class OrgCounter(Base):
+    """
+    Atomic counter for sequential ID generation (e.g., case numbers).
+    
+    Uses INSERT...ON CONFLICT for atomic increment without race conditions.
+    """
+    __tablename__ = "org_counters"
+    
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        primary_key=True
+    )
+    counter_type: Mapped[str] = mapped_column(String(50), primary_key=True)
+    current_value: Mapped[int] = mapped_column(
+        Integer,
+        server_default=text("0"),
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"),
+        onupdate=text("now()"),
+        nullable=False
+    )
+
 
 # =============================================================================
 # CSV Import

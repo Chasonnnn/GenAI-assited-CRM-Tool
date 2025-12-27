@@ -17,17 +17,23 @@ def generate_case_number(db: Session, org_id: UUID) -> str:
     """
     Generate next sequential case number for org (00001-99999).
     
+    Uses atomic INSERT...ON CONFLICT for race-condition-free counter increment.
     Case numbers are unique per org and never reused (even for archived).
     """
-    # Simple query to get max case number as string, then convert
-    max_num = db.query(func.max(Case.case_number)).filter(
-        Case.organization_id == org_id
-    ).scalar()
+    from sqlalchemy import text
     
-    if max_num:
-        result = int(max_num) + 1
-    else:
-        result = 1
+    # Atomic upsert: increment counter or initialize at 1 if not exists
+    result = db.execute(
+        text("""
+            INSERT INTO org_counters (organization_id, counter_type, current_value)
+            VALUES (:org_id, 'case_number', 1)
+            ON CONFLICT (organization_id, counter_type)
+            DO UPDATE SET current_value = org_counters.current_value + 1,
+                          updated_at = now()
+            RETURNING current_value
+        """),
+        {"org_id": org_id}
+    ).scalar()
     
     return f"{result:05d}"
 
