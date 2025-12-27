@@ -11,14 +11,15 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_permission
+from app.core.deps import get_current_session, get_db, require_permission
+from app.core.policies import POLICIES
 
 from app.db.models import Case, MetaLead
 from app.services import pipeline_service
 from app.schemas.auth import UserSession
 
 
-router = APIRouter(prefix="/analytics", tags=["analytics"])
+router = APIRouter(prefix="/analytics", tags=["analytics"], dependencies=[Depends(require_permission(POLICIES["reports"].default))])
 
 
 # =============================================================================
@@ -126,7 +127,7 @@ def parse_date_range(from_date: str | None, to_date: str | None) -> tuple[dateti
 def get_analytics_summary(
     from_date: Optional[str] = Query(None, description="ISO date string"),
     to_date: Optional[str] = Query(None, description="ISO date string"),
-    session: UserSession = Depends(require_permission("view_reports")),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """Get high-level analytics summary."""
@@ -197,7 +198,7 @@ def get_analytics_summary(
 
 @router.get("/cases/by-status", response_model=list[StatusCount])
 def get_cases_by_status(
-    session: UserSession = Depends(require_permission("view_reports")),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """Get case counts grouped by status."""
@@ -220,7 +221,7 @@ def get_cases_by_status(
 
 @router.get("/cases/by-assignee", response_model=list[AssigneeCount])
 def get_cases_by_assignee(
-    session: UserSession = Depends(require_permission("view_reports")),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """Get case counts grouped by owner (user-owned cases only)."""
@@ -255,7 +256,7 @@ def get_cases_trend(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
     period: Literal["day", "week", "month"] = Query("day"),
-    session: UserSession = Depends(require_permission("view_reports")),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """Get case creation trend over time."""
@@ -290,7 +291,7 @@ def get_cases_trend(
 def get_meta_performance(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
-    session: UserSession = Depends(require_permission("view_reports")),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """
@@ -411,7 +412,7 @@ async def get_meta_spend(
         None,
         description="Comma-separated breakdowns (e.g. region,country)",
     ),
-    session: UserSession = Depends(require_permission("view_reports")),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """
@@ -651,7 +652,7 @@ def get_cases_by_state(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
     source: Optional[str] = Query(None),
-    session: UserSession = Depends(require_permission("view_reports")),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ) -> dict:
     """Get case count by US state for map visualization."""
@@ -668,7 +669,7 @@ def get_cases_by_state(
 def get_cases_by_source(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
-    session: UserSession = Depends(require_permission("view_reports")),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ) -> dict:
     """Get case count by lead source."""
@@ -685,7 +686,7 @@ def get_cases_by_source(
 def get_conversion_funnel(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
-    session: UserSession = Depends(require_permission("view_reports")),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ) -> dict:
     """Get conversion funnel data."""
@@ -702,7 +703,7 @@ def get_conversion_funnel(
 def get_kpis(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
-    session: UserSession = Depends(require_permission("view_reports")),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ) -> dict:
     """Get summary KPIs for dashboard cards."""
@@ -717,7 +718,7 @@ def get_kpis(
 
 @router.get("/campaigns")
 def get_campaigns(
-    session: UserSession = Depends(require_permission("view_reports")),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ) -> dict:
     """Get campaigns for filter dropdown."""
@@ -732,7 +733,7 @@ def get_funnel_compare(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
     ad_id: Optional[str] = Query(None),
-    session: UserSession = Depends(require_permission("view_reports")),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ) -> dict:
     """Get funnel with optional campaign filter for comparison."""
@@ -753,7 +754,7 @@ def get_cases_by_state_compare(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
     ad_id: Optional[str] = Query(None),
-    session: UserSession = Depends(require_permission("view_reports")),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ) -> dict:
     """Get cases by state with optional campaign filter."""
@@ -797,7 +798,7 @@ def get_activity_feed(
     offset: int = Query(0, ge=0),
     activity_type: Optional[str] = Query(None, description="Filter by activity type"),
     user_id: Optional[str] = Query(None, description="Filter by actor user ID"),
-    session: UserSession = Depends(require_permission("view_reports")),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ) -> ActivityFeedResponse:
     """
@@ -867,7 +868,7 @@ def get_activity_feed(
 
 @router.get("/export/pdf")
 async def export_analytics_pdf(
-    session: UserSession = Depends(require_permission("view_reports")),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
     from_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     to_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),

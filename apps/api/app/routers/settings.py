@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
+from app.core.policies import POLICIES
 from app.db.models import Organization
 from app.schemas.auth import UserSession
 
@@ -58,7 +59,7 @@ def get_org_settings(
 )
 def update_org_settings(
     body: OrgSettingsUpdate,
-    session: UserSession = Depends(require_permission("manage_org")),
+    session: UserSession = Depends(require_permission(POLICIES["org_settings"].default)),
     db: Session = Depends(get_db),
 ):
     """

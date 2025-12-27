@@ -5,12 +5,16 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_permission
+from app.core.deps import get_current_session, get_db, require_permission
+from app.core.policies import POLICIES
 from app.db.enums import JobStatus, JobType
 from app.schemas.job import JobRead, JobListItem
 from app.services import job_service
 
-router = APIRouter(tags=["Jobs"])
+router = APIRouter(
+    tags=["Jobs"],
+    dependencies=[Depends(require_permission(POLICIES["jobs"].default))],
+)
 
 
 @router.get("", response_model=list[JobListItem])
@@ -19,7 +23,7 @@ def list_jobs(
     job_type: JobType | None = None,
     limit: int = 50,
     db: Session = Depends(get_db),
-    session = Depends(require_permission("manage_jobs")),
+    session = Depends(get_current_session),
 ):
     """List recent jobs for the organization (developer only)."""
     jobs = job_service.list_jobs(
@@ -36,11 +40,10 @@ def list_jobs(
 def get_job(
     job_id: UUID,
     db: Session = Depends(get_db),
-    session = Depends(require_permission("manage_jobs")),
+    session = Depends(get_current_session),
 ):
     """Get a job by ID (developer only)."""
     job = job_service.get_job(db, job_id, org_id=session.org_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
-

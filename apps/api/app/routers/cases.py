@@ -8,16 +8,14 @@ from sqlalchemy.orm import Session
 from app.core.case_access import check_case_access, can_modify_case
 from app.core.deps import (
     CSRF_HEADER,
-    can_archive,
-    can_assign,
-    can_hard_delete,
     get_current_session,
     get_db,
     is_owner_or_can_manage,
     require_csrf_header,
     require_permission,
 )
-from app.db.enums import CaseSource, Role, ROLES_CAN_ARCHIVE, OwnerType
+from app.core.policies import POLICIES
+from app.db.enums import CaseSource, OwnerType
 from app.db.models import User, Queue
 from app.schemas.auth import UserSession
 from app.schemas.case import (
@@ -38,7 +36,7 @@ from app.schemas.case import (
 from app.services import case_service
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_permission(POLICIES["cases"].default))])
 
 
 def _case_to_read(case, db: Session) -> CaseRead:
@@ -298,7 +296,7 @@ class ImportStatusResponse(BaseModel):
 async def preview_import(
     request: Request,
     file: UploadFile = File(...),
-    session: UserSession = Depends(require_permission("edit_cases")),
+    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["import"])),
     db: Session = Depends(get_db),
 ):
     """
@@ -310,7 +308,7 @@ async def preview_import(
     - Duplicate detection counts (DB + within CSV)
     - Validation error count
     
-    Requires: Manager+ role
+    Requires: import_cases permission
     """
     if not file.filename or not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="File must be a CSV")
@@ -345,7 +343,7 @@ async def preview_import(
 async def confirm_import(
     request: Request,
     file: UploadFile = File(...),
-    session: UserSession = Depends(require_permission("edit_cases")),
+    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["import"])),
     db: Session = Depends(get_db),
 ):
     """
@@ -354,7 +352,7 @@ async def confirm_import(
     For large files, consider scheduling as async job (future enhancement).
     Currently executes synchronously.
     
-    Requires: Manager+ role
+    Requires: import_cases permission
     """
     if not file.filename or not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="File must be a CSV")
@@ -429,7 +427,7 @@ async def confirm_import(
 @router.get("/import/{import_id}", response_model=ImportStatusResponse)
 def get_import_status(
     import_id: UUID,
-    session: UserSession = Depends(require_permission("edit_cases")),
+    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["import"])),
     db: Session = Depends(get_db),
 ):
     """Get status of an import job."""
@@ -453,7 +451,7 @@ def get_import_status(
 
 @router.get("/import", response_model=list[ImportStatusResponse])
 def list_imports(
-    session: UserSession = Depends(require_permission("edit_cases")),
+    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["import"])),
     db: Session = Depends(get_db),
 ):
     """List recent imports for the organization."""
@@ -479,7 +477,7 @@ def list_imports(
 # NOTE: /handoff-queue MUST come before /{case_id} routes to avoid routing conflict
 @router.get("/handoff-queue", response_model=CaseListResponse)
 def list_handoff_queue(
-    session: UserSession = Depends(require_permission("view_post_approval_cases")),
+    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["view_post_approval"])),
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
@@ -487,7 +485,7 @@ def list_handoff_queue(
     """
     List cases awaiting case manager review (status=pending_handoff).
     
-    Requires: case_manager+ role
+    Requires: view_post_approval_cases permission
     """
     cases, total = case_service.list_handoff_queue(
         db=db,
@@ -510,7 +508,7 @@ def list_handoff_queue(
 @router.post("", response_model=CaseRead, status_code=201, dependencies=[Depends(require_csrf_header)])
 def create_case(
     data: CaseCreate,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["edit"])),
     db: Session = Depends(get_db),
 ):
     """Create a new case."""
@@ -751,7 +749,7 @@ async def send_case_email(
 def update_case(
     case_id: UUID,
     data: CaseUpdate,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["edit"])),
     db: Session = Depends(get_db),
 ):
     """
@@ -786,7 +784,7 @@ def update_case(
 def change_status(
     case_id: UUID,
     data: CaseStatusChange,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["change_status"])),
     db: Session = Depends(get_db),
 ):
     """Change case stage (records history, respects access control)."""
@@ -818,16 +816,14 @@ def change_status(
 def assign_case(
     case_id: UUID,
     data: CaseAssign,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["assign"])),
     db: Session = Depends(get_db),
 ):
     """
     Assign case to a user or queue.
     
-    Requires: manager+ role
+    Requires: assign_cases permission
     """
-    if not can_assign(session):
-        raise HTTPException(status_code=403, detail="Only managers can assign cases")
     
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
@@ -856,20 +852,14 @@ def assign_case(
 @router.post("/bulk-assign", dependencies=[Depends(require_csrf_header)])
 def bulk_assign_cases(
     data: BulkAssign,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["assign"])),
     db: Session = Depends(get_db),
 ):
     """
     Bulk assign multiple cases to a user or queue.
     
-    Requires: case_manager, manager, or developer role
+    Requires: assign_cases permission
     """
-    from app.db.enums import Role
-    
-    # Role check: case_manager+
-    allowed_roles = {Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER}
-    if session.role not in allowed_roles:
-        raise HTTPException(status_code=403, detail="Only case managers and above can bulk assign cases")
     
     if data.owner_type == OwnerType.USER:
         from app.db.models import Membership
@@ -907,16 +897,14 @@ def bulk_assign_cases(
 @router.post("/{case_id}/archive", response_model=CaseRead, dependencies=[Depends(require_csrf_header)])
 def archive_case(
     case_id: UUID,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["archive"])),
     db: Session = Depends(get_db),
 ):
     """
     Soft-delete (archive) a case.
     
-    Requires: manager+ role
+    Requires: archive_cases permission
     """
-    if not can_archive(session):
-        raise HTTPException(status_code=403, detail="Only managers can archive cases")
     
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
@@ -929,17 +917,15 @@ def archive_case(
 @router.post("/{case_id}/restore", response_model=CaseRead, dependencies=[Depends(require_csrf_header)])
 def restore_case(
     case_id: UUID,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["archive"])),
     db: Session = Depends(get_db),
 ):
     """
     Restore an archived case.
     
-    Requires: manager+ role
+    Requires: archive_cases permission
     Fails if email is now used by another active case.
     """
-    if not can_archive(session):
-        raise HTTPException(status_code=403, detail="Only managers can restore cases")
     
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
@@ -955,16 +941,14 @@ def restore_case(
 @router.delete("/{case_id}", status_code=204, dependencies=[Depends(require_csrf_header)])
 def delete_case(
     case_id: UUID,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["delete"])),
     db: Session = Depends(get_db),
 ):
     """
     Permanently delete a case.
     
-    Requires: manager+ role AND case must be archived first.
+    Requires: delete_cases permission AND case must be archived first.
     """
-    if not can_hard_delete(session):
-        raise HTTPException(status_code=403, detail="Only managers can delete cases")
     
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
@@ -1084,13 +1068,13 @@ def get_case_activity(
 @router.post("/{case_id}/accept", response_model=CaseRead, dependencies=[Depends(require_csrf_header)])
 def accept_handoff(
     case_id: UUID,
-    session: UserSession = Depends(require_permission("assign_cases")),
+    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["assign"])),
     db: Session = Depends(get_db),
 ):
     """
     Accept a pending_handoff case and transition to pending_match.
     
-    Requires: case_manager+ role
+    Requires: assign_cases permission
     Returns 409 if case is not in pending_handoff status.
     """
     case = case_service.get_case(db, session.org_id, case_id)
@@ -1108,13 +1092,13 @@ def accept_handoff(
 def deny_handoff(
     case_id: UUID,
     data: CaseHandoffDeny,
-    session: UserSession = Depends(require_permission("assign_cases")),
+    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["assign"])),
     db: Session = Depends(get_db),
 ):
     """
     Deny a pending_handoff case and revert to under_review.
     
-    Requires: case_manager+ role
+    Requires: assign_cases permission
     Reason is optional but stored in status history.
     Returns 409 if case is not in pending_handoff status.
     """

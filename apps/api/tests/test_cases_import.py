@@ -140,8 +140,7 @@ async def test_preview_import_without_auth_fails(client: AsyncClient):
         files={"file": ("test.csv", io.BytesIO(csv_data), "text/csv")},
     )
     
-    # 403 because CSRF header is missing (not 401 for auth)
-    assert response.status_code == 403
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -381,7 +380,7 @@ async def test_imports_org_isolation(authed_client: AsyncClient, db, test_user):
 
 
 @pytest.mark.asyncio
-async def test_execute_import_requires_csrf(authed_client: AsyncClient):
+async def test_execute_import_requires_csrf(authed_client: AsyncClient, db):
     """Test import execution requires CSRF header."""
     csv_data = create_csv_content([{"email": "alice@test.com"}])
     
@@ -391,7 +390,7 @@ async def test_execute_import_requires_csrf(authed_client: AsyncClient):
     from app.core.deps import get_db
     
     def override_get_db():
-        yield authed_client._state.db  # Access existing db from fixture
+        yield db
     
     app.dependency_overrides[get_db] = override_get_db
     

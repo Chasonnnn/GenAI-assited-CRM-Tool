@@ -12,14 +12,15 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import get_db, require_permission
+from app.core.deps import get_current_session, get_db, require_permission
+from app.core.policies import POLICIES
 from app.db.enums import AuditEventType, Role
 from app.db.models import AuditLog, User
 from app.schemas.compliance import ExportJobCreate, ExportJobListResponse, ExportJobRead
 from app.services import audit_service, compliance_service
 from app.schemas.auth import UserSession
 
-router = APIRouter(prefix="/audit", tags=["Audit"])
+router = APIRouter(prefix="/audit", tags=["Audit"], dependencies=[Depends(require_permission(POLICIES["audit"].default))])
 
 
 # ============================================================================
@@ -68,7 +69,7 @@ def list_audit_logs(
     start_date: datetime | None = Query(None, description="Filter events after this date"),
     end_date: datetime | None = Query(None, description="Filter events before this date"),
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("view_audit_log")),
+    session: UserSession = Depends(get_current_session),
 ) -> AuditLogListResponse:
     """
     List audit log entries for the organization.
@@ -129,7 +130,7 @@ def list_audit_logs(
 
 @router.get("/event-types")
 def list_event_types(
-    session: UserSession = Depends(require_permission("view_audit_log")),
+    session: UserSession = Depends(get_current_session),
 ) -> list[str]:
     """List available audit event types for filtering."""
     return [e.value for e in AuditEventType]
@@ -140,7 +141,7 @@ def get_ai_activity(
     hours: int = Query(24, ge=1, le=720, description="Hours to look back for counts (default 24)"),
     limit: int = Query(6, ge=1, le=50),
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("view_audit_log")),
+    session: UserSession = Depends(get_current_session),
 ) -> AuditAIActivityResponse:
     """Get recent AI audit activity and counts for the specified time window."""
     ai_event_types = [
@@ -195,7 +196,7 @@ def get_ai_activity(
 def list_audit_exports(
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("export_data")),
+    session: UserSession = Depends(require_permission(POLICIES["audit"].actions["export"])),
 ) -> ExportJobListResponse:
     """List recent audit exports for the organization."""
     jobs = compliance_service.list_export_jobs(db, session.org_id, limit=limit)
@@ -229,7 +230,7 @@ def list_audit_exports(
 def create_audit_export(
     payload: ExportJobCreate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("export_data")),
+    session: UserSession = Depends(require_permission(POLICIES["audit"].actions["export"])),
 ) -> ExportJobRead:
     """Request an async audit export job."""
     if payload.redact_mode == "full":
@@ -272,7 +273,7 @@ def create_audit_export(
 def get_audit_export(
     export_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("export_data")),
+    session: UserSession = Depends(require_permission(POLICIES["audit"].actions["export"])),
 ) -> ExportJobRead:
     """Get audit export job status."""
     job = compliance_service.get_export_job(db, session.org_id, export_id)
@@ -305,7 +306,7 @@ def get_audit_export(
 def download_audit_export(
     export_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("export_data")),
+    session: UserSession = Depends(require_permission(POLICIES["audit"].actions["export"])),
 ):
     """Download an export file via signed URL or local file."""
     job = compliance_service.get_export_job(db, session.org_id, export_id)
