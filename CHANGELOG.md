@@ -2,6 +2,49 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2025-12-27] (Afternoon)
+
+### Added
+- **RBAC Standardization** — Complete refactoring of permission system
+  - New `policies.py` with centralized `ResourcePolicy` definitions
+  - `PermissionKey` enum for type-safe permission references
+  - `require_any_permissions()` and `require_all_permissions()` helpers
+  - All 20 routers now use policy-driven dependencies
+  - RBAC regression matrix tests (`test_rbac_policies.py`)
+  
+- **MSW Integration Testing Infrastructure**
+  - Mock Service Worker (MSW) for intercepting API calls in tests
+  - `tests/mocks/handlers.ts` with data factories
+  - `tests/utils/integration-wrapper.tsx` with real QueryClientProvider
+  - Separate `vitest.integration.config.ts` for integration tests
+  - Example integration test for permissions page
+  - New npm scripts: `test:integration`, `test:all`
+
+### Refactored
+- **Analytics Service Centralization**
+  - Unified `analytics_service.py` now provides shared computation for:
+    - `parse_date_range()` — consistent date parsing across endpoints
+    - `get_analytics_summary()` — high-level KPIs
+    - `get_cases_by_status()` / `get_cases_by_assignee()` — breakdown stats
+    - `get_cases_trend()` — time-series data
+    - `get_meta_performance()` / `get_meta_spend_summary()` — Meta Lead Ads metrics
+  - `analytics.py` router now calls service functions instead of inline queries
+  - `admin_export_service.py` uses analytics_service for all analytics data
+  - `admin_exports.py` uses analytics_service for date parsing and Meta spend
+  - PDF export now uses same computation path as API endpoints
+
+### Changed
+- Permission checks shifted from role-based to permission-based approach
+- Test expectations updated: unauthenticated requests now return 401
+
+### Test Coverage
+- **Frontend Unit**: 80 tests passing
+- **Frontend Integration**: 3 tests passing (new)
+- **Backend**: 267 tests passing
+- **Total**: 350 tests
+
+---
+
 ## [2025-12-26] (Evening)
 
 ### Added
