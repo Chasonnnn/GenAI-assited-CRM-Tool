@@ -425,6 +425,40 @@ def get_campaign_run(
     ).options(joinedload(CampaignRun.recipients)).first()
 
 
+def list_run_recipients(
+    db: Session,
+    run_id: UUID,
+    status: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[CampaignRecipient]:
+    """List recipients for a campaign run."""
+    query = db.query(CampaignRecipient).filter(CampaignRecipient.run_id == run_id)
+
+    if status:
+        query = query.filter(CampaignRecipient.status == status)
+
+    return (
+        query.order_by(CampaignRecipient.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+
+def get_latest_run_for_campaign(
+    db: Session,
+    campaign_id: UUID,
+) -> CampaignRun | None:
+    """Fetch the latest run for a campaign."""
+    return (
+        db.query(CampaignRun)
+        .filter(CampaignRun.campaign_id == campaign_id)
+        .order_by(CampaignRun.started_at.desc())
+        .first()
+    )
+
+
 # =============================================================================
 # Suppression
 # =============================================================================

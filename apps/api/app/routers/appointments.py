@@ -19,7 +19,6 @@ from app.core.deps import (
     require_csrf_header,
 )
 from app.db.enums import AppointmentStatus
-from app.db.models import User
 from app.schemas.auth import UserSession
 from app.schemas.appointment import (
     AppointmentTypeCreate,
@@ -103,93 +102,6 @@ def _link_to_read(link, base_url: str = "") -> BookingLinkRead:
         updated_at=link.updated_at,
     )
 
-
-def _appointment_to_read(appt, db: Session) -> AppointmentRead:
-    """Convert Appointment model to read schema."""
-    appt_type_name = None
-    if appt.appointment_type:
-        appt_type_name = appt.appointment_type.name
-    
-    approved_by_name = None
-    if appt.approved_by_user_id:
-        user = db.query(User).filter(User.id == appt.approved_by_user_id).first()
-        approved_by_name = user.display_name if user else None
-    
-    # Resolve linked entities
-    case_number = None
-    if appt.case_id and appt.case:
-        case_number = appt.case.case_number
-    
-    intended_parent_name = None
-    if appt.intended_parent_id and appt.intended_parent:
-        intended_parent_name = appt.intended_parent.full_name
-    
-    return AppointmentRead(
-        id=appt.id,
-        user_id=appt.user_id,
-        appointment_type_id=appt.appointment_type_id,
-        appointment_type_name=appt_type_name,
-        client_name=appt.client_name,
-        client_email=appt.client_email,
-        client_phone=appt.client_phone,
-        client_timezone=appt.client_timezone,
-        client_notes=appt.client_notes,
-        scheduled_start=appt.scheduled_start,
-        scheduled_end=appt.scheduled_end,
-        duration_minutes=appt.duration_minutes,
-        meeting_mode=appt.meeting_mode,
-        status=appt.status,
-        pending_expires_at=appt.pending_expires_at,
-        approved_at=appt.approved_at,
-        approved_by_user_id=appt.approved_by_user_id,
-        approved_by_name=approved_by_name,
-        cancelled_at=appt.cancelled_at,
-        cancelled_by_client=appt.cancelled_by_client,
-        cancellation_reason=appt.cancellation_reason,
-        zoom_join_url=appt.zoom_join_url,
-        google_event_id=appt.google_event_id,
-        case_id=appt.case_id,
-        case_number=case_number,
-        intended_parent_id=appt.intended_parent_id,
-        intended_parent_name=intended_parent_name,
-        created_at=appt.created_at,
-        updated_at=appt.updated_at,
-    )
-
-
-def _appointment_to_list_item(appt) -> AppointmentListItem:
-    """Convert Appointment model to list item schema."""
-    appt_type_name = None
-    if appt.appointment_type:
-        appt_type_name = appt.appointment_type.name
-    
-    # Resolve linked entities
-    case_number = None
-    if appt.case_id and appt.case:
-        case_number = appt.case.case_number
-    
-    intended_parent_name = None
-    if appt.intended_parent_id and appt.intended_parent:
-        intended_parent_name = appt.intended_parent.full_name
-    
-    return AppointmentListItem(
-        id=appt.id,
-        appointment_type_name=appt_type_name,
-        client_name=appt.client_name,
-        client_email=appt.client_email,
-        client_phone=appt.client_phone,
-        client_timezone=appt.client_timezone,
-        scheduled_start=appt.scheduled_start,
-        scheduled_end=appt.scheduled_end,
-        duration_minutes=appt.duration_minutes,
-        meeting_mode=appt.meeting_mode,
-        status=appt.status,
-        case_id=appt.case_id,
-        case_number=case_number,
-        intended_parent_id=appt.intended_parent_id,
-        intended_parent_name=intended_parent_name,
-        created_at=appt.created_at,
-    )
 
 
 # =============================================================================
@@ -486,8 +398,9 @@ def list_appointments(
     
     pages = (total + per_page - 1) // per_page if per_page > 0 else 0
     
+    context = appointment_service.get_appointment_context(db, appointments)
     return AppointmentListResponse(
-        items=[_appointment_to_list_item(a) for a in appointments],
+        items=[appointment_service.to_appointment_list_item(a, context) for a in appointments],
         total=total,
         page=page,
         per_page=per_page,
@@ -510,7 +423,8 @@ def get_appointment(
     if appt.user_id != session.user_id and session.role not in ["admin", "developer"]:
         raise HTTPException(status_code=403, detail="Not authorized")
     
-    return _appointment_to_read(appt, db)
+    context = appointment_service.get_appointment_context(db, [appt])
+    return appointment_service.to_appointment_read(appt, context)
 
 
 @router.patch(
@@ -556,7 +470,8 @@ def update_appointment_link(
 
     db.commit()
     db.refresh(appt)
-    return _appointment_to_read(appt, db)
+    context = appointment_service.get_appointment_context(db, [appt])
+    return appointment_service.to_appointment_read(appt, context)
 
 
 @router.post(
@@ -588,7 +503,8 @@ def approve_appointment(
         base_url = str(settings.FRONTEND_URL).rstrip("/")
         appointment_email_service.send_confirmed(db, appt, base_url)
         
-        return _appointment_to_read(appt, db)
+        context = appointment_service.get_appointment_context(db, [appt])
+        return appointment_service.to_appointment_read(appt, context)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -625,7 +541,8 @@ def reschedule_appointment(
         base_url = str(settings.FRONTEND_URL).rstrip("/")
         appointment_email_service.send_rescheduled(db, appt, old_start, base_url)
         
-        return _appointment_to_read(appt, db)
+        context = appointment_service.get_appointment_context(db, [appt])
+        return appointment_service.to_appointment_read(appt, context)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -661,6 +578,7 @@ def cancel_appointment(
         base_url = str(settings.FRONTEND_URL).rstrip("/")
         appointment_email_service.send_cancelled(db, appt, base_url)
         
-        return _appointment_to_read(appt, db)
+        context = appointment_service.get_appointment_context(db, [appt])
+        return appointment_service.to_appointment_read(appt, context)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

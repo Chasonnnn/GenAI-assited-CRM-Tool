@@ -15,7 +15,6 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
-from app.db.models import User, Organization
 from app.schemas.appointment import (
     AppointmentTypeRead,
     AppointmentCreate,
@@ -27,7 +26,7 @@ from app.schemas.appointment import (
     PublicBookingPageRead,
 )
 from app.core.rate_limit import limiter
-from app.services import appointment_service, appointment_email_service
+from app.services import appointment_service, appointment_email_service, user_service, org_service
 from app.core.config import settings
 
 router = APIRouter()
@@ -62,7 +61,7 @@ def _appointment_to_public_read(appt, db: Session) -> dict:
     if appt.appointment_type:
         appt_type_name = appt.appointment_type.name
     
-    user = db.query(User).filter(User.id == appt.user_id).first()
+    user = user_service.get_user_by_id(db, appt.user_id)
     staff_name = user.display_name if user else None
     
     return {
@@ -99,12 +98,12 @@ def get_booking_page(
         raise HTTPException(status_code=404, detail="Booking page not found")
     
     # Get staff info
-    user = db.query(User).filter(User.id == link.user_id).first()
+    user = user_service.get_user_by_id(db, link.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Staff not found")
     
     # Get org name
-    org = db.query(Organization).filter(Organization.id == link.organization_id).first()
+    org = org_service.get_org_by_id(db, link.organization_id)
     org_name = org.name if org else None
     org_timezone = org.timezone if org else None
     
@@ -166,7 +165,7 @@ def get_available_slots(
     
     # Default timezone to org if not provided
     if not client_timezone:
-        org = db.query(Organization).filter(Organization.id == link.organization_id).first()
+        org = org_service.get_org_by_id(db, link.organization_id)
         client_timezone = org.timezone if org else "America/Los_Angeles"
 
     # Get slots

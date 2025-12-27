@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_session, get_db, require_permission, require_csrf_header
 from app.core.policies import POLICIES
 
-from app.db.models import OrgInvite
 from app.schemas.auth import UserSession
 from app.services import invite_service
 from app.services import invite_email_service
@@ -218,23 +217,11 @@ async def get_invite_details(
     db: Session = Depends(get_db),
 ):
     """Get invite details for accept page (public endpoint)."""
-    from app.db.models import Organization, User
-    
-    invite = db.query(OrgInvite).filter(OrgInvite.id == invite_id).first()
+    invite, org_name, inviter_name = invite_service.get_invite_details(db, invite_id)
     if not invite:
         raise HTTPException(status_code=404, detail="Invite not found")
     
     status = invite_service.get_invite_status(invite)
-    
-    # Get org name
-    org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
-    org_name = org.name if org else "Unknown Organization"
-    
-    # Get inviter name
-    inviter_name = None
-    if invite.invited_by_user_id:
-        inviter = db.query(User).filter(User.id == invite.invited_by_user_id).first()
-        inviter_name = inviter.full_name if inviter else None
     
     return InviteDetailsRead(
         id=str(invite.id),
@@ -253,71 +240,17 @@ async def accept_invite(
     session: UserSession = Depends(get_current_session),
 ):
     """Accept an invitation and create membership."""
-    from app.db.models import Membership, User, Organization
-    from app.db.enums import Role as RoleEnum
-    
-    invite = db.query(OrgInvite).filter(OrgInvite.id == invite_id).first()
-    if not invite:
-        raise HTTPException(status_code=404, detail="Invite not found")
-    
-    # Check invite status
-    status = invite_service.get_invite_status(invite)
-    if status == "accepted":
-        raise HTTPException(status_code=400, detail="Invite already accepted")
-    if status == "expired":
-        raise HTTPException(status_code=400, detail="Invite has expired")
-    if status == "revoked":
-        raise HTTPException(status_code=400, detail="Invite was revoked")
-    
-    # Verify email matches
-    user = db.query(User).filter(User.id == session.user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    if user.email.lower() != invite.email.lower():
-        raise HTTPException(
-            status_code=403, 
-            detail="This invite was sent to a different email address"
-        )
-    
-    # Check if already a member
-    existing = db.query(Membership).filter(
-        Membership.user_id == session.user_id,
-        Membership.organization_id == invite.organization_id,
-    ).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Already a member of this organization")
-    
-    # Map role string to enum
-    role_map = {
-        "member": RoleEnum.MEMBER,
-        "admin": RoleEnum.ADMIN,
-    }
-    role = role_map.get(invite.role, RoleEnum.MEMBER)
-    
-    # Create membership
-    membership = Membership(
-        user_id=session.user_id,
-        organization_id=invite.organization_id,
-        role=role,
-    )
-    db.add(membership)
-    
-    # Mark invite as accepted
-    invite.accepted_at = datetime.utcnow()
-    
-    # Set this org as user's active org if they don't have one
-    if not user.active_org_id:
-        user.active_org_id = invite.organization_id
-    
-    db.commit()
-    
-    # Get org name for response
-    org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
-    
+    try:
+        result = invite_service.accept_invite(db, invite_id, session.user_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        detail = str(e)
+        status_code = 404 if detail == "Invite not found" else 400
+        raise HTTPException(status_code=status_code, detail=detail)
+
     return {
         "accepted": True,
-        "organization_id": str(invite.organization_id),
-        "organization_name": org.name if org else "Unknown",
+        "organization_id": result["organization_id"],
+        "organization_name": result["organization_name"],
     }
-

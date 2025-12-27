@@ -319,6 +319,19 @@ def get_attachment(
     ).first()
 
 
+def get_attachment_by_storage_key(
+    db: Session,
+    org_id: uuid.UUID,
+    storage_key: str,
+) -> Attachment | None:
+    """Get attachment by storage key (org-scoped)."""
+    return db.query(Attachment).filter(
+        Attachment.organization_id == org_id,
+        Attachment.storage_key == storage_key,
+        Attachment.deleted_at.is_(None),
+    ).first()
+
+
 def get_download_url(
     db: Session,
     org_id: uuid.UUID,

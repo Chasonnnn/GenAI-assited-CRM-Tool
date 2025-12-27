@@ -10,7 +10,7 @@ from app.core.deps import get_db, require_permission, get_current_session, requi
 from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
 from app.db.enums import WorkflowTriggerType
-from app.services import workflow_service
+from app.services import case_service, workflow_service
 from app.services.workflow_engine import engine
 from app.schemas.workflow import (
     WorkflowCreate, WorkflowUpdate, WorkflowRead, WorkflowListItem,
@@ -115,7 +115,7 @@ def create_workflow(
             user_id=session.user_id,
             data=data,
         )
-        return _workflow_to_read(db, workflow)
+        return workflow_service.to_workflow_read(db, workflow)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -130,7 +130,7 @@ def get_workflow(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
-    return _workflow_to_read(db, workflow)
+    return workflow_service.to_workflow_read(db, workflow)
 
 
 @router.patch("/{workflow_id}", response_model=WorkflowRead, dependencies=[Depends(require_csrf_header)])
@@ -152,7 +152,7 @@ def update_workflow(
             user_id=session.user_id,
             data=data,
         )
-        return _workflow_to_read(db, workflow)
+        return workflow_service.to_workflow_read(db, workflow)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -184,7 +184,7 @@ def toggle_workflow(
         raise HTTPException(status_code=404, detail="Workflow not found")
     
     workflow = workflow_service.toggle_workflow(db, workflow, session.user_id)
-    return _workflow_to_read(db, workflow)
+    return workflow_service.to_workflow_read(db, workflow)
 
 
 @router.post("/{workflow_id}/duplicate", response_model=WorkflowRead, dependencies=[Depends(require_csrf_header)])
@@ -199,7 +199,7 @@ def duplicate_workflow(
         raise HTTPException(status_code=404, detail="Workflow not found")
     
     new_workflow = workflow_service.duplicate_workflow(db, workflow, session.user_id)
-    return _workflow_to_read(db, new_workflow)
+    return workflow_service.to_workflow_read(db, new_workflow)
 
 
 # =============================================================================
@@ -214,17 +214,12 @@ def test_workflow(
     session: UserSession = Depends(get_current_session),
 ):
     """Test a workflow against an entity (dry run)."""
-    from app.db.models import Case
-    
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
     
     # Get entity
-    entity = db.query(Case).filter(
-        Case.id == request.entity_id,
-        Case.organization_id == session.org_id,
-    ).first()
+    entity = case_service.get_case(db, session.org_id, request.entity_id)
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
     
@@ -359,45 +354,4 @@ def update_my_preference(
         workflow_id=pref.workflow_id,
         workflow_name=workflow.name,
         is_opted_out=pref.is_opted_out,
-    )
-
-
-# =============================================================================
-# Helpers
-# =============================================================================
-
-def _workflow_to_read(db: Session, workflow) -> WorkflowRead:
-    """Convert workflow model to read schema with user names."""
-    from app.db.models import User
-    
-    created_by_name = None
-    updated_by_name = None
-    
-    if workflow.created_by_user_id:
-        user = db.query(User).filter(User.id == workflow.created_by_user_id).first()
-        created_by_name = user.display_name if user else None
-    
-    if workflow.updated_by_user_id:
-        user = db.query(User).filter(User.id == workflow.updated_by_user_id).first()
-        updated_by_name = user.display_name if user else None
-    
-    return WorkflowRead(
-        id=workflow.id,
-        name=workflow.name,
-        description=workflow.description,
-        icon=workflow.icon,
-        schema_version=workflow.schema_version,
-        trigger_type=workflow.trigger_type,
-        trigger_config=workflow.trigger_config,
-        conditions=workflow.conditions,
-        condition_logic=workflow.condition_logic,
-        actions=workflow.actions,
-        is_enabled=workflow.is_enabled,
-        run_count=workflow.run_count,
-        last_run_at=workflow.last_run_at,
-        last_error=workflow.last_error,
-        created_by_name=created_by_name,
-        updated_by_name=updated_by_name,
-        created_at=workflow.created_at,
-        updated_at=workflow.updated_at,
     )

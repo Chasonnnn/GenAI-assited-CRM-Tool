@@ -943,3 +943,168 @@ async def get_meta_spend_summary(
         "time_series": time_series_points,
         "breakdowns": breakdown_points,
     }
+
+
+# =============================================================================
+# Activity Feed
+# =============================================================================
+
+def get_activity_feed(
+    db: Session,
+    organization_id: uuid.UUID,
+    limit: int = 20,
+    offset: int = 0,
+    activity_type: str | None = None,
+    user_id: str | None = None,
+) -> tuple[list[dict[str, Any]], bool]:
+    """Get org-wide activity feed entries."""
+    from app.db.models import CaseActivityLog, User
+    from sqlalchemy import desc
+
+    query = db.query(
+        CaseActivityLog,
+        Case.case_number,
+        Case.full_name.label("case_name"),
+        User.display_name.label("actor_name"),
+    ).join(
+        Case, CaseActivityLog.case_id == Case.id
+    ).outerjoin(
+        User, CaseActivityLog.actor_user_id == User.id
+    ).filter(
+        CaseActivityLog.organization_id == organization_id
+    )
+
+    if activity_type:
+        query = query.filter(CaseActivityLog.activity_type == activity_type)
+
+    if user_id:
+        try:
+            parsed_id = uuid.UUID(user_id)
+            query = query.filter(CaseActivityLog.actor_user_id == parsed_id)
+        except ValueError:
+            pass
+
+    query = query.order_by(desc(CaseActivityLog.created_at))
+    query = query.offset(offset).limit(limit + 1)
+
+    results = query.all()
+    has_more = len(results) > limit
+    items = results[:limit]
+
+    return (
+        [
+            {
+                "id": str(row.CaseActivityLog.id),
+                "activity_type": row.CaseActivityLog.activity_type,
+                "case_id": str(row.CaseActivityLog.case_id),
+                "case_number": row.case_number,
+                "case_name": row.case_name,
+                "actor_name": row.actor_name,
+                "details": row.CaseActivityLog.details,
+                "created_at": row.CaseActivityLog.created_at.isoformat(),
+            }
+            for row in items
+        ],
+        has_more,
+    )
+
+
+# =============================================================================
+# Analytics PDF Export
+# =============================================================================
+
+def get_pdf_export_data(
+    db: Session,
+    organization_id: uuid.UUID,
+    start_dt: datetime | None,
+    end_dt: datetime | None,
+) -> dict[str, Any]:
+    """Build analytics data used for PDF export."""
+    from app.db.models import Task
+    from app.services import pipeline_service, org_service
+
+    date_filter = Case.is_archived == False
+    if start_dt:
+        date_filter = date_filter & (Case.created_at >= start_dt)
+    if end_dt:
+        date_filter = date_filter & (Case.created_at <= end_dt)
+
+    org = org_service.get_org_by_id(db, organization_id)
+    org_name = org.name if org else "Organization"
+
+    total_cases = db.query(func.count(Case.id)).filter(
+        Case.organization_id == organization_id,
+        date_filter,
+    ).scalar() or 0
+
+    period_start = (end_dt or datetime.now(timezone.utc)) - timedelta(days=7)
+    new_this_period = db.query(func.count(Case.id)).filter(
+        Case.organization_id == organization_id,
+        Case.is_archived == False,
+        Case.created_at >= period_start,
+    ).scalar() or 0
+
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
+    qualified_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "qualified")
+
+    qualified_rate = 0.0
+    if qualified_stage and total_cases > 0:
+        qualified_stage_ids = db.query(PipelineStage.id).filter(
+            PipelineStage.pipeline_id == pipeline.id,
+            PipelineStage.order >= qualified_stage.order,
+            PipelineStage.is_active == True,
+        )
+        qualified_count = db.query(func.count(Case.id)).filter(
+            Case.organization_id == organization_id,
+            Case.is_archived == False,
+            Case.stage_id.in_(qualified_stage_ids),
+        ).scalar() or 0
+        qualified_rate = (qualified_count / total_cases) * 100
+
+    pending_tasks = db.query(func.count(Task.id)).filter(
+        Task.organization_id == organization_id,
+        Task.is_completed == False,
+    ).scalar() or 0
+
+    overdue_tasks = db.query(func.count(Task.id)).filter(
+        Task.organization_id == organization_id,
+        Task.is_completed == False,
+        Task.due_date < datetime.now(timezone.utc).date(),
+    ).scalar() or 0
+
+    summary = {
+        "total_cases": total_cases,
+        "new_this_period": new_this_period,
+        "qualified_rate": qualified_rate,
+        "pending_tasks": pending_tasks,
+        "overdue_tasks": overdue_tasks,
+    }
+
+    cases_by_status = get_cases_by_status(db, organization_id)
+    cases_by_assignee = get_cases_by_assignee(
+        db, organization_id, label="display_name"
+    )
+
+    trend_start = datetime.now(timezone.utc) - timedelta(days=30)
+    trend_data = get_cases_trend(
+        db,
+        organization_id,
+        start=trend_start,
+        end=datetime.now(timezone.utc),
+        group_by="day",
+    )
+
+    meta_start = start_dt or datetime(1970, 1, 1, tzinfo=timezone.utc)
+    meta_end = end_dt or datetime.now(timezone.utc)
+    meta_performance = get_meta_performance(
+        db, organization_id, meta_start, meta_end
+    )
+
+    return {
+        "summary": summary,
+        "cases_by_status": cases_by_status,
+        "cases_by_assignee": cases_by_assignee,
+        "trend_data": trend_data,
+        "meta_performance": meta_performance,
+        "org_name": org_name,
+    }

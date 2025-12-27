@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
 from app.core.policies import POLICIES
-from app.db.models import Organization
 from app.schemas.auth import UserSession
+from app.services import org_service
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -39,7 +39,7 @@ def get_org_settings(
     db: Session = Depends(get_db),
 ):
     """Get organization settings."""
-    org = db.query(Organization).filter(Organization.id == session.org_id).first()
+    org = org_service.get_org_by_id(db, session.org_id)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
     
@@ -67,24 +67,17 @@ def update_org_settings(
     
     Requires manage_org permission (Admin only).
     """
-    org = db.query(Organization).filter(Organization.id == session.org_id).first()
+    org = org_service.get_org_by_id(db, session.org_id)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
-    
-    if body.name is not None:
-        org.name = body.name
-    if body.address is not None:
-        if hasattr(org, 'address'):
-            org.address = body.address
-    if body.phone is not None:
-        if hasattr(org, 'phone'):
-            org.phone = body.phone
-    if body.email is not None:
-        if hasattr(org, 'contact_email'):
-            org.contact_email = body.email
-    
-    db.commit()
-    db.refresh(org)
+    org = org_service.update_org_contact(
+        db=db,
+        org=org,
+        name=body.name,
+        address=body.address,
+        phone=body.phone,
+        email=body.email,
+    )
     
     return OrgSettingsRead(
         id=str(org.id),

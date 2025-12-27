@@ -46,6 +46,25 @@ class CreateMeetingResult(BaseModel):
     task_id: uuid.UUID | None = None
 
 
+def list_zoom_meetings(
+    db: Session,
+    org_id: uuid.UUID,
+    user_id: uuid.UUID,
+    limit: int = 20,
+) -> list[ZoomMeetingModel]:
+    """List user's recent Zoom meetings."""
+    return (
+        db.query(ZoomMeetingModel)
+        .filter(
+            ZoomMeetingModel.organization_id == org_id,
+            ZoomMeetingModel.user_id == user_id,
+        )
+        .order_by(ZoomMeetingModel.created_at.desc())
+        .limit(min(limit, 50))
+        .all()
+    )
+
+
 # ============================================================================
 # Zoom API Functions
 # ============================================================================

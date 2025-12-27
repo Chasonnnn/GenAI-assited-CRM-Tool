@@ -21,6 +21,15 @@ All notable changes to this project will be documented in this file.
   - New npm scripts: `test:integration`, `test:all`
 
 ### Refactored
+- **SQL Consolidation** — All router-level SQL moved to service layer
+  - New services: `ai_service.py`, `match_service.py`, `queue_service.py`, `membership_service.py`, `meta_page_service.py`
+  - Updated services: `analytics_service.py`, `audit_service.py`, `note_service.py`, `task_service.py`, `invite_service.py`, `alert_service.py`, `org_service.py`, `user_service.py`
+  - **AI router**: Entity lookups, approvals, conversations, notes/tasks, dashboard counts → `ai_service`
+  - **Matches router**: Match queries, events, batch loading → `match_service`
+  - **Queues router**: CRUD, claim/release, member management → `queue_service`
+  - **All other routers**: Thin HTTP handlers delegating to services
+  - Pattern: Routers handle HTTP concerns only; services own all SQL/ORM queries
+
 - **Analytics Service Centralization**
   - Unified `analytics_service.py` now provides shared computation for:
     - `parse_date_range()` — consistent date parsing across endpoints

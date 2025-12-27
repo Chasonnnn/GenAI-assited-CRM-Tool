@@ -23,6 +23,7 @@ from app.schemas.workflow import (
     SendEmailActionConfig, CreateTaskActionConfig, AssignCaseActionConfig,
     SendNotificationActionConfig, UpdateFieldActionConfig, AddNoteActionConfig,
 )
+from app.services import user_service
 
 
 # =============================================================================
@@ -521,6 +522,41 @@ def is_user_opted_out(
     ).first()
     
     return pref.is_opted_out if pref else False
+
+
+def to_workflow_read(db: Session, workflow: AutomationWorkflow) -> WorkflowRead:
+    """Convert workflow model to read schema with user names."""
+    created_by_name = None
+    updated_by_name = None
+
+    if workflow.created_by_user_id:
+        user = user_service.get_user_by_id(db, workflow.created_by_user_id)
+        created_by_name = user.display_name if user else None
+
+    if workflow.updated_by_user_id:
+        user = user_service.get_user_by_id(db, workflow.updated_by_user_id)
+        updated_by_name = user.display_name if user else None
+
+    return WorkflowRead(
+        id=workflow.id,
+        name=workflow.name,
+        description=workflow.description,
+        icon=workflow.icon,
+        schema_version=workflow.schema_version,
+        trigger_type=workflow.trigger_type,
+        trigger_config=workflow.trigger_config,
+        conditions=workflow.conditions,
+        condition_logic=workflow.condition_logic,
+        actions=workflow.actions,
+        is_enabled=workflow.is_enabled,
+        run_count=workflow.run_count,
+        last_run_at=workflow.last_run_at,
+        last_error=workflow.last_error,
+        created_by_name=created_by_name,
+        updated_by_name=updated_by_name,
+        created_at=workflow.created_at,
+        updated_at=workflow.updated_at,
+    )
 
 
 # =============================================================================

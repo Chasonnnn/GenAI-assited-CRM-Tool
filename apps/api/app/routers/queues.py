@@ -16,6 +16,9 @@ from app.services.queue_service import (
     CaseNotInQueueError,
     DuplicateQueueNameError,
     NotQueueMemberError,
+    QueueMemberExistsError,
+    QueueMemberNotFoundError,
+    QueueMemberUserNotFoundError,
 )
 
 router = APIRouter(
@@ -283,27 +286,17 @@ def add_queue_member(
     if not queue:
         raise HTTPException(status_code=404, detail="Queue not found")
     
-    # Check user exists and is in same org
-    from app.db.models import User, QueueMember
-    user = db.query(User).filter(
-        User.id == data.user_id,
-        User.organization_id == session.org_id,
-    ).first()
-    if not user:
+    try:
+        member, user = queue_service.add_queue_member(
+            db=db,
+            org_id=session.org_id,
+            queue_id=queue_id,
+            user_id=data.user_id,
+        )
+    except QueueMemberUserNotFoundError:
         raise HTTPException(status_code=404, detail="User not found")
-    
-    # Check if already a member
-    existing = db.query(QueueMember).filter(
-        QueueMember.queue_id == queue_id,
-        QueueMember.user_id == data.user_id,
-    ).first()
-    if existing:
+    except QueueMemberExistsError:
         raise HTTPException(status_code=409, detail="User is already a member of this queue")
-    
-    member = QueueMember(queue_id=queue_id, user_id=data.user_id)
-    db.add(member)
-    db.commit()
-    db.refresh(member)
     
     return QueueMemberResponse(
         id=member.id,
@@ -324,16 +317,10 @@ def remove_queue_member(
 ):
     """Remove a user from a queue."""
     
-    from app.db.models import QueueMember
-    result = db.query(QueueMember).filter(
-        QueueMember.queue_id == queue_id,
-        QueueMember.user_id == user_id,
-    ).delete()
-    
-    if not result:
+    try:
+        queue_service.remove_queue_member(db=db, queue_id=queue_id, user_id=user_id)
+    except QueueMemberNotFoundError:
         raise HTTPException(status_code=404, detail="Member not found")
-    
-    db.commit()
 
 
 # =============================================================================

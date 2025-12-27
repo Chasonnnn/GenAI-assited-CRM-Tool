@@ -15,8 +15,8 @@ from app.core.deps import get_current_session, get_db, require_csrf_header, requ
 from app.core.policies import POLICIES
 from app.core.encryption import encrypt_token, is_encryption_configured
 
-from app.db.models import MetaPageMapping
 from app.schemas.auth import UserSession
+from app.services import meta_page_service
 
 
 router = APIRouter(prefix="/admin/meta-pages", tags=["admin"], dependencies=[Depends(require_permission(POLICIES["meta_leads"].default))])
@@ -72,11 +72,7 @@ def list_meta_pages(
     db: Session = Depends(get_db),
 ):
     """List all Meta page mappings for the organization."""
-    pages = db.query(MetaPageMapping).filter(
-        MetaPageMapping.organization_id == session.org_id
-    ).order_by(MetaPageMapping.created_at.desc()).all()
-    
-    return pages
+    return meta_page_service.list_meta_pages(db, session.org_id)
 
 
 @router.post("", response_model=MetaPageRead, status_code=status.HTTP_201_CREATED)
@@ -99,9 +95,7 @@ def create_meta_page(
         )
     
     # Check for existing mapping
-    existing = db.query(MetaPageMapping).filter(
-        MetaPageMapping.page_id == data.page_id
-    ).first()
+    existing = meta_page_service.get_mapping_by_page_id_any_org(db, data.page_id)
     
     if existing:
         raise HTTPException(
@@ -114,19 +108,14 @@ def create_meta_page(
     expires_at = datetime.utcnow() + timedelta(days=data.expires_days)
     
     # Create mapping
-    mapping = MetaPageMapping(
-        organization_id=session.org_id,
+    return meta_page_service.create_mapping(
+        db=db,
+        org_id=session.org_id,
         page_id=data.page_id,
         page_name=data.page_name,
         access_token_encrypted=encrypted,
         token_expires_at=expires_at,
-        is_active=True,
     )
-    db.add(mapping)
-    db.commit()
-    db.refresh(mapping)
-    
-    return mapping
 
 
 @router.put("/{page_id}", response_model=MetaPageRead)
@@ -138,18 +127,12 @@ def update_meta_page(
     db: Session = Depends(get_db),
 ):
     """Update existing Meta page mapping."""
-    mapping = db.query(MetaPageMapping).filter(
-        MetaPageMapping.page_id == page_id,
-        MetaPageMapping.organization_id == session.org_id,
-    ).first()
+    mapping = meta_page_service.get_mapping_by_page_id(db, session.org_id, page_id)
     
     if not mapping:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found")
     
     # Update fields
-    if data.page_name is not None:
-        mapping.page_name = data.page_name
-    
     if data.access_token is not None:
         if not is_encryption_configured():
             raise HTTPException(
@@ -157,21 +140,22 @@ def update_meta_page(
                 detail="META_ENCRYPTION_KEY not configured"
             )
         encrypted = encrypt_token(data.access_token)
-        mapping.access_token_encrypted = encrypted
+    else:
+        encrypted = None
         
     if data.expires_days is not None:
-        mapping.token_expires_at = datetime.utcnow() + timedelta(days=data.expires_days)
-        
-    if data.is_active is not None:
-        mapping.is_active = data.is_active
-        if data.is_active:
-            # Clear error when reactivating
-            mapping.last_error = None
-    
-    db.commit()
-    db.refresh(mapping)
-    
-    return mapping
+        expires_at = datetime.utcnow() + timedelta(days=data.expires_days)
+    else:
+        expires_at = None
+
+    return meta_page_service.update_mapping(
+        db=db,
+        mapping=mapping,
+        page_name=data.page_name,
+        access_token_encrypted=encrypted,
+        token_expires_at=expires_at,
+        is_active=data.is_active,
+    )
 
 
 @router.delete("/{page_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -186,14 +170,9 @@ def delete_meta_page(
     
     Replaces: python -m app.cli deactivate-meta-page
     """
-    mapping = db.query(MetaPageMapping).filter(
-        MetaPageMapping.page_id == page_id,
-        MetaPageMapping.organization_id == session.org_id,
-    ).first()
+    mapping = meta_page_service.get_mapping_by_page_id(db, session.org_id, page_id)
     
     if not mapping:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found")
     
-    db.delete(mapping)
-    db.commit()
-
+    meta_page_service.delete_mapping(db, mapping)

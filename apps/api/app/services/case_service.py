@@ -1007,3 +1007,69 @@ def get_case_stats(db: Session, org_id: UUID) -> dict:
         "month_change_pct": month_change_pct,
         "pending_tasks": pending_tasks,
     }
+
+
+def list_assignees(db: Session, org_id: UUID) -> list[dict[str, str]]:
+    """List assignable org members with display names."""
+    from app.db.models import Membership, User
+
+    rows = db.query(Membership, User).join(
+        User, Membership.user_id == User.id
+    ).filter(
+        Membership.organization_id == org_id
+    ).all()
+
+    return [
+        {
+            "id": str(user.id),
+            "name": user.display_name,
+            "role": membership.role,
+        }
+        for membership, user in rows
+    ]
+
+
+def list_case_activity(
+    db: Session,
+    org_id: UUID,
+    case_id: UUID,
+    page: int,
+    per_page: int,
+) -> tuple[list[dict], int]:
+    """List activity log items for a case."""
+    from app.db.models import CaseActivityLog, User
+
+    base_query = db.query(
+        CaseActivityLog,
+        User.display_name.label("actor_name"),
+    ).outerjoin(
+        User, CaseActivityLog.actor_user_id == User.id
+    ).filter(
+        CaseActivityLog.case_id == case_id,
+        CaseActivityLog.organization_id == org_id,
+    )
+
+    total = base_query.count()
+    offset = (page - 1) * per_page
+    rows = (
+        base_query.order_by(CaseActivityLog.created_at.desc())
+        .offset(offset)
+        .limit(per_page)
+        .all()
+    )
+
+    items = []
+    for row in rows:
+        activity = row.CaseActivityLog
+        items.append(
+            {
+                "id": activity.id,
+                "activity_type": activity.activity_type,
+                "actor_user_id": activity.actor_user_id,
+                "actor_name": row.actor_name,
+                "details": activity.details,
+                "created_at": activity.created_at,
+            }
+        )
+
+    return items, total
