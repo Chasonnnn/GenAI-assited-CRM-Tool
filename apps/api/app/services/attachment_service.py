@@ -3,7 +3,7 @@
 import hashlib
 import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import BinaryIO
 
 import boto3

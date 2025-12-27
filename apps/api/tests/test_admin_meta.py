@@ -234,8 +234,6 @@ async def test_meta_pages_org_isolation(authed_client: AsyncClient, db, client):
     """Test pages are isolated per organization."""
     from app.db.models import Organization, User, Membership, MetaPageMapping
     from app.db.enums import Role
-    from app.core.security import create_session_token
-    from app.core.deps import COOKIE_NAME
     
     # Create second org
     org2 = Organization(

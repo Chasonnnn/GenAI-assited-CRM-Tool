@@ -147,7 +147,7 @@ async def process_job(db, job) -> None:
                 logger.error(f"Webhook retry failed: {webhook_url} - {str(e)}")
                 raise  # Will trigger job retry mechanism
         else:
-            logger.warning(f"Invalid webhook retry payload: missing url or data")
+            logger.warning("Invalid webhook retry payload: missing url or data")
         
     elif job.job_type == JobType.NOTIFICATION.value:
         # Process notification - create in-app notification record
@@ -521,7 +521,7 @@ async def process_workflow_email(db, job) -> None:
         - recipient_email: Target email address
         - variables: Dict of resolved template variables
     """
-    from app.db.models import EmailTemplate, Case, EmailLog
+    from app.db.models import EmailTemplate, EmailLog
     from app.services import email_service
     
     template_id = job.payload.get("template_id")

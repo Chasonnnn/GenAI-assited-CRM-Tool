@@ -18,7 +18,7 @@ def list_meta_pages(db: Session, org_id: UUID) -> list[MetaPageMapping]:
 def list_active_mappings(db: Session) -> list[MetaPageMapping]:
     """List active Meta page mappings across all orgs."""
     return db.query(MetaPageMapping).filter(
-        MetaPageMapping.is_active == True,
+        MetaPageMapping.is_active.is_(True),
     ).all()
 
 
@@ -58,14 +58,14 @@ def get_active_mapping_by_page_id(
     """Get active mapping for a page id."""
     return db.query(MetaPageMapping).filter(
         MetaPageMapping.page_id == page_id,
-        MetaPageMapping.is_active == True,
+        MetaPageMapping.is_active.is_(True),
     ).first()
 
 
 def get_first_active_mapping(db: Session) -> MetaPageMapping | None:
     """Get first active mapping (for dev/test use)."""
     return db.query(MetaPageMapping).filter(
-        MetaPageMapping.is_active == True,
+        MetaPageMapping.is_active.is_(True),
     ).first()
 
 

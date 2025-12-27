@@ -108,7 +108,6 @@ def log_event(
         The created audit log entry with computed hash chain
     """
     from app.services import version_service
-    import json as json_module
     
     # Get previous hash for chain
     prev_hash = version_service.get_last_audit_hash(db, org_id)

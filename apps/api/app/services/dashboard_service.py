@@ -24,7 +24,7 @@ def get_upcoming_items(
 
     task_filters = [
         Task.organization_id == org_id,
-        Task.is_completed == False,
+        Task.is_completed.is_(False),
         and_(Task.owner_type == OwnerType.USER.value, Task.owner_id == user_id),
     ]
 

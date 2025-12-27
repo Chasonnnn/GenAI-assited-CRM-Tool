@@ -1,14 +1,56 @@
 """FastAPI application entry point."""
 import logging
-import os
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.db.session import engine
+from app.routers import (
+    admin_exports,
+    admin_imports,
+    admin_meta,
+    admin_versions,
+    ai,
+    analytics,
+    appointments,
+    attachments,
+    audit,
+    auth,
+    booking,
+    campaigns,
+    cases,
+    cases_import,
+    compliance,
+    dashboard,
+    dev,
+    email_templates,
+    integrations,
+    internal,
+    intended_parents,
+    invites,
+    jobs,
+    matches,
+    metadata,
+    mfa,
+    notes,
+    notifications,
+    ops,
+    permissions,
+    pipelines,
+    queues,
+    settings as settings_router,
+    tasks,
+    templates,
+    tracking,
+    webhooks,
+    websocket as ws_router,
+    workflows,
+)
 
 # ============================================================================
 # Sentry Integration (optional, for production error tracking)
@@ -30,16 +72,6 @@ if settings.SENTRY_DSN and settings.ENV != "dev":
         send_default_pii=False,  # Don't send PII to Sentry
     )
     logging.info("Sentry initialized for error tracking")
-
-# ============================================================================
-# Rate Limiting
-# ============================================================================
-
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-from app.core.rate_limit import limiter
-
-
 
 # ============================================================================
 # FastAPI App
@@ -72,8 +104,6 @@ app.add_middleware(
 # Routers
 # ============================================================================
 
-from app.routers import auth, cases, notes, tasks, webhooks, email_templates, jobs, intended_parents, notifications
-
 # Auth router (always mounted)
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 
@@ -82,7 +112,6 @@ app.include_router(cases.router, prefix="/cases", tags=["cases"])
 app.include_router(notes.router, tags=["notes"])  # Mixed paths: /cases/{id}/notes and /notes/{id}
 app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 
-from app.routers import cases_import
 app.include_router(cases_import.router)  # Already has /cases/import prefix
 
 # Intended Parents module
@@ -99,119 +128,90 @@ app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
 app.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 
 # Internal endpoints (scheduled/cron jobs - protected by INTERNAL_SECRET)
-from app.routers import internal
 app.include_router(internal.router)
 
 # Analytics endpoints (manager dashboards)
-from app.routers import analytics
 app.include_router(analytics.router)
 
 # Ops endpoints (integration health, alerts)
-from app.routers import ops
 app.include_router(ops.router)
 
 # AI Assistant endpoints
-from app.routers import ai
 app.include_router(ai.router)
 
 # Dashboard widgets
-from app.routers import dashboard
 app.include_router(dashboard.router)
 
 # User Integrations (Gmail, Zoom OAuth)
-from app.routers import integrations
 app.include_router(integrations.router)
 
 # Audit Trail (Manager+)
-from app.routers import audit
 app.include_router(audit.router)
 
 # Compliance (Retention, Legal Holds)
-from app.routers import compliance
 app.include_router(compliance.router)
 
 # Pipeline Configuration (Developer only)
-from app.routers import pipelines
 app.include_router(pipelines.router)
 
 # Permission Management (Manager+)
-from app.routers import permissions
 app.include_router(permissions.router)
 
 # Matches (Surrogate ↔ Intended Parent pairing)
-from app.routers import matches
 app.include_router(matches.router)
 
 # Automation Workflows (Manager+)
-from app.routers import workflows
 app.include_router(workflows.router)  # Router already has prefix="/workflows"
 
 # Campaigns (Bulk email sends - Manager+)
-from app.routers import campaigns
 app.include_router(campaigns.router, prefix="/campaigns", tags=["campaigns"])
 
 # Workflow Templates (Marketplace - Manager+)
-from app.routers import templates
 app.include_router(templates.router)
 
-from app.routers import admin_meta
 app.include_router(admin_meta.router)  # Already has prefix in router definition
 
 # Admin Versions (Developer-only)
-from app.routers import admin_versions
 app.include_router(admin_versions.router)
 
 # Admin Exports (Developer-only)
-from app.routers import admin_exports
 app.include_router(admin_exports.router)
 
 # Admin Imports (Developer-only)
-from app.routers import admin_imports
 app.include_router(admin_imports.router)
 
 # Metadata API (Picklists - any authenticated user)
-from app.routers import metadata
 app.include_router(metadata.router, prefix="/metadata", tags=["metadata"])
 
 # WebSocket for real-time notifications
-from app.routers import websocket as ws_router
 app.include_router(ws_router.router)
 
 # Queue Management (Case Routing)
-from app.routers import queues
 app.include_router(queues.router, prefix="/queues", tags=["queues"])
 
 # File Attachments
-from app.routers import attachments
 app.include_router(attachments.router, tags=["attachments"])
 
 # Team Invitations
-from app.routers import invites
 app.include_router(invites.router, tags=["invites"])
 
 # Settings (organization and user preferences)
-from app.routers import settings as settings_router
 app.include_router(settings_router.router, tags=["settings"])
 
 # Appointments (internal, authenticated)
-from app.routers import appointments
 app.include_router(appointments.router, prefix="/appointments", tags=["appointments"])
 
 # Public Booking (unauthenticated)
-from app.routers import booking
 app.include_router(booking.router, prefix="/book", tags=["booking"])
 
 # Email Tracking (public endpoints for pixel/click tracking)
-from app.routers import tracking
 app.include_router(tracking.router)
 
 # MFA (Multi-Factor Authentication)
-from app.routers import mfa
 app.include_router(mfa.router, prefix="/mfa", tags=["mfa"])
 
 # Dev router (ONLY mounted in dev mode)
 if settings.ENV == "dev":
-    from app.routers import dev
     app.include_router(dev.router, prefix="/dev", tags=["dev"])
 
 

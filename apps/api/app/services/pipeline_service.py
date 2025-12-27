@@ -132,7 +132,7 @@ def get_or_create_default_pipeline(
     """
     pipeline = db.query(Pipeline).filter(
         Pipeline.organization_id == org_id,
-        Pipeline.is_default == True,
+        Pipeline.is_default.is_(True),
     ).first()
     
     if not pipeline:
@@ -474,7 +474,7 @@ def get_stages(
     """Get all stages for a pipeline, ordered by position."""
     query = db.query(PipelineStage).filter(PipelineStage.pipeline_id == pipeline_id)
     if not include_inactive:
-        query = query.filter(PipelineStage.is_active == True)
+        query = query.filter(PipelineStage.is_active.is_(True))
     return query.order_by(PipelineStage.order).all()
 
 
@@ -699,5 +699,5 @@ def get_default_stage(db: Session, pipeline_id: UUID) -> PipelineStage | None:
     """Get the first active stage (usually 'new_unread') as default."""
     return db.query(PipelineStage).filter(
         PipelineStage.pipeline_id == pipeline_id,
-        PipelineStage.is_active == True,
+        PipelineStage.is_active.is_(True),
     ).order_by(PipelineStage.order).first()

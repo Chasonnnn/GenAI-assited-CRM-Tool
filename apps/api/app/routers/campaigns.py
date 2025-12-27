@@ -1,7 +1,6 @@
 """Campaigns router - CRUD and send operations for bulk email campaigns."""
 
 from uuid import UUID
-from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session

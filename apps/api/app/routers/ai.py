@@ -1128,7 +1128,7 @@ Be professional, warm, and concise."""
     except json.JSONDecodeError:
         # Fallback
         parsed = {
-            "subject": f"Following up on your application",
+            "subject": "Following up on your application",
             "body": response.content,
         }
     

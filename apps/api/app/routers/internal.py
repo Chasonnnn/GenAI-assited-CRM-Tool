@@ -153,7 +153,6 @@ def workflow_sweep(
     verify_internal_secret(x_internal_secret)
     
     from app.db.enums import JobType
-    from app.db.models import Job
     from app.services import job_service
     
     orgs_processed = 0

@@ -14,10 +14,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 from app.db.enums import (
     DEFAULT_CASE_SOURCE, DEFAULT_JOB_STATUS, DEFAULT_EMAIL_STATUS,
-    DEFAULT_IP_STATUS, DEFAULT_APPOINTMENT_STATUS,
-    CaseSource, TaskType, JobType, JobStatus, EmailStatus,
-    IntendedParentStatus, EntityType, OwnerType,
-    MeetingMode, AppointmentStatus, AppointmentEmailType
+    DEFAULT_IP_STATUS, TaskType, MeetingMode, AppointmentStatus
 )
 
 

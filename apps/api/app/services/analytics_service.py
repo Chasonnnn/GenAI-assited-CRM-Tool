@@ -65,12 +65,12 @@ def get_analytics_summary(
 
     total_cases = db.query(func.count(Case.id)).filter(
         Case.organization_id == organization_id,
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
     ).scalar() or 0
 
     new_this_period = db.query(func.count(Case.id)).filter(
         Case.organization_id == organization_id,
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
         Case.created_at >= start,
         Case.created_at < end,
     ).scalar() or 0
@@ -89,7 +89,7 @@ def get_analytics_summary(
 
     qualified_count = db.query(func.count(Case.id)).filter(
         Case.organization_id == organization_id,
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
         Case.stage_id.in_(qualified_stage_ids),
     ).scalar() or 0
 
@@ -153,7 +153,7 @@ def get_cases_trend(
         func.count(Case.id).label("count"),
     ).filter(
         Case.organization_id == organization_id,
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
         Case.created_at >= start,
         Case.created_at < end,
     )
@@ -198,7 +198,7 @@ def get_cases_by_status(
         func.count(Case.id).label("count"),
     ).filter(
         Case.organization_id == organization_id,
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
     )
     
     if start_date:
@@ -270,7 +270,7 @@ def get_cases_by_state(
         func.count(Case.id).label("count"),
     ).filter(
         Case.organization_id == organization_id,
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
         Case.state.isnot(None),
     )
     
@@ -305,7 +305,7 @@ def get_cases_by_source(
         func.count(Case.id).label("count"),
     ).filter(
         Case.organization_id == organization_id,
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
     )
     
     if start_date:
@@ -343,7 +343,7 @@ def get_cases_by_user(
     ).filter(
         Case.organization_id == organization_id,
         Case.owner_type == OwnerType.USER.value,
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
     )
     
     if start_date:
@@ -387,7 +387,7 @@ def get_cases_by_assignee(
     ).filter(
         Case.organization_id == organization_id,
         Case.owner_type == OwnerType.USER.value,
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
     )
 
     if start_date:
@@ -435,7 +435,7 @@ def get_conversion_funnel(
     
     query = db.query(Case).filter(
         Case.organization_id == organization_id,
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
     )
     
     if start_date:
@@ -484,7 +484,7 @@ def get_summary_kpis(
     # Current period
     current = db.query(func.count(Case.id)).filter(
         Case.organization_id == organization_id,
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
         func.date(Case.created_at) >= start_date,
         func.date(Case.created_at) <= end_date,
     ).scalar() or 0
@@ -492,7 +492,7 @@ def get_summary_kpis(
     # Previous period
     previous = db.query(func.count(Case.id)).filter(
         Case.organization_id == organization_id,
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
         func.date(Case.created_at) >= prev_start,
         func.date(Case.created_at) <= prev_end,
     ).scalar() or 0
@@ -506,7 +506,7 @@ def get_summary_kpis(
     # Total active cases
     total_active = db.query(func.count(Case.id)).filter(
         Case.organization_id == organization_id,
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
     ).scalar() or 0
     
     # Cases needing attention (not contacted in 7+ days)
@@ -524,7 +524,7 @@ def get_summary_kpis(
 
     needs_attention = db.query(func.count(Case.id)).filter(
         Case.organization_id == organization_id,
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
         Case.stage_id.in_(attention_stage_ids),
         (Case.last_contacted_at.is_(None)) | (Case.last_contacted_at < stale_date),
     ).scalar() or 0
@@ -645,7 +645,7 @@ def get_campaigns(
     ).filter(
         Case.organization_id == organization_id,
         Case.meta_ad_id.isnot(None),
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
     ).group_by(
         Case.meta_ad_id
     ).order_by(func.count(Case.id).desc()).all()
@@ -679,7 +679,7 @@ def get_funnel_with_filter(
     
     query = db.query(Case).filter(
         Case.organization_id == organization_id,
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
     )
     
     if start_date:
@@ -719,7 +719,7 @@ def get_cases_by_state_with_filter(
         func.count(Case.id).label("count"),
     ).filter(
         Case.organization_id == organization_id,
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
         Case.state.isnot(None),
     )
     
@@ -1023,7 +1023,7 @@ def get_pdf_export_data(
     from app.db.models import Task
     from app.services import pipeline_service, org_service
 
-    date_filter = Case.is_archived == False
+    date_filter = Case.is_archived.is_(False)
     if start_dt:
         date_filter = date_filter & (Case.created_at >= start_dt)
     if end_dt:
@@ -1040,7 +1040,7 @@ def get_pdf_export_data(
     period_start = (end_dt or datetime.now(timezone.utc)) - timedelta(days=7)
     new_this_period = db.query(func.count(Case.id)).filter(
         Case.organization_id == organization_id,
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
         Case.created_at >= period_start,
     ).scalar() or 0
 
@@ -1052,23 +1052,23 @@ def get_pdf_export_data(
         qualified_stage_ids = db.query(PipelineStage.id).filter(
             PipelineStage.pipeline_id == pipeline.id,
             PipelineStage.order >= qualified_stage.order,
-            PipelineStage.is_active == True,
+            PipelineStage.is_active.is_(True),
         )
         qualified_count = db.query(func.count(Case.id)).filter(
             Case.organization_id == organization_id,
-            Case.is_archived == False,
+            Case.is_archived.is_(False),
             Case.stage_id.in_(qualified_stage_ids),
         ).scalar() or 0
         qualified_rate = (qualified_count / total_cases) * 100
 
     pending_tasks = db.query(func.count(Task.id)).filter(
         Task.organization_id == organization_id,
-        Task.is_completed == False,
+        Task.is_completed.is_(False),
     ).scalar() or 0
 
     overdue_tasks = db.query(func.count(Task.id)).filter(
         Task.organization_id == organization_id,
-        Task.is_completed == False,
+        Task.is_completed.is_(False),
         Task.due_date < datetime.now(timezone.utc).date(),
     ).scalar() or 0
 

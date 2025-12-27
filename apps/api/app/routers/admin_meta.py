@@ -4,7 +4,6 @@ Admin endpoints for Meta Lead Ads page management.
 Replaces CLI commands with web UI for managing Meta page tokens.
 """
 from datetime import datetime, timedelta
-from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from typing import Literal
 import uuid
 
-from sqlalchemy import and_, or_, func
+from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 
 from app.db.models import OrgInvite, Membership, User, Organization

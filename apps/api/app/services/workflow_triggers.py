@@ -1,5 +1,6 @@
 """Workflow triggers - hooks into core services to trigger workflows."""
 
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -184,7 +185,7 @@ def trigger_scheduled_workflows(db: Session, org_id: UUID) -> None:
     workflows = db.query(AutomationWorkflow).filter(
         AutomationWorkflow.organization_id == org_id,
         AutomationWorkflow.trigger_type == WorkflowTriggerType.SCHEDULED.value,
-        AutomationWorkflow.is_enabled == True,
+        AutomationWorkflow.is_enabled.is_(True),
     ).all()
     
     for workflow in workflows:
@@ -213,14 +214,14 @@ def trigger_scheduled_workflows(db: Session, org_id: UUID) -> None:
 def trigger_inactivity_workflows(db: Session, org_id: UUID) -> None:
     """Trigger inactivity workflows for cases with no recent activity."""
     from datetime import datetime, timezone, timedelta
-    from app.db.models import AutomationWorkflow, Case
+    from app.db.models import AutomationWorkflow
     
     now = datetime.now(timezone.utc)
     
     workflows = db.query(AutomationWorkflow).filter(
         AutomationWorkflow.organization_id == org_id,
         AutomationWorkflow.trigger_type == WorkflowTriggerType.INACTIVITY.value,
-        AutomationWorkflow.is_enabled == True,
+        AutomationWorkflow.is_enabled.is_(True),
     ).all()
     
     for workflow in workflows:
@@ -247,7 +248,7 @@ def trigger_inactivity_workflows(db: Session, org_id: UUID) -> None:
 def _iter_cases(
     db: Session,
     org_id: UUID,
-    updated_before: "datetime | None" = None,
+    updated_before: datetime | None = None,
     batch_size: int = 500,
 ):
     """Iterate through active cases in batches to avoid truncating large orgs."""
@@ -257,7 +258,7 @@ def _iter_cases(
     while True:
         query = db.query(Case).filter(
             Case.organization_id == org_id,
-            Case.is_archived == False,
+            Case.is_archived.is_(False),
         )
         if updated_before is not None:
             query = query.filter(Case.updated_at < updated_before)
@@ -273,7 +274,7 @@ def _iter_cases(
 
 def trigger_task_due_sweep(db: Session, org_id: UUID) -> None:
     """Find and trigger task_due workflows for tasks due soon."""
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timedelta
     from zoneinfo import ZoneInfo
     from app.db.models import AutomationWorkflow, Task, Case, Organization
     
@@ -288,7 +289,7 @@ def trigger_task_due_sweep(db: Session, org_id: UUID) -> None:
     workflows = db.query(AutomationWorkflow).filter(
         AutomationWorkflow.organization_id == org_id,
         AutomationWorkflow.trigger_type == WorkflowTriggerType.TASK_DUE.value,
-        AutomationWorkflow.is_enabled == True,
+        AutomationWorkflow.is_enabled.is_(True),
     ).all()
     
     for workflow in workflows:
@@ -299,8 +300,8 @@ def trigger_task_due_sweep(db: Session, org_id: UUID) -> None:
         # Find tasks due within the window
         tasks = db.query(Task).join(Case).filter(
             Case.organization_id == org_id,
-            Task.due_date != None,
-            Task.is_completed == False,
+            Task.due_date.isnot(None),
+            Task.is_completed.is_(False),
         ).all()
         
         for task in tasks:
@@ -315,7 +316,7 @@ def trigger_task_due_sweep(db: Session, org_id: UUID) -> None:
 
 def trigger_task_overdue_sweep(db: Session, org_id: UUID) -> None:
     """Find and trigger task_overdue workflows for overdue tasks."""
-    from datetime import datetime, timezone
+    from datetime import datetime
     from zoneinfo import ZoneInfo
     from app.db.models import Task, Case, Organization
     
@@ -330,9 +331,9 @@ def trigger_task_overdue_sweep(db: Session, org_id: UUID) -> None:
     
     overdue_tasks = db.query(Task).join(Case).filter(
         Case.organization_id == org_id,
-        Task.due_date != None,
+        Task.due_date.isnot(None),
         Task.due_date < today,
-        Task.is_completed == False,
+        Task.is_completed.is_(False),
     ).all()
     
     for task in overdue_tasks:
@@ -533,8 +534,8 @@ def _should_run_cron(cron: str, now, tz: str) -> bool:
     For full cron support, install croniter.
     """
     try:
-        import pytz
-        local_tz = pytz.timezone(tz)
+        from zoneinfo import ZoneInfo
+        local_tz = ZoneInfo(tz)
         local_now = now.astimezone(local_tz)
     except Exception:
         local_now = now

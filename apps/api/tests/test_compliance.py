@@ -204,7 +204,6 @@ def test_export_empty_result(db, test_org, test_user, export_settings):
 def test_specific_entity_legal_hold_blocks_related(db, test_org, test_user):
     """Legal hold on specific case blocks purge for that case only."""
     from app.db.models import Case, Pipeline, PipelineStage
-    from app.db.enums import CaseStatus
     import uuid
 
     # Create retention policy for archived cases

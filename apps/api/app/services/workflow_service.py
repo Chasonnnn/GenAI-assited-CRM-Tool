@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from sqlalchemy import func, and_
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.models import (
@@ -11,12 +11,11 @@ from app.db.models import (
     User, Queue, EmailTemplate
 )
 from app.db.enums import (
-    WorkflowTriggerType, WorkflowActionType, WorkflowExecutionStatus,
+    WorkflowTriggerType, WorkflowExecutionStatus,
     OwnerType
 )
 from app.schemas.workflow import (
-    WorkflowCreate, WorkflowUpdate, WorkflowRead, WorkflowListItem,
-    WorkflowStats, WorkflowOptions,
+    WorkflowCreate, WorkflowUpdate, WorkflowRead, WorkflowStats, WorkflowOptions,
     ALLOWED_CONDITION_FIELDS, ALLOWED_UPDATE_FIELDS, ALLOWED_EMAIL_VARIABLES,
     StatusChangeTriggerConfig, ScheduledTriggerConfig, TaskDueTriggerConfig,
     InactivityTriggerConfig, CaseUpdatedTriggerConfig,
@@ -139,7 +138,7 @@ def list_workflows(
     )
     
     if enabled_only:
-        query = query.filter(AutomationWorkflow.is_enabled == True)
+        query = query.filter(AutomationWorkflow.is_enabled.is_(True))
     
     if trigger_type:
         query = query.filter(AutomationWorkflow.trigger_type == trigger_type.value)
@@ -215,7 +214,7 @@ def get_workflow_stats(db: Session, org_id: UUID) -> WorkflowStats:
     
     enabled = db.query(func.count(AutomationWorkflow.id)).filter(
         AutomationWorkflow.organization_id == org_id,
-        AutomationWorkflow.is_enabled == True,
+        AutomationWorkflow.is_enabled.is_(True),
     ).scalar() or 0
     
     # Executions in last 24h
@@ -304,7 +303,7 @@ def get_workflow_options(db: Session, org_id: UUID) -> WorkflowOptions:
     # Email templates
     templates = db.query(EmailTemplate).filter(
         EmailTemplate.organization_id == org_id,
-        EmailTemplate.is_active == True,
+        EmailTemplate.is_active.is_(True),
     ).all()
     email_templates = [{"id": str(t.id), "name": t.name} for t in templates]
     

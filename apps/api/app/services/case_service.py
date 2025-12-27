@@ -665,7 +665,7 @@ def restore_case(
     existing = db.query(Case).filter(
         Case.organization_id == case.organization_id,
         Case.email == case.email,
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
         Case.id != case.id,
     ).first()
     
@@ -759,7 +759,7 @@ def list_cases(
     from app.db.enums import Role, OwnerType
     from app.db.models import PipelineStage
     from datetime import datetime
-    from sqlalchemy import or_, asc, desc
+    from sqlalchemy import asc, desc
     
     query = db.query(Case).options(selectinload(Case.stage)).filter(
         Case.organization_id == org_id
@@ -767,7 +767,7 @@ def list_cases(
     
     # Archived filter (default: exclude)
     if not include_archived:
-        query = query.filter(Case.is_archived == False)
+        query = query.filter(Case.is_archived.is_(False))
     
     # Permission-based stage type filter (exclude certain stage types)
     # NULL stage_id cases are kept visible (not excluded)
@@ -895,7 +895,7 @@ def list_handoff_queue(
     query = db.query(Case).filter(
         Case.organization_id == org_id,
         Case.stage_id == handoff_stage.id,
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
     ).order_by(Case.created_at.desc())
     
     total = query.count()
@@ -949,7 +949,7 @@ def get_case_stats(db: Session, org_id: UUID) -> dict:
     # Base query for non-archived cases
     base = db.query(Case).filter(
         Case.organization_id == org_id,
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
     )
     
     # Total count
@@ -961,7 +961,7 @@ def get_case_stats(db: Session, org_id: UUID) -> dict:
         func.count(Case.id).label('count')
     ).filter(
         Case.organization_id == org_id,
-        Case.is_archived == False,
+        Case.is_archived.is_(False),
     ).group_by(Case.status_label).all()
     
     by_status = {row.status_label: row.count for row in status_counts}
@@ -993,7 +993,7 @@ def get_case_stats(db: Session, org_id: UUID) -> dict:
     from app.db.models import Task
     pending_tasks = db.query(func.count(Task.id)).filter(
         Task.organization_id == org_id,
-        Task.is_completed == False,
+        Task.is_completed.is_(False),
     ).scalar() or 0
     
     return {

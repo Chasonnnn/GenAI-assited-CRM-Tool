@@ -13,7 +13,6 @@ from app.services.queue_service import (
     QueueNotFoundError,
     CaseNotFoundError,
     CaseAlreadyClaimedError,
-    CaseNotInQueueError,
     DuplicateQueueNameError,
     NotQueueMemberError,
     QueueMemberExistsError,

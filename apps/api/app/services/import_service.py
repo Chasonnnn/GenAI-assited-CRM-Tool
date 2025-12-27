@@ -172,7 +172,7 @@ def preview_import(
         existing = db.execute(
             select(func.lower(Case.email)).where(
                 Case.organization_id == org_id,
-                Case.is_archived == False,
+                Case.is_archived.is_(False),
                 func.lower(Case.email).in_(csv_emails)
             )
         ).scalars().all()
@@ -269,7 +269,7 @@ def execute_import(
     existing_emails = set(db.execute(
         select(func.lower(Case.email)).where(
             Case.organization_id == org_id,
-            Case.is_archived == False,
+            Case.is_archived.is_(False),
         )
     ).scalars().all())
     

@@ -16,7 +16,6 @@ import subprocess
 import tempfile
 from uuid import UUID
 
-from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import Attachment
@@ -154,7 +153,7 @@ def scan_attachment_job(attachment_id: UUID) -> bool:
         try:
             attachment_service.mark_attachment_scanned(db, attachment_id, "error")
             db.commit()
-        except:
+        except Exception:
             pass
         
         return False
@@ -164,7 +163,7 @@ def scan_attachment_job(attachment_id: UUID) -> bool:
         if temp_file and attachment_service._get_storage_backend() == "s3":
             try:
                 os.unlink(temp_file)
-            except:
+            except Exception:
                 pass
         db.close()
 

@@ -4,7 +4,6 @@ Notifications Router - /me/notifications endpoints.
 Provides notification listing, read status, and settings.
 """
 
-from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query

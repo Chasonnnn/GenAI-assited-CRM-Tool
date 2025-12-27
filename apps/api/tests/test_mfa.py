@@ -6,7 +6,6 @@ Tests cover:
 - MFA enrollment flow
 """
 
-import pytest
 from app.services import mfa_service
 
 

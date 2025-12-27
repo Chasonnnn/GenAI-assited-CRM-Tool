@@ -11,7 +11,6 @@ from uuid import UUID
 import asyncio
 import logging
 import threading
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.enums import NotificationType, Role, OwnerType
@@ -20,7 +19,6 @@ from app.db.models import (
     UserNotificationSettings,
     Case,
     Membership,
-    User,
 )
 from app.core.websocket import manager
 

@@ -1,7 +1,7 @@
 """Schemas for compliance exports, retention policies, and legal holds."""
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field

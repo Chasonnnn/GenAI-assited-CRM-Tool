@@ -1,13 +1,12 @@
 """Template service for workflow template marketplace."""
 
-from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.models import WorkflowTemplate, AutomationWorkflow, User
+from app.db.models import WorkflowTemplate, AutomationWorkflow
 
 
 def list_templates(
@@ -22,7 +21,7 @@ def list_templates(
     """
     query = db.query(WorkflowTemplate).filter(
         or_(
-            WorkflowTemplate.is_global == True,
+            WorkflowTemplate.is_global.is_(True),
             WorkflowTemplate.organization_id == org_id,
         )
     )
@@ -46,7 +45,7 @@ def get_template(
     return db.query(WorkflowTemplate).filter(
         WorkflowTemplate.id == template_id,
         or_(
-            WorkflowTemplate.is_global == True,
+            WorkflowTemplate.is_global.is_(True),
             WorkflowTemplate.organization_id == org_id,
         )
     ).first()
@@ -219,7 +218,7 @@ def delete_template(
     template = db.query(WorkflowTemplate).filter(
         WorkflowTemplate.id == template_id,
         WorkflowTemplate.organization_id == org_id,
-        WorkflowTemplate.is_global == False,
+        WorkflowTemplate.is_global.is_(False),
     ).first()
     
     if not template:
@@ -303,7 +302,7 @@ def seed_global_templates(db: Session) -> int:
     created = 0
     for data in templates_data:
         existing = db.query(WorkflowTemplate).filter(
-            WorkflowTemplate.is_global == True,
+            WorkflowTemplate.is_global.is_(True),
             WorkflowTemplate.name == data["name"],
         ).first()
         

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import (
     AutomationWorkflow, WorkflowExecution, Case, Task, EntityNote,
-    User, Queue, Match, Appointment, Attachment
+    Match, Appointment, Attachment
 )
 from app.db.enums import (
     WorkflowTriggerType, WorkflowActionType, WorkflowExecutionStatus,
@@ -96,7 +96,7 @@ class WorkflowEngine:
         workflows = db.query(AutomationWorkflow).filter(
             AutomationWorkflow.organization_id == org_id,
             AutomationWorkflow.trigger_type == trigger_type.value,
-            AutomationWorkflow.is_enabled == True,
+            AutomationWorkflow.is_enabled.is_(True),
         ).all()
         
         matching = []

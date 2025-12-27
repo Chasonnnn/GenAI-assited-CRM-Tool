@@ -17,7 +17,6 @@ from uuid import uuid4
 
 from app.db.models import (
     Appointment, AppointmentType, AvailabilityRule, BookingLink,
-    User, Organization,
 )
 from app.db.enums import AppointmentStatus, MeetingMode
 
@@ -410,7 +409,6 @@ class TestTimezoneHandling:
     def test_slot_times_in_client_timezone(self, db, test_org, test_user, appointment_type, booking_link, availability_rules):
         """Slots should respect client timezone."""
         from app.services.appointment_service import get_available_slots, SlotQuery
-        from zoneinfo import ZoneInfo
         
         today = datetime.now(timezone.utc).date()
         days_until_monday = (7 - today.weekday()) % 7

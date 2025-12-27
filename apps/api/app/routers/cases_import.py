@@ -3,7 +3,6 @@ CSV Import API endpoints.
 
 Provides REST interface for bulk case imports via CSV upload.
 """
-from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -12,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
 from app.core.policies import POLICIES
-from app.db.models import CaseImport
 from app.schemas.auth import UserSession
 from app.services import import_service
 

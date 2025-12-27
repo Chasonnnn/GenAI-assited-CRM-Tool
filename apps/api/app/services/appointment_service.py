@@ -25,7 +25,7 @@ from app.db.models import (
     Case, IntendedParent
 )
 from app.schemas.appointment import AppointmentRead, AppointmentListItem
-from app.db.enums import AppointmentStatus, AppointmentEmailType, MeetingMode
+from app.db.enums import AppointmentStatus, MeetingMode
 
 
 # =============================================================================
@@ -331,7 +331,7 @@ def list_appointment_types(
         AppointmentType.organization_id == org_id,
     )
     if active_only:
-        query = query.filter(AppointmentType.is_active == True)
+        query = query.filter(AppointmentType.is_active.is_(True))
     return query.order_by(AppointmentType.name).all()
 
 
@@ -527,7 +527,7 @@ def get_booking_link_by_slug(
     """Get a booking link by its public slug."""
     return db.query(BookingLink).filter(
         BookingLink.public_slug == public_slug,
-        BookingLink.is_active == True,
+        BookingLink.is_active.is_(True),
     ).first()
 
 
@@ -784,7 +784,7 @@ def _get_conflicting_tasks(
         Task.organization_id == org_id,
         Task.owner_type == OwnerType.USER.value,
         Task.owner_id == user_id,
-        Task.is_completed == False,
+        Task.is_completed.is_(False),
         Task.due_date >= date_start,
         Task.due_date <= date_end,
         Task.due_time.isnot(None),

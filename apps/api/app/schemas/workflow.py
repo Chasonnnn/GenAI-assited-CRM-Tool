@@ -8,10 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.db.enums import (
     WorkflowTriggerType,
-    WorkflowActionType,
     WorkflowConditionOperator,
-    WorkflowExecutionStatus,
-    WorkflowEventSource,
     OwnerType,
 )
 

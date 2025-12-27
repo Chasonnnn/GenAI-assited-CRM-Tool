@@ -1,7 +1,6 @@
 """Authentication service - user resolution, invite handling, session creation."""
 
 from datetime import datetime, timezone
-from uuid import UUID
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session

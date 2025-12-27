@@ -15,7 +15,6 @@ import hashlib
 import logging
 import time
 from typing import Any
-from uuid import UUID
 
 import httpx
 
