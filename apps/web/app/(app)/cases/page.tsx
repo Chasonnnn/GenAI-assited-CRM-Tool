@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -21,6 +21,7 @@ import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useAuth } from "@/lib/auth-context"
 import type { CaseSource } from "@/lib/types/case"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
+import { cn } from "@/lib/utils"
 
 // Format date for display
 function formatDate(dateString: string): string {
@@ -86,11 +87,14 @@ function FloatingActionBar({
                 {/* Assign Dropdown - case_manager+ only */}
                 {canAssign && (
                     <DropdownMenu>
-                        <DropdownMenuTrigger>
-                            <Button variant="secondary" size="sm" disabled={isLoading}>
-                                <UserPlusIcon className="h-4 w-4 mr-1" />
+                        <DropdownMenuTrigger
+                            className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
+                            disabled={isLoading}
+                        >
+                            <span className="inline-flex items-center gap-1">
+                                <UserPlusIcon className="h-4 w-4" />
                                 Assign to...
-                            </Button>
+                            </span>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent>
                             {assignees?.map((user) => (
@@ -567,8 +571,10 @@ export default function CasesPage() {
                                                 </TableCell>
                                                 <TableCell>
                                                     <DropdownMenu>
-                                                        <DropdownMenuTrigger nativeButton={false} className="inline-flex items-center justify-center size-8 p-0 rounded-md hover:bg-accent hover:text-accent-foreground">
-                                                            <MoreVerticalIcon className="size-4" />
+                                                        <DropdownMenuTrigger className="inline-flex items-center justify-center size-8 p-0 rounded-md hover:bg-accent hover:text-accent-foreground">
+                                                            <span className="inline-flex items-center justify-center">
+                                                                <MoreVerticalIcon className="size-4" />
+                                                            </span>
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent align="end">
                                                             <DropdownMenuItem onClick={() => window.location.href = `/cases/${caseItem.id}`}>

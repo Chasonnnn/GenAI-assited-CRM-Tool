@@ -44,8 +44,8 @@ interface ButtonProps
 /**
  * Button component with variants.
  * 
- * For use with Base UI triggers, use `render={}` prop on the trigger instead of asChild.
- * Example: <DialogTrigger render={<Button>Click me</Button>} />
+ * For Base UI triggers, avoid nesting <Button>. Prefer passing a non-button wrapper
+ * as children and apply `buttonVariants` to the trigger element.
  */
 function Button({
   className,

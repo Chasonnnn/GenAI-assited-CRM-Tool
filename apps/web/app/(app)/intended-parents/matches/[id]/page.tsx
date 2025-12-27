@@ -5,7 +5,7 @@ import { useParams, useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
@@ -57,6 +57,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useQueryClient } from "@tanstack/react-query"
 import { ScheduleParserDialog } from "@/components/ai/ScheduleParserDialog"
 import { useSetAIContext } from "@/lib/context/ai-context"
+import { cn } from "@/lib/utils"
 
 const STATUS_LABELS: Record<string, string> = {
     proposed: "Proposed",
@@ -546,12 +547,10 @@ export default function MatchDetailPage() {
                         {canChangeStatus && match.status === 'accepted' && postApprovalStages.length > 0 && (
                             <DropdownMenu>
                                 <DropdownMenuTrigger
-                                    render={
-                                        <Button variant="outline" size="sm" className="h-7 text-xs">
-                                            Change Stage
-                                        </Button>
-                                    }
-                                />
+                                    className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-7 text-xs")}
+                                >
+                                    <span className="inline-flex items-center">Change Stage</span>
+                                </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
                                     {postApprovalStages.map((stage) => (
                                         <DropdownMenuItem

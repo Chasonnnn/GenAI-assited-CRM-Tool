@@ -243,7 +243,9 @@ export default function IntendedParentDetailPage() {
                         </Badge>
                         <DropdownMenu>
                             <DropdownMenuTrigger className="inline-flex items-center justify-center size-10 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground">
-                                <MoreVerticalIcon className="size-4" />
+                                <span className="inline-flex items-center justify-center">
+                                    <MoreVerticalIcon className="size-4" />
+                                </span>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={handleEdit}>Edit</DropdownMenuItem>
