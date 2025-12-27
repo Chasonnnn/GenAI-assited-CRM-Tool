@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, get_current_session, require_roles, require_csrf_header, require_permission
+from app.core.permissions import PermissionKey as P
 from app.core.case_access import check_case_access
 from app.db.enums import CaseActivityType, Role
 from app.db.models import Case, Task, UserIntegration, AIConversation
@@ -237,7 +238,7 @@ def chat(
     request: Request,  # Required by limiter
     body: ChatRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("use_ai_assistant")),
+    session: UserSession = Depends(require_permission(P.AI_USE)),
 ) -> ChatResponseModel:
     """Send a message to the AI assistant.
     
@@ -330,7 +331,7 @@ def get_conversation(
     entity_type: str,
     entity_id: uuid.UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("use_ai_assistant")),
+    session: UserSession = Depends(require_permission(P.AI_USE)),
 ) -> dict[str, Any]:
     """Get conversation history for an entity."""
     # Validate entity access before fetching conversations
@@ -429,7 +430,7 @@ def get_conversation(
 def get_global_conversation(
     request: Request,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("use_ai_assistant")),
+    session: UserSession = Depends(require_permission(P.AI_USE)),
 ) -> dict[str, Any]:
     """Get global conversation history for the current user.
     
@@ -522,7 +523,7 @@ class ActionApprovalResponse(BaseModel):
 def approve_action(
     approval_id: uuid.UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("approve_ai_actions")),
+    session: UserSession = Depends(require_permission(P.AI_APPROVE_ACTIONS)),
 ) -> ActionApprovalResponse:
     """Approve and execute a proposed action.
     
@@ -757,7 +758,7 @@ def get_pending_actions(
     entity_type: str | None = None,
     entity_id: uuid.UUID | None = None,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("use_ai_assistant")),
+    session: UserSession = Depends(require_permission(P.AI_USE)),
 ) -> dict[str, Any]:
     """Get all pending actions for the current user."""
     from app.db.models import AIActionApproval, AIMessage, AIConversation
@@ -938,7 +939,7 @@ def summarize_case(
     request: Request,
     body: SummarizeCaseRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("use_ai_assistant")),
+    session: UserSession = Depends(require_permission(P.AI_USE)),
 ) -> SummarizeCaseResponse:
     """Generate a comprehensive summary of a case using AI.
     
@@ -1073,7 +1074,7 @@ def draft_email(
     request: Request,
     body: DraftEmailRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("use_ai_assistant")),
+    session: UserSession = Depends(require_permission(P.AI_USE)),
 ) -> DraftEmailResponse:
     """Draft an email for a case using AI.
     
@@ -1535,7 +1536,7 @@ async def parse_schedule(
     request: Request,
     body: ParseScheduleRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("use_ai_assistant")),
+    session: UserSession = Depends(require_permission(P.AI_USE)),
 ) -> ParseScheduleResponse:
     """
     Parse schedule text using AI and extract task proposals.
@@ -1678,7 +1679,7 @@ _idempotency_cache: dict[str, BulkTaskCreateResponse] = {}
 async def create_bulk_tasks(
     body: BulkTaskCreateRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("create_tasks")),
+    session: UserSession = Depends(require_permission(P.TASKS_CREATE)),
 ) -> BulkTaskCreateResponse:
     """
     Create multiple tasks in a single transaction (all-or-nothing).

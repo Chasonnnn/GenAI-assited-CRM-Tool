@@ -6,7 +6,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_session, require_roles, require_csrf_header
+from app.core.deps import get_db, get_current_session, require_roles, require_csrf_header, require_permission
+from app.core.policies import POLICIES
 from app.db.enums import Role, IntendedParentStatus, EntityType
 from app.schemas.intended_parent import (
     IntendedParentCreate,
@@ -20,7 +21,10 @@ from app.schemas.intended_parent import (
 from app.schemas.entity_note import EntityNoteCreate, EntityNoteRead, EntityNoteListItem
 from app.services import ip_service, note_service
 
-router = APIRouter(tags=["Intended Parents"])
+router = APIRouter(
+    tags=["Intended Parents"],
+    dependencies=[Depends(require_permission(POLICIES["intended_parents"].default))],
+)
 
 
 # =============================================================================
@@ -90,7 +94,7 @@ def get_stats(
 def create_intended_parent(
     data: IntendedParentCreate,
     db: Session = Depends(get_db),
-    session: dict = Depends(get_current_session),
+    session: dict = Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
 ):
     """Create a new intended parent."""
     # Check for duplicate email
@@ -135,7 +139,7 @@ def update_intended_parent(
     ip_id: UUID,
     data: IntendedParentUpdate,
     db: Session = Depends(get_db),
-    session: dict = Depends(get_current_session),
+    session: dict = Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
 ):
     """Update an intended parent."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -176,7 +180,7 @@ def update_status(
     ip_id: UUID,
     data: IntendedParentStatusUpdate,
     db: Session = Depends(get_db),
-    session: dict = Depends(get_current_session),
+    session: dict = Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
 ):
     """Change status of an intended parent."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -198,7 +202,7 @@ def update_status(
 def archive_intended_parent(
     ip_id: UUID,
     db: Session = Depends(get_db),
-    session: dict = Depends(get_current_session),
+    session: dict = Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
 ):
     """Archive (soft delete) an intended parent."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -313,7 +317,7 @@ def create_note(
     ip_id: UUID,
     data: EntityNoteCreate,
     db: Session = Depends(get_db),
-    session: dict = Depends(get_current_session),
+    session: dict = Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
 ):
     """Add a note to an intended parent."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -341,7 +345,7 @@ def delete_note(
     ip_id: UUID,
     note_id: UUID,
     db: Session = Depends(get_db),
-    session: dict = Depends(get_current_session),
+    session: dict = Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
 ):
     """Delete a note (author or manager only)."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)

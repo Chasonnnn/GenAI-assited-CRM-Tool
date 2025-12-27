@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_permission, get_current_session, require_csrf_header
+from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
 from app.db.enums import WorkflowTriggerType
 from app.services import workflow_service
@@ -19,7 +20,7 @@ from app.schemas.workflow import (
 )
 
 
-router = APIRouter(prefix="/workflows", tags=["Workflows"])
+router = APIRouter(prefix="/workflows", tags=["Workflows"], dependencies=[Depends(require_permission(POLICIES["automation"].default))])
 
 
 # =============================================================================
@@ -31,7 +32,7 @@ def list_workflows(
     enabled_only: bool = False,
     trigger_type: WorkflowTriggerType | None = None,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("manage_automation")),
+    session: UserSession = Depends(get_current_session),
 ):
     """List all workflows for the organization (manager+ only)."""
     workflows = workflow_service.list_workflows(
@@ -46,7 +47,7 @@ def list_workflows(
 @router.get("/options", response_model=WorkflowOptions)
 def get_workflow_options(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("manage_automation")),
+    session: UserSession = Depends(get_current_session),
 ):
     """Get available options for workflow builder UI."""
     return workflow_service.get_workflow_options(db, session.org_id)
@@ -55,7 +56,7 @@ def get_workflow_options(
 @router.get("/stats", response_model=WorkflowStats)
 def get_workflow_stats(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("manage_automation")),
+    session: UserSession = Depends(get_current_session),
 ):
     """Get workflow statistics for dashboard."""
     return workflow_service.get_workflow_stats(db, session.org_id)
@@ -72,7 +73,7 @@ def list_org_executions(
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, le=100),
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("manage_automation")),
+    session: UserSession = Depends(get_current_session),
 ):
     """
     List all workflow executions for the organization.
@@ -94,7 +95,7 @@ def list_org_executions(
 @router.get("/executions/stats")
 def get_execution_stats(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("manage_automation")),
+    session: UserSession = Depends(get_current_session),
 ):
     """Get execution statistics for the dashboard (last 24h)."""
     return workflow_service.get_execution_stats(db, session.org_id)
@@ -104,7 +105,7 @@ def get_execution_stats(
 def create_workflow(
     data: WorkflowCreate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("manage_automation")),
+    session: UserSession = Depends(get_current_session),
 ):
     """Create a new workflow."""
     try:
@@ -123,7 +124,7 @@ def create_workflow(
 def get_workflow(
     workflow_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("manage_automation")),
+    session: UserSession = Depends(get_current_session),
 ):
     """Get a workflow by ID."""
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
@@ -137,7 +138,7 @@ def update_workflow(
     workflow_id: UUID,
     data: WorkflowUpdate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("manage_automation")),
+    session: UserSession = Depends(get_current_session),
 ):
     """Update a workflow."""
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
@@ -160,7 +161,7 @@ def update_workflow(
 def delete_workflow(
     workflow_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("manage_automation")),
+    session: UserSession = Depends(get_current_session),
 ):
     """Delete a workflow."""
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
@@ -175,7 +176,7 @@ def delete_workflow(
 def toggle_workflow(
     workflow_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("manage_automation")),
+    session: UserSession = Depends(get_current_session),
 ):
     """Toggle a workflow's enabled state."""
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
@@ -190,7 +191,7 @@ def toggle_workflow(
 def duplicate_workflow(
     workflow_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("manage_automation")),
+    session: UserSession = Depends(get_current_session),
 ):
     """Duplicate a workflow."""
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
@@ -210,7 +211,7 @@ def test_workflow(
     workflow_id: UUID,
     request: WorkflowTestRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("manage_automation")),
+    session: UserSession = Depends(get_current_session),
 ):
     """Test a workflow against an entity (dry run)."""
     from app.db.models import Case
@@ -292,7 +293,7 @@ def list_executions(
     limit: int = Query(default=50, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("manage_automation")),
+    session: UserSession = Depends(get_current_session),
 ):
     """Get execution history for a workflow."""
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)

@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.permissions import PermissionKey
 from app.core.security import decode_session_token
 from app.db.session import SessionLocal
 
@@ -96,6 +97,10 @@ def get_current_session(
         HTTPException 401: Not authenticated
         HTTPException 403: No membership or unknown role
     """
+    cached = getattr(request.state, "user_session", None)
+    if cached:
+        return cached
+
     # Import here to avoid circular imports
     from app.db.models import Membership
     from app.db.enums import Role
@@ -132,7 +137,7 @@ def get_current_session(
     
     role = Role(membership.role)
     
-    return UserSession(
+    session = UserSession(
         user_id=user.id,
         org_id=membership.organization_id,
         role=role,
@@ -141,6 +146,8 @@ def get_current_session(
         mfa_verified=mfa_verified,
         mfa_required=mfa_required,
     )
+    request.state.user_session = session
+    return session
 
 
 def require_roles(allowed_roles: list):
@@ -163,7 +170,11 @@ def require_roles(allowed_roles: list):
     return dependency
 
 
-def require_permission(permission: str):
+def _normalize_permission(permission: str | PermissionKey) -> str:
+    return permission.value if isinstance(permission, PermissionKey) else permission
+
+
+def require_permission(permission: str | PermissionKey):
     """
     Dependency factory for permission-based authorization.
     
@@ -179,13 +190,63 @@ def require_permission(permission: str):
         from app.services import permission_service
         
         session = get_current_session(request, db)
+        permission_key = _normalize_permission(permission)
         
         if not permission_service.check_permission(
-            db, session.org_id, session.user_id, session.role.value, permission
+            db, session.org_id, session.user_id, session.role.value, permission_key
         ):
             raise HTTPException(
                 status_code=403,
-                detail=f"Missing permission: {permission}"
+                detail=f"Missing permission: {permission_key}"
+            )
+        return session
+    return dependency
+
+
+def require_any_permissions(permissions: list[str | PermissionKey]):
+    """
+    Dependency factory for OR-based permission checks.
+    
+    Usage:
+        @router.get("/reports", dependencies=[Depends(require_any_permissions([P.REPORTS_VIEW, P.OPS_MANAGE]))])
+    """
+    def dependency(request: Request, db: Session = Depends(get_db)):
+        from app.services import permission_service
+
+        session = get_current_session(request, db)
+        permission_keys = [_normalize_permission(p) for p in permissions]
+        effective = permission_service.get_effective_permissions(
+            db, session.org_id, session.user_id, session.role.value
+        )
+        if not any(key in effective for key in permission_keys):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Missing one of permissions: {', '.join(permission_keys)}"
+            )
+        return session
+    return dependency
+
+
+def require_all_permissions(permissions: list[str | PermissionKey]):
+    """
+    Dependency factory for AND-based permission checks.
+    
+    Usage:
+        @router.post("/exports", dependencies=[Depends(require_all_permissions([P.AUDIT_VIEW, P.EXPORT_DATA]))])
+    """
+    def dependency(request: Request, db: Session = Depends(get_db)):
+        from app.services import permission_service
+
+        session = get_current_session(request, db)
+        permission_keys = [_normalize_permission(p) for p in permissions]
+        effective = permission_service.get_effective_permissions(
+            db, session.org_id, session.user_id, session.role.value
+        )
+        missing = [key for key in permission_keys if key not in effective]
+        if missing:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Missing permissions: {', '.join(missing)}"
             )
         return session
     return dependency

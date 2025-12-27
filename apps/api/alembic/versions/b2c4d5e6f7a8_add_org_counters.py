@@ -25,7 +25,7 @@ def upgrade() -> None:
         sa.Column('organization_id', postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column('counter_type', sa.String(50), nullable=False),
         sa.Column('current_value', sa.BigInteger(), nullable=False, server_default='0'),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now()),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.PrimaryKeyConstraint('organization_id', 'counter_type'),
         sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ondelete='CASCADE'),
     )

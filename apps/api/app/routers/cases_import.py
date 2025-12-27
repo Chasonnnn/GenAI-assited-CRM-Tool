@@ -10,14 +10,18 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_csrf_header, require_roles
-from app.db.enums import Role
+from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
+from app.core.policies import POLICIES
 from app.db.models import CaseImport
 from app.schemas.auth import UserSession
 from app.services import import_service
 
 
-router = APIRouter(prefix="/cases/import", tags=["cases", "import"])
+router = APIRouter(
+    prefix="/cases/import",
+    tags=["cases", "import"],
+    dependencies=[Depends(require_permission(POLICIES["cases"].actions["import"]))],
+)
 
 
 # =============================================================================
@@ -85,7 +89,7 @@ class ImportDetailResponse(BaseModel):
 )
 async def preview_csv_import(
     file: UploadFile = File(..., description="CSV file to preview"),
-    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """
@@ -135,7 +139,7 @@ async def preview_csv_import(
 )
 async def execute_csv_import(
     file: UploadFile = File(..., description="CSV file to import"),
-    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """
@@ -197,7 +201,7 @@ async def execute_csv_import(
 
 @router.get("", response_model=list[ImportHistoryItem])
 def list_imports(
-    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """List recent imports for the organization."""
@@ -226,7 +230,7 @@ def list_imports(
 @router.get("/{import_id}", response_model=ImportDetailResponse)
 def get_import_details(
     import_id: UUID,
-    session: UserSession = Depends(require_roles([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """Get detailed import information including errors."""

@@ -13,14 +13,16 @@ from app.core.deps import (
     get_db,
     is_owner_or_can_manage,
     require_csrf_header,
+    require_permission,
 )
+from app.core.policies import POLICIES
 from app.core.case_access import check_case_access
 from app.db.models import User
 from app.schemas.auth import UserSession
 from app.schemas.note import NoteCreate, NoteRead
 from app.services import case_service, note_service
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_permission(POLICIES["cases"].actions["notes_view"]))])
 
 
 def _note_to_read(note, db: Session) -> NoteRead:
@@ -63,7 +65,7 @@ def list_notes(
 def create_note(
     case_id: UUID,
     data: NoteCreate,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["notes_edit"])),
     db: Session = Depends(get_db),
 ):
     """Add a note to a case (respects role-based access)."""
@@ -102,7 +104,7 @@ def create_note(
 @router.delete("/notes/{note_id}", status_code=204, dependencies=[Depends(require_csrf_header)])
 def delete_note(
     note_id: UUID,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["notes_edit"])),
     db: Session = Depends(get_db),
 ):
     """

@@ -6,7 +6,8 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_permission, require_csrf_header
+from app.core.deps import get_db, get_current_session, require_permission, require_csrf_header
+from app.core.policies import POLICIES
 from app.services import campaign_service
 from app.schemas.campaign import (
     CampaignCreate,
@@ -24,7 +25,7 @@ from app.schemas.campaign import (
 )
 
 
-router = APIRouter(tags=["Campaigns"])
+router = APIRouter(tags=["Campaigns"], dependencies=[Depends(require_permission(POLICIES["email_templates"].default))])
 
 
 # =============================================================================
@@ -37,7 +38,7 @@ def list_campaigns(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    session = Depends(require_permission("view_email_templates")),
+    session = Depends(get_current_session),
 ):
     """List campaigns for the organization."""
     campaigns, total = campaign_service.list_campaigns(
@@ -50,7 +51,7 @@ def list_campaigns(
 def create_campaign(
     data: CampaignCreate,
     db: Session = Depends(get_db),
-    session = Depends(require_permission("manage_email_templates")),
+    session = Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
     _csrf = Depends(require_csrf_header),
 ):
     """Create a new campaign (draft status)."""
@@ -68,7 +69,7 @@ def create_campaign(
 def get_campaign(
     campaign_id: UUID,
     db: Session = Depends(get_db),
-    session = Depends(require_permission("view_email_templates")),
+    session = Depends(get_current_session),
 ):
     """Get a campaign by ID with stats."""
     campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
@@ -83,7 +84,7 @@ def update_campaign(
     campaign_id: UUID,
     data: CampaignUpdate,
     db: Session = Depends(get_db),
-    session = Depends(require_permission("manage_email_templates")),
+    session = Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
     _csrf = Depends(require_csrf_header),
 ):
     """Update a draft campaign."""
@@ -104,7 +105,7 @@ def update_campaign(
 def delete_campaign(
     campaign_id: UUID,
     db: Session = Depends(get_db),
-    session = Depends(require_permission("manage_email_templates")),
+    session = Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
     _csrf = Depends(require_csrf_header),
 ):
     """Delete a draft campaign."""
@@ -126,7 +127,7 @@ def preview_filters(
     data: PreviewFiltersRequest,
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
-    session = Depends(require_permission("manage_email_templates")),
+    session = Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
 ):
     """
     Preview recipients that match filter criteria BEFORE creating a campaign.
@@ -150,7 +151,7 @@ def preview_recipients(
     campaign_id: UUID,
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
-    session = Depends(require_permission("manage_email_templates")),
+    session = Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
 ):
     """Preview recipients that match the campaign filter."""
     campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
@@ -171,7 +172,7 @@ def send_campaign(
     campaign_id: UUID,
     data: CampaignSendRequest | None = None,
     db: Session = Depends(get_db),
-    session = Depends(require_permission("manage_email_templates")),
+    session = Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
     _csrf = Depends(require_csrf_header),
 ):
     """
@@ -204,7 +205,7 @@ def send_campaign(
 def cancel_campaign(
     campaign_id: UUID,
     db: Session = Depends(get_db),
-    session = Depends(require_permission("manage_email_templates")),
+    session = Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
     _csrf = Depends(require_csrf_header),
 ):
     """Cancel a scheduled campaign."""
@@ -227,7 +228,7 @@ def list_campaign_runs(
     campaign_id: UUID,
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    session = Depends(require_permission("view_email_templates")),
+    session = Depends(get_current_session),
 ):
     """List execution history for a campaign."""
     return campaign_service.list_campaign_runs(
@@ -240,7 +241,7 @@ def get_campaign_run(
     campaign_id: UUID,
     run_id: UUID,
     db: Session = Depends(get_db),
-    session = Depends(require_permission("view_email_templates")),
+    session = Depends(get_current_session),
 ):
     """Get run details with recipients."""
     run = campaign_service.get_campaign_run(db, session.org_id, run_id)
@@ -258,7 +259,7 @@ def list_run_recipients(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    session = Depends(require_permission("view_email_templates")),
+    session = Depends(get_current_session),
 ):
     """List recipients for a campaign run."""
     from app.db.models import CampaignRecipient, CampaignRun
@@ -286,7 +287,7 @@ def list_suppressions(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    session = Depends(require_permission("manage_email_templates")),
+    session = Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
 ):
     """List suppressed emails for the organization."""
     items, total = campaign_service.list_suppressions(
@@ -299,7 +300,7 @@ def list_suppressions(
 def add_suppression(
     data: SuppressionCreate,
     db: Session = Depends(get_db),
-    session = Depends(require_permission("manage_email_templates")),
+    session = Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
     _csrf = Depends(require_csrf_header),
 ):
     """Add an email to the suppression list."""
@@ -314,7 +315,7 @@ def add_suppression(
 def remove_suppression(
     email: str,
     db: Session = Depends(get_db),
-    session = Depends(require_permission("manage_email_templates")),
+    session = Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
     _csrf = Depends(require_csrf_header),
 ):
     """Remove an email from the suppression list."""

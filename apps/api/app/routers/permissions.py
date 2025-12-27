@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
+from app.core.policies import POLICIES
 from app.core.permissions import (
     PERMISSION_REGISTRY,
     ROLE_DEFAULTS,
@@ -131,7 +132,7 @@ class EffectivePermissions(BaseModel):
 
 @router.get("/available", response_model=list[PermissionInfo])
 def list_available_permissions(
-    session: UserSession = Depends(require_permission("manage_team")),
+    session: UserSession = Depends(require_permission(POLICIES["team"].default)),
 ):
     """
     List all available permissions with metadata.
@@ -157,7 +158,7 @@ def list_available_permissions(
 @router.get("/members", response_model=list[MemberRead])
 def list_members(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("manage_team")),
+    session: UserSession = Depends(require_permission(POLICIES["team"].default)),
 ):
     """
     List all org members with roles.
@@ -190,7 +191,7 @@ def list_members(
 def get_member(
     member_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("manage_team")),
+    session: UserSession = Depends(require_permission(POLICIES["team"].default)),
 ):
     """
     Get member detail with effective permissions and overrides.
@@ -246,7 +247,7 @@ def update_member(
     member_id: UUID,
     data: MemberUpdate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("manage_team")),
+    session: UserSession = Depends(require_permission(POLICIES["team"].default)),
 ):
     """
     Update member role or permission overrides.
@@ -338,7 +339,7 @@ def update_member(
 def remove_member(
     member_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("manage_team")),
+    session: UserSession = Depends(require_permission(POLICIES["team"].default)),
 ):
     """
     Remove member from organization.
@@ -383,7 +384,7 @@ def remove_member(
 def get_effective_permissions(
     user_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("manage_team")),
+    session: UserSession = Depends(require_permission(POLICIES["team"].default)),
 ):
     """
     Get effective permissions for a specific user.
@@ -438,7 +439,7 @@ ROLE_LABELS = {
 
 @router.get("/roles", response_model=list[RoleSummary])
 def list_roles(
-    session: UserSession = Depends(require_permission("view_roles")),
+    session: UserSession = Depends(require_permission(POLICIES["team"].actions["view_roles"])),
 ):
     """
     List all roles with permission counts.
@@ -460,7 +461,7 @@ def list_roles(
 def get_role_detail(
     role: str,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("view_roles")),
+    session: UserSession = Depends(require_permission(POLICIES["team"].actions["view_roles"])),
 ):
     """
     Get role detail with all permissions grouped by category.
@@ -519,7 +520,7 @@ def update_role_permissions(
     role: str,
     data: RolePermissionUpdate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("manage_roles")),  # Developer only enforced by permission
+    session: UserSession = Depends(require_permission(POLICIES["team"].actions["manage_roles"])),  # Developer only enforced by permission
 ):
     """
     Update role default permissions.

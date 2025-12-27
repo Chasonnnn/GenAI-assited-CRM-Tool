@@ -5,9 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_session, require_csrf_header
+from app.core.deps import get_db, get_current_session, require_csrf_header, require_permission
+from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
-from app.db.enums import Role
 from app.services import queue_service
 from app.services.queue_service import (
     QueueNotFoundError,
@@ -18,7 +18,9 @@ from app.services.queue_service import (
     NotQueueMemberError,
 )
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[Depends(require_permission(POLICIES["cases"].actions["assign"]))],
+)
 
 
 # =============================================================================
@@ -106,12 +108,10 @@ def get_queue(
 @router.post("", response_model=QueueResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_csrf_header)])
 def create_queue(
     data: QueueCreate,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["queues"].default)),
     db: Session = Depends(get_db),
 ):
-    """Create a new queue. Manager+ only."""
-    if session.role not in [Role.ADMIN.value, Role.DEVELOPER.value]:
-        raise HTTPException(status_code=403, detail="Manager role required")
+    """Create a new queue."""
     
     try:
         queue = queue_service.create_queue(
@@ -127,12 +127,10 @@ def create_queue(
 def update_queue(
     queue_id: UUID,
     data: QueueUpdate,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["queues"].default)),
     db: Session = Depends(get_db),
 ):
-    """Update a queue. Manager+ only."""
-    if session.role not in [Role.ADMIN.value, Role.DEVELOPER.value]:
-        raise HTTPException(status_code=403, detail="Manager role required")
+    """Update a queue."""
     
     try:
         queue = queue_service.update_queue(
@@ -152,12 +150,10 @@ def update_queue(
 @router.delete("/{queue_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_csrf_header)])
 def delete_queue(
     queue_id: UUID,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["queues"].default)),
     db: Session = Depends(get_db),
 ):
-    """Soft-delete a queue (set inactive). Manager+ only."""
-    if session.role not in [Role.ADMIN.value, Role.DEVELOPER.value]:
-        raise HTTPException(status_code=403, detail="Manager role required")
+    """Soft-delete a queue (set inactive)."""
     
     try:
         queue_service.delete_queue(db, session.org_id, queue_id)
@@ -183,9 +179,6 @@ def claim_case(
     - Sets owner to current user
     - Returns 409 if already claimed by a user
     """
-    if session.role not in [Role.CASE_MANAGER.value, Role.ADMIN.value, Role.DEVELOPER.value]:
-        raise HTTPException(status_code=403, detail="Case manager role required")
-    
     try:
         case = queue_service.claim_case(
             db, session.org_id, case_id, session.user_id
@@ -213,9 +206,6 @@ def release_case(
     - Case must be owned by a user
     - Transfers ownership to specified queue
     """
-    if session.role not in [Role.CASE_MANAGER.value, Role.ADMIN.value, Role.DEVELOPER.value]:
-        raise HTTPException(status_code=403, detail="Case manager role required")
-    
     try:
         case = queue_service.release_case(
             db, session.org_id, case_id, data.queue_id, session.user_id
@@ -236,13 +226,10 @@ def assign_case_to_queue(
     db: Session = Depends(get_db),
 ):
     """
-    Assign a case to a queue. Manager+ only.
+    Assign a case to a queue.
     
     Works whether case is currently user-owned or queue-owned.
     """
-    if session.role not in [Role.ADMIN.value, Role.DEVELOPER.value]:
-        raise HTTPException(status_code=403, detail="Manager role required")
-    
     try:
         case = queue_service.assign_to_queue(
             db, session.org_id, case_id, data.queue_id, session.user_id
@@ -262,7 +249,7 @@ def assign_case_to_queue(
 @router.get("/{queue_id}/members", response_model=list[QueueMemberResponse])
 def list_queue_members(
     queue_id: UUID,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["queues"].default)),
     db: Session = Depends(get_db),
 ):
     """List members of a queue."""
@@ -287,12 +274,10 @@ def list_queue_members(
 def add_queue_member(
     queue_id: UUID,
     data: QueueMemberAdd,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["queues"].default)),
     db: Session = Depends(get_db),
 ):
-    """Add a user to a queue. Manager+ only."""
-    if session.role not in [Role.ADMIN.value, Role.DEVELOPER.value]:
-        raise HTTPException(status_code=403, detail="Manager role required")
+    """Add a user to a queue."""
     
     queue = queue_service.get_queue(db, session.org_id, queue_id)
     if not queue:
@@ -334,12 +319,10 @@ def add_queue_member(
 def remove_queue_member(
     queue_id: UUID,
     user_id: UUID,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["queues"].default)),
     db: Session = Depends(get_db),
 ):
-    """Remove a user from a queue. Manager+ only."""
-    if session.role not in [Role.ADMIN.value, Role.DEVELOPER.value]:
-        raise HTTPException(status_code=403, detail="Manager role required")
+    """Remove a user from a queue."""
     
     from app.db.models import QueueMember
     result = db.query(QueueMember).filter(
@@ -367,4 +350,3 @@ def _queue_to_response(queue) -> QueueResponse:
         is_active=queue.is_active,
         member_ids=[m.user_id for m in queue.members] if hasattr(queue, 'members') else [],
     )
-

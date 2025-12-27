@@ -11,7 +11,9 @@ from app.core.deps import (
     is_owner_or_assignee_or_manager,
     is_owner_or_can_manage,
     require_csrf_header,
+    require_permission,
 )
+from app.core.policies import POLICIES
 from app.db.enums import TaskType, ROLES_CAN_ARCHIVE, OwnerType
 from app.db.models import Case, User, Queue
 from app.schemas.auth import UserSession
@@ -27,7 +29,7 @@ from app.schemas.task import (
 from app.services import task_service
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_permission(POLICIES["tasks"].default))])
 
 
 def _task_to_read(task, db: Session) -> TaskRead:
@@ -192,7 +194,7 @@ def list_tasks(
 @router.post("", response_model=TaskRead, status_code=201, dependencies=[Depends(require_csrf_header)])
 def create_task(
     data: TaskCreate,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["create"])),
     db: Session = Depends(get_db),
 ):
     """Create a new task (respects case access control)."""
@@ -257,7 +259,7 @@ def get_task(
 def update_task(
     task_id: UUID,
     data: TaskUpdate,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["edit"])),
     db: Session = Depends(get_db),
 ):
     """
@@ -309,7 +311,7 @@ def update_task(
 @router.post("/{task_id}/complete", response_model=TaskRead, dependencies=[Depends(require_csrf_header)])
 def complete_task(
     task_id: UUID,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["edit"])),
     db: Session = Depends(get_db),
 ):
     """
@@ -336,7 +338,7 @@ def complete_task(
 @router.post("/{task_id}/uncomplete", response_model=TaskRead, dependencies=[Depends(require_csrf_header)])
 def uncomplete_task(
     task_id: UUID,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["edit"])),
     db: Session = Depends(get_db),
 ):
     """Mark task as not completed (respects role-based case access)."""
@@ -359,7 +361,7 @@ def uncomplete_task(
 @router.post("/bulk-complete", response_model=BulkCompleteResponse, dependencies=[Depends(require_csrf_header)])
 def bulk_complete_tasks(
     data: BulkTaskComplete,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["edit"])),
     db: Session = Depends(get_db),
 ):
     """
@@ -416,7 +418,7 @@ def bulk_complete_tasks(
 @router.delete("/{task_id}", status_code=204, dependencies=[Depends(require_csrf_header)])
 def delete_task(
     task_id: UUID,
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["delete"])),
     db: Session = Depends(get_db),
 ):
     """

@@ -9,13 +9,14 @@ from sqlalchemy import and_, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_csrf_header, require_permission
+from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
+from app.core.policies import POLICIES
 from app.db.enums import CaseActivityType, IntendedParentStatus, MatchStatus
 from app.db.models import Case, IntendedParent, Match, IntendedParentStatusHistory
 from app.schemas.auth import UserSession
 from app.services import workflow_triggers, note_service
 
-router = APIRouter(prefix="/matches", tags=["Matches"])
+router = APIRouter(prefix="/matches", tags=["Matches"], dependencies=[Depends(require_permission(POLICIES["matches"].default))])
 
 
 # =============================================================================
@@ -168,7 +169,7 @@ def _match_to_list_item(match: Match, case: Case | None, ip: IntendedParent | No
 def create_match(
     data: MatchCreate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("propose_matches")),
+    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
 ) -> MatchRead:
     """
     Propose a new match between a surrogate (case) and intended parent.
@@ -265,7 +266,7 @@ def list_matches(
     sort_by: str | None = Query(None, description="Column to sort by"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort direction"),
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("view_matches")),
+    session: UserSession = Depends(get_current_session),
 ) -> MatchListResponse:
     """
     List matches with optional filters.
@@ -336,7 +337,7 @@ def list_matches(
 @router.get("/stats", response_model=MatchStatsResponse)
 def get_match_stats(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("view_matches")),
+    session: UserSession = Depends(get_current_session),
 ) -> MatchStatsResponse:
     """Get match counts by status for the org."""
     total = db.query(Match).filter(Match.organization_id == session.org_id).count()
@@ -356,7 +357,7 @@ def get_match_stats(
 def get_match(
     match_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("view_matches")),
+    session: UserSession = Depends(get_current_session),
 ) -> MatchRead:
     """Get match details. Auto-transitions to 'reviewing' on first view by non-proposer."""
     from app.services import activity_service
@@ -402,7 +403,7 @@ def accept_match(
     match_id: UUID,
     data: MatchAcceptRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("propose_matches")),
+    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
 ) -> MatchRead:
     """
     Accept a match.
@@ -528,7 +529,7 @@ def reject_match(
     match_id: UUID,
     data: MatchRejectRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("propose_matches")),
+    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
 ) -> MatchRead:
     """
     Reject a match with reason.
@@ -587,7 +588,7 @@ def reject_match(
 def cancel_match(
     match_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("propose_matches")),
+    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
 ) -> None:
     """
     Cancel a proposed match.
@@ -633,7 +634,7 @@ def update_match_notes(
     match_id: UUID,
     data: MatchUpdateNotesRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("propose_matches")),
+    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
 ) -> MatchRead:
     """Update match notes. Requires: Manager+ role."""
     match = db.query(Match).filter(
@@ -736,7 +737,7 @@ def list_match_events(
     person_type: str | None = Query(None, description="Filter by person type (surrogate/ip)"),
     event_type: str | None = Query(None, description="Filter by event type"),
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("view_matches")),
+    session: UserSession = Depends(get_current_session),
 ) -> list[MatchEventRead]:
     """
     List events for a match.
@@ -801,7 +802,7 @@ def create_match_event(
     match_id: UUID,
     data: MatchEventCreate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("propose_matches")),
+    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
 ) -> MatchEventRead:
     """
     Create an event for a match.
@@ -862,7 +863,7 @@ def get_match_event(
     match_id: UUID,
     event_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("view_matches")),
+    session: UserSession = Depends(get_current_session),
 ) -> MatchEventRead:
     """
     Get a specific match event.
@@ -886,7 +887,7 @@ def update_match_event(
     event_id: UUID,
     data: MatchEventUpdate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("propose_matches")),
+    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
 ) -> MatchEventRead:
     """
     Update a match event.
@@ -957,7 +958,7 @@ def delete_match_event(
     match_id: UUID,
     event_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission("propose_matches")),
+    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
 ) -> None:
     """
     Delete a match event.

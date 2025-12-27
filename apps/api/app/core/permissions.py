@@ -33,6 +33,55 @@ class PermissionCategory(str, Enum):
     COMPLIANCE = "Compliance"
 
 
+class PermissionKey(str, Enum):
+    """Canonical permission keys (resource_action naming in code)."""
+    VIEW_DASHBOARD = "view_dashboard"
+
+    CASES_VIEW = "view_cases"
+    CASES_EDIT = "edit_cases"
+    CASES_DELETE = "delete_cases"
+    CASES_VIEW_POST_APPROVAL = "view_post_approval_cases"
+    CASES_CHANGE_STATUS = "change_case_status"
+    CASES_ASSIGN = "assign_cases"
+    CASES_VIEW_NOTES = "view_case_notes"
+    CASES_EDIT_NOTES = "edit_case_notes"
+    CASES_ARCHIVE = "archive_cases"
+    CASES_IMPORT = "import_cases"
+
+    INTENDED_PARENTS_VIEW = "view_intended_parents"
+    INTENDED_PARENTS_EDIT = "edit_intended_parents"
+    MATCHES_PROPOSE = "propose_matches"
+    MATCHES_VIEW = "view_matches"
+
+    TASKS_VIEW = "view_tasks"
+    TASKS_CREATE = "create_tasks"
+    TASKS_EDIT = "edit_tasks"
+    TASKS_DELETE = "delete_tasks"
+
+    TEAM_MANAGE = "manage_team"
+    ROLES_VIEW = "view_roles"
+    ROLES_MANAGE = "manage_roles"
+
+    AUDIT_VIEW = "view_audit_log"
+    ORG_MANAGE = "manage_org"
+    INTEGRATIONS_MANAGE = "manage_integrations"
+    AUTOMATION_MANAGE = "manage_automation"
+    PIPELINES_MANAGE = "manage_pipelines"
+    QUEUES_MANAGE = "manage_queues"
+    REPORTS_VIEW = "view_reports"
+    AI_USE = "use_ai_assistant"
+    AI_APPROVE_ACTIONS = "approve_ai_actions"
+
+    EXPORT_DATA = "export_data"
+    COMPLIANCE_MANAGE = "manage_compliance"
+
+    META_LEADS_MANAGE = "manage_meta_leads"
+    EMAIL_TEMPLATES_VIEW = "view_email_templates"
+    EMAIL_TEMPLATES_MANAGE = "manage_email_templates"
+    OPS_MANAGE = "manage_ops"
+    JOBS_MANAGE = "manage_jobs"
+
+
 # =============================================================================
 # Permission Registry
 # =============================================================================
@@ -76,6 +125,10 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
     "edit_case_notes": PermissionDef(
         "edit_case_notes", "Edit Case Notes", 
         "Add and modify case notes", PermissionCategory.CASES
+    ),
+    "import_cases": PermissionDef(
+        "import_cases", "Import Cases",
+        "Import cases via CSV", PermissionCategory.CASES
     ),
     
     # Intended Parents
@@ -131,6 +184,10 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
     "view_audit_log": PermissionDef(
         "view_audit_log", "View Audit Log", 
         "Access audit trail", PermissionCategory.SETTINGS
+    ),
+    "manage_org": PermissionDef(
+        "manage_org", "Manage Organization",
+        "Update organization profile settings", PermissionCategory.SETTINGS
     ),
     "manage_integrations": PermissionDef(
         "manage_integrations", "Manage Integrations", 
@@ -228,6 +285,7 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "archive_cases",
         "view_case_notes",
         "edit_case_notes",
+        "import_cases",
         "view_intended_parents",
         "edit_intended_parents",
         "propose_matches",
@@ -250,6 +308,7 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "archive_cases",
         "view_case_notes",
         "edit_case_notes",
+        "import_cases",
         "view_intended_parents",
         "edit_intended_parents",
         "propose_matches",
@@ -261,6 +320,7 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "manage_team",
         "view_roles",
         "view_audit_log",
+        "manage_org",
         "manage_integrations",
         "manage_automation",
         "manage_queues",
@@ -276,6 +336,45 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "manage_pipelines",
     },
     "developer": set(PERMISSION_REGISTRY.keys()),  # All permissions
+}
+
+
+# =============================================================================
+# Permission Bundles
+# =============================================================================
+
+# Bundles map UI toggles or policy shortcuts to sets of permissions.
+PERMISSION_BUNDLES: dict[str, set[str]] = {
+    "cases_manage": {
+        "view_cases",
+        "edit_cases",
+        "change_case_status",
+        "assign_cases",
+        "archive_cases",
+        "view_case_notes",
+        "edit_case_notes",
+        "import_cases",
+    },
+    "tasks_manage": {
+        "view_tasks",
+        "create_tasks",
+        "edit_tasks",
+        "delete_tasks",
+    },
+    "intended_parents_manage": {
+        "view_intended_parents",
+        "edit_intended_parents",
+        "view_matches",
+        "propose_matches",
+    },
+    "email_templates_manage": {
+        "view_email_templates",
+        "manage_email_templates",
+    },
+    "team_manage": {
+        "manage_team",
+        "view_roles",
+    },
 }
 
 
@@ -307,6 +406,11 @@ def is_developer_only(key: str) -> bool:
 def get_role_default_permissions(role: str) -> set[str]:
     """Get default permissions for a role."""
     return ROLE_DEFAULTS.get(role, set())
+
+
+def get_permission_bundle(bundle_key: str) -> set[str]:
+    """Get permissions for a named bundle."""
+    return PERMISSION_BUNDLES.get(bundle_key, set())
 
 
 def get_permissions_by_category() -> dict[str, list[PermissionDef]]:
