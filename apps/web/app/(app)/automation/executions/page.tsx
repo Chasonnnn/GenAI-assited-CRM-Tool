@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import api from "@/lib/api"
+import { parseDateInput } from "@/lib/utils/date"
 
 // Types for executions
 interface ExecutionAction {
@@ -84,7 +85,7 @@ function formatDuration(ms: number): string {
 
 // Helper to format relative time
 function formatRelativeTime(dateString: string): string {
-    const date = new Date(dateString)
+    const date = parseDateInput(dateString)
     const now = new Date()
     const diffMs = now.getTime() - date.getTime()
     const diffMins = Math.floor(diffMs / 60000)

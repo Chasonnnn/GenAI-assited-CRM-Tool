@@ -15,6 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { History, RotateCcw, Calendar, MessageSquare, ChevronDown, ChevronUp } from "lucide-react"
 import { format } from "date-fns"
 import { useState } from "react"
+import { parseDateInput } from "@/lib/utils/date"
 
 export interface VersionItem {
     id: string
@@ -54,7 +55,7 @@ export function VersionHistoryModal({
 
     const formatDate = (dateStr: string) => {
         try {
-            return format(new Date(dateStr), "MMM d, yyyy 'at' h:mm a")
+            return format(parseDateInput(dateStr), "MMM d, yyyy 'at' h:mm a")
         } catch {
             return dateStr
         }

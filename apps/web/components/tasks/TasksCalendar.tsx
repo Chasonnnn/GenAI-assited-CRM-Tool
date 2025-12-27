@@ -8,6 +8,7 @@ import interactionPlugin from "@fullcalendar/interaction"
 import type { EventDropArg, EventClickArg } from "@fullcalendar/core"
 import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { formatLocalDate } from "@/lib/utils/date"
 
 interface Task {
     id: string
@@ -90,10 +91,7 @@ export function TasksCalendar({
             }
 
             // Format date as YYYY-MM-DD (local time)
-            const year = newStart.getFullYear()
-            const month = String(newStart.getMonth() + 1).padStart(2, "0")
-            const day = String(newStart.getDate()).padStart(2, "0")
-            const newDate = `${year}-${month}-${day}`
+            const newDate = formatLocalDate(newStart)
 
             // Preserve time behavior:
             // - If event was all-day (no time), keep it all-day

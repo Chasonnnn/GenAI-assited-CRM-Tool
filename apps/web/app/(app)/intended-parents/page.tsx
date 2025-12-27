@@ -49,7 +49,7 @@ import {
 } from "@/lib/hooks/use-intended-parents"
 import type { IntendedParentStatus, IntendedParentListItem } from "@/lib/types/intended-parent"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
-import { parseDateInput } from "@/lib/utils/date"
+import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 
 const STATUS_LABELS: Record<IntendedParentStatus, string> = {
     new: "New",
@@ -147,8 +147,8 @@ export default function IntendedParentsPage() {
         if (dateRange === 'all') return {}
         if (dateRange === 'custom' && customRange.from) {
             return {
-                created_after: customRange.from.toISOString(),
-                created_before: customRange.to?.toISOString(),
+                created_after: formatLocalDate(customRange.from),
+                created_before: customRange.to ? formatLocalDate(customRange.to) : undefined,
             }
         }
         const now = new Date()
@@ -160,7 +160,7 @@ export default function IntendedParentsPage() {
         } else if (dateRange === 'month') {
             from = new Date(now.getFullYear(), now.getMonth(), 1)
         }
-        return from ? { created_after: from.toISOString() } : {}
+        return from ? { created_after: formatLocalDate(from) } : {}
     }
 
     const filters = {
