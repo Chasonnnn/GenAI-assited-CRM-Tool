@@ -176,8 +176,14 @@ export default function MatchDetailPage() {
     const { data: ipFiles = [] } = useIPAttachments(match?.intended_parent_id || null)
 
     // Fetch tasks from Case and IP
-    const { data: caseTasks } = useTasks({ case_id: match?.case_id || undefined })
-    const { data: ipTasks } = useTasks({ intended_parent_id: match?.intended_parent_id || undefined })
+    const { data: caseTasks } = useTasks(
+        { case_id: match?.case_id || undefined },
+        { enabled: !!match?.case_id }
+    )
+    const { data: ipTasks } = useTasks(
+        { intended_parent_id: match?.intended_parent_id || undefined },
+        { enabled: !!match?.intended_parent_id }
+    )
 
     // Fetch activity from Case and IP
     const { data: caseActivity } = useCaseActivity(match?.case_id || "", 1, 50)
@@ -387,6 +393,8 @@ export default function MatchDetailPage() {
         if (match?.intended_parent_id) {
             queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(match.intended_parent_id) })
         }
+        queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
+        queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
     }
 
     // Handle Add Note

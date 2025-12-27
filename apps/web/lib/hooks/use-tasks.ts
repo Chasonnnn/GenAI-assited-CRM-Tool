@@ -19,10 +19,11 @@ export const taskKeys = {
 /**
  * Fetch paginated tasks list.
  */
-export function useTasks(params: TaskListParams = {}) {
+export function useTasks(params: TaskListParams = {}, options?: { enabled?: boolean }) {
     return useQuery({
         queryKey: taskKeys.list(params),
         queryFn: () => tasksApi.getTasks(params),
+        enabled: options?.enabled ?? true,
     });
 }
 
@@ -132,4 +133,3 @@ export function useBulkCompleteTasks() {
         },
     });
 }
-
