@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.db.enums import CaseSource
@@ -29,6 +30,14 @@ def generate_case_number(db: Session, org_id: UUID) -> str:
         result = 1
     
     return f"{result:05d}"
+
+
+def _is_case_number_conflict(error: IntegrityError) -> bool:
+    constraint_name = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
+    if constraint_name == "uq_case_number":
+        return True
+    message = str(error.orig) if error.orig else str(error)
+    return "uq_case_number" in message
 
 
 
@@ -67,35 +76,48 @@ def create_case(
     if not default_stage:
         raise ValueError("Default pipeline has no active stages")
 
-    case = Case(
-        case_number=generate_case_number(db, org_id),
-        organization_id=org_id,
-        created_by_user_id=user_id,
-        owner_type=owner_type,
-        owner_id=owner_id,
-        stage_id=default_stage.id,
-        status_label=default_stage.label,
-        source=data.source.value,
-        full_name=normalize_name(data.full_name),
-        email=normalize_email(data.email),
-        phone=data.phone,  # Already normalized by schema
-        state=data.state,  # Already normalized by schema
-        date_of_birth=data.date_of_birth,
-        race=data.race,
-        height_ft=data.height_ft,
-        weight_lb=data.weight_lb,
-        is_age_eligible=data.is_age_eligible,
-        is_citizen_or_pr=data.is_citizen_or_pr,
-        has_child=data.has_child,
-        is_non_smoker=data.is_non_smoker,
-        has_surrogate_experience=data.has_surrogate_experience,
-        num_deliveries=data.num_deliveries,
-        num_csections=data.num_csections,
-        is_priority=data.is_priority if hasattr(data, 'is_priority') else False,
-    )
-    db.add(case)
-    db.commit()
-    db.refresh(case)
+    case = None
+    for attempt in range(3):
+        case = Case(
+            case_number=generate_case_number(db, org_id),
+            organization_id=org_id,
+            created_by_user_id=user_id,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            stage_id=default_stage.id,
+            status_label=default_stage.label,
+            source=data.source.value,
+            full_name=normalize_name(data.full_name),
+            email=normalize_email(data.email),
+            phone=data.phone,  # Already normalized by schema
+            state=data.state,  # Already normalized by schema
+            date_of_birth=data.date_of_birth,
+            race=data.race,
+            height_ft=data.height_ft,
+            weight_lb=data.weight_lb,
+            is_age_eligible=data.is_age_eligible,
+            is_citizen_or_pr=data.is_citizen_or_pr,
+            has_child=data.has_child,
+            is_non_smoker=data.is_non_smoker,
+            has_surrogate_experience=data.has_surrogate_experience,
+            num_deliveries=data.num_deliveries,
+            num_csections=data.num_csections,
+            is_priority=data.is_priority if hasattr(data, 'is_priority') else False,
+        )
+        db.add(case)
+        try:
+            db.commit()
+            db.refresh(case)
+            break
+        except IntegrityError as exc:
+            db.rollback()
+            try:
+                db.expunge(case)
+            except Exception:
+                pass
+            if _is_case_number_conflict(exc) and attempt < 2:
+                continue
+            raise
     
     # Log case creation (only if we have a user)
     if user_id:

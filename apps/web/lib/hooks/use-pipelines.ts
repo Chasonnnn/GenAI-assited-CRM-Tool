@@ -144,8 +144,18 @@ export function useDeleteStage() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ pipelineId, stageId, migrateToStageId }: { pipelineId: string; stageId: string; migrateToStageId: string }) =>
-            pipelinesApi.deleteStage(pipelineId, stageId, migrateToStageId),
+        mutationFn: ({
+            pipelineId,
+            stageId,
+            migrateToStageId,
+            expectedVersion,
+        }: {
+            pipelineId: string;
+            stageId: string;
+            migrateToStageId: string;
+            expectedVersion?: number;
+        }) =>
+            pipelinesApi.deleteStage(pipelineId, stageId, migrateToStageId, expectedVersion),
         onSuccess: (_, { pipelineId }) => {
             queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(pipelineId) });
             queryClient.invalidateQueries({ queryKey: pipelineKeys.list() });
@@ -158,8 +168,16 @@ export function useReorderStages() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ pipelineId, orderedStageIds }: { pipelineId: string; orderedStageIds: string[] }) =>
-            pipelinesApi.reorderStages(pipelineId, orderedStageIds),
+        mutationFn: ({
+            pipelineId,
+            orderedStageIds,
+            expectedVersion,
+        }: {
+            pipelineId: string;
+            orderedStageIds: string[];
+            expectedVersion?: number;
+        }) =>
+            pipelinesApi.reorderStages(pipelineId, orderedStageIds, expectedVersion),
         onSuccess: (_, { pipelineId }) => {
             queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(pipelineId) });
             queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(pipelineId) });

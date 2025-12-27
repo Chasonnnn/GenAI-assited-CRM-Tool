@@ -16,7 +16,7 @@ Stages are stored as PipelineStage rows with immutable slugs.
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.db.models import Pipeline, PipelineStage, Case
 from app.services import version_service
@@ -227,22 +227,9 @@ def sync_missing_stages(
             stage_type=stage_def["stage_type"],
             is_active=True,
         ))
-    
-    # Update pipeline version
-    pipeline.current_version += 1
-    pipeline.updated_at = datetime.now(timezone.utc)
-    
-    # Create version snapshot if user provided
-    if user_id:
-        version_service.create_version(
-            db=db,
-            org_id=pipeline.organization_id,
-            entity_type=ENTITY_TYPE,
-            entity_id=pipeline.id,
-            payload=_pipeline_payload(pipeline),
-            created_by_user_id=user_id,
-            comment=f"Added {len(missing)} missing stages",
-        )
+
+    db.flush()
+    _bump_pipeline_version(db, pipeline, user_id, f"Added {len(missing)} missing stages")
     
     db.commit()
     db.refresh(pipeline)
@@ -274,19 +261,7 @@ def update_pipeline_name(
     Creates version snapshot on name change.
     """
     pipeline.name = name
-    pipeline.current_version += 1
-    pipeline.updated_at = datetime.now(timezone.utc)
-    
-    # Create version snapshot
-    version_service.create_version(
-        db=db,
-        org_id=pipeline.organization_id,
-        entity_type=ENTITY_TYPE,
-        entity_id=pipeline.id,
-        payload=_pipeline_payload(pipeline),
-        created_by_user_id=user_id,
-        comment=comment or "Renamed",
-    )
+    _bump_pipeline_version(db, pipeline, user_id, comment or "Renamed")
     
     db.commit()
     db.refresh(pipeline)
@@ -367,17 +342,24 @@ def _bump_pipeline_version(
     comment: str,
 ) -> None:
     """Create a new pipeline version snapshot after stage changes."""
-    pipeline.current_version += 1
-    pipeline.updated_at = datetime.now(timezone.utc)
-    version_service.create_version(
+    db.flush()
+    locked_pipeline = db.query(Pipeline).options(selectinload(Pipeline.stages)).filter(
+        Pipeline.id == pipeline.id
+    ).with_for_update().first()
+    if not locked_pipeline:
+        return
+
+    version = version_service.create_version(
         db=db,
-        org_id=pipeline.organization_id,
+        org_id=locked_pipeline.organization_id,
         entity_type=ENTITY_TYPE,
-        entity_id=pipeline.id,
-        payload=_pipeline_payload(pipeline),
+        entity_id=locked_pipeline.id,
+        payload=_pipeline_payload(locked_pipeline),
         created_by_user_id=user_id,
         comment=comment,
     )
+    locked_pipeline.current_version = version.version
+    locked_pipeline.updated_at = datetime.now(timezone.utc)
 
 
 # =============================================================================

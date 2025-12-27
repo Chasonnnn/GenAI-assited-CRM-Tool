@@ -70,7 +70,13 @@ def db(db_engine) -> Generator:
     def _restart_savepoint(session_, transaction_):  # type: ignore[no-redef]
         parent = getattr(transaction_, "_parent", None)
         if transaction_.nested and parent is not None and not parent.nested:
-            session_.begin_nested()
+            # Guard against InvalidRequestError when code uses `with db.begin_nested():`
+            # context managers that leave the session in a closed transaction context.
+            try:
+                if session_.in_transaction():
+                    session_.begin_nested()
+            except Exception:
+                pass  # Savepoint restart failed, test will still rollback outer transaction
     
     yield session
 

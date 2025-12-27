@@ -114,11 +114,6 @@ def get_cases_by_status(
     source: str | None = None,
 ) -> dict[str, int]:
     """Get current case count by status."""
-    if not end_date:
-        end_date = date.today()
-    if not start_date:
-        start_date = end_date - timedelta(days=30)
-    
     query = db.query(
         Case.status_label,
         func.count(Case.id).label("count"),
@@ -127,6 +122,10 @@ def get_cases_by_status(
         Case.is_archived == False,
     )
     
+    if start_date:
+        query = query.filter(func.date(Case.created_at) >= start_date)
+    if end_date:
+        query = query.filter(func.date(Case.created_at) <= end_date)
     if source:
         query = query.filter(Case.source == source)
     

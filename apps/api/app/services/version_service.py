@@ -21,6 +21,7 @@ from uuid import UUID
 
 from cryptography.fernet import Fernet
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -160,34 +161,47 @@ def create_version(
     Automatically increments version number.
     Encrypts payload and computes checksum.
     """
-    # Get next version number
-    current_max = db.execute(
-        select(func.max(EntityVersion.version))
-        .where(EntityVersion.organization_id == org_id)
-        .where(EntityVersion.entity_type == entity_type)
-        .where(EntityVersion.entity_id == entity_id)
-    ).scalar() or 0
-    
-    next_version = current_max + 1
-    
-    # Encrypt and compute checksum
-    encrypted = encrypt_payload(payload)
-    checksum = compute_checksum(payload)
-    
-    version = EntityVersion(
-        organization_id=org_id,
-        entity_type=entity_type,
-        entity_id=entity_id,
-        version=next_version,
-        schema_version=1,
-        payload_encrypted=encrypted,
-        checksum=checksum,
-        created_by_user_id=created_by_user_id,
-        comment=comment,
-    )
-    db.add(version)
-    db.flush()  # Get ID
-    
+    def is_version_conflict(error: IntegrityError) -> bool:
+        constraint_name = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
+        if constraint_name and "entity_versions" in constraint_name:
+            return True
+        message = str(error.orig) if error.orig else str(error)
+        return "entity_versions" in message and "version" in message
+
+    for attempt in range(3):
+        current_max = db.execute(
+            select(func.max(EntityVersion.version))
+            .where(EntityVersion.organization_id == org_id)
+            .where(EntityVersion.entity_type == entity_type)
+            .where(EntityVersion.entity_id == entity_id)
+        ).scalar() or 0
+
+        next_version = current_max + 1
+
+        encrypted = encrypt_payload(payload)
+        checksum = compute_checksum(payload)
+
+        version = EntityVersion(
+            organization_id=org_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            version=next_version,
+            schema_version=1,
+            payload_encrypted=encrypted,
+            checksum=checksum,
+            created_by_user_id=created_by_user_id,
+            comment=comment,
+        )
+        try:
+            with db.begin_nested():
+                db.add(version)
+                db.flush()
+            return version
+        except IntegrityError as exc:
+            if is_version_conflict(exc) and attempt < 2:
+                continue
+            raise
+
     return version
 
 
