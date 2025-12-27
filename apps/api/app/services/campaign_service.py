@@ -58,6 +58,8 @@ def list_campaigns(
             total_recipients=latest_run.total_count if latest_run else 0,
             sent_count=latest_run.sent_count if latest_run else 0,
             failed_count=latest_run.failed_count if latest_run else 0,
+            opened_count=latest_run.opened_count if latest_run else 0,
+            clicked_count=latest_run.clicked_count if latest_run else 0,
             created_at=c.created_at,
         ))
     
@@ -306,7 +308,7 @@ def enqueue_campaign_send(
     if campaign.status not in [CampaignStatus.DRAFT.value, CampaignStatus.SCHEDULED.value]:
         raise ValueError(f"Cannot send campaign in '{campaign.status}' status")
     
-    if send_now or not campaign.scheduled_at:
+    if send_now:
         # Create run immediately
         run = CampaignRun(
             organization_id=org_id,
@@ -339,39 +341,42 @@ def enqueue_campaign_send(
         db.flush()
         
         return "Campaign queued for sending", run.id, None
-    else:
-        # Schedule for later - still create the run and job, but with run_at
-        run = CampaignRun(
-            organization_id=org_id,
-            campaign_id=campaign.id,
-            status="pending",
-            total_count=0,
-            sent_count=0,
-            failed_count=0,
-            skipped_count=0,
-        )
-        db.add(run)
-        db.flush()
-        
-        campaign.status = CampaignStatus.SCHEDULED.value
-        
-        # Create job scheduled for future execution
-        job = Job(
-            organization_id=org_id,
-            job_type=JobType.CAMPAIGN_SEND.value,
-            status=JobStatus.PENDING.value,
-            payload={
-                "campaign_id": str(campaign.id),
-                "run_id": str(run.id),
-                "user_id": str(user_id),
-            },
-            idempotency_key=f"campaign:{campaign.id}:run:{run.id}",
-            run_at=campaign.scheduled_at,  # Run at scheduled time
-        )
-        db.add(job)
-        db.flush()
-        
-        return "Campaign scheduled", run.id, campaign.scheduled_at
+
+    if not campaign.scheduled_at:
+        raise ValueError("scheduled_at is required when send_now is false")
+
+    # Schedule for later - still create the run and job, but with run_at
+    run = CampaignRun(
+        organization_id=org_id,
+        campaign_id=campaign.id,
+        status="pending",
+        total_count=0,
+        sent_count=0,
+        failed_count=0,
+        skipped_count=0,
+    )
+    db.add(run)
+    db.flush()
+    
+    campaign.status = CampaignStatus.SCHEDULED.value
+    
+    # Create job scheduled for future execution
+    job = Job(
+        organization_id=org_id,
+        job_type=JobType.CAMPAIGN_SEND.value,
+        status=JobStatus.PENDING.value,
+        payload={
+            "campaign_id": str(campaign.id),
+            "run_id": str(run.id),
+            "user_id": str(user_id),
+        },
+        idempotency_key=f"campaign:{campaign.id}:run:{run.id}",
+        run_at=campaign.scheduled_at,  # Run at scheduled time
+    )
+    db.add(job)
+    db.flush()
+    
+    return "Campaign scheduled", run.id, campaign.scheduled_at
 
 
 def cancel_campaign(db: Session, org_id: UUID, campaign_id: UUID) -> bool:

@@ -134,11 +134,19 @@ def resolve_user_and_create_session(
         user.last_login_at = datetime.now(timezone.utc)
         db.commit()
 
+        # Check MFA status - if MFA is enabled, user needs to complete challenge
+        # If MFA not yet set up but required, they need to set it up
+        mfa_enabled = user.mfa_enabled
+        mfa_required = True  # MFA required for all users
+        mfa_verified = False  # User hasn't verified MFA yet in this session
+
         token = create_session_token(
             user.id, 
             membership.organization_id, 
             membership.role, 
-            user.token_version
+            user.token_version,
+            mfa_verified=mfa_verified,
+            mfa_required=mfa_required,
         )
         return token, None
     
@@ -164,10 +172,14 @@ def resolve_user_and_create_session(
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
     
+    # New users need to set up MFA
     token = create_session_token(
         user.id,
         membership.organization_id,
         membership.role,
-        user.token_version
+        user.token_version,
+        mfa_verified=False,
+        mfa_required=True,
     )
     return token, None
+

@@ -33,6 +33,7 @@ from app.schemas.appointment import (
     AppointmentRead,
     AppointmentListItem,
     AppointmentListResponse,
+    AppointmentLinkUpdate,
     AppointmentReschedule,
     AppointmentCancel,
 )
@@ -114,6 +115,15 @@ def _appointment_to_read(appt, db: Session) -> AppointmentRead:
         user = db.query(User).filter(User.id == appt.approved_by_user_id).first()
         approved_by_name = user.display_name if user else None
     
+    # Resolve linked entities
+    case_number = None
+    if appt.case_id and appt.case:
+        case_number = appt.case.case_number
+    
+    intended_parent_name = None
+    if appt.intended_parent_id and appt.intended_parent:
+        intended_parent_name = appt.intended_parent.full_name
+    
     return AppointmentRead(
         id=appt.id,
         user_id=appt.user_id,
@@ -138,6 +148,10 @@ def _appointment_to_read(appt, db: Session) -> AppointmentRead:
         cancellation_reason=appt.cancellation_reason,
         zoom_join_url=appt.zoom_join_url,
         google_event_id=appt.google_event_id,
+        case_id=appt.case_id,
+        case_number=case_number,
+        intended_parent_id=appt.intended_parent_id,
+        intended_parent_name=intended_parent_name,
         created_at=appt.created_at,
         updated_at=appt.updated_at,
     )
@@ -149,17 +163,31 @@ def _appointment_to_list_item(appt) -> AppointmentListItem:
     if appt.appointment_type:
         appt_type_name = appt.appointment_type.name
     
+    # Resolve linked entities
+    case_number = None
+    if appt.case_id and appt.case:
+        case_number = appt.case.case_number
+    
+    intended_parent_name = None
+    if appt.intended_parent_id and appt.intended_parent:
+        intended_parent_name = appt.intended_parent.full_name
+    
     return AppointmentListItem(
         id=appt.id,
         appointment_type_name=appt_type_name,
         client_name=appt.client_name,
         client_email=appt.client_email,
         client_phone=appt.client_phone,
+        client_timezone=appt.client_timezone,
         scheduled_start=appt.scheduled_start,
         scheduled_end=appt.scheduled_end,
         duration_minutes=appt.duration_minutes,
         meeting_mode=appt.meeting_mode,
         status=appt.status,
+        case_id=appt.case_id,
+        case_number=case_number,
+        intended_parent_id=appt.intended_parent_id,
+        intended_parent_name=intended_parent_name,
         created_at=appt.created_at,
     )
 
@@ -482,6 +510,52 @@ def get_appointment(
     if appt.user_id != session.user_id and session.role not in ["admin", "developer"]:
         raise HTTPException(status_code=403, detail="Not authorized")
     
+    return _appointment_to_read(appt, db)
+
+
+@router.patch(
+    "/{appointment_id}/link",
+    response_model=AppointmentRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def update_appointment_link(
+    appointment_id: UUID,
+    data: AppointmentLinkUpdate,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """Update case/intended parent linkage for an appointment."""
+    from app.core.case_access import check_case_access
+    from app.services import case_service, ip_service
+
+    appt = appointment_service.get_appointment(db, appointment_id, session.org_id)
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    if appt.user_id != session.user_id and session.role not in ["admin", "developer"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if "case_id" in data.model_fields_set:
+        if data.case_id is None:
+            appt.case_id = None
+        else:
+            case = case_service.get_case(db, session.org_id, data.case_id)
+            if not case:
+                raise HTTPException(status_code=404, detail="Case not found")
+            check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+            appt.case_id = case.id
+
+    if "intended_parent_id" in data.model_fields_set:
+        if data.intended_parent_id is None:
+            appt.intended_parent_id = None
+        else:
+            ip = ip_service.get_intended_parent(db, data.intended_parent_id, session.org_id)
+            if not ip:
+                raise HTTPException(status_code=404, detail="Intended parent not found")
+            appt.intended_parent_id = ip.id
+
+    db.commit()
+    db.refresh(appt)
     return _appointment_to_read(appt, db)
 
 

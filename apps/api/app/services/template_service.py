@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.models import WorkflowTemplate, AutomationWorkflow, User
@@ -66,6 +67,13 @@ def create_template(
     icon: str = "template",
 ) -> WorkflowTemplate:
     """Create a new org-specific template."""
+    existing = db.query(WorkflowTemplate).filter(
+        WorkflowTemplate.organization_id == org_id,
+        WorkflowTemplate.name == name,
+    ).first()
+    if existing:
+        raise ValueError("Template name already exists")
+
     template = WorkflowTemplate(
         organization_id=org_id,
         created_by_user_id=user_id,
@@ -82,7 +90,11 @@ def create_template(
         usage_count=0,
     )
     db.add(template)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise ValueError("Template name already exists")
     db.refresh(template)
     return template
 
@@ -130,10 +142,10 @@ def use_template(
     workflow_description: str | None = None,
     is_enabled: bool = True,
     action_overrides: dict | None = None,
-) -> tuple[AutomationWorkflow, list[str]]:
+) -> AutomationWorkflow:
     """Create a workflow from a template.
     
-    Returns tuple of (workflow, warnings).
+    Returns workflow.
     If actions have missing required fields, a validation error is raised.
     """
     template = get_template(db, template_id, org_id)
@@ -143,19 +155,24 @@ def use_template(
     # Apply action overrides if provided
     actions = template.actions.copy() if template.actions else []
     if action_overrides:
+        if not isinstance(action_overrides, dict):
+            raise ValueError("action_overrides must be an object")
         for idx_str, overrides in action_overrides.items():
-            idx = int(idx_str)
-            if 0 <= idx < len(actions):
-                actions[idx] = {**actions[idx], **overrides}
-    
+            try:
+                idx = int(idx_str)
+            except (TypeError, ValueError):
+                raise ValueError(f"Invalid action override index: {idx_str}")
+            if idx < 0 or idx >= len(actions):
+                raise ValueError(f"Action override index out of range: {idx}")
+            if not isinstance(overrides, dict):
+                raise ValueError(f"Action override for index {idx} must be an object")
+            actions[idx] = {**actions[idx], **overrides}
+
     # Validate actions for missing required fields
-    warnings = []
     for i, action in enumerate(actions):
         action_type = action.get("action_type")
         if action_type == "send_email" and not action.get("template_id"):
-            warnings.append(f"Action {i+1} (send_email) missing email template")
-    if warnings:
-        raise ValueError("; ".join(warnings))
+            raise ValueError(f"Action {i+1} (send_email) missing email template")
     
     from app.services import workflow_service
     from app.db.enums import WorkflowTriggerType
@@ -190,7 +207,7 @@ def use_template(
     
     db.commit()
     db.refresh(workflow)
-    return workflow, warnings
+    return workflow
 
 
 def delete_template(

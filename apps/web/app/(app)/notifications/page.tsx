@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { formatDistanceToNow } from "date-fns"
+import { differenceInCalendarDays, formatDistanceToNow, parseISO } from "date-fns"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -60,24 +60,26 @@ export default function NotificationsPage() {
     const markRead = useMarkRead()
     const markAllRead = useMarkAllRead()
 
-    // Fetch overdue tasks (incomplete with due_date in the past)
+    const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    const now = new Date()
+    const todayStr = now.toLocaleDateString("en-CA", { timeZone: userTimeZone })
+    const yesterday = new Date(now)
+    yesterday.setDate(now.getDate() - 1)
+    const yesterdayStr = yesterday.toLocaleDateString("en-CA", { timeZone: userTimeZone })
+
+    // Fetch overdue tasks (incomplete with due_date before today in user timezone)
     const { data: overdueTasksData } = useTasks({
         is_completed: false,
         my_tasks: true,
-        per_page: 10,
+        per_page: 100,
+        due_before: yesterdayStr,
     })
 
     const notifications = notificationsData?.items ?? []
     const unreadCount = notificationsData?.unread_count ?? 0
 
-    // Filter overdue tasks client-side (due_date < today)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const overdueTasks = (overdueTasksData?.items ?? []).filter((task) => {
-        if (!task.due_date) return false
-        const dueDate = new Date(task.due_date)
-        return dueDate < today
-    })
+    const overdueTasks = overdueTasksData?.items ?? []
+    const overdueTotal = overdueTasksData?.total ?? overdueTasks.length
 
     const handleNotificationClick = (notification: Notification) => {
         if (!notification.read_at) {
@@ -88,7 +90,7 @@ export default function NotificationsPage() {
         } else if (notification.entity_type === "task" && notification.entity_id) {
             router.push(`/tasks`)
         } else if (notification.entity_type === "appointment" && notification.entity_id) {
-            router.push(`/appointments/${notification.entity_id}`)
+            router.push(`/appointments`)
         }
     }
 
@@ -96,11 +98,8 @@ export default function NotificationsPage() {
         markAllRead.mutate()
     }
 
-    const getDaysOverdue = (dueDate: string) => {
-        const due = new Date(dueDate)
-        const diffTime = today.getTime() - due.getTime()
-        return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-    }
+    const getDaysOverdue = (dueDate: string) =>
+        differenceInCalendarDays(parseISO(todayStr), parseISO(dueDate))
 
     if (isLoading) {
         return (
@@ -170,7 +169,7 @@ export default function NotificationsPage() {
                 </div>
 
                 {/* Overdue Tasks Section */}
-                {overdueTasks.length > 0 && (
+                {overdueTotal > 0 && (
                     <Collapsible open={isOverdueOpen} onOpenChange={setIsOverdueOpen}>
                         <Card className="border-red-500/20 bg-red-500/5">
                             <CardHeader>
@@ -182,7 +181,7 @@ export default function NotificationsPage() {
                                         <div>
                                             <CardTitle className="text-red-500">Overdue Tasks</CardTitle>
                                             <CardDescription className="text-red-400/80">
-                                                {overdueTasks.length} task{overdueTasks.length > 1 ? "s" : ""} need immediate attention
+                                                {overdueTotal} task{overdueTotal > 1 ? "s" : ""} need immediate attention
                                             </CardDescription>
                                         </div>
                                     </div>
@@ -228,6 +227,11 @@ export default function NotificationsPage() {
                                             </div>
                                         </Link>
                                     ))}
+                                    {overdueTasksData && overdueTasksData.total > overdueTasks.length && (
+                                        <p className="pt-2 text-center text-xs text-muted-foreground">
+                                            Showing first {overdueTasks.length} overdue tasks
+                                        </p>
+                                    )}
                                     <Link href="/tasks" className="block pt-2 text-center text-sm text-teal-500 hover:underline">
                                         View all tasks →
                                     </Link>

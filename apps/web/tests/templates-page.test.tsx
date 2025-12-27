@@ -61,6 +61,13 @@ const mockTemplateWithEmail = {
 }
 
 const mockTemplates = [mockTemplateWithMissingEmail, mockTemplateWithEmail]
+const mockCategories = [
+    { value: 'onboarding', label: 'Onboarding' },
+    { value: 'follow-up', label: 'Follow-up' },
+    { value: 'notifications', label: 'Notifications' },
+    { value: 'compliance', label: 'Compliance' },
+    { value: 'general', label: 'General' },
+]
 
 describe('TemplatesPage', () => {
     beforeEach(() => {
@@ -68,20 +75,23 @@ describe('TemplatesPage', () => {
 
             // Mock useQuery to return different data based on queryKey
             ; (useQuery as ReturnType<typeof vi.fn>).mockImplementation(({ queryKey }) => {
+                if (queryKey[0] === 'template-categories') {
+                    return { data: { categories: mockCategories }, isLoading: false, isError: false, error: null }
+                }
                 if (queryKey[0] === 'templates') {
-                    return { data: mockTemplates, isLoading: false }
+                    return { data: mockTemplates, isLoading: false, isError: false, error: null }
                 }
                 if (queryKey[0] === 'template') {
                     const templateId = queryKey[1]
                     if (templateId === 'tmpl-1') {
-                        return { data: mockTemplateWithMissingEmail, isLoading: false }
+                        return { data: mockTemplateWithMissingEmail, isLoading: false, isError: false, error: null }
                     }
                     if (templateId === 'tmpl-2') {
-                        return { data: mockTemplateWithEmail, isLoading: false }
+                        return { data: mockTemplateWithEmail, isLoading: false, isError: false, error: null }
                     }
-                    return { data: null, isLoading: false }
+                    return { data: null, isLoading: false, isError: false, error: null }
                 }
-                return { data: null, isLoading: false }
+                return { data: null, isLoading: false, isError: false, error: null }
             })
 
             // Mock useMutation

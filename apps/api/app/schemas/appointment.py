@@ -167,6 +167,11 @@ class AppointmentRead(BaseModel):
     cancellation_reason: str | None
     zoom_join_url: str | None
     google_event_id: str | None
+    # Linkage fields
+    case_id: UUID | None = None
+    case_number: int | None = None
+    intended_parent_id: UUID | None = None
+    intended_parent_name: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -178,11 +183,17 @@ class AppointmentListItem(BaseModel):
     client_name: str
     client_email: str
     client_phone: str
+    client_timezone: str
     scheduled_start: datetime
     scheduled_end: datetime
     duration_minutes: int
     meeting_mode: str
     status: str
+    # Linkage fields
+    case_id: UUID | None = None
+    case_number: int | None = None
+    intended_parent_id: UUID | None = None
+    intended_parent_name: str | None = None
     created_at: datetime
 
 
@@ -193,6 +204,16 @@ class AppointmentListResponse(BaseModel):
     page: int
     per_page: int
     pages: int
+
+
+# =============================================================================
+# Link Updates
+# =============================================================================
+
+class AppointmentLinkUpdate(BaseModel):
+    """Update an appointment's case/intended parent linkage."""
+    case_id: UUID | None = None
+    intended_parent_id: UUID | None = None
 
 
 # =============================================================================

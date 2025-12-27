@@ -13,6 +13,8 @@ class TokenPayload(BaseModel):
     org_id: UUID
     role: str
     token_version: int
+    mfa_verified: bool = False  # True after MFA challenge completed
+    mfa_required: bool = True  # MFA required for this user
 
 
 class UserSession(BaseModel):
@@ -27,6 +29,8 @@ class UserSession(BaseModel):
     role: Role  # Validated enum
     email: str
     display_name: str
+    mfa_verified: bool = False
+    mfa_required: bool = True
 
 
 class MeResponse(BaseModel):
@@ -41,3 +45,7 @@ class MeResponse(BaseModel):
     org_timezone: str
     role: Role
     ai_enabled: bool = False
+    mfa_enabled: bool = False
+    mfa_required: bool = True
+    mfa_verified: bool = False
+

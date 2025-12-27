@@ -87,7 +87,7 @@ def get_current_session(
     db: Session = Depends(get_db)
 ):
     """
-    Get full session context: user_id, org_id, role.
+    Get full session context: user_id, org_id, role, MFA status.
     
     This is the PRIMARY auth dependency for most endpoints.
     Returns a UserSession with all context needed for authorization.
@@ -100,6 +100,19 @@ def get_current_session(
     from app.db.models import Membership
     from app.db.enums import Role
     from app.schemas.auth import UserSession
+    
+    # Parse JWT to get MFA status before calling get_current_user
+    token = request.cookies.get(COOKIE_NAME)
+    mfa_verified = False
+    mfa_required = True
+    
+    if token:
+        try:
+            payload = decode_session_token(token)
+            mfa_verified = payload.get("mfa_verified", False)
+            mfa_required = payload.get("mfa_required", True)
+        except Exception:
+            pass  # Let get_current_user handle the error
     
     user = get_current_user(request, db)
     
@@ -125,6 +138,8 @@ def get_current_session(
         role=role,
         email=user.email,
         display_name=user.display_name,
+        mfa_verified=mfa_verified,
+        mfa_required=mfa_required,
     )
 
 

@@ -237,6 +237,24 @@ export function useCancelAppointment() {
     });
 }
 
+export function useUpdateAppointmentLink() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({
+            appointmentId,
+            data,
+        }: {
+            appointmentId: string;
+            data: appointmentsApi.AppointmentLinkUpdate;
+        }) => appointmentsApi.updateAppointmentLink(appointmentId, data),
+        onSuccess: (updatedAppt) => {
+            queryClient.setQueryData(appointmentKeys.detail(updatedAppt.id), updatedAppt);
+            queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
+        },
+    });
+}
+
 // =============================================================================
 // Public Booking Hooks
 // =============================================================================
@@ -310,17 +328,16 @@ export function useCreateBooking() {
 // =============================================================================
 
 export const calendarKeys = {
-    googleEvents: (dateStart: string, dateEnd: string) =>
-        ['google-calendar', 'events', { dateStart, dateEnd }] as const,
+    googleEvents: (dateStart: string, dateEnd: string, timezone?: string) =>
+        ['google-calendar', 'events', { dateStart, dateEnd, timezone }] as const,
 };
 
-export function useGoogleCalendarEvents(dateStart: string, dateEnd: string) {
+export function useGoogleCalendarEvents(dateStart: string, dateEnd: string, timezone?: string) {
     return useQuery({
-        queryKey: calendarKeys.googleEvents(dateStart, dateEnd),
-        queryFn: () => appointmentsApi.getGoogleCalendarEvents(dateStart, dateEnd),
+        queryKey: calendarKeys.googleEvents(dateStart, dateEnd, timezone),
+        queryFn: () => appointmentsApi.getGoogleCalendarEvents(dateStart, dateEnd, timezone),
         enabled: !!dateStart && !!dateEnd,
         // Cache for 5 minutes to reduce API calls
         staleTime: 5 * 60 * 1000,
     });
 }
-
