@@ -3704,8 +3704,8 @@ class CampaignRecipient(Base):
     # External ID from email service
     external_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     
-    # Tracking
-    tracking_token: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    # Tracking - unique index created by migration c3e9f2a1b8d4
+    tracking_token: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
     opened_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     open_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     clicked_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)

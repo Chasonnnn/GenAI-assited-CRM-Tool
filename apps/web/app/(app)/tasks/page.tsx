@@ -347,7 +347,7 @@ export default function TasksPage() {
 
                 {/* Calendar View */}
                 {!isLoading && view === "calendar" && (
-                    <UnifiedCalendar />
+                    <UnifiedCalendar taskFilter={{ my_tasks: filter === "my_tasks" }} />
                 )}
 
                 {/* List View */}

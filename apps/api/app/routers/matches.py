@@ -13,7 +13,7 @@ from app.core.deps import get_db, require_csrf_header, require_permission
 from app.db.enums import CaseActivityType, IntendedParentStatus, MatchStatus
 from app.db.models import Case, IntendedParent, Match, IntendedParentStatusHistory
 from app.schemas.auth import UserSession
-from app.services import workflow_triggers
+from app.services import workflow_triggers, note_service
 
 router = APIRouter(prefix="/matches", tags=["Matches"])
 
@@ -217,6 +217,8 @@ def create_match(
         )
     
     # Create match
+    clean_notes = note_service.sanitize_html(data.notes) if data.notes else None
+
     match = Match(
         organization_id=session.org_id,
         case_id=data.case_id,
@@ -224,7 +226,7 @@ def create_match(
         status=MatchStatus.PROPOSED.value,
         compatibility_score=data.compatibility_score,
         proposed_by_user_id=session.user_id,
-        notes=data.notes,
+        notes=clean_notes,
     )
     db.add(match)
     db.flush()
@@ -457,7 +459,8 @@ def accept_match(
     match.reviewed_by_user_id = session.user_id
     match.reviewed_at = datetime.now(timezone.utc)
     if data.notes:
-        match.notes = (match.notes or "") + "\n\n" + data.notes
+        clean_notes = note_service.sanitize_html(data.notes)
+        match.notes = (match.notes or "") + "\n\n" + clean_notes
     match.updated_at = datetime.now(timezone.utc)
 
     # Update intended parent status to matched (if not already)
@@ -553,7 +556,8 @@ def reject_match(
     match.reviewed_at = datetime.now(timezone.utc)
     match.rejection_reason = data.rejection_reason
     if data.notes:
-        match.notes = (match.notes or "") + "\n\n" + data.notes
+        clean_notes = note_service.sanitize_html(data.notes)
+        match.notes = (match.notes or "") + "\n\n" + clean_notes
     match.updated_at = datetime.now(timezone.utc)
     
     # Log activity
@@ -639,7 +643,7 @@ def update_match_notes(
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
     
-    match.notes = data.notes
+    match.notes = note_service.sanitize_html(data.notes)
     match.updated_at = datetime.now(timezone.utc)
     
     db.commit()

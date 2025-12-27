@@ -529,6 +529,7 @@ function AppointmentDetailDialog({
 function MonthView({
     currentDate,
     appointments,
+    tasks,
     googleEvents = [],
     onEventClick,
     onDragStart,
@@ -539,6 +540,7 @@ function MonthView({
 }: {
     currentDate: Date
     appointments: AppointmentListItem[]
+    tasks: TaskListItem[]
     googleEvents?: GoogleCalendarEvent[]
     onEventClick: (appt: AppointmentListItem) => void
     onDragStart?: (e: React.DragEvent, appointment: AppointmentListItem) => void
@@ -565,6 +567,17 @@ function MonthView({
         })
         return map
     }, [appointments])
+
+    const tasksByDate = useMemo(() => {
+        const map = new Map<string, TaskListItem[]>()
+        tasks.forEach((task) => {
+            if (!task.due_date) return
+            const dateStr = task.due_date
+            if (!map.has(dateStr)) map.set(dateStr, [])
+            map.get(dateStr)!.push(task)
+        })
+        return map
+    }, [tasks])
 
     const googleEventsByDate = useMemo(() => {
         const map = new Map<string, GoogleCalendarEvent[]>()
@@ -615,11 +628,18 @@ function MonthView({
                 {days.map((day, i) => {
                     const dateStr = format(day, "yyyy-MM-dd")
                     const dayAppointments = appointmentsByDate.get(dateStr) || []
+                    const dayTasks = tasksByDate.get(dateStr) || []
                     const dayGoogleEvents = googleEventsByDate.get(dateStr) || []
-                    const totalEvents = dayAppointments.length + dayGoogleEvents.length
+                    const totalEvents = dayAppointments.length + dayTasks.length + dayGoogleEvents.length
                     const isCurrentMonth = isSameMonth(day, currentDate)
                     const isCurrentDay = isToday(day)
                     const isDropTarget = dragOverDate === dateStr
+                    const appointmentSlots = 2
+                    const shownAppointments = dayAppointments.slice(0, appointmentSlots)
+                    const remainingSlots = Math.max(0, 3 - shownAppointments.length)
+                    const shownTasks = dayTasks.slice(0, remainingSlots)
+                    const remainingAfterTasks = Math.max(0, remainingSlots - shownTasks.length)
+                    const shownGoogleEvents = dayGoogleEvents.slice(0, remainingAfterTasks)
 
                     return (
                         <div
@@ -640,7 +660,7 @@ function MonthView({
                             </div>
                             <div className="space-y-1 mt-1">
                                 {/* CRM Appointments */}
-                                {dayAppointments.slice(0, 2).map((appt) => (
+                                {shownAppointments.map((appt) => (
                                     <EventItem
                                         key={appt.id}
                                         appointment={appt}
@@ -650,8 +670,12 @@ function MonthView({
                                         onDragStart={onDragStart}
                                     />
                                 ))}
+                                {/* Tasks */}
+                                {shownTasks.map((task) => (
+                                    <TaskItem key={task.id} task={task} compact />
+                                ))}
                                 {/* Google Calendar Events */}
-                                {dayGoogleEvents.slice(0, Math.max(0, 3 - dayAppointments.length)).map((event) => (
+                                {shownGoogleEvents.map((event) => (
                                     <GoogleEventItem
                                         key={`gcal-${event.id}`}
                                         event={event}
@@ -679,11 +703,13 @@ function MonthView({
 function WeekView({
     currentDate,
     appointments,
+    tasks,
     googleEvents = [],
     onEventClick,
 }: {
     currentDate: Date
     appointments: AppointmentListItem[]
+    tasks: TaskListItem[]
     googleEvents?: GoogleCalendarEvent[]
     onEventClick: (appt: AppointmentListItem) => void
 }) {
@@ -702,6 +728,17 @@ function WeekView({
         })
         return map
     }, [appointments])
+
+    const tasksByDate = useMemo(() => {
+        const map = new Map<string, TaskListItem[]>()
+        tasks.forEach((task) => {
+            if (!task.due_date) return
+            const dateStr = task.due_date
+            if (!map.has(dateStr)) map.set(dateStr, [])
+            map.get(dateStr)!.push(task)
+        })
+        return map
+    }, [tasks])
 
     const googleEventsByDate = useMemo(() => {
         const map = new Map<string, GoogleCalendarEvent[]>()
@@ -734,8 +771,9 @@ function WeekView({
             {days.map((day) => {
                 const dateStr = format(day, "yyyy-MM-dd")
                 const dayAppointments = appointmentsByDate.get(dateStr) || []
+                const dayTasks = tasksByDate.get(dateStr) || []
                 const dayGoogleEvents = googleEventsByDate.get(dateStr) || []
-                const hasEvents = dayAppointments.length > 0 || dayGoogleEvents.length > 0
+                const hasEvents = dayAppointments.length > 0 || dayTasks.length > 0 || dayGoogleEvents.length > 0
                 const isCurrentDay = isToday(day)
 
                 return (
@@ -751,6 +789,9 @@ function WeekView({
                                     appointment={appt}
                                     onClick={() => onEventClick(appt)}
                                 />
+                            ))}
+                            {dayTasks.map((task) => (
+                                <TaskItem key={task.id} task={task} />
                             ))}
                             {dayGoogleEvents.map((event) => (
                                 <GoogleEventItem
@@ -776,11 +817,13 @@ function WeekView({
 function DayView({
     currentDate,
     appointments,
+    tasks,
     googleEvents = [],
     onEventClick,
 }: {
     currentDate: Date
     appointments: AppointmentListItem[]
+    tasks: TaskListItem[]
     googleEvents?: GoogleCalendarEvent[]
     onEventClick: (appt: AppointmentListItem) => void
 }) {
@@ -791,6 +834,10 @@ function DayView({
             format(parseISO(appt.scheduled_start), "yyyy-MM-dd") === dateStr
         ).sort((a, b) => a.scheduled_start.localeCompare(b.scheduled_start))
     }, [dateStr, appointments])
+
+    const dayTasks = useMemo(() => {
+        return tasks.filter((task) => task.due_date === dateStr)
+    }, [dateStr, tasks])
 
     const dayGoogleEvents = useMemo(() => {
         return googleEvents.filter((event) => {
@@ -809,6 +856,8 @@ function DayView({
 
     const allDayEvents = dayGoogleEvents.filter(e => e.is_all_day)
     const timedGoogleEvents = dayGoogleEvents.filter(e => !e.is_all_day)
+    const allDayTasks = dayTasks.filter((task) => !task.due_time)
+    const timedTasks = dayTasks.filter((task) => task.due_time)
 
     // Time slots (8am - 8pm)
     const hours = Array.from({ length: 13 }, (_, i) => i + 8)
@@ -829,11 +878,26 @@ function DayView({
                     </div>
                 </div>
             )}
+            {allDayTasks.length > 0 && (
+                <div className="p-2 bg-muted/50 border-b border-border">
+                    <p className="text-xs text-muted-foreground mb-1">Tasks</p>
+                    <div className="space-y-1">
+                        {allDayTasks.map((task) => (
+                            <TaskItem key={task.id} task={task} compact />
+                        ))}
+                    </div>
+                </div>
+            )}
             <div className="divide-y divide-border">
                 {hours.map((hour) => {
                     const hourAppointments = dayAppointments.filter((appt) => {
                         const apptHour = parseISO(appt.scheduled_start).getHours()
                         return apptHour === hour
+                    })
+                    const hourTasks = timedTasks.filter((task) => {
+                        if (!task.due_time) return false
+                        const taskHour = parseISO(`2000-01-01T${task.due_time}`).getHours()
+                        return taskHour === hour
                     })
                     const hourGoogleEvents = timedGoogleEvents.filter((event) => {
                         const eventHour = parseISO(event.start).getHours()
@@ -852,6 +916,9 @@ function DayView({
                                         appointment={appt}
                                         onClick={() => onEventClick(appt)}
                                     />
+                                ))}
+                                {hourTasks.map((task) => (
+                                    <TaskItem key={task.id} task={task} compact />
                                 ))}
                                 {hourGoogleEvents.map((event) => (
                                     <GoogleEventItem
@@ -872,7 +939,7 @@ function DayView({
 // Main Export
 // =============================================================================
 
-export function UnifiedCalendar() {
+export function UnifiedCalendar({ taskFilter }: { taskFilter?: { my_tasks?: boolean } } = {}) {
     const [currentDate, setCurrentDate] = useState(new Date())
     const [viewType, setViewType] = useState<ViewType>("month")
     const [selectedAppointment, setSelectedAppointment] = useState<AppointmentListItem | null>(null)
@@ -895,7 +962,7 @@ export function UnifiedCalendar() {
         }
     }, [currentDate])
 
-    const { data, isLoading } = useAppointments({
+    const { data, isLoading: appointmentsLoading } = useAppointments({
         ...dateRange,
         per_page: 100,
     })
@@ -914,6 +981,16 @@ export function UnifiedCalendar() {
         userTimezone
     )
     const googleEvents = googleEventsData || []
+
+    const taskParams = {
+        my_tasks: taskFilter?.my_tasks ? true : undefined,
+        is_completed: false,
+        per_page: 100,
+        due_after: dateRange.date_start,
+        due_before: dateRange.date_end,
+    }
+    const { data: tasksData, isLoading: tasksLoading } = useTasks(taskParams)
+    const tasks = tasksData?.items || []
 
     // Navigation
     const navigate = (direction: "prev" | "next") => {
@@ -1016,7 +1093,7 @@ export function UnifiedCalendar() {
             </CardHeader>
 
             <CardContent>
-                {isLoading ? (
+                {appointmentsLoading || tasksLoading ? (
                     <div className="py-12 flex items-center justify-center">
                         <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
                     </div>
@@ -1026,6 +1103,7 @@ export function UnifiedCalendar() {
                             <MonthView
                                 currentDate={currentDate}
                                 appointments={appointments}
+                                tasks={tasks}
                                 googleEvents={googleEvents}
                                 onEventClick={handleEventClick}
                                 onDragStart={handleDragStart}
@@ -1039,6 +1117,7 @@ export function UnifiedCalendar() {
                             <WeekView
                                 currentDate={currentDate}
                                 appointments={appointments}
+                                tasks={tasks}
                                 googleEvents={googleEvents}
                                 onEventClick={handleEventClick}
                             />
@@ -1047,6 +1126,7 @@ export function UnifiedCalendar() {
                             <DayView
                                 currentDate={currentDate}
                                 appointments={appointments}
+                                tasks={tasks}
                                 googleEvents={googleEvents}
                                 onEventClick={handleEventClick}
                             />
@@ -1066,6 +1146,10 @@ export function UnifiedCalendar() {
                     <div className="flex items-center gap-1.5">
                         <div className={`size-3 rounded-full ${GOOGLE_EVENT_COLOR}`} />
                         <span className="text-xs">🌐 Google Calendar</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <div className={`size-3 rounded-full ${TASK_COLOR}`} />
+                        <span className="text-xs">Tasks</span>
                     </div>
                     <span className="text-xs text-muted-foreground ml-auto">
                         💡 Drag pending/confirmed appointments to reschedule
