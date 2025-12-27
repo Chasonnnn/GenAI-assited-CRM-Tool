@@ -75,21 +75,26 @@ def create_template(
     session: UserSession = Depends(require_permission("manage_automation")),
 ):
     """Create a new org-specific template."""
-    template = template_service.create_template(
-        db=db,
-        org_id=session.org_id,
-        user_id=session.user_id,
-        name=data.name,
-        description=data.description,
-        category=data.category,
-        trigger_type=data.trigger_type,
-        trigger_config=data.trigger_config,
-        conditions=[c.model_dump() if hasattr(c, 'model_dump') else c for c in data.conditions],
-        condition_logic=data.condition_logic,
-        actions=data.actions,
-        icon=data.icon,
-    )
-    return TemplateRead.model_validate(template)
+    try:
+        template = template_service.create_template(
+            db=db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+            name=data.name,
+            description=data.description,
+            category=data.category,
+            trigger_type=data.trigger_type,
+            trigger_config=data.trigger_config,
+            conditions=[c.model_dump() if hasattr(c, 'model_dump') else c for c in data.conditions],
+            condition_logic=data.condition_logic,
+            actions=data.actions,
+            icon=data.icon,
+        )
+        return TemplateRead.model_validate(template)
+    except ValueError as e:
+        detail = str(e)
+        status_code = 409 if "already exists" in detail.lower() else 400
+        raise HTTPException(status_code=status_code, detail=detail)
 
 
 @router.post("/from-workflow", response_model=TemplateRead, dependencies=[Depends(require_csrf_header)])
@@ -111,7 +116,11 @@ def create_template_from_workflow(
         )
         return TemplateRead.model_validate(template)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        detail = str(e)
+        if detail == "Workflow not found":
+            raise HTTPException(status_code=404, detail=detail)
+        status_code = 409 if "already exists" in detail.lower() else 400
+        raise HTTPException(status_code=status_code, detail=detail)
 
 
 @router.post("/{template_id}/use", response_model=WorkflowRead, dependencies=[Depends(require_csrf_header)])
@@ -123,7 +132,7 @@ def use_template(
 ):
     """Create a workflow from a template."""
     try:
-        workflow, warnings = template_service.use_template(
+        workflow = template_service.use_template(
             db=db,
             org_id=session.org_id,
             user_id=session.user_id,
@@ -138,11 +147,6 @@ def use_template(
         result = WorkflowRead.model_validate(workflow)
         if workflow.created_by:
             result.created_by_name = workflow.created_by.display_name
-        
-        # Add warnings to result if present
-        if warnings:
-            result.config_warnings = warnings
-        
         return result
     except ValueError as e:
         detail = str(e)

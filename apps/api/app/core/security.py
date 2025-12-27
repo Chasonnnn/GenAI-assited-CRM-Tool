@@ -19,19 +19,23 @@ def create_session_token(
     user_id: UUID, 
     org_id: UUID, 
     role: str, 
-    token_version: int
+    token_version: int,
+    mfa_verified: bool = False,
+    mfa_required: bool = True,
 ) -> str:
     """
     Create signed session JWT.
     
     Always signs with current secret (JWT_SECRET).
-    Token contains user identity, org context, and revocation version.
+    Token contains user identity, org context, MFA status, and revocation version.
     """
     payload = {
         "sub": str(user_id),
         "org_id": str(org_id),
         "role": role,
         "token_version": token_version,
+        "mfa_verified": mfa_verified,
+        "mfa_required": mfa_required,
         "iat": datetime.now(timezone.utc),
         "exp": datetime.now(timezone.utc) + timedelta(hours=settings.JWT_EXPIRES_HOURS),
     }

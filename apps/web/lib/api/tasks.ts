@@ -48,11 +48,14 @@ export interface TaskListResponse {
 export interface TaskListParams {
     page?: number;
     per_page?: number;
+    q?: string;
     owner_id?: string;
     case_id?: string;
     intended_parent_id?: string;
     is_completed?: boolean;
     task_type?: TaskType;
+    due_before?: string;
+    due_after?: string;
     my_tasks?: boolean;
 }
 
@@ -81,11 +84,14 @@ export function getTasks(params: TaskListParams = {}): Promise<TaskListResponse>
 
     if (params.page) searchParams.set('page', String(params.page));
     if (params.per_page) searchParams.set('per_page', String(params.per_page));
+    if (params.q) searchParams.set('q', params.q);
     if (params.owner_id) searchParams.set('owner_id', params.owner_id);
     if (params.case_id) searchParams.set('case_id', params.case_id);
     if (params.intended_parent_id) searchParams.set('intended_parent_id', params.intended_parent_id);
     if (params.is_completed !== undefined) searchParams.set('is_completed', String(params.is_completed));
     if (params.task_type) searchParams.set('task_type', params.task_type);
+    if (params.due_before) searchParams.set('due_before', params.due_before);
+    if (params.due_after) searchParams.set('due_after', params.due_after);
     if (params.my_tasks) searchParams.set('my_tasks', 'true');
 
     const query = searchParams.toString();
@@ -146,4 +152,3 @@ export interface BulkCompleteResponse {
 export function bulkCompleteTasks(taskIds: string[]): Promise<BulkCompleteResponse> {
     return api.post<BulkCompleteResponse>('/tasks/bulk-complete', { task_ids: taskIds });
 }
-

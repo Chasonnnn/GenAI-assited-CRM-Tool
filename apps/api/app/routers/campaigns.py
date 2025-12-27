@@ -355,4 +355,6 @@ def _campaign_to_response(db: Session, campaign) -> CampaignResponse:
         sent_count=latest_run.sent_count if latest_run else 0,
         failed_count=latest_run.failed_count if latest_run else 0,
         skipped_count=latest_run.skipped_count if latest_run else 0,
+        opened_count=latest_run.opened_count if latest_run else 0,
+        clicked_count=latest_run.clicked_count if latest_run else 0,
     )

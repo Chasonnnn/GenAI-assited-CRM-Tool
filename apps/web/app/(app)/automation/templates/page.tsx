@@ -67,14 +67,35 @@ interface UseTemplateFormData {
     action_overrides?: Record<string, { template_id: string }>
 }
 
-// Category config
-const categoryConfig: Record<string, { label: string; color: string }> = {
-    onboarding: { label: "Onboarding", color: "bg-blue-500/10 text-blue-500 border-blue-500/20" },
-    "follow-up": { label: "Follow-up", color: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20" },
-    notifications: { label: "Notifications", color: "bg-purple-500/10 text-purple-500 border-purple-500/20" },
-    compliance: { label: "Compliance", color: "bg-red-500/10 text-red-500 border-red-500/20" },
-    general: { label: "General", color: "bg-gray-500/10 text-gray-500 border-gray-500/20" },
+interface TemplateCategory {
+    value: string
+    label: string
 }
+
+interface TemplateCategoriesResponse {
+    categories: TemplateCategory[]
+}
+
+const DEFAULT_CATEGORY_LABELS: Record<string, string> = {
+    onboarding: "Onboarding",
+    "follow-up": "Follow-up",
+    notifications: "Notifications",
+    compliance: "Compliance",
+    general: "General",
+}
+
+const CATEGORY_COLORS: Record<string, string> = {
+    onboarding: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+    "follow-up": "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
+    notifications: "bg-purple-500/10 text-purple-500 border-purple-500/20",
+    compliance: "bg-red-500/10 text-red-500 border-red-500/20",
+    general: "bg-gray-500/10 text-gray-500 border-gray-500/20",
+}
+
+const DEFAULT_CATEGORIES = Object.entries(DEFAULT_CATEGORY_LABELS).map(([value, label]) => ({
+    value,
+    label,
+}))
 
 // Icon map
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -98,6 +119,10 @@ async function fetchTemplate(templateId: string): Promise<WorkflowTemplateDetail
     return api.get<WorkflowTemplateDetail>(`/templates/${templateId}`)
 }
 
+async function fetchTemplateCategories(): Promise<TemplateCategoriesResponse> {
+    return api.get<TemplateCategoriesResponse>("/templates/categories")
+}
+
 async function useTemplateApi(templateId: string, data: UseTemplateFormData) {
     return api.post(`/templates/${templateId}/use`, data)
 }
@@ -114,11 +139,20 @@ export default function TemplatesPage() {
     })
     const { data: emailTemplates = [], isLoading: isLoadingEmailTemplates } = useEmailTemplates(true)
 
+    const { data: categoriesData } = useQuery({
+        queryKey: ["template-categories"],
+        queryFn: fetchTemplateCategories,
+    })
     const { data: templates = [], isLoading } = useQuery({
         queryKey: ["templates", categoryFilter],
         queryFn: () => fetchTemplates(categoryFilter === "all" ? undefined : categoryFilter),
     })
-    const { data: selectedTemplateDetail, isLoading: isLoadingTemplateDetail } = useQuery({
+    const {
+        data: selectedTemplateDetail,
+        isLoading: isLoadingTemplateDetail,
+        isError: isTemplateDetailError,
+        error: templateDetailError,
+    } = useQuery({
         queryKey: ["template", selectedTemplate?.id],
         queryFn: () => fetchTemplate(selectedTemplate!.id),
         enabled: !!selectedTemplate?.id,
@@ -167,12 +201,22 @@ export default function TemplatesPage() {
             ({ index }) => formData.action_overrides?.[String(index)]?.template_id
         )
     const isTemplateDetailLoading =
-        !!selectedTemplate && (isLoadingTemplateDetail || !selectedTemplateDetail)
+        !!selectedTemplate && (isLoadingTemplateDetail || (!selectedTemplateDetail && !isTemplateDetailError))
+    const hasTemplateDetail = !selectedTemplate || !!selectedTemplateDetail
+    const templateDetailErrorMessage =
+        templateDetailError instanceof Error ? templateDetailError.message : "Failed to load template details"
     const canCreateWorkflow =
         !!formData.name &&
         !useTemplateMutation.isPending &&
         hasAllEmailSelections &&
-        !isTemplateDetailLoading
+        !isTemplateDetailLoading &&
+        hasTemplateDetail &&
+        !isTemplateDetailError
+    const categoryOptions = categoriesData?.categories ?? DEFAULT_CATEGORIES
+    const categoryLabels = categoryOptions.reduce<Record<string, string>>((acc, category) => {
+        acc[category.value] = category.label
+        return acc
+    }, { ...DEFAULT_CATEGORY_LABELS })
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-6">
@@ -190,11 +234,11 @@ export default function TemplatesPage() {
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="all">All Categories</SelectItem>
-                        <SelectItem value="onboarding">Onboarding</SelectItem>
-                        <SelectItem value="follow-up">Follow-up</SelectItem>
-                        <SelectItem value="notifications">Notifications</SelectItem>
-                        <SelectItem value="compliance">Compliance</SelectItem>
-                        <SelectItem value="general">General</SelectItem>
+                        {categoryOptions.map((category) => (
+                            <SelectItem key={category.value} value={category.value}>
+                                {category.label}
+                            </SelectItem>
+                        ))}
                     </SelectContent>
                 </Select>
             </div>
@@ -227,6 +271,7 @@ export default function TemplatesPage() {
                                     <TemplateCard
                                         key={template.id}
                                         template={template}
+                                        categoryLabels={categoryLabels}
                                         onSelect={() => handleSelectTemplate(template)}
                                     />
                                 ))}
@@ -246,6 +291,7 @@ export default function TemplatesPage() {
                                     <TemplateCard
                                         key={template.id}
                                         template={template}
+                                        categoryLabels={categoryLabels}
                                         onSelect={() => handleSelectTemplate(template)}
                                     />
                                 ))}
@@ -293,6 +339,12 @@ export default function TemplatesPage() {
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <LoaderIcon className="h-4 w-4 animate-spin" />
                                 Loading template details...
+                            </div>
+                        )}
+                        {isTemplateDetailError && (
+                            <div className="flex items-center gap-2 text-sm text-red-500">
+                                <AlertCircleIcon className="h-4 w-4" />
+                                {templateDetailErrorMessage}
                             </div>
                         )}
 
@@ -397,13 +449,16 @@ export default function TemplatesPage() {
 // Template Card Component
 function TemplateCard({
     template,
+    categoryLabels,
     onSelect,
 }: {
     template: WorkflowTemplateListItem
+    categoryLabels: Record<string, string>
     onSelect: () => void
 }) {
     const IconComponent = iconMap[template.icon] || LayoutTemplateIcon
-    const category = categoryConfig[template.category] || categoryConfig.general
+    const categoryLabel = categoryLabels[template.category] ?? template.category
+    const categoryColor = CATEGORY_COLORS[template.category] || CATEGORY_COLORS.general
 
     return (
         <Card className="group cursor-pointer transition-all hover:border-teal-500/50 hover:shadow-md" onClick={onSelect}>
@@ -416,8 +471,8 @@ function TemplateCard({
                         <div>
                             <CardTitle className="text-base">{template.name}</CardTitle>
                             <div className="mt-1 flex items-center gap-2">
-                                <Badge variant="secondary" className={category.color}>
-                                    {category.label}
+                                <Badge variant="secondary" className={categoryColor}>
+                                    {categoryLabel}
                                 </Badge>
                                 {template.is_global && (
                                     <Badge variant="outline" className="text-xs">

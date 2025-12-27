@@ -197,6 +197,10 @@ app.include_router(booking.router, prefix="/book", tags=["booking"])
 from app.routers import tracking
 app.include_router(tracking.router)
 
+# MFA (Multi-Factor Authentication)
+from app.routers import mfa
+app.include_router(mfa.router, prefix="/mfa", tags=["mfa"])
+
 # Dev router (ONLY mounted in dev mode)
 if settings.ENV == "dev":
     from app.routers import dev

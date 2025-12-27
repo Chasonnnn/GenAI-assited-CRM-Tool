@@ -30,7 +30,7 @@ import {
     UsersIcon,
     SendIcon,
     CheckCircle2Icon,
-    XCircleIcon,
+    MousePointerClickIcon,
     CopyIcon,
     TrashIcon,
     LoaderIcon,
@@ -141,9 +141,10 @@ export default function CampaignDetailPage() {
     // Calculate percentages
     const totalRecipients = campaign.total_recipients || 0
     const sentPercent = totalRecipients > 0 ? Math.round((campaign.sent_count / totalRecipients) * 100) : 0
-    const deliveredCount = campaign.sent_count - campaign.failed_count
-    const deliveredPercent = campaign.sent_count > 0 ? Math.round((deliveredCount / campaign.sent_count) * 100) : 0
-    const failedPercent = totalRecipients > 0 ? Math.round((campaign.failed_count / totalRecipients) * 100) : 0
+    const openedCount = campaign.opened_count || 0
+    const clickedCount = campaign.clicked_count || 0
+    const openPercent = campaign.sent_count > 0 ? Math.round((openedCount / campaign.sent_count) * 100) : 0
+    const clickPercent = campaign.sent_count > 0 ? Math.round((clickedCount / campaign.sent_count) * 100) : 0
 
     return (
         <div className="flex min-h-screen flex-col bg-background">
@@ -214,6 +215,11 @@ export default function CampaignDetailPage() {
                         <CardContent>
                             <div className="text-3xl font-bold">{campaign.sent_count}</div>
                             <p className="text-sm text-muted-foreground">{sentPercent}% of total</p>
+                            {campaign.failed_count > 0 && (
+                                <p className="text-xs text-muted-foreground">
+                                    Failed: {campaign.failed_count}
+                                </p>
+                            )}
                         </CardContent>
                     </Card>
 
@@ -221,25 +227,25 @@ export default function CampaignDetailPage() {
                         <CardHeader className="pb-2">
                             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                                 <CheckCircle2Icon className="size-4 text-green-500" />
-                                Delivered
+                                Opened
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-bold text-green-600">{deliveredCount}</div>
-                            <p className="text-sm text-muted-foreground">{deliveredPercent}% delivery rate</p>
+                            <div className="text-3xl font-bold text-green-600">{openedCount}</div>
+                            <p className="text-sm text-muted-foreground">{openPercent}% of sent</p>
                         </CardContent>
                     </Card>
 
                     <Card>
                         <CardHeader className="pb-2">
                             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                                <XCircleIcon className="size-4 text-red-500" />
-                                Failed
+                                <MousePointerClickIcon className="size-4 text-blue-500" />
+                                Clicked
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-bold text-red-600">{campaign.failed_count}</div>
-                            <p className="text-sm text-muted-foreground">{failedPercent}% failure rate</p>
+                            <div className="text-3xl font-bold text-blue-600">{clickedCount}</div>
+                            <p className="text-sm text-muted-foreground">{clickPercent}% of sent</p>
                         </CardContent>
                     </Card>
                 </div>

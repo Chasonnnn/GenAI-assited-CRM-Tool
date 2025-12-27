@@ -706,13 +706,22 @@ def send_zoom_meeting_invite(
         password=request.password,
     )
     
-    # Parse case_id
+    # Parse case_id (best-effort; ignore if invalid or not authorized)
     case_id = None
     if request.case_id:
         try:
-            case_id = uuid.UUID(request.case_id)
+            parsed_case_id = uuid.UUID(request.case_id)
+            from app.services import case_service
+            from app.core.case_access import check_case_access
+            case = case_service.get_case(db, session.org_id, parsed_case_id)
+            if case:
+                try:
+                    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+                    case_id = parsed_case_id
+                except HTTPException:
+                    case_id = None
         except ValueError:
-            pass
+            case_id = None
     
     # Send invite
     email_log_id = zoom_service.send_meeting_invite(

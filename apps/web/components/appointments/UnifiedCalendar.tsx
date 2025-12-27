@@ -10,7 +10,7 @@
  * - Click to view details
  */
 
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -38,9 +38,13 @@ import {
     CheckSquareIcon,
     UserIcon,
     LoaderIcon,
+    LinkIcon,
+    XIcon,
 } from "lucide-react"
-import { useAppointments, useRescheduleAppointment, useGoogleCalendarEvents } from "@/lib/hooks/use-appointments"
+import { useAppointments, useRescheduleAppointment, useGoogleCalendarEvents, useUpdateAppointmentLink } from "@/lib/hooks/use-appointments"
 import { useTasks } from "@/lib/hooks/use-tasks"
+import { useCases } from "@/lib/hooks/use-cases"
+import { useIntendedParents } from "@/lib/hooks/use-intended-parents"
 import type { AppointmentListItem, GoogleCalendarEvent } from "@/lib/api/appointments"
 import type { TaskListItem } from "@/lib/api/tasks"
 import {
@@ -236,14 +240,90 @@ function AppointmentDetailDialog({
     open: boolean
     onOpenChange: (open: boolean) => void
 }) {
+    const [showLinkSection, setShowLinkSection] = useState(false)
+    const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null)
+    const [selectedIpId, setSelectedIpId] = useState<string | null>(null)
+
+    const updateLinkMutation = useUpdateAppointmentLink()
+
+    // Fetch cases and IPs for linking
+    const { data: casesData } = useCases({ per_page: 100 })
+    const { data: ipsData } = useIntendedParents({ per_page: 100 })
+
+    const cases = casesData?.items || []
+    const ips = ipsData?.items || []
+
+    // Reset selected values when dialog opens with new appointment
+    const appointmentId = appointment?.id
+    useEffect(() => {
+        if (appointment && open) {
+            setSelectedCaseId(appointment.case_id)
+            setSelectedIpId(appointment.intended_parent_id)
+            setShowLinkSection(false)
+        }
+    }, [appointmentId, open])
+
     if (!appointment) return null
+
+    const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles"
+    const clientTimezone = appointment.client_timezone || userTimezone
+    const showClientTimezone = clientTimezone !== userTimezone
+
+    const formatDateInZone = (iso: string, timeZone: string) =>
+        new Intl.DateTimeFormat(undefined, {
+            timeZone,
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+        }).format(new Date(iso))
+
+    const formatTimeInZone = (iso: string, timeZone: string) =>
+        new Intl.DateTimeFormat(undefined, {
+            timeZone,
+            hour: "numeric",
+            minute: "2-digit",
+        }).format(new Date(iso))
 
     const ModeIcon = MEETING_MODE_ICONS[appointment.meeting_mode as keyof typeof MEETING_MODE_ICONS] || VideoIcon
     const statusColor = STATUS_COLORS[appointment.status as keyof typeof STATUS_COLORS] || "bg-gray-500"
 
+    const hasLink = appointment.case_id || appointment.intended_parent_id
+
+    const handleSaveLink = () => {
+        updateLinkMutation.mutate(
+            {
+                appointmentId: appointment.id,
+                data: {
+                    case_id: selectedCaseId,
+                    intended_parent_id: selectedIpId,
+                },
+            },
+            {
+                onSuccess: () => {
+                    setShowLinkSection(false)
+                },
+            }
+        )
+    }
+
+    const handleUnlinkCase = () => {
+        updateLinkMutation.mutate({
+            appointmentId: appointment.id,
+            data: { case_id: null },
+        })
+    }
+
+    const handleUnlinkIp = () => {
+        updateLinkMutation.mutate({
+            appointmentId: appointment.id,
+            data: { intended_parent_id: null },
+        })
+    }
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent className="max-w-md">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <CalendarIcon className="size-5" />
@@ -278,6 +358,19 @@ function AppointmentDetailDialog({
                             <ClockIcon className="size-4" />
                             {format(parseISO(appointment.scheduled_start), "h:mm a")} - {format(parseISO(appointment.scheduled_end), "h:mm a")}
                         </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            Your timezone: {userTimezone}
+                        </p>
+                        {showClientTimezone && (
+                            <div className="mt-2 rounded-md border border-dashed border-border bg-muted/40 p-2 text-xs text-muted-foreground">
+                                <p>Client timezone: {clientTimezone}</p>
+                                <p className="mt-1">
+                                    {formatDateInZone(appointment.scheduled_start, clientTimezone)}{" "}
+                                    {formatTimeInZone(appointment.scheduled_start, clientTimezone)} -{" "}
+                                    {formatTimeInZone(appointment.scheduled_end, clientTimezone)}
+                                </p>
+                            </div>
+                        )}
                     </div>
 
                     <div>
@@ -294,6 +387,135 @@ function AppointmentDetailDialog({
                             <p className="font-medium">{appointment.appointment_type_name}</p>
                         </div>
                     )}
+
+                    {/* Linkage Section */}
+                    <div className="border-t pt-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <p className="text-sm font-medium flex items-center gap-2">
+                                <LinkIcon className="size-4" />
+                                Linked To
+                            </p>
+                            {!showLinkSection && (
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setShowLinkSection(true)}
+                                >
+                                    {hasLink ? "Edit" : "Link"}
+                                </Button>
+                            )}
+                        </div>
+
+                        {!showLinkSection ? (
+                            <div className="space-y-2">
+                                {appointment.case_id && appointment.case_number ? (
+                                    <div className="flex items-center justify-between p-2 rounded-md bg-muted/50">
+                                        <span className="text-sm">
+                                            <Badge variant="outline" className="mr-2">Case</Badge>
+                                            #{appointment.case_number}
+                                        </span>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={handleUnlinkCase}
+                                            disabled={updateLinkMutation.isPending}
+                                        >
+                                            <XIcon className="size-4" />
+                                        </Button>
+                                    </div>
+                                ) : null}
+                                {appointment.intended_parent_id && appointment.intended_parent_name ? (
+                                    <div className="flex items-center justify-between p-2 rounded-md bg-muted/50">
+                                        <span className="text-sm">
+                                            <Badge variant="outline" className="mr-2">IP</Badge>
+                                            {appointment.intended_parent_name}
+                                        </span>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={handleUnlinkIp}
+                                            disabled={updateLinkMutation.isPending}
+                                        >
+                                            <XIcon className="size-4" />
+                                        </Button>
+                                    </div>
+                                ) : null}
+                                {!hasLink && (
+                                    <p className="text-sm text-muted-foreground">Not linked to any case or IP</p>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="text-xs text-muted-foreground">Link to Case</label>
+                                    <Select
+                                        value={selectedCaseId || "none"}
+                                        onValueChange={(val) => setSelectedCaseId(val === "none" ? null : val)}
+                                    >
+                                        <SelectTrigger className="mt-1">
+                                            <SelectValue placeholder="Select a case..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="none">None</SelectItem>
+                                            {cases.map((c) => (
+                                                <SelectItem key={c.id} value={c.id}>
+                                                    #{c.case_number} - {c.full_name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div>
+                                    <label className="text-xs text-muted-foreground">Link to Intended Parent</label>
+                                    <Select
+                                        value={selectedIpId || "none"}
+                                        onValueChange={(val) => setSelectedIpId(val === "none" ? null : val)}
+                                    >
+                                        <SelectTrigger className="mt-1">
+                                            <SelectValue placeholder="Select an IP..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="none">None</SelectItem>
+                                            {ips.map((ip) => (
+                                                <SelectItem key={ip.id} value={ip.id}>
+                                                    {ip.full_name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="flex items-center gap-2 pt-2">
+                                    <Button
+                                        size="sm"
+                                        onClick={handleSaveLink}
+                                        disabled={updateLinkMutation.isPending}
+                                    >
+                                        {updateLinkMutation.isPending ? (
+                                            <>
+                                                <LoaderIcon className="size-4 mr-2 animate-spin" />
+                                                Saving...
+                                            </>
+                                        ) : (
+                                            "Save"
+                                        )}
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                            setShowLinkSection(false)
+                                            setSelectedCaseId(appointment.case_id)
+                                            setSelectedIpId(appointment.intended_parent_id)
+                                        }}
+                                    >
+                                        Cancel
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </DialogContent>
         </Dialog>
@@ -680,10 +902,16 @@ export function UnifiedCalendar() {
 
     const appointments = data?.items || []
 
+    const userTimezone = useMemo(
+        () => Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles",
+        []
+    )
+
     // Fetch Google Calendar events
     const { data: googleEventsData } = useGoogleCalendarEvents(
         dateRange.date_start,
-        dateRange.date_end
+        dateRange.date_end,
+        userTimezone
     )
     const googleEvents = googleEventsData || []
 
@@ -853,4 +1081,3 @@ export function UnifiedCalendar() {
         </Card>
     )
 }
-

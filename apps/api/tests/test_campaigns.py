@@ -311,6 +311,20 @@ def test_campaign_send_job_scheduled_run_at(db, test_org, test_user, test_campai
     assert job.run_at.replace(tzinfo=None) == scheduled_at.replace(tzinfo=None)
 
 
+def test_campaign_send_requires_scheduled_at_when_send_now_false(db, test_org, test_user, test_campaign):
+    """send_now=False should require campaign.scheduled_at."""
+    from app.services import campaign_service
+
+    with pytest.raises(ValueError, match="scheduled_at"):
+        campaign_service.enqueue_campaign_send(
+            db=db,
+            org_id=test_org.id,
+            campaign_id=test_campaign.id,
+            user_id=test_user.id,
+            send_now=False,
+        )
+
+
 # =============================================================================
 # Campaign Execution Tests
 # =============================================================================

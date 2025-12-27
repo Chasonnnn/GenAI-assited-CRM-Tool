@@ -150,6 +150,31 @@ class User(Base):
         Text, nullable=True
     )
     
+    # MFA fields
+    mfa_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("false"),
+        nullable=False
+    )
+    totp_secret: Mapped[str | None] = mapped_column(
+        String(255), nullable=True  # Encrypted TOTP secret
+    )
+    totp_enabled_at: Mapped[datetime | None] = mapped_column(
+        nullable=True
+    )
+    duo_user_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
+    duo_enrolled_at: Mapped[datetime | None] = mapped_column(
+        nullable=True
+    )
+    mfa_recovery_codes: Mapped[list | None] = mapped_column(
+        JSONB, nullable=True  # Hashed recovery codes
+    )
+    mfa_required_at: Mapped[datetime | None] = mapped_column(
+        nullable=True  # When MFA enforcement started for this user
+    )
+    
     # Relationships
     membership: Mapped["Membership | None"] = relationship(
         back_populates="user", 

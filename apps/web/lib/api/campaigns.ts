@@ -54,6 +54,8 @@ export interface Campaign {
     sent_count: number
     failed_count: number
     skipped_count: number
+    opened_count: number
+    clicked_count: number
 }
 
 export interface CampaignListItem {
@@ -66,6 +68,8 @@ export interface CampaignListItem {
     total_recipients: number
     sent_count: number
     failed_count: number
+    opened_count: number
+    clicked_count: number
     created_at: string
 }
 
@@ -80,6 +84,8 @@ export interface CampaignRun {
     sent_count: number
     failed_count: number
     skipped_count: number
+    opened_count: number
+    clicked_count: number
 }
 
 export interface CampaignRecipient {

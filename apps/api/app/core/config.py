@@ -109,6 +109,17 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str = ""
     ATTACHMENT_SCAN_ENABLED: bool = False
     
+    # Duo MFA (Web SDK v4)
+    DUO_CLIENT_ID: str = ""  # Integration key from Duo Admin
+    DUO_CLIENT_SECRET: str = ""  # Secret key from Duo Admin
+    DUO_API_HOST: str = ""  # API hostname (api-XXXXX.duosecurity.com)
+    DUO_REDIRECT_URI: str = "http://localhost:3000/auth/duo/callback"
+    
+    @property
+    def duo_enabled(self) -> bool:
+        """Check if Duo is configured."""
+        return bool(self.DUO_CLIENT_ID and self.DUO_CLIENT_SECRET and self.DUO_API_HOST)
+    
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse CORS_ORIGINS into a list."""

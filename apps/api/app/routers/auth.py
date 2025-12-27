@@ -197,7 +197,7 @@ def get_me(
     """
     Get current authenticated user info.
     
-    Returns user profile, organization details, and role.
+    Returns user profile, organization details, role, and MFA status.
     Used by frontend to bootstrap auth state on page load.
     """
     user = db.query(User).filter(User.id == session.user_id).first()
@@ -214,6 +214,9 @@ def get_me(
         org_timezone=org.timezone,
         role=session.role,
         ai_enabled=org.ai_enabled if org else False,
+        mfa_enabled=user.mfa_enabled,
+        mfa_required=session.mfa_required,
+        mfa_verified=session.mfa_verified,
     )
 
 

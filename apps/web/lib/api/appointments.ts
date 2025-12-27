@@ -133,6 +133,11 @@ export interface Appointment {
     cancellation_reason: string | null;
     zoom_join_url: string | null;
     google_event_id: string | null;
+    // Linkage fields
+    case_id: string | null;
+    case_number: number | null;
+    intended_parent_id: string | null;
+    intended_parent_name: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -143,11 +148,17 @@ export interface AppointmentListItem {
     client_name: string;
     client_email: string;
     client_phone: string;
+    client_timezone: string;
     scheduled_start: string;
     scheduled_end: string;
     duration_minutes: number;
     meeting_mode: string;
     status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show' | 'expired';
+    // Linkage fields
+    case_id: string | null;
+    case_number: number | null;
+    intended_parent_id: string | null;
+    intended_parent_name: string | null;
     created_at: string;
 }
 
@@ -320,6 +331,18 @@ export function cancelAppointment(
     return api.post<Appointment>(`/appointments/${appointmentId}/cancel`, { reason });
 }
 
+export interface AppointmentLinkUpdate {
+    case_id?: string | null;
+    intended_parent_id?: string | null;
+}
+
+export function updateAppointmentLink(
+    appointmentId: string,
+    data: AppointmentLinkUpdate
+): Promise<Appointment> {
+    return api.patch<Appointment>(`/appointments/${appointmentId}/link`, data);
+}
+
 // =============================================================================
 // Public API (Booking)
 // =============================================================================
@@ -416,11 +439,15 @@ export interface GoogleCalendarEvent {
 
 export function getGoogleCalendarEvents(
     dateStart: string,
-    dateEnd: string
+    dateEnd: string,
+    timezone?: string
 ): Promise<GoogleCalendarEvent[]> {
     const params = new URLSearchParams({
         date_start: dateStart,
         date_end: dateEnd,
     });
+    if (timezone) {
+        params.set('timezone', timezone)
+    }
     return api.get<GoogleCalendarEvent[]>(`/integrations/google/calendar/events?${params}`);
 }

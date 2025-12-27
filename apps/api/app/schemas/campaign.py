@@ -67,6 +67,8 @@ class CampaignResponse(BaseModel):
     sent_count: int = 0
     failed_count: int = 0
     skipped_count: int = 0
+    opened_count: int = 0
+    clicked_count: int = 0
     
     model_config = {"from_attributes": True}
 
@@ -84,6 +86,8 @@ class CampaignListItem(BaseModel):
     total_recipients: int = 0
     sent_count: int = 0
     failed_count: int = 0
+    opened_count: int = 0
+    clicked_count: int = 0
     
     created_at: datetime
     
@@ -106,6 +110,8 @@ class CampaignRunResponse(BaseModel):
     sent_count: int
     failed_count: int
     skipped_count: int
+    opened_count: int
+    clicked_count: int
     
     model_config = {"from_attributes": True}
 

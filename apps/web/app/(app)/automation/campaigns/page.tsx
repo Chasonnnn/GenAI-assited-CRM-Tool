@@ -89,6 +89,8 @@ export default function CampaignsPage() {
 
     // Wizard state
     const [wizardStep, setWizardStep] = useState(1)
+    const [page, setPage] = useState(1)
+    const perPage = 20
     const [campaignName, setCampaignName] = useState("")
     const [campaignDescription, setCampaignDescription] = useState("")
     const [selectedTemplateId, setSelectedTemplateId] = useState("")
@@ -138,7 +140,23 @@ export default function CampaignsPage() {
             return
         }
 
+        if (scheduleFor === "later") {
+            if (!scheduledDate) {
+                toast.error("Please select a scheduled date and time")
+                return
+            }
+            const parsedDate = new Date(scheduledDate)
+            if (Number.isNaN(parsedDate.getTime())) {
+                toast.error("Scheduled date is invalid")
+                return
+            }
+        }
+
         try {
+            const scheduledAt =
+                scheduleFor === "later" && scheduledDate
+                    ? new Date(scheduledDate).toISOString()
+                    : undefined
             const campaign = await createCampaign.mutateAsync({
                 name: campaignName,
                 description: campaignDescription || undefined,
@@ -148,7 +166,7 @@ export default function CampaignsPage() {
                     stage_ids: selectedStages.length > 0 ? selectedStages : undefined,
                     states: selectedStates.length > 0 ? selectedStates : undefined,
                 },
-                scheduled_at: scheduleFor === "later" && scheduledDate ? new Date(scheduledDate).toISOString() : undefined,
+                scheduled_at: scheduledAt,
             })
 
             toast.success("Campaign created successfully")
@@ -221,7 +239,7 @@ export default function CampaignsPage() {
             {/* Main Content */}
             <div className="flex-1 p-6">
                 {/* Filter Tabs */}
-                <Tabs value={statusFilter || "all"} onValueChange={(v) => setStatusFilter(v === "all" ? undefined : v)} className="space-y-6">
+                <Tabs value={statusFilter || "all"} onValueChange={(v) => { setStatusFilter(v === "all" ? undefined : v); setPage(1) }} className="space-y-6">
                     <TabsList>
                         <TabsTrigger value="all">All</TabsTrigger>
                         <TabsTrigger value="draft">Draft</TabsTrigger>
@@ -259,90 +277,140 @@ export default function CampaignsPage() {
                                             <TableHead>Recipients</TableHead>
                                             <TableHead>Status</TableHead>
                                             <TableHead>Sent / Failed</TableHead>
+                                            <TableHead>Opens</TableHead>
+                                            <TableHead>Clicks</TableHead>
                                             <TableHead>Date</TableHead>
                                             <TableHead className="w-[50px]"></TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {filteredCampaigns.map((campaign) => (
-                                            <TableRow key={campaign.id}>
-                                                <TableCell>
-                                                    <Link
-                                                        href={`/automation/campaigns/${campaign.id}`}
-                                                        className="font-medium text-primary hover:underline"
-                                                    >
-                                                        {campaign.name}
-                                                    </Link>
-                                                </TableCell>
-                                                <TableCell className="text-muted-foreground">
-                                                    {campaign.email_template_name || "-"}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-1">
-                                                        <UsersIcon className="size-4 text-muted-foreground" />
-                                                        {campaign.total_recipients}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge
-                                                        variant={statusStyles[campaign.status]?.variant || "secondary"}
-                                                        className={statusStyles[campaign.status]?.className}
-                                                    >
-                                                        {statusLabels[campaign.status] || campaign.status}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="flex items-center gap-1 text-green-600">
-                                                            <CheckCircle2Icon className="size-4" />
-                                                            {campaign.sent_count}
-                                                        </span>
-                                                        <span className="flex items-center gap-1 text-red-600">
-                                                            <XCircleIcon className="size-4" />
-                                                            {campaign.failed_count}
-                                                        </span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="text-muted-foreground text-sm">
-                                                    {campaign.scheduled_at
-                                                        ? `Scheduled ${format(new Date(campaign.scheduled_at), "MMM d, yyyy")}`
-                                                        : format(new Date(campaign.created_at), "MMM d, yyyy")}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger>
-                                                            <Button variant="ghost" size="icon-sm">
-                                                                <MoreVerticalIcon className="size-4" />
-                                                            </Button>
-                                                        </DropdownMenuTrigger>
-                                                        <DropdownMenuContent align="end">
-                                                            <DropdownMenuItem
-                                                                onClick={() => router.push(`/automation/campaigns/${campaign.id}`)}
+                                        {filteredCampaigns
+                                            .slice((page - 1) * perPage, page * perPage)
+                                            .map((campaign) => {
+                                                const openRate = campaign.sent_count > 0
+                                                    ? Math.round((campaign.opened_count / campaign.sent_count) * 100)
+                                                    : 0
+                                                const clickRate = campaign.sent_count > 0
+                                                    ? Math.round((campaign.clicked_count / campaign.sent_count) * 100)
+                                                    : 0
+                                                const statusSummary = `${statusLabels[campaign.status] || campaign.status} • ${openRate}% opened • ${campaign.clicked_count} clicks`
+
+                                                return (
+                                                    <TableRow key={campaign.id}>
+                                                        <TableCell>
+                                                            <Link
+                                                                href={`/automation/campaigns/${campaign.id}`}
+                                                                className="font-medium text-primary hover:underline"
                                                             >
-                                                                <EyeIcon className="mr-2 size-4" />
-                                                                View Details
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem onClick={() => handleDuplicateCampaign(campaign.id)}>
-                                                                <CopyIcon className="mr-2 size-4" />
-                                                                Duplicate
-                                                            </DropdownMenuItem>
-                                                            {campaign.status === "draft" && (
-                                                                <DropdownMenuItem
-                                                                    onClick={() => handleDeleteCampaign(campaign.id)}
-                                                                    className="text-destructive"
-                                                                >
-                                                                    <TrashIcon className="mr-2 size-4" />
-                                                                    Delete
-                                                                </DropdownMenuItem>
-                                                            )}
-                                                        </DropdownMenuContent>
-                                                    </DropdownMenu>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
+                                                                {campaign.name}
+                                                            </Link>
+                                                        </TableCell>
+                                                        <TableCell className="text-muted-foreground">
+                                                            {campaign.email_template_name || "-"}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <div className="flex items-center gap-1">
+                                                                <UsersIcon className="size-4 text-muted-foreground" />
+                                                                {campaign.total_recipients}
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Badge
+                                                                variant={statusStyles[campaign.status]?.variant || "secondary"}
+                                                                className={statusStyles[campaign.status]?.className}
+                                                                title={statusSummary}
+                                                            >
+                                                                {statusLabels[campaign.status] || campaign.status}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="flex items-center gap-1 text-green-600">
+                                                                    <CheckCircle2Icon className="size-4" />
+                                                                    {campaign.sent_count}
+                                                                </span>
+                                                                <span className="flex items-center gap-1 text-red-600">
+                                                                    <XCircleIcon className="size-4" />
+                                                                    {campaign.failed_count}
+                                                                </span>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="text-sm text-muted-foreground">
+                                                            {campaign.opened_count}
+                                                            <span className="ml-1 text-xs">({openRate}%)</span>
+                                                        </TableCell>
+                                                        <TableCell className="text-sm text-muted-foreground">
+                                                            {campaign.clicked_count}
+                                                            <span className="ml-1 text-xs">({clickRate}%)</span>
+                                                        </TableCell>
+                                                        <TableCell className="text-muted-foreground text-sm">
+                                                            {campaign.scheduled_at
+                                                                ? `Scheduled ${format(new Date(campaign.scheduled_at), "MMM d, yyyy")}`
+                                                                : format(new Date(campaign.created_at), "MMM d, yyyy")}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger>
+                                                                    <Button variant="ghost" size="icon-sm">
+                                                                        <MoreVerticalIcon className="size-4" />
+                                                                    </Button>
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuContent align="end">
+                                                                    <DropdownMenuItem
+                                                                        onClick={() => router.push(`/automation/campaigns/${campaign.id}`)}
+                                                                    >
+                                                                        <EyeIcon className="mr-2 size-4" />
+                                                                        View Details
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={() => handleDuplicateCampaign(campaign.id)}>
+                                                                        <CopyIcon className="mr-2 size-4" />
+                                                                        Duplicate
+                                                                    </DropdownMenuItem>
+                                                                    {campaign.status === "draft" && (
+                                                                        <DropdownMenuItem
+                                                                            onClick={() => handleDeleteCampaign(campaign.id)}
+                                                                            className="text-destructive"
+                                                                        >
+                                                                            <TrashIcon className="mr-2 size-4" />
+                                                                            Delete
+                                                                        </DropdownMenuItem>
+                                                                    )}
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )
+                                            })}
                                     </TableBody>
                                 </Table>
                             </Card>
+                        )}
+
+                        {/* Pagination */}
+                        {filteredCampaigns.length > perPage && (
+                            <div className="flex items-center justify-between mt-4">
+                                <div className="text-sm text-muted-foreground">
+                                    Showing {((page - 1) * perPage) + 1}-{Math.min(page * perPage, filteredCampaigns.length)} of {filteredCampaigns.length} campaigns
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={page === 1}
+                                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                                    >
+                                        Previous
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={page * perPage >= filteredCampaigns.length}
+                                        onClick={() => setPage(p => p + 1)}
+                                    >
+                                        Next
+                                    </Button>
+                                </div>
+                            </div>
                         )}
                     </TabsContent>
                 </Tabs>
@@ -643,7 +711,11 @@ export default function CampaignsPage() {
                         ) : (
                             <Button
                                 onClick={handleCreateCampaign}
-                                disabled={createCampaign.isPending || sendCampaign.isPending}
+                                disabled={
+                                    createCampaign.isPending ||
+                                    sendCampaign.isPending ||
+                                    (scheduleFor === "later" && !scheduledDate)
+                                }
                             >
                                 {createCampaign.isPending || sendCampaign.isPending ? (
                                     <LoaderIcon className="size-4 animate-spin" />
