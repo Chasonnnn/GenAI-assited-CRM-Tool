@@ -20,6 +20,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useSetAIContext } from "@/lib/context/ai-context"
 import { useAIUsageSummary } from "@/lib/hooks/use-ai"
 import { toast } from "sonner"
+import { formatLocalDate } from "@/lib/utils/date"
 
 // Chart configs
 const casesOverviewConfig = {
@@ -80,13 +81,6 @@ function AIUsageStats() {
             </div>
         </div>
     )
-}
-
-const formatLocalDate = (date: Date) => {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, "0")
-    const day = String(date.getDate()).padStart(2, "0")
-    return `${year}-${month}-${day}`
 }
 
 export default function ReportsPage() {
@@ -273,7 +267,7 @@ export default function ReportsPage() {
                         <Select value={selectedCampaign} onValueChange={(v) => setSelectedCampaign(v || '')}>
                             <SelectTrigger className="w-48">
                                 <SelectValue placeholder="All">
-                                    {(value) => {
+                                    {(value: string | null) => {
                                         if (!value) return "All"
                                         return campaignLabelById.get(value) ?? "Unknown campaign"
                                     }}

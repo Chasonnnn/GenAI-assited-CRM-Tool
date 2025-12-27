@@ -50,10 +50,13 @@ import type { EmailType, SummarizeCaseResponse, DraftEmailResponse } from "@/lib
 import type { TaskListItem } from "@/lib/types/task"
 import { useAuth } from "@/lib/auth-context"
 import { cn } from "@/lib/utils"
+import { parseDateInput } from "@/lib/utils/date"
 
 // Format date for display
 function formatDateTime(dateString: string): string {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    const parsed = parseDateInput(dateString)
+    if (Number.isNaN(parsed.getTime())) return "—"
+    return parsed.toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
@@ -63,7 +66,9 @@ function formatDateTime(dateString: string): string {
 }
 
 function formatDate(dateString: string): string {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    const parsed = parseDateInput(dateString)
+    if (Number.isNaN(parsed.getTime())) return "—"
+    return parsed.toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'short',
         day: 'numeric',

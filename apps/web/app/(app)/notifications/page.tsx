@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { differenceInCalendarDays, formatDistanceToNow, parseISO } from "date-fns"
+import { differenceInCalendarDays, formatDistanceToNow } from "date-fns"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -23,6 +23,7 @@ import {
 import { useNotifications, useMarkRead, useMarkAllRead } from "@/lib/hooks/use-notifications"
 import { useTasks } from "@/lib/hooks/use-tasks"
 import type { Notification } from "@/lib/api/notifications"
+import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 
 // Map notification types to UI groups
 const TYPE_GROUPS: Record<string, string[]> = {
@@ -53,7 +54,7 @@ export default function NotificationsPage() {
     // Get notification types for filter
     const notificationTypes = typeFilter !== "all" ? TYPE_GROUPS[typeFilter] : undefined
 
-    const { data: notificationsData, isLoading } = useNotifications({
+    const { data: notificationsData, isLoading, isError: notificationsError } = useNotifications({
         limit: 50,
         notification_types: notificationTypes,
     })
@@ -62,13 +63,13 @@ export default function NotificationsPage() {
 
     const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
     const now = new Date()
-    const todayStr = now.toLocaleDateString("en-CA", { timeZone: userTimeZone })
+    const todayStr = formatLocalDate(now, userTimeZone)
     const yesterday = new Date(now)
     yesterday.setDate(now.getDate() - 1)
-    const yesterdayStr = yesterday.toLocaleDateString("en-CA", { timeZone: userTimeZone })
+    const yesterdayStr = formatLocalDate(yesterday, userTimeZone)
 
     // Fetch overdue tasks (incomplete with due_date before today in user timezone)
-    const { data: overdueTasksData } = useTasks({
+    const { data: overdueTasksData, isError: overdueTasksError } = useTasks({
         is_completed: false,
         my_tasks: true,
         per_page: 100,
@@ -99,7 +100,7 @@ export default function NotificationsPage() {
     }
 
     const getDaysOverdue = (dueDate: string) =>
-        differenceInCalendarDays(parseISO(todayStr), parseISO(dueDate))
+        differenceInCalendarDays(parseDateInput(todayStr), parseDateInput(dueDate))
 
     if (isLoading) {
         return (
@@ -114,6 +115,29 @@ export default function NotificationsPage() {
                     {Array.from({ length: 5 }).map((_, i) => (
                         <Skeleton key={i} className="h-20 w-full" />
                     ))}
+                </div>
+            </div>
+        )
+    }
+
+    if (notificationsError) {
+        return (
+            <div className="flex min-h-screen flex-col">
+                <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+                    <div className="flex h-16 items-center justify-between px-6">
+                        <div className="flex items-center gap-3">
+                            <BellIcon className="size-6" />
+                            <h1 className="text-2xl font-semibold">Notifications</h1>
+                        </div>
+                    </div>
+                </div>
+                <div className="flex-1 p-6">
+                    <Card className="border-destructive/40 bg-destructive/5">
+                        <CardHeader>
+                            <CardTitle className="text-destructive">Unable to load notifications</CardTitle>
+                            <CardDescription>Please try again in a moment.</CardDescription>
+                        </CardHeader>
+                    </Card>
                 </div>
             </div>
         )
@@ -169,7 +193,7 @@ export default function NotificationsPage() {
                 </div>
 
                 {/* Overdue Tasks Section */}
-                {overdueTotal > 0 && (
+                {overdueTotal > 0 && !overdueTasksError && (
                     <Collapsible open={isOverdueOpen} onOpenChange={setIsOverdueOpen}>
                         <Card className="border-red-500/20 bg-red-500/5">
                             <CardHeader>
@@ -239,6 +263,15 @@ export default function NotificationsPage() {
                             </CollapsibleContent>
                         </Card>
                     </Collapsible>
+                )}
+
+                {overdueTasksError && (
+                    <Card className="border-destructive/40 bg-destructive/5">
+                        <CardHeader>
+                            <CardTitle className="text-destructive">Unable to load overdue tasks</CardTitle>
+                            <CardDescription>Please try again in a moment.</CardDescription>
+                        </CardHeader>
+                    </Card>
                 )}
 
                 {/* Recent Notifications Section */}

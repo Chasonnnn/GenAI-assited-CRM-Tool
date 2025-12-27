@@ -12,6 +12,7 @@ import {
   TrendingDownIcon,
   ArrowUpIcon,
   LoaderIcon,
+  AlertCircleIcon,
 } from "lucide-react"
 import { useMemo } from "react"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis, Cell } from "recharts"
@@ -23,10 +24,11 @@ import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useAuth } from "@/lib/auth-context"
 import { useDashboardSocket } from "@/lib/hooks/use-dashboard-socket"
 import type { TaskListItem } from "@/lib/types/task"
+import { parseDateInput, startOfLocalDay } from "@/lib/utils/date"
 
 // Format relative time
 function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString)
+  const date = parseDateInput(dateString)
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
   const diffMins = Math.floor(diffMs / 60000)
@@ -42,15 +44,15 @@ function formatRelativeTime(dateString: string): string {
 // Check if task is overdue
 function isOverdue(dueDate: string | null): boolean {
   if (!dueDate) return false
-  return new Date(dueDate) < new Date()
+  return parseDateInput(dueDate) < startOfLocalDay()
 }
 
 // Check if task is due today
 function isDueToday(dueDate: string | null): boolean {
   if (!dueDate) return false
-  const due = new Date(dueDate)
-  const today = new Date()
-  return due.toDateString() === today.toDateString()
+  const due = parseDateInput(dueDate)
+  const today = startOfLocalDay()
+  return due.getTime() === today.getTime()
 }
 
 // Get due badge variant
@@ -59,12 +61,12 @@ function getDueBadge(dueDate: string | null, isCompleted: boolean): { label: str
   if (isOverdue(dueDate)) return { label: 'Overdue', variant: 'destructive' }
   if (isDueToday(dueDate)) return { label: 'Today', variant: 'bg-amber-500 hover:bg-amber-500/80' }
 
-  const due = new Date(dueDate)
-  const tomorrow = new Date()
+  const due = parseDateInput(dueDate)
+  const tomorrow = startOfLocalDay()
   tomorrow.setDate(tomorrow.getDate() + 1)
-  if (due.toDateString() === tomorrow.toDateString()) return { label: 'Tomorrow', variant: 'secondary' }
+  if (due.getTime() === tomorrow.getTime()) return { label: 'Tomorrow', variant: 'secondary' }
 
-  const nextWeek = new Date()
+  const nextWeek = startOfLocalDay()
   nextWeek.setDate(nextWeek.getDate() + 7)
   if (due <= nextWeek) return { label: 'This Week', variant: 'secondary' }
 

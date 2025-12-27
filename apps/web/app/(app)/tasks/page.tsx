@@ -21,6 +21,7 @@ import { TaskEditModal } from "@/components/tasks/TaskEditModal"
 import { useTasks, useCompleteTask, useUncompleteTask, useUpdateTask } from "@/lib/hooks/use-tasks"
 import { useAIContext } from "@/lib/context/ai-context"
 import type { TaskListItem } from "@/lib/types/task"
+import { parseDateInput, startOfLocalDay } from "@/lib/utils/date"
 
 // Get initials from name
 function getInitials(name: string | null): string {
@@ -28,34 +29,25 @@ function getInitials(name: string | null): string {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
-function parseLocalDate(dateStr: string): Date {
-    return new Date(`${dateStr}T00:00:00`)
-}
-
-function startOfToday(): Date {
-    const now = new Date()
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate())
-}
-
 // Check if task is overdue
 function isOverdue(dueDate: string | null): boolean {
     if (!dueDate) return false
-    return parseLocalDate(dueDate) < startOfToday()
+    return parseDateInput(dueDate) < startOfLocalDay()
 }
 
 // Check if task is due today
 function isDueToday(dueDate: string | null): boolean {
     if (!dueDate) return false
-    const due = parseLocalDate(dueDate)
-    const today = startOfToday()
+    const due = parseDateInput(dueDate)
+    const today = startOfLocalDay()
     return due.getTime() === today.getTime()
 }
 
 // Check if task is due tomorrow
 function isDueTomorrow(dueDate: string | null): boolean {
     if (!dueDate) return false
-    const due = parseLocalDate(dueDate)
-    const tomorrow = startOfToday()
+    const due = parseDateInput(dueDate)
+    const tomorrow = startOfLocalDay()
     tomorrow.setDate(tomorrow.getDate() + 1)
     return due.getTime() === tomorrow.getTime()
 }
@@ -63,8 +55,8 @@ function isDueTomorrow(dueDate: string | null): boolean {
 // Check if task is due this week
 function isDueThisWeek(dueDate: string | null): boolean {
     if (!dueDate) return false
-    const due = parseLocalDate(dueDate)
-    const today = startOfToday()
+    const due = parseDateInput(dueDate)
+    const today = startOfLocalDay()
     const endOfWeek = new Date(today)
     endOfWeek.setDate(today.getDate() + 7)
     return due > today && due <= endOfWeek && !isDueToday(dueDate) && !isDueTomorrow(dueDate)
