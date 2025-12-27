@@ -4,14 +4,14 @@ Provides query functions for case trends, status distributions, and geographic d
 Works without AI - purely script-generated aggregations.
 """
 import uuid
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from typing import Any
 
-from sqlalchemy import func, case as sql_case, and_, extract
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from app.db.models import Case, CaseStatusHistory, PipelineStage
-from app.db.enums import CaseSource, OwnerType
+from app.db.models import Case, CaseStatusHistory, PipelineStage, MetaLead
+from app.db.enums import OwnerType
 
 
 # ============================================================================
@@ -34,36 +34,111 @@ def _get_default_pipeline_stages(db: Session, organization_id: uuid.UUID) -> lis
     pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
     return pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
 
+
+def parse_date_range(
+    from_date: str | None,
+    to_date: str | None,
+    default_days: int = 30,
+) -> tuple[datetime, datetime]:
+    """Parse ISO date strings to a datetime range with defaults."""
+    if to_date:
+        end = datetime.fromisoformat(to_date.replace("Z", "+00:00"))
+    else:
+        end = datetime.now(timezone.utc)
+
+    if from_date:
+        start = datetime.fromisoformat(from_date.replace("Z", "+00:00"))
+    else:
+        start = end - timedelta(days=default_days)
+
+    return start, end
+
+
+def get_analytics_summary(
+    db: Session,
+    organization_id: uuid.UUID,
+    start: datetime,
+    end: datetime,
+) -> dict[str, Any]:
+    """Get high-level analytics summary."""
+    from app.services import pipeline_service
+
+    total_cases = db.query(func.count(Case.id)).filter(
+        Case.organization_id == organization_id,
+        Case.is_archived == False,
+    ).scalar() or 0
+
+    new_this_period = db.query(func.count(Case.id)).filter(
+        Case.organization_id == organization_id,
+        Case.is_archived == False,
+        Case.created_at >= start,
+        Case.created_at < end,
+    ).scalar() or 0
+
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
+    stages = pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
+    qualified_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "qualified")
+    if qualified_stage:
+        qualified_stage_ids = [
+            s.id for s in stages if s.order >= qualified_stage.order and s.is_active
+        ]
+    else:
+        qualified_stage_ids = [
+            s.id for s in stages if s.stage_type in ("post_approval", "terminal") and s.is_active
+        ]
+
+    qualified_count = db.query(func.count(Case.id)).filter(
+        Case.organization_id == organization_id,
+        Case.is_archived == False,
+        Case.stage_id.in_(qualified_stage_ids),
+    ).scalar() or 0
+
+    qualified_rate = (qualified_count / total_cases * 100) if total_cases > 0 else 0.0
+
+    avg_time_to_qualified_hours = None
+    if qualified_stage:
+        result = db.execute(
+            text("""
+                SELECT AVG(EXTRACT(EPOCH FROM (csh.changed_at - c.created_at)) / 3600) as avg_hours
+                FROM cases c
+                JOIN case_status_history csh ON c.id = csh.case_id
+                WHERE c.organization_id = :org_id
+                  AND c.is_archived = false
+                  AND csh.to_stage_id = :qualified_stage_id
+                  AND csh.changed_at >= :start
+                  AND csh.changed_at < :end
+            """),
+            {
+                "org_id": organization_id,
+                "start": start,
+                "end": end,
+                "qualified_stage_id": qualified_stage.id,
+            },
+        )
+        row = result.fetchone()
+        avg_time_to_qualified_hours = round(row[0], 1) if row and row[0] else None
+
+    return {
+        "total_cases": total_cases,
+        "new_this_period": new_this_period,
+        "qualified_rate": round(qualified_rate, 1),
+        "avg_time_to_qualified_hours": avg_time_to_qualified_hours,
+    }
+
 def get_cases_trend(
     db: Session,
     organization_id: uuid.UUID,
-    start_date: date | None = None,
-    end_date: date | None = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
     source: str | None = None,
     owner_id: uuid.UUID | None = None,
     group_by: str = "day",  # day, week, month
 ) -> list[dict[str, Any]]:
     """Get new cases created over time."""
-    if not end_date:
-        end_date = date.today()
-    if not start_date:
-        start_date = end_date - timedelta(days=30)
-    
-    # Build base query
-    query = db.query(Case).filter(
-        Case.organization_id == organization_id,
-        Case.is_archived == False,
-        func.date(Case.created_at) >= start_date,
-        func.date(Case.created_at) <= end_date,
-    )
-    
-    if source:
-        query = query.filter(Case.source == source)
-    if owner_id:
-        query = query.filter(
-            Case.owner_type == OwnerType.USER.value,
-            Case.owner_id == owner_id,
-        )
+    if not end:
+        end = datetime.now(timezone.utc)
+    if not start:
+        start = end - timedelta(days=30)
     
     # Group by time period
     if group_by == "week":
@@ -79,8 +154,8 @@ def get_cases_trend(
     ).filter(
         Case.organization_id == organization_id,
         Case.is_archived == False,
-        func.date(Case.created_at) >= start_date,
-        func.date(Case.created_at) <= end_date,
+        Case.created_at >= start,
+        Case.created_at < end,
     )
     
     if source:
@@ -93,13 +168,17 @@ def get_cases_trend(
     
     results = results.group_by(date_trunc).order_by(date_trunc).all()
     
-    return [
-        {
-            "period": r.period.isoformat() if hasattr(r.period, 'isoformat') else str(r.period),
-            "count": r.count,
-        }
-        for r in results
-    ]
+    trend = []
+    for row in results:
+        if isinstance(row.period, datetime):
+            period_str = row.period.strftime("%Y-%m-%d")
+        elif isinstance(row.period, date):
+            period_str = row.period.isoformat()
+        else:
+            period_str = str(row.period)
+        trend.append({"date": period_str, "count": row.count})
+
+    return trend
 
 
 # ============================================================================
@@ -112,10 +191,10 @@ def get_cases_by_status(
     start_date: date | None = None,
     end_date: date | None = None,
     source: str | None = None,
-) -> dict[str, int]:
+) -> list[dict[str, Any]]:
     """Get current case count by status."""
     query = db.query(
-        Case.status_label,
+        Case.status_label.label("status"),
         func.count(Case.id).label("count"),
     ).filter(
         Case.organization_id == organization_id,
@@ -129,9 +208,9 @@ def get_cases_by_status(
     if source:
         query = query.filter(Case.source == source)
     
-    results = query.group_by(Case.status_label).all()
-    
-    return {r.status_label: r.count for r in results}
+    results = query.group_by(Case.status_label).order_by(func.count(Case.id).desc()).all()
+
+    return [{"status": r.status, "count": r.count} for r in results]
 
 
 def get_status_trend(
@@ -286,6 +365,54 @@ def get_cases_by_user(
     ]
 
 
+def get_cases_by_assignee(
+    db: Session,
+    organization_id: uuid.UUID,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    label: str = "email",
+) -> list[dict[str, Any]]:
+    """Get case count by assignee (user-owned cases only)."""
+    from app.db.models import User
+
+    label_column = User.email if label == "email" else User.display_name
+    label_key = "user_email" if label == "email" else "display_name"
+
+    query = db.query(
+        Case.owner_id,
+        label_column.label("label"),
+        func.count(Case.id).label("count"),
+    ).outerjoin(
+        User, Case.owner_id == User.id
+    ).filter(
+        Case.organization_id == organization_id,
+        Case.owner_type == OwnerType.USER.value,
+        Case.is_archived == False,
+    )
+
+    if start_date:
+        query = query.filter(func.date(Case.created_at) >= start_date)
+    if end_date:
+        query = query.filter(func.date(Case.created_at) <= end_date)
+
+    results = query.group_by(
+        Case.owner_id, label_column
+    ).order_by(func.count(Case.id).desc()).all()
+
+    payload = []
+    for row in results:
+        label_value = row.label
+        if label == "display_name" and not label_value:
+            label_value = "Unassigned"
+        payload.append({
+            "user_id": str(row.owner_id) if row.owner_id else None,
+            label_key: label_value,
+            "count": row.count,
+        })
+
+    return payload
+
+
 # ============================================================================
 # Conversion Funnel
 # ============================================================================
@@ -411,6 +538,97 @@ def get_summary_kpis(
     }
 
 
+def get_meta_performance(
+    db: Session,
+    organization_id: uuid.UUID,
+    start: datetime,
+    end: datetime,
+) -> dict[str, Any]:
+    """Get Meta Lead Ads performance metrics."""
+    from app.services import pipeline_service
+
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
+    stages = pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
+    qualified_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "qualified")
+    converted_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "application_submitted")
+
+    qualified_or_later_ids = []
+    converted_or_later_ids = []
+    if qualified_stage:
+        qualified_or_later_ids = [s.id for s in stages if s.order >= qualified_stage.order and s.is_active]
+    if converted_stage:
+        converted_or_later_ids = [s.id for s in stages if s.order >= converted_stage.order and s.is_active]
+
+    lead_time = func.coalesce(MetaLead.meta_created_time, MetaLead.received_at)
+    leads_received = db.query(MetaLead).filter(
+        MetaLead.organization_id == organization_id,
+        lead_time >= start,
+        lead_time < end,
+    ).count()
+
+    leads_qualified = 0
+    if qualified_or_later_ids:
+        leads_qualified = db.execute(
+            text("""
+                SELECT COUNT(*)
+                FROM meta_leads ml
+                JOIN cases c ON ml.converted_case_id = c.id
+                WHERE ml.organization_id = :org_id
+                  AND COALESCE(ml.meta_created_time, ml.received_at) >= :start
+                  AND COALESCE(ml.meta_created_time, ml.received_at) < :end
+                  AND ml.is_converted = true
+                  AND c.stage_id = ANY(:stage_ids)
+            """),
+            {"org_id": organization_id, "start": start, "end": end, "stage_ids": qualified_or_later_ids},
+        ).scalar() or 0
+
+    leads_converted = 0
+    if converted_or_later_ids:
+        leads_converted = db.execute(
+            text("""
+                SELECT COUNT(*)
+                FROM meta_leads ml
+                JOIN cases c ON ml.converted_case_id = c.id
+                WHERE ml.organization_id = :org_id
+                  AND COALESCE(ml.meta_created_time, ml.received_at) >= :start
+                  AND COALESCE(ml.meta_created_time, ml.received_at) < :end
+                  AND ml.is_converted = true
+                  AND c.stage_id = ANY(:stage_ids)
+            """),
+            {"org_id": organization_id, "start": start, "end": end, "stage_ids": converted_or_later_ids},
+        ).scalar() or 0
+
+    qualification_rate = (leads_qualified / leads_received * 100) if leads_received > 0 else 0.0
+    conversion_rate = (leads_converted / leads_received * 100) if leads_received > 0 else 0.0
+
+    avg_hours = None
+    if converted_stage:
+        result = db.execute(
+            text("""
+                SELECT AVG(EXTRACT(EPOCH FROM (csh.changed_at - COALESCE(ml.meta_created_time, ml.received_at))) / 3600) as avg_hours
+                FROM meta_leads ml
+                JOIN cases c ON ml.converted_case_id = c.id
+                JOIN case_status_history csh ON c.id = csh.case_id AND csh.to_stage_id = :converted_stage_id
+                WHERE ml.organization_id = :org_id
+                  AND COALESCE(ml.meta_created_time, ml.received_at) >= :start
+                  AND COALESCE(ml.meta_created_time, ml.received_at) < :end
+                  AND ml.is_converted = true
+            """),
+            {"org_id": organization_id, "start": start, "end": end, "converted_stage_id": converted_stage.id},
+        )
+        row = result.fetchone()
+        avg_hours = round(row[0], 1) if row and row[0] else None
+
+    return {
+        "leads_received": leads_received,
+        "leads_qualified": leads_qualified,
+        "leads_converted": leads_converted,
+        "qualification_rate": round(qualification_rate, 1),
+        "conversion_rate": round(conversion_rate, 1),
+        "avg_time_to_convert_hours": avg_hours,
+    }
+
+
 # ============================================================================
 # Campaign Filter
 # ============================================================================
@@ -518,3 +736,210 @@ def get_cases_by_state_with_filter(
         {"state": r.state, "count": r.count}
         for r in results
     ]
+
+
+async def get_meta_spend_summary(
+    start: datetime,
+    end: datetime,
+    time_increment: int | None = None,
+    breakdowns: list[str] | None = None,
+) -> dict[str, Any]:
+    from app.core.config import settings
+    from app.services import meta_api
+
+    ad_account_id = settings.META_AD_ACCOUNT_ID
+    access_token = settings.META_SYSTEM_TOKEN
+
+    if not settings.META_TEST_MODE and (not ad_account_id or not access_token):
+        return {
+            "total_spend": 0.0,
+            "total_impressions": 0,
+            "total_leads": 0,
+            "cost_per_lead": None,
+            "campaigns": [],
+            "time_series": [],
+            "breakdowns": [],
+        }
+
+    date_start = start.strftime("%Y-%m-%d")
+    date_end = end.strftime("%Y-%m-%d")
+
+    insights, error = await meta_api.fetch_ad_account_insights(
+        ad_account_id=ad_account_id or "act_mock",
+        access_token=access_token or "mock_token",
+        date_start=date_start,
+        date_end=date_end,
+        level="campaign",
+        time_increment=time_increment,
+        breakdowns=breakdowns or None,
+    )
+
+    if error or not insights:
+        return {
+            "total_spend": 0.0,
+            "total_impressions": 0,
+            "total_leads": 0,
+            "cost_per_lead": None,
+            "campaigns": [],
+            "time_series": [],
+            "breakdowns": [],
+        }
+
+    def safe_float(val, default=0.0) -> float:
+        if val is None or val == "":
+            return default
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return default
+
+    def safe_int(val, default=0) -> int:
+        if val is None or val == "":
+            return default
+        try:
+            return int(float(val))
+        except (ValueError, TypeError):
+            return default
+
+    lead_action_types = {"lead", "leadgen", "onsite_conversion.lead_grouped", "offsite_conversion.fb_pixel_lead"}
+
+    campaigns_by_id: dict[str, dict[str, float | int | str]] = {}
+    total_spend = 0.0
+    total_impressions = 0
+    total_leads = 0
+    time_series: dict[tuple[str, str], dict[str, float | int]] = {}
+    breakdown_totals: dict[tuple[str, ...], dict[str, float | int | dict[str, str]]] = {}
+
+    for insight in insights:
+        spend = safe_float(insight.get("spend"))
+        impressions = safe_int(insight.get("impressions"))
+        reach = safe_int(insight.get("reach"))
+        clicks = safe_int(insight.get("clicks"))
+
+        leads = 0
+        actions = insight.get("actions") or []
+        for action in actions:
+            action_type = action.get("action_type", "")
+            if action_type in lead_action_types:
+                leads += safe_int(action.get("value"))
+
+        campaign_id = insight.get("campaign_id", "") or "unknown"
+        campaign_name = insight.get("campaign_name", "Unknown")
+        campaign_totals = campaigns_by_id.get(campaign_id)
+        if not campaign_totals:
+            campaign_totals = {
+                "campaign_id": campaign_id,
+                "campaign_name": campaign_name,
+                "spend": 0.0,
+                "impressions": 0,
+                "reach": 0,
+                "clicks": 0,
+                "leads": 0,
+            }
+            campaigns_by_id[campaign_id] = campaign_totals
+        campaign_totals["spend"] = float(campaign_totals["spend"]) + spend
+        campaign_totals["impressions"] = int(campaign_totals["impressions"]) + impressions
+        campaign_totals["reach"] = int(campaign_totals["reach"]) + reach
+        campaign_totals["clicks"] = int(campaign_totals["clicks"]) + clicks
+        campaign_totals["leads"] = int(campaign_totals["leads"]) + leads
+
+        total_spend += spend
+        total_impressions += impressions
+        total_leads += leads
+
+        if time_increment:
+            date_start_value = insight.get("date_start") or date_start
+            date_stop_value = insight.get("date_stop") or date_end
+            time_key = (str(date_start_value), str(date_stop_value))
+            point = time_series.get(time_key)
+            if not point:
+                point = {"spend": 0.0, "impressions": 0, "reach": 0, "clicks": 0, "leads": 0}
+                time_series[time_key] = point
+            point["spend"] = float(point["spend"]) + spend
+            point["impressions"] = int(point["impressions"]) + impressions
+            point["reach"] = int(point["reach"]) + reach
+            point["clicks"] = int(point["clicks"]) + clicks
+            point["leads"] = int(point["leads"]) + leads
+
+        if breakdowns:
+            breakdown_values = {key: str(insight.get(key, "unknown")) for key in breakdowns}
+            breakdown_key = tuple(breakdown_values.get(key, "unknown") for key in breakdowns)
+            breakdown = breakdown_totals.get(breakdown_key)
+            if not breakdown:
+                breakdown = {
+                    "breakdown_values": breakdown_values,
+                    "spend": 0.0,
+                    "impressions": 0,
+                    "reach": 0,
+                    "clicks": 0,
+                    "leads": 0,
+                }
+                breakdown_totals[breakdown_key] = breakdown
+            breakdown["spend"] = float(breakdown["spend"]) + spend
+            breakdown["impressions"] = int(breakdown["impressions"]) + impressions
+            breakdown["reach"] = int(breakdown["reach"]) + reach
+            breakdown["clicks"] = int(breakdown["clicks"]) + clicks
+            breakdown["leads"] = int(breakdown["leads"]) + leads
+
+    overall_cpl = round(total_spend / total_leads, 2) if total_leads > 0 else None
+
+    campaigns = []
+    for totals in campaigns_by_id.values():
+        campaign_spend = float(totals["spend"])
+        campaign_leads = int(totals["leads"])
+        cpl = round(campaign_spend / campaign_leads, 2) if campaign_leads > 0 else None
+        campaigns.append({
+            "campaign_id": str(totals["campaign_id"]),
+            "campaign_name": str(totals["campaign_name"]),
+            "spend": campaign_spend,
+            "impressions": int(totals["impressions"]),
+            "reach": int(totals["reach"]),
+            "clicks": int(totals["clicks"]),
+            "leads": campaign_leads,
+            "cost_per_lead": cpl,
+        })
+
+    time_series_points = []
+    if time_increment:
+        for (start_key, stop_key), totals in sorted(time_series.items()):
+            point_spend = float(totals["spend"])
+            point_leads = int(totals["leads"])
+            point_cpl = round(point_spend / point_leads, 2) if point_leads > 0 else None
+            time_series_points.append({
+                "date_start": start_key,
+                "date_stop": stop_key,
+                "spend": point_spend,
+                "impressions": int(totals["impressions"]),
+                "reach": int(totals["reach"]),
+                "clicks": int(totals["clicks"]),
+                "leads": point_leads,
+                "cost_per_lead": point_cpl,
+            })
+
+    breakdown_points = []
+    if breakdowns:
+        for breakdown in breakdown_totals.values():
+            breakdown_spend = float(breakdown["spend"])
+            breakdown_leads = int(breakdown["leads"])
+            breakdown_cpl = round(breakdown_spend / breakdown_leads, 2) if breakdown_leads > 0 else None
+            breakdown_points.append({
+                "breakdown_values": breakdown["breakdown_values"],
+                "spend": breakdown_spend,
+                "impressions": int(breakdown["impressions"]),
+                "reach": int(breakdown["reach"]),
+                "clicks": int(breakdown["clicks"]),
+                "leads": breakdown_leads,
+                "cost_per_lead": breakdown_cpl,
+            })
+
+    breakdown_points.sort(key=lambda item: item["spend"], reverse=True)
+
+    return {
+        "total_spend": round(total_spend, 2),
+        "total_impressions": total_impressions,
+        "total_leads": total_leads,
+        "cost_per_lead": overall_cpl,
+        "campaigns": campaigns,
+        "time_series": time_series_points,
+        "breakdowns": breakdown_points,
+    }

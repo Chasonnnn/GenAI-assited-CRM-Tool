@@ -1,18 +1,8 @@
 # Feature Completeness Evaluation — Current State
 
-**Last Updated:** 2025-12-26 (Evening)  
+**Last Updated:** 2025-12-27 (Afternoon)  
 **Purpose:** Identify features that need development to be fully functional  
-**Test Coverage:** ✅ **320/320 tests passing** - Frontend: 79/79, Backend: 241/241
-
-> **Pipeline Phase 2 Complete ✅** — Custom stages, stage CRUD, soft-delete, versioning, frontend editor all functional.
-> 
-> **Sprint Complete ✅** — File Attachments, Invitation System, Tasks Calendar, Appointment Scheduling, Google Calendar Display, and Context-Aware Chatbot all implemented.
->
-> **Matches Module Complete ✅** — IP-Surrogate matching with propose/accept/reject workflow, 3-column Match Detail page, Match Tasks Calendar with filtering and color-coding.
->
-> **Automation System Complete ✅** — Workflow engine with 11 trigger types, 6 action types, Campaigns module for bulk email, 10 default email templates.
->
-> **MFA System Complete ✅** — TOTP-based 2FA with recovery codes, Duo Web SDK v4 integration, login enforcement, Security settings page.
+**Test Coverage:** ✅ **350/350 tests passing** - Frontend: 83/83 (80 unit + 3 integration), Backend: 267/267
 
 ---
 
@@ -20,556 +10,249 @@
 
 | Status | Meaning |
 |--------|---------|
-| ✅ **Complete** | Fully functional, tested, and usable |
-| ⚠️ **Partial** | Backend exists but frontend missing or vice versa |
-| 🔧 **Scaffolded** | Code exists but not wired up / mock data |
 | ❌ **Not Started** | Mentioned in roadmap but no code exists |
+| ⚠️ **Partial** | Backend exists but frontend missing or vice versa |
+| ✅ **Complete** | Fully functional, tested, and usable |
 
 ---
 
-## 🔴 HIGH PRIORITY GAPS (Uncompleted)
+## 🔴 UNCOMPLETED — Work Remaining
 
-### 1. Default Automated Workflows & Email Templates ✅ COMPLETE
-**Status:** Fully implemented (2025-12-24)
+### 1. A/B Testing for Campaigns ❌ NOT STARTED
+**Priority:** Medium  
+**Effort:** 3-5 days
 
-**What was built:**
-
-- **Workflow Engine:**
-  - Trigger types: case_created, status_changed, case_assigned, case_updated, task_due, task_overdue, scheduled, inactivity, appointment_scheduled, appointment_completed, note_added, document_uploaded, match_proposed, match_accepted, match_rejected
-  - Condition operators: equals, not_equals, contains, in, greater_than, less_than, is_empty, is_not_empty
-  - Action types: send_email, create_task, assign_case, send_notification, update_field, add_note
-  - Condition logic: AND / OR support
-  - **Entity-type restrictions**: Case-only actions validated before execution
-  
-- **10 Default Email Templates (auto-seeded):**
-  - Welcome New Lead
-  - Application Next Steps
-  - Document Request
-  - Appointment Reminder (24h)
-  - Appointment Confirmed
-  - Status Update
-  - Match Proposal Introduction
-  - Match Accepted Congratulations
-  - Inactivity Follow-up
-  - Contract Ready for Review
-
-- **Campaigns Module:**
-  - Bulk email send with recipient filtering
-  - Campaign runs with recipient tracking
-  - Email suppression list (bounces, unsubscribes)
-  - Job-based async processing
-  - Idempotency keys to prevent double-sends
-
-- **Frontend:**
-  - `/automation` - Workflows list with stats cards
-  - `/automation/campaigns` - Campaign management
-  - Create/edit workflow modal with visual builder
-  - Trigger type dropdown with descriptions
-  - Email template selector
-
-**Effort:** Complete
+**What's needed:**
+- Split audience into test groups
+- Variant subject lines / content
+- Statistical significance calculation
+- Winner selection automation
 
 ---
 
+### 2. AI Weekly Reports ❌ NOT STARTED
+**Priority:** Low  
+**Effort:** 1-2 weeks
 
-### 2. Notification Center ✅ COMPLETE
-**Status:** Fully implemented
-
-**What was built:**
-
-- **Backend (notification_service.py):**
-  - 15+ trigger functions for different notification types
-  - User notification settings (per-type opt-in/out)
-  - Deduplication with 1-hour window
-  - Mark read/unread, mark all read
-  - Type-based filtering
-
-- **Notification Types:**
-  - ✅ Task assigned/due/overdue
-  - ✅ Case status changes
-  - ✅ Case assigned (new lead)
-  - ✅ Appointment requests/confirmed/cancelled
-  - ✅ Case handoff ready/accepted/denied
-  - ❌ AI action approvals (future)
-
-- **Frontend:**
-  - Bell icon in header with unread count badge
-  - Dropdown with recent notifications
-  - Click-to-navigate to source entity
-  - `/notifications` page with full list
-  - WebSocket real-time updates
-  - Browser push notifications
-
-- **API Endpoints:**
-  - `GET /me/notifications` - paginated list
-  - `GET /me/notifications/count` - unread count
-  - `POST /me/notifications/{id}/read` - mark read
-  - `POST /me/notifications/read-all` - mark all read
-  - WebSocket at `/ws/notifications`
-
-**Effort:** Complete
+**What's needed:**
+- Scheduled report generation (weekly digest)
+- AI-powered insights summary
+- Email delivery to managers
+- PDF attachment option
 
 ---
 
+### 3. AI Token Budget Alerts ⚠️ OPTIONAL
+**Priority:** Low  
+**Effort:** 2-3 days
 
-### 3. Email Signature Setup ✅ COMPLETE (Pending Logo)
-**Status:** Implemented - awaiting organization logo
-
-**What was built:**
-- ✅ Signature editor in dedicated Email Templates page (`/automation/email-templates`)
-- ✅ Per-user signature storage (8 fields: name, title, company, phone, email, address, website)
-- ✅ Live preview before save
-- ✅ Backend API: `GET/PUT /auth/me/signature`
-- ✅ Custom HTML signature option
-
-**Pending:**
-- ⚠️ **Add organization logo** - Place logo file at `/apps/web/public/logo.png`
-- Future: Auto-append signature to outgoing emails (requires email sending integration)
-
-**Effort:** Complete
+**What's needed:**
+- Token usage tracking already exists in Reports page
+- Budget thresholds with email alerts
+- Usage dashboard per user/org
 
 ---
 
-### 4. Matched Tab (IP + Surrogate Pairs) ✅ COMPLETE
-**Status:** Fully implemented
+### 4. Organization Logo Upload ⚠️ PENDING
+**Priority:** Low  
+**Effort:** 30 min
 
-**What was built:**
-- **Matches List Page** (`/intended-parents/matches`):
-  - Status cards (proposed, reviewing, accepted, rejected)
-  - Filterable/sortable table view
-  - Compatibility score display
-  - Links to Match detail pages
-
-- **Match Detail Page** (`/intended-parents/matches/[id]`):
-  - 3-column layout (35% Surrogate | 35% IP | 30% Notes/Files/Tasks)
-  - Full profile data for both Surrogate and IP
-  - Action buttons: Accept, Reject, Cancel (based on status)
-  - Status workflow with badges
-  - Notes/Files/Tasks/Activity tabs in sidebar
-  - **Parse Schedule button** next to Overview/Calendar tabs
-  - **AI Assistant context-aware** (shows match name instead of Global Mode)
-
-- **Match Tasks Calendar** (`MatchTasksCalendar.tsx`):
-  - Month/Week/Day view toggle
-  - All/Surrogate/IP/Appointments filter
-  - Color-coded tasks:
-    - 🟣 Purple: Surrogate tasks
-    - 🟢 Green: IP tasks
-    - 🔵 Blue: Appointments (MatchEvents)
-  - Navigation and Today button
-  - Task display on calendar cells
-
-- **Backend API:**
-  - `Match` and `MatchEvent` data models
-  - Match CRUD endpoints
-  - Propose, accept, reject, cancel workflow
-  - Notes update endpoint
-
-- **Tests (33 new tests):**
-  - `matches-page.test.tsx` (9 tests)
-  - `match-detail.test.tsx` (9 tests)
-  - `match-tasks-calendar.test.tsx` (15 tests)
-
-**Effort:** Completed
+**What's needed:**
+- Place logo file at `/apps/web/public/logo.png`
+- Email signature will auto-include logo
 
 ---
 
-### 5. UI/UX Improvements ✅ MOSTLY COMPLETE
-**Status:** Major issues fixed (2025-12-24)
-
-**Completed Fixes:**
-
-1. ✅ **Appointments Tab - Empty space above tabs**
-   - Reduced header height (h-16 → h-14)
-   - Removed redundant description text
-   - Reduced TabsContent margins (mt-6 → mt-4)
-
-2. ✅ **Case Detail - Notes section styling**
-   - Added CardHeader with note count badge
-   - Bordered input section with subtle background
-   - Individual note cards with borders and hover effects
-   - Better avatar styling with primary colors
-
-3. ✅ **Match Calendar - Add Task button**
-   - Added "Add Task" button next to "Today" in calendar header
-   - Opens AddTaskDialog modal for manual task creation
-
-4. ✅ **Table spacing issues**
-   - Added `py-0` override to Card wrappers on list pages
-   - Fixed on: cases, intended-parents, intended-parents/matches, campaigns
-
-5. ✅ **Activity log HTML display**
-   - Added `stripHtml()` helper to show plain text in activity log
-   - Notes and note_deleted entries now show readable text
-
-6. ✅ **Notes HTML rendering**
-   - Fixed intended-parents/[id] and match detail pages
-   - Now use `dangerouslySetInnerHTML` to render rich text properly
-
-**Bug Fixes (2025-12-24):**
-- ✅ Notes API 500 error - Fixed wrong attribute names in `workflow_triggers.py`
-  - Changed `note.is_pinned` and `note.created_by_user_id` to `note.author_id`
-
-**Effort:** Completed
-
----
-
-## 🟡 MEDIUM PRIORITY GAPS (Uncompleted)
-
-### 1. Automation & Campaigns Future Enhancements ⚠️
-**Status:** Mostly complete
-
-| Feature | Value | Priority | Status |
-|---------|-------|----------|--------|
-| Workflow execution dashboard | Monitor workflow runs/failures in real-time | High | ✅ Complete (2025-12-25) |
-| Dashboard real-time updates | WebSocket + polling for KPI cards | High | ✅ Complete (2025-12-24) |
-| Rate limiting for triggers | Prevent runaway automation and spam | High | ✅ Complete (2025-12-25) |
-| Workflow template marketplace | Share common automations between orgs | Medium | ✅ Complete (2025-12-25) |
-| Email open/click tracking | Campaign analytics and engagement metrics | High | ❌ Not started |
-| A/B testing for campaigns | Optimize outreach with split testing | Medium | ❌ Not started |
-
-**Effort:** Remaining: Small (3-5 days for email tracking + A/B)
-
----
-
-### 3. AI Assistant Improvements ✅ COMPLETE
-**Status:** Complete
-
-**Completed:**
-- ✅ Model upgraded to **Gemini 3.0 Flash** (`gemini-3-flash-preview`)
-- ✅ Chat History added to left sidebar
-- ✅ Token usage display exists in Reports page
-
-**Remaining (optional):**
-- Token budget alerts
-- Sidebar layout is now left panel, not right drawer
-
-**Effort:** Complete
-
----
-
-### 4. UI Consistency Audit ✅ COMPLETE
-**Status:** Audited 2025-12-26 - Layouts are already consistent
-
-**Audit Results:**
-- ✅ **Cases page**: Filters LEFT, Search RIGHT (`ml-auto`)
-- ✅ **Intended Parents page**: Filters LEFT, Search RIGHT (`flex-1` spacer)
-- ✅ **Matches page**: Filters LEFT, Search RIGHT (`flex-1` spacer)
-- ✅ **Campaigns page**: Status filter LEFT, actions RIGHT
-- ✅ **All pages use** `py-0` Card wrapper for consistent table spacing
-- ✅ **Consistent pagination** placement at bottom
-
-**Design System Rules (Documented):**
-1. Filter dropdowns: LEFT side, multiple allowed
-2. DateRangePicker: After filters, before spacer
-3. Search input: RIGHT side (pushed via `ml-auto` or `flex-1` spacer)
-4. Primary action button: Header RIGHT (e.g., "Import CSV", "New Intended Parent")
-5. Table Card: `className="py-0"` to remove extra padding
-
-**Effort:** Complete
-
----
-
-## 🟢 LOW PRIORITY GAPS (Uncompleted)
-
-### 5. Smart Task Creation from AI ✅ COMPLETE
-**Status:** Fully implemented with match integration
-
-**What was built:**
-
-- **Backend (`apps/api/app/routers/ai.py`):**
-  - `/ai/parse-schedule` - AI-powered schedule text parser
-  - `/ai/create-bulk-tasks` - All-or-nothing bulk task creation
-  - Expanded TaskType enum: `medication`, `exam`, `appointment`
-  - Flexible entity linking: case_id, surrogate_id, intended_parent_id, match_id
-  - Match tasks auto-link to case and intended_parent
-  - Idempotency via request_id
-  - User timezone detection
-
-- **Frontend:**
-  - `ScheduleParserDialog.tsx` - 3-step flow (Paste → Review → Create)
-  - Editable task proposals with confidence scores
-  - Entity type selection (case, surrogate, IP, match)
-  - `schedule-parser.ts`, `use-schedule-parser.ts` API hooks
-
-- **Match Integration:**
-  - Parse Schedule button on match detail page (next to tabs)
-  - AI Assistant context-aware for match pages
-  - Tasks linked to both case and IP when created from match
-
-- **AI Assistant Integration:**
-  - "Parse Schedule" quick action in AI chat panel (case context)
-  - Match entity type added to AI context system
-
-**Effort:** Complete
-
----
-
-### 6. AI-Powered Weekly Reports ❌
-**Status:** Not started
-
-**Requirements:**
-- Weekly batch job analyzes trends/patterns
-- Case load changes
-- Employee performance metrics
-- Conversion rate trends
-- Auto-generated insights
-- Email summary to managers
-
-**Considerations:**
-- Batch processing via worker
-- Report storage/history
-- Configurable report sections
-
-**Effort:** Large (1-2 weeks)
-
----
-
-### 7. Version Drift in Docs ✅ FIXED
-**Files:** `README.md:3`, `apps/api/app/core/config.py:15`
-
-~~Version numbers in docs don't match backend settings.~~
-
-**Fixed 2025-12-26:** Synced config.py VERSION from `0.09.00` → `0.15.00` to match README.md.
-
----
-
-## ✅ COMPLETED FEATURES & FIXES
-
-### Recently Completed Features
-
-#### 5. Context-Aware Floating Chatbot ✅ COMPLETE
-**Status:** Full stack complete
-
-**What was built:**
-- **Backend (ai_chat_service.py):**
-  - `TASK_SYSTEM_PROMPT` with schedule parsing instructions
-  - `get_task_context()` - loads task with related case
-  - `_build_task_context()` - builds context string for AI
-  - `chat()` handles `entity_type='task'`
-  - AI parses medication/exam schedules → proposes create_task actions
-
-- **Frontend:**
-  - Updated EntityContext and ChatRequest types to include 'task'
-  - AIChatPanel/AIChatDrawer support task context
-  - Tasks page dynamically sets AI context when editing
-  - Green pulse indicates active task context
-  - Context clears when modal closes
-
----
-
-#### 6. Google Calendar Event Display ✅ COMPLETE
-**Status:** Full stack complete
-
-**What was built:**
-- **Backend:**
-  - `get_google_events()` with pagination, all-day handling, singleEvents=true
-  - `GET /integrations/google/calendar/events` endpoint
-  - Date range validation (400 for reversed ranges)
-  - Returns event id, summary, start, end, html_link, is_all_day
-
-- **Frontend:**
-  - `GoogleEventItem` component with gray styling
-  - Google events displayed in Month, Week, and Day views
-  - All-day events use direct date string extraction (no TZ shift)
-  - Click-through opens event in Google Calendar
-  - Legend includes Google Calendar indicator
-
----
-
-#### 1. File Attachments on Cases ✅ COMPLETE
-**Status:** Fully implemented
-
-**What was built:**
-- `Attachment` model with security fields (checksum, scan status, quarantine)
-- S3/local storage with signed URLs (5-min expiry)
-- Virus scan job (`scan_attachment.py`) with ClamAV integration
-- EXIF stripping for privacy (`strip_exif_data()`)
-- `FileUploadZone.tsx` component with drag-drop
-- Attachments integrated into Case Notes UI
-- Soft-delete with audit logging
-
-**Security features:**
-- SHA-256 checksum verification
-- File type + MIME type validation
-- Quarantine until scan completes
-- Access control (case-level + uploader/Manager+ for delete)
-
----
-
-#### 2. Invitation System ✅ COMPLETE
-**Status:** Full stack complete
-
-**What was built:**
-- **Backend:**
-  - `OrgInvite` model with resend tracking, revocation
-  - Rate limiting (50 pending per org)
-  - Resend cooldown (5 min, 3/day max)
-  - Gmail integration for invite emails (HTML template)
-  - Email domain validation (`ALLOWED_EMAIL_DOMAINS`)
-  - Accept invite API (creates membership)
-
-- **Frontend:**
-  - `/settings/team/page.tsx` with pending invites table
-  - Invite modal with role selection
-  - Status badges (pending/expired/accepted/revoked)
-  - Resend button with cooldown timer
-  - `/invite/[id]/page.tsx` accept page
-
-**Email flow:**
-- Inviter must have Gmail connected
-- Professional HTML email with accept button
-- Domain validation before sending
-
----
-
-#### 3. Tasks Calendar View ✅ COMPLETE
-**Status:** Fully implemented
-
-**What was built:**
-- FullCalendar integration with month/week/day views
-- List/Calendar view toggle with localStorage persistence
-- Drag-drop rescheduling with API persistence
-- Time preservation on date-only moves
-- Revert on failed reschedule
-- `TaskEditModal.tsx` for click-to-edit
-
----
-
-#### 4. Appointment Scheduling System ✅ COMPLETE
-**Status:** Full stack complete
-
-**What was built:**
-- **Backend (6 new tables):**
-  - `AppointmentType` - customizable meeting templates per user
-  - `AvailabilityRule` - weekly availability (Mon-Sun, 9am-5pm etc.)
-  - `AvailabilityOverride` - date-specific exceptions (vacations, meetings)
-  - `BookingLink` - secure public URLs for self-service booking
-  - `Appointment` - booked appointments with status workflow
-  - `AppointmentEmailLog` - email tracking
-
-- **Booking Flow:**
-  - Public booking page (`/book/{slug}`)
-  - Time slot calculation respecting buffers, existing appointments
-  - Pending → Confirmed → Completed status workflow
-  - Self-service reschedule/cancel via secure tokens
-  - Rate limiting on booking endpoints
-
-- **Email Notifications:**
-  - Request received, Confirmed, Rescheduled, Cancelled templates
-  - Client timezone support (default: Pacific)
-  - Professional HTML email design
-
-- **Frontend:**
-  - Unified Tasks page with Calendar/List view toggle
-  - `/appointments` - pending/upcoming/past management
-  - `/settings/appointments` - availability configuration
-  - Appointment type management (duration, buffers, meeting mode)
-  - Weekly availability grid with timezone selector
-  - **Google Calendar event display** - External calendar events shown in unified calendar view (gray styling, click-through to Google)
-
----
-
-#### 5. Reports PDF Export ✅ COMPLETE
-**Status:** Fully functional with native charts
-
-**What was built:**
-- Backend generates PDF with reportlab including native bar, line, and pie charts
-- Endpoint at `/analytics/export/pdf` with date range params
-- Includes: Key Metrics summary, Cases by Status (bar chart), Cases Trend (line chart), Team Performance (pie chart), Meta Lead Ads funnel
-- Frontend Export PDF button calls backend API
-- Small file size (~50KB) with professional formatting
-
----
-
-### Fixed Security & Infrastructure Issues
-
-#### CSRF on Queue/Invite Mutations ✅ FIXED
-**Files:** `apps/api/app/routers/queues.py`, `apps/api/app/routers/invites.py`
-Queue and invite mutation endpoints (create/update/delete/claim/release/assign) now enforce CSRF tokens.
-**Fixed:** Added `require_csrf_header` dependency to all mutation endpoints.
-
-#### WebSocket Auth Cookie Mismatch ✅ FIXED
-**Files:** `apps/api/app/routers/websocket.py`
-WebSocket auth now correctly uses `crm_session` independent of the REST API auth name.
-**Fixed:** Imported and used `COOKIE_NAME` from deps.py.
-
-#### CORS Missing PUT Method ✅ FIXED
-**File:** `apps/api/app/main.py:89`
-CORS middleware now allows PUT methods.
-**Fixed:** Added PUT to `allow_methods`.
-
-#### WebSocket/REST URL Environment Mismatch ✅ FIXED
-**Files:** `apps/web/lib/hooks/use-notification-socket.ts`
-Standardized on `NEXT_PUBLIC_API_BASE_URL` for both REST and WebSocket connections.
-**Fixed:** Standardized to use `NEXT_PUBLIC_API_BASE_URL`.
-
-#### Settings Save Buttons (Profile & Org) ✅ FIXED
-**Files:** `apps/web/app/(app)/settings/page.tsx`, `apps/api/app/routers/auth.py`, `apps/api/app/routers/settings.py`
-Implemented logic for saving Profile and Organization settings via `PATCH /auth/me` and `PATCH /settings/organization`.
-**Fixed:** Added PATCH /auth/me for profile and PATCH /settings/organization for org settings.
-
----
-
-## EXISTING FEATURES — Reference (Previously Completed)
-
-### Complete ✅
-- Cases, Intended Parents, Tasks, Dashboard
-- Authentication, Notifications, Audit Trail
-- Email Sending, Gmail Integration, Meta Leads
-- Automation Engine, Activity Feed
-- Zoom Integration, Matching System
-- Compliance/HIPAA exports
-
----
-
-## ENTERPRISE POLISH SUGGESTIONS
-
-1. **Gate auth bypass** with environment flags and wire login + invite flows to backend OAuth (or implement Duo), including return-to handling and session cookie creation.
-2. **Enforce CSRF globally** via middleware; align WebSocket auth to `crm_session` and add origin checks or token-based WS auth.
-3. **Standardize API/WS base URLs** (e.g., `NEXT_PUBLIC_API_BASE_URL` + `NEXT_PUBLIC_API_WS_URL`).
-4. **Finish Settings APIs** (profile/org preferences) with audit logging and permissions; add server-side validation for enterprise governance.
-5. **Implement AI usage dashboards/budgets** and persist conversation history server-side.
-
----
-
-## PRIORITY RECOMMENDATIONS
-
-### Immediate (Next Sprint)
-1. **Settings Save functionality** — Complete UI
-2. **Context-Aware Chatbot** — AI integration
-3. **AI Assistant Improvements** — Sidebar, token tracking
-
-### Short Term
-4. **PDF Export filename fix** — Polish
-5. **CSV Import Improvements** — Flexibility
-6. **Smart Task Creation** — AI feature
-
-### Medium Term
-7. **AI Weekly Reports** — Batch analytics
-
----
-
-## EFFORT SUMMARY
+## EFFORT SUMMARY — Remaining Work
 
 | Feature | Effort | Priority | Status |
 |---------|--------|----------|--------|
-| File Attachments | 1 week | High | ✅ Done |
-| Invitation Frontend | 2-3 days | High | ✅ Done |
-| Tasks Calendar | 1 week | High | ✅ Done |
-| PDF Export | 1 day | Medium | ✅ Done |
-| CSRF on Mutations | 2-3 hours | High | ✅ Fixed |
-| WebSocket Auth Fix | 1 hour | High | ✅ Fixed |
-| CORS PUT Method | 5 min | Medium | ✅ Fixed |
-| WS/REST URL Mismatch | 5 min | Medium | ✅ Fixed |
-| Settings Save APIs | 2-3 days | Medium | ✅ Fixed |
-| Context-Aware Chatbot | 1 week | High | ✅ Done |
-| AI Assistant Improvements | 3-4 days | Medium | ⚠️ |
-| UI Consistency | 1-2 days | Medium | ⚠️ |
-| CSV Import | 1 week | Medium | ✅ Done |
-| Smart Task Creation | 1 week | Low | ✅ Done |
+| A/B Testing | 3-5 days | Medium | ❌ |
 | AI Weekly Reports | 1-2 weeks | Low | ❌ |
+| AI Token Budgets | 2-3 days | Low | ⚠️ Optional |
+| Organization Logo | 30 min | Low | ⚠️ Pending |
 
-**Features/Fixes Completed This Session:** 12+ ✅  
-**Total Remaining Gaps:** 4 features  
-**Total Remaining Effort:** ~3 weeks
+**Total Remaining Effort:** ~2 weeks
+
+---
+
+## � NICE-TO-HAVE — Future Enhancements
+
+> Features that would add significant value but are not blocking for MVP.
+
+### High Value
+
+| Feature | Description | Effort |
+|---------|-------------|--------|
+| **Document Signing** | DocuSign/HelloSign integration for contracts | 1 week |
+| **SMS Notifications** | Twilio integration for text alerts | 3-5 days |
+| **Calendar Sync (Two-way)** | Push appointments TO Google Calendar | 2-3 days |
+
+### Medium Value
+
+| Feature | Description | Effort |
+|---------|-------------|--------|
+| **Bulk Import for IPs** | Import intended parents from CSV | 2-3 days |
+| **Advanced Search** | Full-text search across cases, notes, files | 2-3 days |
+| **Custom Fields** | User-defined fields on cases/IPs | 1 week |
+| **Reporting Builder** | Custom report generation UI | 1-2 weeks |
+
+### Lower Priority
+
+| Feature | Description | Effort |
+|---------|-------------|--------|
+| **Mobile App / PWA** | Dedicated mobile experience | 2-4 weeks |
+| **Contract Tracking** | Track pending/signed contract status | 2-3 days |
+| **Medical Clearance Status** | Track surrogate medical clearance | 1-2 days |
+| **Payment Milestones** | Track compensation milestones | 3-5 days |
+| **Background Check Status** | Field for background check results | 1 day |
+| **Insurance Verification** | Track surrogate insurance status | 1 day |
+
+---
+
+## �🟢 COMPLETED — Reference
+
+> All features below are fully functional, tested, and deployed.
+
+### Infrastructure & Testing ✅
+- **RBAC Standardization** (2025-12-27)
+  - Centralized `policies.py` with ResourcePolicy definitions
+  - PermissionKey enum for type-safe permissions
+  - `require_any_permissions()` / `require_all_permissions()` helpers
+  - All 20 routers use policy-driven dependencies
+  - RBAC regression matrix tests
+  
+- **MSW Integration Testing** (2025-12-27)
+  - Mock Service Worker for API mocking
+  - Separate integration test config
+  - Real QueryClientProvider wrapper
+  - 83 frontend tests (80 unit + 3 integration)
+
+---
+
+### Email Open/Click Tracking ✅ (2025-12-26)
+- Tracking pixel injection (1x1 transparent GIF)
+- Link wrapping for click tracking
+- Public endpoints: `/tracking/open/{token}`, `/tracking/click/{token}`
+- `CampaignTrackingEvent` model with IP, user agent, URL
+- Open/click counters on CampaignRecipient and CampaignRun
+- 16 tests in `test_tracking.py`
+
+---
+
+### MFA System ✅ (2025-12-26)
+- TOTP-based 2FA with QR code enrollment
+- 8 single-use recovery codes (hashed storage)
+- Duo Web SDK v4 integration
+- MFA enforcement during login flow
+- Security settings page at `/settings/security`
+
+---
+
+### Automation System ✅ (2025-12-24)
+- **Workflow Engine:**
+  - 15 trigger types (case_created, status_changed, task_due, etc.)
+  - 6 action types (send_email, create_task, assign_case, etc.)
+  - AND/OR condition logic
+  - Entity-type restrictions validated before execution
+  
+- **10 Default Email Templates (auto-seeded)**
+  
+- **Campaigns Module:**
+  - Bulk email with recipient filtering
+  - Job-based async processing
+  - Idempotency keys to prevent double-sends
+  
+- **Workflow Execution Dashboard:**
+  - Real-time monitoring of workflow runs/failures
+
+---
+
+### Matches Module ✅
+- IP-Surrogate matching with propose/accept/reject workflow
+- 3-column Match Detail page (Surrogate | IP | Notes/Files/Tasks)
+- Match Tasks Calendar with filtering and color-coding
+- Parse Schedule button with AI integration
+
+---
+
+### Notification Center ✅
+- 15+ notification types (task, case, appointment, handoff)
+- Per-user notification settings
+- WebSocket real-time updates
+- Browser push notifications
+- `/notifications` page with full list
+
+---
+
+### File Attachments ✅
+- S3/local storage with signed URLs
+- Virus scan with ClamAV integration
+- EXIF stripping for privacy
+- Drag-drop upload component
+
+---
+
+### Invitation System ✅
+- OrgInvite model with resend tracking
+- Gmail integration for invite emails
+- Accept invite creates membership
+- Rate limiting (50 pending per org)
+
+---
+
+### Tasks Calendar ✅
+- FullCalendar with month/week/day views
+- Drag-drop rescheduling
+- List/Calendar view toggle
+
+---
+
+### Appointment Scheduling ✅
+- 6 new tables (AppointmentType, AvailabilityRule, etc.)
+- Public booking page (`/book/{slug}`)
+- Pending → Confirmed → Completed workflow
+- Google Calendar event display
+
+---
+
+### AI Assistant ✅
+- Gemini 3.0 Flash model
+- Chat history in left sidebar
+- Context-aware for cases, matches, tasks
+- Schedule parsing with bulk task creation
+
+---
+
+### Reports & Analytics ✅
+- Dashboard with KPI cards
+- Funnel chart, map chart, trend lines
+- PDF export with native charts
+
+---
+
+### UI/UX Consistency ✅
+- Filter dropdowns LEFT, Search RIGHT pattern
+- Consistent pagination placement
+- `py-0` Card wrapper for table spacing
+
+---
+
+### Core Features ✅
+- Cases, Intended Parents, Tasks, Dashboard
+- Authentication, Audit Trail
+- Email Sending, Gmail Integration, Meta Leads
+- Zoom Integration, Compliance/HIPAA exports
+- Custom Pipelines with stage CRUD, versioning
+
+---
+
+## Fixed Security & Infrastructure ✅
+
+| Issue | Fix |
+|-------|-----|
+| CSRF on Queue/Invite Mutations | Added `require_csrf_header` dependency |
+| WebSocket Auth Cookie Mismatch | Uses `crm_session` from deps.py |
+| CORS Missing PUT Method | Added PUT to `allow_methods` |
+| WS/REST URL Mismatch | Standardized to `NEXT_PUBLIC_API_BASE_URL` |
+| Settings Save Buttons | Added PATCH endpoints for profile/org |

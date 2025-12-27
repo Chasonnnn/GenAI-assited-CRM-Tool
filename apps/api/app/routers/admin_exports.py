@@ -13,7 +13,7 @@ from app.core.deps import get_db, require_roles
 from app.core.rate_limit import limiter
 from app.db.enums import AuditEventType, Role
 from app.schemas.auth import UserSession
-from app.services import admin_export_service, audit_service
+from app.services import admin_export_service, audit_service, analytics_service
 
 
 router = APIRouter(prefix="/admin/exports", tags=["Admin - Exports"])
@@ -79,9 +79,8 @@ async def export_analytics(
     db: Session = Depends(get_db),
 ) -> Response:
     """Export analytics datasets used by the Reports page (ZIP)."""
-    start, end = admin_export_service.parse_date_range(from_date, to_date)
-
-    meta_spend = await admin_export_service.get_meta_spend_summary(start, end)
+    start, end = analytics_service.parse_date_range(from_date, to_date)
+    meta_spend = await analytics_service.get_meta_spend_summary(start, end)
     payload = admin_export_service.build_analytics_zip(
         db=db,
         org_id=session.org_id,
