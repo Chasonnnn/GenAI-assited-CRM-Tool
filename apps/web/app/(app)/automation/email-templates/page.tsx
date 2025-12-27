@@ -34,6 +34,7 @@ import {
     LoaderIcon,
     CodeIcon,
 } from "lucide-react"
+import DOMPurify from "dompurify"
 import {
     useEmailTemplates,
     useEmailTemplate,
@@ -93,6 +94,10 @@ export default function EmailTemplatesPage() {
 
     // Get full template details when editing
     const { data: fullTemplate } = useEmailTemplate(editingTemplate?.id || null)
+
+    const sanitizeHtml = React.useCallback((html: string) => {
+        return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } })
+    }, [])
 
     // Load signature data on mount
     React.useEffect(() => {
@@ -173,7 +178,7 @@ export default function EmailTemplatesPage() {
             html += `<br><br>${signature}`
         }
 
-        setPreviewHtml(html)
+        setPreviewHtml(sanitizeHtml(html))
         setShowPreview(true)
     }
 
@@ -241,6 +246,9 @@ export default function EmailTemplatesPage() {
             signature_html: useCustomSignature ? signatureCustomHtml || null : buildSignatureHtml() || null,
         })
     }
+
+    const signaturePreviewHtml = sanitizeHtml(buildSignatureHtml())
+    const signaturePreviewFallback = '<p class="text-muted-foreground italic">No signature configured</p>'
 
     return (
         <div className="flex min-h-screen flex-col">
@@ -474,7 +482,7 @@ export default function EmailTemplatesPage() {
                                         </p>
                                         <div
                                             className="prose prose-sm max-w-none"
-                                            dangerouslySetInnerHTML={{ __html: buildSignatureHtml() || '<p class="text-muted-foreground italic">No signature configured</p>' }}
+                                            dangerouslySetInnerHTML={{ __html: signaturePreviewHtml || signaturePreviewFallback }}
                                         />
                                     </div>
                                 </CardContent>

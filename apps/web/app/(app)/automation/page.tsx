@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -102,6 +102,7 @@ function formatRelativeTime(dateString: string | null): string {
 }
 
 export default function AutomationPage() {
+    const router = useRouter()
     const searchParams = useSearchParams()
     const validTabs = ["workflows", "email-templates", "campaigns"]
     const tabParam = searchParams.get("tab")
@@ -113,7 +114,9 @@ export default function AutomationPage() {
     const [showHistoryPanel, setShowHistoryPanel] = useState(false)
     const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null)
     const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null)
+    const [hydratedWorkflowId, setHydratedWorkflowId] = useState<string | null>(null)
     const [wizardStep, setWizardStep] = useState(1)
+    const [validationError, setValidationError] = useState<string | null>(null)
 
     // Test workflow state
     const [showTestModal, setShowTestModal] = useState(false)
@@ -156,6 +159,49 @@ export default function AutomationPage() {
     const updateTemplate = useUpdateEmailTemplate()
     const deleteTemplate = useDeleteEmailTemplate()
 
+    const getActionValidationError = (action: ActionConfig): string | null => {
+        if (!action.action_type) return "Select an action type for each action."
+        if (action.action_type === "send_email" && !action.template_id) {
+            return "Select an email template for all email actions."
+        }
+        if (action.action_type === "create_task" && !(action.title as string | undefined)?.trim()) {
+            return "Task actions need a title."
+        }
+        if (action.action_type === "send_notification" && !(action.title as string | undefined)?.trim()) {
+            return "Notification actions need a title."
+        }
+        if (action.action_type === "add_note" && !(action.content as string | undefined)?.trim()) {
+            return "Note actions need content."
+        }
+        return null
+    }
+
+    const getActionsValidationError = (): string | null => {
+        if (actions.length === 0) return "Add at least one action."
+        for (const action of actions) {
+            const error = getActionValidationError(action)
+            if (error) return error
+        }
+        return null
+    }
+
+    const getWorkflowValidationError = (): string | null => {
+        if (!workflowName.trim()) return "Workflow name is required."
+        if (!triggerType) return "Trigger type is required."
+        return getActionsValidationError()
+    }
+
+    const getStepValidationError = (step: number): string | null => {
+        if (step === 1) {
+            if (!workflowName.trim()) return "Workflow name is required."
+            if (!triggerType) return "Trigger type is required."
+        }
+        if (step === 3) {
+            return getActionsValidationError()
+        }
+        return null
+    }
+
     const handleToggle = (id: string) => {
         toggleWorkflow.mutate(id)
     }
@@ -190,22 +236,35 @@ export default function AutomationPage() {
         )
     }
 
-    const resetWizard = () => {
+    const resetWorkflowForm = () => {
         setWizardStep(1)
         setWorkflowName("")
         setWorkflowDescription("")
         setTriggerType("")
         setTriggerConfig({})
         setConditions([])
+        setConditionLogic("AND")
         setActions([])
+        setHydratedWorkflowId(null)
+        setValidationError(null)
+    }
+
+    const resetWizard = () => {
+        resetWorkflowForm()
         setShowCreateModal(false)
         setEditingWorkflowId(null)
     }
 
+    const handleCreate = () => {
+        resetWorkflowForm()
+        setEditingWorkflowId(null)
+        setShowCreateModal(true)
+    }
+
     const handleEdit = async (workflowId: string) => {
+        resetWorkflowForm()
         setEditingWorkflowId(workflowId)
         setShowCreateModal(true)
-        setWizardStep(1)
         // The full workflow data will be fetched by useWorkflow hook
     }
 
@@ -214,7 +273,7 @@ export default function AutomationPage() {
 
     useEffect(() => {
         if (!editingWorkflow || !editingWorkflowId || !showCreateModal) return
-        if (workflowName !== "") return
+        if (hydratedWorkflowId === editingWorkflowId) return
         setWorkflowName(editingWorkflow.name)
         setWorkflowDescription(editingWorkflow.description || "")
         setTriggerType(editingWorkflow.trigger_type)
@@ -222,10 +281,26 @@ export default function AutomationPage() {
         setConditions(editingWorkflow.conditions || [])
         setConditionLogic((editingWorkflow.condition_logic || "AND") as "AND" | "OR")
         setActions(editingWorkflow.actions || [])
-    }, [editingWorkflow, editingWorkflowId, showCreateModal, workflowName])
+        setHydratedWorkflowId(editingWorkflowId)
+    }, [editingWorkflow, editingWorkflowId, hydratedWorkflowId, showCreateModal])
+
+    const handleNextStep = () => {
+        const error = getStepValidationError(wizardStep)
+        if (error) {
+            setValidationError(error)
+            return
+        }
+        setValidationError(null)
+        setWizardStep(wizardStep + 1)
+    }
 
     const handleSaveWorkflow = () => {
-        if (!workflowName || !triggerType || actions.length === 0) return
+        const error = getWorkflowValidationError()
+        if (error) {
+            setValidationError(error)
+            return
+        }
+        setValidationError(null)
 
         const data: WorkflowCreate = {
             name: workflowName,
@@ -307,6 +382,8 @@ export default function AutomationPage() {
         }
     }
 
+    const workflowValidationError = getWorkflowValidationError()
+
     return (
         <div className="flex min-h-screen flex-col">
             {/* Page Header */}
@@ -316,11 +393,11 @@ export default function AutomationPage() {
                     <div className="flex gap-3">
                         {activeTab === "workflows" && (
                             <>
-                                <Button variant="outline" onClick={() => setShowHistoryPanel(true)}>
+                                <Button variant="outline" onClick={() => router.push("/automation/executions")}>
                                     <ActivityIcon className="mr-2 size-4" />
                                     Execution History
                                 </Button>
-                                <Button onClick={() => setShowCreateModal(true)}>
+                                <Button onClick={handleCreate}>
                                     <PlusIcon className="mr-2 size-4" />
                                     Create Workflow
                                 </Button>
@@ -410,7 +487,7 @@ export default function AutomationPage() {
                                     <p className="mt-1 text-sm text-muted-foreground">
                                         Create your first workflow to automate repetitive tasks
                                     </p>
-                                    <Button className="mt-4" onClick={() => setShowCreateModal(true)}>
+                                    <Button className="mt-4" onClick={handleCreate}>
                                         <PlusIcon className="mr-2 size-4" />
                                         Create Workflow
                                     </Button>
@@ -743,7 +820,7 @@ export default function AutomationPage() {
                                         </div>
                                     </div>
                                 </div>
-                                {workflowName && triggerType && actions.length > 0 ? (
+                                {!workflowValidationError ? (
                                     <div className="flex items-center gap-2 rounded-lg border border-teal-500/20 bg-teal-500/5 p-3 text-sm">
                                         <CheckCircle2Icon className="size-4 text-teal-500" />
                                         <span>Ready to activate workflow</span>
@@ -758,14 +835,26 @@ export default function AutomationPage() {
                         )}
                     </div>
 
+                    {validationError && (
+                        <div className="mt-4 flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm">
+                            <AlertCircleIcon className="size-4 text-destructive" />
+                            <span>{validationError}</span>
+                        </div>
+                    )}
                     <DialogFooter>
                         {wizardStep > 1 && (
-                            <Button variant="outline" onClick={() => setWizardStep(wizardStep - 1)}>
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    setValidationError(null)
+                                    setWizardStep(wizardStep - 1)
+                                }}
+                            >
                                 Back
                             </Button>
                         )}
                         {wizardStep < 4 ? (
-                            <Button onClick={() => setWizardStep(wizardStep + 1)}>
+                            <Button onClick={handleNextStep}>
                                 Next
                                 <ChevronRightIcon className="ml-1 size-4" />
                             </Button>
@@ -773,7 +862,7 @@ export default function AutomationPage() {
                             <Button
                                 onClick={handleSaveWorkflow}
                                 className="bg-teal-500 hover:bg-teal-600"
-                                disabled={!workflowName || !triggerType || actions.length === 0 || createWorkflow.isPending || updateWorkflow.isPending}
+                                disabled={!!workflowValidationError || createWorkflow.isPending || updateWorkflow.isPending}
                             >
                                 {(createWorkflow.isPending || updateWorkflow.isPending) ? (
                                     <LoaderIcon className="mr-2 size-4 animate-spin" />

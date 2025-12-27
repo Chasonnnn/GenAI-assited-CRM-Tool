@@ -14,6 +14,7 @@ interface FunnelStage {
 interface FunnelChartProps {
     data: FunnelStage[] | undefined
     isLoading?: boolean
+    isError?: boolean
     title?: string
 }
 
@@ -29,6 +30,7 @@ const stageColors = [
 export function FunnelChart({
     data,
     isLoading = false,
+    isError = false,
     title = "Conversion Funnel",
 }: FunnelChartProps) {
     const maxCount = useMemo(() => {
@@ -45,6 +47,21 @@ export function FunnelChart({
                 <CardContent>
                     <div className="flex h-[300px] items-center justify-center">
                         <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                    </div>
+                </CardContent>
+            </Card>
+        )
+    }
+
+    if (isError) {
+        return (
+            <Card>
+                <CardHeader>
+                    <CardTitle>{title}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex h-[300px] items-center justify-center text-destructive">
+                        Unable to load funnel data
                     </div>
                 </CardContent>
             </Card>

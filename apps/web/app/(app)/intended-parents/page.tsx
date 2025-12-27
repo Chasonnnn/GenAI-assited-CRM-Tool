@@ -39,6 +39,7 @@ import {
     UsersIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
+    AlertCircleIcon,
 } from "lucide-react"
 import { SortableTableHead } from "@/components/ui/sortable-table-head"
 import {
@@ -170,7 +171,7 @@ export default function IntendedParentsPage() {
         sort_order: sortOrder,
         ...getDateRangeParams(),
     }
-    const { data, isLoading } = useIntendedParents(filters)
+    const { data, isLoading, isError } = useIntendedParents(filters)
     const { data: stats } = useIntendedParentStats()
     const createMutation = useCreateIntendedParent()
 
@@ -312,6 +313,12 @@ export default function IntendedParentsPage() {
                             <div className="flex items-center justify-center py-12">
                                 <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
                                 <span className="ml-2 text-muted-foreground">Loading...</span>
+                            </div>
+                        ) : isError ? (
+                            <div className="flex flex-col items-center justify-center py-12 text-center">
+                                <AlertCircleIcon className="size-12 text-destructive mb-4" />
+                                <h3 className="text-lg font-medium">Failed to load intended parents</h3>
+                                <p className="text-muted-foreground">Please try again or contact support if the issue persists.</p>
                             </div>
                         ) : !data?.items.length ? (
                             <div className="flex flex-col items-center justify-center py-12 text-center">

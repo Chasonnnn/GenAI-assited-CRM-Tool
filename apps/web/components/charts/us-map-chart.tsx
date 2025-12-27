@@ -47,12 +47,14 @@ interface StateCount {
 interface USMapChartProps {
     data: StateCount[] | undefined
     isLoading?: boolean
+    isError?: boolean
     title?: string
 }
 
 export function USMapChart({
     data,
     isLoading = false,
+    isError = false,
     title = "Cases by State",
 }: USMapChartProps) {
     // Create a lookup map for quick access
@@ -90,6 +92,21 @@ export function USMapChart({
                 <CardContent>
                     <div className="flex h-[300px] items-center justify-center">
                         <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                    </div>
+                </CardContent>
+            </Card>
+        )
+    }
+
+    if (isError) {
+        return (
+            <Card>
+                <CardHeader>
+                    <CardTitle>{title}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex h-[300px] items-center justify-center text-destructive">
+                        Unable to load geographic data
                     </div>
                 </CardContent>
             </Card>

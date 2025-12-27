@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import MatchDetailPage from '../app/(app)/intended-parents/matches/[id]/page'
 
@@ -217,6 +217,12 @@ describe('MatchDetailPage', () => {
         })
         render(<MatchDetailPage />)
         expect(screen.getByText('Match not found')).toBeInTheDocument()
+    })
+
+    it('shows upload button in files tab', () => {
+        render(<MatchDetailPage />)
+        fireEvent.click(screen.getByRole('button', { name: /files/i }))
+        expect(screen.getByRole('button', { name: /upload file/i })).toBeInTheDocument()
     })
 
     it('displays surrogate name when loaded', () => {

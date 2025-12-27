@@ -7,6 +7,11 @@ vi.mock('next/navigation', () => ({
     useSearchParams: () => ({
         get: vi.fn(() => null),
     }),
+    useRouter: () => ({
+        push: vi.fn(),
+        replace: vi.fn(),
+        back: vi.fn(),
+    }),
 }))
 
 vi.mock('@/lib/hooks/use-email-templates', () => ({

@@ -63,7 +63,7 @@ function MatchRow({ match }: { match: MatchListItem }) {
             </TableCell>
             <TableCell className="text-right">
                 <Link
-                    href={`/matches/${match.id}`}
+                    href={`/intended-parents/matches/${match.id}`}
                     className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent hover:text-accent-foreground"
                 >
                     <ArrowRightIcon className="size-4" />

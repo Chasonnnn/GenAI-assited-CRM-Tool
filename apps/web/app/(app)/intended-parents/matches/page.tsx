@@ -64,7 +64,7 @@ export default function MatchesPage() {
         page,
         per_page: 20,
     }
-    const { data, isLoading } = useMatches(filters)
+    const { data, isLoading, isError } = useMatches(filters)
     const { data: stats } = useMatchStats()
 
     const formatDate = (dateStr: string) => {
@@ -156,6 +156,14 @@ export default function MatchesPage() {
                             <div className="flex items-center justify-center py-12">
                                 <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
                                 <span className="ml-2 text-muted-foreground">Loading...</span>
+                            </div>
+                        ) : isError ? (
+                            <div className="flex flex-col items-center justify-center py-12 text-center">
+                                <HeartHandshakeIcon className="size-12 text-muted-foreground mb-4" />
+                                <h3 className="text-lg font-medium">Unable to load matches</h3>
+                                <p className="text-muted-foreground">
+                                    Please try again in a moment.
+                                </p>
                             </div>
                         ) : !data?.items.length ? (
                             <div className="flex flex-col items-center justify-center py-12 text-center">

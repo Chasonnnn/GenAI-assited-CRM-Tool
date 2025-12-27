@@ -2,9 +2,8 @@
 
 import { useState, useMemo } from "react"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ChevronDownIcon, TrendingUpIcon, TrendingDownIcon, SparklesIcon, UsersIcon, CheckCircle2Icon, Loader2Icon, AlertCircleIcon, FacebookIcon, DollarSignIcon } from "lucide-react"
+import { TrendingUpIcon, TrendingDownIcon, SparklesIcon, UsersIcon, CheckCircle2Icon, Loader2Icon, AlertCircleIcon, FacebookIcon, DollarSignIcon } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Line, LineChart, Pie, PieChart } from "recharts"
 import {
     ChartContainer,
@@ -20,6 +19,7 @@ import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-rang
 import { useAuth } from "@/lib/auth-context"
 import { useSetAIContext } from "@/lib/context/ai-context"
 import { useAIUsageSummary } from "@/lib/hooks/use-ai"
+import { toast } from "sonner"
 
 // Chart configs
 const casesOverviewConfig = {
@@ -46,10 +46,14 @@ const chartColors = [
 
 // AI Usage Stats sub-component
 function AIUsageStats() {
-    const { data: usage, isLoading } = useAIUsageSummary(30)
+    const { data: usage, isLoading, isError } = useAIUsageSummary(30)
 
     if (isLoading) {
         return <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+    }
+
+    if (isError) {
+        return <p className="text-xs text-destructive">Unable to load AI usage</p>
     }
 
     if (!usage || usage.total_requests === 0) {
@@ -78,6 +82,13 @@ function AIUsageStats() {
     )
 }
 
+const formatLocalDate = (date: Date) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, "0")
+    const day = String(date.getDate()).padStart(2, "0")
+    return `${year}-${month}-${day}`
+}
+
 export default function ReportsPage() {
     const { user } = useAuth()
     const aiEnabled = user?.ai_enabled ?? false
@@ -102,47 +113,47 @@ export default function ReportsPage() {
                 return { fromDate: undefined, toDate: undefined }
             case 'today':
                 return {
-                    fromDate: now.toISOString().split('T')[0],
-                    toDate: now.toISOString().split('T')[0],
+                    fromDate: formatLocalDate(now),
+                    toDate: formatLocalDate(now),
                 }
             case 'week':
                 return {
-                    fromDate: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                    toDate: now.toISOString().split('T')[0],
+                    fromDate: formatLocalDate(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)),
+                    toDate: formatLocalDate(now),
                 }
             case 'custom':
                 if (customRange.from && customRange.to) {
                     return {
-                        fromDate: customRange.from.toISOString().split('T')[0],
-                        toDate: customRange.to.toISOString().split('T')[0],
+                        fromDate: formatLocalDate(customRange.from),
+                        toDate: formatLocalDate(customRange.to),
                     }
                 }
                 return { fromDate: undefined, toDate: undefined }
             case 'month':
             default:
                 return {
-                    fromDate: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                    toDate: now.toISOString().split('T')[0],
+                    fromDate: formatLocalDate(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)),
+                    toDate: formatLocalDate(now),
                 }
         }
     }, [dateRange, customRange])
 
     // Fetch data
-    const { data: summary, isLoading: summaryLoading } = useAnalyticsSummary({ from_date: fromDate, to_date: toDate })
-    const { data: byStatus, isLoading: byStatusLoading } = useCasesByStatus()
-    const { data: byAssignee, isLoading: byAssigneeLoading } = useCasesByAssignee()
-    const { data: trend, isLoading: trendLoading } = useCasesTrend({ from_date: fromDate, to_date: toDate })
-    const { data: metaPerf, isLoading: metaLoading } = useMetaPerformance({ from_date: fromDate, to_date: toDate })
-    const { data: metaSpend, isLoading: spendLoading } = useMetaSpend({ from_date: fromDate, to_date: toDate })
+    const { data: summary, isLoading: summaryLoading, isError: summaryError } = useAnalyticsSummary({ from_date: fromDate, to_date: toDate })
+    const { data: byStatus, isLoading: byStatusLoading, isError: byStatusError } = useCasesByStatus()
+    const { data: byAssignee, isLoading: byAssigneeLoading, isError: byAssigneeError } = useCasesByAssignee()
+    const { data: trend, isLoading: trendLoading, isError: trendError } = useCasesTrend({ from_date: fromDate, to_date: toDate })
+    const { data: metaPerf, isLoading: metaLoading, isError: metaError } = useMetaPerformance({ from_date: fromDate, to_date: toDate })
+    const { data: metaSpend, isLoading: spendLoading, isError: spendError } = useMetaSpend({ from_date: fromDate, to_date: toDate })
 
     // New hooks for funnel and map
-    const { data: campaigns } = useCampaigns()
-    const { data: funnel, isLoading: funnelLoading } = useFunnelCompare({
+    const { data: campaigns, isLoading: campaignsLoading, isError: campaignsError } = useCampaigns()
+    const { data: funnel, isLoading: funnelLoading, isError: funnelError } = useFunnelCompare({
         from_date: fromDate,
         to_date: toDate,
         ad_id: selectedCampaign || undefined
     })
-    const { data: byState, isLoading: byStateLoading } = useCasesByStateCompare({
+    const { data: byState, isLoading: byStateLoading, isError: byStateError } = useCasesByStateCompare({
         from_date: fromDate,
         to_date: toDate,
         ad_id: selectedCampaign || undefined
@@ -193,6 +204,14 @@ export default function ReportsPage() {
         return trendChartData.reduce((sum, d) => sum + d.count, 0)
     }, [trendChartData])
 
+    const campaignLabelById = useMemo(() => {
+        const map = new Map<string, string>()
+        campaigns?.forEach((campaign) => {
+            map.set(campaign.ad_id, `${campaign.ad_name} (${campaign.lead_count})`)
+        })
+        return map
+    }, [campaigns])
+
     const handleExportPDF = async () => {
         setIsExporting(true)
         try {
@@ -230,6 +249,9 @@ export default function ReportsPage() {
             URL.revokeObjectURL(blobUrl)
         } catch (error) {
             console.error("Failed to export PDF:", error)
+            toast.error("Export failed", {
+                description: error instanceof Error ? error.message : "Unable to export report.",
+            })
         } finally {
             setIsExporting(false)
         }
@@ -250,10 +272,25 @@ export default function ReportsPage() {
                         />
                         <Select value={selectedCampaign} onValueChange={(v) => setSelectedCampaign(v || '')}>
                             <SelectTrigger className="w-48">
-                                <SelectValue placeholder="All" />
+                                <SelectValue placeholder="All">
+                                    {(value) => {
+                                        if (!value) return "All"
+                                        return campaignLabelById.get(value) ?? "Unknown campaign"
+                                    }}
+                                </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="">All</SelectItem>
+                                {campaignsLoading && (
+                                    <SelectItem value="__loading__" disabled>
+                                        Loading campaigns...
+                                    </SelectItem>
+                                )}
+                                {campaignsError && (
+                                    <SelectItem value="__error__" disabled>
+                                        Unable to load campaigns
+                                    </SelectItem>
+                                )}
                                 {campaigns?.map(c => (
                                     <SelectItem key={c.ad_id} value={c.ad_id}>
                                         {c.ad_name} ({c.lead_count})
@@ -291,6 +328,11 @@ export default function ReportsPage() {
                         <CardContent>
                             {summaryLoading ? (
                                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                            ) : summaryError ? (
+                                <div className="flex items-center text-xs text-destructive">
+                                    <AlertCircleIcon className="mr-1 size-4" />
+                                    Unable to load
+                                </div>
                             ) : (
                                 <>
                                     <div className="text-2xl font-bold">{summary?.total_cases ?? 0}</div>
@@ -308,6 +350,11 @@ export default function ReportsPage() {
                         <CardContent>
                             {summaryLoading ? (
                                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                            ) : summaryError ? (
+                                <div className="flex items-center text-xs text-destructive">
+                                    <AlertCircleIcon className="mr-1 size-4" />
+                                    Unable to load
+                                </div>
                             ) : (
                                 <>
                                     <div className="text-2xl font-bold">{summary?.new_this_period ?? 0}</div>
@@ -325,6 +372,11 @@ export default function ReportsPage() {
                         <CardContent>
                             {summaryLoading ? (
                                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                            ) : summaryError ? (
+                                <div className="flex items-center text-xs text-destructive">
+                                    <AlertCircleIcon className="mr-1 size-4" />
+                                    Unable to load
+                                </div>
                             ) : (
                                 <>
                                     <div className="text-2xl font-bold">{summary?.qualified_rate ?? 0}%</div>
@@ -342,6 +394,11 @@ export default function ReportsPage() {
                         <CardContent>
                             {metaLoading ? (
                                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                            ) : metaError ? (
+                                <div className="flex items-center text-xs text-destructive">
+                                    <AlertCircleIcon className="mr-1 size-4" />
+                                    Unable to load
+                                </div>
                             ) : (
                                 <div className="space-y-1">
                                     <div className="flex items-center justify-between">
@@ -368,6 +425,11 @@ export default function ReportsPage() {
                         <CardContent>
                             {spendLoading ? (
                                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                            ) : spendError ? (
+                                <div className="flex items-center text-xs text-destructive">
+                                    <AlertCircleIcon className="mr-1 size-4" />
+                                    Unable to load
+                                </div>
                             ) : (
                                 <>
                                     <div className="text-2xl font-bold">
@@ -407,6 +469,10 @@ export default function ReportsPage() {
                                 <div className="flex h-[300px] items-center justify-center">
                                     <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
                                 </div>
+                            ) : byStatusError ? (
+                                <div className="flex h-[300px] items-center justify-center text-destructive">
+                                    <AlertCircleIcon className="mr-2 size-4" /> Unable to load data
+                                </div>
                             ) : statusChartData.length > 0 ? (
                                 <ChartContainer config={casesOverviewConfig} className="h-[300px] w-full">
                                     <BarChart data={statusChartData}>
@@ -426,10 +492,10 @@ export default function ReportsPage() {
                         <CardFooter className="flex-col items-start gap-2">
                             <div className="flex gap-2 leading-none font-medium">
                                 {aiEnabled && <SparklesIcon className="size-4 text-primary" />}
-                                {topStatus ? `${topStatus.status}: ${topStatus.count} cases` : 'No data yet'}
+                                {byStatusError ? 'Unable to load status data' : topStatus ? `${topStatus.status}: ${topStatus.count} cases` : 'No data yet'}
                             </div>
                             <div className="text-muted-foreground leading-none">
-                                {aiEnabled ? 'AI insight coming soon' : 'Current distribution by status'}
+                                {byStatusError ? 'Please try again later' : aiEnabled ? 'AI insight coming soon' : 'Current distribution by status'}
                             </div>
                         </CardFooter>
                     </Card>
@@ -443,6 +509,10 @@ export default function ReportsPage() {
                             {trendLoading ? (
                                 <div className="flex h-[300px] items-center justify-center">
                                     <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                                </div>
+                            ) : trendError ? (
+                                <div className="flex h-[300px] items-center justify-center text-destructive">
+                                    <AlertCircleIcon className="mr-2 size-4" /> Unable to load data
                                 </div>
                             ) : trendChartData.length > 0 ? (
                                 <ChartContainer config={monthlyTrendsConfig} className="h-[300px] w-full">
@@ -469,7 +539,9 @@ export default function ReportsPage() {
                         <CardFooter className="flex-col items-start gap-2">
                             <div className="flex gap-2 leading-none font-medium">
                                 {aiEnabled && <SparklesIcon className="size-4 text-primary" />}
-                                {computeTrendPercentage !== null ? (
+                                {trendError ? (
+                                    'Unable to load trend data'
+                                ) : computeTrendPercentage !== null ? (
                                     <>
                                         {computeTrendPercentage >= 0 ? 'Trending up' : 'Trending down'} by {Math.abs(computeTrendPercentage)}%
                                         {computeTrendPercentage >= 0 ? <TrendingUpIcon className="size-4" /> : <TrendingDownIcon className="size-4" />}
@@ -479,7 +551,7 @@ export default function ReportsPage() {
                                 )}
                             </div>
                             <div className="text-muted-foreground leading-none">
-                                {aiEnabled ? 'AI insight coming soon' : `${trendChartData.length} data points`}
+                                {trendError ? 'Please try again later' : aiEnabled ? 'AI insight coming soon' : `${trendChartData.length} data points`}
                             </div>
                         </CardFooter>
                     </Card>
@@ -493,6 +565,10 @@ export default function ReportsPage() {
                             {byAssigneeLoading ? (
                                 <div className="flex h-[300px] items-center justify-center">
                                     <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                                </div>
+                            ) : byAssigneeError ? (
+                                <div className="flex h-[300px] items-center justify-center text-destructive">
+                                    <AlertCircleIcon className="mr-2 size-4" /> Unable to load data
                                 </div>
                             ) : assigneeChartData.length > 0 ? (
                                 <ChartContainer config={casesByAssigneeConfig} className="h-[300px] w-full">
@@ -513,11 +589,11 @@ export default function ReportsPage() {
                         <CardFooter className="flex-col items-start gap-2">
                             <div className="flex gap-2 leading-none font-medium">
                                 {aiEnabled && <SparklesIcon className="size-4 text-primary" />}
-                                {topPerformer ? `Top: ${topPerformer.member} (${topPerformer.count} cases)` : 'No assignments yet'}
-                                {topPerformer && <TrendingUpIcon className="size-4" />}
+                                {byAssigneeError ? 'Unable to load team data' : topPerformer ? `Top: ${topPerformer.member} (${topPerformer.count} cases)` : 'No assignments yet'}
+                                {!byAssigneeError && topPerformer && <TrendingUpIcon className="size-4" />}
                             </div>
                             <div className="text-muted-foreground leading-none">
-                                {aiEnabled ? 'AI insight coming soon' : `${assigneeChartData.length} team members`}
+                                {byAssigneeError ? 'Please try again later' : aiEnabled ? 'AI insight coming soon' : `${assigneeChartData.length} team members`}
                             </div>
                         </CardFooter>
                     </Card>
@@ -534,6 +610,10 @@ export default function ReportsPage() {
                             {metaLoading ? (
                                 <div className="flex h-[300px] items-center justify-center">
                                     <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                                </div>
+                            ) : metaError ? (
+                                <div className="flex h-[300px] items-center justify-center text-destructive">
+                                    <AlertCircleIcon className="mr-2 size-4" /> Unable to load data
                                 </div>
                             ) : (
                                 <ChartContainer config={{
@@ -576,13 +656,13 @@ export default function ReportsPage() {
                         </CardContent>
                         <CardFooter className="flex-col items-start gap-2">
                             <div className="flex gap-2 leading-none font-medium">
-                                {metaPerf?.avg_time_to_convert_hours
+                                {metaError ? 'Unable to load performance data' : metaPerf?.avg_time_to_convert_hours
                                     ? `Avg ${Math.round(metaPerf.avg_time_to_convert_hours / 24)} days to convert`
                                     : 'No conversion data yet'
                                 }
                             </div>
                             <div className="text-muted-foreground leading-none">
-                                {metaPerf?.leads_received ?? 0} leads received • {metaPerf?.conversion_rate ?? 0}% conversion rate
+                                {metaError ? 'Please try again later' : `${metaPerf?.leads_received ?? 0} leads received • ${metaPerf?.conversion_rate ?? 0}% conversion rate`}
                             </div>
                         </CardFooter>
                     </Card>
@@ -593,11 +673,13 @@ export default function ReportsPage() {
                     <FunnelChart
                         data={funnel}
                         isLoading={funnelLoading}
+                        isError={funnelError}
                         title="Conversion Funnel"
                     />
                     <USMapChart
                         data={byState}
                         isLoading={byStateLoading}
+                        isError={byStateError}
                         title="Cases by State"
                     />
                 </div>

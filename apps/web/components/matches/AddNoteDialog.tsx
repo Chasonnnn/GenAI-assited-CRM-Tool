@@ -55,8 +55,16 @@ export function AddNoteDialog({
         onOpenChange(false)
     }
 
+    const handleOpenChange = (isOpen: boolean) => {
+        if (!isOpen) {
+            setContent("")
+            setTarget("case")
+        }
+        onOpenChange(isOpen)
+    }
+
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
                     <DialogTitle>Add Note</DialogTitle>
