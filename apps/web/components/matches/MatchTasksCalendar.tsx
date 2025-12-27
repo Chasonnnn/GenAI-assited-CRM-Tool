@@ -429,11 +429,14 @@ export function MatchTasksCalendar({ caseId, ipId, onAddTask }: MatchTasksCalend
     })
 
     // Fetch tasks for IP (now supported via intended_parent_id filter)
-    const { data: ipTasks, isLoading: loadingIP } = useTasks({
-        intended_parent_id: ipId || undefined,
-        is_completed: false,
-        per_page: 100,
-    })
+    const { data: ipTasks, isLoading: loadingIP } = useTasks(
+        {
+            intended_parent_id: ipId || undefined,
+            is_completed: false,
+            per_page: 100,
+        },
+        { enabled: !!ipId }
+    )
 
     // Fetch appointments for the calendar window (scoped to this match)
     const { data: appointmentsData, isLoading: loadingAppointments } = useAppointments({

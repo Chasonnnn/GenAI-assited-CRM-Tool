@@ -55,10 +55,48 @@ All notable changes to this project will be documented in this file.
   - Match notes explicitly sanitized in create/accept/reject/update
 
 ### Test Coverage
-- **Frontend**: 79 tests passing (Base UI warnings eliminated)
-- **Backend**: 241 tests passing (including 18 MFA tests)
+- **Frontend**: 80 tests passing
+- **Backend**: 241 tests passing (0 warnings)
 
 ---
+
+## [2025-12-27] (Late Night)
+
+### Added
+- **Workflow Editor Validation**
+  - Validates required fields before wizard step advancement
+  - Checks trigger type, action types, email templates, task titles
+  - Resets/hydrates state per edit session
+  
+- **Reports/Analytics Improvements**
+  - Local date formatting for filters
+  - Error states for funnel chart, map chart, and PDF export
+  - Tooltip now renders zero values correctly
+  - Campaign filter shows clearer labeling
+
+### Fixed
+- **Match Detail Improvements**
+  - Notes use `updated_at` for accurate timestamp ordering
+  - Files tab has "Upload File" action button
+  - Add Note / Reject Match dialogs reset state on close (overlay/ESC)
+  - Prevent IP task queries when ipId is missing
+  - Local date parsing for DOB/due dates
+  
+- **Execution History**
+  - Button now routes to `/automation/executions` global page
+  - Pagination resets on filter changes
+  
+- **Email Templates**
+  - DOMPurify sanitization for template/signature previews
+  
+- **Legacy Route Cleanup**
+  - Removed `/matches/[id]` in favor of `/intended-parents/matches/[id]`
+  
+- **Intended Parents List**
+  - Added `isError` handling with proper error UI
+  
+- **SQLAlchemy Test Warning**
+  - Fixed "transaction already deassociated" warning in conftest.py
 
 ## [2025-12-26]
 

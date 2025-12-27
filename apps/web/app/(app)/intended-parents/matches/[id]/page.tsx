@@ -40,6 +40,7 @@ import {
     TrashIcon,
     DownloadIcon,
     CalendarPlusIcon,
+    UploadIcon,
 } from "lucide-react"
 import { useMatch, matchKeys, useAcceptMatch, useRejectMatch } from "@/lib/hooks/use-matches"
 import { MatchTasksCalendar } from "@/components/matches/MatchTasksCalendar"
@@ -220,7 +221,12 @@ export default function MatchDetailPage() {
         }
         // Match notes (single field)
         if (match?.notes) {
-            notes.push({ id: 'match-notes', content: match.notes, created_at: match.created_at, source: 'match' })
+            notes.push({
+                id: 'match-notes',
+                content: match.notes,
+                created_at: match.updated_at || match.created_at,
+                source: 'match',
+            })
         }
         // Sort by created_at descending
         notes.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -342,9 +348,18 @@ export default function MatchDetailPage() {
     // Check if user can change case status (case_manager+)
     const canChangeStatus = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
 
+    const parseDate = (dateStr: string) => {
+        if (dateStr.includes("T")) {
+            return new Date(dateStr)
+        }
+        return new Date(`${dateStr}T00:00:00`)
+    }
+
     const formatDate = (dateStr: string | null | undefined) => {
         if (!dateStr) return "—"
-        return new Date(dateStr).toLocaleDateString("en-US", {
+        const parsed = parseDate(dateStr)
+        if (Number.isNaN(parsed.getTime())) return "—"
+        return parsed.toLocaleDateString("en-US", {
             month: "short",
             day: "numeric",
             year: "numeric",
@@ -352,7 +367,9 @@ export default function MatchDetailPage() {
     }
 
     const formatDateTime = (dateStr: string) => {
-        return new Date(dateStr).toLocaleDateString("en-US", {
+        const parsed = new Date(dateStr)
+        if (Number.isNaN(parsed.getTime())) return "—"
+        return parsed.toLocaleDateString("en-US", {
             month: "short",
             day: "numeric",
             year: "numeric",
@@ -862,6 +879,15 @@ export default function MatchDetailPage() {
 
                                         {activeTab === "files" && (
                                             <div className="space-y-2">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="w-full h-8 text-xs mb-3"
+                                                    onClick={() => setUploadFileDialogOpen(true)}
+                                                >
+                                                    <UploadIcon className="size-3.5 mr-1.5" />
+                                                    Upload File
+                                                </Button>
                                                 {filteredFiles.length > 0 ? (
                                                     filteredFiles.map((file) => (
                                                         <div key={file.id} className="p-2 rounded bg-muted/30 flex items-center gap-2">

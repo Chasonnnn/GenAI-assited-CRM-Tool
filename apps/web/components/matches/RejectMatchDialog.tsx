@@ -36,13 +36,20 @@ export function RejectMatchDialog({
         onOpenChange(false)
     }
 
+    const handleOpenChange = (isOpen: boolean) => {
+        if (!isOpen) {
+            setReason("")
+        }
+        onOpenChange(isOpen)
+    }
+
     const handleCancel = () => {
         setReason("")
         onOpenChange(false)
     }
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
                     <DialogTitle>Reject Match</DialogTitle>

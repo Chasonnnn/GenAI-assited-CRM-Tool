@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -139,6 +139,10 @@ export default function WorkflowExecutionsPage() {
     const [workflowFilter, setWorkflowFilter] = useState("all")
     const [page, setPage] = useState(1)
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+
+    useEffect(() => {
+        setPage(1)
+    }, [statusFilter, workflowFilter])
 
     // Fetch data
     const { data: executionsData, isLoading: executionsLoading } = useQuery({
