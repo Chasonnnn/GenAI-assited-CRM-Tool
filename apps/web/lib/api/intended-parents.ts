@@ -25,6 +25,8 @@ export interface IntendedParentFilters {
     q?: string
     owner_id?: string
     include_archived?: boolean
+    created_after?: string
+    created_before?: string
     page?: number
     per_page?: number
     sort_by?: string
@@ -46,6 +48,8 @@ export async function listIntendedParents(
     if (filters.q) params.set('q', filters.q)
     if (filters.owner_id) params.set('owner_id', filters.owner_id)
     if (filters.include_archived) params.set('include_archived', 'true')
+    if (filters.created_after) params.set('created_after', filters.created_after)
+    if (filters.created_before) params.set('created_before', filters.created_before)
     if (filters.page) params.set('page', String(filters.page))
     if (filters.per_page) params.set('per_page', String(filters.per_page))
     if (filters.sort_by) params.set('sort_by', filters.sort_by)
