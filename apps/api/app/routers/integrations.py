@@ -290,7 +290,18 @@ class GoogleCalendarEventRead(BaseModel):
     source: str = "google"
 
 
-@router.get("/google/calendar/events", response_model=list[GoogleCalendarEventRead])
+class GoogleCalendarEventsResponse(BaseModel):
+    """Calendar events response with connection state."""
+
+    connected: bool
+    events: list[GoogleCalendarEventRead]
+    error: str | None = None
+
+
+@router.get(
+    "/google/calendar/events",
+    response_model=GoogleCalendarEventsResponse,
+)
 async def get_google_calendar_events(
     date_start: str,  # ISO date (YYYY-MM-DD)
     date_end: str,  # ISO date (YYYY-MM-DD)
@@ -343,15 +354,14 @@ async def get_google_calendar_events(
     time_max = dt.combine(end_date.date(), tm(23, 59, 59, 999999), tzinfo=client_tz)
 
     # Fetch events - returns empty list if not connected
-    events = await calendar_service.get_user_calendar_events(
+    result = await calendar_service.get_user_calendar_events(
         db=db,
         user_id=session.user_id,
         time_min=time_min,
         time_max=time_max,
         calendar_id="primary",
     )
-
-    return [
+    events = [
         GoogleCalendarEventRead(
             id=e["id"],
             summary=e["summary"],
@@ -361,8 +371,14 @@ async def get_google_calendar_events(
             is_all_day=e["is_all_day"],
             source="google",
         )
-        for e in events
+        for e in result["events"]
     ]
+
+    return GoogleCalendarEventsResponse(
+        connected=result["connected"],
+        events=events,
+        error=result["error"],
+    )
 
 
 # ============================================================================

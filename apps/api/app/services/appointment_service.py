@@ -8,7 +8,9 @@ Handles:
 - Approval, reschedule, and cancellation workflows
 """
 
+import asyncio
 import hashlib
+import logging
 import secrets
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -33,6 +35,155 @@ from app.db.models import (
 )
 from app.schemas.appointment import AppointmentRead, AppointmentListItem
 from app.db.enums import AppointmentStatus, MeetingMode
+
+logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Async Helpers
+# =============================================================================
+
+
+def _run_async(coro):
+    """
+    Run an async coroutine from sync code.
+
+    Works whether called from sync or async context.
+    Returns None on failure (best-effort).
+    """
+    try:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop is not None:
+            # Already in async context - create a task and let it run
+            # Can't block here, so we run in a new thread
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                future = pool.submit(asyncio.run, coro)
+                return future.result(timeout=30)
+        else:
+            # Not in async context
+            return asyncio.run(coro)
+    except Exception as e:
+        logger.warning(f"Async operation failed: {e}")
+        return None
+
+
+def _sync_to_google_calendar(
+    db: "Session",
+    appointment: "Appointment",
+    action: str,  # "create", "update", "delete"
+) -> str | None:
+    """
+    Sync appointment to Google Calendar (best-effort).
+
+    Returns google_event_id on create/update success, None otherwise.
+    Does NOT raise exceptions - calendar sync failures are logged but don't block.
+    """
+    from app.services import calendar_service
+
+    user_id = appointment.user_id
+    client_tz = appointment.client_timezone or "UTC"
+
+    if action == "create":
+        # Build event summary and description
+        appt_type_name = "Appointment"
+        if appointment.appointment_type_id:
+            from app.db.models import AppointmentType
+
+            appt_type = (
+                db.query(AppointmentType)
+                .filter(AppointmentType.id == appointment.appointment_type_id)
+                .first()
+            )
+            if appt_type:
+                appt_type_name = appt_type.name
+
+        summary = f"{appt_type_name} with {appointment.client_name}"
+        description = (
+            f"Client: {appointment.client_name}\nEmail: {appointment.client_email}"
+        )
+        if appointment.client_phone:
+            description += f"\nPhone: {appointment.client_phone}"
+        if appointment.client_notes:
+            description += f"\n\nNotes: {appointment.client_notes}"
+
+        event = _run_async(
+            calendar_service.create_appointment_event(
+                db=db,
+                user_id=user_id,
+                appointment_summary=summary,
+                start_time=appointment.scheduled_start,
+                end_time=appointment.scheduled_end,
+                client_email=appointment.client_email,
+                description=description,
+                timezone_name=client_tz,
+            )
+        )
+
+        if event:
+            logger.info(
+                f"Created Google Calendar event {event['id']} for appointment {appointment.id}"
+            )
+            return event["id"]
+        else:
+            logger.warning(
+                f"Failed to create Google Calendar event for appointment {appointment.id}"
+            )
+            return None
+
+    elif action == "update":
+        if not appointment.google_event_id:
+            logger.debug(
+                f"No google_event_id for appointment {appointment.id}, skipping update"
+            )
+            return None
+
+        result = _run_async(
+            calendar_service.update_appointment_event(
+                db=db,
+                user_id=user_id,
+                event_id=appointment.google_event_id,
+                start_time=appointment.scheduled_start,
+                end_time=appointment.scheduled_end,
+            )
+        )
+
+        if result:
+            logger.info(f"Updated Google Calendar event {appointment.google_event_id}")
+            return appointment.google_event_id
+        else:
+            # Event may have been deleted in Google - clear the ID
+            logger.warning(
+                f"Failed to update Google Calendar event {appointment.google_event_id}, clearing"
+            )
+            return None
+
+    elif action == "delete":
+        if not appointment.google_event_id:
+            return None
+
+        success = _run_async(
+            calendar_service.delete_appointment_event(
+                db=db,
+                user_id=user_id,
+                event_id=appointment.google_event_id,
+            )
+        )
+
+        if success:
+            logger.info(f"Deleted Google Calendar event {appointment.google_event_id}")
+        else:
+            logger.warning(
+                f"Failed to delete Google Calendar event {appointment.google_event_id}"
+            )
+        return None
+
+    return None
 
 
 # =============================================================================
@@ -1111,6 +1262,13 @@ def approve_booking(
     db.commit()
     db.refresh(appointment)
 
+    # Sync to Google Calendar (best-effort, after commit)
+    google_event_id = _sync_to_google_calendar(db, appointment, "create")
+    if google_event_id:
+        appointment.google_event_id = google_event_id
+        db.commit()
+        db.refresh(appointment)
+
     # Notify staff about confirmed appointment
     from app.services import notification_service
 
@@ -1222,6 +1380,15 @@ def reschedule_booking(
     db.commit()
     db.refresh(appointment)
 
+    # Sync to Google Calendar (best-effort, after commit)
+    if appointment.google_event_id:
+        updated_event_id = _sync_to_google_calendar(db, appointment, "update")
+        if not updated_event_id:
+            # Event may have been deleted in Google - clear ID and optionally recreate
+            appointment.google_event_id = None
+            db.commit()
+            db.refresh(appointment)
+
     return appointment
 
 
@@ -1273,6 +1440,13 @@ def cancel_booking(
 
     db.commit()
     db.refresh(appointment)
+
+    # Delete from Google Calendar (best-effort, after commit)
+    if appointment.google_event_id:
+        _sync_to_google_calendar(db, appointment, "delete")
+        appointment.google_event_id = None
+        db.commit()
+        db.refresh(appointment)
 
     # Notify staff about cancelled appointment
     from app.services import notification_service

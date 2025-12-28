@@ -152,6 +152,28 @@ def get_access_token(
     return decrypt_token(integration.access_token_encrypted)
 
 
+async def get_access_token_async(
+    db: Session, user_id: uuid.UUID, integration_type: str
+) -> str | None:
+    """
+    Async version of get_access_token for already-async endpoints.
+
+    Avoids blocking the event loop when refreshing tokens.
+    """
+    integration = get_user_integration(db, user_id, integration_type)
+    if not integration:
+        return None
+
+    # Check if token is expired and needs refresh
+    if integration.token_expires_at and _is_expired(integration.token_expires_at):
+        if integration.refresh_token_encrypted:
+            refreshed = await refresh_token_async(db, integration, integration_type)
+            if not refreshed:
+                return None
+
+    return decrypt_token(integration.access_token_encrypted)
+
+
 # ============================================================================
 # Gmail OAuth
 # ============================================================================
@@ -313,6 +335,38 @@ async def refresh_zoom_token(refresh_token: str) -> dict[str, Any] | None:
         return None
 
 
+# =============================================================================
+# Audit Helpers
+# =============================================================================
+
+
+def _log_token_refresh(
+    db: Session, integration: UserIntegration, integration_type: str
+) -> None:
+    """Best-effort audit log for token refresh events."""
+    try:
+        from app.db.enums import AuditEventType
+        from app.services import audit_service, membership_service
+
+        membership = membership_service.get_membership_by_user_id(
+            db, integration.user_id
+        )
+        if not membership:
+            return
+
+        audit_service.log_event(
+            db=db,
+            org_id=membership.organization_id,
+            event_type=AuditEventType.INTEGRATION_TOKEN_REFRESHED,
+            actor_user_id=integration.user_id,
+            target_type="user_integration",
+            target_id=integration.id,
+            details={"integration_type": integration_type},
+        )
+    except Exception as exc:
+        logger.warning(f"Token refresh audit log failed: {exc}")
+
+
 # ============================================================================
 # Generic Refresh
 # ============================================================================
@@ -364,9 +418,45 @@ def refresh_token(
                 seconds=result["expires_in"]
             )
         integration.updated_at = _now_utc()
+        _log_token_refresh(db, integration, integration_type)
         db.commit()
-
         return True
     except Exception as e:
         logger.error(f"Token refresh failed for {integration_type}: {e}")
+        return False
+
+
+async def refresh_token_async(
+    db: Session, integration: UserIntegration, integration_type: str
+) -> bool:
+    """Async-safe token refresh for use in async endpoints."""
+    if not integration.refresh_token_encrypted:
+        return False
+
+    refresh = decrypt_token(integration.refresh_token_encrypted)
+
+    try:
+        if integration_type == "gmail":
+            result = await refresh_gmail_token(refresh)
+        elif integration_type == "zoom":
+            result = await refresh_zoom_token(refresh)
+        else:
+            return False
+
+        if not result:
+            return False
+
+        integration.access_token_encrypted = encrypt_token(result["access_token"])
+        if "refresh_token" in result:
+            integration.refresh_token_encrypted = encrypt_token(result["refresh_token"])
+        if "expires_in" in result:
+            integration.token_expires_at = _now_utc() + timedelta(
+                seconds=result["expires_in"]
+            )
+        integration.updated_at = _now_utc()
+        _log_token_refresh(db, integration, integration_type)
+        db.commit()
+        return True
+    except Exception as e:
+        logger.error(f"Async token refresh failed for {integration_type}: {e}")
         return False

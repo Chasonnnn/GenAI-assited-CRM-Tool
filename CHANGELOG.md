@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2025-12-27] (Evening)
+
+### Added
+- **Calendar Push (Two-way Sync Complete)** — Push appointments to Google Calendar
+  - Appointments are now created in Google Calendar when approved
+  - Reschedules update the Google Calendar event
+  - Cancellations delete the Google Calendar event
+  - Two-phase commit: appointment saved first, then best-effort sync
+  - Uses client timezone for event times (falls back to org/UTC)
+  - Handles missing/expired tokens gracefully (logs warning, continues)
+  - `calendar_service.py`: Added `timezone_name` parameter
+  - `appointment_service.py`: Added `_run_async()` helper, `_sync_to_google_calendar()` helper
+
+- **Advanced Search** — Full-text search across cases, notes, attachments, intended parents
+  - PostgreSQL tsvector columns with GIN indexes
+  - Auto-update triggers for insert/update
+  - HTML tag stripping for notes (via `regexp_replace`)
+  - Uses `simple` dictionary (no stemming) for names/emails
+  - Backfill for existing rows
+  - New files:
+    - `alembic/versions/5764ba19b573_add_fulltext_search.py`
+    - `services/search_service.py` — `global_search()` function
+    - `routers/search.py` — `GET /search` endpoint
+  - Features:
+    - Org-scoped results
+    - Permission-gated (notes require `view_case_notes`, IPs require `view_intended_parents`)
+    - Ranked by relevance
+    - Snippets via `ts_headline()` with highlights
+    - `websearch_to_tsquery()` with `plainto_tsquery()` fallback
+
 ## [2025-12-27] (Afternoon)
 
 ### Added

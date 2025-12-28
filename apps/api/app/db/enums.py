@@ -541,6 +541,8 @@ class AuditEventType(str, Enum):
     DATA_EXPORT_CASES = "data_export_cases"
     DATA_EXPORT_ANALYTICS = "data_export_analytics"
     DATA_EXPORT_CONFIG = "data_export_config"
+    DATA_VIEW_CASE = "data_view_case"
+    DATA_VIEW_NOTE = "data_view_note"
     DATA_IMPORT_STARTED = "data_import_started"
     DATA_IMPORT_COMPLETED = "data_import_completed"
 

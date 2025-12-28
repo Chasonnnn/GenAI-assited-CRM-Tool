@@ -3,7 +3,7 @@
 from decimal import Decimal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import (
@@ -14,7 +14,7 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
-from app.db.enums import Role, IntendedParentStatus, EntityType
+from app.db.enums import AuditEventType, Role, IntendedParentStatus, EntityType
 from app.schemas.intended_parent import (
     IntendedParentCreate,
     IntendedParentUpdate,
@@ -353,6 +353,7 @@ def get_status_history(
 @router.get("/{ip_id}/notes", response_model=list[EntityNoteListItem])
 def list_notes(
     ip_id: UUID,
+    request: Request,
     db: Session = Depends(get_db),
     session: dict = Depends(get_current_session),
 ):
@@ -361,9 +362,25 @@ def list_notes(
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
 
-    return note_service.list_notes(
+    notes = note_service.list_notes(
         db, session.org_id, EntityType.INTENDED_PARENT, ip_id
     )
+
+    from app.services import audit_service
+
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.DATA_VIEW_NOTE,
+        actor_user_id=session.user_id,
+        target_type="intended_parent",
+        target_id=ip_id,
+        details={"notes_count": len(notes)},
+        request=request,
+    )
+    db.commit()
+
+    return notes
 
 
 @router.post(

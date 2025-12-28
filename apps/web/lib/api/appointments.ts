@@ -437,11 +437,17 @@ export interface GoogleCalendarEvent {
     source: 'google';
 }
 
+export interface GoogleCalendarEventsResponse {
+    connected: boolean;
+    events: GoogleCalendarEvent[];
+    error: string | null;
+}
+
 export function getGoogleCalendarEvents(
     dateStart: string,
     dateEnd: string,
     timezone?: string
-): Promise<GoogleCalendarEvent[]> {
+): Promise<GoogleCalendarEventsResponse> {
     const params = new URLSearchParams({
         date_start: dateStart,
         date_end: dateEnd,
@@ -449,5 +455,5 @@ export function getGoogleCalendarEvents(
     if (timezone) {
         params.set('timezone', timezone)
     }
-    return api.get<GoogleCalendarEvent[]>(`/integrations/google/calendar/events?${params}`);
+    return api.get<GoogleCalendarEventsResponse>(`/integrations/google/calendar/events?${params}`);
 }
