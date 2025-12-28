@@ -21,7 +21,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import CITEXT, JSONB, UUID
+from sqlalchemy.dialects.postgresql import CITEXT, JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -582,6 +582,9 @@ class Case(Base):
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"), onupdate=text("now()"), nullable=False
     )
+
+    # Full-text search vector (managed by trigger)
+    search_vector = mapped_column(TSVECTOR, nullable=True)
 
     # Relationships
     organization: Mapped["Organization"] = relationship(back_populates="cases")
@@ -1158,6 +1161,9 @@ class IntendedParent(Base):
         server_default=text("now()"), onupdate=datetime.utcnow, nullable=False
     )
 
+    # Full-text search vector (managed by trigger)
+    search_vector = mapped_column(TSVECTOR, nullable=True)
+
     # Relationships
     organization: Mapped["Organization"] = relationship()
     status_history: Mapped[list["IntendedParentStatusHistory"]] = relationship(
@@ -1240,6 +1246,9 @@ class EntityNote(Base):
     created_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"), nullable=False
     )
+
+    # Full-text search vector (managed by trigger)
+    search_vector = mapped_column(TSVECTOR, nullable=True)
 
     author: Mapped["User"] = relationship()
 
@@ -3002,6 +3011,9 @@ class Attachment(Base):
     created_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"), nullable=False
     )
+
+    # Full-text search vector (managed by trigger)
+    search_vector = mapped_column(TSVECTOR, nullable=True)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
