@@ -5,16 +5,14 @@ Tests for AI workflow generation and action execution.
 import uuid
 
 
-from app.db.models import (
-    Case, EntityNote, Task, EmailTemplate,
-    PipelineStage
-)
-from app.services.ai_workflow_service import (
-    GeneratedWorkflow, validate_workflow
-)
+from app.db.models import Case, EntityNote, Task, EmailTemplate, PipelineStage
+from app.services.ai_workflow_service import GeneratedWorkflow, validate_workflow
 from app.services.ai_action_executor import (
-    AddNoteExecutor, CreateTaskExecutor, UpdateStatusExecutor,
-    get_executor, ACTION_PERMISSIONS
+    AddNoteExecutor,
+    CreateTaskExecutor,
+    UpdateStatusExecutor,
+    get_executor,
+    ACTION_PERMISSIONS,
 )
 
 
@@ -119,7 +117,9 @@ class TestWorkflowValidation:
         workflow = GeneratedWorkflow(
             name="Invalid Condition",
             trigger_type="case_created",
-            conditions=[{"field": "invalid_field", "operator": "equals", "value": "test"}],
+            conditions=[
+                {"field": "invalid_field", "operator": "equals", "value": "test"}
+            ],
             actions=[{"action_type": "add_note", "content": "test"}],
         )
         result = validate_workflow(db, test_org.id, workflow)
@@ -189,14 +189,18 @@ class TestAddNoteExecutor:
     def test_validate_with_content(self, db, test_user, test_org):
         """Should pass with content."""
         executor = AddNoteExecutor()
-        valid, error = executor.validate({"content": "test note"}, db, test_user.id, test_org.id)
+        valid, error = executor.validate(
+            {"content": "test note"}, db, test_user.id, test_org.id
+        )
         assert valid
         assert error is None
 
     def test_validate_accepts_body_alias(self, db, test_user, test_org):
         """Should accept 'body' as alias for content."""
         executor = AddNoteExecutor()
-        valid, error = executor.validate({"body": "test note"}, db, test_user.id, test_org.id)
+        valid, error = executor.validate(
+            {"body": "test note"}, db, test_user.id, test_org.id
+        )
         assert valid
 
     def test_execute_creates_note(self, db, test_user, test_org, default_stage):
@@ -218,14 +222,17 @@ class TestAddNoteExecutor:
 
         executor = AddNoteExecutor()
         result = executor.execute(
-            {"content": "AI generated note"},
-            db, test_user.id, test_org.id, case.id
+            {"content": "AI generated note"}, db, test_user.id, test_org.id, case.id
         )
 
         assert result["success"]
         assert "note_id" in result
 
-        note = db.query(EntityNote).filter(EntityNote.id == uuid.UUID(result["note_id"])).first()
+        note = (
+            db.query(EntityNote)
+            .filter(EntityNote.id == uuid.UUID(result["note_id"]))
+            .first()
+        )
         assert note is not None
         assert "AI generated note" in note.content
 
@@ -243,7 +250,9 @@ class TestCreateTaskExecutor:
     def test_validate_with_title(self, db, test_user, test_org):
         """Should pass with title."""
         executor = CreateTaskExecutor()
-        valid, error = executor.validate({"title": "Follow up"}, db, test_user.id, test_org.id)
+        valid, error = executor.validate(
+            {"title": "Follow up"}, db, test_user.id, test_org.id
+        )
         assert valid
 
     def test_execute_creates_task(self, db, test_user, test_org, default_stage):
@@ -266,7 +275,10 @@ class TestCreateTaskExecutor:
         executor = CreateTaskExecutor()
         result = executor.execute(
             {"title": "Follow up call", "description": "Call the client"},
-            db, test_user.id, test_org.id, case.id
+            db,
+            test_user.id,
+            test_org.id,
+            case.id,
         )
 
         assert result["success"]
@@ -292,8 +304,7 @@ class TestUpdateStatusExecutor:
         """Should pass with valid stage_id."""
         executor = UpdateStatusExecutor()
         valid, error = executor.validate(
-            {"stage_id": str(default_stage.id)},
-            db, test_user.id, test_org.id
+            {"stage_id": str(default_stage.id)}, db, test_user.id, test_org.id
         )
         assert valid
 
@@ -330,15 +341,16 @@ class TestUpdateStatusExecutor:
 
         executor = UpdateStatusExecutor()
         result = executor.execute(
-            {"stage_id": str(new_stage.id)},
-            db, test_user.id, test_org.id, case.id
+            {"stage_id": str(new_stage.id)}, db, test_user.id, test_org.id, case.id
         )
 
         assert result["success"], f"Expected success but got: {result}"
         assert result["new_stage_id"] == str(new_stage.id)
 
         # Check case in-memory before refresh
-        assert case.stage_id == new_stage.id, "In-memory stage_id mismatch. Case re-queried?"
+        assert case.stage_id == new_stage.id, (
+            "In-memory stage_id mismatch. Case re-queried?"
+        )
         assert case.status_label == "In Progress"
 
 

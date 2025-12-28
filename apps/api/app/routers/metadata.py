@@ -18,20 +18,24 @@ def list_case_statuses(
 ):
     """
     Get all case statuses with metadata.
-    
+
     Returns list of {value, label, stage} for populating dropdowns.
     """
     statuses = []
-    pipeline = pipeline_service.get_or_create_default_pipeline(db, session.org_id, session.user_id)
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db, session.org_id, session.user_id
+    )
     stages = pipeline_service.get_stages(db, pipeline.id, include_inactive=False)
     for stage in stages:
-        statuses.append({
-            "id": str(stage.id),
-            "value": stage.slug,
-            "label": stage.label,
-            "stage_type": stage.stage_type,
-        })
-    
+        statuses.append(
+            {
+                "id": str(stage.id),
+                "value": stage.slug,
+                "label": stage.label,
+                "stage_type": stage.stage_type,
+            }
+        )
+
     return {"statuses": statuses}
 
 
@@ -41,7 +45,7 @@ def list_case_sources(
 ):
     """
     Get all case sources.
-    
+
     Returns list of {value, label} for populating dropdowns.
     """
     sources = [
@@ -57,7 +61,7 @@ def list_task_types(
 ):
     """
     Get all task types.
-    
+
     Returns list of {value, label} for populating dropdowns.
     """
     task_types = [
@@ -73,7 +77,7 @@ def list_intended_parent_statuses(
 ):
     """
     Get all intended parent statuses.
-    
+
     Returns list of {value, label} for populating dropdowns.
     """
     statuses = []
@@ -81,12 +85,14 @@ def list_intended_parent_statuses(
         # Skip pseudo-statuses used for history only
         if status.value in ("archived", "restored"):
             continue
-        
-        statuses.append({
-            "value": status.value,
-            "label": status.value.replace("_", " ").title(),
-        })
-    
+
+        statuses.append(
+            {
+                "value": status.value,
+                "label": status.value.replace("_", " ").title(),
+            }
+        )
+
     return {"statuses": statuses}
 
 
@@ -96,7 +102,7 @@ def list_roles(
 ):
     """
     Get all user roles.
-    
+
     Returns list of {value, label} for populating dropdowns.
     """
     roles = [

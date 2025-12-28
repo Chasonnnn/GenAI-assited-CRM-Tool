@@ -33,37 +33,39 @@ def hash_email(email: str) -> str:
 def get_client_ip(request: Request | None) -> str | None:
     """
     Extract client IP from request.
-    
+
     Only trusts X-Forwarded-For when TRUST_PROXY_HEADERS=True (behind reverse proxy).
     In development/direct connections, uses request.client.host.
     """
     if not request:
         return None
-    
+
     # Only trust X-Forwarded-For when explicitly configured (behind nginx/Cloudflare)
     if settings.TRUST_PROXY_HEADERS:
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
             # X-Forwarded-For: client, proxy1, proxy2 - take first
             return forwarded.split(",")[0].strip()
-    
+
     # Direct connection or TRUST_PROXY_HEADERS=False
     if request.client:
         return request.client.host
-    
+
     return None
 
 
 def canonical_json(obj: dict | None) -> str:
     """
     Serialize object to canonical JSON for consistent hashing.
-    
+
     Uses sorted keys, compact separators, and str() for non-JSON types.
     This MUST be used consistently everywhere hashes are computed.
     """
     import json as json_module
-    return json_module.dumps(obj or {}, sort_keys=True, separators=(",", ":"), default=str)
 
+    return json_module.dumps(
+        obj or {}, sort_keys=True, separators=(",", ":"), default=str
+    )
 
 
 def get_user_agent(request: Request | None) -> str | None:
@@ -90,7 +92,7 @@ def log_event(
 ) -> AuditLog:
     """
     Log an audit event with hash chain.
-    
+
     Args:
         db: Database session
         org_id: Organization context
@@ -103,15 +105,15 @@ def log_event(
         request_id: Optional request ID for correlating related events
         before_version_id: EntityVersion ID before change (for config changes)
         after_version_id: EntityVersion ID after change (for config changes)
-    
+
     Returns:
         The created audit log entry with computed hash chain
     """
     from app.services import version_service
-    
+
     # Get previous hash for chain
     prev_hash = version_service.get_last_audit_hash(db, org_id)
-    
+
     entry = AuditLog(
         organization_id=org_id,
         actor_user_id=actor_user_id,
@@ -128,7 +130,7 @@ def log_event(
     )
     db.add(entry)
     db.flush()  # Get ID and created_at
-    
+
     # Compute entry hash using canonical JSON and ALL immutable fields
     details_json = canonical_json(details)
     entry_hash = version_service.compute_audit_hash(
@@ -148,7 +150,7 @@ def log_event(
         after_version_id=str(after_version_id) if after_version_id else "",
     )
     entry.entry_hash = entry_hash
-    
+
     return entry
 
 
@@ -183,7 +185,9 @@ def list_audit_logs(
 
     total = query.count()
     offset = (page - 1) * per_page
-    logs = query.order_by(AuditLog.created_at.desc()).offset(offset).limit(per_page).all()
+    logs = (
+        query.order_by(AuditLog.created_at.desc()).offset(offset).limit(per_page).all()
+    )
 
     actor_ids = {log.actor_user_id for log in logs if log.actor_user_id}
     actor_names = _get_actor_names(db, actor_ids)
@@ -209,16 +213,26 @@ def get_ai_activity(
     cutoff = datetime.utcnow() - timedelta(hours=hours)
     counts = {}
     for event_type in ai_event_types:
-        counts[event_type] = db.query(AuditLog).filter(
-            AuditLog.organization_id == org_id,
-            AuditLog.event_type == event_type,
-            AuditLog.created_at >= cutoff,
-        ).count()
+        counts[event_type] = (
+            db.query(AuditLog)
+            .filter(
+                AuditLog.organization_id == org_id,
+                AuditLog.event_type == event_type,
+                AuditLog.created_at >= cutoff,
+            )
+            .count()
+        )
 
-    recent_logs = db.query(AuditLog).filter(
-        AuditLog.organization_id == org_id,
-        AuditLog.event_type.in_(ai_event_types),
-    ).order_by(AuditLog.created_at.desc()).limit(limit).all()
+    recent_logs = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.organization_id == org_id,
+            AuditLog.event_type.in_(ai_event_types),
+        )
+        .order_by(AuditLog.created_at.desc())
+        .limit(limit)
+        .all()
+    )
 
     actor_ids = {log.actor_user_id for log in recent_logs if log.actor_user_id}
     actor_names = _get_actor_names(db, actor_ids)
@@ -238,7 +252,7 @@ def log_config_changed(
 ) -> AuditLog:
     """
     Log versioned config change with before/after version links.
-    
+
     Used for: pipelines, email templates, AI settings, integrations
     """
     event_map = {
@@ -249,7 +263,7 @@ def log_config_changed(
         "integration": AuditEventType.INTEGRATION_CONNECTED,
     }
     event_type = event_map.get(entity_type, AuditEventType.SETTINGS_ORG_UPDATED)
-    
+
     return log_event(
         db=db,
         org_id=org_id,
@@ -267,6 +281,7 @@ def log_config_changed(
 # =============================================================================
 # Authentication Events
 # =============================================================================
+
 
 def log_login_success(
     db: Session,
@@ -328,6 +343,7 @@ def log_logout(
 # Settings Events
 # =============================================================================
 
+
 def log_settings_changed(
     db: Session,
     org_id: UUID,
@@ -338,8 +354,8 @@ def log_settings_changed(
 ) -> AuditLog:
     """Log organization or AI settings change."""
     event_type = (
-        AuditEventType.SETTINGS_AI_UPDATED 
-        if setting_area == "ai" 
+        AuditEventType.SETTINGS_AI_UPDATED
+        if setting_area == "ai"
         else AuditEventType.SETTINGS_ORG_UPDATED
     )
     return log_event(
@@ -393,6 +409,7 @@ def log_consent_accepted(
 # =============================================================================
 # AI Action Events
 # =============================================================================
+
 
 def log_ai_action_approved(
     db: Session,
@@ -484,6 +501,7 @@ def log_ai_action_denied(
 # Integration Events
 # =============================================================================
 
+
 def log_integration_connected(
     db: Session,
     org_id: UUID,
@@ -526,6 +544,7 @@ def log_integration_disconnected(
 # Data Export/Import Events
 # =============================================================================
 
+
 def log_data_export(
     db: Session,
     org_id: UUID,
@@ -536,8 +555,8 @@ def log_data_export(
 ) -> AuditLog:
     """Log data export."""
     event_type = (
-        AuditEventType.DATA_EXPORT_CASES 
-        if export_type == "cases" 
+        AuditEventType.DATA_EXPORT_CASES
+        if export_type == "cases"
         else AuditEventType.DATA_EXPORT_ANALYTICS
     )
     return log_event(
@@ -616,7 +635,11 @@ def log_compliance_legal_hold_created(
         actor_user_id=user_id,
         target_type="legal_hold",
         target_id=hold_id,
-        details={"entity_type": entity_type, "entity_id": str(entity_id) if entity_id else None, "reason": reason},
+        details={
+            "entity_type": entity_type,
+            "entity_id": str(entity_id) if entity_id else None,
+            "reason": reason,
+        },
         request=request,
     )
 
@@ -638,7 +661,10 @@ def log_compliance_legal_hold_released(
         actor_user_id=user_id,
         target_type="legal_hold",
         target_id=hold_id,
-        details={"entity_type": entity_type, "entity_id": str(entity_id) if entity_id else None},
+        details={
+            "entity_type": entity_type,
+            "entity_id": str(entity_id) if entity_id else None,
+        },
         request=request,
     )
 
@@ -697,8 +723,7 @@ def log_compliance_purge_executed(
 ) -> AuditLog:
     """Log purge execution."""
     formatted = [
-        {"entity_type": result.entity_type, "count": result.count}
-        for result in results
+        {"entity_type": result.entity_type, "count": result.count} for result in results
     ]
     return log_event(
         db=db,
@@ -757,6 +782,7 @@ def log_import_completed(
 # User Management Events
 # =============================================================================
 
+
 def log_user_invited(
     db: Session,
     org_id: UUID,
@@ -801,6 +827,7 @@ def log_user_role_changed(
 # =============================================================================
 # AI Workflow Events
 # =============================================================================
+
 
 def log_ai_workflow_created(
     db: Session,

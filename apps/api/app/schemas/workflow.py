@@ -19,30 +19,57 @@ from app.db.enums import (
 
 ALLOWED_CONDITION_FIELDS = {
     # Basic fields
-    "status_label", "stage_id", "source", "is_priority", "state", "created_at",
-    # Owner fields  
-    "owner_type", "owner_id",
+    "status_label",
+    "stage_id",
+    "source",
+    "is_priority",
+    "state",
+    "created_at",
+    # Owner fields
+    "owner_type",
+    "owner_id",
     # Contact fields
-    "email", "phone", "full_name",
+    "email",
+    "phone",
+    "full_name",
     # Demographics
-    "age", "bmi", "date_of_birth", "race",
+    "age",
+    "bmi",
+    "date_of_birth",
+    "race",
     # Eligibility flags
-    "has_child", "is_citizen_or_pr", "is_non_smoker",
-    "has_surrogate_experience", "is_age_eligible",
+    "has_child",
+    "is_citizen_or_pr",
+    "is_non_smoker",
+    "has_surrogate_experience",
+    "is_age_eligible",
     # Physical measurements
-    "height_ft", "weight_lb", "num_deliveries", "num_csections",
+    "height_ft",
+    "weight_lb",
+    "num_deliveries",
+    "num_csections",
     # Meta tracking
-    "meta_lead_id", "meta_ad_id", "meta_form_id",
+    "meta_lead_id",
+    "meta_ad_id",
+    "meta_form_id",
 }
 
 ALLOWED_UPDATE_FIELDS = {
-    "stage_id", "is_priority", "owner_type", "owner_id",
+    "stage_id",
+    "is_priority",
+    "owner_type",
+    "owner_id",
 }
 
 ALLOWED_EMAIL_VARIABLES = {
-    "full_name", "email", "phone",
-    "case_number", "status_label", "state",
-    "owner_name", "org_name",
+    "full_name",
+    "email",
+    "phone",
+    "case_number",
+    "status_label",
+    "state",
+    "owner_name",
+    "org_name",
 }
 
 
@@ -50,17 +77,21 @@ ALLOWED_EMAIL_VARIABLES = {
 # Condition Schemas
 # =============================================================================
 
+
 class Condition(BaseModel):
     """A single condition to evaluate."""
+
     field: str
     operator: WorkflowConditionOperator
     value: Any = None
-    
+
     @field_validator("field")
     @classmethod
     def validate_field(cls, v: str) -> str:
         if v not in ALLOWED_CONDITION_FIELDS:
-            raise ValueError(f"Field '{v}' is not allowed. Allowed: {ALLOWED_CONDITION_FIELDS}")
+            raise ValueError(
+                f"Field '{v}' is not allowed. Allowed: {ALLOWED_CONDITION_FIELDS}"
+            )
         return v
 
 
@@ -68,32 +99,38 @@ class Condition(BaseModel):
 # Trigger Config Schemas
 # =============================================================================
 
+
 class StatusChangeTriggerConfig(BaseModel):
     """Config for status_changed trigger."""
+
     from_stage_id: UUID | None = None
     to_stage_id: UUID
 
 
 class ScheduledTriggerConfig(BaseModel):
     """Config for scheduled trigger."""
+
     cron: str = Field(description="Cron expression, e.g., '0 9 * * 1' for Mon 9am")
     timezone: str = Field(default="America/Los_Angeles", description="IANA timezone")
 
 
 class TaskDueTriggerConfig(BaseModel):
     """Config for task_due trigger."""
+
     hours_before: int = Field(ge=1, le=168, default=24)
 
 
 class InactivityTriggerConfig(BaseModel):
     """Config for inactivity trigger."""
+
     days: int = Field(ge=1, le=90, default=7)
 
 
 class CaseUpdatedTriggerConfig(BaseModel):
     """Config for case_updated trigger."""
+
     fields: list[str] = Field(min_length=1)
-    
+
     @field_validator("fields")
     @classmethod
     def validate_fields(cls, v: list[str]) -> list[str]:
@@ -105,6 +142,7 @@ class CaseUpdatedTriggerConfig(BaseModel):
 
 class CaseAssignedTriggerConfig(BaseModel):
     """Config for case_assigned trigger."""
+
     to_user_id: UUID | None = None  # Optional: only trigger for specific user
 
 
@@ -112,14 +150,17 @@ class CaseAssignedTriggerConfig(BaseModel):
 # Action Config Schemas
 # =============================================================================
 
+
 class SendEmailActionConfig(BaseModel):
     """Config for send_email action."""
+
     action_type: Literal["send_email"] = "send_email"
     template_id: UUID
 
 
 class CreateTaskActionConfig(BaseModel):
     """Config for create_task action."""
+
     action_type: Literal["create_task"] = "create_task"
     title: str = Field(max_length=200)
     description: str | None = None
@@ -129,6 +170,7 @@ class CreateTaskActionConfig(BaseModel):
 
 class AssignCaseActionConfig(BaseModel):
     """Config for assign_case action."""
+
     action_type: Literal["assign_case"] = "assign_case"
     owner_type: OwnerType
     owner_id: UUID
@@ -136,6 +178,7 @@ class AssignCaseActionConfig(BaseModel):
 
 class SendNotificationActionConfig(BaseModel):
     """Config for send_notification action."""
+
     action_type: Literal["send_notification"] = "send_notification"
     title: str = Field(max_length=100)
     body: str | None = None
@@ -144,32 +187,36 @@ class SendNotificationActionConfig(BaseModel):
 
 class UpdateFieldActionConfig(BaseModel):
     """Config for update_field action."""
+
     action_type: Literal["update_field"] = "update_field"
     field: str
     value: Any
-    
+
     @field_validator("field")
     @classmethod
     def validate_field(cls, v: str) -> str:
         if v not in ALLOWED_UPDATE_FIELDS:
-            raise ValueError(f"Field '{v}' is not allowed for update. Allowed: {ALLOWED_UPDATE_FIELDS}")
+            raise ValueError(
+                f"Field '{v}' is not allowed for update. Allowed: {ALLOWED_UPDATE_FIELDS}"
+            )
         return v
 
 
 class AddNoteActionConfig(BaseModel):
     """Config for add_note action."""
+
     action_type: Literal["add_note"] = "add_note"
     content: str = Field(min_length=1, max_length=4000)
 
 
 # Union of all action configs
 ActionConfig = (
-    SendEmailActionConfig |
-    CreateTaskActionConfig |
-    AssignCaseActionConfig |
-    SendNotificationActionConfig |
-    UpdateFieldActionConfig |
-    AddNoteActionConfig
+    SendEmailActionConfig
+    | CreateTaskActionConfig
+    | AssignCaseActionConfig
+    | SendNotificationActionConfig
+    | UpdateFieldActionConfig
+    | AddNoteActionConfig
 )
 
 
@@ -177,8 +224,10 @@ ActionConfig = (
 # Workflow CRUD Schemas
 # =============================================================================
 
+
 class WorkflowCreate(BaseModel):
     """Schema for creating a workflow."""
+
     name: str = Field(max_length=100)
     description: str | None = None
     icon: str = Field(default="workflow", max_length=50)
@@ -195,6 +244,7 @@ class WorkflowCreate(BaseModel):
 
 class WorkflowUpdate(BaseModel):
     """Schema for updating a workflow."""
+
     name: str | None = Field(default=None, max_length=100)
     description: str | None = None
     icon: str | None = Field(default=None, max_length=50)
@@ -211,6 +261,7 @@ class WorkflowUpdate(BaseModel):
 
 class WorkflowRead(BaseModel):
     """Schema for reading a workflow."""
+
     id: UUID
     name: str
     description: str | None
@@ -233,12 +284,13 @@ class WorkflowRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     config_warnings: list[str] | None = None  # Warnings from template usage
-    
+
     model_config = {"from_attributes": True}
 
 
 class WorkflowListItem(BaseModel):
     """Schema for workflow list item."""
+
     id: UUID
     name: str
     description: str | None
@@ -249,7 +301,7 @@ class WorkflowListItem(BaseModel):
     last_run_at: datetime | None
     last_error: str | None
     created_at: datetime
-    
+
     model_config = {"from_attributes": True}
 
 
@@ -257,8 +309,10 @@ class WorkflowListItem(BaseModel):
 # Execution Schemas
 # =============================================================================
 
+
 class ExecutionRead(BaseModel):
     """Schema for reading a workflow execution."""
+
     id: UUID
     workflow_id: UUID
     event_id: UUID
@@ -273,12 +327,13 @@ class ExecutionRead(BaseModel):
     error_message: str | None
     duration_ms: int | None
     executed_at: datetime
-    
+
     model_config = {"from_attributes": True}
 
 
 class ExecutionListResponse(BaseModel):
     """Response for listing executions."""
+
     items: list[ExecutionRead]
     total: int
 
@@ -287,8 +342,10 @@ class ExecutionListResponse(BaseModel):
 # Stats and Options Schemas
 # =============================================================================
 
+
 class WorkflowStats(BaseModel):
     """Statistics for workflows dashboard."""
+
     total_workflows: int
     enabled_workflows: int
     total_executions_24h: int
@@ -298,6 +355,7 @@ class WorkflowStats(BaseModel):
 
 class WorkflowOptions(BaseModel):
     """Available options for workflow builder UI."""
+
     trigger_types: list[dict]  # {value, label, description}
     action_types: list[dict]
     condition_operators: list[dict]
@@ -314,18 +372,21 @@ class WorkflowOptions(BaseModel):
 # User Preference Schemas
 # =============================================================================
 
+
 class UserWorkflowPreferenceRead(BaseModel):
     """Schema for reading user workflow preference."""
+
     id: UUID
     workflow_id: UUID
     workflow_name: str
     is_opted_out: bool
-    
+
     model_config = {"from_attributes": True}
 
 
 class UserWorkflowPreferenceUpdate(BaseModel):
     """Schema for updating user workflow preference."""
+
     is_opted_out: bool
 
 
@@ -333,13 +394,16 @@ class UserWorkflowPreferenceUpdate(BaseModel):
 # Test/Dry Run Schemas
 # =============================================================================
 
+
 class WorkflowTestRequest(BaseModel):
     """Request to test a workflow (dry run)."""
+
     entity_id: UUID
 
 
 class WorkflowTestResponse(BaseModel):
     """Response from testing a workflow."""
+
     would_trigger: bool
     conditions_matched: bool
     conditions_evaluated: list[dict]  # {field, operator, value, result}

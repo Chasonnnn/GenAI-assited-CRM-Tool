@@ -2,6 +2,7 @@
 
 Uses Gmail API to send emails via user's connected account.
 """
+
 import base64
 import logging
 from email.mime.text import MIMEText
@@ -27,7 +28,7 @@ async def send_email(
     html: bool = False,
 ) -> dict[str, Any]:
     """Send an email via Gmail API.
-    
+
     Args:
         db: Database session
         user_id: UUID of the user (as string)
@@ -35,21 +36,21 @@ async def send_email(
         subject: Email subject
         body: Email body (plain text or HTML)
         html: If True, body is HTML
-    
+
     Returns:
         {"success": True, "message_id": "..."} or {"success": False, "error": "..."}
     """
     import uuid
-    
+
     # Get access token
     access_token = oauth_service.get_access_token(db, uuid.UUID(user_id), "gmail")
     if not access_token:
         return {"success": False, "error": "Gmail not connected"}
-    
+
     # Get sender email
     integration = oauth_service.get_user_integration(db, uuid.UUID(user_id), "gmail")
     sender_email = integration.account_email if integration else "me"
-    
+
     try:
         # Build email message
         if html:
@@ -57,14 +58,14 @@ async def send_email(
             msg.attach(MIMEText(body, "html"))
         else:
             msg = MIMEText(body)
-        
+
         msg["To"] = to
         msg["From"] = sender_email
         msg["Subject"] = subject
-        
+
         # Encode message
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
-        
+
         # Send via Gmail API
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -75,14 +76,17 @@ async def send_email(
                 },
                 json={"raw": raw},
             )
-            
+
             if response.status_code == 401:
                 # Token expired, try to refresh
-                return {"success": False, "error": "Gmail token expired. Please reconnect."}
-            
+                return {
+                    "success": False,
+                    "error": "Gmail token expired. Please reconnect.",
+                }
+
             response.raise_for_status()
             data = response.json()
-            
+
             return {
                 "success": True,
                 "message_id": data.get("id"),

@@ -15,17 +15,18 @@ from app.core.config import settings
 # Session Token (JWT in cookie)
 # =============================================================================
 
+
 def create_session_token(
-    user_id: UUID, 
-    org_id: UUID, 
-    role: str, 
+    user_id: UUID,
+    org_id: UUID,
+    role: str,
     token_version: int,
     mfa_verified: bool = False,
     mfa_required: bool = True,
 ) -> str:
     """
     Create signed session JWT.
-    
+
     Always signs with current secret (JWT_SECRET).
     Token contains user identity, org context, MFA status, and revocation version.
     """
@@ -45,10 +46,10 @@ def create_session_token(
 def decode_session_token(token: str) -> dict:
     """
     Decode and verify session JWT.
-    
+
     Tries current secret first, then previous (for rotation support).
     This allows zero-downtime secret rotation.
-    
+
     Raises:
         jwt.InvalidTokenError: If token invalid with all secrets
     """
@@ -66,6 +67,7 @@ def decode_session_token(token: str) -> dict:
 # OAuth State/Nonce with User-Agent Binding
 # =============================================================================
 
+
 def generate_oauth_state() -> str:
     """Generate cryptographically random state (32 bytes, URL-safe base64)."""
     return secrets.token_urlsafe(32)
@@ -79,7 +81,7 @@ def generate_oauth_nonce() -> str:
 def hash_user_agent(user_agent: str) -> str:
     """
     Create a hash of user-agent for binding to OAuth state.
-    
+
     This provides lightweight replay protection - an attacker would
     need to use the same browser to replay a stolen state cookie.
     """
@@ -89,7 +91,7 @@ def hash_user_agent(user_agent: str) -> str:
 def create_oauth_state_payload(state: str, nonce: str, user_agent: str) -> str:
     """
     Create JSON payload for OAuth state cookie.
-    
+
     Includes:
     - state: CSRF protection
     - nonce: Replay protection (verified in ID token)
@@ -109,25 +111,23 @@ def parse_oauth_state_payload(cookie_value: str) -> dict:
 
 
 def verify_oauth_state(
-    stored_payload: dict, 
-    received_state: str, 
-    user_agent: str
+    stored_payload: dict, received_state: str, user_agent: str
 ) -> tuple[bool, str]:
     """
     Verify OAuth callback state matches stored state.
-    
+
     Checks:
     1. State parameter matches (CSRF protection)
     2. User-agent hash matches (replay protection)
-    
+
     Returns:
         (success, error_message)
     """
     if stored_payload.get("state") != received_state:
         return False, "State mismatch - possible CSRF attack"
-    
+
     expected_ua_hash = hash_user_agent(user_agent)
     if stored_payload.get("ua_hash") != expected_ua_hash:
         return False, "User-agent mismatch - possible session hijack"
-    
+
     return True, ""

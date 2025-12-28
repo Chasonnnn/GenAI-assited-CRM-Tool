@@ -8,6 +8,7 @@ from app.services import version_service
 # Unit Tests (no DB required)
 # =============================================================================
 
+
 def test_compute_audit_hash_deterministic():
     """Audit hash computation should be deterministic."""
     hash1 = version_service.compute_audit_hash(

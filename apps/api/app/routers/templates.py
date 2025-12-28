@@ -5,7 +5,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db, require_permission, require_csrf_header
+from app.core.deps import (
+    get_current_session,
+    get_db,
+    require_permission,
+    require_csrf_header,
+)
 from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
 from app.services import template_service
@@ -20,7 +25,11 @@ from app.schemas.template import (
 from app.schemas.workflow import WorkflowRead
 
 
-router = APIRouter(prefix="/templates", tags=["Templates"], dependencies=[Depends(require_permission(POLICIES["automation"].default))])
+router = APIRouter(
+    prefix="/templates",
+    tags=["Templates"],
+    dependencies=[Depends(require_permission(POLICIES["automation"].default))],
+)
 
 
 @router.get("", response_model=list[TemplateListItem])
@@ -35,7 +44,7 @@ def list_templates(
         org_id=session.org_id,
         category=category,
     )
-    
+
     result = []
     for t in templates:
         item = TemplateListItem.model_validate(t)
@@ -59,17 +68,19 @@ def get_template(
     template = template_service.get_template(db, template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
-    
+
     result = TemplateRead.model_validate(template)
-    
+
     # Add creator name if available
     if template.created_by:
         result.created_by_name = template.created_by.display_name
-    
+
     return result
 
 
-@router.post("", response_model=TemplateRead, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "", response_model=TemplateRead, dependencies=[Depends(require_csrf_header)]
+)
 def create_template(
     data: TemplateCreate,
     db: Session = Depends(get_db),
@@ -86,7 +97,10 @@ def create_template(
             category=data.category,
             trigger_type=data.trigger_type,
             trigger_config=data.trigger_config,
-            conditions=[c.model_dump() if hasattr(c, 'model_dump') else c for c in data.conditions],
+            conditions=[
+                c.model_dump() if hasattr(c, "model_dump") else c
+                for c in data.conditions
+            ],
             condition_logic=data.condition_logic,
             actions=data.actions,
             icon=data.icon,
@@ -98,7 +112,11 @@ def create_template(
         raise HTTPException(status_code=status_code, detail=detail)
 
 
-@router.post("/from-workflow", response_model=TemplateRead, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/from-workflow",
+    response_model=TemplateRead,
+    dependencies=[Depends(require_csrf_header)],
+)
 def create_template_from_workflow(
     data: TemplateFromWorkflow,
     db: Session = Depends(get_db),
@@ -124,7 +142,11 @@ def create_template_from_workflow(
         raise HTTPException(status_code=status_code, detail=detail)
 
 
-@router.post("/{template_id}/use", response_model=WorkflowRead, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/{template_id}/use",
+    response_model=WorkflowRead,
+    dependencies=[Depends(require_csrf_header)],
+)
 def use_template(
     template_id: UUID,
     data: UseTemplateRequest,
@@ -141,9 +163,9 @@ def use_template(
             workflow_name=data.name,
             workflow_description=data.description,
             is_enabled=data.is_enabled,
-            action_overrides=getattr(data, 'action_overrides', None),
+            action_overrides=getattr(data, "action_overrides", None),
         )
-        
+
         # Build response with creator name
         result = WorkflowRead.model_validate(workflow)
         if workflow.created_by:
@@ -166,6 +188,6 @@ def delete_template(
     if not deleted:
         raise HTTPException(
             status_code=404,
-            detail="Template not found or cannot delete global template"
+            detail="Template not found or cannot delete global template",
         )
     return {"message": "Template deleted"}

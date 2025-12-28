@@ -17,7 +17,7 @@ def log_activity(
 ) -> CaseActivityLog:
     """
     Log a case activity.
-    
+
     Args:
         db: Database session
         case_id: The case this activity is for
@@ -25,7 +25,7 @@ def log_activity(
         activity_type: Type of activity (from CaseActivityType enum)
         actor_user_id: User who performed the action (None for system)
         details: Type-specific details as JSON
-        
+
     Returns:
         The created activity log entry
     """

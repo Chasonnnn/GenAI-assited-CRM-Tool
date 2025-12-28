@@ -47,7 +47,6 @@ def export_settings(tmp_path):
 
 
 def test_export_job_redacts_phi(db, test_org, test_user, export_settings):
-
     _create_audit_log(
         db,
         test_org.id,
@@ -96,7 +95,6 @@ def test_export_job_redacts_phi(db, test_org, test_user, export_settings):
 
 
 def test_export_job_full_mode_keeps_values(db, test_org, test_user, export_settings):
-
     _create_audit_log(
         db,
         test_org.id,
@@ -215,7 +213,7 @@ def test_specific_entity_legal_hold_blocks_related(db, test_org, test_user):
         retention_days=1,
         is_active=True,
     )
-    
+
     # Create default pipeline and stage for test org (required for Case.stage_id NOT NULL)
     pipeline = Pipeline(
         id=uuid.uuid4(),
@@ -226,7 +224,7 @@ def test_specific_entity_legal_hold_blocks_related(db, test_org, test_user):
     )
     db.add(pipeline)
     db.flush()
-    
+
     stage = PipelineStage(
         id=uuid.uuid4(),
         pipeline_id=pipeline.id,

@@ -5,26 +5,44 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_permission, get_current_session, require_csrf_header
+from app.core.deps import (
+    get_db,
+    require_permission,
+    get_current_session,
+    require_csrf_header,
+)
 from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
 from app.db.enums import WorkflowTriggerType
 from app.services import case_service, workflow_service
 from app.services.workflow_engine import engine
 from app.schemas.workflow import (
-    WorkflowCreate, WorkflowUpdate, WorkflowRead, WorkflowListItem,
-    WorkflowStats, WorkflowOptions, ExecutionRead, ExecutionListResponse,
-    UserWorkflowPreferenceRead, UserWorkflowPreferenceUpdate,
-    WorkflowTestRequest, WorkflowTestResponse,
+    WorkflowCreate,
+    WorkflowUpdate,
+    WorkflowRead,
+    WorkflowListItem,
+    WorkflowStats,
+    WorkflowOptions,
+    ExecutionRead,
+    ExecutionListResponse,
+    UserWorkflowPreferenceRead,
+    UserWorkflowPreferenceUpdate,
+    WorkflowTestRequest,
+    WorkflowTestResponse,
 )
 
 
-router = APIRouter(prefix="/workflows", tags=["Workflows"], dependencies=[Depends(require_permission(POLICIES["automation"].default))])
+router = APIRouter(
+    prefix="/workflows",
+    tags=["Workflows"],
+    dependencies=[Depends(require_permission(POLICIES["automation"].default))],
+)
 
 
 # =============================================================================
 # Workflow CRUD
 # =============================================================================
+
 
 @router.get("", response_model=list[WorkflowListItem])
 def list_workflows(
@@ -65,6 +83,7 @@ def get_workflow_stats(
 # Org-wide Execution Dashboard (Manager+Dev only)
 # =============================================================================
 
+
 @router.get("/executions")
 def list_org_executions(
     status: str | None = None,
@@ -76,7 +95,7 @@ def list_org_executions(
 ):
     """
     List all workflow executions for the organization.
-    
+
     Manager/Developer only. Shows all executions across the org.
     """
     offset = (page - 1) * per_page
@@ -100,7 +119,9 @@ def get_execution_stats(
     return workflow_service.get_execution_stats(db, session.org_id)
 
 
-@router.post("", response_model=WorkflowRead, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "", response_model=WorkflowRead, dependencies=[Depends(require_csrf_header)]
+)
 def create_workflow(
     data: WorkflowCreate,
     db: Session = Depends(get_db),
@@ -132,7 +153,11 @@ def get_workflow(
     return workflow_service.to_workflow_read(db, workflow)
 
 
-@router.patch("/{workflow_id}", response_model=WorkflowRead, dependencies=[Depends(require_csrf_header)])
+@router.patch(
+    "/{workflow_id}",
+    response_model=WorkflowRead,
+    dependencies=[Depends(require_csrf_header)],
+)
 def update_workflow(
     workflow_id: UUID,
     data: WorkflowUpdate,
@@ -143,7 +168,7 @@ def update_workflow(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
-    
+
     try:
         workflow = workflow_service.update_workflow(
             db=db,
@@ -166,12 +191,16 @@ def delete_workflow(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
-    
+
     workflow_service.delete_workflow(db, workflow)
     return {"message": "Workflow deleted"}
 
 
-@router.post("/{workflow_id}/toggle", response_model=WorkflowRead, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/{workflow_id}/toggle",
+    response_model=WorkflowRead,
+    dependencies=[Depends(require_csrf_header)],
+)
 def toggle_workflow(
     workflow_id: UUID,
     db: Session = Depends(get_db),
@@ -181,12 +210,16 @@ def toggle_workflow(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
-    
+
     workflow = workflow_service.toggle_workflow(db, workflow, session.user_id)
     return workflow_service.to_workflow_read(db, workflow)
 
 
-@router.post("/{workflow_id}/duplicate", response_model=WorkflowRead, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/{workflow_id}/duplicate",
+    response_model=WorkflowRead,
+    dependencies=[Depends(require_csrf_header)],
+)
 def duplicate_workflow(
     workflow_id: UUID,
     db: Session = Depends(get_db),
@@ -196,7 +229,7 @@ def duplicate_workflow(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
-    
+
     new_workflow = workflow_service.duplicate_workflow(db, workflow, session.user_id)
     return workflow_service.to_workflow_read(db, new_workflow)
 
@@ -205,7 +238,12 @@ def duplicate_workflow(
 # Workflow Testing (Dry Run)
 # =============================================================================
 
-@router.post("/{workflow_id}/test", response_model=WorkflowTestResponse, dependencies=[Depends(require_csrf_header)])
+
+@router.post(
+    "/{workflow_id}/test",
+    response_model=WorkflowTestResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
 def test_workflow(
     workflow_id: UUID,
     request: WorkflowTestRequest,
@@ -216,12 +254,12 @@ def test_workflow(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
-    
+
     # Get entity
     entity = case_service.get_case(db, session.org_id, request.entity_id)
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
-    
+
     # Evaluate conditions
     conditions_evaluated = []
     for condition in workflow.conditions:
@@ -229,46 +267,60 @@ def test_workflow(
         operator = condition.get("operator")
         value = condition.get("value")
         entity_value = getattr(entity, field, None)
-        
+
         result = engine._evaluate_condition(operator, entity_value, value)
-        conditions_evaluated.append({
-            "field": field,
-            "operator": operator,
-            "expected": value,
-            "actual": str(entity_value),
-            "result": result,
-        })
-    
+        conditions_evaluated.append(
+            {
+                "field": field,
+                "operator": operator,
+                "expected": value,
+                "actual": str(entity_value),
+                "result": result,
+            }
+        )
+
     logic = workflow.condition_logic
     if logic == "AND":
-        conditions_matched = all(c["result"] for c in conditions_evaluated) if conditions_evaluated else True
+        conditions_matched = (
+            all(c["result"] for c in conditions_evaluated)
+            if conditions_evaluated
+            else True
+        )
     else:
-        conditions_matched = any(c["result"] for c in conditions_evaluated) if conditions_evaluated else True
-    
+        conditions_matched = (
+            any(c["result"] for c in conditions_evaluated)
+            if conditions_evaluated
+            else True
+        )
+
     # Preview actions
     actions_preview = []
     for action in workflow.actions:
         action_type = action.get("action_type")
         description = f"{action_type}: "
-        
+
         if action_type == "send_email":
             description += f"Send template {action.get('template_id')}"
         elif action_type == "create_task":
             description += f"Create task '{action.get('title')}'"
         elif action_type == "assign_case":
-            description += f"Assign to {action.get('owner_type')}:{action.get('owner_id')}"
+            description += (
+                f"Assign to {action.get('owner_type')}:{action.get('owner_id')}"
+            )
         elif action_type == "send_notification":
             description += f"Notify: {action.get('title')}"
         elif action_type == "update_field":
             description += f"Set {action.get('field')} = {action.get('value')}"
         elif action_type == "add_note":
             description += f"Add note: {action.get('content', '')[:50]}..."
-        
-        actions_preview.append({
-            "action_type": action_type,
-            "description": description,
-        })
-    
+
+        actions_preview.append(
+            {
+                "action_type": action_type,
+                "description": description,
+            }
+        )
+
     return WorkflowTestResponse(
         would_trigger=True,  # We're testing directly
         conditions_matched=conditions_matched,
@@ -280,6 +332,7 @@ def test_workflow(
 # =============================================================================
 # Execution History
 # =============================================================================
+
 
 @router.get("/{workflow_id}/executions", response_model=ExecutionListResponse)
 def list_executions(
@@ -293,7 +346,7 @@ def list_executions(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
-    
+
     items, total = workflow_service.list_executions(db, workflow_id, limit, offset)
     return ExecutionListResponse(
         items=[ExecutionRead.model_validate(e) for e in items],
@@ -305,6 +358,7 @@ def list_executions(
 # User Preferences
 # =============================================================================
 
+
 @router.get("/me/preferences", response_model=list[UserWorkflowPreferenceRead])
 def get_my_preferences(
     db: Session = Depends(get_db),
@@ -312,21 +366,27 @@ def get_my_preferences(
 ):
     """Get current user's workflow preferences."""
     prefs = workflow_service.get_user_preferences(db, session.user_id, session.org_id)
-    
+
     result = []
     for pref in prefs:
         workflow = workflow_service.get_workflow(db, pref.workflow_id, session.org_id)
         if workflow:
-            result.append(UserWorkflowPreferenceRead(
-                id=pref.id,
-                workflow_id=pref.workflow_id,
-                workflow_name=workflow.name,
-                is_opted_out=pref.is_opted_out,
-            ))
+            result.append(
+                UserWorkflowPreferenceRead(
+                    id=pref.id,
+                    workflow_id=pref.workflow_id,
+                    workflow_name=workflow.name,
+                    is_opted_out=pref.is_opted_out,
+                )
+            )
     return result
 
 
-@router.patch("/me/preferences/{workflow_id}", response_model=UserWorkflowPreferenceRead, dependencies=[Depends(require_csrf_header)])
+@router.patch(
+    "/me/preferences/{workflow_id}",
+    response_model=UserWorkflowPreferenceRead,
+    dependencies=[Depends(require_csrf_header)],
+)
 def update_my_preference(
     workflow_id: UUID,
     data: UserWorkflowPreferenceUpdate,
@@ -338,7 +398,7 @@ def update_my_preference(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
-    
+
     # Users can only opt out of workflows they created OR their own preferences
     # They cannot disable org-level workflows globally
     pref = workflow_service.update_user_preference(
@@ -347,7 +407,7 @@ def update_my_preference(
         workflow_id=workflow_id,
         is_opted_out=data.is_opted_out,
     )
-    
+
     return UserWorkflowPreferenceRead(
         id=pref.id,
         workflow_id=pref.workflow_id,

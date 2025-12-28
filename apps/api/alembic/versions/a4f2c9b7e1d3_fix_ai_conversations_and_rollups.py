@@ -5,6 +5,7 @@ Revises: e64c5c89667e
 Create Date: 2025-12-26 12:05:00.000000
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -12,8 +13,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'a4f2c9b7e1d3'
-down_revision: Union[str, Sequence[str], None] = 'e64c5c89667e'
+revision: str = "a4f2c9b7e1d3"
+down_revision: Union[str, Sequence[str], None] = "e64c5c89667e"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -21,8 +22,8 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
     op.alter_column(
-        'attachments',
-        'uploaded_by_user_id',
+        "attachments",
+        "uploaded_by_user_id",
         existing_type=sa.UUID(),
         nullable=True,
     )
@@ -193,43 +194,51 @@ def upgrade() -> None:
     """)
 
     op.create_unique_constraint(
-        'uq_ai_conversations_user_entity',
-        'ai_conversations',
-        ['organization_id', 'user_id', 'entity_type', 'entity_id'],
+        "uq_ai_conversations_user_entity",
+        "ai_conversations",
+        ["organization_id", "user_id", "entity_type", "entity_id"],
     )
     op.create_index(
-        'uq_integration_health_org_type_null_key',
-        'integration_health',
-        ['organization_id', 'integration_type'],
+        "uq_integration_health_org_type_null_key",
+        "integration_health",
+        ["organization_id", "integration_type"],
         unique=True,
-        postgresql_where=sa.text('integration_key IS NULL'),
+        postgresql_where=sa.text("integration_key IS NULL"),
     )
     op.create_index(
-        'uq_integration_error_rollup_null_key',
-        'integration_error_rollup',
-        ['organization_id', 'integration_type', 'period_start'],
+        "uq_integration_error_rollup_null_key",
+        "integration_error_rollup",
+        ["organization_id", "integration_type", "period_start"],
         unique=True,
-        postgresql_where=sa.text('integration_key IS NULL'),
+        postgresql_where=sa.text("integration_key IS NULL"),
     )
     op.create_index(
-        'uq_request_metrics_rollup_null_org',
-        'request_metrics_rollup',
-        ['period_start', 'route', 'method'],
+        "uq_request_metrics_rollup_null_org",
+        "request_metrics_rollup",
+        ["period_start", "route", "method"],
         unique=True,
-        postgresql_where=sa.text('organization_id IS NULL'),
+        postgresql_where=sa.text("organization_id IS NULL"),
     )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_index('uq_request_metrics_rollup_null_org', table_name='request_metrics_rollup')
-    op.drop_index('uq_integration_error_rollup_null_key', table_name='integration_error_rollup')
-    op.drop_index('uq_integration_health_org_type_null_key', table_name='integration_health')
-    op.drop_constraint('uq_ai_conversations_user_entity', 'ai_conversations', type_='unique')
+    op.drop_index(
+        "uq_request_metrics_rollup_null_org", table_name="request_metrics_rollup"
+    )
+    op.drop_index(
+        "uq_integration_error_rollup_null_key", table_name="integration_error_rollup"
+    )
+    op.drop_index(
+        "uq_integration_health_org_type_null_key", table_name="integration_health"
+    )
+    op.drop_constraint(
+        "uq_ai_conversations_user_entity", "ai_conversations", type_="unique"
+    )
 
     op.alter_column(
-        'attachments',
-        'uploaded_by_user_id',
+        "attachments",
+        "uploaded_by_user_id",
         existing_type=sa.UUID(),
         nullable=False,
     )

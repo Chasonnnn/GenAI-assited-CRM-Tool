@@ -1,6 +1,5 @@
 """Dashboard router - API endpoints for dashboard widgets."""
 
-
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -16,8 +15,10 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 # Schemas
 # =============================================================================
 
+
 class UpcomingTask(BaseModel):
     """Task item for upcoming widget."""
+
     id: str
     type: str = "task"
     title: str
@@ -31,6 +32,7 @@ class UpcomingTask(BaseModel):
 
 class UpcomingMeeting(BaseModel):
     """Meeting item for upcoming widget."""
+
     id: str
     type: str = "meeting"
     title: str
@@ -44,6 +46,7 @@ class UpcomingMeeting(BaseModel):
 
 class UpcomingResponse(BaseModel):
     """Response for upcoming widget."""
+
     tasks: list[UpcomingTask]
     meetings: list[UpcomingMeeting]
 
@@ -51,6 +54,7 @@ class UpcomingResponse(BaseModel):
 # =============================================================================
 # Endpoints
 # =============================================================================
+
 
 @router.get("/upcoming", response_model=UpcomingResponse)
 def get_upcoming(
@@ -61,7 +65,7 @@ def get_upcoming(
 ) -> UpcomingResponse:
     """
     Get user's upcoming tasks and meetings for dashboard.
-    
+
     Returns tasks where user is assignee/owner and meetings user created.
     Scoped to cases the user has access to.
     """

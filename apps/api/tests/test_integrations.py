@@ -10,7 +10,9 @@ from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_zoom_connect_sets_state_cookie_and_returns_auth_url(authed_client: AsyncClient):
+async def test_zoom_connect_sets_state_cookie_and_returns_auth_url(
+    authed_client: AsyncClient,
+):
     response = await authed_client.get("/integrations/zoom/connect")
     assert response.status_code == 200
 
@@ -42,11 +44,15 @@ async def test_zoom_callback_requires_state_cookie(authed_client: AsyncClient):
         follow_redirects=False,
     )
     assert response.status_code == 302
-    assert "/settings/integrations?error=invalid_state" in response.headers.get("location", "")
+    assert "/settings/integrations?error=invalid_state" in response.headers.get(
+        "location", ""
+    )
 
 
 @pytest.mark.asyncio
-async def test_zoom_callback_happy_path_saves_integration(authed_client: AsyncClient, db, test_auth, monkeypatch):
+async def test_zoom_callback_happy_path_saves_integration(
+    authed_client: AsyncClient, db, test_auth, monkeypatch
+):
     from app.db.models import UserIntegration
     from app.services import oauth_service
 
@@ -86,7 +92,9 @@ async def test_zoom_callback_happy_path_saves_integration(authed_client: AsyncCl
 
 
 @pytest.mark.asyncio
-async def test_create_zoom_meeting_case_not_found_returns_404(authed_client: AsyncClient):
+async def test_create_zoom_meeting_case_not_found_returns_404(
+    authed_client: AsyncClient,
+):
     response = await authed_client.post(
         "/integrations/zoom/meetings",
         json={
@@ -101,7 +109,9 @@ async def test_create_zoom_meeting_case_not_found_returns_404(authed_client: Asy
 
 
 @pytest.mark.asyncio
-async def test_create_zoom_meeting_intended_parent_not_found_returns_404(authed_client: AsyncClient):
+async def test_create_zoom_meeting_intended_parent_not_found_returns_404(
+    authed_client: AsyncClient,
+):
     response = await authed_client.post(
         "/integrations/zoom/meetings",
         json={
@@ -164,7 +174,9 @@ async def test_create_zoom_meeting_returns_response_when_service_mocked(
             task_id=None,
         )
 
-    monkeypatch.setattr(zoom_service, "schedule_zoom_meeting", fake_schedule_zoom_meeting)
+    monkeypatch.setattr(
+        zoom_service, "schedule_zoom_meeting", fake_schedule_zoom_meeting
+    )
 
     response = await authed_client.post(
         "/integrations/zoom/meetings",

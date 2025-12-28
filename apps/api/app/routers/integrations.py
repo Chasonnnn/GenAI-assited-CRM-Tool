@@ -3,6 +3,7 @@
 Handles per-user OAuth flows for Gmail, Zoom, etc.
 Each user connects their own accounts.
 """
+
 import logging
 import uuid
 from typing import Any
@@ -24,7 +25,7 @@ from app.core.security import (
     verify_oauth_state,
 )
 from app.schemas.auth import UserSession
-from app.services import oauth_service, org_service, user_service
+from app.services import oauth_service, org_service, user_service, zoom_service
 
 router = APIRouter(prefix="/integrations", tags=["Integrations"])
 logger = logging.getLogger(__name__)
@@ -42,8 +43,10 @@ def _oauth_cookie_name(integration_type: str) -> str:
 # Models
 # ============================================================================
 
+
 class IntegrationStatus(BaseModel):
     """Status of a user's integration."""
+
     integration_type: str
     connected: bool
     account_email: str | None = None
@@ -52,12 +55,14 @@ class IntegrationStatus(BaseModel):
 
 class IntegrationListResponse(BaseModel):
     """List of user's integrations."""
+
     integrations: list[IntegrationStatus]
 
 
 # ============================================================================
 # List Integrations
 # ============================================================================
+
 
 @router.get("/", response_model=IntegrationListResponse)
 def list_integrations(
@@ -66,14 +71,16 @@ def list_integrations(
 ) -> IntegrationListResponse:
     """List user's connected integrations."""
     integrations = oauth_service.get_user_integrations(db, session.user_id)
-    
+
     return IntegrationListResponse(
         integrations=[
             IntegrationStatus(
                 integration_type=i.integration_type,
                 connected=True,
                 account_email=i.account_email,
-                expires_at=i.token_expires_at.isoformat() if i.token_expires_at else None,
+                expires_at=i.token_expires_at.isoformat()
+                if i.token_expires_at
+                else None,
             )
             for i in integrations
         ]
@@ -91,7 +98,9 @@ def disconnect_integration(
     from app.db.enums import AuditEventType
     from app.services import audit_service
 
-    integration = oauth_service.get_user_integration(db, session.user_id, integration_type)
+    integration = oauth_service.get_user_integration(
+        db, session.user_id, integration_type
+    )
     if not integration:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -123,6 +132,7 @@ def disconnect_integration(
 # Gmail OAuth
 # ============================================================================
 
+
 @router.get("/gmail/connect")
 def gmail_connect(
     request: Request,
@@ -130,7 +140,7 @@ def gmail_connect(
     session: UserSession = Depends(get_current_session),
 ) -> dict[str, str]:
     """Get Gmail OAuth authorization URL.
-    
+
     Frontend should redirect user to this URL.
     """
     if not settings.GOOGLE_CLIENT_ID:
@@ -138,7 +148,7 @@ def gmail_connect(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Gmail integration not configured. Set GOOGLE_CLIENT_ID.",
         )
-    
+
     state = generate_oauth_state()
     nonce = generate_oauth_nonce()
     user_agent = request.headers.get("user-agent", "")
@@ -156,7 +166,7 @@ def gmail_connect(
 
     redirect_uri = settings.GMAIL_REDIRECT_URI
     auth_url = oauth_service.get_gmail_auth_url(redirect_uri, state)
-    
+
     return {"auth_url": auth_url}
 
 
@@ -189,15 +199,15 @@ async def gmail_callback(
     valid, _ = verify_oauth_state(stored_payload, state, user_agent)
     if not valid:
         return error_response
-    
+
     try:
         # Exchange code for tokens
         redirect_uri = settings.GMAIL_REDIRECT_URI
         tokens = await oauth_service.exchange_gmail_code(code, redirect_uri)
-        
+
         # Get user info
         user_info = await oauth_service.get_gmail_user_info(tokens["access_token"])
-        
+
         # Save integration
         oauth_service.save_integration(
             db,
@@ -223,12 +233,14 @@ async def gmail_callback(
             target_id=integration.id if integration else None,
             details={
                 "integration_type": "gmail",
-                "account_email": audit_service.hash_email(user_info.get("email", "") or ""),
+                "account_email": audit_service.hash_email(
+                    user_info.get("email", "") or ""
+                ),
             },
             request=request,
         )
         db.commit()
-        
+
         success = RedirectResponse(
             f"{settings.FRONTEND_URL}/settings/integrations?success=gmail",
             status_code=302,
@@ -251,11 +263,13 @@ def gmail_connection_status(
 ) -> dict[str, Any]:
     """Check if current user has Gmail connected."""
     integration = oauth_service.get_user_integration(db, session.user_id, "gmail")
-    
+
     return {
         "connected": integration is not None,
         "account_email": integration.account_email if integration else None,
-        "expires_at": integration.token_expires_at.isoformat() if integration and integration.token_expires_at else None,
+        "expires_at": integration.token_expires_at.isoformat()
+        if integration and integration.token_expires_at
+        else None,
     }
 
 
@@ -263,12 +277,14 @@ def gmail_connection_status(
 # Google Calendar Events
 # ============================================================================
 
+
 class GoogleCalendarEventRead(BaseModel):
     """A Google Calendar event for display."""
+
     id: str
     summary: str
     start: str  # ISO datetime
-    end: str    # ISO datetime
+    end: str  # ISO datetime
     html_link: str
     is_all_day: bool = False
     source: str = "google"
@@ -277,17 +293,17 @@ class GoogleCalendarEventRead(BaseModel):
 @router.get("/google/calendar/events", response_model=list[GoogleCalendarEventRead])
 async def get_google_calendar_events(
     date_start: str,  # ISO date (YYYY-MM-DD)
-    date_end: str,    # ISO date (YYYY-MM-DD)
+    date_end: str,  # ISO date (YYYY-MM-DD)
     timezone: str | None = None,  # Optional: client timezone (e.g., "America/New_York")
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
 ) -> list[GoogleCalendarEventRead]:
     """
     Get user's Google Calendar events for a date range.
-    
+
     Returns empty list if Google is not connected (no error).
     Events are fetched from the user's primary calendar only.
-    
+
     Query params:
     - date_start: Start date (ISO format YYYY-MM-DD)
     - date_end: End date (ISO format YYYY-MM-DD)
@@ -296,7 +312,7 @@ async def get_google_calendar_events(
     from datetime import datetime as dt, time as tm
     from zoneinfo import ZoneInfo
     from app.services import calendar_service
-    
+
     # Parse dates
     try:
         start_date = dt.fromisoformat(date_start)
@@ -306,26 +322,26 @@ async def get_google_calendar_events(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid date format. Use YYYY-MM-DD.",
         )
-    
+
     # Validate date range
     if end_date < start_date:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="date_end must be greater than or equal to date_start.",
         )
-    
+
     # Determine timezone for day boundaries (default to Pacific like rest of app)
     try:
         client_tz = ZoneInfo(timezone) if timezone else ZoneInfo("America/Los_Angeles")
     except Exception:
         # Invalid timezone, fall back to Pacific
         client_tz = ZoneInfo("America/Los_Angeles")
-    
+
     # Convert to datetime with timezone (start of day to end of day in client TZ)
     # Then convert to UTC for the API call
     time_min = dt.combine(start_date.date(), tm.min, tzinfo=client_tz)
     time_max = dt.combine(end_date.date(), tm(23, 59, 59, 999999), tzinfo=client_tz)
-    
+
     # Fetch events - returns empty list if not connected
     events = await calendar_service.get_user_calendar_events(
         db=db,
@@ -334,7 +350,7 @@ async def get_google_calendar_events(
         time_max=time_max,
         calendar_id="primary",
     )
-    
+
     return [
         GoogleCalendarEventRead(
             id=e["id"],
@@ -353,6 +369,7 @@ async def get_google_calendar_events(
 # Zoom OAuth
 # ============================================================================
 
+
 @router.get("/zoom/connect")
 def zoom_connect(
     request: Request,
@@ -365,7 +382,7 @@ def zoom_connect(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Zoom integration not configured. Set ZOOM_CLIENT_ID.",
         )
-    
+
     state = generate_oauth_state()
     nonce = generate_oauth_nonce()
     user_agent = request.headers.get("user-agent", "")
@@ -383,7 +400,7 @@ def zoom_connect(
 
     redirect_uri = settings.ZOOM_REDIRECT_URI
     auth_url = oauth_service.get_zoom_auth_url(redirect_uri, state)
-    
+
     return {"auth_url": auth_url}
 
 
@@ -416,15 +433,15 @@ async def zoom_callback(
     valid, _ = verify_oauth_state(stored_payload, state, user_agent)
     if not valid:
         return error_response
-    
+
     try:
         # Exchange code for tokens
         redirect_uri = settings.ZOOM_REDIRECT_URI
         tokens = await oauth_service.exchange_zoom_code(code, redirect_uri)
-        
+
         # Get user info
         user_info = await oauth_service.get_zoom_user_info(tokens["access_token"])
-        
+
         # Save integration
         oauth_service.save_integration(
             db,
@@ -450,12 +467,14 @@ async def zoom_callback(
             target_id=integration.id if integration else None,
             details={
                 "integration_type": "zoom",
-                "account_email": audit_service.hash_email(user_info.get("email", "") or ""),
+                "account_email": audit_service.hash_email(
+                    user_info.get("email", "") or ""
+                ),
             },
             request=request,
         )
         db.commit()
-        
+
         success = RedirectResponse(
             f"{settings.FRONTEND_URL}/settings/integrations?success=zoom",
             status_code=302,
@@ -475,8 +494,10 @@ async def zoom_callback(
 # Zoom Meetings
 # ============================================================================
 
+
 class CreateMeetingRequest(BaseModel):
     """Request to create a Zoom meeting."""
+
     entity_type: str  # "case" or "intended_parent"
     entity_id: uuid.UUID
     topic: str
@@ -488,6 +509,7 @@ class CreateMeetingRequest(BaseModel):
 
 class CreateMeetingResponse(BaseModel):
     """Response from creating a Zoom meeting."""
+
     join_url: str
     start_url: str
     meeting_id: int
@@ -496,14 +518,18 @@ class CreateMeetingResponse(BaseModel):
     task_id: str | None = None
 
 
-@router.post("/zoom/meetings", response_model=CreateMeetingResponse, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/zoom/meetings",
+    response_model=CreateMeetingResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
 async def create_zoom_meeting(
     request: CreateMeetingRequest,
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
 ) -> CreateMeetingResponse:
     """Create a Zoom meeting for a case or intended parent.
-    
+
     Automatically:
     - Creates meeting via Zoom API
     - Adds note to the entity with meeting link
@@ -514,7 +540,7 @@ async def create_zoom_meeting(
     from app.core.case_access import check_case_access
     from app.services import zoom_service
     from app.services import case_service, ip_service
-    
+
     # Parse entity type
     if request.entity_type == "case":
         entity_type = EntityType.CASE
@@ -525,7 +551,7 @@ async def create_zoom_meeting(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid entity_type: {request.entity_type}. Must be 'case' or 'intended_parent'.",
         )
-    
+
     # Parse start time
     start_time = None
     if request.start_time:
@@ -538,17 +564,24 @@ async def create_zoom_meeting(
             )
 
     timezone_name = request.timezone or "UTC"
-    
+
     # Validate entity exists and user has access (prevents cross-tenant/task leakage)
     if entity_type == EntityType.CASE:
         case = case_service.get_case(db, session.org_id, request.entity_id)
         if not case:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
-        check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Case not found"
+            )
+        check_case_access(
+            case, session.role, session.user_id, db=db, org_id=session.org_id
+        )
     else:
         ip = ip_service.get_intended_parent(db, request.entity_id, session.org_id)
         if not ip:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intended parent not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Intended parent not found",
+            )
 
     # Check user has Zoom connected
     if not zoom_service.check_user_has_zoom(db, session.user_id):
@@ -556,7 +589,7 @@ async def create_zoom_meeting(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Zoom not connected. Please connect Zoom in Settings → Integrations.",
         )
-    
+
     try:
         result = await zoom_service.schedule_zoom_meeting(
             db=db,
@@ -570,7 +603,7 @@ async def create_zoom_meeting(
             duration=request.duration,
             contact_name=request.contact_name,
         )
-        
+
         return CreateMeetingResponse(
             join_url=result.meeting.join_url,
             start_url=result.meeting.start_url,
@@ -595,19 +628,24 @@ def zoom_connection_status(
     session: UserSession = Depends(get_current_session),
 ) -> dict[str, Any]:
     """Check if current user has Zoom connected."""
-    
+
     integration = oauth_service.get_user_integration(db, session.user_id, "zoom")
-    
+
     return {
         "connected": integration is not None,
         "account_email": integration.account_email if integration else None,
-        "connected_at": integration.created_at.isoformat() if integration and integration.created_at else None,
-        "token_expires_at": integration.token_expires_at.isoformat() if integration and integration.token_expires_at else None,
+        "connected_at": integration.created_at.isoformat()
+        if integration and integration.created_at
+        else None,
+        "token_expires_at": integration.token_expires_at.isoformat()
+        if integration and integration.token_expires_at
+        else None,
     }
 
 
 class ZoomMeetingRead(BaseModel):
     """Zoom meeting response for list."""
+
     id: str
     topic: str
     start_time: str | None
@@ -631,7 +669,7 @@ def list_zoom_meetings(
         user_id=session.user_id,
         limit=limit,
     )
-    
+
     return [
         ZoomMeetingRead(
             id=str(m.id),
@@ -640,7 +678,9 @@ def list_zoom_meetings(
             duration=m.duration,
             join_url=m.join_url,
             case_id=str(m.case_id) if m.case_id else None,
-            intended_parent_id=str(m.intended_parent_id) if m.intended_parent_id else None,
+            intended_parent_id=str(m.intended_parent_id)
+            if m.intended_parent_id
+            else None,
             created_at=m.created_at.isoformat(),
         )
         for m in meetings
@@ -649,6 +689,7 @@ def list_zoom_meetings(
 
 class SendMeetingInviteRequest(BaseModel):
     """Request to send a Zoom meeting invite email."""
+
     recipient_email: str
     meeting_id: int
     join_url: str
@@ -662,26 +703,31 @@ class SendMeetingInviteRequest(BaseModel):
 
 class SendMeetingInviteResponse(BaseModel):
     """Response from sending meeting invite."""
+
     email_log_id: str
     success: bool
 
 
-@router.post("/zoom/send-invite", response_model=SendMeetingInviteResponse, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/zoom/send-invite",
+    response_model=SendMeetingInviteResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
 def send_zoom_meeting_invite(
     request: SendMeetingInviteRequest,
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
 ) -> SendMeetingInviteResponse:
     """Send a Zoom meeting invite email using the org's template.
-    
+
     Uses the 'Zoom Meeting Invite' template (auto-created if missing).
     """
     from app.services import zoom_service
-    
+
     # Get host name for template
     user = user_service.get_user_by_id(db, session.user_id)
     host_name = user.display_name if user else "Your Host"
-    
+
     org = org_service.get_org_by_id(db, session.org_id)
     org_timezone = org.timezone if org else "America/Los_Angeles"
 
@@ -697,7 +743,7 @@ def send_zoom_meeting_invite(
         start_url="",  # Not needed for attendee
         password=request.password,
     )
-    
+
     # Parse case_id (best-effort; ignore if invalid or not authorized)
     case_id = None
     if request.case_id:
@@ -705,16 +751,23 @@ def send_zoom_meeting_invite(
             parsed_case_id = uuid.UUID(request.case_id)
             from app.services import case_service
             from app.core.case_access import check_case_access
+
             case = case_service.get_case(db, session.org_id, parsed_case_id)
             if case:
                 try:
-                    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+                    check_case_access(
+                        case,
+                        session.role,
+                        session.user_id,
+                        db=db,
+                        org_id=session.org_id,
+                    )
                     case_id = parsed_case_id
                 except HTTPException:
                     case_id = None
         except ValueError:
             case_id = None
-    
+
     # Send invite
     email_log_id = zoom_service.send_meeting_invite(
         db=db,
@@ -726,13 +779,13 @@ def send_zoom_meeting_invite(
         host_name=host_name,
         case_id=case_id,
     )
-    
+
     if not email_log_id:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to send invite email",
         )
-    
+
     return SendMeetingInviteResponse(
         email_log_id=str(email_log_id),
         success=True,

@@ -6,6 +6,7 @@ Provides:
 - JWT token minting for authenticated tests
 - HTTPX AsyncClient with proper headers
 """
+
 import asyncio
 import os
 import uuid
@@ -29,6 +30,7 @@ os.environ.setdefault("GOOGLE_CLIENT_SECRET", "test-google-client-secret")
 # Configuration
 # =============================================================================
 
+
 @pytest.fixture(scope="session")
 def event_loop() -> Generator:
     """Create an instance of the default event loop for each test session."""
@@ -44,10 +46,12 @@ def event_loop() -> Generator:
 # Database Fixtures
 # =============================================================================
 
+
 @pytest.fixture(scope="session")
 def db_engine():
     """Yields the SQLAlchemy engine."""
     from app.db.session import engine
+
     yield engine
 
 
@@ -58,6 +62,7 @@ def db(db_engine) -> Generator:
     """
     from sqlalchemy import event
     from app.db.session import SessionLocal
+
     connection = db_engine.connect()
     transaction = connection.begin()
     session = SessionLocal(bind=connection)
@@ -77,7 +82,7 @@ def db(db_engine) -> Generator:
                     session_.begin_nested()
             except Exception:
                 pass  # Savepoint restart failed, test will still rollback outer transaction
-    
+
     yield session
 
     session.close()
@@ -91,11 +96,12 @@ def db(db_engine) -> Generator:
 # Entity Fixtures
 # =============================================================================
 
+
 @pytest.fixture(scope="function")
 def test_org(db):
     """Create a test organization."""
     from app.db.models import Organization
-    
+
     org = Organization(
         id=uuid.uuid4(),
         name="Test Organization",
@@ -110,11 +116,11 @@ def test_org(db):
 @pytest.fixture(scope="function")
 def default_stage(db, test_org):
     """Create a default pipeline and stage for the test organization.
-    
+
     Required since Case.stage_id is NOT NULL after Pipeline Phase 2.
     """
     from app.db.models import Pipeline, PipelineStage
-    
+
     pipeline = Pipeline(
         id=uuid.uuid4(),
         organization_id=test_org.id,
@@ -124,7 +130,7 @@ def default_stage(db, test_org):
     )
     db.add(pipeline)
     db.flush()
-    
+
     stage = PipelineStage(
         id=uuid.uuid4(),
         pipeline_id=pipeline.id,
@@ -137,7 +143,7 @@ def default_stage(db, test_org):
     )
     db.add(stage)
     db.flush()
-    
+
     return stage
 
 
@@ -146,7 +152,7 @@ def test_user(db, test_org):
     """Create a test user with membership in test_org."""
     from app.db.models import User, Membership
     from app.db.enums import Role
-    
+
     user = User(
         id=uuid.uuid4(),
         email=f"test-{uuid.uuid4().hex[:8]}@test.com",
@@ -156,7 +162,7 @@ def test_user(db, test_org):
     )
     db.add(user)
     db.flush()
-    
+
     membership = Membership(
         id=uuid.uuid4(),
         user_id=user.id,
@@ -165,7 +171,7 @@ def test_user(db, test_org):
     )
     db.add(membership)
     db.flush()
-    
+
     return user
 
 
@@ -173,9 +179,11 @@ def test_user(db, test_org):
 # Auth Fixtures
 # =============================================================================
 
+
 @dataclass
 class TestAuth:
     """Test authentication context."""
+
     user: object
     org: object
     token: str
@@ -188,7 +196,7 @@ def test_auth(test_user, test_org):
     from app.core.security import create_session_token
     from app.core.deps import COOKIE_NAME
     from app.db.enums import Role
-    
+
     token = create_session_token(
         user_id=test_user.id,
         org_id=test_org.id,
@@ -207,6 +215,7 @@ def test_auth(test_user, test_org):
 # Client Fixtures
 # =============================================================================
 
+
 @pytest.fixture(scope="function")
 async def client(db) -> AsyncGenerator:
     """
@@ -222,8 +231,7 @@ async def client(db) -> AsyncGenerator:
     app.dependency_overrides[get_db] = override_get_db
 
     async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="https://test"
+        transport=ASGITransport(app=app), base_url="https://test"
     ) as c:
         yield c
 

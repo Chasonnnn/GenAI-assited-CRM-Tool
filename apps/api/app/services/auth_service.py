@@ -12,54 +12,59 @@ from app.services.google_oauth import GoogleUserInfo
 
 
 def find_user_by_identity(
-    db: Session, 
-    provider: AuthProvider, 
-    provider_subject: str
+    db: Session, provider: AuthProvider, provider_subject: str
 ) -> User | None:
     """Find user by their external identity provider credentials."""
-    identity = db.query(AuthIdentity).filter(
-        AuthIdentity.provider == provider.value,
-        AuthIdentity.provider_subject == provider_subject
-    ).first()
+    identity = (
+        db.query(AuthIdentity)
+        .filter(
+            AuthIdentity.provider == provider.value,
+            AuthIdentity.provider_subject == provider_subject,
+        )
+        .first()
+    )
     return identity.user if identity else None
 
 
 def get_valid_invite(db: Session, email: str) -> OrgInvite | None:
     """
     Find valid pending invite for email (globally).
-    
+
     Valid means:
     - accepted_at IS NULL (not already used)
     - expires_at IS NULL OR expires_at > now()
     """
-    return db.query(OrgInvite).filter(
-        func.lower(OrgInvite.email) == email.lower(),
-        OrgInvite.accepted_at.is_(None),
-        or_(
-            OrgInvite.expires_at.is_(None),
-            OrgInvite.expires_at > func.now()
+    return (
+        db.query(OrgInvite)
+        .filter(
+            func.lower(OrgInvite.email) == email.lower(),
+            OrgInvite.accepted_at.is_(None),
+            or_(OrgInvite.expires_at.is_(None), OrgInvite.expires_at > func.now()),
         )
-    ).first()
+        .first()
+    )
 
 
 def get_expired_invite(db: Session, email: str) -> OrgInvite | None:
     """Check for expired invite (for better error messaging)."""
-    return db.query(OrgInvite).filter(
-        func.lower(OrgInvite.email) == email.lower(),
-        OrgInvite.accepted_at.is_(None),
-        OrgInvite.expires_at.isnot(None),
-        OrgInvite.expires_at <= func.now()
-    ).first()
+    return (
+        db.query(OrgInvite)
+        .filter(
+            func.lower(OrgInvite.email) == email.lower(),
+            OrgInvite.accepted_at.is_(None),
+            OrgInvite.expires_at.isnot(None),
+            OrgInvite.expires_at <= func.now(),
+        )
+        .first()
+    )
 
 
 def create_user_from_invite(
-    db: Session, 
-    invite: OrgInvite, 
-    google_user: GoogleUserInfo
+    db: Session, invite: OrgInvite, google_user: GoogleUserInfo
 ) -> tuple[User, Membership]:
     """
     Create user, auth identity, and membership from invite.
-    
+
     Marks the invite as accepted.
     """
     # Create user
@@ -70,7 +75,7 @@ def create_user_from_invite(
     )
     db.add(user)
     db.flush()  # Get user.id
-    
+
     # Create auth identity
     identity = AuthIdentity(
         user_id=user.id,
@@ -79,7 +84,7 @@ def create_user_from_invite(
         email=google_user.email,
     )
     db.add(identity)
-    
+
     # Create membership
     membership = Membership(
         user_id=user.id,
@@ -87,45 +92,42 @@ def create_user_from_invite(
         role=invite.role,
     )
     db.add(membership)
-    
+
     # Mark invite as accepted
     invite.accepted_at = datetime.now(timezone.utc)
-    
+
     db.commit()
     db.refresh(user)
     db.refresh(membership)
-    
+
     return user, membership
 
 
 def resolve_user_and_create_session(
-    db: Session, 
-    google_user: GoogleUserInfo
+    db: Session, google_user: GoogleUserInfo
 ) -> tuple[str | None, str | None]:
     """
     Find or create user based on Google identity.
-    
+
     Flow:
     1. Check if user already exists (has auth identity)
     2. If not, check for valid invite
     3. Create user from invite if found
     4. Return session token or error code
-    
+
     Returns:
         (session_token, error_code) - one will be None
     """
     # Check for existing auth identity
     user = find_user_by_identity(db, AuthProvider.GOOGLE, google_user.sub)
-    
+
     if user:
         # Existing user - validate and create session
         if not user.is_active:
             return None, "account_disabled"
-        
-        membership = db.query(Membership).filter(
-            Membership.user_id == user.id
-        ).first()
-        
+
+        membership = db.query(Membership).filter(Membership.user_id == user.id).first()
+
         if not membership:
             return None, "no_membership"
 
@@ -135,42 +137,41 @@ def resolve_user_and_create_session(
 
         # Check MFA status - if MFA is enabled, user needs to complete challenge
         # If MFA not yet set up but required, they need to set it up
-        mfa_enabled = user.mfa_enabled
         mfa_required = True  # MFA required for all users
         mfa_verified = False  # User hasn't verified MFA yet in this session
 
         token = create_session_token(
-            user.id, 
-            membership.organization_id, 
-            membership.role, 
+            user.id,
+            membership.organization_id,
+            membership.role,
             user.token_version,
             mfa_verified=mfa_verified,
             mfa_required=mfa_required,
         )
         return token, None
-    
+
     # New user - check for valid invite
     invite = get_valid_invite(db, google_user.email)
-    
+
     if not invite:
         expired = get_expired_invite(db, google_user.email)
         if expired:
             return None, "invite_expired"
         return None, "not_invited"
-    
+
     # Validate role from invite
     try:
         Role(invite.role)
     except ValueError:
         return None, "invalid_invite_role"
-    
+
     # Create user from invite
     user, membership = create_user_from_invite(db, invite, google_user)
 
     # Track last login time for new users
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
-    
+
     # New users need to set up MFA
     token = create_session_token(
         user.id,
@@ -181,4 +182,3 @@ def resolve_user_and_create_session(
         mfa_required=True,
     )
     return token, None
-

@@ -12,20 +12,21 @@ from app.utils.normalization import normalize_phone, normalize_state
 
 class CaseCreate(BaseModel):
     """Request schema for creating a case."""
+
     # Contact (required)
     full_name: str = Field(..., min_length=1, max_length=255)
     email: EmailStr
-    
+
     # Contact (optional)
     phone: str | None = Field(None, max_length=20)
     state: str | None = Field(None, max_length=50)
-    
+
     # Demographics
     date_of_birth: date | None = None
     race: str | None = Field(None, max_length=100)
     height_ft: Decimal | None = Field(None, ge=0, le=10)
     weight_lb: int | None = Field(None, ge=0, le=1000)
-    
+
     # Eligibility
     is_age_eligible: bool | None = None
     is_citizen_or_pr: bool | None = None
@@ -34,7 +35,7 @@ class CaseCreate(BaseModel):
     has_surrogate_experience: bool | None = None
     num_deliveries: int | None = Field(None, ge=0, le=20)
     num_csections: int | None = Field(None, ge=0, le=10)
-    
+
     # Workflow
     source: CaseSource = CaseSource.MANUAL
     is_priority: bool = False
@@ -58,6 +59,7 @@ class CaseCreate(BaseModel):
 
 class CaseUpdate(BaseModel):
     """Request schema for updating a case (partial)."""
+
     full_name: str | None = Field(None, min_length=1, max_length=255)
     email: EmailStr | None = None
     phone: str | None = None
@@ -96,6 +98,7 @@ class CaseUpdate(BaseModel):
 
 class BulkAssign(BaseModel):
     """Request schema for bulk case assignment."""
+
     case_ids: list[UUID] = Field(..., min_length=1, max_length=100)
     owner_type: OwnerType
     owner_id: UUID
@@ -103,31 +106,32 @@ class BulkAssign(BaseModel):
 
 class CaseRead(BaseModel):
     """Full case response for detail views."""
+
     id: UUID
     case_number: str
     stage_id: UUID
     status_label: str
     source: CaseSource
     is_priority: bool
-    
+
     # Ownership (Salesforce-style)
     owner_type: str  # 'user' | 'queue'
     owner_id: UUID
     owner_name: str | None = None
     created_by_user_id: UUID | None
-    
+
     # Contact
     full_name: str
     email: str
     phone: str | None
     state: str | None
-    
+
     # Demographics
     date_of_birth: date | None
     race: str | None
     height_ft: Decimal | None
     weight_lb: int | None
-    
+
     # Eligibility
     is_age_eligible: bool | None
     is_citizen_or_pr: bool | None
@@ -136,11 +140,11 @@ class CaseRead(BaseModel):
     has_surrogate_experience: bool | None
     num_deliveries: int | None
     num_csections: int | None
-    
+
     # Soft delete
     is_archived: bool
     archived_at: datetime | None
-    
+
     # Timestamps
     created_at: datetime
     updated_at: datetime
@@ -150,6 +154,7 @@ class CaseRead(BaseModel):
 
 class CaseListItem(BaseModel):
     """Compact case for table views."""
+
     id: UUID
     case_number: str
     stage_id: UUID
@@ -177,6 +182,7 @@ class CaseListItem(BaseModel):
 
 class CaseListResponse(BaseModel):
     """Paginated case list response."""
+
     items: list[CaseListItem]
     total: int
     page: int
@@ -186,18 +192,21 @@ class CaseListResponse(BaseModel):
 
 class CaseStatusChange(BaseModel):
     """Request to change case stage."""
+
     stage_id: UUID
     reason: str | None = Field(None, max_length=500)
 
 
 class CaseAssign(BaseModel):
     """Request to assign case to a user or queue."""
+
     owner_type: OwnerType
     owner_id: UUID
 
 
 class CaseStatusHistoryRead(BaseModel):
     """Status history entry response."""
+
     id: UUID
     from_stage_id: UUID | None
     to_stage_id: UUID | None
@@ -213,6 +222,7 @@ class CaseStatusHistoryRead(BaseModel):
 
 class CaseStats(BaseModel):
     """Dashboard aggregation stats with period comparisons."""
+
     total: int
     by_status: dict[str, int]
     this_week: int
@@ -226,15 +236,15 @@ class CaseStats(BaseModel):
 
 class CaseHandoffDeny(BaseModel):
     """Request to deny a pending_handoff case."""
+
     reason: str | None = Field(
-        None, 
-        max_length=500, 
-        description="Reason for denial (logged in status history)"
+        None, max_length=500, description="Reason for denial (logged in status history)"
     )
 
 
 class CaseActivityRead(BaseModel):
     """Response schema for case activity log entry."""
+
     id: UUID
     activity_type: str
     actor_user_id: UUID | None
@@ -245,6 +255,7 @@ class CaseActivityRead(BaseModel):
 
 class CaseActivityResponse(BaseModel):
     """Paginated response for case activity log."""
+
     items: list[CaseActivityRead]
     total: int
     page: int

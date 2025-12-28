@@ -93,10 +93,14 @@ class TestAdminImports:
 
     @pytest.mark.asyncio
     async def test_import_config_success(self, authed_client, db, test_user, test_org):
-        membership = db.query(Membership).filter(
-            Membership.organization_id == test_org.id,
-            Membership.user_id == test_user.id,
-        ).first()
+        membership = (
+            db.query(Membership)
+            .filter(
+                Membership.organization_id == test_org.id,
+                Membership.user_id == test_user.id,
+            )
+            .first()
+        )
         assert membership is not None
 
         export_user_id = uuid.uuid4()
@@ -150,39 +154,49 @@ class TestAdminImports:
         assert refreshed_user is not None
         assert refreshed_user.id == test_user.id
         assert refreshed_user.display_name == "Imported User"
-        refreshed_membership = db.query(Membership).filter(
-            Membership.organization_id == test_org.id,
-            Membership.user_id == test_user.id,
-        ).first()
+        refreshed_membership = (
+            db.query(Membership)
+            .filter(
+                Membership.organization_id == test_org.id,
+                Membership.user_id == test_user.id,
+            )
+            .first()
+        )
         assert refreshed_membership is not None
         assert refreshed_membership.role == Role.DEVELOPER.value
 
     @pytest.mark.asyncio
-    async def test_import_cases_maps_user_by_email_and_imports_meta_payload(self, authed_client, db, test_org, test_user, default_stage):
+    async def test_import_cases_maps_user_by_email_and_imports_meta_payload(
+        self, authed_client, db, test_org, test_user, default_stage
+    ):
         meta_lead_id = uuid.uuid4()
         case_id = uuid.uuid4()
         export_user_id = uuid.uuid4()
-        cases_csv = _build_cases_csv([
-            {
-                "id": str(case_id),
-                "case_number": "00001",
-                "status_label": default_stage.label,
-                "stage_id": str(default_stage.id),
-                "source": "import",
-                "owner_type": "user",
-                "owner_id": str(export_user_id),
-                "owner_email": test_user.email,
-                "full_name": "Test Case",
-                "email": "case@example.com",
-                "meta_lead_id": str(meta_lead_id),
-                "meta_lead_external_id": "lead_123",
-                "meta_lead_status": "converted",
-                "meta_lead_meta_created_time": "2024-01-01T00:00:00+00:00",
-                "meta_lead_received_at": "2024-01-01T01:00:00+00:00",
-                "meta_lead_field_data": json.dumps({"first_name": "Jane"}),
-                "meta_lead_raw_payload": json.dumps({"payload": {"id": "lead_123"}}),
-            }
-        ])
+        cases_csv = _build_cases_csv(
+            [
+                {
+                    "id": str(case_id),
+                    "case_number": "00001",
+                    "status_label": default_stage.label,
+                    "stage_id": str(default_stage.id),
+                    "source": "import",
+                    "owner_type": "user",
+                    "owner_id": str(export_user_id),
+                    "owner_email": test_user.email,
+                    "full_name": "Test Case",
+                    "email": "case@example.com",
+                    "meta_lead_id": str(meta_lead_id),
+                    "meta_lead_external_id": "lead_123",
+                    "meta_lead_status": "converted",
+                    "meta_lead_meta_created_time": "2024-01-01T00:00:00+00:00",
+                    "meta_lead_received_at": "2024-01-01T01:00:00+00:00",
+                    "meta_lead_field_data": json.dumps({"first_name": "Jane"}),
+                    "meta_lead_raw_payload": json.dumps(
+                        {"payload": {"id": "lead_123"}}
+                    ),
+                }
+            ]
+        )
 
         response = await authed_client.post(
             "/admin/imports/cases",

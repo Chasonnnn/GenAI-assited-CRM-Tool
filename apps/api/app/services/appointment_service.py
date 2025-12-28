@@ -20,9 +20,16 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.db.models import (
-    AppointmentType, AvailabilityRule, AvailabilityOverride,
-    BookingLink, Appointment, AppointmentEmailLog, Task, UserIntegration,
-    Case, IntendedParent
+    AppointmentType,
+    AvailabilityRule,
+    AvailabilityOverride,
+    BookingLink,
+    Appointment,
+    AppointmentEmailLog,
+    Task,
+    UserIntegration,
+    Case,
+    IntendedParent,
 )
 from app.schemas.appointment import AppointmentRead, AppointmentListItem
 from app.db.enums import AppointmentStatus, MeetingMode
@@ -32,14 +39,17 @@ from app.db.enums import AppointmentStatus, MeetingMode
 # Types
 # =============================================================================
 
+
 class TimeSlot(NamedTuple):
     """Available time slot."""
+
     start: datetime
     end: datetime
 
 
 class SlotQuery(NamedTuple):
     """Parameters for slot calculation."""
+
     user_id: UUID
     org_id: UUID
     appointment_type_id: UUID
@@ -52,13 +62,14 @@ class SlotQuery(NamedTuple):
 # Slugs and Tokens
 # =============================================================================
 
+
 def generate_slug(name: str) -> str:
     """Generate URL-safe slug from name."""
     # Lowercase, replace spaces with hyphens, remove special chars
     slug = name.lower().strip()
-    slug = re.sub(r'[^a-z0-9\s-]', '', slug)
-    slug = re.sub(r'[\s_]+', '-', slug)
-    slug = re.sub(r'-+', '-', slug)
+    slug = re.sub(r"[^a-z0-9\s-]", "", slug)
+    slug = re.sub(r"[\s_]+", "-", slug)
+    slug = re.sub(r"-+", "-", slug)
     return slug[:100]  # Max length
 
 
@@ -103,6 +114,7 @@ def _normalize_scheduled_start(
 # Appointment Types
 # =============================================================================
 
+
 def create_appointment_type(
     db: Session,
     org_id: UUID,
@@ -120,18 +132,19 @@ def create_appointment_type(
     gmail_connected = _check_gmail_connected(db, user_id)
     if not gmail_connected:
         raise ValueError("Gmail must be connected to create appointment types")
-    
+
     slug = generate_slug(name)
     # Ensure unique slug for user
     base_slug = slug
     counter = 1
-    while db.query(AppointmentType).filter(
-        AppointmentType.user_id == user_id,
-        AppointmentType.slug == slug
-    ).first():
+    while (
+        db.query(AppointmentType)
+        .filter(AppointmentType.user_id == user_id, AppointmentType.slug == slug)
+        .first()
+    ):
         slug = f"{base_slug}-{counter}"
         counter += 1
-    
+
     appt_type = AppointmentType(
         organization_id=org_id,
         user_id=user_id,
@@ -169,11 +182,15 @@ def update_appointment_type(
         new_slug = generate_slug(name)
         base_slug = new_slug
         counter = 1
-        while db.query(AppointmentType).filter(
-            AppointmentType.user_id == appt_type.user_id,
-            AppointmentType.slug == new_slug,
-            AppointmentType.id != appt_type.id,
-        ).first():
+        while (
+            db.query(AppointmentType)
+            .filter(
+                AppointmentType.user_id == appt_type.user_id,
+                AppointmentType.slug == new_slug,
+                AppointmentType.id != appt_type.id,
+            )
+            .first()
+        ):
             new_slug = f"{base_slug}-{counter}"
             counter += 1
         appt_type.slug = new_slug
@@ -191,7 +208,7 @@ def update_appointment_type(
         appt_type.reminder_hours_before = reminder_hours_before
     if is_active is not None:
         appt_type.is_active = is_active
-    
+
     db.commit()
     db.refresh(appt_type)
     return appt_type
@@ -211,7 +228,9 @@ def get_appointment_context(
         }
 
     type_ids = {a.appointment_type_id for a in appointments if a.appointment_type_id}
-    approved_by_ids = {a.approved_by_user_id for a in appointments if a.approved_by_user_id}
+    approved_by_ids = {
+        a.approved_by_user_id for a in appointments if a.approved_by_user_id
+    }
     case_ids = {a.case_id for a in appointments if a.case_id}
     ip_ids = {a.intended_parent_id for a in appointments if a.intended_parent_id}
 
@@ -223,6 +242,7 @@ def get_appointment_context(
     user_names = {}
     if approved_by_ids:
         from app.db.models import User
+
         users = db.query(User).filter(User.id.in_(approved_by_ids)).all()
         user_names = {u.id: u.display_name for u in users}
 
@@ -276,7 +296,9 @@ def to_appointment_read(
         case_id=appt.case_id,
         case_number=context["case_numbers"].get(appt.case_id),
         intended_parent_id=appt.intended_parent_id,
-        intended_parent_name=context["intended_parent_names"].get(appt.intended_parent_id),
+        intended_parent_name=context["intended_parent_names"].get(
+            appt.intended_parent_id
+        ),
         created_at=appt.created_at,
         updated_at=appt.updated_at,
     )
@@ -302,7 +324,9 @@ def to_appointment_list_item(
         case_id=appt.case_id,
         case_number=context["case_numbers"].get(appt.case_id),
         intended_parent_id=appt.intended_parent_id,
-        intended_parent_name=context["intended_parent_names"].get(appt.intended_parent_id),
+        intended_parent_name=context["intended_parent_names"].get(
+            appt.intended_parent_id
+        ),
         created_at=appt.created_at,
     )
 
@@ -313,10 +337,14 @@ def get_appointment_type(
     org_id: UUID,
 ) -> AppointmentType | None:
     """Get appointment type by ID."""
-    return db.query(AppointmentType).filter(
-        AppointmentType.id == appt_type_id,
-        AppointmentType.organization_id == org_id,
-    ).first()
+    return (
+        db.query(AppointmentType)
+        .filter(
+            AppointmentType.id == appt_type_id,
+            AppointmentType.organization_id == org_id,
+        )
+        .first()
+    )
 
 
 def list_appointment_types(
@@ -339,6 +367,7 @@ def list_appointment_types(
 # Availability Rules
 # =============================================================================
 
+
 def set_availability_rules(
     db: Session,
     user_id: UUID,
@@ -348,7 +377,7 @@ def set_availability_rules(
 ) -> list[AvailabilityRule]:
     """
     Replace all availability rules for a user.
-    
+
     rules format: [{"day_of_week": 0, "start_time": "09:00", "end_time": "17:00"}, ...]
     """
     # Delete existing rules
@@ -356,7 +385,7 @@ def set_availability_rules(
         AvailabilityRule.user_id == user_id,
         AvailabilityRule.organization_id == org_id,
     ).delete()
-    
+
     # Create new rules
     new_rules = []
     for rule_data in rules:
@@ -370,7 +399,7 @@ def set_availability_rules(
         )
         db.add(rule)
         new_rules.append(rule)
-    
+
     db.commit()
     for rule in new_rules:
         db.refresh(rule)
@@ -383,15 +412,21 @@ def get_availability_rules(
     org_id: UUID,
 ) -> list[AvailabilityRule]:
     """Get all availability rules for a user."""
-    return db.query(AvailabilityRule).filter(
-        AvailabilityRule.user_id == user_id,
-        AvailabilityRule.organization_id == org_id,
-    ).order_by(AvailabilityRule.day_of_week, AvailabilityRule.start_time).all()
+    return (
+        db.query(AvailabilityRule)
+        .filter(
+            AvailabilityRule.user_id == user_id,
+            AvailabilityRule.organization_id == org_id,
+        )
+        .order_by(AvailabilityRule.day_of_week, AvailabilityRule.start_time)
+        .all()
+    )
 
 
 # =============================================================================
 # Availability Overrides
 # =============================================================================
+
 
 def set_availability_override(
     db: Session,
@@ -404,12 +439,16 @@ def set_availability_override(
     reason: str | None = None,
 ) -> AvailabilityOverride:
     """Create or update an availability override for a specific date."""
-    existing = db.query(AvailabilityOverride).filter(
-        AvailabilityOverride.user_id == user_id,
-        AvailabilityOverride.organization_id == org_id,
-        AvailabilityOverride.override_date == override_date,
-    ).first()
-    
+    existing = (
+        db.query(AvailabilityOverride)
+        .filter(
+            AvailabilityOverride.user_id == user_id,
+            AvailabilityOverride.organization_id == org_id,
+            AvailabilityOverride.override_date == override_date,
+        )
+        .first()
+    )
+
     if existing:
         existing.is_unavailable = is_unavailable
         existing.start_time = start_time
@@ -418,7 +457,7 @@ def set_availability_override(
         db.commit()
         db.refresh(existing)
         return existing
-    
+
     override = AvailabilityOverride(
         organization_id=org_id,
         user_id=user_id,
@@ -441,11 +480,15 @@ def delete_availability_override(
     org_id: UUID,
 ) -> bool:
     """Delete an availability override."""
-    override = db.query(AvailabilityOverride).filter(
-        AvailabilityOverride.id == override_id,
-        AvailabilityOverride.user_id == user_id,
-        AvailabilityOverride.organization_id == org_id,
-    ).first()
+    override = (
+        db.query(AvailabilityOverride)
+        .filter(
+            AvailabilityOverride.id == override_id,
+            AvailabilityOverride.user_id == user_id,
+            AvailabilityOverride.organization_id == org_id,
+        )
+        .first()
+    )
     if override:
         db.delete(override)
         db.commit()
@@ -476,20 +519,25 @@ def get_availability_overrides(
 # Booking Links
 # =============================================================================
 
+
 def get_or_create_booking_link(
     db: Session,
     user_id: UUID,
     org_id: UUID,
 ) -> BookingLink:
     """Get or create a booking link for a user."""
-    existing = db.query(BookingLink).filter(
-        BookingLink.user_id == user_id,
-        BookingLink.organization_id == org_id,
-    ).first()
-    
+    existing = (
+        db.query(BookingLink)
+        .filter(
+            BookingLink.user_id == user_id,
+            BookingLink.organization_id == org_id,
+        )
+        .first()
+    )
+
     if existing:
         return existing
-    
+
     link = BookingLink(
         organization_id=org_id,
         user_id=user_id,
@@ -507,13 +555,17 @@ def regenerate_booking_link(
     user_id: UUID,
 ) -> BookingLink | None:
     """Regenerate a booking link with a new slug."""
-    link = db.query(BookingLink).filter(
-        BookingLink.user_id == user_id,
-    ).first()
-    
+    link = (
+        db.query(BookingLink)
+        .filter(
+            BookingLink.user_id == user_id,
+        )
+        .first()
+    )
+
     if not link:
         return None
-    
+
     link.public_slug = generate_public_slug()
     db.commit()
     db.refresh(link)
@@ -525,15 +577,20 @@ def get_booking_link_by_slug(
     public_slug: str,
 ) -> BookingLink | None:
     """Get a booking link by its public slug."""
-    return db.query(BookingLink).filter(
-        BookingLink.public_slug == public_slug,
-        BookingLink.is_active.is_(True),
-    ).first()
+    return (
+        db.query(BookingLink)
+        .filter(
+            BookingLink.public_slug == public_slug,
+            BookingLink.is_active.is_(True),
+        )
+        .first()
+    )
 
 
 # =============================================================================
 # Slot Calculation
 # =============================================================================
+
 
 def get_available_slots(
     db: Session,
@@ -546,7 +603,7 @@ def get_available_slots(
 ) -> list[TimeSlot]:
     """
     Calculate available time slots for booking.
-    
+
     Checks:
     - User's availability rules
     - Date-specific overrides
@@ -554,18 +611,32 @@ def get_available_slots(
     - Tasks with scheduled times
     - (Future: Google Calendar freebusy)
     """
-    appt_type = db.query(AppointmentType).filter(
-        AppointmentType.id == query.appointment_type_id,
-        AppointmentType.organization_id == query.org_id,
-    ).first()
-    
+    appt_type = (
+        db.query(AppointmentType)
+        .filter(
+            AppointmentType.id == query.appointment_type_id,
+            AppointmentType.organization_id == query.org_id,
+        )
+        .first()
+    )
+
     if not appt_type or not appt_type.is_active:
         return []
-    
-    duration = duration_minutes if duration_minutes is not None else appt_type.duration_minutes
-    buffer_before = buffer_before_minutes if buffer_before_minutes is not None else appt_type.buffer_before_minutes
-    buffer_after = buffer_after_minutes if buffer_after_minutes is not None else appt_type.buffer_after_minutes
-    
+
+    duration = (
+        duration_minutes if duration_minutes is not None else appt_type.duration_minutes
+    )
+    buffer_before = (
+        buffer_before_minutes
+        if buffer_before_minutes is not None
+        else appt_type.buffer_before_minutes
+    )
+    buffer_after = (
+        buffer_after_minutes
+        if buffer_after_minutes is not None
+        else appt_type.buffer_after_minutes
+    )
+
     client_tz = _get_timezone(query.client_timezone)
 
     # Get all rules and overrides
@@ -579,11 +650,10 @@ def get_available_slots(
     user_date_end = client_end.astimezone(user_tz).date()
 
     overrides = get_availability_overrides(
-        db, query.user_id, query.org_id,
-        user_date_start, user_date_end
+        db, query.user_id, query.org_id, user_date_start, user_date_end
     )
     override_map = {o.override_date: o for o in overrides}
-    
+
     # Get existing appointments
     existing_appointments = _get_conflicting_appointments(
         db,
@@ -592,25 +662,25 @@ def get_available_slots(
         user_date_end,
         exclude_appointment_id=exclude_appointment_id,
     )
-    
+
     # Get tasks with scheduled times (use user timezone dates for consistency)
     existing_tasks = _get_conflicting_tasks(
         db, query.user_id, query.org_id, user_date_start, user_date_end
     )
-    
+
     # Build slots day by day
     slots: list[TimeSlot] = []
     current_date = user_date_start
-    
+
     while current_date <= user_date_end:
         # Skip past dates
         today = datetime.now(user_tz).date()
         if current_date < today:
             current_date += timedelta(days=1)
             continue
-        
+
         day_of_week = current_date.weekday()  # Monday=0, Sunday=6
-        
+
         # Check override first
         override = override_map.get(current_date)
         if override:
@@ -651,15 +721,12 @@ def get_available_slots(
                     user_tz,
                 )
                 slots.extend(day_slots)
-        
+
         current_date += timedelta(days=1)
-    
+
     client_start_utc = client_start.astimezone(timezone.utc)
     client_end_utc = client_end.astimezone(timezone.utc)
-    slots = [
-        slot for slot in slots
-        if client_start_utc <= slot.start <= client_end_utc
-    ]
+    slots = [slot for slot in slots if client_start_utc <= slot.start <= client_end_utc]
 
     return slots
 
@@ -678,63 +745,85 @@ def _build_day_slots(
 ) -> list[TimeSlot]:
     """Build available slots for a single day."""
     slots = []
-    
+
     # Create datetime objects in user's timezone, then normalize to UTC
     day_start_local = datetime.combine(slot_date, start_time, tzinfo=user_tz)
     day_end_local = datetime.combine(slot_date, end_time, tzinfo=user_tz)
     day_start = day_start_local.astimezone(timezone.utc)
     day_end = day_end_local.astimezone(timezone.utc)
-    
+
     # Skip if booking would be in the past
     now = datetime.now(timezone.utc)
     if day_end <= now:
         return slots
-    
+
     # Start from now if today
     if day_start < now:
         # Round up to next interval, using timedelta to avoid minute=60 ValueError
         minutes_into_interval = now.minute % interval_minutes
-        minutes_to_add = interval_minutes - minutes_into_interval if minutes_into_interval else 0
-        day_start = (now.replace(second=0, microsecond=0) + timedelta(minutes=minutes_to_add))
-    
+        minutes_to_add = (
+            interval_minutes - minutes_into_interval if minutes_into_interval else 0
+        )
+        day_start = now.replace(second=0, microsecond=0) + timedelta(
+            minutes=minutes_to_add
+        )
+
     current = day_start
     total_block = buffer_before + duration_minutes + buffer_after
-    
-    while current + timedelta(minutes=total_block) <= day_end + timedelta(minutes=buffer_after):
+
+    while current + timedelta(minutes=total_block) <= day_end + timedelta(
+        minutes=buffer_after
+    ):
         slot_start = current + timedelta(minutes=buffer_before)
         slot_end = slot_start + timedelta(minutes=duration_minutes)
-        
+
         # Check for conflicts with appointments
         has_conflict = False
         for appt in appointments:
             # Include buffer in conflict check
-            appt_buffer_before = appt.buffer_before_minutes if appt.buffer_before_minutes is not None else buffer_before
-            appt_buffer_after = appt.buffer_after_minutes if appt.buffer_after_minutes is not None else buffer_after
-            appt_block_start = appt.scheduled_start - timedelta(minutes=appt_buffer_before)
+            appt_buffer_before = (
+                appt.buffer_before_minutes
+                if appt.buffer_before_minutes is not None
+                else buffer_before
+            )
+            appt_buffer_after = (
+                appt.buffer_after_minutes
+                if appt.buffer_after_minutes is not None
+                else buffer_after
+            )
+            appt_block_start = appt.scheduled_start - timedelta(
+                minutes=appt_buffer_before
+            )
             appt_block_end = appt.scheduled_end + timedelta(minutes=appt_buffer_after)
-            
+
             if not (slot_end <= appt_block_start or slot_start >= appt_block_end):
                 has_conflict = True
                 break
-        
+
         # Check for conflicts with tasks
         # Tasks store due_time as local time (user's timezone), not UTC
         if not has_conflict:
             for task in tasks:
-                if task.due_date == slot_date and task.due_time and task.duration_minutes:
+                if (
+                    task.due_date == slot_date
+                    and task.due_time
+                    and task.duration_minutes
+                ):
                     # Task time is in user's local timezone, convert to UTC for comparison
-                    task_start_local = datetime.combine(task.due_date, task.due_time, tzinfo=user_tz)
+                    task_start_local = datetime.combine(
+                        task.due_date, task.due_time, tzinfo=user_tz
+                    )
                     task_start = task_start_local.astimezone(timezone.utc)
                     task_end = task_start + timedelta(minutes=task.duration_minutes)
                     if not (slot_end <= task_start or slot_start >= task_end):
                         has_conflict = True
                         break
-        
+
         if not has_conflict:
             slots.append(TimeSlot(start=slot_start, end=slot_end))
-        
+
         current += timedelta(minutes=interval_minutes)
-    
+
     return slots
 
 
@@ -749,7 +838,7 @@ def _get_conflicting_appointments(
     start_dt = datetime.combine(date_start, time.min, tzinfo=timezone.utc)
     end_dt = datetime.combine(date_end, time.max, tzinfo=timezone.utc)
     now = datetime.now(timezone.utc)
-    
+
     query = db.query(Appointment).filter(
         Appointment.user_id == user_id,
         Appointment.scheduled_start < end_dt,
@@ -779,22 +868,27 @@ def _get_conflicting_tasks(
 ) -> list["Task"]:
     """Get tasks with scheduled times that could conflict."""
     from app.db.enums import OwnerType
-    
-    return db.query(Task).filter(
-        Task.organization_id == org_id,
-        Task.owner_type == OwnerType.USER.value,
-        Task.owner_id == user_id,
-        Task.is_completed.is_(False),
-        Task.due_date >= date_start,
-        Task.due_date <= date_end,
-        Task.due_time.isnot(None),
-        Task.duration_minutes.isnot(None),
-    ).all()
+
+    return (
+        db.query(Task)
+        .filter(
+            Task.organization_id == org_id,
+            Task.owner_type == OwnerType.USER.value,
+            Task.owner_id == user_id,
+            Task.is_completed.is_(False),
+            Task.due_date >= date_start,
+            Task.due_date <= date_end,
+            Task.due_time.isnot(None),
+            Task.duration_minutes.isnot(None),
+        )
+        .all()
+    )
 
 
 # =============================================================================
 # Booking
 # =============================================================================
+
 
 def expire_pending_appointments(
     db: Session,
@@ -828,6 +922,7 @@ def expire_pending_appointments(
         db.commit()
     return updated
 
+
 def create_booking(
     db: Session,
     org_id: UUID,
@@ -843,7 +938,7 @@ def create_booking(
 ) -> Appointment:
     """
     Create a new appointment booking (pending approval).
-    
+
     Includes:
     - Idempotency check
     - Token generation for self-service
@@ -854,23 +949,31 @@ def create_booking(
     # Check idempotency
     if idempotency_key:
         idempotency_key = _normalize_idempotency_key(org_id, user_id, idempotency_key)
-        existing = db.query(Appointment).filter(
-            Appointment.idempotency_key == idempotency_key,
-            Appointment.organization_id == org_id,
-            Appointment.user_id == user_id,
-        ).first()
+        existing = (
+            db.query(Appointment)
+            .filter(
+                Appointment.idempotency_key == idempotency_key,
+                Appointment.organization_id == org_id,
+                Appointment.user_id == user_id,
+            )
+            .first()
+        )
         if existing:
             return existing
-    
+
     # Get appointment type
-    appt_type = db.query(AppointmentType).filter(
-        AppointmentType.id == appointment_type_id,
-        AppointmentType.organization_id == org_id,
-    ).first()
-    
+    appt_type = (
+        db.query(AppointmentType)
+        .filter(
+            AppointmentType.id == appointment_type_id,
+            AppointmentType.organization_id == org_id,
+        )
+        .first()
+    )
+
     if not appt_type:
         raise ValueError("Appointment type not found")
-    
+
     scheduled_start = _normalize_scheduled_start(scheduled_start, client_timezone)
     scheduled_end = scheduled_start + timedelta(minutes=appt_type.duration_minutes)
     pending_expires = datetime.now(timezone.utc) + timedelta(minutes=60)
@@ -887,7 +990,7 @@ def create_booking(
     slots = get_available_slots(db, slot_query)
     if not any(slot.start == scheduled_start for slot in slots):
         raise ValueError("Selected time is no longer available")
-    
+
     appointment = Appointment(
         organization_id=org_id,
         user_id=user_id,
@@ -914,9 +1017,10 @@ def create_booking(
     db.add(appointment)
     db.commit()
     db.refresh(appointment)
-    
+
     # Notify staff about new appointment request
     from app.services import notification_service
+
     notification_service.notify_appointment_requested(
         db=db,
         org_id=org_id,
@@ -926,7 +1030,7 @@ def create_booking(
         appointment_type=appt_type.name,
         requested_time=scheduled_start.strftime("%Y-%m-%d %H:%M"),
     )
-    
+
     return appointment
 
 
@@ -937,7 +1041,7 @@ def approve_booking(
 ) -> Appointment:
     """
     Approve a pending appointment.
-    
+
     - Re-validates slot availability to prevent double-booking
     - Sets status to confirmed
     - Clears pending expiry
@@ -945,7 +1049,10 @@ def approve_booking(
     """
     if appointment.status != AppointmentStatus.PENDING.value:
         raise ValueError(f"Cannot approve appointment with status {appointment.status}")
-    if appointment.pending_expires_at and appointment.pending_expires_at <= datetime.now(timezone.utc):
+    if (
+        appointment.pending_expires_at
+        and appointment.pending_expires_at <= datetime.now(timezone.utc)
+    ):
         appointment.status = AppointmentStatus.EXPIRED.value
         appointment.pending_expires_at = None
         appointment.reschedule_token = None
@@ -954,7 +1061,7 @@ def approve_booking(
         appointment.cancel_token_expires_at = None
         db.commit()
         raise ValueError("Appointment request has expired")
-    
+
     # Re-validate slot availability to prevent double-booking
     # Another appointment/task may have been created since the request
     if appointment.appointment_type_id:
@@ -965,7 +1072,7 @@ def approve_booking(
         except Exception:
             client_tz = ZoneInfo("UTC")
         scheduled_date_local = appointment.scheduled_start.astimezone(client_tz).date()
-        
+
         slot_query = SlotQuery(
             user_id=appointment.user_id,
             org_id=appointment.organization_id,
@@ -975,35 +1082,43 @@ def approve_booking(
             client_timezone=client_tz_name,
         )
         available_slots = get_available_slots(
-            db, slot_query,
+            db,
+            slot_query,
             exclude_appointment_id=appointment.id,  # Exclude this pending appt itself
             duration_minutes=appointment.duration_minutes,
             buffer_before_minutes=appointment.buffer_before_minutes,
             buffer_after_minutes=appointment.buffer_after_minutes,
         )
-        if not any(slot.start == appointment.scheduled_start for slot in available_slots):
-            raise ValueError("This time slot is no longer available - another appointment or task has been scheduled")
-    
+        if not any(
+            slot.start == appointment.scheduled_start for slot in available_slots
+        ):
+            raise ValueError(
+                "This time slot is no longer available - another appointment or task has been scheduled"
+            )
+
     appointment.status = AppointmentStatus.CONFIRMED.value
     appointment.approved_at = datetime.now(timezone.utc)
     appointment.approved_by_user_id = approved_by_user_id
     appointment.pending_expires_at = None
-    
+
     # Rotate tokens for security
     appointment.reschedule_token = generate_token()
     appointment.cancel_token = generate_token()
     token_expires = appointment.scheduled_end + timedelta(days=7)
     appointment.reschedule_token_expires_at = token_expires
     appointment.cancel_token_expires_at = token_expires
-    
+
     db.commit()
     db.refresh(appointment)
-    
+
     # Notify staff about confirmed appointment
     from app.services import notification_service
-    appt_type = db.query(AppointmentType).filter(
-        AppointmentType.id == appointment.appointment_type_id
-    ).first()
+
+    appt_type = (
+        db.query(AppointmentType)
+        .filter(AppointmentType.id == appointment.appointment_type_id)
+        .first()
+    )
     notification_service.notify_appointment_confirmed(
         db=db,
         org_id=appointment.organization_id,
@@ -1013,11 +1128,12 @@ def approve_booking(
         appointment_type=appt_type.name if appt_type else "Appointment",
         confirmed_time=appointment.scheduled_start.strftime("%Y-%m-%d %H:%M"),
     )
-    
+
     # Fire workflow trigger for appointment scheduled
     from app.services import workflow_triggers
+
     workflow_triggers.trigger_appointment_scheduled(db, appointment)
-    
+
     return appointment
 
 
@@ -1033,15 +1149,23 @@ def reschedule_booking(
     if by_client:
         if not token or appointment.reschedule_token != token:
             raise ValueError("Invalid reschedule token")
-        if appointment.reschedule_token_expires_at and appointment.reschedule_token_expires_at <= datetime.now(timezone.utc):
+        if (
+            appointment.reschedule_token_expires_at
+            and appointment.reschedule_token_expires_at <= datetime.now(timezone.utc)
+        ):
             raise ValueError("Reschedule link has expired")
-    
+
     if appointment.status not in [
         AppointmentStatus.PENDING.value,
         AppointmentStatus.CONFIRMED.value,
     ]:
-        raise ValueError(f"Cannot reschedule appointment with status {appointment.status}")
-    if appointment.status == AppointmentStatus.PENDING.value and appointment.pending_expires_at:
+        raise ValueError(
+            f"Cannot reschedule appointment with status {appointment.status}"
+        )
+    if (
+        appointment.status == AppointmentStatus.PENDING.value
+        and appointment.pending_expires_at
+    ):
         if appointment.pending_expires_at <= datetime.now(timezone.utc):
             appointment.status = AppointmentStatus.EXPIRED.value
             appointment.pending_expires_at = None
@@ -1053,7 +1177,7 @@ def reschedule_booking(
             raise ValueError("Appointment request has expired")
     if not appointment.appointment_type_id:
         raise ValueError("Appointment type not found")
-    
+
     # Calculate new end time
     new_start = _normalize_scheduled_start(new_start, appointment.client_timezone)
     new_end = new_start + timedelta(minutes=appointment.duration_minutes)
@@ -1062,8 +1186,12 @@ def reschedule_booking(
         user_id=appointment.user_id,
         org_id=appointment.organization_id,
         appointment_type_id=appointment.appointment_type_id,
-        date_start=new_start.astimezone(_get_timezone(appointment.client_timezone)).date(),
-        date_end=new_start.astimezone(_get_timezone(appointment.client_timezone)).date(),
+        date_start=new_start.astimezone(
+            _get_timezone(appointment.client_timezone)
+        ).date(),
+        date_end=new_start.astimezone(
+            _get_timezone(appointment.client_timezone)
+        ).date(),
         client_timezone=appointment.client_timezone,
     )
     slots = get_available_slots(
@@ -1076,22 +1204,24 @@ def reschedule_booking(
     )
     if not any(slot.start == new_start for slot in slots):
         raise ValueError("Selected time is no longer available")
-    
+
     appointment.scheduled_start = new_start
     appointment.scheduled_end = new_end
     if appointment.status == AppointmentStatus.PENDING.value:
-        appointment.pending_expires_at = datetime.now(timezone.utc) + timedelta(minutes=60)
-    
+        appointment.pending_expires_at = datetime.now(timezone.utc) + timedelta(
+            minutes=60
+        )
+
     # Rotate tokens after reschedule
     appointment.reschedule_token = generate_token()
     appointment.cancel_token = generate_token()
     token_expires = new_end + timedelta(days=7)
     appointment.reschedule_token_expires_at = token_expires
     appointment.cancel_token_expires_at = token_expires
-    
+
     db.commit()
     db.refresh(appointment)
-    
+
     return appointment
 
 
@@ -1107,15 +1237,21 @@ def cancel_booking(
     if by_client:
         if not token or appointment.cancel_token != token:
             raise ValueError("Invalid cancel token")
-        if appointment.cancel_token_expires_at and appointment.cancel_token_expires_at <= datetime.now(timezone.utc):
+        if (
+            appointment.cancel_token_expires_at
+            and appointment.cancel_token_expires_at <= datetime.now(timezone.utc)
+        ):
             raise ValueError("Cancel link has expired")
-    
+
     if appointment.status not in [
         AppointmentStatus.PENDING.value,
         AppointmentStatus.CONFIRMED.value,
     ]:
         raise ValueError(f"Cannot cancel appointment with status {appointment.status}")
-    if appointment.status == AppointmentStatus.PENDING.value and appointment.pending_expires_at:
+    if (
+        appointment.status == AppointmentStatus.PENDING.value
+        and appointment.pending_expires_at
+    ):
         if appointment.pending_expires_at <= datetime.now(timezone.utc):
             appointment.status = AppointmentStatus.EXPIRED.value
             appointment.pending_expires_at = None
@@ -1125,7 +1261,7 @@ def cancel_booking(
             appointment.cancel_token_expires_at = None
             db.commit()
             raise ValueError("Appointment request has expired")
-    
+
     appointment.status = AppointmentStatus.CANCELLED.value
     appointment.cancelled_at = datetime.now(timezone.utc)
     appointment.cancelled_by_client = by_client
@@ -1134,15 +1270,18 @@ def cancel_booking(
     appointment.cancel_token = None
     appointment.reschedule_token_expires_at = None
     appointment.cancel_token_expires_at = None
-    
+
     db.commit()
     db.refresh(appointment)
-    
+
     # Notify staff about cancelled appointment
     from app.services import notification_service
-    appt_type = db.query(AppointmentType).filter(
-        AppointmentType.id == appointment.appointment_type_id
-    ).first()
+
+    appt_type = (
+        db.query(AppointmentType)
+        .filter(AppointmentType.id == appointment.appointment_type_id)
+        .first()
+    )
     notification_service.notify_appointment_cancelled(
         db=db,
         org_id=appointment.organization_id,
@@ -1152,7 +1291,7 @@ def cancel_booking(
         appointment_type=appt_type.name if appt_type else "Appointment",
         cancelled_time=appointment.scheduled_start.strftime("%Y-%m-%d %H:%M"),
     )
-    
+
     return appointment
 
 
@@ -1162,10 +1301,14 @@ def get_appointment(
     org_id: UUID,
 ) -> Appointment | None:
     """Get appointment by ID."""
-    return db.query(Appointment).filter(
-        Appointment.id == appointment_id,
-        Appointment.organization_id == org_id,
-    ).first()
+    return (
+        db.query(Appointment)
+        .filter(
+            Appointment.id == appointment_id,
+            Appointment.organization_id == org_id,
+        )
+        .first()
+    )
 
 
 def get_appointment_by_token(
@@ -1176,17 +1319,15 @@ def get_appointment_by_token(
     """Get appointment by self-service token."""
     now = datetime.now(timezone.utc)
     if token_type == "reschedule":
-        appt = db.query(Appointment).filter(
-            Appointment.reschedule_token == token
-        ).first()
+        appt = (
+            db.query(Appointment).filter(Appointment.reschedule_token == token).first()
+        )
         if not appt:
             return None
         if appt.reschedule_token_expires_at and appt.reschedule_token_expires_at <= now:
             return None
     elif token_type == "cancel":
-        appt = db.query(Appointment).filter(
-            Appointment.cancel_token == token
-        ).first()
+        appt = db.query(Appointment).filter(Appointment.cancel_token == token).first()
         if not appt:
             return None
         if appt.cancel_token_expires_at and appt.cancel_token_expires_at <= now:
@@ -1202,7 +1343,11 @@ def get_appointment_by_token(
     ]:
         return None
 
-    if appt.status == AppointmentStatus.PENDING.value and appt.pending_expires_at and appt.pending_expires_at <= now:
+    if (
+        appt.status == AppointmentStatus.PENDING.value
+        and appt.pending_expires_at
+        and appt.pending_expires_at <= now
+    ):
         appt.status = AppointmentStatus.EXPIRED.value
         appt.pending_expires_at = None
         appt.reschedule_token = None
@@ -1228,7 +1373,7 @@ def list_appointments(
     offset: int = 0,
 ) -> tuple[list[Appointment], int]:
     """List appointments for a user with pagination.
-    
+
     When case_id and/or intended_parent_id are provided, filters to appointments
     matching EITHER the case_id OR the intended_parent_id (used for match-scoped views).
     """
@@ -1237,18 +1382,18 @@ def list_appointments(
         Appointment.user_id == user_id,
         Appointment.organization_id == org_id,
     )
-    
+
     if status:
         query = query.filter(Appointment.status == status)
-    
+
     if date_start:
         start_dt = datetime.combine(date_start, time.min, tzinfo=timezone.utc)
         query = query.filter(Appointment.scheduled_start >= start_dt)
-    
+
     if date_end:
         end_dt = datetime.combine(date_end, time.max, tzinfo=timezone.utc)
         query = query.filter(Appointment.scheduled_start <= end_dt)
-    
+
     # Filter by case_id OR intended_parent_id (for match-scoped views)
     if case_id and intended_parent_id:
         query = query.filter(
@@ -1261,18 +1406,22 @@ def list_appointments(
         query = query.filter(Appointment.case_id == case_id)
     elif intended_parent_id:
         query = query.filter(Appointment.intended_parent_id == intended_parent_id)
-    
+
     total = query.count()
-    appointments = query.order_by(
-        Appointment.scheduled_start.desc()
-    ).offset(offset).limit(limit).all()
-    
+    appointments = (
+        query.order_by(Appointment.scheduled_start.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
     return appointments, total
 
 
 # =============================================================================
 # Email Logging
 # =============================================================================
+
 
 def log_appointment_email(
     db: Session,
@@ -1328,10 +1477,15 @@ def mark_email_failed(
 # Helpers
 # =============================================================================
 
+
 def _check_gmail_connected(db: Session, user_id: UUID) -> bool:
     """Check if user has Gmail connected."""
-    integration = db.query(UserIntegration).filter(
-        UserIntegration.user_id == user_id,
-        UserIntegration.integration_type == "gmail",
-    ).first()
+    integration = (
+        db.query(UserIntegration)
+        .filter(
+            UserIntegration.user_id == user_id,
+            UserIntegration.integration_type == "gmail",
+        )
+        .first()
+    )
     return integration is not None and integration.access_token_encrypted is not None

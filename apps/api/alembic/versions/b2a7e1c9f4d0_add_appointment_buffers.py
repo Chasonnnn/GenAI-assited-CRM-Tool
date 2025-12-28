@@ -5,6 +5,7 @@ Revises: a4f2c9b7e1d3
 Create Date: 2025-12-26 13:05:00.000000
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -12,8 +13,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'b2a7e1c9f4d0'
-down_revision: Union[str, Sequence[str], None] = 'a4f2c9b7e1d3'
+revision: str = "b2a7e1c9f4d0"
+down_revision: Union[str, Sequence[str], None] = "a4f2c9b7e1d3"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -21,12 +22,22 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
     op.add_column(
-        'appointments',
-        sa.Column('buffer_before_minutes', sa.Integer(), server_default=sa.text('0'), nullable=False)
+        "appointments",
+        sa.Column(
+            "buffer_before_minutes",
+            sa.Integer(),
+            server_default=sa.text("0"),
+            nullable=False,
+        ),
     )
     op.add_column(
-        'appointments',
-        sa.Column('buffer_after_minutes', sa.Integer(), server_default=sa.text('0'), nullable=False)
+        "appointments",
+        sa.Column(
+            "buffer_after_minutes",
+            sa.Integer(),
+            server_default=sa.text("0"),
+            nullable=False,
+        ),
     )
 
     op.execute("""
@@ -41,5 +52,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_column('appointments', 'buffer_after_minutes')
-    op.drop_column('appointments', 'buffer_before_minutes')
+    op.drop_column("appointments", "buffer_after_minutes")
+    op.drop_column("appointments", "buffer_before_minutes")

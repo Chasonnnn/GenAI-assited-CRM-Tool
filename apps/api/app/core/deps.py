@@ -21,7 +21,7 @@ CSRF_HEADER_VALUE = "XMLHttpRequest"
 def get_db() -> Generator[Session, None, None]:
     """
     Database session dependency.
-    
+
     Yields a database session and ensures it's closed after the request.
     """
     db = SessionLocal()
@@ -31,25 +31,22 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
-def get_current_user(
-    request: Request, 
-    db: Session = Depends(get_db)
-):
+def get_current_user(request: Request, db: Session = Depends(get_db)):
     """
     Get authenticated user from session cookie.
-    
+
     Validates:
     - Session cookie exists
     - JWT is valid and not expired
     - User exists and is active
     - Token version matches (for revocation support)
-    
+
     Raises:
         HTTPException 401: Authentication failed
     """
     # Import here to avoid circular imports
     from app.db.models import User
-    
+
     # DEV BYPASS: Return mock user for testing
     if settings.DEV_BYPASS_AUTH:
         mock_user = db.query(User).filter(User.email == "manager@test.com").first()
@@ -59,40 +56,37 @@ def get_current_user(
         any_user = db.query(User).filter(User.is_active.is_(True)).first()
         if any_user:
             return any_user
-    
+
     token = request.cookies.get(COOKIE_NAME)
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
+
     try:
         payload = decode_session_token(token)
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid session")
-    
+
     user = db.query(User).filter(User.id == payload["sub"]).first()
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
-    
+
     if not user.is_active:
         raise HTTPException(status_code=401, detail="Account disabled")
-    
+
     # Token version check (revocation support)
     if user.token_version != payload.get("token_version"):
         raise HTTPException(status_code=401, detail="Session revoked")
-    
+
     return user
 
 
-def get_current_session(
-    request: Request,
-    db: Session = Depends(get_db)
-):
+def get_current_session(request: Request, db: Session = Depends(get_db)):
     """
     Get full session context: user_id, org_id, role, MFA status.
-    
+
     This is the PRIMARY auth dependency for most endpoints.
     Returns a UserSession with all context needed for authorization.
-    
+
     Raises:
         HTTPException 401: Not authenticated
         HTTPException 403: No membership or unknown role
@@ -105,12 +99,12 @@ def get_current_session(
     from app.db.models import Membership
     from app.db.enums import Role
     from app.schemas.auth import UserSession
-    
+
     # Parse JWT to get MFA status before calling get_current_user
     token = request.cookies.get(COOKIE_NAME)
     mfa_verified = False
     mfa_required = True
-    
+
     if token:
         try:
             payload = decode_session_token(token)
@@ -118,25 +112,23 @@ def get_current_session(
             mfa_required = payload.get("mfa_required", True)
         except Exception:
             pass  # Let get_current_user handle the error
-    
+
     user = get_current_user(request, db)
-    
-    membership = db.query(Membership).filter(
-        Membership.user_id == user.id
-    ).first()
-    
+
+    membership = db.query(Membership).filter(Membership.user_id == user.id).first()
+
     if not membership:
         raise HTTPException(status_code=403, detail="No organization membership")
-    
+
     # Validate role is a known enum value - return 403 not 500
     if not Role.has_value(membership.role):
         raise HTTPException(
-            status_code=403, 
-            detail=f"Unknown role '{membership.role}'. Contact administrator."
+            status_code=403,
+            detail=f"Unknown role '{membership.role}'. Contact administrator.",
         )
-    
+
     role = Role(membership.role)
-    
+
     session = UserSession(
         user_id=user.id,
         org_id=membership.organization_id,
@@ -153,20 +145,22 @@ def get_current_session(
 def require_roles(allowed_roles: list):
     """
     Dependency factory for role-based authorization.
-    
+
     Uses enum values (not strings) to prevent drift.
-    
+
     Usage:
         @router.post("/admin", dependencies=[Depends(require_roles([Role.ADMIN, Role.DEVELOPER]))])
     """
+
     def dependency(request: Request, db: Session = Depends(get_db)):
         session = get_current_session(request, db)
         if session.role not in allowed_roles:
             raise HTTPException(
-                status_code=403, 
-                detail=f"Role '{session.role.value}' not authorized for this action"
+                status_code=403,
+                detail=f"Role '{session.role.value}' not authorized for this action",
             )
         return session
+
     return dependency
 
 
@@ -177,39 +171,41 @@ def _normalize_permission(permission: str | PermissionKey) -> str:
 def require_permission(permission: str | PermissionKey):
     """
     Dependency factory for permission-based authorization.
-    
+
     Uses the RBAC permission system with:
     - Role defaults
     - User-level overrides (grant/revoke)
     - Developer always has all permissions
-    
+
     Usage:
         @router.get("/cases", dependencies=[Depends(require_permission("view_cases"))])
     """
+
     def dependency(request: Request, db: Session = Depends(get_db)):
         from app.services import permission_service
-        
+
         session = get_current_session(request, db)
         permission_key = _normalize_permission(permission)
-        
+
         if not permission_service.check_permission(
             db, session.org_id, session.user_id, session.role.value, permission_key
         ):
             raise HTTPException(
-                status_code=403,
-                detail=f"Missing permission: {permission_key}"
+                status_code=403, detail=f"Missing permission: {permission_key}"
             )
         return session
+
     return dependency
 
 
 def require_any_permissions(permissions: list[str | PermissionKey]):
     """
     Dependency factory for OR-based permission checks.
-    
+
     Usage:
         @router.get("/reports", dependencies=[Depends(require_any_permissions([P.REPORTS_VIEW, P.OPS_MANAGE]))])
     """
+
     def dependency(request: Request, db: Session = Depends(get_db)):
         from app.services import permission_service
 
@@ -221,19 +217,21 @@ def require_any_permissions(permissions: list[str | PermissionKey]):
         if not any(key in effective for key in permission_keys):
             raise HTTPException(
                 status_code=403,
-                detail=f"Missing one of permissions: {', '.join(permission_keys)}"
+                detail=f"Missing one of permissions: {', '.join(permission_keys)}",
             )
         return session
+
     return dependency
 
 
 def require_all_permissions(permissions: list[str | PermissionKey]):
     """
     Dependency factory for AND-based permission checks.
-    
+
     Usage:
         @router.post("/exports", dependencies=[Depends(require_all_permissions([P.AUDIT_VIEW, P.EXPORT_DATA]))])
     """
+
     def dependency(request: Request, db: Session = Depends(get_db)):
         from app.services import permission_service
 
@@ -245,36 +243,33 @@ def require_all_permissions(permissions: list[str | PermissionKey]):
         missing = [key for key in permission_keys if key not in effective]
         if missing:
             raise HTTPException(
-                status_code=403,
-                detail=f"Missing permissions: {', '.join(missing)}"
+                status_code=403, detail=f"Missing permissions: {', '.join(missing)}"
             )
         return session
+
     return dependency
 
 
 def require_csrf_header(request: Request) -> None:
     """
     Verify CSRF header on mutations.
-    
+
     Apply to state-changing endpoints (POST, PATCH, DELETE).
-    
+
     Raises:
         HTTPException 403: Missing or invalid CSRF header
     """
     if request.headers.get(CSRF_HEADER) != CSRF_HEADER_VALUE:
         raise HTTPException(
-            status_code=403, 
-            detail=f"Missing CSRF header. Include '{CSRF_HEADER}: {CSRF_HEADER_VALUE}'"
+            status_code=403,
+            detail=f"Missing CSRF header. Include '{CSRF_HEADER}: {CSRF_HEADER_VALUE}'",
         )
 
 
-def get_org_scope(
-    request: Request,
-    db: Session = Depends(get_db)
-) -> UUID:
+def get_org_scope(request: Request, db: Session = Depends(get_db)) -> UUID:
     """
     Get org_id for query scoping.
-    
+
     Every list/detail query MUST filter by this value
     to ensure proper tenant isolation.
     """
@@ -286,59 +281,68 @@ def get_org_scope(
 # Permission Check Helpers (use enum sets from db.enums)
 # =============================================================================
 
+
 def can_assign(session) -> bool:
     """Check if user can assign cases to others."""
     from app.db.enums import ROLES_CAN_ASSIGN
+
     return session.role in ROLES_CAN_ASSIGN
 
 
 def can_archive(session) -> bool:
     """Check if user can archive/restore cases."""
     from app.db.enums import ROLES_CAN_ARCHIVE
+
     return session.role in ROLES_CAN_ARCHIVE
 
 
 def can_hard_delete(session) -> bool:
     """Check if user can permanently delete cases."""
     from app.db.enums import ROLES_CAN_HARD_DELETE
+
     return session.role in ROLES_CAN_HARD_DELETE
 
 
 def can_manage_settings(session) -> bool:
     """Check if user can manage org settings."""
     from app.db.enums import ROLES_CAN_MANAGE_SETTINGS
+
     return session.role in ROLES_CAN_MANAGE_SETTINGS
 
 
 def can_manage_integrations(session) -> bool:
     """Check if user can manage integrations (developer only)."""
     from app.db.enums import ROLES_CAN_MANAGE_INTEGRATIONS
+
     return session.role in ROLES_CAN_MANAGE_INTEGRATIONS
 
 
 def can_invite(session) -> bool:
     """Check if user can invite new members."""
     from app.db.enums import ROLES_CAN_INVITE
+
     return session.role in ROLES_CAN_INVITE
 
 
 def is_owner_or_can_manage(session, created_by_user_id: UUID) -> bool:
     """Check if user is the creator OR has manager+ permissions."""
     from app.db.enums import ROLES_CAN_ARCHIVE  # Manager+ can do anything
+
     return session.user_id == created_by_user_id or session.role in ROLES_CAN_ARCHIVE
 
 
 def is_owner_or_assignee_or_manager(
-    session, 
+    session,
     created_by_user_id: UUID | None,
     owner_type: str | None,
     owner_id: UUID | None,
 ) -> bool:
     """Check if user is creator, owner (user), or manager+. For tasks."""
     from app.db.enums import ROLES_CAN_ARCHIVE, OwnerType
+
     is_owner = owner_type == OwnerType.USER.value and owner_id == session.user_id
     return (
-        session.user_id == created_by_user_id or
-        is_owner or
-        session.role in ROLES_CAN_ARCHIVE
+        session.user_id == created_by_user_id
+        or is_owner
+        or session.role in ROLES_CAN_ARCHIVE
     )

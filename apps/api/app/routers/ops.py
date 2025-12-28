@@ -3,6 +3,7 @@ Ops/Alerts endpoints for integration health and system alerts.
 
 Manager+ access for viewing integration status and managing alerts.
 """
+
 from datetime import datetime
 from typing import Optional, Literal
 from uuid import UUID
@@ -11,7 +12,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db, require_permission, require_csrf_header
+from app.core.deps import (
+    get_current_session,
+    get_db,
+    require_permission,
+    require_csrf_header,
+)
 from app.core.policies import POLICIES
 from app.db.enums import AlertStatus, AlertSeverity
 from app.schemas.auth import UserSession
@@ -28,6 +34,7 @@ router = APIRouter(
 # =============================================================================
 # Pydantic Schemas
 # =============================================================================
+
 
 class IntegrationHealthResponse(BaseModel):
     id: str
@@ -75,6 +82,7 @@ AlertSeverityParam = Literal["warn", "error", "critical"]
 # Endpoints
 # =============================================================================
 
+
 @router.get("/health", response_model=list[IntegrationHealthResponse])
 def get_integration_health(
     session: UserSession = Depends(get_current_session),
@@ -97,7 +105,9 @@ def get_alerts_summary(
 @router.get("/alerts", response_model=AlertsListResponse)
 def list_alerts(
     status: Optional[AlertStatusParam] = Query(None, description="Filter by status"),
-    severity: Optional[AlertSeverityParam] = Query(None, description="Filter by severity"),
+    severity: Optional[AlertSeverityParam] = Query(
+        None, description="Filter by severity"
+    ),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     session: UserSession = Depends(get_current_session),
@@ -107,7 +117,7 @@ def list_alerts(
     # FastAPI validates the Literal types, so these are safe
     status_enum = AlertStatus(status) if status else None
     severity_enum = AlertSeverity(severity) if severity else None
-    
+
     alerts = alert_service.list_alerts(
         db=db,
         org_id=session.org_id,
@@ -116,10 +126,10 @@ def list_alerts(
         limit=limit,
         offset=offset,
     )
-    
+
     # Pass severity to count_alerts for consistent pagination
     total = alert_service.count_alerts(db, session.org_id, status_enum, severity_enum)
-    
+
     return AlertsListResponse(
         items=[
             AlertResponse(
@@ -150,15 +160,17 @@ def resolve_alert(
     """Resolve an alert."""
     # Verify alert belongs to org
     alert = alert_service.get_alert_for_org(db, session.org_id, alert_id)
-    
+
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
-    
-    result = alert_service.resolve_alert(db, alert_id, session.user_id)
+
+    alert_service.resolve_alert(db, alert_id, session.user_id)
     return {"status": "resolved", "alert_id": str(alert_id)}
 
 
-@router.post("/alerts/{alert_id}/acknowledge", dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/alerts/{alert_id}/acknowledge", dependencies=[Depends(require_csrf_header)]
+)
 def acknowledge_alert(
     alert_id: UUID,
     session: UserSession = Depends(get_current_session),
@@ -167,10 +179,10 @@ def acknowledge_alert(
     """Acknowledge an alert (stops notifications but keeps open)."""
     # Verify alert belongs to org
     alert = alert_service.get_alert_for_org(db, session.org_id, alert_id)
-    
+
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
-    
+
     alert_service.acknowledge_alert(db, alert_id)
     return {"status": "acknowledged", "alert_id": str(alert_id)}
 
@@ -185,9 +197,9 @@ def snooze_alert(
     """Snooze an alert for specified hours."""
     # Verify alert belongs to org
     alert = alert_service.get_alert_for_org(db, session.org_id, alert_id)
-    
+
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
-    
+
     alert_service.snooze_alert(db, alert_id, hours)
     return {"status": "snoozed", "alert_id": str(alert_id), "hours": hours}

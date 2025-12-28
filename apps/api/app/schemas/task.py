@@ -10,6 +10,7 @@ from app.db.enums import TaskType
 
 class TaskCreate(BaseModel):
     """Request to create a task."""
+
     title: str = Field(..., min_length=1, max_length=255)
     description: str | None = Field(None, max_length=2000)
     task_type: TaskType = TaskType.OTHER
@@ -25,6 +26,7 @@ class TaskCreate(BaseModel):
 
 class TaskUpdate(BaseModel):
     """Request to update a task (partial)."""
+
     title: str | None = Field(None, min_length=1, max_length=255)
     description: str | None = None
     task_type: TaskType | None = None
@@ -39,6 +41,7 @@ class TaskUpdate(BaseModel):
 
 class TaskRead(BaseModel):
     """Full task response."""
+
     id: UUID
     case_id: UUID | None
     case_number: str | None = None
@@ -48,7 +51,7 @@ class TaskRead(BaseModel):
     owner_name: str | None = None  # Resolved user or queue name
     created_by_user_id: UUID
     created_by_name: str | None = None
-    
+
     title: str
     description: str | None
     task_type: TaskType
@@ -58,7 +61,7 @@ class TaskRead(BaseModel):
     is_completed: bool
     completed_at: datetime | None
     completed_by_name: str | None = None
-    
+
     created_at: datetime
     updated_at: datetime
 
@@ -67,6 +70,7 @@ class TaskRead(BaseModel):
 
 class TaskListItem(BaseModel):
     """Compact task for list views."""
+
     id: UUID
     case_id: UUID | None
     case_number: str | None = None
@@ -86,6 +90,7 @@ class TaskListItem(BaseModel):
 
 class TaskListResponse(BaseModel):
     """Paginated task list."""
+
     items: list[TaskListItem]
     total: int
     page: int
@@ -95,11 +100,12 @@ class TaskListResponse(BaseModel):
 
 class BulkTaskComplete(BaseModel):
     """Request to complete multiple tasks."""
+
     task_ids: list[UUID] = Field(..., min_length=1, max_length=100)
 
 
 class BulkCompleteResponse(BaseModel):
     """Response for bulk task completion."""
+
     completed: int
     failed: list[dict]  # [{"task_id": str, "reason": str}]
-

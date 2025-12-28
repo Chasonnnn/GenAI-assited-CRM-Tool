@@ -45,6 +45,7 @@ router = APIRouter()
 # Helper Functions
 # =============================================================================
 
+
 def _type_to_read(appt_type) -> AppointmentTypeRead:
     """Convert AppointmentType model to read schema."""
     return AppointmentTypeRead(
@@ -101,10 +102,10 @@ def _link_to_read(link, base_url: str = "") -> BookingLinkRead:
     )
 
 
-
 # =============================================================================
 # Appointment Types
 # =============================================================================
+
 
 @router.get("/types", response_model=list[AppointmentTypeRead])
 def list_appointment_types(
@@ -167,11 +168,11 @@ def update_appointment_type(
     appt_type = appointment_service.get_appointment_type(db, type_id, session.org_id)
     if not appt_type:
         raise HTTPException(status_code=404, detail="Appointment type not found")
-    
+
     # Verify ownership
     if appt_type.user_id != session.user_id:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
+
     appt_type = appointment_service.update_appointment_type(
         db=db,
         appt_type=appt_type,
@@ -194,10 +195,10 @@ def deactivate_appointment_type(
     appt_type = appointment_service.get_appointment_type(db, type_id, session.org_id)
     if not appt_type:
         raise HTTPException(status_code=404, detail="Appointment type not found")
-    
+
     if appt_type.user_id != session.user_id:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
+
     appointment_service.update_appointment_type(db, appt_type, is_active=False)
     return None
 
@@ -205,6 +206,7 @@ def deactivate_appointment_type(
 # =============================================================================
 # Availability Rules
 # =============================================================================
+
 
 @router.get("/availability", response_model=list[AvailabilityRuleRead])
 def get_availability_rules(
@@ -245,6 +247,7 @@ def set_availability_rules(
 # Availability Overrides
 # =============================================================================
 
+
 @router.get("/overrides", response_model=list[AvailabilityOverrideRead])
 def get_availability_overrides(
     session: UserSession = Depends(get_current_session),
@@ -276,10 +279,10 @@ def create_availability_override(
 ):
     """Create or update an availability override."""
     from datetime import time as dt_time
-    
+
     start_time = dt_time.fromisoformat(data.start_time) if data.start_time else None
     end_time = dt_time.fromisoformat(data.end_time) if data.end_time else None
-    
+
     override = appointment_service.set_availability_override(
         db=db,
         user_id=session.user_id,
@@ -319,6 +322,7 @@ def delete_availability_override(
 # Booking Link
 # =============================================================================
 
+
 @router.get("/booking-link", response_model=BookingLinkRead)
 def get_booking_link(
     session: UserSession = Depends(get_current_session),
@@ -326,13 +330,13 @@ def get_booking_link(
 ):
     """Get or create booking link for the current user."""
     from app.core.config import settings
-    
+
     link = appointment_service.get_or_create_booking_link(
         db=db,
         user_id=session.user_id,
         org_id=session.org_id,
     )
-    base_url = settings.FRONTEND_URL if hasattr(settings, 'FRONTEND_URL') else ""
+    base_url = settings.FRONTEND_URL if hasattr(settings, "FRONTEND_URL") else ""
     return _link_to_read(link, base_url)
 
 
@@ -347,21 +351,22 @@ def regenerate_booking_link(
 ):
     """Regenerate booking link with a new slug."""
     from app.core.config import settings
-    
+
     link = appointment_service.regenerate_booking_link(
         db=db,
         user_id=session.user_id,
     )
     if not link:
         raise HTTPException(status_code=404, detail="Booking link not found")
-    
-    base_url = settings.FRONTEND_URL if hasattr(settings, 'FRONTEND_URL') else ""
+
+    base_url = settings.FRONTEND_URL if hasattr(settings, "FRONTEND_URL") else ""
     return _link_to_read(link, base_url)
 
 
 # =============================================================================
 # Appointments
 # =============================================================================
+
 
 @router.get("", response_model=AppointmentListResponse)
 def list_appointments(
@@ -376,7 +381,7 @@ def list_appointments(
     intended_parent_id: UUID | None = None,
 ):
     """List appointments for the current user.
-    
+
     Optionally filter by case_id and/or intended_parent_id for match-scoped views.
     When both are provided, returns appointments matching EITHER.
     """
@@ -393,12 +398,15 @@ def list_appointments(
         limit=per_page,
         offset=offset,
     )
-    
+
     pages = (total + per_page - 1) // per_page if per_page > 0 else 0
-    
+
     context = appointment_service.get_appointment_context(db, appointments)
     return AppointmentListResponse(
-        items=[appointment_service.to_appointment_list_item(a, context) for a in appointments],
+        items=[
+            appointment_service.to_appointment_list_item(a, context)
+            for a in appointments
+        ],
         total=total,
         page=page,
         per_page=per_page,
@@ -416,11 +424,11 @@ def get_appointment(
     appt = appointment_service.get_appointment(db, appointment_id, session.org_id)
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
-    
+
     # Verify ownership or admin
     if appt.user_id != session.user_id and session.role not in ["admin", "developer"]:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
+
     context = appointment_service.get_appointment_context(db, [appt])
     return appointment_service.to_appointment_read(appt, context)
 
@@ -454,14 +462,18 @@ def update_appointment_link(
             case = case_service.get_case(db, session.org_id, data.case_id)
             if not case:
                 raise HTTPException(status_code=404, detail="Case not found")
-            check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+            check_case_access(
+                case, session.role, session.user_id, db=db, org_id=session.org_id
+            )
             appt.case_id = case.id
 
     if "intended_parent_id" in data.model_fields_set:
         if data.intended_parent_id is None:
             appt.intended_parent_id = None
         else:
-            ip = ip_service.get_intended_parent(db, data.intended_parent_id, session.org_id)
+            ip = ip_service.get_intended_parent(
+                db, data.intended_parent_id, session.org_id
+            )
             if not ip:
                 raise HTTPException(status_code=404, detail="Intended parent not found")
             appt.intended_parent_id = ip.id
@@ -486,21 +498,21 @@ def approve_appointment(
     appt = appointment_service.get_appointment(db, appointment_id, session.org_id)
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
-    
+
     if appt.user_id != session.user_id and session.role not in ["admin", "developer"]:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
+
     try:
         appt = appointment_service.approve_booking(
             db=db,
             appointment=appt,
             approved_by_user_id=session.user_id,
         )
-        
+
         # Send confirmation email to client
         base_url = str(settings.FRONTEND_URL).rstrip("/")
         appointment_email_service.send_confirmed(db, appt, base_url)
-        
+
         context = appointment_service.get_appointment_context(db, [appt])
         return appointment_service.to_appointment_read(appt, context)
     except ValueError as e:
@@ -522,10 +534,10 @@ def reschedule_appointment(
     appt = appointment_service.get_appointment(db, appointment_id, session.org_id)
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
-    
+
     if appt.user_id != session.user_id and session.role not in ["admin", "developer"]:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
+
     try:
         old_start = appt.scheduled_start  # Save for email
         appt = appointment_service.reschedule_booking(
@@ -534,11 +546,11 @@ def reschedule_appointment(
             new_start=data.scheduled_start,
             by_client=False,
         )
-        
+
         # Send reschedule notification email
         base_url = str(settings.FRONTEND_URL).rstrip("/")
         appointment_email_service.send_rescheduled(db, appt, old_start, base_url)
-        
+
         context = appointment_service.get_appointment_context(db, [appt])
         return appointment_service.to_appointment_read(appt, context)
     except ValueError as e:
@@ -560,10 +572,10 @@ def cancel_appointment(
     appt = appointment_service.get_appointment(db, appointment_id, session.org_id)
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
-    
+
     if appt.user_id != session.user_id and session.role not in ["admin", "developer"]:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
+
     try:
         appt = appointment_service.cancel_booking(
             db=db,
@@ -571,11 +583,11 @@ def cancel_appointment(
             reason=data.reason,
             by_client=False,
         )
-        
+
         # Send cancellation notification email
         base_url = str(settings.FRONTEND_URL).rstrip("/")
         appointment_email_service.send_cancelled(db, appt, base_url)
-        
+
         context = appointment_service.get_appointment_context(db, [appt])
         return appointment_service.to_appointment_read(appt, context)
     except ValueError as e:

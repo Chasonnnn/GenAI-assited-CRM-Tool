@@ -3,6 +3,7 @@ Analytics endpoints for manager dashboards.
 
 Provides case statistics, trends, and Meta performance metrics.
 """
+
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
@@ -17,24 +18,29 @@ from app.services import analytics_service
 from app.schemas.auth import UserSession
 
 
-router = APIRouter(prefix="/analytics", tags=["analytics"], dependencies=[Depends(require_permission(POLICIES["reports"].default))])
+router = APIRouter(
+    prefix="/analytics",
+    tags=["analytics"],
+    dependencies=[Depends(require_permission(POLICIES["reports"].default))],
+)
 
 
 # =============================================================================
 # Pydantic Schemas
 # =============================================================================
 
+
 class AnalyticsSummary(BaseModel):
     total_cases: int
     new_this_period: int
     qualified_rate: float
     avg_time_to_qualified_hours: Optional[float]
-    
+
 
 class StatusCount(BaseModel):
     status: str
     count: int
-    
+
 
 class AssigneeCount(BaseModel):
     user_id: Optional[str]
@@ -102,6 +108,7 @@ class MetaSpendSummary(BaseModel):
 # Endpoints
 # =============================================================================
 
+
 @router.get("/summary", response_model=AnalyticsSummary)
 def get_analytics_summary(
     from_date: Optional[str] = Query(None, description="ISO date string"),
@@ -168,7 +175,7 @@ def get_meta_performance(
 ):
     """
     Get Meta Lead Ads performance metrics.
-    
+
     Qualified = Lead's case reached the "Qualified" stage or later.
     Converted = Lead's case reached the "Application Submitted" stage or later.
     """
@@ -198,7 +205,7 @@ async def get_meta_spend(
 ):
     """
     Get Meta Ads spend data from Marketing API.
-    
+
     Returns total spend, impressions, leads and cost per lead,
     broken down by campaign. Optional time series and breakdowns
     are included when requested via query params.
@@ -206,7 +213,9 @@ async def get_meta_spend(
     from app.services import analytics_service
 
     start, end = analytics_service.parse_date_range(from_date, to_date)
-    breakdown_list = [item.strip() for item in breakdowns.split(",")] if breakdowns else []
+    breakdown_list = (
+        [item.strip() for item in breakdowns.split(",")] if breakdowns else []
+    )
     breakdown_list = [item for item in breakdown_list if item]
 
     data = await analytics_service.get_meta_spend_summary(
@@ -222,7 +231,9 @@ async def get_meta_spend(
         total_leads=data["total_leads"],
         cost_per_lead=data["cost_per_lead"],
         campaigns=[CampaignSpend(**item) for item in data.get("campaigns", [])],
-        time_series=[MetaSpendTimePoint(**item) for item in data.get("time_series", [])],
+        time_series=[
+            MetaSpendTimePoint(**item) for item in data.get("time_series", [])
+        ],
         breakdowns=[MetaSpendBreakdown(**item) for item in data.get("breakdowns", [])],
     )
 
@@ -230,6 +241,7 @@ async def get_meta_spend(
 # =============================================================================
 # New Analytics Endpoints (Phase A)
 # =============================================================================
+
 
 @router.get("/cases/by-state")
 def get_cases_by_state(
@@ -241,10 +253,14 @@ def get_cases_by_state(
 ) -> dict:
     """Get case count by US state for map visualization."""
     from app.services import analytics_service
-    
+
     start, end = analytics_service.parse_date_range(from_date, to_date)
     data = analytics_service.get_cases_by_state(
-        db, session.org_id, start.date() if start else None, end.date() if end else None, source
+        db,
+        session.org_id,
+        start.date() if start else None,
+        end.date() if end else None,
+        source,
     )
     return {"data": data}
 
@@ -258,7 +274,7 @@ def get_cases_by_source(
 ) -> dict:
     """Get case count by lead source."""
     from app.services import analytics_service
-    
+
     start, end = analytics_service.parse_date_range(from_date, to_date)
     data = analytics_service.get_cases_by_source(
         db, session.org_id, start.date() if start else None, end.date() if end else None
@@ -275,7 +291,7 @@ def get_conversion_funnel(
 ) -> dict:
     """Get conversion funnel data."""
     from app.services import analytics_service
-    
+
     start, end = analytics_service.parse_date_range(from_date, to_date)
     data = analytics_service.get_conversion_funnel(
         db, session.org_id, start.date() if start else None, end.date() if end else None
@@ -292,7 +308,7 @@ def get_kpis(
 ) -> dict:
     """Get summary KPIs for dashboard cards."""
     from app.services import analytics_service
-    
+
     start, end = analytics_service.parse_date_range(from_date, to_date)
     data = analytics_service.get_summary_kpis(
         db, session.org_id, start.date() if start else None, end.date() if end else None
@@ -307,7 +323,7 @@ def get_campaigns(
 ) -> dict:
     """Get campaigns for filter dropdown."""
     from app.services import analytics_service
-    
+
     data = analytics_service.get_campaigns(db, session.org_id)
     return {"data": data}
 
@@ -322,13 +338,14 @@ def get_funnel_compare(
 ) -> dict:
     """Get funnel with optional campaign filter for comparison."""
     from app.services import analytics_service
-    
+
     start, end = analytics_service.parse_date_range(from_date, to_date)
     data = analytics_service.get_funnel_with_filter(
-        db, session.org_id,
+        db,
+        session.org_id,
         start.date() if start else None,
         end.date() if end else None,
-        ad_id
+        ad_id,
     )
     return {"data": data}
 
@@ -343,13 +360,14 @@ def get_cases_by_state_compare(
 ) -> dict:
     """Get cases by state with optional campaign filter."""
     from app.services import analytics_service
-    
+
     start, end = analytics_service.parse_date_range(from_date, to_date)
     data = analytics_service.get_cases_by_state_with_filter(
-        db, session.org_id,
+        db,
+        session.org_id,
         start.date() if start else None,
         end.date() if end else None,
-        ad_id
+        ad_id,
     )
     return {"data": data}
 
@@ -358,8 +376,10 @@ def get_cases_by_state_compare(
 # Activity Feed
 # =============================================================================
 
+
 class ActivityFeedItem(BaseModel):
     """Single activity item for feed."""
+
     id: str
     activity_type: str
     case_id: str
@@ -372,6 +392,7 @@ class ActivityFeedItem(BaseModel):
 
 class ActivityFeedResponse(BaseModel):
     """Activity feed response."""
+
     items: list[ActivityFeedItem]
     has_more: bool
 
@@ -387,7 +408,7 @@ def get_activity_feed(
 ) -> ActivityFeedResponse:
     """
     Get org-wide activity feed.
-    
+
     Returns recent activities across all cases in the organization.
     Useful for managers to see what's happening across the team.
     """
@@ -399,7 +420,7 @@ def get_activity_feed(
         activity_type=activity_type,
         user_id=user_id,
     )
-    
+
     return ActivityFeedResponse(
         items=[
             ActivityFeedItem(
@@ -422,6 +443,7 @@ def get_activity_feed(
 # PDF Export
 # =============================================================================
 
+
 @router.get("/export/pdf")
 async def export_analytics_pdf(
     session: UserSession = Depends(get_current_session),
@@ -431,7 +453,7 @@ async def export_analytics_pdf(
 ):
     """
     Export analytics data as a PDF report.
-    
+
     Generates a PDF containing:
     - Summary statistics
     - Cases by status breakdown
@@ -442,20 +464,22 @@ async def export_analytics_pdf(
     from fastapi.responses import Response
     from app.services import analytics_service
     from app.services.pdf_service import create_analytics_pdf
-    
+
     org_id = session.org_id
-    
+
     # Parse date range
     start_dt = None
     end_dt = None
     date_range_str = "All Time"
-    
+
     if from_date:
         try:
-            start_dt = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            start_dt = datetime.strptime(from_date, "%Y-%m-%d").replace(
+                tzinfo=timezone.utc
+            )
         except ValueError:
             pass
-    
+
     if to_date:
         try:
             end_dt = datetime.strptime(to_date, "%Y-%m-%d").replace(
@@ -463,21 +487,21 @@ async def export_analytics_pdf(
             )
         except ValueError:
             pass
-    
+
     if from_date and to_date:
         date_range_str = f"{from_date} to {to_date}"
     elif from_date:
         date_range_str = f"From {from_date}"
     elif to_date:
         date_range_str = f"Until {to_date}"
-    
+
     export_data = analytics_service.get_pdf_export_data(
         db=db,
         organization_id=org_id,
         start_dt=start_dt,
         end_dt=end_dt,
     )
-    
+
     # Generate PDF
     pdf_bytes = create_analytics_pdf(
         summary=export_data["summary"],
@@ -488,13 +512,11 @@ async def export_analytics_pdf(
         org_name=export_data["org_name"],
         date_range=date_range_str,
     )
-    
+
     # Return PDF response
     filename = f"analytics_report_{datetime.now().strftime('%Y%m%d')}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
-        }
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

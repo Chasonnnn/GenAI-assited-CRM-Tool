@@ -11,6 +11,7 @@ Rehashes existing audit_logs entries using:
 Note: This is a breaking change for hash verification of old entries.
 Old hashes used v1 (details only), new hashes use v2 (all columns).
 """
+
 from typing import Sequence, Union
 import hashlib
 import json
@@ -20,8 +21,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '0020_rehash_audit_v2'
-down_revision: Union[str, Sequence[str], None] = '0019_ai_settings_versioning'
+revision: str = "0020_rehash_audit_v2"
+down_revision: Union[str, Sequence[str], None] = "0019_ai_settings_versioning"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -51,32 +52,47 @@ def compute_audit_hash_v2(
     after_version_id: str = "",
 ) -> str:
     """V2 hash: includes all immutable columns."""
-    data = "|".join([
-        prev_hash, entry_id, org_id, event_type, created_at, details_json,
-        actor_user_id, target_type, target_id, ip_address, user_agent,
-        request_id, before_version_id, after_version_id,
-    ])
+    data = "|".join(
+        [
+            prev_hash,
+            entry_id,
+            org_id,
+            event_type,
+            created_at,
+            details_json,
+            actor_user_id,
+            target_type,
+            target_id,
+            ip_address,
+            user_agent,
+            request_id,
+            before_version_id,
+            after_version_id,
+        ]
+    )
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
 
 def upgrade() -> None:
     """Rehash all audit entries with v2 algorithm."""
     conn = op.get_bind()
-    
+
     # Get all existing audit logs ordered by created_at, id (for determinism)
-    result = conn.execute(sa.text("""
+    result = conn.execute(
+        sa.text("""
         SELECT id, organization_id, actor_user_id, event_type, target_type, target_id,
                details, ip_address, user_agent, request_id,
                before_version_id, after_version_id, created_at
         FROM audit_logs
         ORDER BY organization_id, created_at, id
-    """))
-    
+    """)
+    )
+
     rows = result.fetchall()
-    
+
     # Track prev_hash per org
     org_hashes = {}
-    
+
     for row in rows:
         entry_id = str(row[0])
         org_id = str(row[1])
@@ -91,10 +107,10 @@ def upgrade() -> None:
         before_version_id = str(row[10]) if row[10] else ""
         after_version_id = str(row[11]) if row[11] else ""
         created_at = str(row[12])
-        
+
         # Get previous hash for this org
         prev_hash = org_hashes.get(org_id, GENESIS_HASH)
-        
+
         # Compute v2 entry hash
         entry_hash = compute_audit_hash_v2(
             prev_hash=prev_hash,
@@ -112,13 +128,15 @@ def upgrade() -> None:
             before_version_id=before_version_id,
             after_version_id=after_version_id,
         )
-        
+
         # Update record
         conn.execute(
-            sa.text("UPDATE audit_logs SET prev_hash = :prev_hash, entry_hash = :entry_hash WHERE id = :id"),
-            {"prev_hash": prev_hash, "entry_hash": entry_hash, "id": row[0]}
+            sa.text(
+                "UPDATE audit_logs SET prev_hash = :prev_hash, entry_hash = :entry_hash WHERE id = :id"
+            ),
+            {"prev_hash": prev_hash, "entry_hash": entry_hash, "id": row[0]},
         )
-        
+
         # Track for next entry
         org_hashes[org_id] = entry_hash
 

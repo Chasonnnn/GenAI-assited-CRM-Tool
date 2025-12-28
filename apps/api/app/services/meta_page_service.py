@@ -10,23 +10,34 @@ from app.db.models import MetaPageMapping
 
 def list_meta_pages(db: Session, org_id: UUID) -> list[MetaPageMapping]:
     """List meta page mappings for an organization."""
-    return db.query(MetaPageMapping).filter(
-        MetaPageMapping.organization_id == org_id
-    ).order_by(MetaPageMapping.created_at.desc()).all()
+    return (
+        db.query(MetaPageMapping)
+        .filter(MetaPageMapping.organization_id == org_id)
+        .order_by(MetaPageMapping.created_at.desc())
+        .all()
+    )
 
 
 def list_active_mappings(db: Session) -> list[MetaPageMapping]:
     """List active Meta page mappings across all orgs."""
-    return db.query(MetaPageMapping).filter(
-        MetaPageMapping.is_active.is_(True),
-    ).all()
+    return (
+        db.query(MetaPageMapping)
+        .filter(
+            MetaPageMapping.is_active.is_(True),
+        )
+        .all()
+    )
 
 
 def list_problem_pages(db: Session) -> list[MetaPageMapping]:
     """List Meta page mappings with recent errors."""
-    return db.query(MetaPageMapping).filter(
-        MetaPageMapping.last_error.isnot(None),
-    ).all()
+    return (
+        db.query(MetaPageMapping)
+        .filter(
+            MetaPageMapping.last_error.isnot(None),
+        )
+        .all()
+    )
 
 
 def get_mapping_by_page_id(
@@ -35,10 +46,14 @@ def get_mapping_by_page_id(
     page_id: str,
 ) -> MetaPageMapping | None:
     """Get mapping by page id scoped to org."""
-    return db.query(MetaPageMapping).filter(
-        MetaPageMapping.page_id == page_id,
-        MetaPageMapping.organization_id == org_id,
-    ).first()
+    return (
+        db.query(MetaPageMapping)
+        .filter(
+            MetaPageMapping.page_id == page_id,
+            MetaPageMapping.organization_id == org_id,
+        )
+        .first()
+    )
 
 
 def get_mapping_by_page_id_any_org(
@@ -46,9 +61,13 @@ def get_mapping_by_page_id_any_org(
     page_id: str,
 ) -> MetaPageMapping | None:
     """Get mapping by page id without org scoping."""
-    return db.query(MetaPageMapping).filter(
-        MetaPageMapping.page_id == page_id,
-    ).first()
+    return (
+        db.query(MetaPageMapping)
+        .filter(
+            MetaPageMapping.page_id == page_id,
+        )
+        .first()
+    )
 
 
 def get_active_mapping_by_page_id(
@@ -56,17 +75,25 @@ def get_active_mapping_by_page_id(
     page_id: str,
 ) -> MetaPageMapping | None:
     """Get active mapping for a page id."""
-    return db.query(MetaPageMapping).filter(
-        MetaPageMapping.page_id == page_id,
-        MetaPageMapping.is_active.is_(True),
-    ).first()
+    return (
+        db.query(MetaPageMapping)
+        .filter(
+            MetaPageMapping.page_id == page_id,
+            MetaPageMapping.is_active.is_(True),
+        )
+        .first()
+    )
 
 
 def get_first_active_mapping(db: Session) -> MetaPageMapping | None:
     """Get first active mapping (for dev/test use)."""
-    return db.query(MetaPageMapping).filter(
-        MetaPageMapping.is_active.is_(True),
-    ).first()
+    return (
+        db.query(MetaPageMapping)
+        .filter(
+            MetaPageMapping.is_active.is_(True),
+        )
+        .first()
+    )
 
 
 def create_mapping(

@@ -10,6 +10,7 @@ from app.db.enums import JobType
 
 class JobBase(BaseModel):
     """Base job fields."""
+
     job_type: JobType
     payload: dict = {}
     run_at: datetime | None = None
@@ -18,13 +19,15 @@ class JobBase(BaseModel):
 
 class JobCreate(JobBase):
     """Create a new job."""
+
     pass
 
 
 class JobRead(BaseModel):
     """Job response schema."""
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     organization_id: UUID
     job_type: str
@@ -40,8 +43,9 @@ class JobRead(BaseModel):
 
 class JobListItem(BaseModel):
     """Job list item (minimal)."""
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     job_type: str
     status: str

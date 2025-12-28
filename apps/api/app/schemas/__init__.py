@@ -26,7 +26,7 @@ from app.schemas.task import (
 __all__ = [
     # Auth
     "TokenPayload",
-    "UserSession", 
+    "UserSession",
     "MeResponse",
     # User
     "UserRead",

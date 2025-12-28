@@ -13,51 +13,61 @@ from app.services import activity_service
 
 class QueueServiceError(Exception):
     """Base exception for queue service errors."""
+
     pass
 
 
 class QueueNotFoundError(QueueServiceError):
     """Queue not found."""
+
     pass
 
 
 class CaseNotFoundError(QueueServiceError):
     """Case not found."""
+
     pass
 
 
 class CaseAlreadyClaimedError(QueueServiceError):
     """Case is already claimed by a user (not in a queue)."""
+
     pass
 
 
 class CaseNotInQueueError(QueueServiceError):
     """Case is not in a queue (cannot release)."""
+
     pass
 
 
 class DuplicateQueueNameError(QueueServiceError):
     """Queue name already exists in org."""
+
     pass
 
 
 class NotQueueMemberError(QueueServiceError):
     """User is not a member of the queue."""
+
     pass
 
 
 class QueueMemberExistsError(QueueServiceError):
     """Queue member already exists."""
+
     pass
 
 
 class QueueMemberNotFoundError(QueueServiceError):
     """Queue member not found."""
+
     pass
 
 
 class QueueMemberUserNotFoundError(QueueServiceError):
     """User not found in org."""
+
     pass
 
 
@@ -67,6 +77,7 @@ DEFAULT_QUEUE_NAME = "Unassigned"
 # =============================================================================
 # Queue CRUD
 # =============================================================================
+
 
 def list_queues(
     db: Session,
@@ -84,9 +95,7 @@ def list_queues(
 def get_queue(db: Session, org_id: UUID, queue_id: UUID) -> Queue | None:
     """Get a single queue by ID."""
     return db.execute(
-        select(Queue).where(
-            and_(Queue.id == queue_id, Queue.organization_id == org_id)
-        )
+        select(Queue).where(and_(Queue.id == queue_id, Queue.organization_id == org_id))
     ).scalar_one_or_none()
 
 
@@ -123,14 +132,14 @@ def update_queue(
     queue = get_queue(db, org_id, queue_id)
     if not queue:
         raise QueueNotFoundError(f"Queue {queue_id} not found")
-    
+
     if name is not None:
         queue.name = name.strip()
     if description is not None:
         queue.description = description.strip() if description else None
     if is_active is not None:
         queue.is_active = is_active
-    
+
     try:
         db.flush()
     except IntegrityError:
@@ -195,6 +204,7 @@ def get_or_create_default_queue(db: Session, org_id: UUID) -> Queue:
 # Claim / Release (Atomic with Audit)
 # =============================================================================
 
+
 def claim_case(
     db: Session,
     org_id: UUID,
@@ -203,7 +213,7 @@ def claim_case(
 ) -> Case:
     """
     Claim a case from a queue. Atomic operation.
-    
+
     - Case must be owner_type="queue" (in a queue)
     - Sets owner_type="user", owner_id=claimer
     - Logs activity for audit trail
@@ -215,15 +225,13 @@ def claim_case(
         .where(and_(Case.id == case_id, Case.organization_id == org_id))
         .with_for_update()
     ).scalar_one_or_none()
-    
+
     if not case:
         raise CaseNotFoundError(f"Case {case_id} not found")
-    
+
     if case.owner_type != OwnerType.QUEUE.value:
-        raise CaseAlreadyClaimedError(
-            "Case is already owned by a user, not in a queue"
-        )
-    
+        raise CaseAlreadyClaimedError("Case is already owned by a user, not in a queue")
+
     # Check if user is a member of the queue (if queue has members)
     queue = db.query(Queue).filter(Queue.id == case.owner_id).first()
     if queue and queue.members:
@@ -232,13 +240,13 @@ def claim_case(
             raise NotQueueMemberError(
                 f"You are not a member of queue '{queue.name}' and cannot claim cases from it"
             )
-    
+
     old_queue_id = case.owner_id
-    
+
     # Transfer ownership to user
     case.owner_type = OwnerType.USER.value
     case.owner_id = claimer_user_id
-    
+
     # Log activity
     activity_service.log_activity(
         db=db,
@@ -251,7 +259,7 @@ def claim_case(
             "to_user_id": str(claimer_user_id),
         },
     )
-    
+
     return case
 
 
@@ -264,7 +272,7 @@ def release_case(
 ) -> Case:
     """
     Release a case back to a queue.
-    
+
     - Case must be owner_type="user"
     - Sets owner_type="queue", owner_id=queue_id
     - Logs activity for audit trail
@@ -273,23 +281,23 @@ def release_case(
     queue = get_queue(db, org_id, queue_id)
     if not queue or not queue.is_active:
         raise QueueNotFoundError(f"Queue {queue_id} not found or inactive")
-    
+
     # Lock row for update
     case = db.execute(
         select(Case)
         .where(and_(Case.id == case_id, Case.organization_id == org_id))
         .with_for_update()
     ).scalar_one_or_none()
-    
+
     if not case:
         raise CaseNotFoundError(f"Case {case_id} not found")
-    
+
     old_owner_id = case.owner_id
-    
+
     # Transfer ownership to queue
     case.owner_type = OwnerType.QUEUE.value
     case.owner_id = queue_id
-    
+
     # Log activity
     activity_service.log_activity(
         db=db,
@@ -302,7 +310,7 @@ def release_case(
             "to_queue_id": str(queue_id),
         },
     )
-    
+
     return case
 
 
@@ -321,23 +329,23 @@ def assign_to_queue(
     queue = get_queue(db, org_id, queue_id)
     if not queue or not queue.is_active:
         raise QueueNotFoundError(f"Queue {queue_id} not found or inactive")
-    
+
     case = db.execute(
         select(Case)
         .where(and_(Case.id == case_id, Case.organization_id == org_id))
         .with_for_update()
     ).scalar_one_or_none()
-    
+
     if not case:
         raise CaseNotFoundError(f"Case {case_id} not found")
-    
+
     old_owner_type = case.owner_type
     old_owner_id = case.owner_id
-    
+
     # Assign to queue
     case.owner_type = OwnerType.QUEUE.value
     case.owner_id = queue_id
-    
+
     # Log activity
     activity_service.log_activity(
         db=db,
@@ -351,7 +359,7 @@ def assign_to_queue(
             "to_queue_id": str(queue_id),
         },
     )
-    
+
     return case
 
 
@@ -362,17 +370,25 @@ def add_queue_member(
     user_id: UUID,
 ) -> tuple[QueueMember, User]:
     """Add a user to a queue."""
-    user = db.query(User).filter(
-        User.id == user_id,
-        User.organization_id == org_id,
-    ).first()
+    user = (
+        db.query(User)
+        .filter(
+            User.id == user_id,
+            User.organization_id == org_id,
+        )
+        .first()
+    )
     if not user:
         raise QueueMemberUserNotFoundError("User not found")
 
-    existing = db.query(QueueMember).filter(
-        QueueMember.queue_id == queue_id,
-        QueueMember.user_id == user_id,
-    ).first()
+    existing = (
+        db.query(QueueMember)
+        .filter(
+            QueueMember.queue_id == queue_id,
+            QueueMember.user_id == user_id,
+        )
+        .first()
+    )
     if existing:
         raise QueueMemberExistsError("User is already a member of this queue")
 
@@ -390,10 +406,14 @@ def remove_queue_member(
     user_id: UUID,
 ) -> None:
     """Remove a user from a queue."""
-    result = db.query(QueueMember).filter(
-        QueueMember.queue_id == queue_id,
-        QueueMember.user_id == user_id,
-    ).delete()
+    result = (
+        db.query(QueueMember)
+        .filter(
+            QueueMember.queue_id == queue_id,
+            QueueMember.user_id == user_id,
+        )
+        .delete()
+    )
 
     if not result:
         raise QueueMemberNotFoundError("Member not found")

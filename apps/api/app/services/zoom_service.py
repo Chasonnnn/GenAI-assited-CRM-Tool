@@ -3,6 +3,7 @@
 Handles Zoom meeting creation and management using the Zoom API.
 Uses OAuth tokens stored per-user in UserIntegration table.
 """
+
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -26,8 +27,10 @@ ZOOM_API_BASE = "https://api.zoom.us/v2"
 # Response Models
 # ============================================================================
 
+
 class ZoomMeeting(BaseModel):
     """Zoom meeting response."""
+
     id: int
     uuid: str
     topic: str
@@ -41,6 +44,7 @@ class ZoomMeeting(BaseModel):
 
 class CreateMeetingResult(BaseModel):
     """Result of creating a Zoom meeting with note and meeting task."""
+
     meeting: ZoomMeeting
     note_id: uuid.UUID | None = None
     task_id: uuid.UUID | None = None
@@ -69,6 +73,7 @@ def list_zoom_meetings(
 # Zoom API Functions
 # ============================================================================
 
+
 async def create_zoom_meeting(
     access_token: str,
     topic: str,
@@ -77,14 +82,14 @@ async def create_zoom_meeting(
     timezone_name: str = "America/Los_Angeles",
 ) -> ZoomMeeting:
     """Create a Zoom meeting using the Zoom API.
-    
+
     Args:
         access_token: User's Zoom OAuth access token
         topic: Meeting topic/title
         start_time: When meeting starts (None = instant meeting)
         duration: Meeting duration in minutes
         timezone: Meeting timezone
-        
+
     Returns:
         ZoomMeeting with join_url, start_url, etc.
     """
@@ -103,7 +108,7 @@ async def create_zoom_meeting(
             "meeting_authentication": False,
         },
     }
-    
+
     if start_time:
         # Zoom supports local time + separate timezone. Prefer sending local time without
         # an offset so Zoom displays it in the provided timezone.
@@ -117,8 +122,10 @@ async def create_zoom_meeting(
         else:
             local_dt = start_time.astimezone(tz)
 
-        meeting_data["start_time"] = local_dt.replace(tzinfo=None, microsecond=0).isoformat()
-    
+        meeting_data["start_time"] = local_dt.replace(
+            tzinfo=None, microsecond=0
+        ).isoformat()
+
     async with httpx.AsyncClient() as client:
         response = await client.post(
             f"{ZOOM_API_BASE}/users/me/meetings",
@@ -131,7 +138,7 @@ async def create_zoom_meeting(
         )
         response.raise_for_status()
         data = response.json()
-    
+
     return ZoomMeeting(
         id=data["id"],
         uuid=data["uuid"],
@@ -149,8 +156,9 @@ async def create_zoom_meeting(
 # High-Level Functions (with note/task creation)
 # ============================================================================
 
+
 def get_user_zoom_token(
-    db: Session, 
+    db: Session,
     user_id: uuid.UUID,
 ) -> str:
     """Get user's Zoom access token, refreshing if expired.
@@ -159,11 +167,15 @@ def get_user_zoom_token(
     """
     integration = oauth_service.get_user_integration(db, user_id, "zoom")
     if not integration:
-        raise ValueError("Zoom not connected. Please connect in Settings → Integrations.")
+        raise ValueError(
+            "Zoom not connected. Please connect in Settings → Integrations."
+        )
 
     access_token = oauth_service.get_access_token(db, user_id, "zoom")
     if not access_token:
-        raise ValueError("Zoom token expired or invalid. Please reconnect in Settings → Integrations.")
+        raise ValueError(
+            "Zoom token expired or invalid. Please reconnect in Settings → Integrations."
+        )
 
     return access_token
 
@@ -181,7 +193,7 @@ async def schedule_zoom_meeting(
     contact_name: str | None = None,
 ) -> CreateMeetingResult:
     """Schedule a Zoom meeting and add note + meeting task.
-    
+
     Args:
         db: Database session
         user_id: User scheduling the meeting
@@ -192,13 +204,13 @@ async def schedule_zoom_meeting(
         start_time: When meeting starts (None = instant)
         duration: Duration in minutes
         contact_name: Name of person meeting is with (for note)
-        
+
     Returns:
         CreateMeetingResult with meeting details and note/task IDs
     """
     # Get user's Zoom token
     access_token = get_user_zoom_token(db, user_id)
-    
+
     # Create the Zoom meeting
     meeting = await create_zoom_meeting(
         access_token=access_token,
@@ -216,7 +228,7 @@ async def schedule_zoom_meeting(
             )
         except ValueError:
             meeting_start_time = start_time
-    
+
     # Build note content
     from html import escape
     from app.services import note_service
@@ -249,7 +261,7 @@ async def schedule_zoom_meeting(
         f"<p><strong>Topic:</strong> {safe_topic}<br/>"
         f"<strong>Time:</strong> {escape(time_str)}<br/>"
         f"<strong>Duration:</strong> {duration} minutes</p>"
-        f"<p><strong>Join Link:</strong> <a href=\"{join_url}\" target=\"_blank\">{join_url}</a></p>"
+        f'<p><strong>Join Link:</strong> <a href="{join_url}" target="_blank">{join_url}</a></p>'
     )
     if meeting.password:
         note_content += f"<p><strong>Password:</strong> {escape(meeting.password)}</p>"
@@ -257,7 +269,7 @@ async def schedule_zoom_meeting(
         note_content += f"<p><strong>With:</strong> {escape(contact_name)}</p>"
 
     note_content = note_service.sanitize_html(note_content)
-    
+
     # Create note
     note = EntityNote(
         organization_id=org_id,
@@ -272,6 +284,7 @@ async def schedule_zoom_meeting(
     # Log case activity (case only)
     if entity_type == EntityType.CASE:
         from app.services import activity_service
+
         activity_service.log_note_added(
             db=db,
             case_id=entity_id,
@@ -280,7 +293,7 @@ async def schedule_zoom_meeting(
             note_id=note.id,
             content=note_content,
         )
-    
+
     # Always create a meeting task aligned with the scheduled time + duration.
     task = Task(
         organization_id=org_id,
@@ -299,13 +312,15 @@ async def schedule_zoom_meeting(
     db.add(task)
     db.flush()
     task_id = task.id
-    
+
     # Save meeting to zoom_meetings table for history
     zoom_meeting_record = ZoomMeetingModel(
         organization_id=org_id,
         user_id=user_id,
         case_id=entity_id if entity_type == EntityType.CASE else None,
-        intended_parent_id=entity_id if entity_type == EntityType.INTENDED_PARENT else None,
+        intended_parent_id=entity_id
+        if entity_type == EntityType.INTENDED_PARENT
+        else None,
         zoom_meeting_id=str(meeting.id),
         topic=meeting.topic,
         start_time=meeting_start_time,
@@ -316,10 +331,10 @@ async def schedule_zoom_meeting(
         password=meeting.password,
     )
     db.add(zoom_meeting_record)
-    
+
     db.commit()
     db.refresh(note)
-    
+
     return CreateMeetingResult(
         meeting=meeting,
         note_id=note.id,
@@ -366,16 +381,16 @@ def get_or_create_zoom_template(
     user_id: uuid.UUID,
 ) -> uuid.UUID:
     """Get the Zoom meeting invite template, creating if it doesn't exist.
-    
+
     Returns the template ID.
     """
     from app.services import email_service
-    
+
     # Check if template exists
     template = email_service.get_template_by_name(db, ZOOM_TEMPLATE_NAME, org_id)
     if template:
         return template.id
-    
+
     # Create default template
     template = email_service.create_template(
         db=db,
@@ -399,14 +414,14 @@ def send_meeting_invite(
     case_id: uuid.UUID | None = None,
 ) -> uuid.UUID | None:
     """Send a Zoom meeting invite email using the org's template.
-    
+
     Returns the email_log ID or None if template not found.
     """
     from app.services import email_service
-    
+
     # Get or create template
     template_id = get_or_create_zoom_template(db, org_id, user_id)
-    
+
     # Build variables
     time_str = meeting.start_time if meeting.start_time else "Instant meeting"
     password_line = f"🔒 **Password:** {meeting.password}" if meeting.password else ""
@@ -420,7 +435,7 @@ def send_meeting_invite(
         "contact_name": contact_name,
         "host_name": host_name,
     }
-    
+
     # Send via template
     result = email_service.send_from_template(
         db=db,
@@ -430,7 +445,7 @@ def send_meeting_invite(
         variables=variables,
         case_id=case_id,
     )
-    
+
     if result:
         email_log, _ = result
         return email_log.id

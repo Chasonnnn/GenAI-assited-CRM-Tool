@@ -29,43 +29,39 @@ HTTPX_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 def verify_signature(payload: bytes, signature: str) -> bool:
     """
     Verify X-Hub-Signature-256 HMAC signature.
-    
+
     Args:
         payload: Raw request body bytes
         signature: Value of X-Hub-Signature-256 header
-        
+
     Returns:
         True if signature is valid, False otherwise
     """
     if not signature or not signature.startswith("sha256="):
         return False
-    
+
     if not settings.META_APP_SECRET:
         return False
-    
+
     expected = hmac.new(
-        settings.META_APP_SECRET.encode(),
-        payload,
-        hashlib.sha256
+        settings.META_APP_SECRET.encode(), payload, hashlib.sha256
     ).hexdigest()
-    
+
     return hmac.compare_digest(f"sha256={expected}", signature)
 
 
 def compute_appsecret_proof(access_token: str) -> str:
     """
     Compute appsecret_proof for secure Graph API calls.
-    
+
     This is HMAC-SHA256 of the access token with the app secret.
     Required for secure server-to-server API calls.
     """
     if not settings.META_APP_SECRET:
         return ""
-    
+
     return hmac.new(
-        settings.META_APP_SECRET.encode(),
-        access_token.encode(),
-        hashlib.sha256
+        settings.META_APP_SECRET.encode(), access_token.encode(), hashlib.sha256
     ).hexdigest()
 
 
@@ -75,20 +71,20 @@ async def fetch_lead_details(
 ) -> tuple[dict | None, str | None]:
     """
     Fetch lead details from Meta Graph API.
-    
+
     Args:
         leadgen_id: Meta leadgen ID from webhook
         access_token: Page access token (decrypted)
-        
+
     Returns:
         (data, error) tuple - data is None if error
     """
     if settings.META_TEST_MODE:
         return _mock_lead_data(leadgen_id), None
-    
+
     if not access_token:
         return None, "No access token provided"
-    
+
     proof = compute_appsecret_proof(access_token)
     url = f"{_graph_base()}/{leadgen_id}"
     params = {
@@ -96,17 +92,17 @@ async def fetch_lead_details(
         "appsecret_proof": proof,
         "fields": "id,created_time,field_data,form_id,page_id,ad_id",
     }
-    
+
     try:
         async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
             resp = await client.get(url, params=params)
-            
+
             if resp.status_code != 200:
                 error_body = resp.text[:500]
                 return None, f"Meta API {resp.status_code}: {error_body}"
-            
+
             return resp.json(), None
-            
+
     except httpx.TimeoutException:
         return None, "Meta API timeout"
     except httpx.ConnectError:
@@ -118,7 +114,7 @@ async def fetch_lead_details(
 def normalize_field_data(field_data_list: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Normalize Meta field_data array to dict with standard keys.
-    
+
     Handles common field name variations across different forms:
     - phone_number, mobile_phone, phone, cell_phone → phone
     - full_name, name, first_name + last_name → full_name
@@ -126,19 +122,19 @@ def normalize_field_data(field_data_list: list[dict[str, Any]]) -> dict[str, Any
     - state, us_state → state
     """
     result: dict[str, Any] = {}
-    
+
     for field in field_data_list:
         name = field.get("name", "").lower().replace(" ", "_")
         values = field.get("values", [])
         value = values[0] if values else None
-        
+
         if not value:
             continue
-        
+
         # Phone variations
         if name in ("phone_number", "mobile_phone", "phone", "cell_phone", "telephone"):
             result["phone"] = value
-            
+
         # Name handling
         elif name in ("full_name", "name"):
             result["full_name"] = value
@@ -151,23 +147,23 @@ def normalize_field_data(field_data_list: list[dict[str, Any]]) -> dict[str, Any
             result["last_name"] = value
             if "first_name" in result:
                 result["full_name"] = f"{result['first_name']} {value}"
-                
+
         # Email variations
         elif name in ("email", "email_address", "e-mail"):
             result["email"] = value
-            
+
         # State variations
         elif name in ("state", "us_state", "province"):
             result["state"] = value
-            
+
         # Date of birth variations
         elif name in ("date_of_birth", "dob", "birthday", "birth_date"):
             result["date_of_birth"] = value
-            
+
         # Everything else - keep original key
         else:
             result[name] = value
-    
+
     return result
 
 
@@ -175,7 +171,7 @@ def parse_meta_timestamp(timestamp_str: str | None) -> datetime | None:
     """Parse Meta's timestamp format to datetime."""
     if not timestamp_str:
         return None
-    
+
     # Meta uses ISO 8601 format: 2025-12-15T12:00:00+0000
     for fmt in [
         "%Y-%m-%dT%H:%M:%S%z",
@@ -186,7 +182,7 @@ def parse_meta_timestamp(timestamp_str: str | None) -> datetime | None:
             return datetime.strptime(timestamp_str, fmt)
         except ValueError:
             continue
-    
+
     return None
 
 
@@ -219,7 +215,7 @@ async def fetch_ad_account_insights(
 ) -> tuple[list[dict] | None, str | None]:
     """
     Fetch ad insights (spend, impressions, etc.) from Meta Marketing API.
-    
+
     Args:
         ad_account_id: Meta Ad Account ID (format: act_XXXXX)
         access_token: User/system access token with ads_read permission
@@ -229,7 +225,7 @@ async def fetch_ad_account_insights(
         max_pages: Maximum number of pages to fetch (default 10)
         time_increment: Time granularity in days (1, 7, 28, etc.)
         breakdowns: Optional breakdown dimensions (region, country, dma, etc.)
-        
+
     Returns:
         (data, error) tuple - data is list of insight objects
     """
@@ -240,13 +236,13 @@ async def fetch_ad_account_insights(
             time_increment=time_increment,
             breakdowns=breakdowns,
         ), None
-    
+
     if not access_token:
         return None, "No access token provided"
-    
+
     if not ad_account_id:
         return None, "No ad account ID provided"
-    
+
     proof = compute_appsecret_proof(access_token)
     url = f"{_graph_base()}/{ad_account_id}/insights"
     params = {
@@ -261,30 +257,32 @@ async def fetch_ad_account_insights(
         params["time_increment"] = time_increment
     if breakdowns:
         params["breakdowns"] = ",".join(breakdowns)
-    
+
     all_data = []
     pages_fetched = 0
-    
+
     try:
         async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
             while url and pages_fetched < max_pages:
-                resp = await client.get(url, params=params if pages_fetched == 0 else None)
-                
+                resp = await client.get(
+                    url, params=params if pages_fetched == 0 else None
+                )
+
                 if resp.status_code != 200:
                     error_body = resp.text[:500]
                     return None, f"Meta API {resp.status_code}: {error_body}"
-                
+
                 data = resp.json()
                 all_data.extend(data.get("data", []))
                 pages_fetched += 1
-                
+
                 # Check for next page
                 paging = data.get("paging", {})
                 url = paging.get("next")
                 params = None  # Next page URL includes all params
-            
+
             return all_data, None
-            
+
     except httpx.TimeoutException:
         return None, "Meta API timeout"
     except httpx.ConnectError:
@@ -319,7 +317,7 @@ def _mock_insights_data(
             **({"country": "US"} if "country" in breakdowns else {}),
         },
         {
-            "campaign_id": "camp_002", 
+            "campaign_id": "camp_002",
             "campaign_name": "Surrogacy Leads - TX",
             "spend": "980.25",
             "impressions": "38000",
@@ -336,7 +334,7 @@ def _mock_insights_data(
         },
         {
             "campaign_id": "camp_003",
-            "campaign_name": "Surrogacy Leads - FL", 
+            "campaign_name": "Surrogacy Leads - FL",
             "spend": "875.00",
             "impressions": "31000",
             "reach": "24000",

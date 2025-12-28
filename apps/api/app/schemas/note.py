@@ -8,11 +8,13 @@ from pydantic import BaseModel, Field
 
 class NoteCreate(BaseModel):
     """Request to add a note."""
+
     body: str = Field(..., min_length=2, max_length=4000)
 
 
 class NoteRead(BaseModel):
     """Note response."""
+
     id: UUID
     case_id: UUID
     author_id: UUID

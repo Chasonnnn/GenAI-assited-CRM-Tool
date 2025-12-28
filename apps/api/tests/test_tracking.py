@@ -5,7 +5,6 @@ Tests token generation, link wrapping, pixel injection,
 and open/click event recording.
 """
 
-
 from app.services import tracking_service
 
 
@@ -60,7 +59,7 @@ def test_inject_tracking_pixel_with_body_tag():
     html = "<html><body><p>Hello</p></body></html>"
     token = "test-token"
     result = tracking_service.inject_tracking_pixel(html, token)
-    
+
     assert "/tracking/open/test-token" in result
     assert "<img " in result
     assert "</body>" in result
@@ -73,7 +72,7 @@ def test_inject_tracking_pixel_without_body_tag():
     html = "<p>Hello</p>"
     token = "test-token"
     result = tracking_service.inject_tracking_pixel(html, token)
-    
+
     assert "/tracking/open/test-token" in result
     assert result.endswith('alt="" />')
 
@@ -83,11 +82,11 @@ def test_wrap_links_in_email():
     html = '<a href="https://example.com/page1">Link 1</a> <a href="https://example.com/page2">Link 2</a>'
     token = "test-token"
     result = tracking_service.wrap_links_in_email(html, token)
-    
+
     # Both links should be wrapped
     assert result.count("/tracking/click/test-token") == 2
-    assert "https://example.com/page1" not in result.split('url=')[0]
-    assert "https://example.com/page2" not in result.split('url=')[0]
+    assert "https://example.com/page1" not in result.split("url=")[0]
+    assert "https://example.com/page2" not in result.split("url=")[0]
 
 
 def test_wrap_links_skips_mailto():
@@ -95,7 +94,7 @@ def test_wrap_links_skips_mailto():
     html = '<a href="mailto:test@example.com">Email</a>'
     token = "test-token"
     result = tracking_service.wrap_links_in_email(html, token)
-    
+
     assert "/tracking/click/" not in result
     assert 'href="mailto:test@example.com"' in result
 
@@ -105,7 +104,7 @@ def test_wrap_links_skips_tel():
     html = '<a href="tel:+1234567890">Call</a>'
     token = "test-token"
     result = tracking_service.wrap_links_in_email(html, token)
-    
+
     assert "/tracking/click/" not in result
     assert 'href="tel:+1234567890"' in result
 
@@ -115,7 +114,7 @@ def test_wrap_links_skips_anchor():
     html = '<a href="#section">Jump</a>'
     token = "test-token"
     result = tracking_service.wrap_links_in_email(html, token)
-    
+
     assert "/tracking/click/" not in result
     assert 'href="#section"' in result
 
@@ -125,7 +124,7 @@ def test_wrap_links_skips_template_vars():
     html = '<a href="{{unsubscribe_link}}">Unsubscribe</a>'
     token = "test-token"
     result = tracking_service.wrap_links_in_email(html, token)
-    
+
     assert "/tracking/click/" not in result
     assert 'href="{{unsubscribe_link}}"' in result
 
@@ -135,7 +134,7 @@ def test_prepare_email_for_tracking():
     html = '<html><body><a href="https://example.com">Link</a></body></html>'
     token = "test-token"
     result = tracking_service.prepare_email_for_tracking(html, token)
-    
+
     # Should have both pixel and wrapped link
     assert "/tracking/open/test-token" in result
     assert "/tracking/click/test-token" in result
@@ -149,7 +148,7 @@ def test_prepare_email_for_tracking():
 def test_record_open_creates_event(db, test_org, test_user):
     """Test that recording an open creates an event and updates counters."""
     from app.db.models import CampaignRecipient, CampaignRun, Campaign, EmailTemplate
-    
+
     # Create email template first (required by Campaign)
     template = EmailTemplate(
         organization_id=test_org.id,
@@ -159,7 +158,7 @@ def test_record_open_creates_event(db, test_org, test_user):
     )
     db.add(template)
     db.flush()
-    
+
     # Create campaign structure
     campaign = Campaign(
         organization_id=test_org.id,
@@ -169,7 +168,7 @@ def test_record_open_creates_event(db, test_org, test_user):
     )
     db.add(campaign)
     db.flush()
-    
+
     run = CampaignRun(
         organization_id=test_org.id,
         campaign_id=campaign.id,
@@ -177,7 +176,7 @@ def test_record_open_creates_event(db, test_org, test_user):
     )
     db.add(run)
     db.flush()
-    
+
     token = tracking_service.generate_tracking_token()
     recipient = CampaignRecipient(
         run_id=run.id,
@@ -189,7 +188,7 @@ def test_record_open_creates_event(db, test_org, test_user):
     )
     db.add(recipient)
     db.commit()
-    
+
     # Record open
     result = tracking_service.record_open(
         db=db,
@@ -197,13 +196,13 @@ def test_record_open_creates_event(db, test_org, test_user):
         ip_address="127.0.0.1",
         user_agent="TestAgent/1.0",
     )
-    
+
     assert result is True
-    
+
     db.refresh(recipient)
     assert recipient.open_count == 1
     assert recipient.opened_at is not None
-    
+
     db.refresh(run)
     assert run.opened_count == 1
 
@@ -211,7 +210,7 @@ def test_record_open_creates_event(db, test_org, test_user):
 def test_record_open_increments_count(db, test_org, test_user):
     """Test that multiple opens increment count but only set opened_at once."""
     from app.db.models import CampaignRecipient, CampaignRun, Campaign, EmailTemplate
-    
+
     # Create email template first
     template = EmailTemplate(
         organization_id=test_org.id,
@@ -221,7 +220,7 @@ def test_record_open_increments_count(db, test_org, test_user):
     )
     db.add(template)
     db.flush()
-    
+
     # Create campaign structure
     campaign = Campaign(
         organization_id=test_org.id,
@@ -231,7 +230,7 @@ def test_record_open_increments_count(db, test_org, test_user):
     )
     db.add(campaign)
     db.flush()
-    
+
     run = CampaignRun(
         organization_id=test_org.id,
         campaign_id=campaign.id,
@@ -239,7 +238,7 @@ def test_record_open_increments_count(db, test_org, test_user):
     )
     db.add(run)
     db.flush()
-    
+
     token = tracking_service.generate_tracking_token()
     recipient = CampaignRecipient(
         run_id=run.id,
@@ -251,18 +250,18 @@ def test_record_open_increments_count(db, test_org, test_user):
     )
     db.add(recipient)
     db.commit()
-    
+
     # Record multiple opens
     tracking_service.record_open(db, token)
     first_opened_at = recipient.opened_at
-    
+
     tracking_service.record_open(db, token)
     tracking_service.record_open(db, token)
-    
+
     db.refresh(recipient)
     assert recipient.open_count == 3
     assert recipient.opened_at == first_opened_at  # Should not change
-    
+
     db.refresh(run)
     assert run.opened_count == 1  # Only increments on first open
 
@@ -276,7 +275,7 @@ def test_record_open_invalid_token(db):
 def test_record_click_creates_event(db, test_org, test_user):
     """Test that recording a click creates an event and updates counters."""
     from app.db.models import CampaignRecipient, CampaignRun, Campaign, EmailTemplate
-    
+
     # Create email template first
     template = EmailTemplate(
         organization_id=test_org.id,
@@ -286,7 +285,7 @@ def test_record_click_creates_event(db, test_org, test_user):
     )
     db.add(template)
     db.flush()
-    
+
     # Create campaign structure
     campaign = Campaign(
         organization_id=test_org.id,
@@ -296,7 +295,7 @@ def test_record_click_creates_event(db, test_org, test_user):
     )
     db.add(campaign)
     db.flush()
-    
+
     run = CampaignRun(
         organization_id=test_org.id,
         campaign_id=campaign.id,
@@ -304,7 +303,7 @@ def test_record_click_creates_event(db, test_org, test_user):
     )
     db.add(run)
     db.flush()
-    
+
     token = tracking_service.generate_tracking_token()
     recipient = CampaignRecipient(
         run_id=run.id,
@@ -316,7 +315,7 @@ def test_record_click_creates_event(db, test_org, test_user):
     )
     db.add(recipient)
     db.commit()
-    
+
     # Record click
     original_url = "https://example.com/page"
     result = tracking_service.record_click(
@@ -326,18 +325,20 @@ def test_record_click_creates_event(db, test_org, test_user):
         ip_address="127.0.0.1",
         user_agent="TestAgent/1.0",
     )
-    
+
     assert result == original_url
-    
+
     db.refresh(recipient)
     assert recipient.click_count == 1
     assert recipient.clicked_at is not None
-    
+
     db.refresh(run)
     assert run.clicked_count == 1
 
 
 def test_record_click_invalid_token(db):
     """Test that invalid token returns None."""
-    result = tracking_service.record_click(db, "invalid-token-xyz", "https://example.com")
+    result = tracking_service.record_click(
+        db, "invalid-token-xyz", "https://example.com"
+    )
     assert result is None

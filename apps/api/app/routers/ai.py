@@ -2,6 +2,7 @@
 
 Endpoints for AI settings, chat, and actions.
 """
+
 import logging
 import uuid
 from datetime import datetime
@@ -12,7 +13,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_session, require_roles, require_csrf_header, require_permission
+from app.core.deps import (
+    get_db,
+    get_current_session,
+    require_roles,
+    require_csrf_header,
+    require_permission,
+)
 from app.core.permissions import PermissionKey as P
 from app.core.case_access import check_case_access
 from app.db.enums import CaseActivityType, Role
@@ -63,8 +70,10 @@ By enabling the AI Assistant, you acknowledge that:
 # Request/Response Models
 # ============================================================================
 
+
 class AISettingsResponse(BaseModel):
     """AI settings for display (with masked key)."""
+
     is_enabled: bool
     provider: str
     model: str | None
@@ -81,6 +90,7 @@ class AISettingsResponse(BaseModel):
 
 class AISettingsUpdate(BaseModel):
     """Update AI settings."""
+
     is_enabled: bool | None = None
     provider: str | None = Field(None, pattern="^(openai|gemini)$")
     api_key: str | None = None
@@ -88,22 +98,27 @@ class AISettingsUpdate(BaseModel):
     context_notes_limit: int | None = Field(None, ge=1, le=20)
     conversation_history_limit: int | None = Field(None, ge=5, le=50)
     anonymize_pii: bool | None = None
-    expected_version: int | None = Field(None, description="Required for optimistic locking")
+    expected_version: int | None = Field(
+        None, description="Required for optimistic locking"
+    )
 
 
 class TestKeyRequest(BaseModel):
     """Test an API key."""
+
     provider: str = Field(..., pattern="^(openai|gemini)$")
     api_key: str
 
 
 class TestKeyResponse(BaseModel):
     """API key test result."""
+
     valid: bool
 
 
 class ConsentResponse(BaseModel):
     """Consent info."""
+
     consent_text: str
     consent_accepted_at: str | None
     consent_accepted_by: str | None
@@ -111,17 +126,21 @@ class ConsentResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     """Send a chat message.
-    
+
     entity_type and entity_id are optional for global chat mode.
     When provided, context is injected for that specific entity.
     """
-    entity_type: str | None = Field(None, pattern="^(case|task|global)$")  # case, task, or global
+
+    entity_type: str | None = Field(
+        None, pattern="^(case|task|global)$"
+    )  # case, task, or global
     entity_id: uuid.UUID | None = None
     message: str = Field(..., min_length=1, max_length=10000)
 
 
 class ChatResponseModel(BaseModel):
     """Chat response."""
+
     content: str
     proposed_actions: list[dict[str, Any]]
     tokens_used: dict[str, Any]
@@ -131,14 +150,17 @@ class ChatResponseModel(BaseModel):
 # Settings Endpoints (Manager Only)
 # ============================================================================
 
+
 @router.get("/settings", response_model=AISettingsResponse)
 def get_settings(
     db: Session = Depends(get_db),
     session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> AISettingsResponse:
     """Get AI settings for the organization."""
-    settings = ai_settings_service.get_or_create_ai_settings(db, session.org_id, session.user_id)
-    
+    settings = ai_settings_service.get_or_create_ai_settings(
+        db, session.org_id, session.user_id
+    )
+
     return AISettingsResponse(
         is_enabled=settings.is_enabled,
         provider=settings.provider,
@@ -147,13 +169,19 @@ def get_settings(
         context_notes_limit=settings.context_notes_limit or 5,
         conversation_history_limit=settings.conversation_history_limit or 10,
         anonymize_pii=settings.anonymize_pii,
-        consent_accepted_at=settings.consent_accepted_at.isoformat() if settings.consent_accepted_at else None,
+        consent_accepted_at=settings.consent_accepted_at.isoformat()
+        if settings.consent_accepted_at
+        else None,
         consent_required=ai_settings_service.is_consent_required(settings),
         current_version=settings.current_version,
     )
 
 
-@router.patch("/settings", response_model=AISettingsResponse, dependencies=[Depends(require_csrf_header)])
+@router.patch(
+    "/settings",
+    response_model=AISettingsResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
 def update_settings(
     update: AISettingsUpdate,
     db: Session = Depends(get_db),
@@ -161,7 +189,7 @@ def update_settings(
 ) -> AISettingsResponse:
     """Update AI settings for the organization. Creates version snapshot."""
     from app.services import version_service
-    
+
     try:
         settings = ai_settings_service.update_ai_settings(
             db,
@@ -177,8 +205,11 @@ def update_settings(
             expected_version=update.expected_version,
         )
     except version_service.VersionConflictError as e:
-        raise HTTPException(status_code=409, detail=f"Version conflict: expected {e.expected}, got {e.actual}")
-    
+        raise HTTPException(
+            status_code=409,
+            detail=f"Version conflict: expected {e.expected}, got {e.actual}",
+        )
+
     return AISettingsResponse(
         is_enabled=settings.is_enabled,
         provider=settings.provider,
@@ -187,14 +218,19 @@ def update_settings(
         context_notes_limit=settings.context_notes_limit or 5,
         conversation_history_limit=settings.conversation_history_limit or 10,
         anonymize_pii=settings.anonymize_pii,
-        consent_accepted_at=settings.consent_accepted_at.isoformat() if settings.consent_accepted_at else None,
+        consent_accepted_at=settings.consent_accepted_at.isoformat()
+        if settings.consent_accepted_at
+        else None,
         consent_required=ai_settings_service.is_consent_required(settings),
         current_version=settings.current_version,
     )
 
 
-
-@router.post("/settings/test", response_model=TestKeyResponse, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/settings/test",
+    response_model=TestKeyResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
 async def test_api_key(
     request: TestKeyRequest,
     session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
@@ -208,18 +244,25 @@ async def test_api_key(
 # Consent Endpoints (Manager Only)
 # ============================================================================
 
+
 @router.get("/consent", response_model=ConsentResponse)
 def get_consent(
     db: Session = Depends(get_db),
     session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> ConsentResponse:
     """Get consent text and status."""
-    settings = ai_settings_service.get_or_create_ai_settings(db, session.org_id, session.user_id)
-    
+    settings = ai_settings_service.get_or_create_ai_settings(
+        db, session.org_id, session.user_id
+    )
+
     return ConsentResponse(
         consent_text=CONSENT_TEXT,
-        consent_accepted_at=settings.consent_accepted_at.isoformat() if settings.consent_accepted_at else None,
-        consent_accepted_by=str(settings.consent_accepted_by) if settings.consent_accepted_by else None,
+        consent_accepted_at=settings.consent_accepted_at.isoformat()
+        if settings.consent_accepted_at
+        else None,
+        consent_accepted_by=str(settings.consent_accepted_by)
+        if settings.consent_accepted_by
+        else None,
     )
 
 
@@ -230,11 +273,15 @@ def accept_consent(
 ) -> dict[str, Any]:
     """Accept the AI data processing consent."""
     settings = ai_settings_service.accept_consent(db, session.org_id, session.user_id)
-    
+
     return {
         "accepted": True,
-        "accepted_at": settings.consent_accepted_at.isoformat() if settings.consent_accepted_at else None,
-        "accepted_by": str(settings.consent_accepted_by) if settings.consent_accepted_by else None,
+        "accepted_at": settings.consent_accepted_at.isoformat()
+        if settings.consent_accepted_at
+        else None,
+        "accepted_by": str(settings.consent_accepted_by)
+        if settings.consent_accepted_by
+        else None,
     }
 
 
@@ -242,7 +289,12 @@ def accept_consent(
 # Chat Endpoints
 # ============================================================================
 
-@router.post("/chat", response_model=ChatResponseModel, dependencies=[Depends(require_csrf_header)])
+
+@router.post(
+    "/chat",
+    response_model=ChatResponseModel,
+    dependencies=[Depends(require_csrf_header)],
+)
 @limiter.limit("60/minute")
 def chat(
     request: Request,  # Required by limiter
@@ -251,7 +303,7 @@ def chat(
     session: UserSession = Depends(require_permission(P.AI_USE)),
 ) -> ChatResponseModel:
     """Send a message to the AI assistant.
-    
+
     Requires: use_ai_assistant permission
     """
     # Check consent before allowing chat
@@ -261,17 +313,17 @@ def chat(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="AI consent not accepted. A manager must accept the data processing consent before using AI.",
         )
-    
+
     # Determine entity type and ID - support global mode
     entity_type = body.entity_type or "global"
     entity_id = body.entity_id
-    
+
     # For global mode, use a special "global" entity ID based on user
     if entity_type == "global" or entity_id is None:
         entity_type = "global"
         # Use user_id as entity_id for global conversations
         entity_id = session.user_id
-    
+
     # Check if user has access to the entity
     if entity_type == "case":
         case = case_service.get_case(db, session.org_id, entity_id)
@@ -297,7 +349,10 @@ def chat(
                 detail="Task not found",
             )
         # Check if user owns or is assigned to the task
-        if task.created_by_user_id != session.user_id and task.assigned_to_user_id != session.user_id:
+        if (
+            task.created_by_user_id != session.user_id
+            and task.assigned_to_user_id != session.user_id
+        ):
             # Allow managers to access any task in their org
             is_manager = session.role in (Role.ADMIN, Role.CASE_MANAGER, Role.DEVELOPER)
             if not is_manager:
@@ -305,11 +360,11 @@ def chat(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Not authorized to access this task",
                 )
-    
+
     # Get user's connected integrations
     integrations = oauth_service.get_user_integrations(db, session.user_id)
     user_integrations = [i.integration_type for i in integrations]
-    
+
     # Process chat
     response = ai_chat_service.chat(
         db,
@@ -320,7 +375,7 @@ def chat(
         body.message,
         user_integrations,
     )
-    
+
     return ChatResponseModel(
         content=response["content"],
         proposed_actions=response["proposed_actions"],
@@ -360,25 +415,28 @@ def get_conversation(
                 detail="Task not found",
             )
         # Check if user owns or is assigned to the task
-        if task.created_by_user_id != session.user_id and task.assigned_to_user_id != session.user_id:
+        if (
+            task.created_by_user_id != session.user_id
+            and task.assigned_to_user_id != session.user_id
+        ):
             is_manager = session.role in (Role.ADMIN, Role.CASE_MANAGER, Role.DEVELOPER)
             if not is_manager:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Not authorized to access this task",
                 )
-    
+
     conversations = ai_chat_service.get_user_conversations(
         db, session.user_id, entity_type, entity_id
     )
-    
+
     if not conversations:
         return {"messages": []}
-    
+
     # Get the most recent conversation
     conversation = conversations[0]
     messages = ai_chat_service.get_conversation_messages(db, conversation.id)
-    
+
     formatted_messages = []
     for msg in messages:
         # Build proposed_actions with approval_id from action_approvals
@@ -389,32 +447,38 @@ def get_conversation(
                 # Find matching approval by action_index
                 approval = next(
                     (a for a in (msg.action_approvals or []) if a.action_index == i),
-                    None
+                    None,
                 )
-                proposed_actions.append({
-                    "approval_id": str(approval.id) if approval else None,
-                    "action_type": action.get("type", "unknown"),
-                    "action_data": action,
-                    "status": approval.status if approval else "unknown",
-                })
-        
-        formatted_messages.append({
-            "id": str(msg.id),
-            "role": msg.role,
-            "content": msg.content,
-            "proposed_actions": proposed_actions,
-            "created_at": msg.created_at.isoformat(),
-            "action_approvals": [
-                {
-                    "id": str(a.id),
-                    "action_index": a.action_index,
-                    "action_type": a.action_type,
-                    "status": a.status,
-                }
-                for a in msg.action_approvals
-            ] if msg.action_approvals else None,
-        })
-    
+                proposed_actions.append(
+                    {
+                        "approval_id": str(approval.id) if approval else None,
+                        "action_type": action.get("type", "unknown"),
+                        "action_data": action,
+                        "status": approval.status if approval else "unknown",
+                    }
+                )
+
+        formatted_messages.append(
+            {
+                "id": str(msg.id),
+                "role": msg.role,
+                "content": msg.content,
+                "proposed_actions": proposed_actions,
+                "created_at": msg.created_at.isoformat(),
+                "action_approvals": [
+                    {
+                        "id": str(a.id),
+                        "action_index": a.action_index,
+                        "action_type": a.action_type,
+                        "status": a.status,
+                    }
+                    for a in msg.action_approvals
+                ]
+                if msg.action_approvals
+                else None,
+            }
+        )
+
     return {
         "conversation_id": str(conversation.id),
         "messages": formatted_messages,
@@ -429,20 +493,20 @@ def get_global_conversation(
     session: UserSession = Depends(require_permission(P.AI_USE)),
 ) -> dict[str, Any]:
     """Get global conversation history for the current user.
-    
+
     Global conversations use entity_type='global' and entity_id=user_id.
     """
     conversations = ai_chat_service.get_user_conversations(
         db, session.user_id, "global", session.user_id
     )
-    
+
     if not conversations:
         return {"messages": []}
-    
+
     # Get the most recent conversation
     conversation = conversations[0]
     messages = ai_chat_service.get_conversation_messages(db, conversation.id)
-    
+
     formatted_messages = []
     for msg in messages:
         # Build proposed_actions with approval_id from action_approvals
@@ -452,23 +516,27 @@ def get_global_conversation(
             for i, action in enumerate(msg.proposed_actions):
                 approval = next(
                     (a for a in (msg.action_approvals or []) if a.action_index == i),
-                    None
+                    None,
                 )
-                proposed_actions.append({
-                    "approval_id": str(approval.id) if approval else None,
-                    "action_type": action.get("type", "unknown"),
-                    "action_data": action,
-                    "status": approval.status if approval else "unknown",
-                })
-        
-        formatted_messages.append({
-            "id": str(msg.id),
-            "role": msg.role,
-            "content": msg.content,
-            "proposed_actions": proposed_actions,
-            "created_at": msg.created_at.isoformat(),
-        })
-    
+                proposed_actions.append(
+                    {
+                        "approval_id": str(approval.id) if approval else None,
+                        "action_type": action.get("type", "unknown"),
+                        "action_data": action,
+                        "status": approval.status if approval else "unknown",
+                    }
+                )
+
+        formatted_messages.append(
+            {
+                "id": str(msg.id),
+                "role": msg.role,
+                "content": msg.content,
+                "proposed_actions": proposed_actions,
+                "created_at": msg.created_at.isoformat(),
+            }
+        )
+
     return {
         "conversation_id": str(conversation.id),
         "messages": formatted_messages,
@@ -489,7 +557,7 @@ def get_all_conversations(
         entity_type=entity_type,
         entity_id=entity_id,
     )
-    
+
     return {
         "conversations": [
             {
@@ -507,8 +575,10 @@ def get_all_conversations(
 # Action Approval Endpoints
 # ============================================================================
 
+
 class ActionApprovalResponse(BaseModel):
     """Response for action approval."""
+
     success: bool
     action_type: str
     status: str
@@ -516,48 +586,57 @@ class ActionApprovalResponse(BaseModel):
     error: str | None = None
 
 
-@router.post("/actions/{approval_id}/approve", response_model=ActionApprovalResponse, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/actions/{approval_id}/approve",
+    response_model=ActionApprovalResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
 def approve_action(
     approval_id: uuid.UUID,
     db: Session = Depends(get_db),
     session: UserSession = Depends(require_permission(P.AI_APPROVE_ACTIONS)),
 ) -> ActionApprovalResponse:
     """Approve and execute a proposed action.
-    
+
     Requires: approve_ai_actions permission (plus action-specific permissions)
     """
     from app.services.ai_action_executor import execute_action
-    
+
     # Get the approval with related data
-    approval, message, conversation = ai_service.get_approval_with_conversation(db, approval_id)
+    approval, message, conversation = ai_service.get_approval_with_conversation(
+        db, approval_id
+    )
     if not approval:
         raise HTTPException(status_code=404, detail="Action not found")
-    
+
     # Get conversation to verify org access
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
-    
+
     if not conversation or conversation.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    
+
     # Verify user owns this conversation or has manager role
     is_manager = session.role in (Role.ADMIN, Role.CASE_MANAGER, Role.DEVELOPER)
     if conversation.user_id != session.user_id and not is_manager:
-        raise HTTPException(status_code=403, detail="Not authorized to approve this action")
-    
+        raise HTTPException(
+            status_code=403, detail="Not authorized to approve this action"
+        )
+
     # Check status
     if approval.status != "pending":
         raise HTTPException(
-            status_code=400, 
-            detail=f"Action already processed (status: {approval.status})"
+            status_code=400,
+            detail=f"Action already processed (status: {approval.status})",
         )
-    
+
     # Get user's permissions for action-specific checks
     from app.services import permission_service
+
     user_permissions = permission_service.get_effective_permissions(
         db, session.org_id, session.user_id, session.role.value
     )
-    
+
     # Execute the action with permission checks
     result = execute_action(
         db=db,
@@ -571,6 +650,7 @@ def approve_action(
     # Case activity log for AI-generated actions (case context only)
     if result.get("success") and conversation.entity_type == "case":
         from app.services import activity_service, pipeline_service
+
         case_id = conversation.entity_id
         details_base = {
             "source": "ai",
@@ -615,10 +695,14 @@ def approve_action(
             old_label = None
             new_label = None
             if old_stage_id:
-                old_stage = pipeline_service.get_stage_by_id(db, uuid.UUID(old_stage_id))
+                old_stage = pipeline_service.get_stage_by_id(
+                    db, uuid.UUID(old_stage_id)
+                )
                 old_label = old_stage.label if old_stage else None
             if new_stage_id:
-                new_stage = pipeline_service.get_stage_by_id(db, uuid.UUID(new_stage_id))
+                new_stage = pipeline_service.get_stage_by_id(
+                    db, uuid.UUID(new_stage_id)
+                )
                 new_label = new_stage.label if new_stage else None
 
             activity_service.log_activity(
@@ -646,9 +730,10 @@ def approve_action(
                     "title": result.get("title"),
                 },
             )
-    
+
     # Audit log - only log approved if actually successful
     from app.services import audit_service
+
     if result.get("success"):
         audit_service.log_ai_action_approved(
             db=db,
@@ -677,9 +762,9 @@ def approve_action(
                 action_type=approval.action_type,
                 error=result.get("error"),
             )
-    
+
     db.commit()
-    
+
     return ActionApprovalResponse(
         success=result.get("success", False),
         action_type=approval.action_type,
@@ -689,7 +774,9 @@ def approve_action(
     )
 
 
-@router.post("/actions/{approval_id}/reject", dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/actions/{approval_id}/reject", dependencies=[Depends(require_csrf_header)]
+)
 def reject_action(
     approval_id: uuid.UUID,
     db: Session = Depends(get_db),
@@ -697,35 +784,40 @@ def reject_action(
 ) -> dict[str, Any]:
     """Reject a proposed action."""
     # Get the approval with related data
-    approval, message, conversation = ai_service.get_approval_with_conversation(db, approval_id)
+    approval, message, conversation = ai_service.get_approval_with_conversation(
+        db, approval_id
+    )
     if not approval:
         raise HTTPException(status_code=404, detail="Action not found")
-    
+
     # Get conversation to verify org access
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
-    
+
     if not conversation or conversation.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    
+
     # Verify user owns this conversation or has manager role
     is_manager = session.role in (Role.ADMIN, Role.CASE_MANAGER, Role.DEVELOPER)
     if conversation.user_id != session.user_id and not is_manager:
-        raise HTTPException(status_code=403, detail="Not authorized to reject this action")
-    
+        raise HTTPException(
+            status_code=403, detail="Not authorized to reject this action"
+        )
+
     # Check status
     if approval.status != "pending":
         raise HTTPException(
-            status_code=400, 
-            detail=f"Action already processed (status: {approval.status})"
+            status_code=400,
+            detail=f"Action already processed (status: {approval.status})",
         )
-    
+
     # Mark as rejected
     approval.status = "rejected"
     approval.executed_at = datetime.utcnow()
-    
+
     # Audit log
     from app.services import audit_service
+
     audit_service.log_ai_action_rejected(
         db=db,
         org_id=session.org_id,
@@ -733,9 +825,9 @@ def reject_action(
         approval_id=approval.id,
         action_type=approval.action_type,
     )
-    
+
     db.commit()
-    
+
     return {
         "success": True,
         "action_type": approval.action_type,
@@ -758,7 +850,7 @@ def get_pending_actions(
         entity_type=entity_type,
         entity_id=entity_id,
     )
-    
+
     return {
         "pending_actions": [
             {
@@ -776,6 +868,7 @@ def get_pending_actions(
 # Usage Analytics Endpoints (Manager Only)
 # ============================================================================
 
+
 @router.get("/usage/summary")
 def get_usage_summary(
     days: int = 30,
@@ -784,7 +877,7 @@ def get_usage_summary(
 ) -> dict[str, Any]:
     """Get organization usage summary."""
     from app.services import ai_usage_service
-    
+
     return ai_usage_service.get_org_usage_summary(db, session.org_id, days)
 
 
@@ -796,7 +889,7 @@ def get_usage_by_model(
 ) -> dict[str, Any]:
     """Get usage breakdown by AI model."""
     from app.services import ai_usage_service
-    
+
     return {"models": ai_usage_service.get_usage_by_model(db, session.org_id, days)}
 
 
@@ -808,7 +901,7 @@ def get_daily_usage(
 ) -> dict[str, Any]:
     """Get daily usage breakdown."""
     from app.services import ai_usage_service
-    
+
     return {"daily": ai_usage_service.get_daily_usage(db, session.org_id, days)}
 
 
@@ -821,7 +914,7 @@ def get_top_users(
 ) -> dict[str, Any]:
     """Get top users by AI usage."""
     from app.services import ai_usage_service
-    
+
     return {"users": ai_usage_service.get_top_users(db, session.org_id, days, limit)}
 
 
@@ -833,7 +926,7 @@ def get_my_usage(
 ) -> dict[str, Any]:
     """Get current user's AI usage."""
     from app.services import ai_usage_service
-    
+
     return ai_usage_service.get_user_usage_summary(db, session.user_id, days)
 
 
@@ -841,13 +934,16 @@ def get_my_usage(
 # Focused AI Endpoints (One-shot operations, no conversation history)
 # ============================================================================
 
+
 class SummarizeCaseRequest(BaseModel):
     """Request to summarize a case."""
+
     case_id: uuid.UUID
 
 
 class SummarizeCaseResponse(BaseModel):
     """Case summary response."""
+
     case_number: str
     full_name: str
     summary: str
@@ -860,6 +956,7 @@ class SummarizeCaseResponse(BaseModel):
 
 class EmailType(str, Enum):
     """Types of emails that can be drafted."""
+
     FOLLOW_UP = "follow_up"
     STATUS_UPDATE = "status_update"
     MEETING_REQUEST = "meeting_request"
@@ -869,6 +966,7 @@ class EmailType(str, Enum):
 
 class DraftEmailRequest(BaseModel):
     """Request to draft an email."""
+
     case_id: uuid.UUID
     email_type: EmailType
     additional_context: str | None = None
@@ -876,6 +974,7 @@ class DraftEmailRequest(BaseModel):
 
 class DraftEmailResponse(BaseModel):
     """Draft email response."""
+
     subject: str
     body: str
     recipient_email: str
@@ -885,6 +984,7 @@ class DraftEmailResponse(BaseModel):
 
 class AnalyzeDashboardResponse(BaseModel):
     """Dashboard analytics response."""
+
     insights: list[str]
     case_volume_trend: str
     bottlenecks: list[dict[str, Any]]
@@ -896,23 +996,22 @@ class AnalyzeDashboardResponse(BaseModel):
 EMAIL_PROMPTS = {
     EmailType.FOLLOW_UP: """Draft a professional follow-up email to check in with the applicant. 
 The tone should be warm and supportive. Ask how they're doing and if they have any questions.""",
-    
     EmailType.STATUS_UPDATE: """Draft a status update email informing the applicant about their case progress.
 Be clear about current status, what's been completed, and what to expect next.""",
-    
     EmailType.MEETING_REQUEST: """Draft an email requesting a meeting or phone call with the applicant.
 Suggest a few time options and explain what you'd like to discuss.""",
-    
     EmailType.DOCUMENT_REQUEST: """Draft an email requesting missing or additional documents from the applicant.
 Be specific about what documents are needed and why they're important.""",
-    
     EmailType.INTRODUCTION: """Draft an introduction email to share with intended parents about this surrogate candidate.
 Highlight key qualifications and background while being professional and respectful of privacy.""",
 }
 
 
-
-@router.post("/summarize-case", response_model=SummarizeCaseResponse, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/summarize-case",
+    response_model=SummarizeCaseResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
 @limiter.limit("30/minute")
 def summarize_case(
     request: Request,
@@ -921,12 +1020,12 @@ def summarize_case(
     session: UserSession = Depends(require_permission(P.AI_USE)),
 ) -> SummarizeCaseResponse:
     """Generate a comprehensive summary of a case using AI.
-    
+
     Requires: use_ai_assistant permission
     """
     from app.services import ai_settings_service
     from app.services.ai_provider import ChatMessage, get_provider
-    
+
     # Check AI is enabled and consent accepted
     settings = ai_settings_service.get_ai_settings(db, session.org_id)
     if not settings or not settings.is_enabled:
@@ -939,12 +1038,14 @@ def summarize_case(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="AI consent not accepted",
         )
-    
+
     # Load case with context
     case = case_service.get_case(db, session.org_id, body.case_id)
     if not case:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Case not found"
+        )
+
     # Load notes and tasks
     notes = note_service.list_notes_limited(
         db=db,
@@ -959,16 +1060,27 @@ def summarize_case(
         org_id=session.org_id,
         limit=10,
     )
-    
+
     # Build context
-    notes_text = "\n".join([f"- [{n.created_at.strftime('%Y-%m-%d')}] {n.content[:200]}" for n in notes]) or "No notes yet"
-    tasks_text = "\n".join([f"- {t.title} (due: {t.due_date or 'not set'})" for t in tasks]) or "No pending tasks"
-    
+    notes_text = (
+        "\n".join(
+            [
+                f"- [{n.created_at.strftime('%Y-%m-%d')}] {n.content[:200]}"
+                for n in notes
+            ]
+        )
+        or "No notes yet"
+    )
+    tasks_text = (
+        "\n".join([f"- {t.title} (due: {t.due_date or 'not set'})" for t in tasks])
+        or "No pending tasks"
+    )
+
     context = f"""Case #{case.case_number}
 Name: {case.full_name}
 Email: {case.email}
 Status: {case.status_label}
-Created: {case.created_at.strftime('%Y-%m-%d')}
+Created: {case.created_at.strftime("%Y-%m-%d")}
 
 Recent Notes:
 {notes_text}
@@ -992,21 +1104,31 @@ Be concise and professional. Focus on actionable insights."""
     # Call AI
     api_key = ai_settings_service.get_decrypted_key(settings)
     if not api_key:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="AI API key not configured")
-    
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="AI API key not configured"
+        )
+
     provider = get_provider(settings.provider, api_key, settings.model)
-    
+
     import asyncio
+
     response = asyncio.get_event_loop().run_until_complete(
-        provider.chat([
-            ChatMessage(role="system", content="You are a helpful CRM assistant for a surrogacy agency. Always respond with valid JSON."),
-            ChatMessage(role="user", content=prompt),
-        ], temperature=0.3)
+        provider.chat(
+            [
+                ChatMessage(
+                    role="system",
+                    content="You are a helpful CRM assistant for a surrogacy agency. Always respond with valid JSON.",
+                ),
+                ChatMessage(role="user", content=prompt),
+            ],
+            temperature=0.3,
+        )
     )
-    
+
     # Parse response
     try:
         import json
+
         # Extract JSON from response
         content = response.content.strip()
         if content.startswith("```json"):
@@ -1022,19 +1144,23 @@ Be concise and professional. Focus on actionable insights."""
             "recent_activity": "See notes above",
             "suggested_next_steps": ["Review case details", "Follow up with applicant"],
         }
-    
+
     # Build key dates
     key_dates = {
         "created": case.created_at.isoformat() if case.created_at else None,
         "updated": case.updated_at.isoformat() if case.updated_at else None,
     }
-    
+
     # Build pending tasks list
     pending_tasks = [
-        {"id": str(t.id), "title": t.title, "due_date": t.due_date.isoformat() if t.due_date else None}
+        {
+            "id": str(t.id),
+            "title": t.title,
+            "due_date": t.due_date.isoformat() if t.due_date else None,
+        }
         for t in tasks
     ]
-    
+
     return SummarizeCaseResponse(
         case_number=case.case_number,
         full_name=case.full_name,
@@ -1047,7 +1173,11 @@ Be concise and professional. Focus on actionable insights."""
     )
 
 
-@router.post("/draft-email", response_model=DraftEmailResponse, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/draft-email",
+    response_model=DraftEmailResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
 @limiter.limit("30/minute")
 def draft_email(
     request: Request,
@@ -1056,32 +1186,42 @@ def draft_email(
     session: UserSession = Depends(require_permission(P.AI_USE)),
 ) -> DraftEmailResponse:
     """Draft an email for a case using AI.
-    
+
     Requires: use_ai_assistant permission
     """
     from app.services import ai_settings_service
     from app.services.ai_provider import ChatMessage, get_provider
-    
+
     # Check AI is enabled
     settings = ai_settings_service.get_ai_settings(db, session.org_id)
     if not settings or not settings.is_enabled:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="AI is not enabled")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="AI is not enabled"
+        )
     if ai_settings_service.is_consent_required(settings):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="AI consent not accepted")
-    
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="AI consent not accepted"
+        )
+
     # Load case
     case = case_service.get_case(db, session.org_id, body.case_id)
     if not case:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Case not found"
+        )
+
     # Get user name for signature
     user = user_service.get_user_by_id(db, session.user_id)
     sender_name = user.full_name if user else "Your Case Manager"
-    
+
     # Build email prompt
     email_instruction = EMAIL_PROMPTS[body.email_type]
-    additional = f"\nAdditional context: {body.additional_context}" if body.additional_context else ""
-    
+    additional = (
+        f"\nAdditional context: {body.additional_context}"
+        if body.additional_context
+        else ""
+    )
+
     prompt = f"""{email_instruction}
 
 Recipient: {case.full_name}
@@ -1102,21 +1242,31 @@ Be professional, warm, and concise."""
     # Call AI
     api_key = ai_settings_service.get_decrypted_key(settings)
     if not api_key:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="AI API key not configured")
-    
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="AI API key not configured"
+        )
+
     provider = get_provider(settings.provider, api_key, settings.model)
-    
+
     import asyncio
+
     response = asyncio.get_event_loop().run_until_complete(
-        provider.chat([
-            ChatMessage(role="system", content="You are a professional email writer for a surrogacy agency. Always respond with valid JSON."),
-            ChatMessage(role="user", content=prompt),
-        ], temperature=0.5)
+        provider.chat(
+            [
+                ChatMessage(
+                    role="system",
+                    content="You are a professional email writer for a surrogacy agency. Always respond with valid JSON.",
+                ),
+                ChatMessage(role="user", content=prompt),
+            ],
+            temperature=0.5,
+        )
     )
-    
+
     # Parse response
     try:
         import json
+
         content = response.content.strip()
         if content.startswith("```json"):
             content = content[7:]
@@ -1131,7 +1281,7 @@ Be professional, warm, and concise."""
             "subject": "Following up on your application",
             "body": response.content,
         }
-    
+
     return DraftEmailResponse(
         subject=parsed.get("subject", "Following up"),
         body=parsed.get("body", ""),
@@ -1141,7 +1291,11 @@ Be professional, warm, and concise."""
     )
 
 
-@router.post("/analyze-dashboard", response_model=AnalyzeDashboardResponse, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/analyze-dashboard",
+    response_model=AnalyzeDashboardResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
 @limiter.limit("10/minute")
 def analyze_dashboard(
     request: Request,
@@ -1151,25 +1305,24 @@ def analyze_dashboard(
     """Analyze dashboard data and provide AI-powered insights."""
     from app.services import ai_settings_service
     from app.services.ai_provider import ChatMessage, get_provider
-    from datetime import timedelta
-    
+
     # Check AI is enabled
     settings = ai_settings_service.get_ai_settings(db, session.org_id)
     if not settings or not settings.is_enabled:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="AI is not enabled")
-    
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="AI is not enabled"
+        )
+
     # Gather dashboard stats
     now = datetime.utcnow()
-    thirty_days_ago = now - timedelta(days=30)
-    seven_days_ago = now - timedelta(days=7)
-    
+
     case_stats = case_service.get_case_stats(db, session.org_id)
     total_cases = case_stats["total"]
     status_summary = case_stats["by_status"]
     cases_this_week = case_stats["this_week"]
     cases_last_week = case_stats["last_week"]
     overdue_tasks = task_service.count_overdue_tasks(db, session.org_id, now.date())
-    
+
     # Build stats summary
     stats = {
         "total_active_cases": total_cases,
@@ -1178,25 +1331,33 @@ def analyze_dashboard(
         "overdue_tasks": overdue_tasks,
         "status_breakdown": status_summary,
     }
-    
+
     # Determine trend
     if cases_this_week > cases_last_week:
-        trend = f"Increasing ({cases_this_week} this week vs {cases_last_week} last week)"
+        trend = (
+            f"Increasing ({cases_this_week} this week vs {cases_last_week} last week)"
+        )
     elif cases_this_week < cases_last_week:
-        trend = f"Decreasing ({cases_this_week} this week vs {cases_last_week} last week)"
+        trend = (
+            f"Decreasing ({cases_this_week} this week vs {cases_last_week} last week)"
+        )
     else:
         trend = f"Stable ({cases_this_week} cases this week)"
-    
+
     # Identify bottlenecks
     bottlenecks = []
     for status_name, count in status_summary.items():
         if count > total_cases * 0.3:  # More than 30% in one status
-            bottlenecks.append({
-                "status": status_name,
-                "count": count,
-                "percentage": round(count / total_cases * 100, 1) if total_cases > 0 else 0,
-            })
-    
+            bottlenecks.append(
+                {
+                    "status": status_name,
+                    "count": count,
+                    "percentage": round(count / total_cases * 100, 1)
+                    if total_cases > 0
+                    else 0,
+                }
+            )
+
     # Call AI for insights
     api_key = ai_settings_service.get_decrypted_key(settings)
     if not api_key:
@@ -1208,7 +1369,7 @@ def analyze_dashboard(
             recommendations=["Configure AI API key for detailed insights"],
             stats=stats,
         )
-    
+
     prompt = f"""Analyze this CRM dashboard data for a surrogacy agency:
 
 Total Active Cases: {total_cases}
@@ -1231,18 +1392,26 @@ Focus on:
 - Staffing or process recommendations"""
 
     provider = get_provider(settings.provider, api_key, settings.model)
-    
+
     import asyncio
+
     response = asyncio.get_event_loop().run_until_complete(
-        provider.chat([
-            ChatMessage(role="system", content="You are a CRM analytics expert for a surrogacy agency. Provide actionable business insights. Always respond with valid JSON."),
-            ChatMessage(role="user", content=prompt),
-        ], temperature=0.4)
+        provider.chat(
+            [
+                ChatMessage(
+                    role="system",
+                    content="You are a CRM analytics expert for a surrogacy agency. Provide actionable business insights. Always respond with valid JSON.",
+                ),
+                ChatMessage(role="user", content=prompt),
+            ],
+            temperature=0.4,
+        )
     )
-    
+
     # Parse response
     try:
         import json
+
         content = response.content.strip()
         if content.startswith("```json"):
             content = content[7:]
@@ -1256,7 +1425,7 @@ Focus on:
             "insights": [response.content[:200]],
             "recommendations": ["Review case statuses regularly"],
         }
-    
+
     return AnalyzeDashboardResponse(
         insights=parsed.get("insights", []),
         case_volume_trend=trend,
@@ -1270,13 +1439,16 @@ Focus on:
 # AI Workflow Generation Endpoints
 # ============================================================================
 
+
 class GenerateWorkflowRequest(BaseModel):
     """Request to generate a workflow from natural language."""
+
     description: str = Field(..., min_length=10, max_length=2000)
 
 
 class GenerateWorkflowResponse(BaseModel):
     """Response from workflow generation."""
+
     success: bool
     workflow: dict[str, Any] | None = None
     explanation: str | None = None
@@ -1286,11 +1458,13 @@ class GenerateWorkflowResponse(BaseModel):
 
 class ValidateWorkflowRequest(BaseModel):
     """Request to validate a workflow configuration."""
+
     workflow: dict[str, Any]
 
 
 class ValidateWorkflowResponse(BaseModel):
     """Response from workflow validation."""
+
     valid: bool
     errors: list[str] = []
     warnings: list[str] = []
@@ -1298,20 +1472,22 @@ class ValidateWorkflowResponse(BaseModel):
 
 class SaveWorkflowRequest(BaseModel):
     """Request to save an approved workflow."""
+
     workflow: dict[str, Any]
 
 
 class SaveWorkflowResponse(BaseModel):
     """Response from workflow save."""
+
     success: bool
     workflow_id: str | None = None
     error: str | None = None
 
 
 @router.post(
-    "/workflows/generate", 
+    "/workflows/generate",
     response_model=GenerateWorkflowResponse,
-    dependencies=[Depends(require_csrf_header)]
+    dependencies=[Depends(require_csrf_header)],
 )
 @limiter.limit("10/minute")
 def generate_workflow(
@@ -1322,19 +1498,19 @@ def generate_workflow(
 ) -> GenerateWorkflowResponse:
     """
     Generate a workflow configuration from natural language description.
-    
+
     The generated workflow is returned for user review before saving.
     Restricted to Manager/Developer roles for safety.
     """
     from app.services import ai_workflow_service
-    
+
     result = ai_workflow_service.generate_workflow(
         db=db,
         org_id=session.org_id,
         user_id=session.user_id,
         description=body.description,
     )
-    
+
     return GenerateWorkflowResponse(
         success=result.success,
         workflow=result.workflow.model_dump() if result.workflow else None,
@@ -1345,9 +1521,9 @@ def generate_workflow(
 
 
 @router.post(
-    "/workflows/validate", 
+    "/workflows/validate",
     response_model=ValidateWorkflowResponse,
-    dependencies=[Depends(require_csrf_header)]
+    dependencies=[Depends(require_csrf_header)],
 )
 def validate_workflow(
     body: ValidateWorkflowRequest,
@@ -1356,13 +1532,13 @@ def validate_workflow(
 ) -> ValidateWorkflowResponse:
     """
     Validate a workflow configuration.
-    
+
     Used to check if an AI-generated or user-modified workflow is valid
     before saving.
     """
     from app.services import ai_workflow_service
     from app.services.ai_workflow_service import GeneratedWorkflow
-    
+
     try:
         workflow = GeneratedWorkflow(**body.workflow)
     except Exception as e:
@@ -1370,9 +1546,9 @@ def validate_workflow(
             valid=False,
             errors=[f"Invalid workflow format: {str(e)}"],
         )
-    
+
     result = ai_workflow_service.validate_workflow(db, session.org_id, workflow)
-    
+
     return ValidateWorkflowResponse(
         valid=result.valid,
         errors=result.errors,
@@ -1381,9 +1557,9 @@ def validate_workflow(
 
 
 @router.post(
-    "/workflows/save", 
+    "/workflows/save",
     response_model=SaveWorkflowResponse,
-    dependencies=[Depends(require_csrf_header)]
+    dependencies=[Depends(require_csrf_header)],
 )
 def save_ai_workflow(
     body: SaveWorkflowRequest,
@@ -1392,13 +1568,13 @@ def save_ai_workflow(
 ) -> SaveWorkflowResponse:
     """
     Save an approved AI-generated workflow.
-    
+
     The workflow must pass validation before saving.
     Created workflows are disabled by default for safety.
     """
     from app.services import ai_workflow_service, audit_service
     from app.services.ai_workflow_service import GeneratedWorkflow
-    
+
     try:
         workflow_data = GeneratedWorkflow(**body.workflow)
     except Exception as e:
@@ -1406,7 +1582,7 @@ def save_ai_workflow(
             success=False,
             error=f"Invalid workflow format: {str(e)}",
         )
-    
+
     try:
         saved = ai_workflow_service.save_workflow(
             db=db,
@@ -1414,7 +1590,7 @@ def save_ai_workflow(
             user_id=session.user_id,
             workflow=workflow_data,
         )
-        
+
         # Audit log for AI-generated workflow
         audit_service.log_ai_workflow_created(
             db=db,
@@ -1423,14 +1599,14 @@ def save_ai_workflow(
             workflow_id=saved.id,
             workflow_name=saved.name,
         )
-        
+
         db.commit()
-        
+
         return SaveWorkflowResponse(
             success=True,
             workflow_id=str(saved.id),
         )
-        
+
     except ValueError as e:
         return SaveWorkflowResponse(
             success=False,
@@ -1448,8 +1624,10 @@ def save_ai_workflow(
 # Schedule Parsing Endpoints
 # ============================================================================
 
+
 class ParseScheduleRequest(BaseModel):
     """Request to parse a schedule text."""
+
     text: str = Field(..., min_length=1, max_length=10000)
     # At least one entity ID must be provided
     case_id: uuid.UUID | None = None
@@ -1460,13 +1638,18 @@ class ParseScheduleRequest(BaseModel):
 
     @model_validator(mode="after")
     def _validate_entity_ids(self):
-        if not any([self.case_id, self.surrogate_id, self.intended_parent_id, self.match_id]):
-            raise ValueError("At least one of case_id, surrogate_id, intended_parent_id, or match_id must be provided")
+        if not any(
+            [self.case_id, self.surrogate_id, self.intended_parent_id, self.match_id]
+        ):
+            raise ValueError(
+                "At least one of case_id, surrogate_id, intended_parent_id, or match_id must be provided"
+            )
         return self
 
 
 class ParseScheduleResponse(BaseModel):
     """Response with proposed tasks."""
+
     proposed_tasks: list[dict]
     warnings: list[str]
     assumed_timezone: str
@@ -1487,7 +1670,7 @@ async def parse_schedule(
 ) -> ParseScheduleResponse:
     """
     Parse schedule text using AI and extract task proposals.
-    
+
     At least one of case_id, surrogate_id, intended_parent_id, or match_id must be provided.
     User reviews and approves before tasks are created.
     """
@@ -1500,7 +1683,7 @@ async def parse_schedule(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="AI consent not accepted. A manager must accept the data processing consent before using AI.",
         )
-    
+
     # Verify entity exists and belongs to org
     entity_type = None
     entity_id = None
@@ -1510,7 +1693,9 @@ async def parse_schedule(
     if case_id:
         case = case_service.get_case(db, session.org_id, case_id)
         if not case:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Case not found"
+            )
         # Enforce case access (owner/role-based)
         check_case_access(
             case=case,
@@ -1522,15 +1707,22 @@ async def parse_schedule(
         entity_type = "case"
         entity_id = case_id
     elif body.intended_parent_id:
-        parent = ip_service.get_intended_parent(db, body.intended_parent_id, session.org_id)
+        parent = ip_service.get_intended_parent(
+            db, body.intended_parent_id, session.org_id
+        )
         if not parent:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intended parent not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Intended parent not found",
+            )
         entity_type = "intended_parent"
         entity_id = body.intended_parent_id
     elif body.match_id:
         match = match_service.get_match(db, body.match_id, session.org_id)
         if not match:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Match not found"
+            )
         # Enforce access to the associated case
         if match.case_id:
             case = case_service.get_case(db, session.org_id, match.case_id)
@@ -1544,13 +1736,13 @@ async def parse_schedule(
                 )
         entity_type = "match"
         entity_id = body.match_id
-    
+
     # Log metadata only (no PII from schedule text)
     logger.info(
         f"Parse schedule request: user={session.user_id}, "
         f"entity_type={entity_type}, entity_id={entity_id}, text_len={len(body.text)}"
     )
-    
+
     # Parse using AI
     result = await parse_schedule_text(
         db=db,
@@ -1558,7 +1750,7 @@ async def parse_schedule(
         text=body.text,
         user_timezone=body.user_timezone,
     )
-    
+
     return ParseScheduleResponse(
         proposed_tasks=[task.model_dump() for task in result.proposed_tasks],
         warnings=result.warnings,
@@ -1569,6 +1761,7 @@ async def parse_schedule(
 
 class BulkTaskItem(BaseModel):
     """A single task to create."""
+
     title: str = Field(..., min_length=1, max_length=255)
     description: str | None = None
     due_date: str | None = None  # ISO format
@@ -1579,6 +1772,7 @@ class BulkTaskItem(BaseModel):
 
 class BulkTaskCreateRequest(BaseModel):
     """Request to create multiple tasks."""
+
     request_id: uuid.UUID  # Idempotency key
     # At least one entity ID must be provided
     case_id: uuid.UUID | None = None
@@ -1589,13 +1783,18 @@ class BulkTaskCreateRequest(BaseModel):
 
     @model_validator(mode="after")
     def _validate_entity_ids(self):
-        if not any([self.case_id, self.surrogate_id, self.intended_parent_id, self.match_id]):
-            raise ValueError("At least one of case_id, surrogate_id, intended_parent_id, or match_id must be provided")
+        if not any(
+            [self.case_id, self.surrogate_id, self.intended_parent_id, self.match_id]
+        ):
+            raise ValueError(
+                "At least one of case_id, surrogate_id, intended_parent_id, or match_id must be provided"
+            )
         return self
 
 
 class BulkTaskCreateResponse(BaseModel):
     """Response from bulk task creation."""
+
     success: bool
     created: list[dict]  # [{task_id, title}]
     error: str | None = None
@@ -1617,7 +1816,7 @@ async def create_bulk_tasks(
 ) -> BulkTaskCreateResponse:
     """
     Create multiple tasks in a single transaction (all-or-nothing).
-    
+
     Uses request_id for idempotency - same request_id returns cached result.
     Tasks can be linked to case, surrogate, intended parent, or match.
     """
@@ -1625,38 +1824,47 @@ async def create_bulk_tasks(
     from app.db.models import Task
     from app.db.enums import TaskType
     from app.services import activity_service
-    
+
     # Check idempotency cache
     cache_key = f"{session.org_id}:{session.user_id}:{body.request_id}"
     if cache_key in _idempotency_cache:
         logger.info(f"Returning cached result for request_id={body.request_id}")
         return _idempotency_cache[cache_key]
-    
+
     # Verify entity exists and belongs to org
     entity_type = None
     entity_id = None
     match = None
     case_for_access = None
-    
+
     # NOTE: surrogate_id is treated as a case_id alias (the CRM uses Case as the surrogate record)
     case_id = body.case_id or body.surrogate_id
     if case_id:
         case = case_service.get_case(db, session.org_id, case_id)
         if not case:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Case not found"
+            )
         case_for_access = case
         entity_type = "case"
         entity_id = case_id
     elif body.intended_parent_id:
-        parent = ip_service.get_intended_parent(db, body.intended_parent_id, session.org_id)
+        parent = ip_service.get_intended_parent(
+            db, body.intended_parent_id, session.org_id
+        )
         if not parent:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intended parent not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Intended parent not found",
+            )
         entity_type = "intended_parent"
         entity_id = body.intended_parent_id
     elif body.match_id:
         match = match_service.get_match(db, body.match_id, session.org_id)
         if not match:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Match not found"
+            )
         entity_type = "match"
         entity_id = body.match_id
 
@@ -1673,10 +1881,10 @@ async def create_bulk_tasks(
             db=db,
             org_id=session.org_id,
         )
-    
+
     # All-or-nothing: create all tasks in single transaction
     created_tasks: list[dict] = []
-    
+
     try:
         for task_item in body.tasks:
             # Parse date
@@ -1686,7 +1894,7 @@ async def create_bulk_tasks(
                     due_date = date.fromisoformat(task_item.due_date)
                 except ValueError:
                     raise ValueError(f"Invalid date format: {task_item.due_date}")
-            
+
             # Parse time
             due_time = None
             if task_item.due_time:
@@ -1694,25 +1902,27 @@ async def create_bulk_tasks(
                     due_time = time.fromisoformat(task_item.due_time)
                 except ValueError:
                     raise ValueError(f"Invalid time format: {task_item.due_time}")
-            
+
             # Parse task type
             try:
                 task_type = TaskType(task_item.task_type.lower())
             except ValueError:
                 task_type = TaskType.OTHER
-            
+
             # Resolve entity links for task - Task model only has case_id and intended_parent_id
             task_case_id = case_id
             task_ip_id = body.intended_parent_id
-            
+
             # If creating from match, link to both case and intended_parent from the match
             if body.match_id and entity_type == "match":
                 task_case_id = match.case_id if match else None
                 task_ip_id = match.intended_parent_id if match else None
 
             if not task_case_id and not task_ip_id:
-                raise ValueError("Each task must be linked to a case_id or intended_parent_id")
-            
+                raise ValueError(
+                    "Each task must be linked to a case_id or intended_parent_id"
+                )
+
             # Create task with appropriate entity link
             task = Task(
                 organization_id=session.org_id,
@@ -1729,12 +1939,14 @@ async def create_bulk_tasks(
             )
             db.add(task)
             db.flush()  # Get task ID
-            
-            created_tasks.append({
-                "task_id": str(task.id),
-                "title": task.title,
-            })
-        
+
+            created_tasks.append(
+                {
+                    "task_id": str(task.id),
+                    "title": task.title,
+                }
+            )
+
         # Log single case activity for bulk creation (when a case is available)
         case_id_for_activity = None
         if entity_type == "match" and match and match.case_id:
@@ -1758,24 +1970,24 @@ async def create_bulk_tasks(
                     "entity_id": str(entity_id) if entity_id else None,
                 },
             )
-        
+
         db.commit()
-        
+
         result = BulkTaskCreateResponse(
             success=True,
             created=created_tasks,
         )
-        
+
         # Cache for idempotency
         _idempotency_cache[cache_key] = result
-        
+
         logger.info(
             f"Created {len(created_tasks)} tasks for {entity_type} {entity_id} "
             f"by user {session.user_id}"
         )
-        
+
         return result
-        
+
     except ValueError as e:
         db.rollback()
         return BulkTaskCreateResponse(

@@ -3,6 +3,7 @@ Admin endpoints for Meta Lead Ads page management.
 
 Replaces CLI commands with web UI for managing Meta page tokens.
 """
+
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -10,7 +11,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
+from app.core.deps import (
+    get_current_session,
+    get_db,
+    require_csrf_header,
+    require_permission,
+)
 from app.core.policies import POLICIES
 from app.core.encryption import encrypt_token, is_encryption_configured
 
@@ -18,12 +24,17 @@ from app.schemas.auth import UserSession
 from app.services import meta_page_service
 
 
-router = APIRouter(prefix="/admin/meta-pages", tags=["admin"], dependencies=[Depends(require_permission(POLICIES["meta_leads"].default))])
+router = APIRouter(
+    prefix="/admin/meta-pages",
+    tags=["admin"],
+    dependencies=[Depends(require_permission(POLICIES["meta_leads"].default))],
+)
 
 
 # =============================================================================
 # Schemas
 # =============================================================================
+
 
 class MetaPageCreate(BaseModel):
     page_id: str = Field(..., description="Meta page ID")
@@ -34,14 +45,16 @@ class MetaPageCreate(BaseModel):
 
 class MetaPageUpdate(BaseModel):
     page_name: str | None = None
-    access_token: str | None = Field(None, description="New access token (will be encrypted)")
+    access_token: str | None = Field(
+        None, description="New access token (will be encrypted)"
+    )
     expires_days: int | None = Field(None, ge=1, le=365)
     is_active: bool | None = None
 
 
 class MetaPageRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     organization_id: UUID
     page_id: str
@@ -65,6 +78,7 @@ class MetaPageTestResponse(BaseModel):
 # Endpoints
 # =============================================================================
 
+
 @router.get("", response_model=list[MetaPageRead])
 def list_meta_pages(
     session: UserSession = Depends(get_current_session),
@@ -83,29 +97,29 @@ def create_meta_page(
 ):
     """
     Create or update Meta page mapping with encrypted token.
-    
+
     Replaces: python -m app.cli update-meta-page-token
     """
     # Check encryption configured
     if not is_encryption_configured():
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="META_ENCRYPTION_KEY not configured. Contact administrator."
+            detail="META_ENCRYPTION_KEY not configured. Contact administrator.",
         )
-    
+
     # Check for existing mapping
     existing = meta_page_service.get_mapping_by_page_id_any_org(db, data.page_id)
-    
+
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Page {data.page_id} already exists. Use PUT to update."
+            detail=f"Page {data.page_id} already exists. Use PUT to update.",
         )
-    
+
     # Encrypt token
     encrypted = encrypt_token(data.access_token)
     expires_at = datetime.utcnow() + timedelta(days=data.expires_days)
-    
+
     # Create mapping
     return meta_page_service.create_mapping(
         db=db,
@@ -127,21 +141,23 @@ def update_meta_page(
 ):
     """Update existing Meta page mapping."""
     mapping = meta_page_service.get_mapping_by_page_id(db, session.org_id, page_id)
-    
+
     if not mapping:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Page not found"
+        )
+
     # Update fields
     if data.access_token is not None:
         if not is_encryption_configured():
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="META_ENCRYPTION_KEY not configured"
+                detail="META_ENCRYPTION_KEY not configured",
             )
         encrypted = encrypt_token(data.access_token)
     else:
         encrypted = None
-        
+
     if data.expires_days is not None:
         expires_at = datetime.utcnow() + timedelta(days=data.expires_days)
     else:
@@ -166,12 +182,14 @@ def delete_meta_page(
 ):
     """
     Delete Meta page mapping.
-    
+
     Replaces: python -m app.cli deactivate-meta-page
     """
     mapping = meta_page_service.get_mapping_by_page_id(db, session.org_id, page_id)
-    
+
     if not mapping:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Page not found"
+        )
+
     meta_page_service.delete_mapping(db, mapping)

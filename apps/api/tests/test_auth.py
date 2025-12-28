@@ -1,6 +1,8 @@
 """Tests for Authentication."""
+
 import pytest
 from httpx import AsyncClient
+
 
 @pytest.mark.asyncio
 async def test_login_redirects_to_google(client: AsyncClient):

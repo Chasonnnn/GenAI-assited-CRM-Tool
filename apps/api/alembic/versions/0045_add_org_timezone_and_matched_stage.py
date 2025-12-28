@@ -4,12 +4,13 @@ Revision ID: 0045_add_org_timezone_and_matched_stage
 Revises: 0044_fix_appointment_types
 Create Date: 2025-01-06
 """
+
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = '0045_add_org_timezone_and_matched_stage'
-down_revision = '0044_fix_appointment_types'
+revision = "0045_add_org_timezone_and_matched_stage"
+down_revision = "0044_fix_appointment_types"
 branch_labels = None
 depends_on = None
 
@@ -46,7 +47,7 @@ def upgrade():
 
         pending = conn.execute(
             sa.text(
-                "SELECT \"order\" FROM pipeline_stages "
+                'SELECT "order" FROM pipeline_stages '
                 "WHERE pipeline_id = :pid AND slug = 'pending_match' AND deleted_at IS NULL"
             ),
             {"pid": pipeline_id},
@@ -54,7 +55,7 @@ def upgrade():
 
         meds = conn.execute(
             sa.text(
-                "SELECT \"order\" FROM pipeline_stages "
+                'SELECT "order" FROM pipeline_stages '
                 "WHERE pipeline_id = :pid AND slug = 'meds_started' AND deleted_at IS NULL"
             ),
             {"pid": pipeline_id},
@@ -65,8 +66,8 @@ def upgrade():
             conn.execute(
                 sa.text(
                     "UPDATE pipeline_stages "
-                    "SET \"order\" = \"order\" + 1 "
-                    "WHERE pipeline_id = :pid AND \"order\" >= :order"
+                    'SET "order" = "order" + 1 '
+                    'WHERE pipeline_id = :pid AND "order" >= :order'
                 ),
                 {"pid": pipeline_id, "order": insert_order},
             )
@@ -75,15 +76,15 @@ def upgrade():
             conn.execute(
                 sa.text(
                     "UPDATE pipeline_stages "
-                    "SET \"order\" = \"order\" + 1 "
-                    "WHERE pipeline_id = :pid AND \"order\" > :order"
+                    'SET "order" = "order" + 1 '
+                    'WHERE pipeline_id = :pid AND "order" > :order'
                 ),
                 {"pid": pipeline_id, "order": pending[0]},
             )
         else:
             max_order = conn.execute(
                 sa.text(
-                    "SELECT COALESCE(MAX(\"order\"), 0) FROM pipeline_stages WHERE pipeline_id = :pid"
+                    'SELECT COALESCE(MAX("order"), 0) FROM pipeline_stages WHERE pipeline_id = :pid'
                 ),
                 {"pid": pipeline_id},
             ).scalar()
@@ -92,7 +93,7 @@ def upgrade():
         conn.execute(
             sa.text(
                 "INSERT INTO pipeline_stages "
-                "(pipeline_id, slug, stage_type, label, color, \"order\", is_active, created_at, updated_at) "
+                '(pipeline_id, slug, stage_type, label, color, "order", is_active, created_at, updated_at) '
                 "VALUES (:pid, 'matched', 'post_approval', 'Matched', :color, :order, true, now(), now())"
             ),
             {"pid": pipeline_id, "color": MATCHED_COLOR, "order": insert_order},

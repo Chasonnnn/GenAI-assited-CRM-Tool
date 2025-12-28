@@ -20,18 +20,13 @@ def list_orgs(db: Session) -> list[Organization]:
 
 def get_org_by_slug(db: Session, slug: str) -> Organization | None:
     """Get organization by slug."""
-    return db.query(Organization).filter(Organization.slug == slug).first()
-
-
-def get_org_by_slug(db: Session, slug: str) -> Organization | None:
-    """Get organization by slug."""
     return db.query(Organization).filter(Organization.slug == slug.lower()).first()
 
 
 def create_org(db: Session, name: str, slug: str) -> Organization:
     """
     Create a new organization.
-    
+
     Raises:
         IntegrityError: If slug already exists
     """
@@ -42,6 +37,7 @@ def create_org(db: Session, name: str, slug: str) -> Organization:
 
     # Seed default role permissions for new org
     from app.services import permission_service
+
     permission_service.seed_role_defaults(db, org.id)
     db.commit()
 
@@ -58,18 +54,20 @@ def update_org_settings(
 ) -> Organization:
     """
     Update organization settings with version snapshot.
-    
+
     Creates a version snapshot before applying changes.
-    
+
     Raises:
         VersionConflictError: If expected_version doesn't match
     """
     # Optimistic locking check
     if expected_version is not None and org.current_version != expected_version:
-        raise version_service.VersionConflictError(expected_version, org.current_version)
-    
+        raise version_service.VersionConflictError(
+            expected_version, org.current_version
+        )
+
     # Create snapshot of current state
-    before_version = version_service.create_version_snapshot(
+    version_service.create_version_snapshot(
         db,
         org_id=org.id,
         entity_type="organization",
@@ -83,15 +81,15 @@ def update_org_settings(
         user_id=user_id,
         comment="Before settings update",
     )
-    
+
     # Apply changes
     if name is not None:
         org.name = name
     if ai_enabled is not None:
         org.ai_enabled = ai_enabled
-    
+
     org.current_version += 1
-    
+
     # Create snapshot of new state
     version_service.create_version_snapshot(
         db,
@@ -107,7 +105,7 @@ def update_org_settings(
         user_id=user_id,
         comment="After settings update",
     )
-    
+
     db.commit()
     db.refresh(org)
     return org
@@ -149,7 +147,7 @@ def rollback_org_settings(
 ) -> Organization:
     """
     Rollback organization settings to a previous version.
-    
+
     Creates a new version with the old settings (history is never rewritten).
     """
     # Get the target version payload
@@ -158,14 +156,14 @@ def rollback_org_settings(
     )
     if not version:
         raise ValueError(f"Version {target_version} not found")
-    
+
     payload = version_service.decrypt_version_payload(version)
-    
+
     # Create new version from old state
     org.name = payload.get("name", org.name)
     org.ai_enabled = payload.get("ai_enabled", org.ai_enabled)
     org.current_version += 1
-    
+
     version_service.create_version_snapshot(
         db,
         org_id=org.id,
@@ -180,7 +178,7 @@ def rollback_org_settings(
         user_id=user_id,
         comment=f"Rolled back from v{target_version}",
     )
-    
+
     db.commit()
     db.refresh(org)
     return org
@@ -194,19 +192,19 @@ def update_org(
 ) -> Organization | None:
     """
     Update organization details (legacy - no version control).
-    
+
     Note: Slug is not updateable to preserve URL stability.
-    
+
     Returns:
         Updated org or None if not found
     """
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
         return None
-    
+
     if name is not None:
         org.name = name
-    
+
     db.commit()
     db.refresh(org)
     return org

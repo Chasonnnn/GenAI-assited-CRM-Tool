@@ -2,7 +2,8 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile, Request
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.case_access import check_case_access, can_modify_case
@@ -30,10 +31,18 @@ from app.schemas.case import (
     CaseActivityRead,
     CaseActivityResponse,
 )
-from app.services import case_service, membership_service, queue_service, user_service
+from app.services import (
+    case_service,
+    import_service,
+    membership_service,
+    queue_service,
+    user_service,
+)
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 
-router = APIRouter(dependencies=[Depends(require_permission(POLICIES["cases"].default))])
+router = APIRouter(
+    dependencies=[Depends(require_permission(POLICIES["cases"].default))]
+)
 
 
 def _case_to_read(case, db: Session) -> CaseRead:
@@ -45,7 +54,7 @@ def _case_to_read(case, db: Session) -> CaseRead:
     elif case.owner_type == OwnerType.QUEUE.value:
         queue = queue_service.get_queue(db, case.organization_id, case.owner_id)
         owner_name = queue.name if queue else None
-    
+
     return CaseRead(
         id=case.id,
         case_number=case.case_number,
@@ -82,29 +91,29 @@ def _case_to_read(case, db: Session) -> CaseRead:
 def _case_to_list_item(case, db: Session) -> CaseListItem:
     """Convert Case model to CaseListItem schema."""
     from datetime import date
-    
+
     # Use preloaded relationships instead of separate queries (fixes N+1)
     owner_name = None
     if case.owner_type == OwnerType.USER.value and case.owner_user:
         owner_name = case.owner_user.display_name
     elif case.owner_type == OwnerType.QUEUE.value and case.owner_queue:
         owner_name = case.owner_queue.name
-    
+
     # Calculate age from date_of_birth
     age = None
     if case.date_of_birth:
         today = date.today()
         dob = case.date_of_birth
         age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
-    
+
     # Calculate BMI from height_ft and weight_lb
     # BMI = (weight in lbs / (height in inches)^2) * 703
     bmi = None
     if case.height_ft and case.weight_lb:
         height_inches = case.height_ft * 12  # Convert feet to inches
         if height_inches > 0:
-            bmi = round((case.weight_lb / (height_inches ** 2)) * 703, 1)
-    
+            bmi = round((case.weight_lb / (height_inches**2)) * 703, 1)
+
     return CaseListItem(
         id=case.id,
         case_number=case.case_number,
@@ -135,7 +144,7 @@ def get_case_stats(
 ):
     """Get aggregated case statistics for dashboard with period comparisons."""
     stats = case_service.get_case_stats(db, session.org_id)
-    
+
     return CaseStats(
         total=stats["total"],
         by_status=stats["by_status"],
@@ -156,7 +165,7 @@ def get_assignees(
 ):
     """
     Get list of org members who can be assigned cases.
-    
+
     Returns users with their ID, name, and role.
     """
     return case_service.list_assignees(db, session.org_id)
@@ -175,14 +184,20 @@ def list_cases(
     include_archived: bool = False,
     queue_id: UUID | None = None,
     owner_type: str | None = Query(None, pattern="^(user|queue)$"),
-    created_from: str | None = Query(None, description="Filter by creation date from (ISO format)"),
-    created_to: str | None = Query(None, description="Filter by creation date to (ISO format)"),
+    created_from: str | None = Query(
+        None, description="Filter by creation date from (ISO format)"
+    ),
+    created_to: str | None = Query(
+        None, description="Filter by creation date to (ISO format)"
+    ),
     sort_by: str | None = Query(None, description="Column to sort by"),
-    sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort direction"),
+    sort_order: str = Query(
+        "desc", pattern="^(asc|desc)$", description="Sort direction"
+    ),
 ):
     """
     List cases with filters and pagination.
-    
+
     - Default excludes archived cases
     - Search (q) searches name, email, phone, case_number
     - Intake specialists only see their owned cases
@@ -193,14 +208,18 @@ def list_cases(
     - Post-approval cases hidden if user lacks view_post_approval_cases permission
     """
     from app.services import permission_service
-    
+
     # Permission-based stage filtering (Developer bypasses via permission_service)
     exclude_stage_types = []
     if not permission_service.check_permission(
-        db, session.org_id, session.user_id, session.role.value, "view_post_approval_cases"
+        db,
+        session.org_id,
+        session.user_id,
+        session.role.value,
+        "view_post_approval_cases",
     ):
         exclude_stage_types.append("post_approval")
-    
+
     cases, total = case_service.list_cases(
         db=db,
         org_id=session.org_id,
@@ -221,9 +240,9 @@ def list_cases(
         sort_by=sort_by,
         sort_order=sort_order,
     )
-    
+
     pages = (total + per_page - 1) // per_page if per_page > 0 else 0
-    
+
     return CaseListResponse(
         items=[_case_to_list_item(c, db) for c in cases],
         total=total,
@@ -237,13 +256,10 @@ def list_cases(
 # CSV Import Endpoints
 # =============================================================================
 
-from fastapi import File, UploadFile, Request
-from pydantic import BaseModel
-from app.services import import_service
-
 
 class ImportPreviewResponse(BaseModel):
     """Preview response for CSV import."""
+
     total_rows: int
     sample_rows: list[dict]
     detected_columns: list[str]
@@ -255,12 +271,14 @@ class ImportPreviewResponse(BaseModel):
 
 class ImportConfirmRequest(BaseModel):
     """Request to confirm and execute import."""
+
     import_id: UUID
     dedupe_action: str = "skip"  # "skip" or "update" (future)
 
 
 class ImportStatusResponse(BaseModel):
     """Status of an import job."""
+
     id: UUID
     filename: str
     status: str
@@ -273,42 +291,48 @@ class ImportStatusResponse(BaseModel):
     completed_at: str | None
 
 
-@router.post("/import/preview", response_model=ImportPreviewResponse, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/import/preview",
+    response_model=ImportPreviewResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
 async def preview_import(
     request: Request,
     file: UploadFile = File(...),
-    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["import"])),
+    session: UserSession = Depends(
+        require_permission(POLICIES["cases"].actions["import"])
+    ),
     db: Session = Depends(get_db),
 ):
     """
     Preview CSV import without executing.
-    
+
     Returns:
     - Column mapping results
     - Sample rows (first 5)
     - Duplicate detection counts (DB + within CSV)
     - Validation error count
-    
+
     Requires: import_cases permission
     """
-    if not file.filename or not file.filename.endswith('.csv'):
+    if not file.filename or not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="File must be a CSV")
-    
+
     content = await file.read()
     if len(content) > 10 * 1024 * 1024:  # 10MB limit
         raise HTTPException(status_code=400, detail="File too large (max 10MB)")
-    
+
     preview = import_service.preview_import(db, session.org_id, content)
-    
+
     # Create import job for later confirmation
-    import_job = import_service.create_import_job(
+    import_service.create_import_job(
         db=db,
         org_id=session.org_id,
         user_id=session.user_id,
         filename=file.filename,
         total_rows=preview.total_rows,
     )
-    
+
     return ImportPreviewResponse(
         total_rows=preview.total_rows,
         sample_rows=preview.sample_rows,
@@ -320,28 +344,34 @@ async def preview_import(
     )
 
 
-@router.post("/import/confirm", response_model=ImportStatusResponse, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/import/confirm",
+    response_model=ImportStatusResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
 async def confirm_import(
     request: Request,
     file: UploadFile = File(...),
-    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["import"])),
+    session: UserSession = Depends(
+        require_permission(POLICIES["cases"].actions["import"])
+    ),
     db: Session = Depends(get_db),
 ):
     """
     Confirm and execute CSV import.
-    
+
     For large files, consider scheduling as async job (future enhancement).
     Currently executes synchronously.
-    
+
     Requires: import_cases permission
     """
-    if not file.filename or not file.filename.endswith('.csv'):
+    if not file.filename or not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="File must be a CSV")
-    
+
     content = await file.read()
     if len(content) > 10 * 1024 * 1024:  # 10MB limit
         raise HTTPException(status_code=400, detail="File too large (max 10MB)")
-    
+
     # Create import job
     import_job = import_service.create_import_job(
         db=db,
@@ -350,13 +380,14 @@ async def confirm_import(
         filename=file.filename,
         total_rows=0,  # Will be updated during execution
     )
-    
+
     # Execute import (synchronous for now, async via job queue for large files later)
     import_job.status = "processing"
     db.commit()
-    
+
     # Audit log
     from app.services import audit_service
+
     audit_service.log_import_started(
         db=db,
         org_id=session.org_id,
@@ -367,7 +398,7 @@ async def confirm_import(
         request=request,
     )
     db.commit()
-    
+
     result = import_service.execute_import(
         db=db,
         org_id=session.org_id,
@@ -375,7 +406,7 @@ async def confirm_import(
         import_id=import_job.id,
         file_content=content,
     )
-    
+
     # Audit log completion
     audit_service.log_import_completed(
         db=db,
@@ -387,10 +418,10 @@ async def confirm_import(
         errors=len(result.errors),
     )
     db.commit()
-    
+
     # Refresh to get updated counts
     db.refresh(import_job)
-    
+
     return ImportStatusResponse(
         id=import_job.id,
         filename=import_job.filename,
@@ -401,21 +432,25 @@ async def confirm_import(
         error_count=import_job.error_count,
         errors=import_job.errors,
         created_at=import_job.created_at.isoformat(),
-        completed_at=import_job.completed_at.isoformat() if import_job.completed_at else None,
+        completed_at=import_job.completed_at.isoformat()
+        if import_job.completed_at
+        else None,
     )
 
 
 @router.get("/import/{import_id}", response_model=ImportStatusResponse)
 def get_import_status(
     import_id: UUID,
-    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["import"])),
+    session: UserSession = Depends(
+        require_permission(POLICIES["cases"].actions["import"])
+    ),
     db: Session = Depends(get_db),
 ):
     """Get status of an import job."""
     import_job = import_service.get_import(db, session.org_id, import_id)
     if not import_job:
         raise HTTPException(status_code=404, detail="Import not found")
-    
+
     return ImportStatusResponse(
         id=import_job.id,
         filename=import_job.filename,
@@ -426,18 +461,22 @@ def get_import_status(
         error_count=import_job.error_count,
         errors=import_job.errors,
         created_at=import_job.created_at.isoformat(),
-        completed_at=import_job.completed_at.isoformat() if import_job.completed_at else None,
+        completed_at=import_job.completed_at.isoformat()
+        if import_job.completed_at
+        else None,
     )
 
 
 @router.get("/import", response_model=list[ImportStatusResponse])
 def list_imports(
-    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["import"])),
+    session: UserSession = Depends(
+        require_permission(POLICIES["cases"].actions["import"])
+    ),
     db: Session = Depends(get_db),
 ):
     """List recent imports for the organization."""
     imports = import_service.list_imports(db, session.org_id)
-    
+
     return [
         ImportStatusResponse(
             id=i.id,
@@ -458,14 +497,16 @@ def list_imports(
 # NOTE: /handoff-queue MUST come before /{case_id} routes to avoid routing conflict
 @router.get("/handoff-queue", response_model=CaseListResponse)
 def list_handoff_queue(
-    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["view_post_approval"])),
+    session: UserSession = Depends(
+        require_permission(POLICIES["cases"].actions["view_post_approval"])
+    ),
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
 ):
     """
     List cases awaiting case manager review (status=pending_handoff).
-    
+
     Requires: view_post_approval_cases permission
     """
     cases, total = case_service.list_handoff_queue(
@@ -474,9 +515,9 @@ def list_handoff_queue(
         page=page,
         per_page=per_page,
     )
-    
+
     pages = (total + per_page - 1) // per_page if per_page > 0 else 0
-    
+
     return CaseListResponse(
         items=[_case_to_list_item(c, db) for c in cases],
         total=total,
@@ -486,10 +527,17 @@ def list_handoff_queue(
     )
 
 
-@router.post("", response_model=CaseRead, status_code=201, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "",
+    response_model=CaseRead,
+    status_code=201,
+    dependencies=[Depends(require_csrf_header)],
+)
 def create_case(
     data: CaseCreate,
-    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["edit"])),
+    session: UserSession = Depends(
+        require_permission(POLICIES["cases"].actions["edit"])
+    ),
     db: Session = Depends(get_db),
 ):
     """Create a new case."""
@@ -503,9 +551,11 @@ def create_case(
     except Exception as e:
         # Handle unique constraint violations
         if "uq_case_email_active" in str(e).lower() or "duplicate" in str(e).lower():
-            raise HTTPException(status_code=409, detail="A case with this email already exists")
+            raise HTTPException(
+                status_code=409, detail="A case with this email already exists"
+            )
         raise
-    
+
     return _case_to_read(case, db)
 
 
@@ -519,10 +569,10 @@ def get_case(
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    
+
     # Access control: checks ownership + post-approval permission
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
-    
+
     return _case_to_read(case, db)
 
 
@@ -530,15 +580,19 @@ def get_case(
 # Email Sending
 # =============================================================================
 
+
 class SendEmailRequest(BaseModel):
     """Request to send email to case contact."""
+
     template_id: UUID
     subject: str | None = None
     body: str | None = None
     provider: str = "auto"  # "gmail", "resend", or "auto" (gmail first, then resend)
-    
+
+
 class SendEmailResponse(BaseModel):
     """Response after sending email."""
+
     success: bool
     email_log_id: UUID | None = None
     message_id: str | None = None
@@ -546,7 +600,11 @@ class SendEmailResponse(BaseModel):
     error: str | None = None
 
 
-@router.post("/{case_id}/send-email", response_model=SendEmailResponse, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/{case_id}/send-email",
+    response_model=SendEmailResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
 async def send_case_email(
     case_id: UUID,
     data: SendEmailRequest,
@@ -555,62 +613,70 @@ async def send_case_email(
 ):
     """
     Send email to case contact using template.
-    
+
     Provider options:
     - "auto": Try Gmail first (if connected), fall back to Resend
     - "gmail": Use user's connected Gmail (fails if not connected)
     - "resend": Use Resend API (fails if not configured)
-    
+
     The email is logged and linked to the case activity.
     """
-    from app.services import email_service, gmail_service, oauth_service, activity_service
+    from app.services import (
+        email_service,
+        gmail_service,
+        oauth_service,
+        activity_service,
+    )
     from datetime import datetime
     import os
-    
+
     # Get case
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    
+
     # Access control
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
-    
+
     if not case.email:
         raise HTTPException(status_code=400, detail="Case has no email address")
-    
+
     # Get template
     template = email_service.get_template(db, data.template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Email template not found")
-    
+
     # Prepare variables for template rendering
     variables = email_service.build_case_template_variables(db, case)
 
     # Render template (allow UI overrides)
     subject_template = data.subject if data.subject is not None else template.subject
     body_template = data.body if data.body is not None else template.body
-    subject, body = email_service.render_template(subject_template, body_template, variables)
-    
+    subject, body = email_service.render_template(
+        subject_template, body_template, variables
+    )
+
     # Determine provider
     provider = data.provider
-    gmail_connected = oauth_service.get_user_integration(db, session.user_id, "gmail") is not None
+    gmail_connected = (
+        oauth_service.get_user_integration(db, session.user_id, "gmail") is not None
+    )
     resend_configured = bool(os.getenv("RESEND_API_KEY"))
-    
+
     use_gmail = False
     use_resend = False
-    
+
     if provider == "gmail":
         if not gmail_connected:
             return SendEmailResponse(
                 success=False,
-                error="Gmail not connected. Connect Gmail in Settings > Integrations."
+                error="Gmail not connected. Connect Gmail in Settings > Integrations.",
             )
         use_gmail = True
     elif provider == "resend":
         if not resend_configured:
             return SendEmailResponse(
-                success=False,
-                error="Resend not configured. Contact administrator."
+                success=False, error="Resend not configured. Contact administrator."
             )
         use_resend = True
     else:  # auto
@@ -621,9 +687,9 @@ async def send_case_email(
         else:
             return SendEmailResponse(
                 success=False,
-                error="No email provider available. Connect Gmail in Settings."
+                error="No email provider available. Connect Gmail in Settings.",
             )
-    
+
     # Send email
     if use_gmail:
         # Create email log for direct Gmail send
@@ -651,13 +717,13 @@ async def send_case_email(
             body=body,
             html=True,  # Templates are typically HTML
         )
-        
+
         if result.get("success"):
             email_log.status = EmailStatus.SENT.value
             email_log.sent_at = datetime.utcnow()
             email_log.external_id = result.get("message_id")
             db.commit()
-            
+
             # Log activity
             activity_service.log_email_sent(
                 db=db,
@@ -668,7 +734,7 @@ async def send_case_email(
                 subject=subject,
                 provider="gmail",
             )
-            
+
             return SendEmailResponse(
                 success=True,
                 email_log_id=email_log.id,
@@ -679,13 +745,13 @@ async def send_case_email(
             email_log.status = EmailStatus.FAILED.value
             email_log.error = result.get("error")
             db.commit()
-            
+
             return SendEmailResponse(
                 success=False,
                 email_log_id=email_log.id,
                 error=result.get("error"),
             )
-    
+
     elif use_resend:
         # Queue via existing email service (uses job queue)
         try:
@@ -698,10 +764,10 @@ async def send_case_email(
                 body=body,
                 case_id=case_id,
             )
-            
+
             if result:
                 log, job = result
-                
+
                 # Log activity
                 activity_service.log_email_sent(
                     db=db,
@@ -712,7 +778,7 @@ async def send_case_email(
                     subject=subject,
                     provider="resend",
                 )
-                
+
                 return SendEmailResponse(
                     success=True,
                     email_log_id=log.id,
@@ -722,63 +788,79 @@ async def send_case_email(
                 return SendEmailResponse(success=False, error="Failed to queue email")
         except Exception as e:
             return SendEmailResponse(success=False, error=str(e))
-    
+
     return SendEmailResponse(success=False, error="No provider selected")
 
 
-@router.patch("/{case_id}", response_model=CaseRead, dependencies=[Depends(require_csrf_header)])
+@router.patch(
+    "/{case_id}", response_model=CaseRead, dependencies=[Depends(require_csrf_header)]
+)
 def update_case(
     case_id: UUID,
     data: CaseUpdate,
-    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["edit"])),
+    session: UserSession = Depends(
+        require_permission(POLICIES["cases"].actions["edit"])
+    ),
     db: Session = Depends(get_db),
 ):
     """
     Update case fields.
-    
+
     Requires: creator or manager+ (blocked after handoff for intake)
     """
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    
+
     # Access control: intake can't access handed-off cases
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
-    
+
     # Permission check: must be able to modify
     if not can_modify_case(case, str(session.user_id), session.role):
-        raise HTTPException(status_code=403, detail="Not authorized to update this case")
-    
+        raise HTTPException(
+            status_code=403, detail="Not authorized to update this case"
+        )
+
     try:
         case = case_service.update_case(
-            db, case, data,
+            db,
+            case,
+            data,
             user_id=session.user_id,
             org_id=session.org_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    
+
     return _case_to_read(case, db)
 
 
-@router.patch("/{case_id}/status", response_model=CaseRead, dependencies=[Depends(require_csrf_header)])
+@router.patch(
+    "/{case_id}/status",
+    response_model=CaseRead,
+    dependencies=[Depends(require_csrf_header)],
+)
 def change_status(
     case_id: UUID,
     data: CaseStatusChange,
-    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["change_status"])),
+    session: UserSession = Depends(
+        require_permission(POLICIES["cases"].actions["change_status"])
+    ),
     db: Session = Depends(get_db),
 ):
     """Change case stage (records history, respects access control)."""
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    
+
     # Access control: intake can't access handed-off cases
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
-    
+
     if case.is_archived:
-        raise HTTPException(status_code=400, detail="Cannot change status of archived case")
-    
+        raise HTTPException(
+            status_code=400, detail="Cannot change status of archived case"
+        )
+
     try:
         case = case_service.change_status(
             db=db,
@@ -793,148 +875,181 @@ def change_status(
     return _case_to_read(case, db)
 
 
-@router.patch("/{case_id}/assign", response_model=CaseRead, dependencies=[Depends(require_csrf_header)])
+@router.patch(
+    "/{case_id}/assign",
+    response_model=CaseRead,
+    dependencies=[Depends(require_csrf_header)],
+)
 def assign_case(
     case_id: UUID,
     data: CaseAssign,
-    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["assign"])),
+    session: UserSession = Depends(
+        require_permission(POLICIES["cases"].actions["assign"])
+    ),
     db: Session = Depends(get_db),
 ):
     """
     Assign case to a user or queue.
-    
+
     Requires: assign_cases permission
     """
-    
+
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    
+
     if data.owner_type == OwnerType.USER:
         membership = membership_service.get_membership_for_org(
             db, session.org_id, data.owner_id
         )
         if not membership:
-            raise HTTPException(status_code=400, detail="User not found in organization")
+            raise HTTPException(
+                status_code=400, detail="User not found in organization"
+            )
     elif data.owner_type == OwnerType.QUEUE:
         queue = queue_service.get_queue(db, session.org_id, data.owner_id)
         if not queue or not queue.is_active:
             raise HTTPException(status_code=400, detail="Queue not found or inactive")
     else:
         raise HTTPException(status_code=400, detail="Invalid owner_type")
-    
-    case = case_service.assign_case(db, case, data.owner_type, data.owner_id, session.user_id)
+
+    case = case_service.assign_case(
+        db, case, data.owner_type, data.owner_id, session.user_id
+    )
     return _case_to_read(case, db)
 
 
 @router.post("/bulk-assign", dependencies=[Depends(require_csrf_header)])
 def bulk_assign_cases(
     data: BulkAssign,
-    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["assign"])),
+    session: UserSession = Depends(
+        require_permission(POLICIES["cases"].actions["assign"])
+    ),
     db: Session = Depends(get_db),
 ):
     """
     Bulk assign multiple cases to a user or queue.
-    
+
     Requires: assign_cases permission
     """
-    
+
     if data.owner_type == OwnerType.USER:
         membership = membership_service.get_membership_for_org(
             db, session.org_id, data.owner_id
         )
         if not membership:
-            raise HTTPException(status_code=400, detail="User not found in organization")
+            raise HTTPException(
+                status_code=400, detail="User not found in organization"
+            )
     elif data.owner_type == OwnerType.QUEUE:
         queue = queue_service.get_queue(db, session.org_id, data.owner_id)
         if not queue or not queue.is_active:
             raise HTTPException(status_code=400, detail="Queue not found or inactive")
     else:
         raise HTTPException(status_code=400, detail="Invalid owner_type")
-    
+
     # Process each case
     results = {"assigned": 0, "failed": []}
     for case_id in data.case_ids:
         case = case_service.get_case(db, session.org_id, case_id)
         if not case:
-            results["failed"].append({"case_id": str(case_id), "reason": "Case not found"})
+            results["failed"].append(
+                {"case_id": str(case_id), "reason": "Case not found"}
+            )
             continue
-        
+
         try:
-            case_service.assign_case(db, case, data.owner_type, data.owner_id, session.user_id)
+            case_service.assign_case(
+                db, case, data.owner_type, data.owner_id, session.user_id
+            )
             results["assigned"] += 1
         except Exception as e:
             results["failed"].append({"case_id": str(case_id), "reason": str(e)})
-    
+
     return results
 
 
-@router.post("/{case_id}/archive", response_model=CaseRead, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/{case_id}/archive",
+    response_model=CaseRead,
+    dependencies=[Depends(require_csrf_header)],
+)
 def archive_case(
     case_id: UUID,
-    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["archive"])),
+    session: UserSession = Depends(
+        require_permission(POLICIES["cases"].actions["archive"])
+    ),
     db: Session = Depends(get_db),
 ):
     """
     Soft-delete (archive) a case.
-    
+
     Requires: archive_cases permission
     """
-    
+
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    
+
     case = case_service.archive_case(db, case, session.user_id)
     return _case_to_read(case, db)
 
 
-@router.post("/{case_id}/restore", response_model=CaseRead, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/{case_id}/restore",
+    response_model=CaseRead,
+    dependencies=[Depends(require_csrf_header)],
+)
 def restore_case(
     case_id: UUID,
-    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["archive"])),
+    session: UserSession = Depends(
+        require_permission(POLICIES["cases"].actions["archive"])
+    ),
     db: Session = Depends(get_db),
 ):
     """
     Restore an archived case.
-    
+
     Requires: archive_cases permission
     Fails if email is now used by another active case.
     """
-    
+
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    
+
     case, error = case_service.restore_case(db, case, session.user_id)
     if error:
         raise HTTPException(status_code=409, detail=error)
-    
+
     return _case_to_read(case, db)
 
 
-@router.delete("/{case_id}", status_code=204, dependencies=[Depends(require_csrf_header)])
+@router.delete(
+    "/{case_id}", status_code=204, dependencies=[Depends(require_csrf_header)]
+)
 def delete_case(
     case_id: UUID,
-    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["delete"])),
+    session: UserSession = Depends(
+        require_permission(POLICIES["cases"].actions["delete"])
+    ),
     db: Session = Depends(get_db),
 ):
     """
     Permanently delete a case.
-    
+
     Requires: delete_cases permission AND case must be archived first.
     """
-    
+
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    
+
     if not case.is_archived:
         raise HTTPException(
-            status_code=400, 
-            detail="Case must be archived before permanent deletion"
+            status_code=400, detail="Case must be archived before permanent deletion"
         )
-    
+
     case_service.hard_delete_case(db, case)
     return None
 
@@ -949,28 +1064,30 @@ def get_case_history(
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    
+
     history = case_service.get_status_history(db, case_id, session.org_id)
-    
+
     result = []
     for h in history:
         changed_by_name = None
         if h.changed_by_user_id:
             user = user_service.get_user_by_id(db, h.changed_by_user_id)
             changed_by_name = user.display_name if user else None
-        
-        result.append(CaseStatusHistoryRead(
-            id=h.id,
-            from_stage_id=h.from_stage_id,
-            to_stage_id=h.to_stage_id,
-            from_label_snapshot=h.from_label_snapshot,
-            to_label_snapshot=h.to_label_snapshot,
-            changed_by_user_id=h.changed_by_user_id,
-            changed_by_name=changed_by_name,
-            reason=h.reason,
-            changed_at=h.changed_at,
-        ))
-    
+
+        result.append(
+            CaseStatusHistoryRead(
+                id=h.id,
+                from_stage_id=h.from_stage_id,
+                to_stage_id=h.to_stage_id,
+                from_label_snapshot=h.from_label_snapshot,
+                to_label_snapshot=h.to_label_snapshot,
+                changed_by_user_id=h.changed_by_user_id,
+                changed_by_name=changed_by_name,
+                reason=h.reason,
+                changed_at=h.changed_at,
+            )
+        )
+
     return result
 
 
@@ -984,16 +1101,16 @@ def get_case_activity(
 ):
     """
     Get comprehensive activity log for a case (paginated).
-    
+
     Includes: creates, edits, status changes, assignments, notes, etc.
     """
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    
+
     # Access control
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
-    
+
     items_data, total = case_service.list_case_activity(
         db=db,
         org_id=session.org_id,
@@ -1014,7 +1131,7 @@ def get_case_activity(
         )
         for item in items_data
     ]
-    
+
     return CaseActivityResponse(
         items=items,
         total=total,
@@ -1028,39 +1145,51 @@ def get_case_activity(
 # =============================================================================
 
 
-@router.post("/{case_id}/accept", response_model=CaseRead, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/{case_id}/accept",
+    response_model=CaseRead,
+    dependencies=[Depends(require_csrf_header)],
+)
 def accept_handoff(
     case_id: UUID,
-    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["assign"])),
+    session: UserSession = Depends(
+        require_permission(POLICIES["cases"].actions["assign"])
+    ),
     db: Session = Depends(get_db),
 ):
     """
     Accept a pending_handoff case and transition to pending_match.
-    
+
     Requires: assign_cases permission
     Returns 409 if case is not in pending_handoff status.
     """
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    
+
     case, error = case_service.accept_handoff(db, case, session.user_id)
     if error:
         raise HTTPException(status_code=409, detail=error)
-    
+
     return _case_to_read(case, db)
 
 
-@router.post("/{case_id}/deny", response_model=CaseRead, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/{case_id}/deny",
+    response_model=CaseRead,
+    dependencies=[Depends(require_csrf_header)],
+)
 def deny_handoff(
     case_id: UUID,
     data: CaseHandoffDeny,
-    session: UserSession = Depends(require_permission(POLICIES["cases"].actions["assign"])),
+    session: UserSession = Depends(
+        require_permission(POLICIES["cases"].actions["assign"])
+    ),
     db: Session = Depends(get_db),
 ):
     """
     Deny a pending_handoff case and revert to under_review.
-    
+
     Requires: assign_cases permission
     Reason is optional but stored in status history.
     Returns 409 if case is not in pending_handoff status.
@@ -1068,9 +1197,9 @@ def deny_handoff(
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    
+
     case, error = case_service.deny_handoff(db, case, session.user_id, data.reason)
     if error:
         raise HTTPException(status_code=409, detail=error)
-    
+
     return _case_to_read(case, db)

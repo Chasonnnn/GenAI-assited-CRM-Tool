@@ -22,9 +22,10 @@ router = APIRouter(prefix="/attachments", tags=["attachments"])
 # Schemas
 # =============================================================================
 
+
 class AttachmentRead(BaseModel):
     model_config = {"from_attributes": True}
-    
+
     id: str
     filename: str
     content_type: str
@@ -44,6 +45,7 @@ class AttachmentDownloadResponse(BaseModel):
 # Helpers
 # =============================================================================
 
+
 def _get_case_with_access(
     db: Session,
     case_id: UUID,
@@ -52,20 +54,23 @@ def _get_case_with_access(
 ) -> Case:
     """Get case and verify user has access."""
     case = case_service.get_case(db, session.org_id, case_id)
-    
+
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    
+
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
     if require_write and not can_modify_case(case, session.user_id, session.role):
-        raise HTTPException(status_code=403, detail="Not authorized to modify this case")
-    
+        raise HTTPException(
+            status_code=403, detail="Not authorized to modify this case"
+        )
+
     return case
 
 
 # =============================================================================
 # Endpoints
 # =============================================================================
+
 
 @router.post("/cases/{case_id}/attachments", response_model=AttachmentRead)
 async def upload_attachment(
@@ -77,19 +82,20 @@ async def upload_attachment(
 ):
     """
     Upload a file attachment to a case.
-    
+
     File is quarantined until virus scan completes.
     """
     case = _get_case_with_access(db, case_id, session, require_write=True)
-    
+
     # Read file content
     content = await file.read()
     file_size = len(content)
-    
+
     # Create file-like object for service
     from io import BytesIO
+
     file_obj = BytesIO(content)
-    
+
     try:
         attachment = attachment_service.upload_attachment(
             db=db,
@@ -102,7 +108,7 @@ async def upload_attachment(
             case_id=case.id,
         )
         db.commit()
-        
+
         return AttachmentRead(
             id=str(attachment.id),
             filename=attachment.filename,
@@ -110,7 +116,9 @@ async def upload_attachment(
             file_size=attachment.file_size,
             scan_status=attachment.scan_status,
             quarantined=attachment.quarantined,
-            uploaded_by_user_id=str(attachment.uploaded_by_user_id) if attachment.uploaded_by_user_id else None,
+            uploaded_by_user_id=str(attachment.uploaded_by_user_id)
+            if attachment.uploaded_by_user_id
+            else None,
             created_at=attachment.created_at.isoformat(),
         )
     except ValueError as e:
@@ -125,14 +133,14 @@ async def list_attachments(
 ):
     """List attachments for a case (excludes quarantined and deleted)."""
     case = _get_case_with_access(db, case_id, session)
-    
+
     attachments = attachment_service.list_attachments(
         db=db,
         org_id=case.organization_id,
         case_id=case.id,
         include_quarantined=False,
     )
-    
+
     return [
         AttachmentRead(
             id=str(a.id),
@@ -141,7 +149,9 @@ async def list_attachments(
             file_size=a.file_size,
             scan_status=a.scan_status,
             quarantined=a.quarantined,
-            uploaded_by_user_id=str(a.uploaded_by_user_id) if a.uploaded_by_user_id else None,
+            uploaded_by_user_id=str(a.uploaded_by_user_id)
+            if a.uploaded_by_user_id
+            else None,
             created_at=a.created_at.isoformat(),
         )
         for a in attachments
@@ -152,6 +162,7 @@ async def list_attachments(
 # Intended Parent Attachment Endpoints
 # =============================================================================
 
+
 def _get_ip_with_access(db: Session, ip_id: UUID, session: UserSession):
     """Get intended parent and verify org access."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -160,7 +171,9 @@ def _get_ip_with_access(db: Session, ip_id: UUID, session: UserSession):
     return ip
 
 
-@router.get("/intended-parents/{ip_id}/attachments", response_model=list[AttachmentRead])
+@router.get(
+    "/intended-parents/{ip_id}/attachments", response_model=list[AttachmentRead]
+)
 async def list_ip_attachments(
     ip_id: UUID,
     db: Session = Depends(get_db),
@@ -168,14 +181,14 @@ async def list_ip_attachments(
 ):
     """List attachments for an intended parent."""
     ip = _get_ip_with_access(db, ip_id, session)
-    
+
     attachments = attachment_service.list_attachments(
         db=db,
         org_id=ip.organization_id,
         intended_parent_id=ip.id,
         include_quarantined=False,
     )
-    
+
     return [
         AttachmentRead(
             id=str(a.id),
@@ -184,7 +197,9 @@ async def list_ip_attachments(
             file_size=a.file_size,
             scan_status=a.scan_status,
             quarantined=a.quarantined,
-            uploaded_by_user_id=str(a.uploaded_by_user_id) if a.uploaded_by_user_id else None,
+            uploaded_by_user_id=str(a.uploaded_by_user_id)
+            if a.uploaded_by_user_id
+            else None,
             created_at=a.created_at.isoformat(),
         )
         for a in attachments
@@ -201,13 +216,14 @@ async def upload_ip_attachment(
 ):
     """Upload a file attachment to an intended parent."""
     ip = _get_ip_with_access(db, ip_id, session)
-    
+
     content = await file.read()
     file_size = len(content)
-    
+
     from io import BytesIO
+
     file_obj = BytesIO(content)
-    
+
     try:
         attachment = attachment_service.upload_attachment(
             db=db,
@@ -220,7 +236,7 @@ async def upload_ip_attachment(
             file_size=file_size,
         )
         db.commit()
-        
+
         return AttachmentRead(
             id=str(attachment.id),
             filename=attachment.filename,
@@ -228,7 +244,9 @@ async def upload_ip_attachment(
             file_size=attachment.file_size,
             scan_status=attachment.scan_status,
             quarantined=attachment.quarantined,
-            uploaded_by_user_id=str(attachment.uploaded_by_user_id) if attachment.uploaded_by_user_id else None,
+            uploaded_by_user_id=str(attachment.uploaded_by_user_id)
+            if attachment.uploaded_by_user_id
+            else None,
             created_at=attachment.created_at.isoformat(),
         )
     except ValueError as e:
@@ -248,20 +266,20 @@ async def download_attachment(
         org_id=session.org_id,
         attachment_id=attachment_id,
     )
-    
+
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
-    
+
     if attachment.quarantined:
         raise HTTPException(status_code=403, detail="File is pending virus scan")
-    
+
     # Verify access: case attachment requires case access, IP attachment uses org-wide access
     if attachment.case_id:
         _get_case_with_access(db, attachment.case_id, session)
     elif attachment.intended_parent_id:
         # IP attachments use org-wide access (already verified by get_attachment org_id filter)
         _get_ip_with_access(db, attachment.intended_parent_id, session)
-    
+
     url = attachment_service.get_download_url(
         db=db,
         org_id=session.org_id,
@@ -269,13 +287,13 @@ async def download_attachment(
         user_id=session.user_id,
     )
     db.commit()
-    
+
     if not url:
         raise HTTPException(status_code=500, detail="Failed to generate download URL")
 
     if url.startswith("/"):
         url = f"{request.base_url}".rstrip("/") + url
-    
+
     return AttachmentDownloadResponse(
         download_url=url,
         filename=attachment.filename,
@@ -295,20 +313,22 @@ async def delete_attachment(
         org_id=session.org_id,
         attachment_id=attachment_id,
     )
-    
+
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
-    
+
     # Access control: uploader or Manager+
     is_manager = session.role in (Role.ADMIN, Role.DEVELOPER)
     is_uploader = attachment.uploaded_by_user_id == session.user_id
-    
+
     if not is_manager and not is_uploader:
-        raise HTTPException(status_code=403, detail="Only uploader or manager can delete")
+        raise HTTPException(
+            status_code=403, detail="Only uploader or manager can delete"
+        )
 
     if attachment.case_id:
         _get_case_with_access(db, attachment.case_id, session, require_write=True)
-    
+
     success = attachment_service.soft_delete_attachment(
         db=db,
         org_id=session.org_id,
@@ -316,10 +336,10 @@ async def delete_attachment(
         user_id=session.user_id,
     )
     db.commit()
-    
+
     if not success:
         raise HTTPException(status_code=404, detail="Attachment not found")
-    
+
     return {"deleted": True}
 
 

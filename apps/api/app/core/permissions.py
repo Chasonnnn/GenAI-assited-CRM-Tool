@@ -14,6 +14,7 @@ from enum import Enum
 @dataclass(frozen=True)
 class PermissionDef:
     """Permission definition with metadata."""
+
     key: str
     label: str
     description: str
@@ -23,6 +24,7 @@ class PermissionDef:
 
 class PermissionCategory(str, Enum):
     """Permission categories for UI grouping."""
+
     NAVIGATION = "Navigation"
     CASES = "Cases"
     INTENDED_PARENTS = "Intended Parents"
@@ -35,6 +37,7 @@ class PermissionCategory(str, Enum):
 
 class PermissionKey(str, Enum):
     """Canonical permission keys (resource_action naming in code)."""
+
     VIEW_DASHBOARD = "view_dashboard"
 
     CASES_VIEW = "view_cases"
@@ -89,170 +92,219 @@ class PermissionKey(str, Enum):
 PERMISSION_REGISTRY: dict[str, PermissionDef] = {
     # Navigation
     "view_dashboard": PermissionDef(
-        "view_dashboard", "View Dashboard", 
-        "Access the main dashboard", PermissionCategory.NAVIGATION
+        "view_dashboard",
+        "View Dashboard",
+        "Access the main dashboard",
+        PermissionCategory.NAVIGATION,
     ),
-    
     # Cases
     "view_cases": PermissionDef(
-        "view_cases", "View Cases", 
-        "See case list and details", PermissionCategory.CASES
+        "view_cases",
+        "View Cases",
+        "See case list and details",
+        PermissionCategory.CASES,
     ),
     "edit_cases": PermissionDef(
-        "edit_cases", "Edit Cases", 
-        "Modify case information", PermissionCategory.CASES
+        "edit_cases", "Edit Cases", "Modify case information", PermissionCategory.CASES
     ),
     "delete_cases": PermissionDef(
-        "delete_cases", "Delete Cases", 
-        "Soft-delete cases", PermissionCategory.CASES
+        "delete_cases", "Delete Cases", "Soft-delete cases", PermissionCategory.CASES
     ),
     "view_post_approval_cases": PermissionDef(
-        "view_post_approval_cases", "View Post-Approval Cases", 
-        "See Stage B (post-approval) cases", PermissionCategory.CASES
+        "view_post_approval_cases",
+        "View Post-Approval Cases",
+        "See Stage B (post-approval) cases",
+        PermissionCategory.CASES,
     ),
     "change_case_status": PermissionDef(
-        "change_case_status", "Change Case Status", 
-        "Move cases between pipeline stages", PermissionCategory.CASES
+        "change_case_status",
+        "Change Case Status",
+        "Move cases between pipeline stages",
+        PermissionCategory.CASES,
     ),
     "assign_cases": PermissionDef(
-        "assign_cases", "Assign Cases", 
-        "Assign cases to users or queues", PermissionCategory.CASES
+        "assign_cases",
+        "Assign Cases",
+        "Assign cases to users or queues",
+        PermissionCategory.CASES,
     ),
     "view_case_notes": PermissionDef(
-        "view_case_notes", "View Case Notes", 
-        "Read case notes", PermissionCategory.CASES
+        "view_case_notes",
+        "View Case Notes",
+        "Read case notes",
+        PermissionCategory.CASES,
     ),
     "edit_case_notes": PermissionDef(
-        "edit_case_notes", "Edit Case Notes", 
-        "Add and modify case notes", PermissionCategory.CASES
+        "edit_case_notes",
+        "Edit Case Notes",
+        "Add and modify case notes",
+        PermissionCategory.CASES,
     ),
     "import_cases": PermissionDef(
-        "import_cases", "Import Cases",
-        "Import cases via CSV", PermissionCategory.CASES
+        "import_cases", "Import Cases", "Import cases via CSV", PermissionCategory.CASES
     ),
-    
     # Intended Parents
     "view_intended_parents": PermissionDef(
-        "view_intended_parents", "View Intended Parents", 
-        "Access intended parents list", PermissionCategory.INTENDED_PARENTS
+        "view_intended_parents",
+        "View Intended Parents",
+        "Access intended parents list",
+        PermissionCategory.INTENDED_PARENTS,
     ),
     "edit_intended_parents": PermissionDef(
-        "edit_intended_parents", "Edit Intended Parents", 
-        "Modify intended parent information", PermissionCategory.INTENDED_PARENTS
+        "edit_intended_parents",
+        "Edit Intended Parents",
+        "Modify intended parent information",
+        PermissionCategory.INTENDED_PARENTS,
     ),
     "propose_matches": PermissionDef(
-        "propose_matches", "Propose Matches", 
-        "Create match proposals between surrogates and IPs", PermissionCategory.INTENDED_PARENTS
+        "propose_matches",
+        "Propose Matches",
+        "Create match proposals between surrogates and IPs",
+        PermissionCategory.INTENDED_PARENTS,
     ),
     "view_matches": PermissionDef(
-        "view_matches", "View Matches",
-        "Access match list and details", PermissionCategory.INTENDED_PARENTS
+        "view_matches",
+        "View Matches",
+        "Access match list and details",
+        PermissionCategory.INTENDED_PARENTS,
     ),
-    
     # Tasks
     "view_tasks": PermissionDef(
-        "view_tasks", "View Tasks", 
-        "See task list", PermissionCategory.TASKS
+        "view_tasks", "View Tasks", "See task list", PermissionCategory.TASKS
     ),
     "create_tasks": PermissionDef(
-        "create_tasks", "Create Tasks", 
-        "Create new tasks", PermissionCategory.TASKS
+        "create_tasks", "Create Tasks", "Create new tasks", PermissionCategory.TASKS
     ),
     "edit_tasks": PermissionDef(
-        "edit_tasks", "Edit Tasks", 
-        "Modify task details", PermissionCategory.TASKS
+        "edit_tasks", "Edit Tasks", "Modify task details", PermissionCategory.TASKS
     ),
     "delete_tasks": PermissionDef(
-        "delete_tasks", "Delete Tasks", 
-        "Delete tasks", PermissionCategory.TASKS
+        "delete_tasks", "Delete Tasks", "Delete tasks", PermissionCategory.TASKS
     ),
-    
     # Team & Settings
     "manage_team": PermissionDef(
-        "manage_team", "Manage Team", 
-        "Invite members and change roles", PermissionCategory.TEAM
+        "manage_team",
+        "Manage Team",
+        "Invite members and change roles",
+        PermissionCategory.TEAM,
     ),
     "view_roles": PermissionDef(
-        "view_roles", "View Role Permissions", 
-        "View default permissions for each role", PermissionCategory.TEAM
+        "view_roles",
+        "View Role Permissions",
+        "View default permissions for each role",
+        PermissionCategory.TEAM,
     ),
     "manage_roles": PermissionDef(
-        "manage_roles", "Manage Role Permissions", 
-        "Edit default permissions per role", PermissionCategory.TEAM,
-        developer_only=True
+        "manage_roles",
+        "Manage Role Permissions",
+        "Edit default permissions per role",
+        PermissionCategory.TEAM,
+        developer_only=True,
     ),
     "view_audit_log": PermissionDef(
-        "view_audit_log", "View Audit Log", 
-        "Access audit trail", PermissionCategory.SETTINGS
+        "view_audit_log",
+        "View Audit Log",
+        "Access audit trail",
+        PermissionCategory.SETTINGS,
     ),
     "manage_org": PermissionDef(
-        "manage_org", "Manage Organization",
-        "Update organization profile settings", PermissionCategory.SETTINGS
+        "manage_org",
+        "Manage Organization",
+        "Update organization profile settings",
+        PermissionCategory.SETTINGS,
     ),
     "manage_integrations": PermissionDef(
-        "manage_integrations", "Manage Integrations", 
-        "Connect Gmail, Zoom, Meta", PermissionCategory.SETTINGS
+        "manage_integrations",
+        "Manage Integrations",
+        "Connect Gmail, Zoom, Meta",
+        PermissionCategory.SETTINGS,
     ),
     "manage_automation": PermissionDef(
-        "manage_automation", "Manage Automation", 
-        "Create and edit workflows", PermissionCategory.SETTINGS
+        "manage_automation",
+        "Manage Automation",
+        "Create and edit workflows",
+        PermissionCategory.SETTINGS,
     ),
     "manage_pipelines": PermissionDef(
-        "manage_pipelines", "Manage Pipelines", 
-        "Edit pipeline stages", PermissionCategory.SETTINGS
+        "manage_pipelines",
+        "Manage Pipelines",
+        "Edit pipeline stages",
+        PermissionCategory.SETTINGS,
     ),
     "manage_queues": PermissionDef(
-        "manage_queues", "Manage Queues", 
-        "Create and configure case queues", PermissionCategory.SETTINGS
+        "manage_queues",
+        "Manage Queues",
+        "Create and configure case queues",
+        PermissionCategory.SETTINGS,
     ),
     "view_reports": PermissionDef(
-        "view_reports", "View Reports", 
-        "Access analytics and reports", PermissionCategory.SETTINGS
+        "view_reports",
+        "View Reports",
+        "Access analytics and reports",
+        PermissionCategory.SETTINGS,
     ),
     "use_ai_assistant": PermissionDef(
-        "use_ai_assistant", "Use AI Assistant", 
-        "Chat with AI and view suggestions", PermissionCategory.AI
+        "use_ai_assistant",
+        "Use AI Assistant",
+        "Chat with AI and view suggestions",
+        PermissionCategory.AI,
     ),
     "approve_ai_actions": PermissionDef(
-        "approve_ai_actions", "Approve AI Actions", 
-        "Execute AI-proposed actions (send email, create task, etc.)", PermissionCategory.AI
+        "approve_ai_actions",
+        "Approve AI Actions",
+        "Execute AI-proposed actions (send email, create task, etc.)",
+        PermissionCategory.AI,
     ),
-    
     # Compliance
     "export_data": PermissionDef(
-        "export_data", "Export Data", 
-        "Download data exports", PermissionCategory.COMPLIANCE
+        "export_data",
+        "Export Data",
+        "Download data exports",
+        PermissionCategory.COMPLIANCE,
     ),
     "manage_compliance": PermissionDef(
-        "manage_compliance", "Manage Compliance", 
-        "Legal holds, purge requests, HIPAA exports", PermissionCategory.COMPLIANCE
+        "manage_compliance",
+        "Manage Compliance",
+        "Legal holds, purge requests, HIPAA exports",
+        PermissionCategory.COMPLIANCE,
     ),
-    
     # New granular permissions
     "manage_meta_leads": PermissionDef(
-        "manage_meta_leads", "Manage Meta Leads", 
-        "Configure Meta leadgen integration and webhooks", PermissionCategory.SETTINGS
+        "manage_meta_leads",
+        "Manage Meta Leads",
+        "Configure Meta leadgen integration and webhooks",
+        PermissionCategory.SETTINGS,
     ),
     "view_email_templates": PermissionDef(
-        "view_email_templates", "View Email Templates", 
-        "List and preview email templates", PermissionCategory.SETTINGS
+        "view_email_templates",
+        "View Email Templates",
+        "List and preview email templates",
+        PermissionCategory.SETTINGS,
     ),
     "manage_email_templates": PermissionDef(
-        "manage_email_templates", "Manage Email Templates", 
-        "Create, edit and delete email templates", PermissionCategory.SETTINGS
+        "manage_email_templates",
+        "Manage Email Templates",
+        "Create, edit and delete email templates",
+        PermissionCategory.SETTINGS,
     ),
     "manage_ops": PermissionDef(
-        "manage_ops", "Manage Operations", 
-        "View alerts, queue stats, system monitoring", PermissionCategory.SETTINGS
+        "manage_ops",
+        "Manage Operations",
+        "View alerts, queue stats, system monitoring",
+        PermissionCategory.SETTINGS,
     ),
     "manage_jobs": PermissionDef(
-        "manage_jobs", "Manage Background Jobs", 
-        "Trigger and view job status", PermissionCategory.SETTINGS,
-        developer_only=True
+        "manage_jobs",
+        "Manage Background Jobs",
+        "Trigger and view job status",
+        PermissionCategory.SETTINGS,
+        developer_only=True,
     ),
     "archive_cases": PermissionDef(
-        "archive_cases", "Archive Cases", 
-        "Archive and restore cases", PermissionCategory.CASES
+        "archive_cases",
+        "Archive Cases",
+        "Archive and restore cases",
+        PermissionCategory.CASES,
     ),
 }
 
@@ -381,6 +433,7 @@ PERMISSION_BUNDLES: dict[str, set[str]] = {
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
 
 def get_all_permissions() -> list[PermissionDef]:
     """Get all permissions sorted by category."""

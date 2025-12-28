@@ -40,10 +40,14 @@ def get_match(
     org_id: UUID,
 ) -> Match | None:
     """Get match by ID (org-scoped)."""
-    return db.query(Match).filter(
-        Match.id == match_id,
-        Match.organization_id == org_id,
-    ).first()
+    return (
+        db.query(Match)
+        .filter(
+            Match.id == match_id,
+            Match.organization_id == org_id,
+        )
+        .first()
+    )
 
 
 def get_existing_match(
@@ -53,11 +57,15 @@ def get_existing_match(
     intended_parent_id: UUID,
 ) -> Match | None:
     """Find an existing match for a case/IP in org."""
-    return db.query(Match).filter(
-        Match.organization_id == org_id,
-        Match.case_id == case_id,
-        Match.intended_parent_id == intended_parent_id,
-    ).first()
+    return (
+        db.query(Match)
+        .filter(
+            Match.organization_id == org_id,
+            Match.case_id == case_id,
+            Match.intended_parent_id == intended_parent_id,
+        )
+        .first()
+    )
 
 
 def get_accepted_match_for_case(
@@ -66,11 +74,15 @@ def get_accepted_match_for_case(
     case_id: UUID,
 ) -> Match | None:
     """Get accepted match for a case (org-scoped)."""
-    return db.query(Match).filter(
-        Match.organization_id == org_id,
-        Match.case_id == case_id,
-        Match.status == MatchStatus.ACCEPTED.value,
-    ).first()
+    return (
+        db.query(Match)
+        .filter(
+            Match.organization_id == org_id,
+            Match.case_id == case_id,
+            Match.status == MatchStatus.ACCEPTED.value,
+        )
+        .first()
+    )
 
 
 def list_matches(
@@ -97,13 +109,19 @@ def list_matches(
 
     if q:
         search_term = f"%{q}%"
-        query = query.join(Case, Match.case_id == Case.id, isouter=True).join(
-            IntendedParent, Match.intended_parent_id == IntendedParent.id, isouter=True
-        ).filter(
-            or_(
-                Case.full_name.ilike(search_term),
-                Case.case_number.ilike(search_term),
-                IntendedParent.full_name.ilike(search_term),
+        query = (
+            query.join(Case, Match.case_id == Case.id, isouter=True)
+            .join(
+                IntendedParent,
+                Match.intended_parent_id == IntendedParent.id,
+                isouter=True,
+            )
+            .filter(
+                or_(
+                    Case.full_name.ilike(search_term),
+                    Case.case_number.ilike(search_term),
+                    IntendedParent.full_name.ilike(search_term),
+                )
             )
         )
 
@@ -134,10 +152,15 @@ def get_cases_with_stage_by_ids(
     """Batch load cases with stages for match list."""
     if not case_ids:
         return {}
-    cases = db.query(Case).options(joinedload(Case.stage)).filter(
-        Case.organization_id == org_id,
-        Case.id.in_(case_ids),
-    ).all()
+    cases = (
+        db.query(Case)
+        .options(joinedload(Case.stage))
+        .filter(
+            Case.organization_id == org_id,
+            Case.id.in_(case_ids),
+        )
+        .all()
+    )
     return {case.id: case for case in cases}
 
 
@@ -149,10 +172,14 @@ def get_intended_parents_by_ids(
     """Batch load intended parents for match list."""
     if not intended_parent_ids:
         return {}
-    ips = db.query(IntendedParent).filter(
-        IntendedParent.organization_id == org_id,
-        IntendedParent.id.in_(intended_parent_ids),
-    ).all()
+    ips = (
+        db.query(IntendedParent)
+        .filter(
+            IntendedParent.organization_id == org_id,
+            IntendedParent.id.in_(intended_parent_ids),
+        )
+        .all()
+    )
     return {ip.id: ip for ip in ips}
 
 
@@ -163,9 +190,12 @@ def get_match_stats(
     """Return total matches and counts by status."""
     total = db.query(Match).filter(Match.organization_id == org_id).count()
     counts = {status.value: 0 for status in MatchStatus}
-    rows = db.query(Match.status, func.count(Match.id)).filter(
-        Match.organization_id == org_id
-    ).group_by(Match.status).all()
+    rows = (
+        db.query(Match.status, func.count(Match.id))
+        .filter(Match.organization_id == org_id)
+        .group_by(Match.status)
+        .all()
+    )
 
     for status, count in rows:
         counts[status] = count
@@ -217,11 +247,16 @@ def list_match_events(
         if timed_filters:
             date_filters.append(and_(MatchEvent.starts_at.isnot(None), *timed_filters))
 
-        all_day_filters = [MatchEvent.all_day.is_(True), MatchEvent.start_date.isnot(None)]
+        all_day_filters = [
+            MatchEvent.all_day.is_(True),
+            MatchEvent.start_date.isnot(None),
+        ]
         if to_day:
             all_day_filters.append(MatchEvent.start_date <= to_day)
         if from_day:
-            all_day_filters.append(func.coalesce(MatchEvent.end_date, MatchEvent.start_date) >= from_day)
+            all_day_filters.append(
+                func.coalesce(MatchEvent.end_date, MatchEvent.start_date) >= from_day
+            )
         date_filters.append(and_(*all_day_filters))
 
         query = query.filter(or_(*date_filters))
@@ -236,8 +271,12 @@ def get_match_event(
     org_id: UUID,
 ) -> MatchEvent | None:
     """Get a match event by ID (org-scoped)."""
-    return db.query(MatchEvent).filter(
-        MatchEvent.id == event_id,
-        MatchEvent.match_id == match_id,
-        MatchEvent.organization_id == org_id,
-    ).first()
+    return (
+        db.query(MatchEvent)
+        .filter(
+            MatchEvent.id == event_id,
+            MatchEvent.match_id == match_id,
+            MatchEvent.organization_id == org_id,
+        )
+        .first()
+    )

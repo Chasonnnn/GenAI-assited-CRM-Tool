@@ -144,140 +144,165 @@ def stream_cases_csv(db: Session, org_id: UUID) -> Iterator[str]:
     yield _write_csv_row(headers)
 
     from app.db.models import MetaLead
+
     meta_lead = aliased(MetaLead)
 
-    query = db.query(
-        Case,
-        PipelineStage,
-        owner_user,
-        owner_queue,
-        created_by,
-        archived_by,
-        meta_lead,
-    ).join(
-        PipelineStage, Case.stage_id == PipelineStage.id
-    ).outerjoin(
-        owner_user,
-        and_(Case.owner_type == OwnerType.USER.value, Case.owner_id == owner_user.id),
-    ).outerjoin(
-        owner_queue,
-        and_(Case.owner_type == OwnerType.QUEUE.value, Case.owner_id == owner_queue.id),
-    ).outerjoin(
-        created_by, Case.created_by_user_id == created_by.id
-    ).outerjoin(
-        archived_by, Case.archived_by_user_id == archived_by.id
-    ).outerjoin(
-        meta_lead, Case.meta_lead_id == meta_lead.id
-    ).filter(
-        Case.organization_id == org_id
-    ).order_by(
-        Case.created_at.asc()
+    query = (
+        db.query(
+            Case,
+            PipelineStage,
+            owner_user,
+            owner_queue,
+            created_by,
+            archived_by,
+            meta_lead,
+        )
+        .join(PipelineStage, Case.stage_id == PipelineStage.id)
+        .outerjoin(
+            owner_user,
+            and_(
+                Case.owner_type == OwnerType.USER.value, Case.owner_id == owner_user.id
+            ),
+        )
+        .outerjoin(
+            owner_queue,
+            and_(
+                Case.owner_type == OwnerType.QUEUE.value,
+                Case.owner_id == owner_queue.id,
+            ),
+        )
+        .outerjoin(created_by, Case.created_by_user_id == created_by.id)
+        .outerjoin(archived_by, Case.archived_by_user_id == archived_by.id)
+        .outerjoin(meta_lead, Case.meta_lead_id == meta_lead.id)
+        .filter(Case.organization_id == org_id)
+        .order_by(Case.created_at.asc())
     )
 
-    for case, stage, owner_user_row, owner_queue_row, created_by_row, archived_by_row, meta_lead_row in query.yield_per(500):
+    for (
+        case,
+        stage,
+        owner_user_row,
+        owner_queue_row,
+        created_by_row,
+        archived_by_row,
+        meta_lead_row,
+    ) in query.yield_per(500):
         owner_name = owner_user_row.display_name if owner_user_row else None
         owner_email = owner_user_row.email if owner_user_row else None
         owner_queue_name = owner_queue_row.name if owner_queue_row else None
 
-        yield _write_csv_row([
-            case.id,
-            case.case_number,
-            case.organization_id,
-            case.status_label,
-            case.stage_id,
-            stage.slug if stage else None,
-            stage.label if stage else None,
-            stage.order if stage else None,
-            case.source,
-            case.is_priority,
-            case.owner_type,
-            case.owner_id,
-            owner_name,
-            owner_email,
-            owner_queue_name,
-            case.created_by_user_id,
-            created_by_row.display_name if created_by_row else None,
-            created_by_row.email if created_by_row else None,
-            case.meta_lead_id,
-            meta_lead_row.meta_lead_id if meta_lead_row else None,
-            meta_lead_row.meta_form_id if meta_lead_row else None,
-            meta_lead_row.meta_page_id if meta_lead_row else None,
-            meta_lead_row.status if meta_lead_row else None,
-            meta_lead_row.fetch_error if meta_lead_row else None,
-            meta_lead_row.conversion_error if meta_lead_row else None,
-            meta_lead_row.is_converted if meta_lead_row else None,
-            meta_lead_row.meta_created_time if meta_lead_row else None,
-            meta_lead_row.received_at if meta_lead_row else None,
-            meta_lead_row.converted_at if meta_lead_row else None,
-            meta_lead_row.field_data if meta_lead_row else None,
-            meta_lead_row.raw_payload if meta_lead_row else None,
-            case.meta_ad_id,
-            case.meta_form_id,
-            case.full_name,
-            case.email,
-            case.phone,
-            case.state,
-            case.date_of_birth,
-            case.race,
-            case.height_ft,
-            case.weight_lb,
-            case.is_age_eligible,
-            case.is_citizen_or_pr,
-            case.has_child,
-            case.is_non_smoker,
-            case.has_surrogate_experience,
-            case.num_deliveries,
-            case.num_csections,
-            case.is_archived,
-            case.archived_at,
-            case.archived_by_user_id,
-            archived_by_row.display_name if archived_by_row else None,
-            archived_by_row.email if archived_by_row else None,
-            case.last_contacted_at,
-            case.last_contact_method,
-            case.created_at,
-            case.updated_at,
-        ])
+        yield _write_csv_row(
+            [
+                case.id,
+                case.case_number,
+                case.organization_id,
+                case.status_label,
+                case.stage_id,
+                stage.slug if stage else None,
+                stage.label if stage else None,
+                stage.order if stage else None,
+                case.source,
+                case.is_priority,
+                case.owner_type,
+                case.owner_id,
+                owner_name,
+                owner_email,
+                owner_queue_name,
+                case.created_by_user_id,
+                created_by_row.display_name if created_by_row else None,
+                created_by_row.email if created_by_row else None,
+                case.meta_lead_id,
+                meta_lead_row.meta_lead_id if meta_lead_row else None,
+                meta_lead_row.meta_form_id if meta_lead_row else None,
+                meta_lead_row.meta_page_id if meta_lead_row else None,
+                meta_lead_row.status if meta_lead_row else None,
+                meta_lead_row.fetch_error if meta_lead_row else None,
+                meta_lead_row.conversion_error if meta_lead_row else None,
+                meta_lead_row.is_converted if meta_lead_row else None,
+                meta_lead_row.meta_created_time if meta_lead_row else None,
+                meta_lead_row.received_at if meta_lead_row else None,
+                meta_lead_row.converted_at if meta_lead_row else None,
+                meta_lead_row.field_data if meta_lead_row else None,
+                meta_lead_row.raw_payload if meta_lead_row else None,
+                case.meta_ad_id,
+                case.meta_form_id,
+                case.full_name,
+                case.email,
+                case.phone,
+                case.state,
+                case.date_of_birth,
+                case.race,
+                case.height_ft,
+                case.weight_lb,
+                case.is_age_eligible,
+                case.is_citizen_or_pr,
+                case.has_child,
+                case.is_non_smoker,
+                case.has_surrogate_experience,
+                case.num_deliveries,
+                case.num_csections,
+                case.is_archived,
+                case.archived_at,
+                case.archived_by_user_id,
+                archived_by_row.display_name if archived_by_row else None,
+                archived_by_row.email if archived_by_row else None,
+                case.last_contacted_at,
+                case.last_contact_method,
+                case.created_at,
+                case.updated_at,
+            ]
+        )
 
 
 def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
     org = db.query(Organization).filter(Organization.id == org_id).first()
 
-    pipelines = db.query(Pipeline).filter(Pipeline.organization_id == org_id).order_by(
-        Pipeline.is_default.desc(), Pipeline.name
-    ).all()
+    pipelines = (
+        db.query(Pipeline)
+        .filter(Pipeline.organization_id == org_id)
+        .order_by(Pipeline.is_default.desc(), Pipeline.name)
+        .all()
+    )
     pipeline_payload = []
     for pipeline in pipelines:
-        stages = db.query(PipelineStage).filter(
-            PipelineStage.pipeline_id == pipeline.id
-        ).order_by(PipelineStage.order).all()
-        pipeline_payload.append({
-            "id": str(pipeline.id),
-            "name": pipeline.name,
-            "is_default": pipeline.is_default,
-            "current_version": pipeline.current_version,
-            "created_at": pipeline.created_at,
-            "updated_at": pipeline.updated_at,
-            "stages": [
-                {
-                    "id": str(stage.id),
-                    "slug": stage.slug,
-                    "label": stage.label,
-                    "color": stage.color,
-                    "order": stage.order,
-                    "stage_type": stage.stage_type,
-                    "is_active": stage.is_active,
-                    "deleted_at": stage.deleted_at,
-                    "created_at": stage.created_at,
-                    "updated_at": stage.updated_at,
-                }
-                for stage in stages
-            ],
-        })
+        stages = (
+            db.query(PipelineStage)
+            .filter(PipelineStage.pipeline_id == pipeline.id)
+            .order_by(PipelineStage.order)
+            .all()
+        )
+        pipeline_payload.append(
+            {
+                "id": str(pipeline.id),
+                "name": pipeline.name,
+                "is_default": pipeline.is_default,
+                "current_version": pipeline.current_version,
+                "created_at": pipeline.created_at,
+                "updated_at": pipeline.updated_at,
+                "stages": [
+                    {
+                        "id": str(stage.id),
+                        "slug": stage.slug,
+                        "label": stage.label,
+                        "color": stage.color,
+                        "order": stage.order,
+                        "stage_type": stage.stage_type,
+                        "is_active": stage.is_active,
+                        "deleted_at": stage.deleted_at,
+                        "created_at": stage.created_at,
+                        "updated_at": stage.updated_at,
+                    }
+                    for stage in stages
+                ],
+            }
+        )
 
-    templates = db.query(EmailTemplate).filter(
-        EmailTemplate.organization_id == org_id
-    ).order_by(EmailTemplate.name).all()
+    templates = (
+        db.query(EmailTemplate)
+        .filter(EmailTemplate.organization_id == org_id)
+        .order_by(EmailTemplate.name)
+        .all()
+    )
     template_payload = [
         {
             "id": str(t.id),
@@ -289,16 +314,21 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "system_key": t.system_key,
             "category": t.category,
             "current_version": t.current_version,
-            "created_by_user_id": str(t.created_by_user_id) if t.created_by_user_id else None,
+            "created_by_user_id": str(t.created_by_user_id)
+            if t.created_by_user_id
+            else None,
             "created_at": t.created_at,
             "updated_at": t.updated_at,
         }
         for t in templates
     ]
 
-    workflows = db.query(AutomationWorkflow).filter(
-        AutomationWorkflow.organization_id == org_id
-    ).order_by(AutomationWorkflow.created_at.asc()).all()
+    workflows = (
+        db.query(AutomationWorkflow)
+        .filter(AutomationWorkflow.organization_id == org_id)
+        .order_by(AutomationWorkflow.created_at.asc())
+        .all()
+    )
     workflow_payload = [
         {
             "id": str(w.id),
@@ -324,18 +354,28 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "system_key": w.system_key,
             "requires_review": w.requires_review,
             "reviewed_at": w.reviewed_at,
-            "reviewed_by_user_id": str(w.reviewed_by_user_id) if w.reviewed_by_user_id else None,
-            "created_by_user_id": str(w.created_by_user_id) if w.created_by_user_id else None,
-            "updated_by_user_id": str(w.updated_by_user_id) if w.updated_by_user_id else None,
+            "reviewed_by_user_id": str(w.reviewed_by_user_id)
+            if w.reviewed_by_user_id
+            else None,
+            "created_by_user_id": str(w.created_by_user_id)
+            if w.created_by_user_id
+            else None,
+            "updated_by_user_id": str(w.updated_by_user_id)
+            if w.updated_by_user_id
+            else None,
             "created_at": w.created_at,
             "updated_at": w.updated_at,
         }
         for w in workflows
     ]
 
-    members = db.query(User, Membership).join(
-        Membership, Membership.user_id == User.id
-    ).filter(Membership.organization_id == org_id).order_by(User.email).all()
+    members = (
+        db.query(User, Membership)
+        .join(Membership, Membership.user_id == User.id)
+        .filter(Membership.organization_id == org_id)
+        .order_by(User.email)
+        .all()
+    )
 
     user_payload = [
         {
@@ -370,7 +410,12 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
         for _user, membership in members
     ]
 
-    queues = db.query(Queue).filter(Queue.organization_id == org_id).order_by(Queue.name).all()
+    queues = (
+        db.query(Queue)
+        .filter(Queue.organization_id == org_id)
+        .order_by(Queue.name)
+        .all()
+    )
     queue_payload = [
         {
             "id": str(queue.id),
@@ -384,9 +429,12 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
         for queue in queues
     ]
 
-    queue_members = db.query(QueueMember).join(
-        Queue, QueueMember.queue_id == Queue.id
-    ).filter(Queue.organization_id == org_id).all()
+    queue_members = (
+        db.query(QueueMember)
+        .join(Queue, QueueMember.queue_id == Queue.id)
+        .filter(Queue.organization_id == org_id)
+        .all()
+    )
     queue_member_payload = [
         {
             "id": str(member.id),
@@ -397,9 +445,13 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
         for member in queue_members
     ]
 
-    notification_settings = db.query(UserNotificationSettings, User).join(
-        User, UserNotificationSettings.user_id == User.id
-    ).filter(UserNotificationSettings.organization_id == org_id).order_by(User.email).all()
+    notification_settings = (
+        db.query(UserNotificationSettings, User)
+        .join(User, UserNotificationSettings.user_id == User.id)
+        .filter(UserNotificationSettings.organization_id == org_id)
+        .order_by(User.email)
+        .all()
+    )
     notification_payload = [
         {
             "user_id": str(settings_row.user_id),
@@ -415,11 +467,14 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
         for settings_row, user in notification_settings
     ]
 
-    integrations = db.query(UserIntegration, User, Membership).join(
-        User, UserIntegration.user_id == User.id
-    ).join(
-        Membership, Membership.user_id == User.id
-    ).filter(Membership.organization_id == org_id).order_by(User.email, UserIntegration.integration_type).all()
+    integrations = (
+        db.query(UserIntegration, User, Membership)
+        .join(User, UserIntegration.user_id == User.id)
+        .join(Membership, Membership.user_id == User.id)
+        .filter(Membership.organization_id == org_id)
+        .order_by(User.email, UserIntegration.integration_type)
+        .all()
+    )
     integration_payload = [
         {
             "user_id": str(user.id),
@@ -434,9 +489,9 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
         for integration, user, _membership in integrations
     ]
 
-    ai_settings = db.query(AISettings).filter(
-        AISettings.organization_id == org_id
-    ).first()
+    ai_settings = (
+        db.query(AISettings).filter(AISettings.organization_id == org_id).first()
+    )
     ai_payload = None
     if ai_settings:
         ai_payload = {
@@ -447,7 +502,9 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "context_notes_limit": ai_settings.context_notes_limit,
             "conversation_history_limit": ai_settings.conversation_history_limit,
             "consent_accepted_at": ai_settings.consent_accepted_at,
-            "consent_accepted_by": str(ai_settings.consent_accepted_by) if ai_settings.consent_accepted_by else None,
+            "consent_accepted_by": str(ai_settings.consent_accepted_by)
+            if ai_settings.consent_accepted_by
+            else None,
             "anonymize_pii": ai_settings.anonymize_pii,
             "current_version": ai_settings.current_version,
             "has_api_key": ai_settings.api_key_encrypted is not None,
@@ -455,9 +512,12 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "updated_at": ai_settings.updated_at,
         }
 
-    role_permissions = db.query(RolePermission).filter(
-        RolePermission.organization_id == org_id
-    ).order_by(RolePermission.role, RolePermission.permission).all()
+    role_permissions = (
+        db.query(RolePermission)
+        .filter(RolePermission.organization_id == org_id)
+        .order_by(RolePermission.role, RolePermission.permission)
+        .all()
+    )
     role_permission_payload = [
         {
             "id": str(permission.id),
@@ -471,9 +531,12 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
         for permission in role_permissions
     ]
 
-    user_overrides = db.query(UserPermissionOverride).filter(
-        UserPermissionOverride.organization_id == org_id
-    ).order_by(UserPermissionOverride.user_id, UserPermissionOverride.permission).all()
+    user_overrides = (
+        db.query(UserPermissionOverride)
+        .filter(UserPermissionOverride.organization_id == org_id)
+        .order_by(UserPermissionOverride.user_id, UserPermissionOverride.permission)
+        .all()
+    )
     user_override_payload = [
         {
             "id": str(override.id),
@@ -487,9 +550,12 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
         for override in user_overrides
     ]
 
-    meta_pages = db.query(MetaPageMapping).filter(
-        MetaPageMapping.organization_id == org_id
-    ).order_by(MetaPageMapping.created_at.desc()).all()
+    meta_pages = (
+        db.query(MetaPageMapping)
+        .filter(MetaPageMapping.organization_id == org_id)
+        .order_by(MetaPageMapping.created_at.desc())
+        .all()
+    )
     meta_page_payload = [
         {
             "id": str(page.id),
@@ -537,9 +603,13 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
         archive.writestr("queues.json", _write_json(queue_payload))
         archive.writestr("queue_members.json", _write_json(queue_member_payload))
         archive.writestr("role_permissions.json", _write_json(role_permission_payload))
-        archive.writestr("user_permission_overrides.json", _write_json(user_override_payload))
+        archive.writestr(
+            "user_permission_overrides.json", _write_json(user_override_payload)
+        )
         archive.writestr("email_templates.json", _write_json(template_payload))
-        archive.writestr("notification_settings.json", _write_json(notification_payload))
+        archive.writestr(
+            "notification_settings.json", _write_json(notification_payload)
+        )
         archive.writestr("workflows.json", _write_json(workflow_payload))
         archive.writestr("integrations.json", _write_json(integration_payload))
         archive.writestr("meta_pages.json", _write_json(meta_page_payload))
@@ -601,7 +671,10 @@ def build_analytics_zip(
             "cases_by_assignee.csv",
             _write_csv(
                 ["user_id", "user_email", "count"],
-                [(item["user_id"], item["user_email"], item["count"]) for item in cases_by_assignee],
+                [
+                    (item["user_id"], item["user_email"], item["count"])
+                    for item in cases_by_assignee
+                ],
             ),
         )
         archive.writestr(
@@ -621,7 +694,16 @@ def build_analytics_zip(
         archive.writestr(
             "meta_spend_campaigns.csv",
             _write_csv(
-                ["campaign_id", "campaign_name", "spend", "impressions", "reach", "clicks", "leads", "cost_per_lead"],
+                [
+                    "campaign_id",
+                    "campaign_name",
+                    "spend",
+                    "impressions",
+                    "reach",
+                    "clicks",
+                    "leads",
+                    "cost_per_lead",
+                ],
                 [
                     (
                         item["campaign_id"],
@@ -640,7 +722,16 @@ def build_analytics_zip(
         archive.writestr(
             "meta_spend_time_series.csv",
             _write_csv(
-                ["date_start", "date_stop", "spend", "impressions", "reach", "clicks", "leads", "cost_per_lead"],
+                [
+                    "date_start",
+                    "date_stop",
+                    "spend",
+                    "impressions",
+                    "reach",
+                    "clicks",
+                    "leads",
+                    "cost_per_lead",
+                ],
                 [
                     (
                         item["date_start"],
@@ -659,7 +750,15 @@ def build_analytics_zip(
         archive.writestr(
             "meta_spend_breakdowns.csv",
             _write_csv(
-                ["breakdown_values", "spend", "impressions", "reach", "clicks", "leads", "cost_per_lead"],
+                [
+                    "breakdown_values",
+                    "spend",
+                    "impressions",
+                    "reach",
+                    "clicks",
+                    "leads",
+                    "cost_per_lead",
+                ],
                 [
                     (
                         json.dumps(item.get("breakdown_values", {}), sort_keys=True),
@@ -678,14 +777,20 @@ def build_analytics_zip(
             "campaigns.csv",
             _write_csv(
                 ["ad_id", "ad_name", "lead_count"],
-                [(item["ad_id"], item["ad_name"], item["lead_count"]) for item in campaigns],
+                [
+                    (item["ad_id"], item["ad_name"], item["lead_count"])
+                    for item in campaigns
+                ],
             ),
         )
         archive.writestr(
             "funnel.csv",
             _write_csv(
                 ["stage", "label", "count", "percentage"],
-                [(item["stage"], item["label"], item["count"], item["percentage"]) for item in funnel],
+                [
+                    (item["stage"], item["label"], item["count"], item["percentage"])
+                    for item in funnel
+                ],
             ),
         )
         archive.writestr(

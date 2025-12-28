@@ -3,13 +3,19 @@ CSV Import API endpoints.
 
 Provides REST interface for bulk case imports via CSV upload.
 """
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
+from app.core.deps import (
+    get_current_session,
+    get_db,
+    require_csrf_header,
+    require_permission,
+)
 from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
 from app.services import import_service
@@ -25,6 +31,7 @@ router = APIRouter(
 # =============================================================================
 # Schemas
 # =============================================================================
+
 
 class ImportPreviewResponse(BaseModel):
     total_rows: int
@@ -49,7 +56,7 @@ class ImportExecuteResponse(BaseModel):
 
 class ImportHistoryItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     filename: str
     status: str
@@ -63,7 +70,7 @@ class ImportHistoryItem(BaseModel):
 
 class ImportDetailResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     filename: str
     status: str
@@ -80,6 +87,7 @@ class ImportDetailResponse(BaseModel):
 # Endpoints
 # =============================================================================
 
+
 @router.post(
     "/preview",
     response_model=ImportPreviewResponse,
@@ -92,19 +100,18 @@ async def preview_csv_import(
 ):
     """
     Upload and preview CSV file before importing.
-    
+
     Returns column mapping, sample data, and duplicate counts.
     """
     # Read file
     content = await file.read()
-    
+
     # Validate file type
-    if not file.filename or not file.filename.endswith('.csv'):
+    if not file.filename or not file.filename.endswith(".csv"):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File must be a CSV file"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="File must be a CSV file"
         )
-    
+
     # Generate preview
     try:
         preview = import_service.preview_import(
@@ -115,9 +122,9 @@ async def preview_csv_import(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to parse CSV: {str(e)}"
+            detail=f"Failed to parse CSV: {str(e)}",
         )
-    
+
     return ImportPreviewResponse(
         total_rows=preview.total_rows,
         sample_rows=preview.sample_rows,
@@ -142,24 +149,23 @@ async def execute_csv_import(
 ):
     """
     Execute CSV import asynchronously.
-    
+
     Queues import for background processing and returns immediately.
     Use GET /cases/import/{id} to check status.
     """
     import base64
     from app.db.enums import JobType
     from app.services import job_service
-    
+
     # Read file
     content = await file.read()
-    
+
     # Validate
-    if not file.filename or not file.filename.endswith('.csv'):
+    if not file.filename or not file.filename.endswith(".csv"):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File must be a CSV file"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="File must be a CSV file"
         )
-    
+
     # Quick parse to get row count
     try:
         _, rows = import_service.parse_csv_file(content)
@@ -167,9 +173,9 @@ async def execute_csv_import(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to parse CSV: {str(e)}"
+            detail=f"Failed to parse CSV: {str(e)}",
         )
-    
+
     # Create import record with pending status
     import_record = import_service.create_import_job(
         db=db,
@@ -178,7 +184,7 @@ async def execute_csv_import(
         filename=file.filename,
         total_rows=total_rows,
     )
-    
+
     # Queue background job for processing
     job_service.schedule_job(
         db=db,
@@ -190,10 +196,10 @@ async def execute_csv_import(
             "dedupe_action": "skip",
         },
     )
-    
+
     return ImportExecuteResponse(
         import_id=import_record.id,
-        message=f"Import queued for processing. {total_rows} rows will be processed in background."
+        message=f"Import queued for processing. {total_rows} rows will be processed in background.",
     )
 
 
@@ -208,7 +214,7 @@ def list_imports(
         org_id=session.org_id,
         limit=50,
     )
-    
+
     return [
         ImportHistoryItem(
             id=imp.id,
@@ -237,10 +243,12 @@ def get_import_details(
         org_id=session.org_id,
         import_id=import_id,
     )
-    
+
     if not import_record:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Import not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Import not found"
+        )
+
     return ImportDetailResponse(
         id=import_record.id,
         filename=import_record.filename,
@@ -251,5 +259,7 @@ def get_import_details(
         error_count=import_record.error_count,
         errors=import_record.errors,
         created_at=import_record.created_at.isoformat(),
-        completed_at=import_record.completed_at.isoformat() if import_record.completed_at else None,
+        completed_at=import_record.completed_at.isoformat()
+        if import_record.completed_at
+        else None,
     )

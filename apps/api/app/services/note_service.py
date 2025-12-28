@@ -14,7 +14,22 @@ from app.db.models import EntityNote
 from app.schemas.note import NoteRead
 
 # Allowed HTML tags for TipTap rich text
-ALLOWED_TAGS = {"p", "br", "strong", "em", "ul", "ol", "li", "a", "blockquote", "h1", "h2", "h3", "code", "pre"}
+ALLOWED_TAGS = {
+    "p",
+    "br",
+    "strong",
+    "em",
+    "ul",
+    "ol",
+    "li",
+    "a",
+    "blockquote",
+    "h1",
+    "h2",
+    "h3",
+    "code",
+    "pre",
+}
 ALLOWED_ATTRIBUTES = {"a": {"href", "target"}}
 
 
@@ -27,6 +42,7 @@ def sanitize_html(html: str) -> str:
 # Unified EntityNote functions (for all entity types)
 # =============================================================================
 
+
 def create_note(
     db: Session,
     org_id: UUID,
@@ -37,10 +53,10 @@ def create_note(
 ) -> EntityNote:
     """Create a note on any entity type."""
     clean_content = sanitize_html(content)
-    
+
     # Convert enum to string if needed
     type_str = entity_type.value if isinstance(entity_type, EntityType) else entity_type
-    
+
     note = EntityNote(
         organization_id=org_id,
         entity_type=type_str,
@@ -51,11 +67,12 @@ def create_note(
     db.add(note)
     db.commit()
     db.refresh(note)
-    
+
     # Trigger workflow automation after successful commit
     from app.services.workflow_triggers import trigger_note_added
+
     trigger_note_added(db, note)
-    
+
     return note
 
 
@@ -67,12 +84,18 @@ def list_notes(
 ) -> list[EntityNote]:
     """List notes for an entity, newest first."""
     type_str = entity_type.value if isinstance(entity_type, EntityType) else entity_type
-    
-    return db.query(EntityNote).options(joinedload(EntityNote.author)).filter(
-        EntityNote.organization_id == org_id,
-        EntityNote.entity_type == type_str,
-        EntityNote.entity_id == entity_id,
-    ).order_by(EntityNote.created_at.desc()).all()
+
+    return (
+        db.query(EntityNote)
+        .options(joinedload(EntityNote.author))
+        .filter(
+            EntityNote.organization_id == org_id,
+            EntityNote.entity_type == type_str,
+            EntityNote.entity_id == entity_id,
+        )
+        .order_by(EntityNote.created_at.desc())
+        .all()
+    )
 
 
 def list_notes_limited(
@@ -85,19 +108,31 @@ def list_notes_limited(
     """List most recent notes for an entity with a limit."""
     type_str = entity_type.value if isinstance(entity_type, EntityType) else entity_type
 
-    return db.query(EntityNote).options(joinedload(EntityNote.author)).filter(
-        EntityNote.organization_id == org_id,
-        EntityNote.entity_type == type_str,
-        EntityNote.entity_id == entity_id,
-    ).order_by(EntityNote.created_at.desc()).limit(limit).all()
+    return (
+        db.query(EntityNote)
+        .options(joinedload(EntityNote.author))
+        .filter(
+            EntityNote.organization_id == org_id,
+            EntityNote.entity_type == type_str,
+            EntityNote.entity_id == entity_id,
+        )
+        .order_by(EntityNote.created_at.desc())
+        .limit(limit)
+        .all()
+    )
 
 
 def get_note(db: Session, note_id: UUID, org_id: UUID) -> EntityNote | None:
     """Get a note by ID (org-scoped)."""
-    return db.query(EntityNote).options(joinedload(EntityNote.author)).filter(
-        EntityNote.id == note_id,
-        EntityNote.organization_id == org_id,
-    ).first()
+    return (
+        db.query(EntityNote)
+        .options(joinedload(EntityNote.author))
+        .filter(
+            EntityNote.id == note_id,
+            EntityNote.organization_id == org_id,
+        )
+        .first()
+    )
 
 
 def to_note_read(note: EntityNote) -> NoteRead:

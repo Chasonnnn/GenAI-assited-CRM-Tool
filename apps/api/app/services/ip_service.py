@@ -15,6 +15,7 @@ from app.db.models import IntendedParent, IntendedParentStatusHistory
 # CRUD Operations
 # =============================================================================
 
+
 def list_intended_parents(
     db: Session,
     org_id: UUID,
@@ -35,31 +36,31 @@ def list_intended_parents(
 ) -> tuple[list[IntendedParent], int]:
     """
     List intended parents with filters and pagination.
-    
+
     Returns (items, total_count).
     """
     from sqlalchemy import asc, desc
-    
+
     query = db.query(IntendedParent).filter(IntendedParent.organization_id == org_id)
-    
+
     # Archive filter
     if not include_archived:
         query = query.filter(IntendedParent.is_archived.is_(False))
-    
+
     # Status filter (multi-select)
     if status:
         query = query.filter(IntendedParent.status.in_(status))
-    
+
     # State filter
     if state:
         query = query.filter(IntendedParent.state == state)
-    
+
     # Budget range filter
     if budget_min is not None:
         query = query.filter(IntendedParent.budget >= budget_min)
     if budget_max is not None:
         query = query.filter(IntendedParent.budget <= budget_max)
-    
+
     # Search filter (name, email, phone)
     if q:
         search_term = f"%{q}%"
@@ -70,7 +71,7 @@ def list_intended_parents(
                 IntendedParent.phone.ilike(search_term),
             )
         )
-    
+
     # Owner filter
     if owner_id:
         query = query.filter(IntendedParent.owner_id == owner_id)
@@ -78,20 +79,20 @@ def list_intended_parents(
     # Created date range filter (ISO format)
     if created_after:
         try:
-            after_date = datetime.fromisoformat(created_after.replace('Z', '+00:00'))
+            after_date = datetime.fromisoformat(created_after.replace("Z", "+00:00"))
             query = query.filter(IntendedParent.created_at >= after_date)
         except (ValueError, AttributeError):
             pass
     if created_before:
         try:
-            before_date = datetime.fromisoformat(created_before.replace('Z', '+00:00'))
+            before_date = datetime.fromisoformat(created_before.replace("Z", "+00:00"))
             query = query.filter(IntendedParent.created_at <= before_date)
         except (ValueError, AttributeError):
             pass
-    
+
     # Get total count before pagination
     total = query.count()
-    
+
     # Dynamic sorting
     order_func = asc if sort_order == "asc" else desc
     sortable_columns = {
@@ -103,26 +104,29 @@ def list_intended_parents(
         "status": IntendedParent.status,
         "created_at": IntendedParent.created_at,
     }
-    
+
     if sort_by and sort_by in sortable_columns:
         query = query.order_by(order_func(sortable_columns[sort_by]))
     else:
         query = query.order_by(IntendedParent.created_at.desc())
-    
+
     # Pagination
     per_page = min(per_page, 100)  # Cap at 100
     offset = (page - 1) * per_page
     items = query.offset(offset).limit(per_page).all()
-    
+
     return items, total
 
 
-def get_intended_parent(db: Session, ip_id: UUID, org_id: UUID) -> IntendedParent | None:
+def get_intended_parent(
+    db: Session, ip_id: UUID, org_id: UUID
+) -> IntendedParent | None:
     """Get a single intended parent by ID, scoped to organization."""
-    return db.query(IntendedParent).filter(
-        IntendedParent.id == ip_id,
-        IntendedParent.organization_id == org_id
-    ).first()
+    return (
+        db.query(IntendedParent)
+        .filter(IntendedParent.id == ip_id, IntendedParent.organization_id == org_id)
+        .first()
+    )
 
 
 def create_intended_parent(
@@ -153,7 +157,7 @@ def create_intended_parent(
     )
     db.add(ip)
     db.flush()
-    
+
     # Record initial status in history
     history = IntendedParentStatusHistory(
         intended_parent_id=ip.id,
@@ -199,10 +203,10 @@ def update_intended_parent(
         ip.owner_type = owner_type
     if owner_id is not None:
         ip.owner_id = owner_id
-    
+
     ip.last_activity = datetime.utcnow()
     ip.updated_at = datetime.utcnow()
-    
+
     db.commit()
     db.refresh(ip)
     return ip
@@ -211,6 +215,7 @@ def update_intended_parent(
 # =============================================================================
 # Status Management
 # =============================================================================
+
 
 def update_ip_status(
     db: Session,
@@ -224,7 +229,7 @@ def update_ip_status(
     ip.status = new_status
     ip.last_activity = datetime.utcnow()
     ip.updated_at = datetime.utcnow()
-    
+
     history = IntendedParentStatusHistory(
         intended_parent_id=ip.id,
         changed_by_user_id=user_id,
@@ -238,16 +243,22 @@ def update_ip_status(
     return ip
 
 
-def get_ip_status_history(db: Session, ip_id: UUID) -> list[IntendedParentStatusHistory]:
+def get_ip_status_history(
+    db: Session, ip_id: UUID
+) -> list[IntendedParentStatusHistory]:
     """Get status history for an intended parent."""
-    return db.query(IntendedParentStatusHistory).filter(
-        IntendedParentStatusHistory.intended_parent_id == ip_id
-    ).order_by(IntendedParentStatusHistory.changed_at.desc()).all()
+    return (
+        db.query(IntendedParentStatusHistory)
+        .filter(IntendedParentStatusHistory.intended_parent_id == ip_id)
+        .order_by(IntendedParentStatusHistory.changed_at.desc())
+        .all()
+    )
 
 
 # =============================================================================
 # Archive / Restore
 # =============================================================================
+
 
 def archive_intended_parent(
     db: Session,
@@ -260,7 +271,7 @@ def archive_intended_parent(
     ip.archived_at = datetime.utcnow()
     ip.status = IntendedParentStatus.ARCHIVED.value  # Actually change the status
     ip.last_activity = datetime.utcnow()
-    
+
     # Record in history
     history = IntendedParentStatusHistory(
         intended_parent_id=ip.id,
@@ -282,19 +293,29 @@ def restore_intended_parent(
 ) -> IntendedParent:
     """Restore an archived intended parent. Restores to previous status before archive."""
     # Get the status before archiving from history
-    history = db.query(IntendedParentStatusHistory).filter(
-        IntendedParentStatusHistory.intended_parent_id == ip.id,
-        IntendedParentStatusHistory.new_status == IntendedParentStatus.ARCHIVED.value
-    ).order_by(IntendedParentStatusHistory.changed_at.desc()).first()
-    
+    history = (
+        db.query(IntendedParentStatusHistory)
+        .filter(
+            IntendedParentStatusHistory.intended_parent_id == ip.id,
+            IntendedParentStatusHistory.new_status
+            == IntendedParentStatus.ARCHIVED.value,
+        )
+        .order_by(IntendedParentStatusHistory.changed_at.desc())
+        .first()
+    )
+
     # Restore to previous status, or default to 'new' if not found
-    previous_status = history.old_status if history and history.old_status else IntendedParentStatus.NEW.value
-    
+    previous_status = (
+        history.old_status
+        if history and history.old_status
+        else IntendedParentStatus.NEW.value
+    )
+
     ip.is_archived = False
     ip.archived_at = None
     ip.status = previous_status
     ip.last_activity = datetime.utcnow()
-    
+
     history_entry = IntendedParentStatusHistory(
         intended_parent_id=ip.id,
         changed_by_user_id=user_id,
@@ -320,19 +341,22 @@ def delete_intended_parent(db: Session, ip: IntendedParent) -> None:
 # Stats
 # =============================================================================
 
+
 def get_ip_stats(db: Session, org_id: UUID) -> dict:
     """Get IP counts by status."""
-    results = db.query(
-        IntendedParent.status,
-        func.count(IntendedParent.id)
-    ).filter(
-        IntendedParent.organization_id == org_id,
-        IntendedParent.is_archived.is_(False),
-    ).group_by(IntendedParent.status).all()
-    
+    results = (
+        db.query(IntendedParent.status, func.count(IntendedParent.id))
+        .filter(
+            IntendedParent.organization_id == org_id,
+            IntendedParent.is_archived.is_(False),
+        )
+        .group_by(IntendedParent.status)
+        .all()
+    )
+
     by_status = {status: count for status, count in results}
     total = sum(by_status.values())
-    
+
     return {"total": total, "by_status": by_status}
 
 
@@ -340,10 +364,15 @@ def get_ip_stats(db: Session, org_id: UUID) -> dict:
 # Duplicate Check
 # =============================================================================
 
+
 def get_ip_by_email(db: Session, email: str, org_id: UUID) -> IntendedParent | None:
     """Check if an active IP with this email exists in the org."""
-    return db.query(IntendedParent).filter(
-        IntendedParent.organization_id == org_id,
-        IntendedParent.email == email.lower().strip(),
-        IntendedParent.is_archived.is_(False),
-    ).first()
+    return (
+        db.query(IntendedParent)
+        .filter(
+            IntendedParent.organization_id == org_id,
+            IntendedParent.email == email.lower().strip(),
+            IntendedParent.is_archived.is_(False),
+        )
+        .first()
+    )

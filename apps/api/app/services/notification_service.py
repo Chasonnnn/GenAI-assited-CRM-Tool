@@ -36,14 +36,18 @@ def get_user_settings(
 ) -> dict:
     """
     Get user notification settings.
-    
+
     Returns defaults (all ON) if no row exists.
     """
-    settings = db.query(UserNotificationSettings).filter(
-        UserNotificationSettings.user_id == user_id,
-        UserNotificationSettings.organization_id == org_id,
-    ).first()
-    
+    settings = (
+        db.query(UserNotificationSettings)
+        .filter(
+            UserNotificationSettings.user_id == user_id,
+            UserNotificationSettings.organization_id == org_id,
+        )
+        .first()
+    )
+
     if settings:
         return {
             "case_assigned": settings.case_assigned,
@@ -53,7 +57,7 @@ def get_user_settings(
             "task_reminders": settings.task_reminders,
             "appointments": settings.appointments,
         }
-    
+
     # Defaults (all ON)
     return {
         "case_assigned": True,
@@ -73,29 +77,33 @@ def update_user_settings(
 ) -> dict:
     """
     Update user notification settings.
-    
+
     Creates row if it doesn't exist.
     """
-    settings = db.query(UserNotificationSettings).filter(
-        UserNotificationSettings.user_id == user_id,
-        UserNotificationSettings.organization_id == org_id,
-    ).first()
-    
+    settings = (
+        db.query(UserNotificationSettings)
+        .filter(
+            UserNotificationSettings.user_id == user_id,
+            UserNotificationSettings.organization_id == org_id,
+        )
+        .first()
+    )
+
     if not settings:
         settings = UserNotificationSettings(
             user_id=user_id,
             organization_id=org_id,
         )
         db.add(settings)
-    
+
     # Update provided fields
     for key, value in updates.items():
         if hasattr(settings, key):
             setattr(settings, key, value)
-    
+
     db.commit()
     db.refresh(settings)
-    
+
     return {
         "case_assigned": settings.case_assigned,
         "case_status_changed": settings.case_status_changed,
@@ -136,7 +144,7 @@ def create_notification(
 ) -> Optional[Notification]:
     """
     Create a notification.
-    
+
     Dedupes by dedupe_key + org_id + user_id within a time window
     (or forever when dedupe_window_hours is None).
     """
@@ -148,13 +156,15 @@ def create_notification(
             Notification.user_id == user_id,
         )
         if dedupe_window_hours is not None:
-            window_start = datetime.now(timezone.utc) - timedelta(hours=dedupe_window_hours)
+            window_start = datetime.now(timezone.utc) - timedelta(
+                hours=dedupe_window_hours
+            )
             query = query.filter(Notification.created_at > window_start)
         existing = query.first()
-        
+
         if existing:
             return None  # Already notified
-    
+
     notification = Notification(
         organization_id=org_id,
         user_id=user_id,
@@ -189,14 +199,16 @@ def get_notifications(
         Notification.user_id == user_id,
         Notification.organization_id == org_id,
     )
-    
+
     if unread_only:
         query = query.filter(Notification.read_at.is_(None))
-    
+
     if notification_types:
         query = query.filter(Notification.type.in_(notification_types))
-    
-    return query.order_by(Notification.created_at.desc()).offset(offset).limit(limit).all()
+
+    return (
+        query.order_by(Notification.created_at.desc()).offset(offset).limit(limit).all()
+    )
 
 
 def get_unread_count(
@@ -205,11 +217,15 @@ def get_unread_count(
     org_id: UUID,
 ) -> int:
     """Get count of unread notifications."""
-    return db.query(Notification).filter(
-        Notification.user_id == user_id,
-        Notification.organization_id == org_id,
-        Notification.read_at.is_(None),
-    ).count()
+    return (
+        db.query(Notification)
+        .filter(
+            Notification.user_id == user_id,
+            Notification.organization_id == org_id,
+            Notification.read_at.is_(None),
+        )
+        .count()
+    )
 
 
 def mark_read(
@@ -219,19 +235,23 @@ def mark_read(
     org_id: UUID,
 ) -> Optional[Notification]:
     """Mark a notification as read (scoped by org for tenant isolation)."""
-    notification = db.query(Notification).filter(
-        Notification.id == notification_id,
-        Notification.user_id == user_id,
-        Notification.organization_id == org_id,
-    ).first()
-    
+    notification = (
+        db.query(Notification)
+        .filter(
+            Notification.id == notification_id,
+            Notification.user_id == user_id,
+            Notification.organization_id == org_id,
+        )
+        .first()
+    )
+
     if notification and not notification.read_at:
         notification.read_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(notification)
         unread_count = get_unread_count(db, user_id, org_id)
         _schedule_ws_send(_send_ws_count_update(user_id, unread_count))
-    
+
     return notification
 
 
@@ -241,11 +261,15 @@ def mark_all_read(
     org_id: UUID,
 ) -> int:
     """Mark all notifications as read. Returns count updated."""
-    count = db.query(Notification).filter(
-        Notification.user_id == user_id,
-        Notification.organization_id == org_id,
-        Notification.read_at.is_(None),
-    ).update({"read_at": datetime.now(timezone.utc)})
+    count = (
+        db.query(Notification)
+        .filter(
+            Notification.user_id == user_id,
+            Notification.organization_id == org_id,
+            Notification.read_at.is_(None),
+        )
+        .update({"read_at": datetime.now(timezone.utc)})
+    )
     db.commit()
     unread_count = get_unread_count(db, user_id, org_id)
     _schedule_ws_send(_send_ws_count_update(user_id, unread_count))
@@ -272,7 +296,9 @@ def _schedule_ws_send(coro: asyncio.Future) -> None:
     threading.Thread(target=_runner, daemon=True).start()
 
 
-async def _send_ws_updates(user_id: UUID, notification: Notification, unread_count: int) -> None:
+async def _send_ws_updates(
+    user_id: UUID, notification: Notification, unread_count: int
+) -> None:
     """Send realtime notification + unread count to websocket clients."""
     payload = {
         "id": str(notification.id),
@@ -285,22 +311,31 @@ async def _send_ws_updates(user_id: UUID, notification: Notification, unread_cou
         "created_at": notification.created_at.isoformat(),
     }
 
-    await manager.send_to_user(user_id, {
-        "type": "notification",
-        "data": payload,
-    })
-    await manager.send_to_user(user_id, {
-        "type": "count_update",
-        "data": {"count": unread_count},
-    })
+    await manager.send_to_user(
+        user_id,
+        {
+            "type": "notification",
+            "data": payload,
+        },
+    )
+    await manager.send_to_user(
+        user_id,
+        {
+            "type": "count_update",
+            "data": {"count": unread_count},
+        },
+    )
 
 
 async def _send_ws_count_update(user_id: UUID, unread_count: int) -> None:
     """Send unread count updates to websocket clients."""
-    await manager.send_to_user(user_id, {
-        "type": "count_update",
-        "data": {"count": unread_count},
-    })
+    await manager.send_to_user(
+        user_id,
+        {
+            "type": "count_update",
+            "data": {"count": unread_count},
+        },
+    )
 
 
 # =============================================================================
@@ -317,10 +352,10 @@ def notify_case_assigned(
     """Notify user when a case is assigned to them."""
     if not assignee_id:
         return
-    
+
     if not should_notify(db, assignee_id, case.organization_id, "case_assigned"):
         return
-    
+
     dedupe_key = f"case_assigned:{case.id}:{assignee_id}"
     create_notification(
         db=db,
@@ -345,19 +380,23 @@ def notify_case_status_changed(
 ) -> None:
     """Notify assignee and creator when case status changes."""
     recipients = set()
-    
+
     # Add owner if owned by user
-    if case.owner_type == OwnerType.USER.value and case.owner_id and case.owner_id != actor_id:
+    if (
+        case.owner_type == OwnerType.USER.value
+        and case.owner_id
+        and case.owner_id != actor_id
+    ):
         recipients.add(case.owner_id)
-    
+
     # Add creator (if different from assignee and actor)
     if case.created_by_user_id and case.created_by_user_id != actor_id:
         recipients.add(case.created_by_user_id)
-    
+
     for user_id in recipients:
         if not should_notify(db, user_id, case.organization_id, "case_status_changed"):
             continue
-        
+
         dedupe_key = f"case_status:{case.id}:{to_status}:{user_id}"
         create_notification(
             db=db,
@@ -378,15 +417,21 @@ def notify_case_handoff_ready(
 ) -> None:
     """Notify all case_manager+ when a case is ready for handoff."""
     # Get all case_manager+ in org
-    managers = db.query(Membership).filter(
-        Membership.organization_id == case.organization_id,
-        Membership.role.in_([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER]),
-    ).all()
-    
+    managers = (
+        db.query(Membership)
+        .filter(
+            Membership.organization_id == case.organization_id,
+            Membership.role.in_([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER]),
+        )
+        .all()
+    )
+
     for membership in managers:
-        if not should_notify(db, membership.user_id, case.organization_id, "case_handoff"):
+        if not should_notify(
+            db, membership.user_id, case.organization_id, "case_handoff"
+        ):
             continue
-        
+
         dedupe_key = f"case_handoff_ready:{case.id}:{membership.user_id}"
         create_notification(
             db=db,
@@ -409,10 +454,12 @@ def notify_case_handoff_accepted(
     """Notify case creator when handoff is accepted."""
     if not case.created_by_user_id:
         return
-    
-    if not should_notify(db, case.created_by_user_id, case.organization_id, "case_handoff"):
+
+    if not should_notify(
+        db, case.created_by_user_id, case.organization_id, "case_handoff"
+    ):
         return
-    
+
     dedupe_key = f"case_handoff_accepted:{case.id}:{case.created_by_user_id}"
     create_notification(
         db=db,
@@ -436,14 +483,16 @@ def notify_case_handoff_denied(
     """Notify case creator when handoff is denied."""
     if not case.created_by_user_id:
         return
-    
-    if not should_notify(db, case.created_by_user_id, case.organization_id, "case_handoff"):
+
+    if not should_notify(
+        db, case.created_by_user_id, case.organization_id, "case_handoff"
+    ):
         return
-    
+
     body = f"{actor_name} denied the handoff for case {case.full_name}"
     if reason:
         body += f": {reason}"
-    
+
     dedupe_key = f"case_handoff_denied:{case.id}:{case.created_by_user_id}"
     create_notification(
         db=db,
@@ -470,15 +519,15 @@ def notify_task_assigned(
     """Notify user when a task is assigned to them."""
     if not assignee_id:
         return
-    
+
     if not should_notify(db, assignee_id, org_id, "task_assigned"):
         return
-    
+
     title = f"Task assigned: {task_title[:50]}"
     body = f"{actor_name} assigned you a task"
     if case_number:
         body += f" for case #{case_number}"
-    
+
     dedupe_key = f"task_assigned:{task_id}:{assignee_id}"
     create_notification(
         db=db,
@@ -505,16 +554,16 @@ def notify_task_due_soon(
     """Notify user when a task is due soon (within 24h). One-time notification."""
     if not assignee_id:
         return
-    
+
     # Respect user settings for task reminders
     if not should_notify(db, assignee_id, org_id, "task_reminders"):
         return
-    
+
     title = f"Task due soon: {task_title[:50]}"
     body = f"Due: {due_date}"
     if case_number:
         body += f" (Case #{case_number})"
-    
+
     # One-time dedupe (no time bucket - dedupe forever)
     dedupe_key = f"task:{task_id}:due_soon"
     create_notification(
@@ -543,16 +592,16 @@ def notify_task_overdue(
     """Notify user when a task is overdue. One-time notification."""
     if not assignee_id:
         return
-    
+
     # Respect user settings for task reminders
     if not should_notify(db, assignee_id, org_id, "task_reminders"):
         return
-    
+
     title = f"Task overdue: {task_title[:50]}"
     body = f"Was due: {due_date}"
     if case_number:
         body += f" (Case #{case_number})"
-    
+
     # One-time dedupe (no time bucket - dedupe forever)
     dedupe_key = f"task:{task_id}:overdue"
     create_notification(
@@ -586,14 +635,14 @@ def notify_appointment_requested(
     """Notify staff when a new appointment is requested."""
     if not staff_user_id:
         return
-    
+
     # Respect user settings for appointments
     if not should_notify(db, staff_user_id, org_id, "appointments"):
         return
-    
+
     title = f"New appointment request: {appointment_type}"
     body = f"{client_name} requested {requested_time}"
-    
+
     dedupe_key = f"apt:{appointment_id}:requested"
     create_notification(
         db=db,
@@ -620,14 +669,14 @@ def notify_appointment_confirmed(
     """Notify staff when an appointment is confirmed."""
     if not staff_user_id:
         return
-    
+
     # Respect user settings for appointments
     if not should_notify(db, staff_user_id, org_id, "appointments"):
         return
-    
+
     title = f"Appointment confirmed: {appointment_type}"
     body = f"{confirmed_time} with {client_name}"
-    
+
     dedupe_key = f"apt:{appointment_id}:confirmed"
     create_notification(
         db=db,
@@ -654,14 +703,14 @@ def notify_appointment_cancelled(
     """Notify staff when an appointment is cancelled."""
     if not staff_user_id:
         return
-    
+
     # Respect user settings for appointments
     if not should_notify(db, staff_user_id, org_id, "appointments"):
         return
-    
+
     title = f"Appointment cancelled: {appointment_type}"
     body = f"{cancelled_time} with {client_name} was cancelled"
-    
+
     dedupe_key = f"apt:{appointment_id}:cancelled"
     create_notification(
         db=db,

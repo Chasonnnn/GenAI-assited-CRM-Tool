@@ -8,13 +8,15 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class EntityNoteCreate(BaseModel):
     """Schema for creating a note on any entity."""
+
     content: str = Field(..., min_length=1, max_length=50000)
 
 
 class EntityNoteRead(BaseModel):
     """Note response schema."""
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     organization_id: UUID
     entity_type: str
@@ -26,8 +28,9 @@ class EntityNoteRead(BaseModel):
 
 class EntityNoteListItem(BaseModel):
     """Minimal note for list view."""
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     author_id: UUID
     content: str
