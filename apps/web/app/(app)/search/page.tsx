@@ -10,31 +10,14 @@ import { Badge } from "@/components/ui/badge"
 import {
     Search,
     FileText,
-    User,
     Paperclip,
     Users,
     Loader2,
     AlertCircle,
     ArrowRight,
 } from "lucide-react"
-import { fetchJson } from "@/lib/api/fetch"
+import { globalSearch, type SearchResult, type SearchResponse } from "@/lib/api/search"
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
-
-interface SearchResult {
-    entity_type: "case" | "note" | "attachment" | "intended_parent"
-    entity_id: string
-    title: string
-    snippet: string
-    rank: number
-    case_id: string | null
-    case_name: string | null
-}
-
-interface SearchResponse {
-    query: string
-    total: number
-    results: SearchResult[]
-}
 
 const ENTITY_CONFIG = {
     case: {
@@ -75,7 +58,7 @@ export default function SearchPage() {
         isError,
     } = useQuery<SearchResponse>({
         queryKey: ["search", debouncedQuery],
-        queryFn: () => fetchJson(`/search?q=${encodeURIComponent(debouncedQuery)}&limit=50`),
+        queryFn: () => globalSearch({ q: debouncedQuery, limit: 50 }),
         enabled: debouncedQuery.length >= 2,
         staleTime: 30000,
     })
@@ -127,7 +110,7 @@ export default function SearchPage() {
                     </CardHeader>
                     <CardContent className="text-sm text-muted-foreground space-y-2">
                         <p>• Search by name, email, phone, or case number</p>
-                        <p>• Use quotes for exact phrases: "contract signed"</p>
+                        <p>• Use quotes for exact phrases: &quot;contract signed&quot;</p>
                         <p>• Results are ranked by relevance</p>
                     </CardContent>
                 </Card>
@@ -152,7 +135,7 @@ export default function SearchPage() {
             {/* No Results */}
             {results && results.total === 0 && debouncedQuery.length >= 2 && (
                 <div className="text-muted-foreground">
-                    No results found for "{debouncedQuery}"
+                    No results found for &quot;{debouncedQuery}&quot;
                 </div>
             )}
 
@@ -160,7 +143,7 @@ export default function SearchPage() {
             {results && results.total > 0 && (
                 <div className="space-y-4">
                     <div className="text-sm text-muted-foreground">
-                        {results.total} result{results.total !== 1 ? "s" : ""} for "{results.query}"
+                        {results.total} result{results.total !== 1 ? "s" : ""} for &quot;{results.query}&quot;
                     </div>
 
                     <div className="space-y-3 max-w-4xl">
