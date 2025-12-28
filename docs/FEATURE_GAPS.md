@@ -1,6 +1,6 @@
 # Feature Completeness Evaluation — Current State
 
-**Last Updated:** 2025-12-27 (Afternoon)  
+**Last Updated:** 2025-12-27 (Evening)  
 **Purpose:** Identify features that need development to be fully functional  
 **Test Coverage:** ✅ **350/350 tests passing** - Frontend: 83/83 (80 unit + 3 integration), Backend: 267/267
 
@@ -86,13 +86,11 @@
 |---------|-------------|--------|
 | **Document Signing** | DocuSign/HelloSign integration for contracts | 1 week |
 | **SMS Notifications** | Twilio integration for text alerts | 3-5 days |
-| **Calendar Sync (Two-way)** | Push appointments TO Google Calendar | 2-3 days |
 
 ### Medium Value
 
 | Feature | Description | Effort |
 |---------|-------------|--------|
-| **Advanced Search** | Full-text search across cases, notes, files | 2-3 days |
 | **Custom Fields** | User-defined fields on cases/IPs | 1 week |
 | **Reporting Builder** | Custom report generation UI | 1-2 weeks |
 
@@ -126,6 +124,26 @@
   - Separate integration test config
   - Real QueryClientProvider wrapper
   - 83 frontend tests (80 unit + 3 integration)
+
+---
+
+### Calendar Sync (Two-way) ✅ (2025-12-27)
+- Appointments pushed to Google Calendar when approved
+- Reschedules update the Google Calendar event
+- Cancellations delete the Google Calendar event
+- Two-phase commit: appointment saved first, then best-effort sync
+- Uses client timezone for event times
+- Handles missing/expired tokens gracefully
+
+---
+
+### Advanced Search ✅ (2025-12-27)
+- Full-text search across cases, notes, attachments, intended parents
+- PostgreSQL tsvector with GIN indexes
+- `simple` dictionary (no stemming) for names/emails
+- HTML tag stripping for notes
+- `GET /search` endpoint with filters and snippets
+- Org-scoped, permission-gated results
 
 ---
 

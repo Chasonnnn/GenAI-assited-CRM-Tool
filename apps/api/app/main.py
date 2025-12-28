@@ -44,6 +44,7 @@ from app.routers import (
     permissions,
     pipelines,
     queues,
+    search,
     settings as settings_router,
     tasks,
     templates,
@@ -214,6 +215,9 @@ app.include_router(tracking.router)
 
 # MFA (Multi-Factor Authentication)
 app.include_router(mfa.router, prefix="/mfa", tags=["mfa"])
+
+# Global Search
+app.include_router(search.router)
 
 # Dev router (ONLY mounted in dev mode)
 if settings.ENV == "dev":

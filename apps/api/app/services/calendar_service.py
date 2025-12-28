@@ -41,6 +41,14 @@ class CalendarEvent(TypedDict):
     is_all_day: bool
 
 
+class CalendarEventsResult(TypedDict):
+    """Calendar fetch result with connection state."""
+
+    connected: bool
+    events: list[CalendarEvent]
+    error: str | None
+
+
 # =============================================================================
 # Token Management
 # =============================================================================
@@ -56,7 +64,7 @@ async def get_google_access_token(
     Refreshes the token if expired.
     Returns None if no integration exists.
     """
-    return oauth_service.get_access_token(db, user_id, "gmail")
+    return await oauth_service.get_access_token_async(db, user_id, "gmail")
 
 
 # =============================================================================
@@ -229,22 +237,27 @@ async def get_user_calendar_events(
     time_min: datetime,
     time_max: datetime,
     calendar_id: str = "primary",
-) -> list[CalendarEvent]:
+) -> CalendarEventsResult:
     """
     Convenience wrapper to fetch calendar events for a user.
 
-    Returns empty list if Google is not connected.
+    Returns connection state + events for UI handling.
     """
+    integration = oauth_service.get_user_integration(db, user_id, "gmail")
+    if not integration:
+        return {"connected": False, "events": [], "error": "not_connected"}
+
     access_token = await get_google_access_token(db, user_id)
     if not access_token:
-        return []
+        return {"connected": False, "events": [], "error": "token_expired"}
 
-    return await get_google_events(
+    events = await get_google_events(
         access_token=access_token,
         calendar_id=calendar_id,
         time_min=time_min,
         time_max=time_max,
     )
+    return {"connected": True, "events": events, "error": None}
 
 
 # =============================================================================
@@ -261,6 +274,7 @@ async def create_google_event(
     description: str | None = None,
     location: str | None = None,
     attendee_emails: list[str] | None = None,
+    timezone_name: str = "UTC",
 ) -> CalendarEvent | None:
     """
     Create a Google Calendar event.
@@ -271,11 +285,11 @@ async def create_google_event(
         "summary": summary,
         "start": {
             "dateTime": start_time.isoformat(),
-            "timeZone": "UTC",
+            "timeZone": timezone_name,
         },
         "end": {
             "dateTime": end_time.isoformat(),
-            "timeZone": "UTC",
+            "timeZone": timezone_name,
         },
     }
 
@@ -431,11 +445,13 @@ async def create_appointment_event(
     client_email: str,
     description: str | None = None,
     location: str | None = None,
+    timezone_name: str = "UTC",
 ) -> CalendarEvent | None:
     """
     Create a calendar event for an appointment.
 
     Convenience wrapper that gets the token and creates the event.
+    Returns None if no Gmail integration or API failure.
     """
     access_token = await get_google_access_token(db, user_id)
     if not access_token:
@@ -450,6 +466,7 @@ async def create_appointment_event(
         description=description,
         location=location,
         attendee_emails=[client_email],
+        timezone_name=timezone_name,
     )
 
 

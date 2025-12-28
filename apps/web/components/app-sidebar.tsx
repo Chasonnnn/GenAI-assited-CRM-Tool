@@ -50,6 +50,7 @@ import {
     CalendarIcon,
     CalendarDays,
     HeartHandshake,
+    Search,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { NotificationBell } from "@/components/notification-bell"
@@ -82,6 +83,12 @@ const reportsNavigation = {
     title: "Reports",
     url: "/reports",
     icon: BarChart3,
+}
+
+const searchNavigation = {
+    title: "Search",
+    url: "/search",
+    icon: Search,
 }
 
 const aiNavigation = {
@@ -338,6 +345,18 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                     >
                                         <reportsNavigation.icon />
                                         <span>{reportsNavigation.title}</span>
+                                    </SidebarMenuButton>
+                                </Link>
+                            </SidebarMenuItem>
+                            {/* Search */}
+                            <SidebarMenuItem>
+                                <Link href={searchNavigation.url}>
+                                    <SidebarMenuButton
+                                        isActive={pathname === searchNavigation.url || pathname?.startsWith(searchNavigation.url + "/")}
+                                        tooltip={searchNavigation.title}
+                                    >
+                                        <searchNavigation.icon />
+                                        <span>{searchNavigation.title}</span>
                                     </SidebarMenuButton>
                                 </Link>
                             </SidebarMenuItem>

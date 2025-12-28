@@ -27,6 +27,12 @@ def _verify_dev_secret(x_dev_secret: str = Header(...)):
     Provides an extra layer of protection for dev endpoints
     beyond just the ENV check.
     """
+    if settings.ENV not in ("dev", "test"):
+        raise HTTPException(
+            status_code=403, detail="Dev endpoints are only available in dev/test."
+        )
+    if not settings.DEV_SECRET:
+        raise HTTPException(status_code=501, detail="DEV_SECRET not configured")
     if x_dev_secret != settings.DEV_SECRET:
         raise HTTPException(status_code=403, detail="Invalid dev secret")
 

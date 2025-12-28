@@ -14,7 +14,7 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
-from app.db.enums import CaseSource, OwnerType
+from app.db.enums import AuditEventType, CaseSource, OwnerType
 from app.schemas.auth import UserSession
 from app.schemas.case import (
     CaseAssign,
@@ -562,6 +562,7 @@ def create_case(
 @router.get("/{case_id}", response_model=CaseRead)
 def get_case(
     case_id: UUID,
+    request: Request,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
@@ -572,6 +573,19 @@ def get_case(
 
     # Access control: checks ownership + post-approval permission
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+
+    from app.services import audit_service
+
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.DATA_VIEW_CASE,
+        actor_user_id=session.user_id,
+        target_type="case",
+        target_id=case.id,
+        request=request,
+    )
+    db.commit()
 
     return _case_to_read(case, db)
 

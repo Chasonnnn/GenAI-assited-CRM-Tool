@@ -157,7 +157,7 @@ async def create_zoom_meeting(
 # ============================================================================
 
 
-def get_user_zoom_token(
+async def get_user_zoom_token(
     db: Session,
     user_id: uuid.UUID,
 ) -> str:
@@ -171,7 +171,7 @@ def get_user_zoom_token(
             "Zoom not connected. Please connect in Settings → Integrations."
         )
 
-    access_token = oauth_service.get_access_token(db, user_id, "zoom")
+    access_token = await oauth_service.get_access_token_async(db, user_id, "zoom")
     if not access_token:
         raise ValueError(
             "Zoom token expired or invalid. Please reconnect in Settings → Integrations."
@@ -209,7 +209,7 @@ async def schedule_zoom_meeting(
         CreateMeetingResult with meeting details and note/task IDs
     """
     # Get user's Zoom token
-    access_token = get_user_zoom_token(db, user_id)
+    access_token = await get_user_zoom_token(db, user_id)
 
     # Create the Zoom meeting
     meeting = await create_zoom_meeting(

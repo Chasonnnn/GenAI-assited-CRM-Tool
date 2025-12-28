@@ -5,7 +5,7 @@ Uses unified EntityNote model with entity_type='case'.
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.deps import (
@@ -18,6 +18,7 @@ from app.core.deps import (
 from app.core.policies import POLICIES
 from app.core.case_access import check_case_access
 from app.schemas.auth import UserSession
+from app.db.enums import AuditEventType
 from app.schemas.note import NoteCreate, NoteRead
 from app.services import case_service, note_service
 
@@ -29,6 +30,7 @@ router = APIRouter(
 @router.get("/cases/{case_id}/notes", response_model=list[NoteRead])
 def list_notes(
     case_id: UUID,
+    request: Request,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
@@ -42,6 +44,21 @@ def list_notes(
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
 
     notes = note_service.list_notes(db, session.org_id, "case", case_id)
+
+    from app.services import audit_service
+
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.DATA_VIEW_NOTE,
+        actor_user_id=session.user_id,
+        target_type="case",
+        target_id=case_id,
+        details={"notes_count": len(notes)},
+        request=request,
+    )
+    db.commit()
+
     return [note_service.to_note_read(n) for n in notes]
 
 

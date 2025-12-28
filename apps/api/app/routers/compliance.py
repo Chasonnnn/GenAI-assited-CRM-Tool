@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_roles
+from app.core.deps import get_db, require_csrf_header, require_roles
 from app.db.enums import Role
 from app.schemas.auth import UserSession
 from app.schemas.compliance import (
@@ -33,7 +33,11 @@ def list_policies(
     return compliance_service.list_retention_policies(db, session.org_id)
 
 
-@router.post("/policies", response_model=RetentionPolicyRead)
+@router.post(
+    "/policies",
+    response_model=RetentionPolicyRead,
+    dependencies=[Depends(require_csrf_header)],
+)
 def upsert_policy(
     payload: RetentionPolicyUpsert,
     db: Session = Depends(get_db),
@@ -62,7 +66,11 @@ def list_legal_holds(
     return compliance_service.list_legal_holds(db, session.org_id)
 
 
-@router.post("/legal-holds", response_model=LegalHoldRead)
+@router.post(
+    "/legal-holds",
+    response_model=LegalHoldRead,
+    dependencies=[Depends(require_csrf_header)],
+)
 def create_legal_hold(
     payload: LegalHoldCreate,
     db: Session = Depends(get_db),
@@ -79,7 +87,11 @@ def create_legal_hold(
     )
 
 
-@router.post("/legal-holds/{hold_id}/release", response_model=LegalHoldRead)
+@router.post(
+    "/legal-holds/{hold_id}/release",
+    response_model=LegalHoldRead,
+    dependencies=[Depends(require_csrf_header)],
+)
 def release_legal_hold(
     hold_id: UUID,
     db: Session = Depends(get_db),
@@ -122,7 +134,11 @@ def purge_preview(
     )
 
 
-@router.post("/purge-execute", response_model=PurgeExecuteResponse)
+@router.post(
+    "/purge-execute",
+    response_model=PurgeExecuteResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
 def purge_execute(
     db: Session = Depends(get_db),
     session: UserSession = Depends(require_roles([Role.DEVELOPER])),

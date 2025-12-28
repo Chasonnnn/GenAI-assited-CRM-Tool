@@ -14,6 +14,7 @@ import { useState, useMemo, useCallback, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
     Select,
     SelectContent,
@@ -40,6 +41,7 @@ import {
     LoaderIcon,
     LinkIcon,
     XIcon,
+    MailIcon,
 } from "lucide-react"
 import { useAppointments, useRescheduleAppointment, useGoogleCalendarEvents, useUpdateAppointmentLink } from "@/lib/hooks/use-appointments"
 import { useTasks } from "@/lib/hooks/use-tasks"
@@ -47,6 +49,7 @@ import { useCases } from "@/lib/hooks/use-cases"
 import { useIntendedParents } from "@/lib/hooks/use-intended-parents"
 import type { AppointmentListItem, GoogleCalendarEvent } from "@/lib/api/appointments"
 import type { TaskListItem } from "@/lib/api/tasks"
+import Link from "next/link"
 import {
     format,
     startOfMonth,
@@ -980,7 +983,9 @@ export function UnifiedCalendar({ taskFilter }: { taskFilter?: { my_tasks?: bool
         dateRange.date_end,
         userTimezone
     )
-    const googleEvents = googleEventsData || []
+    const googleEvents = googleEventsData?.events || []
+    const calendarConnected = googleEventsData?.connected ?? true
+    const calendarError = googleEventsData?.error ?? null
 
     const taskParams = {
         my_tasks: taskFilter?.my_tasks ? true : undefined,
@@ -1099,6 +1104,24 @@ export function UnifiedCalendar({ taskFilter }: { taskFilter?: { my_tasks?: bool
                     </div>
                 ) : (
                     <>
+                        {!calendarConnected && (
+                            <Alert className="mb-4 border-amber-500/60 bg-amber-50 text-amber-900">
+                                <MailIcon className="size-4" />
+                                <AlertTitle>Google Calendar not connected</AlertTitle>
+                                <AlertDescription>
+                                    {calendarError === "token_expired"
+                                        ? "Your Gmail token expired. Reconnect to show Google Calendar events."
+                                        : "Connect Gmail to show Google Calendar events alongside appointments."}
+                                </AlertDescription>
+                                <AlertAction>
+                                    <Link href="/settings/integrations">
+                                        <Button size="sm" variant="outline">
+                                            Reconnect
+                                        </Button>
+                                    </Link>
+                                </AlertAction>
+                            </Alert>
+                        )}
                         {viewType === "month" && (
                             <MonthView
                                 currentDate={currentDate}
