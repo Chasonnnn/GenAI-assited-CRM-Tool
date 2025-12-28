@@ -26,8 +26,10 @@ logger = logging.getLogger(__name__)
 # Schemas
 # ============================================================================
 
+
 class ProposedTask(BaseModel):
     """A task proposal extracted from schedule text."""
+
     title: str = Field(..., max_length=255)
     description: str | None = None
     due_date: date | None = None
@@ -35,7 +37,7 @@ class ProposedTask(BaseModel):
     task_type: TaskType = TaskType.OTHER
     confidence: float = Field(default=0.8, ge=0, le=1)
     dedupe_key: str = ""  # Generated hash for duplicate detection
-    
+
     def model_post_init(self, __context: Any) -> None:
         """Generate dedupe_key after initialization."""
         if not self.dedupe_key:
@@ -45,6 +47,7 @@ class ProposedTask(BaseModel):
 
 class ParseScheduleResult(BaseModel):
     """Result of parsing a schedule."""
+
     proposed_tasks: list[ProposedTask]
     warnings: list[str] = []
     assumed_timezone: str
@@ -94,6 +97,7 @@ Return JSON array of tasks."""
 # Main Parser Function
 # ============================================================================
 
+
 async def parse_schedule_text(
     db: Session,
     org_id: UUID,
@@ -102,18 +106,18 @@ async def parse_schedule_text(
 ) -> ParseScheduleResult:
     """
     Parse schedule text using AI and extract task proposals.
-    
+
     Args:
         db: Database session
         org_id: Organization ID for AI settings
         text: The pasted schedule text
         user_timezone: User's timezone (falls back to org timezone)
-        
+
     Returns:
         ParseScheduleResult with proposed tasks and metadata
     """
     from app.services import ai_settings_service
-    
+
     # Get organization timezone
     org = db.query(Organization).filter(Organization.id == org_id).first()
     timezone = user_timezone or (org.timezone if org else "UTC")
@@ -127,7 +131,7 @@ async def parse_schedule_text(
         timezone = "UTC"
         tzinfo = ZoneInfo("UTC")
     reference_date = datetime.now(tzinfo).date()
-    
+
     # Get AI settings
     ai_settings = ai_settings_service.get_ai_settings(db, org_id)
     if not ai_settings or not ai_settings.is_enabled:
@@ -151,15 +155,15 @@ async def parse_schedule_text(
             assumed_timezone=timezone,
             assumed_reference_date=reference_date,
         )
-    
+
     # Truncate text to prevent abuse (max 10000 chars)
     text = text[:10000]
-    
+
     # Log metadata only (no PII)
     logger.info(f"Parsing schedule: {len(text)} chars, org_id={org_id}")
-    
+
     proposed_tasks: list[ProposedTask] = []
-    
+
     try:
         # Decrypt API key
         try:
@@ -171,22 +175,24 @@ async def parse_schedule_text(
                 assumed_timezone=timezone,
                 assumed_reference_date=reference_date,
             )
-        
+
         # Get AI provider
         provider = get_provider(ai_settings.provider, api_key, ai_settings.model)
-        
+
         # Build messages
         messages = [
             ChatMessage(role="system", content=PARSE_SCHEDULE_SYSTEM_PROMPT),
             ChatMessage(role="user", content=_build_user_prompt(text, reference_date)),
         ]
-        
+
         # Call AI
-        response = await provider.chat(messages=messages, max_tokens=2000, temperature=0.3)
+        response = await provider.chat(
+            messages=messages, max_tokens=2000, temperature=0.3
+        )
         content = response.content
-        
+
         # Parse response - extract JSON from response (handle markdown code blocks)
-        json_match = re.search(r'\[[\s\S]*\]', content)
+        json_match = re.search(r"\[[\s\S]*\]", content)
         if not json_match:
             warnings.append("AI did not return valid JSON. Please try rephrasing.")
             return ParseScheduleResult(
@@ -195,10 +201,10 @@ async def parse_schedule_text(
                 assumed_timezone=timezone,
                 assumed_reference_date=reference_date,
             )
-        
+
         json_str = json_match.group()
         raw_tasks = json.loads(json_str)
-        
+
         # Convert to ProposedTask objects
         for raw_task in raw_tasks:
             try:
@@ -208,24 +214,30 @@ async def parse_schedule_text(
                     try:
                         due_date = date.fromisoformat(raw_task["due_date"])
                     except ValueError:
-                        warnings.append(f"Invalid date format for '{raw_task.get('title', 'unknown')}': {raw_task.get('due_date')}")
-                
+                        warnings.append(
+                            f"Invalid date format for '{raw_task.get('title', 'unknown')}': {raw_task.get('due_date')}"
+                        )
+
                 # Parse time
                 due_time = None
                 if raw_task.get("due_time"):
                     try:
                         due_time = time.fromisoformat(raw_task["due_time"])
                     except ValueError:
-                        warnings.append(f"Invalid time format for '{raw_task.get('title', 'unknown')}': {raw_task.get('due_time')}")
-                
+                        warnings.append(
+                            f"Invalid time format for '{raw_task.get('title', 'unknown')}': {raw_task.get('due_time')}"
+                        )
+
                 # Parse task type
                 task_type_str = raw_task.get("task_type", "other").lower()
                 try:
                     task_type = TaskType(task_type_str)
                 except ValueError:
                     task_type = TaskType.OTHER
-                    warnings.append(f"Unknown task type '{task_type_str}', using 'other'")
-                
+                    warnings.append(
+                        f"Unknown task type '{task_type_str}', using 'other'"
+                    )
+
                 proposed_task = ProposedTask(
                     title=raw_task.get("title", "Untitled Task")[:255],
                     description=raw_task.get("description"),
@@ -235,20 +247,20 @@ async def parse_schedule_text(
                     confidence=float(raw_task.get("confidence", 0.8)),
                 )
                 proposed_tasks.append(proposed_task)
-                
+
             except Exception as e:
                 logger.warning(f"Failed to parse task: {e}")
                 warnings.append(f"Failed to parse one task: {str(e)}")
-        
+
         logger.info(f"Parsed {len(proposed_tasks)} tasks, {len(warnings)} warnings")
-        
+
     except json.JSONDecodeError as e:
         logger.error(f"JSON decode error: {e}")
         warnings.append("AI response was not valid JSON. Please try again.")
     except Exception as e:
         logger.error(f"Schedule parsing error: {e}")
         warnings.append(f"Parsing error: {str(e)}")
-    
+
     return ParseScheduleResult(
         proposed_tasks=proposed_tasks,
         warnings=warnings,

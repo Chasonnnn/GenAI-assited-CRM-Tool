@@ -28,9 +28,9 @@ class TestTOTPGeneration:
         """Provisioning URI should have correct format for authenticator apps."""
         secret = "JBSWY3DPEHPK3PXP"  # Test secret
         email = "test@example.com"
-        
+
         uri = mfa_service.get_totp_provisioning_uri(secret, email)
-        
+
         assert uri.startswith("otpauth://totp/")
         assert "SurrogacyCRM" in uri  # Issuer
         assert "test%40example.com" in uri or "test@example.com" in uri  # Email
@@ -42,17 +42,17 @@ class TestTOTPVerification:
     def test_verify_valid_code(self):
         """Valid TOTP code should pass verification."""
         import pyotp
-        
+
         secret = "JBSWY3DPEHPK3PXP"
         totp = pyotp.TOTP(secret)
         current_code = totp.now()
-        
+
         assert mfa_service.verify_totp_code(secret, current_code) is True
 
     def test_verify_invalid_code(self):
         """Invalid TOTP code should fail verification."""
         secret = "JBSWY3DPEHPK3PXP"
-        
+
         assert mfa_service.verify_totp_code(secret, "000000") is False
         assert mfa_service.verify_totp_code(secret, "123456") is False
 
@@ -65,12 +65,12 @@ class TestTOTPVerification:
     def test_verify_code_with_spaces(self):
         """Code with spaces should be sanitized and verified."""
         import pyotp
-        
+
         secret = "JBSWY3DPEHPK3PXP"
         totp = pyotp.TOTP(secret)
         code = totp.now()
         code_with_spaces = f"{code[:3]} {code[3:]}"
-        
+
         assert mfa_service.verify_totp_code(secret, code_with_spaces) is True
 
 
@@ -105,7 +105,7 @@ class TestRecoveryCodes:
         code = "ABCD1234"
         hash1 = mfa_service.hash_recovery_code(code)
         hash2 = mfa_service.hash_recovery_code(code)
-        
+
         assert hash1 == hash2
         assert len(hash1) == 64  # SHA-256 hex digest
 
@@ -113,34 +113,34 @@ class TestRecoveryCodes:
         """Hashing should be case-insensitive."""
         hash1 = mfa_service.hash_recovery_code("ABCD1234")
         hash2 = mfa_service.hash_recovery_code("abcd1234")
-        
+
         assert hash1 == hash2
 
     def test_verify_recovery_code_valid(self):
         """Valid recovery code should be found in hashed list."""
         code = "ABCD1234"
         hashed = mfa_service.hash_recovery_codes([code, "EFGH5678"])
-        
+
         is_valid, index = mfa_service.verify_recovery_code(code, hashed)
-        
+
         assert is_valid is True
         assert index == 0
 
     def test_verify_recovery_code_invalid(self):
         """Invalid code should not be found."""
         hashed = mfa_service.hash_recovery_codes(["ABCD1234", "EFGH5678"])
-        
+
         is_valid, index = mfa_service.verify_recovery_code("XXXX9999", hashed)
-        
+
         assert is_valid is False
         assert index == -1
 
     def test_verify_recovery_code_case_insensitive(self):
         """Verification should work regardless of case."""
         hashed = mfa_service.hash_recovery_codes(["ABCD1234"])
-        
+
         is_valid, _ = mfa_service.verify_recovery_code("abcd1234", hashed)
-        
+
         assert is_valid is True
 
 
@@ -149,6 +149,7 @@ class TestMFAStatus:
 
     def test_is_mfa_required_always_true(self):
         """MFA should be required for all users currently."""
+
         # Create a mock user
         class MockUser:
             mfa_enabled = False
@@ -168,6 +169,7 @@ class TestMFAStatus:
 
     def test_has_mfa_setup_without_enrollment(self):
         """User without enrollment should not have MFA setup."""
+
         class MockUser:
             mfa_enabled = False
             totp_enabled_at = None

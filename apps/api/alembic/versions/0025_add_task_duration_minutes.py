@@ -25,4 +25,3 @@ def upgrade():
 
 def downgrade():
     op.drop_column("tasks", "duration_minutes")
-

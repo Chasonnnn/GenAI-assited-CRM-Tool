@@ -68,7 +68,9 @@ class TestAdminExports:
         assert "case_number" in response.text.splitlines()[0]
 
     @pytest.mark.asyncio
-    async def test_cases_export_csv_escapes_formula(self, authed_client, db, test_org, test_user, default_stage):
+    async def test_cases_export_csv_escapes_formula(
+        self, authed_client, db, test_org, test_user, default_stage
+    ):
         case = Case(
             id=uuid.uuid4(),
             case_number=str(uuid.uuid4().int)[-5:],

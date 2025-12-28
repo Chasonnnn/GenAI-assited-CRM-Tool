@@ -3,6 +3,7 @@
 Handles OAuth flows for Gmail, Zoom, and other third-party services.
 Stores encrypted tokens per-user.
 """
+
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -17,6 +18,7 @@ from app.core.config import settings
 from app.db.models import UserIntegration
 
 logger = logging.getLogger(__name__)
+
 
 def _now_utc() -> datetime:
     """Timezone-aware UTC timestamp."""
@@ -33,6 +35,7 @@ def _is_expired(expires_at: datetime) -> bool:
 # ============================================================================
 # Token Encryption
 # ============================================================================
+
 
 def _get_fernet() -> Fernet:
     """Get Fernet instance for encryption/decryption."""
@@ -58,23 +61,24 @@ def decrypt_token(encrypted_token: str) -> str:
 # Integration CRUD
 # ============================================================================
 
+
 def get_user_integration(
-    db: Session, 
-    user_id: uuid.UUID, 
-    integration_type: str
+    db: Session, user_id: uuid.UUID, integration_type: str
 ) -> UserIntegration | None:
     """Get a user's integration by type."""
-    return db.query(UserIntegration).filter(
-        UserIntegration.user_id == user_id,
-        UserIntegration.integration_type == integration_type,
-    ).first()
+    return (
+        db.query(UserIntegration)
+        .filter(
+            UserIntegration.user_id == user_id,
+            UserIntegration.integration_type == integration_type,
+        )
+        .first()
+    )
 
 
 def get_user_integrations(db: Session, user_id: uuid.UUID) -> list[UserIntegration]:
     """Get all integrations for a user."""
-    return db.query(UserIntegration).filter(
-        UserIntegration.user_id == user_id
-    ).all()
+    return db.query(UserIntegration).filter(UserIntegration.user_id == user_id).all()
 
 
 def save_integration(
@@ -88,11 +92,11 @@ def save_integration(
 ) -> UserIntegration:
     """Save or update a user's integration tokens."""
     integration = get_user_integration(db, user_id, integration_type)
-    
+
     token_expires_at = None
     if expires_in:
         token_expires_at = _now_utc() + timedelta(seconds=expires_in)
-    
+
     if integration:
         integration.access_token_encrypted = encrypt_token(access_token)
         if refresh_token:
@@ -106,12 +110,14 @@ def save_integration(
             user_id=user_id,
             integration_type=integration_type,
             access_token_encrypted=encrypt_token(access_token),
-            refresh_token_encrypted=encrypt_token(refresh_token) if refresh_token else None,
+            refresh_token_encrypted=encrypt_token(refresh_token)
+            if refresh_token
+            else None,
             token_expires_at=token_expires_at,
             account_email=account_email,
         )
         db.add(integration)
-    
+
     db.commit()
     db.refresh(integration)
     return integration
@@ -127,12 +133,14 @@ def delete_integration(db: Session, user_id: uuid.UUID, integration_type: str) -
     return False
 
 
-def get_access_token(db: Session, user_id: uuid.UUID, integration_type: str) -> str | None:
+def get_access_token(
+    db: Session, user_id: uuid.UUID, integration_type: str
+) -> str | None:
     """Get decrypted access token, refreshing if expired."""
     integration = get_user_integration(db, user_id, integration_type)
     if not integration:
         return None
-    
+
     # Check if token is expired and needs refresh
     if integration.token_expires_at and _is_expired(integration.token_expires_at):
         if integration.refresh_token_encrypted:
@@ -140,7 +148,7 @@ def get_access_token(db: Session, user_id: uuid.UUID, integration_type: str) -> 
             refreshed = refresh_token(db, integration, integration_type)
             if not refreshed:
                 return None
-    
+
     return decrypt_token(integration.access_token_encrypted)
 
 
@@ -244,11 +252,11 @@ def get_zoom_auth_url(redirect_uri: str, state: str) -> str:
 async def exchange_zoom_code(code: str, redirect_uri: str) -> dict[str, Any]:
     """Exchange Zoom authorization code for tokens."""
     import base64
-    
+
     credentials = base64.b64encode(
         f"{settings.ZOOM_CLIENT_ID}:{settings.ZOOM_CLIENT_SECRET}".encode()
     ).decode()
-    
+
     async with httpx.AsyncClient() as client:
         response = await client.post(
             ZOOM_TOKEN_URL,
@@ -280,12 +288,12 @@ async def get_zoom_user_info(access_token: str) -> dict[str, Any]:
 async def refresh_zoom_token(refresh_token: str) -> dict[str, Any] | None:
     """Refresh Zoom access token."""
     import base64
-    
+
     try:
         credentials = base64.b64encode(
             f"{settings.ZOOM_CLIENT_ID}:{settings.ZOOM_CLIENT_SECRET}".encode()
         ).decode()
-        
+
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 ZOOM_TOKEN_URL,
@@ -309,49 +317,55 @@ async def refresh_zoom_token(refresh_token: str) -> dict[str, Any] | None:
 # Generic Refresh
 # ============================================================================
 
-def refresh_token(db: Session, integration: UserIntegration, integration_type: str) -> bool:
+
+def refresh_token(
+    db: Session, integration: UserIntegration, integration_type: str
+) -> bool:
     """Refresh an expired token. Returns True if successful.
-    
+
     Note: This function creates a new event loop if needed, or uses an existing one.
     """
     import asyncio
-    
+
     if not integration.refresh_token_encrypted:
         return False
-    
+
     refresh = decrypt_token(integration.refresh_token_encrypted)
-    
+
     async def do_refresh():
         if integration_type == "gmail":
             return await refresh_gmail_token(refresh)
         elif integration_type == "zoom":
             return await refresh_zoom_token(refresh)
         return None
-    
+
     try:
         # Check if we're in an existing event loop
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
             # We're in an async context - create a task
             import concurrent.futures
+
             with concurrent.futures.ThreadPoolExecutor() as pool:
                 result = pool.submit(asyncio.run, do_refresh()).result()
         except RuntimeError:
             # No event loop running - safe to use asyncio.run
             result = asyncio.run(do_refresh())
-        
+
         if not result:
             return False
-        
+
         # Update tokens
         integration.access_token_encrypted = encrypt_token(result["access_token"])
         if "refresh_token" in result:
             integration.refresh_token_encrypted = encrypt_token(result["refresh_token"])
         if "expires_in" in result:
-            integration.token_expires_at = _now_utc() + timedelta(seconds=result["expires_in"])
+            integration.token_expires_at = _now_utc() + timedelta(
+                seconds=result["expires_in"]
+            )
         integration.updated_at = _now_utc()
         db.commit()
-        
+
         return True
     except Exception as e:
         logger.error(f"Token refresh failed for {integration_type}: {e}")

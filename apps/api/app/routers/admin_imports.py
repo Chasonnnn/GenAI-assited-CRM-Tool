@@ -18,7 +18,9 @@ router = APIRouter(prefix="/admin/imports", tags=["Admin - Imports"])
 
 def _ensure_dev_env() -> None:
     if settings.ENV not in ("dev", "test"):
-        raise HTTPException(status_code=403, detail="Admin imports are only available in dev mode.")
+        raise HTTPException(
+            status_code=403, detail="Admin imports are only available in dev mode."
+        )
 
 
 @router.post("/all")
@@ -43,8 +45,12 @@ async def import_all(
     cases_content = await cases_csv.read()
 
     try:
-        config_counts = admin_import_service.import_org_config_zip(db, session.org_id, config_content)
-        cases_count = admin_import_service.import_cases_csv(db, session.org_id, cases_content)
+        config_counts = admin_import_service.import_org_config_zip(
+            db, session.org_id, config_content
+        )
+        cases_count = admin_import_service.import_cases_csv(
+            db, session.org_id, cases_content
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -82,7 +88,9 @@ async def import_config(
     config_content = await config_zip.read()
 
     try:
-        config_counts = admin_import_service.import_org_config_zip(db, session.org_id, config_content)
+        config_counts = admin_import_service.import_org_config_zip(
+            db, session.org_id, config_content
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -116,7 +124,9 @@ async def import_cases(
     cases_content = await cases_csv.read()
 
     try:
-        cases_count = admin_import_service.import_cases_csv(db, session.org_id, cases_content)
+        cases_count = admin_import_service.import_cases_csv(
+            db, session.org_id, cases_content
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

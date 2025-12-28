@@ -4,6 +4,7 @@ System email template and workflow seeder.
 Provides idempotent seeding of default system templates and workflows
 that are pre-configured for common surrogacy agency use cases.
 """
+
 from uuid import UUID
 from sqlalchemy.orm import Session
 
@@ -29,7 +30,7 @@ A member of our team will be in touch within the next 24-48 hours to discuss the
 In the meantime, feel free to reply to this email if you have any questions.
 
 Warm regards,
-The {{org_name}} Team"""
+The {{org_name}} Team""",
     },
     {
         "system_key": "application_next_steps",
@@ -48,7 +49,7 @@ Here's what to expect:
 If you have any questions, please don't hesitate to reach out.
 
 Best regards,
-The {{org_name}} Team"""
+The {{org_name}} Team""",
     },
     {
         "system_key": "document_request",
@@ -68,7 +69,7 @@ You can reply to this email with the requested documents or upload them directly
 Thank you for your prompt attention to this matter.
 
 Best,
-The {{org_name}} Team"""
+The {{org_name}} Team""",
     },
     {
         "system_key": "appointment_reminder_24h",
@@ -86,7 +87,7 @@ This is a friendly reminder that you have an appointment scheduled for tomorrow:
 If you need to reschedule, please let us know as soon as possible.
 
 See you soon!
-The {{org_name}} Team"""
+The {{org_name}} Team""",
     },
     {
         "system_key": "appointment_confirmed",
@@ -104,7 +105,7 @@ Your appointment has been confirmed!
 We've added this to your calendar. If you need to make any changes, please contact us.
 
 Looking forward to meeting with you!
-The {{org_name}} Team"""
+The {{org_name}} Team""",
     },
     {
         "system_key": "status_update",
@@ -120,7 +121,7 @@ Your status has been updated to: {{new_status}}
 Our team is continuing to work on your file and will be in touch if we need anything from you.
 
 Best regards,
-The {{org_name}} Team"""
+The {{org_name}} Team""",
     },
     {
         "system_key": "match_proposal_intro",
@@ -136,7 +137,7 @@ Our team will be reaching out shortly to discuss this opportunity in detail and 
 We're thrilled to be at this stage of your journey!
 
 Warm regards,
-The {{org_name}} Team"""
+The {{org_name}} Team""",
     },
     {
         "system_key": "match_accepted",
@@ -152,7 +153,7 @@ This is a wonderful milestone in your surrogacy journey. Our team will be in tou
 Thank you for entrusting us with this important chapter of your life.
 
 With warmest congratulations,
-The {{org_name}} Team"""
+The {{org_name}} Team""",
     },
     {
         "system_key": "inactivity_followup",
@@ -168,7 +169,7 @@ Is there anything we can help you with? Whether you have questions or just need 
 Feel free to reply to this email or give us a call whenever you're ready.
 
 Best regards,
-The {{org_name}} Team"""
+The {{org_name}} Team""",
     },
     {
         "system_key": "contract_ready",
@@ -184,7 +185,7 @@ Please review the attached documents at your earliest convenience. If you have a
 Once you've reviewed everything, please let us know so we can proceed with the next steps.
 
 Best regards,
-The {{org_name}} Team"""
+The {{org_name}} Team""",
     },
 ]
 
@@ -203,12 +204,7 @@ SYSTEM_WORKFLOWS = [
         "trigger_config": {},
         "conditions": [],
         "condition_logic": "AND",
-        "actions": [
-            {
-                "action_type": "send_email",
-                "template_key": "welcome_new_lead"
-            }
-        ],
+        "actions": [{"action_type": "send_email", "template_key": "welcome_new_lead"}],
         "is_enabled": False,  # Disabled by default
         "requires_review": True,
         "recurrence_mode": "one_time",
@@ -223,10 +219,7 @@ SYSTEM_WORKFLOWS = [
         "conditions": [],
         "condition_logic": "AND",
         "actions": [
-            {
-                "action_type": "send_email",
-                "template_key": "application_next_steps"
-            }
+            {"action_type": "send_email", "template_key": "application_next_steps"}
         ],
         "is_enabled": False,
         "requires_review": True,
@@ -242,14 +235,8 @@ SYSTEM_WORKFLOWS = [
         "conditions": [],
         "condition_logic": "AND",
         "actions": [
-            {
-                "action_type": "send_email",
-                "template_key": "appointment_reminder_24h"
-            },
-            {
-                "action_type": "send_notification",
-                "title": "Appointment Reminder Sent"
-            }
+            {"action_type": "send_email", "template_key": "appointment_reminder_24h"},
+            {"action_type": "send_notification", "title": "Appointment Reminder Sent"},
         ],
         "is_enabled": False,
         "requires_review": True,
@@ -265,14 +252,8 @@ SYSTEM_WORKFLOWS = [
         "conditions": [],
         "condition_logic": "AND",
         "actions": [
-            {
-                "action_type": "send_notification",
-                "title": "New Match Proposed"
-            },
-            {
-                "action_type": "send_email",
-                "template_key": "match_proposal_intro"
-            }
+            {"action_type": "send_notification", "title": "New Match Proposed"},
+            {"action_type": "send_email", "template_key": "match_proposal_intro"},
         ],
         "is_enabled": False,
         "requires_review": True,
@@ -288,14 +269,8 @@ SYSTEM_WORKFLOWS = [
         "conditions": [],
         "condition_logic": "AND",
         "actions": [
-            {
-                "action_type": "send_email",
-                "template_key": "inactivity_followup"
-            },
-            {
-                "action_type": "create_task",
-                "title": "Follow up on inactive case"
-            }
+            {"action_type": "send_email", "template_key": "inactivity_followup"},
+            {"action_type": "create_task", "title": "Follow up on inactive case"},
         ],
         "is_enabled": False,
         "requires_review": True,
@@ -313,10 +288,7 @@ SYSTEM_WORKFLOWS = [
         ],
         "condition_logic": "AND",
         "actions": [
-            {
-                "action_type": "send_notification",
-                "title": "Weekly nurture email sent"
-            }
+            {"action_type": "send_notification", "title": "Weekly nurture email sent"}
         ],
         "is_enabled": False,
         "requires_review": True,
@@ -329,24 +301,28 @@ SYSTEM_WORKFLOWS = [
 def seed_system_templates(db: Session, org_id: UUID) -> int:
     """
     Seed system email templates for an organization.
-    
+
     Idempotent: skips templates where system_key already exists for this org.
-    
+
     Returns:
         Number of templates created.
     """
     created_count = 0
-    
+
     for template_data in SYSTEM_TEMPLATES:
         # Check if template already exists
-        existing = db.query(EmailTemplate).filter(
-            EmailTemplate.organization_id == org_id,
-            EmailTemplate.system_key == template_data["system_key"]
-        ).first()
-        
+        existing = (
+            db.query(EmailTemplate)
+            .filter(
+                EmailTemplate.organization_id == org_id,
+                EmailTemplate.system_key == template_data["system_key"],
+            )
+            .first()
+        )
+
         if existing:
             continue
-        
+
         # Create new template
         template = EmailTemplate(
             organization_id=org_id,
@@ -360,44 +336,54 @@ def seed_system_templates(db: Session, org_id: UUID) -> int:
         )
         db.add(template)
         created_count += 1
-    
+
     if created_count > 0:
         db.flush()
-    
+
     return created_count
 
 
-def seed_system_workflows(db: Session, org_id: UUID, user_id: UUID | None = None) -> int:
+def seed_system_workflows(
+    db: Session, org_id: UUID, user_id: UUID | None = None
+) -> int:
     """
     Seed system automation workflows for an organization.
-    
+
     Idempotent: skips workflows where system_key already exists for this org.
-    
+
     Note: Workflows are created disabled by default and require manager review.
-    
+
     Returns:
         Number of workflows created.
     """
     created_count = 0
-    
+
     # First, get the template IDs for this org
     template_keys = [t["system_key"] for t in SYSTEM_TEMPLATES]
-    templates = db.query(EmailTemplate).filter(
-        EmailTemplate.organization_id == org_id,
-        EmailTemplate.system_key.in_(template_keys)
-    ).all()
+    templates = (
+        db.query(EmailTemplate)
+        .filter(
+            EmailTemplate.organization_id == org_id,
+            EmailTemplate.system_key.in_(template_keys),
+        )
+        .all()
+    )
     template_map = {t.system_key: str(t.id) for t in templates}
-    
+
     for workflow_data in SYSTEM_WORKFLOWS:
         # Check if workflow already exists
-        existing = db.query(AutomationWorkflow).filter(
-            AutomationWorkflow.organization_id == org_id,
-            AutomationWorkflow.system_key == workflow_data["system_key"]
-        ).first()
-        
+        existing = (
+            db.query(AutomationWorkflow)
+            .filter(
+                AutomationWorkflow.organization_id == org_id,
+                AutomationWorkflow.system_key == workflow_data["system_key"],
+            )
+            .first()
+        )
+
         if existing:
             continue
-        
+
         # Resolve template_key to template_id in actions
         actions = []
         for action in workflow_data.get("actions", []):
@@ -407,7 +393,7 @@ def seed_system_workflows(db: Session, org_id: UUID, user_id: UUID | None = None
                 if template_key in template_map:
                     action_copy["template_id"] = template_map[template_key]
             actions.append(action_copy)
-        
+
         # Create new workflow
         workflow = AutomationWorkflow(
             organization_id=org_id,
@@ -430,23 +416,23 @@ def seed_system_workflows(db: Session, org_id: UUID, user_id: UUID | None = None
         )
         db.add(workflow)
         created_count += 1
-    
+
     if created_count > 0:
         db.flush()
-    
+
     return created_count
 
 
 def seed_all(db: Session, org_id: UUID, user_id: UUID | None = None) -> dict:
     """
     Seed all system templates and workflows for an organization.
-    
+
     Returns:
         Dictionary with counts of created items.
     """
     templates_created = seed_system_templates(db, org_id)
     workflows_created = seed_system_workflows(db, org_id, user_id)
-    
+
     return {
         "templates_created": templates_created,
         "workflows_created": workflows_created,

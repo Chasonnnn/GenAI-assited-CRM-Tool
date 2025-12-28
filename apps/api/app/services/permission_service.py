@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 # Permission Resolution
 # =============================================================================
 
+
 def get_effective_permissions(
     db: Session,
     org_id: uuid.UUID,
@@ -37,7 +38,7 @@ def get_effective_permissions(
 ) -> set[str]:
     """
     Get effective permissions for a user.
-    
+
     Resolution: role_defaults + grants - revokes
     Developer role always gets all permissions.
     Developer-only permissions are filtered out for non-developers.
@@ -45,43 +46,50 @@ def get_effective_permissions(
     # Developer always has everything
     if role == "developer":
         return set(PERMISSION_REGISTRY.keys())
-    
+
     # Start with role defaults
     effective = get_role_default_permissions(role).copy()
-    
+
     # Apply org-level role overrides (if any exist)
     from app.db.models import RolePermission
-    role_perms = db.query(RolePermission).filter(
-        RolePermission.organization_id == org_id,
-        RolePermission.role == role,
-    ).all()
-    
+
+    role_perms = (
+        db.query(RolePermission)
+        .filter(
+            RolePermission.organization_id == org_id,
+            RolePermission.role == role,
+        )
+        .all()
+    )
+
     for rp in role_perms:
         if rp.is_granted:
             effective.add(rp.permission)
         else:
             effective.discard(rp.permission)
-    
+
     # Apply user-level overrides
     from app.db.models import UserPermissionOverride
-    user_overrides = db.query(UserPermissionOverride).filter(
-        UserPermissionOverride.organization_id == org_id,
-        UserPermissionOverride.user_id == user_id,
-    ).all()
-    
+
+    user_overrides = (
+        db.query(UserPermissionOverride)
+        .filter(
+            UserPermissionOverride.organization_id == org_id,
+            UserPermissionOverride.user_id == user_id,
+        )
+        .all()
+    )
+
     for override in user_overrides:
         if override.override_type == "grant":
             effective.add(override.permission)
         elif override.override_type == "revoke":
             effective.discard(override.permission)
-    
+
     # Enforcement: Developer-only permissions cannot be granted to non-developers
     # This is the final filter to ensure security even if override was created
-    effective = {
-        p for p in effective 
-        if not is_developer_only(p)
-    }
-    
+    effective = {p for p in effective if not is_developer_only(p)}
+
     return effective
 
 
@@ -96,7 +104,7 @@ def check_permission(
     # Developer always has everything
     if role == "developer":
         return True
-    
+
     effective = get_effective_permissions(db, org_id, user_id, role)
     return permission in effective
 
@@ -105,17 +113,20 @@ def check_permission(
 # Permission Modification
 # =============================================================================
 
-def can_grant_permission(actor_permissions: set[str], target_permission: str, actor_role: str) -> bool:
+
+def can_grant_permission(
+    actor_permissions: set[str], target_permission: str, actor_role: str
+) -> bool:
     """
     Check if actor can grant a permission.
-    
+
     Rules:
     1. Developer-only permissions can only be granted by Developer role
     2. Actor must have the permission themselves to grant it
     """
     if is_developer_only(target_permission):
         return actor_role == "developer"
-    
+
     return target_permission in actor_permissions
 
 
@@ -129,42 +140,51 @@ def set_user_override(
 ) -> bool:
     """
     Set or remove a user permission override.
-    
+
     Args:
         override_type: 'grant' to add, 'revoke' to remove, None to delete override
-    
+
     Returns True if successful.
     """
     if not is_valid_permission(permission):
         raise ValueError(f"Invalid permission: {permission}")
-    
+
     # Block granting developer_only permissions to non-developers
     # These permissions should ONLY ever be held by Developer role
     if override_type == "grant" and is_developer_only(permission):
         from app.db.models import Membership
-        target_membership = db.query(Membership).filter(
-            Membership.organization_id == org_id,
-            Membership.user_id == target_user_id,
-        ).first()
+
+        target_membership = (
+            db.query(Membership)
+            .filter(
+                Membership.organization_id == org_id,
+                Membership.user_id == target_user_id,
+            )
+            .first()
+        )
         if target_membership and target_membership.role != "developer":
             raise ValueError(
                 f"Permission '{permission}' is developer-only and cannot be granted to non-developers"
             )
-    
+
     # Self-modification prevention
     if target_user_id == actor_user_id:
         raise ValueError("Cannot modify your own permissions")
-    
+
     from app.db.models import UserPermissionOverride
-    
-    existing = db.query(UserPermissionOverride).filter(
-        UserPermissionOverride.organization_id == org_id,
-        UserPermissionOverride.user_id == target_user_id,
-        UserPermissionOverride.permission == permission,
-    ).first()
-    
+
+    existing = (
+        db.query(UserPermissionOverride)
+        .filter(
+            UserPermissionOverride.organization_id == org_id,
+            UserPermissionOverride.user_id == target_user_id,
+            UserPermissionOverride.permission == permission,
+        )
+        .first()
+    )
+
     before_value = existing.override_type if existing else None
-    
+
     if override_type is None:
         # Remove override
         if existing:
@@ -174,13 +194,15 @@ def set_user_override(
             existing.override_type = override_type
             existing.updated_at = datetime.now(timezone.utc)
         else:
-            db.add(UserPermissionOverride(
-                organization_id=org_id,
-                user_id=target_user_id,
-                permission=permission,
-                override_type=override_type,
-            ))
-    
+            db.add(
+                UserPermissionOverride(
+                    organization_id=org_id,
+                    user_id=target_user_id,
+                    permission=permission,
+                    override_type=override_type,
+                )
+            )
+
     # Audit log
     audit_service.log_event(
         db=db,
@@ -195,7 +217,7 @@ def set_user_override(
             "after": override_type,
         },
     )
-    
+
     return True
 
 
@@ -209,33 +231,39 @@ def set_role_default(
 ) -> bool:
     """
     Set role default permission for an org.
-    
+
     Creates org-specific override of the global defaults.
     """
     if not is_valid_permission(permission):
         raise ValueError(f"Invalid permission: {permission}")
-    
+
     from app.db.models import RolePermission
-    
-    existing = db.query(RolePermission).filter(
-        RolePermission.organization_id == org_id,
-        RolePermission.role == role,
-        RolePermission.permission == permission,
-    ).first()
-    
+
+    existing = (
+        db.query(RolePermission)
+        .filter(
+            RolePermission.organization_id == org_id,
+            RolePermission.role == role,
+            RolePermission.permission == permission,
+        )
+        .first()
+    )
+
     before_value = existing.is_granted if existing else None
-    
+
     if existing:
         existing.is_granted = is_granted
         existing.updated_at = datetime.now(timezone.utc)
     else:
-        db.add(RolePermission(
-            organization_id=org_id,
-            role=role,
-            permission=permission,
-            is_granted=is_granted,
-        ))
-    
+        db.add(
+            RolePermission(
+                organization_id=org_id,
+                role=role,
+                permission=permission,
+                is_granted=is_granted,
+            )
+        )
+
     # Audit log
     audit_service.log_event(
         db=db,
@@ -251,7 +279,7 @@ def set_role_default(
             "after": is_granted,
         },
     )
-    
+
     return True
 
 
@@ -259,58 +287,65 @@ def set_role_default(
 # Seeding & Backfill
 # =============================================================================
 
+
 def seed_role_defaults(db: Session, org_id: uuid.UUID) -> int:
     """
     Seed role_permissions table with defaults for a new org.
-    
+
     Only creates rows for permissions explicitly in ROLE_DEFAULTS (granted).
     Missing permissions default to False at runtime.
-    
+
     Returns count of rows created.
     """
     from app.db.models import RolePermission
-    
+
     count = 0
     for role, permissions in ROLE_DEFAULTS.items():
         if role == "developer":
             continue  # Developer is immutable, no DB rows needed
-        
+
         for permission in permissions:
-            existing = db.query(RolePermission).filter(
-                RolePermission.organization_id == org_id,
-                RolePermission.role == role,
-                RolePermission.permission == permission,
-            ).first()
-            
+            existing = (
+                db.query(RolePermission)
+                .filter(
+                    RolePermission.organization_id == org_id,
+                    RolePermission.role == role,
+                    RolePermission.permission == permission,
+                )
+                .first()
+            )
+
             if not existing:
-                db.add(RolePermission(
-                    organization_id=org_id,
-                    role=role,
-                    permission=permission,
-                    is_granted=True,
-                ))
+                db.add(
+                    RolePermission(
+                        organization_id=org_id,
+                        role=role,
+                        permission=permission,
+                        is_granted=True,
+                    )
+                )
                 count += 1
-    
+
     return count
 
 
 def backfill_new_permissions(db: Session) -> int:
     """
     Backfill new permissions to all orgs.
-    
-    For each org, ensures role_permissions rows exist for all 
+
+    For each org, ensures role_permissions rows exist for all
     permissions in ROLE_DEFAULTS. Run on deploy or as nightly job.
-    
+
     Returns total rows created.
     """
     from app.db.models import Organization
-    
+
     orgs = db.query(Organization).all()
     total = 0
-    
+
     for org in orgs:
         total += seed_role_defaults(db, org.id)
-    
+
     db.commit()
     return total
 
@@ -319,6 +354,7 @@ def backfill_new_permissions(db: Session) -> int:
 # Member Management
 # =============================================================================
 
+
 def get_user_overrides(
     db: Session,
     org_id: uuid.UUID,
@@ -326,11 +362,15 @@ def get_user_overrides(
 ) -> list["UserPermissionOverride"]:
     """Get all permission overrides for a user."""
     from app.db.models import UserPermissionOverride
-    
-    return db.query(UserPermissionOverride).filter(
-        UserPermissionOverride.organization_id == org_id,
-        UserPermissionOverride.user_id == user_id,
-    ).all()
+
+    return (
+        db.query(UserPermissionOverride)
+        .filter(
+            UserPermissionOverride.organization_id == org_id,
+            UserPermissionOverride.user_id == user_id,
+        )
+        .all()
+    )
 
 
 def delete_user_overrides(
@@ -340,12 +380,16 @@ def delete_user_overrides(
 ) -> int:
     """Delete all permission overrides for a user (on removal from org)."""
     from app.db.models import UserPermissionOverride
-    
-    count = db.query(UserPermissionOverride).filter(
-        UserPermissionOverride.organization_id == org_id,
-        UserPermissionOverride.user_id == user_id,
-    ).delete()
-    
+
+    count = (
+        db.query(UserPermissionOverride)
+        .filter(
+            UserPermissionOverride.organization_id == org_id,
+            UserPermissionOverride.user_id == user_id,
+        )
+        .delete()
+    )
+
     return count
 
 
@@ -355,11 +399,14 @@ def list_members(
 ):
     """List memberships and users for an organization."""
     from app.db.models import Membership, User
-    return db.query(Membership, User).join(
-        User, Membership.user_id == User.id
-    ).filter(
-        Membership.organization_id == org_id
-    ).order_by(User.display_name, User.email).all()
+
+    return (
+        db.query(Membership, User)
+        .join(User, Membership.user_id == User.id)
+        .filter(Membership.organization_id == org_id)
+        .order_by(User.display_name, User.email)
+        .all()
+    )
 
 
 def get_member(
@@ -369,12 +416,16 @@ def get_member(
 ):
     """Get membership and user for a member id."""
     from app.db.models import Membership, User
-    return db.query(Membership, User).join(
-        User, Membership.user_id == User.id
-    ).filter(
-        Membership.id == member_id,
-        Membership.organization_id == org_id,
-    ).first()
+
+    return (
+        db.query(Membership, User)
+        .join(User, Membership.user_id == User.id)
+        .filter(
+            Membership.id == member_id,
+            Membership.organization_id == org_id,
+        )
+        .first()
+    )
 
 
 def get_membership_for_user(
@@ -384,10 +435,15 @@ def get_membership_for_user(
 ):
     """Get membership for user in org."""
     from app.db.models import Membership
-    return db.query(Membership).filter(
-        Membership.user_id == user_id,
-        Membership.organization_id == org_id,
-    ).first()
+
+    return (
+        db.query(Membership)
+        .filter(
+            Membership.user_id == user_id,
+            Membership.organization_id == org_id,
+        )
+        .first()
+    )
 
 
 def get_role_overrides(
@@ -397,10 +453,13 @@ def get_role_overrides(
 ) -> dict[str, bool]:
     """Get org-level role permission overrides."""
     from app.db.models import RolePermission
+
     return {
         rp.permission: rp.is_granted
-        for rp in db.query(RolePermission).filter(
+        for rp in db.query(RolePermission)
+        .filter(
             RolePermission.organization_id == org_id,
             RolePermission.role == role,
-        ).all()
+        )
+        .all()
     }

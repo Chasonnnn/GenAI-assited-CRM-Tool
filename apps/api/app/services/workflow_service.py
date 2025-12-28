@@ -7,20 +7,34 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.models import (
-    AutomationWorkflow, WorkflowExecution, UserWorkflowPreference,
-    User, Queue, EmailTemplate
+    AutomationWorkflow,
+    WorkflowExecution,
+    UserWorkflowPreference,
+    User,
+    Queue,
+    EmailTemplate,
 )
-from app.db.enums import (
-    WorkflowTriggerType, WorkflowExecutionStatus,
-    OwnerType
-)
+from app.db.enums import WorkflowTriggerType, WorkflowExecutionStatus, OwnerType
 from app.schemas.workflow import (
-    WorkflowCreate, WorkflowUpdate, WorkflowRead, WorkflowStats, WorkflowOptions,
-    ALLOWED_CONDITION_FIELDS, ALLOWED_UPDATE_FIELDS, ALLOWED_EMAIL_VARIABLES,
-    StatusChangeTriggerConfig, ScheduledTriggerConfig, TaskDueTriggerConfig,
-    InactivityTriggerConfig, CaseUpdatedTriggerConfig,
-    SendEmailActionConfig, CreateTaskActionConfig, AssignCaseActionConfig,
-    SendNotificationActionConfig, UpdateFieldActionConfig, AddNoteActionConfig,
+    WorkflowCreate,
+    WorkflowUpdate,
+    WorkflowRead,
+    WorkflowStats,
+    WorkflowOptions,
+    ALLOWED_CONDITION_FIELDS,
+    ALLOWED_UPDATE_FIELDS,
+    ALLOWED_EMAIL_VARIABLES,
+    StatusChangeTriggerConfig,
+    ScheduledTriggerConfig,
+    TaskDueTriggerConfig,
+    InactivityTriggerConfig,
+    CaseUpdatedTriggerConfig,
+    SendEmailActionConfig,
+    CreateTaskActionConfig,
+    AssignCaseActionConfig,
+    SendNotificationActionConfig,
+    UpdateFieldActionConfig,
+    AddNoteActionConfig,
 )
 from app.services import user_service
 
@@ -28,6 +42,7 @@ from app.services import user_service
 # =============================================================================
 # CRUD Operations
 # =============================================================================
+
 
 def create_workflow(
     db: Session,
@@ -38,11 +53,11 @@ def create_workflow(
     """Create a new workflow with validation."""
     # Validate trigger config
     _validate_trigger_config(data.trigger_type, data.trigger_config)
-    
+
     # Validate actions
     for action in data.actions:
         _validate_action_config(db, org_id, action)
-    
+
     workflow = AutomationWorkflow(
         organization_id=org_id,
         name=data.name,
@@ -57,7 +72,7 @@ def create_workflow(
         created_by_user_id=user_id,
         updated_by_user_id=user_id,
     )
-    
+
     db.add(workflow)
     db.commit()
     db.refresh(workflow)
@@ -73,13 +88,17 @@ def update_workflow(
     """Update an existing workflow with validation."""
     if data.trigger_type is not None or data.trigger_config is not None:
         trigger_type = data.trigger_type or WorkflowTriggerType(workflow.trigger_type)
-        trigger_config = data.trigger_config if data.trigger_config is not None else workflow.trigger_config
+        trigger_config = (
+            data.trigger_config
+            if data.trigger_config is not None
+            else workflow.trigger_config
+        )
         _validate_trigger_config(trigger_type, trigger_config)
-    
+
     if data.actions is not None:
         for action in data.actions:
             _validate_action_config(db, workflow.organization_id, action)
-    
+
     # Update fields
     if data.name is not None:
         workflow.name = data.name
@@ -99,10 +118,10 @@ def update_workflow(
         workflow.actions = data.actions
     if data.is_enabled is not None:
         workflow.is_enabled = data.is_enabled
-    
+
     workflow.updated_by_user_id = user_id
     workflow.updated_at = datetime.now(timezone.utc)
-    
+
     db.commit()
     db.refresh(workflow)
     return workflow
@@ -120,10 +139,14 @@ def get_workflow(
     org_id: UUID,
 ) -> AutomationWorkflow | None:
     """Get a workflow by ID, scoped to org."""
-    return db.query(AutomationWorkflow).filter(
-        AutomationWorkflow.id == workflow_id,
-        AutomationWorkflow.organization_id == org_id,
-    ).first()
+    return (
+        db.query(AutomationWorkflow)
+        .filter(
+            AutomationWorkflow.id == workflow_id,
+            AutomationWorkflow.organization_id == org_id,
+        )
+        .first()
+    )
 
 
 def list_workflows(
@@ -136,13 +159,13 @@ def list_workflows(
     query = db.query(AutomationWorkflow).filter(
         AutomationWorkflow.organization_id == org_id
     )
-    
+
     if enabled_only:
         query = query.filter(AutomationWorkflow.is_enabled.is_(True))
-    
+
     if trigger_type:
         query = query.filter(AutomationWorkflow.trigger_type == trigger_type.value)
-    
+
     return query.order_by(AutomationWorkflow.created_at.desc()).all()
 
 
@@ -170,13 +193,17 @@ def duplicate_workflow(
     base_name = f"{workflow.name} (Copy)"
     name = base_name
     counter = 1
-    while db.query(AutomationWorkflow).filter(
-        AutomationWorkflow.organization_id == workflow.organization_id,
-        AutomationWorkflow.name == name,
-    ).first():
+    while (
+        db.query(AutomationWorkflow)
+        .filter(
+            AutomationWorkflow.organization_id == workflow.organization_id,
+            AutomationWorkflow.name == name,
+        )
+        .first()
+    ):
         counter += 1
         name = f"{base_name} {counter}"
-    
+
     new_workflow = AutomationWorkflow(
         organization_id=workflow.organization_id,
         name=name,
@@ -191,7 +218,7 @@ def duplicate_workflow(
         created_by_user_id=user_id,
         updated_by_user_id=user_id,
     )
-    
+
     db.add(new_workflow)
     db.commit()
     db.refresh(new_workflow)
@@ -202,50 +229,69 @@ def duplicate_workflow(
 # Stats & Options
 # =============================================================================
 
+
 def get_workflow_stats(db: Session, org_id: UUID) -> WorkflowStats:
     """Get workflow statistics for dashboard."""
     now = datetime.now(timezone.utc)
     day_ago = now - timedelta(hours=24)
-    
+
     # Total and enabled counts
-    total = db.query(func.count(AutomationWorkflow.id)).filter(
-        AutomationWorkflow.organization_id == org_id
-    ).scalar() or 0
-    
-    enabled = db.query(func.count(AutomationWorkflow.id)).filter(
-        AutomationWorkflow.organization_id == org_id,
-        AutomationWorkflow.is_enabled.is_(True),
-    ).scalar() or 0
-    
+    total = (
+        db.query(func.count(AutomationWorkflow.id))
+        .filter(AutomationWorkflow.organization_id == org_id)
+        .scalar()
+        or 0
+    )
+
+    enabled = (
+        db.query(func.count(AutomationWorkflow.id))
+        .filter(
+            AutomationWorkflow.organization_id == org_id,
+            AutomationWorkflow.is_enabled.is_(True),
+        )
+        .scalar()
+        or 0
+    )
+
     # Executions in last 24h
-    executions_24h = db.query(func.count(WorkflowExecution.id)).filter(
-        WorkflowExecution.organization_id == org_id,
-        WorkflowExecution.executed_at >= day_ago,
-    ).scalar() or 0
-    
-    # Success rate
-    if executions_24h > 0:
-        successes = db.query(func.count(WorkflowExecution.id)).filter(
+    executions_24h = (
+        db.query(func.count(WorkflowExecution.id))
+        .filter(
             WorkflowExecution.organization_id == org_id,
             WorkflowExecution.executed_at >= day_ago,
-            WorkflowExecution.status == WorkflowExecutionStatus.SUCCESS.value,
-        ).scalar() or 0
+        )
+        .scalar()
+        or 0
+    )
+
+    # Success rate
+    if executions_24h > 0:
+        successes = (
+            db.query(func.count(WorkflowExecution.id))
+            .filter(
+                WorkflowExecution.organization_id == org_id,
+                WorkflowExecution.executed_at >= day_ago,
+                WorkflowExecution.status == WorkflowExecutionStatus.SUCCESS.value,
+            )
+            .scalar()
+            or 0
+        )
         success_rate = round(successes / executions_24h * 100, 1)
     else:
         success_rate = 0.0
-    
+
     # By trigger type
     by_trigger = {}
-    trigger_counts = db.query(
-        AutomationWorkflow.trigger_type,
-        func.count(AutomationWorkflow.id)
-    ).filter(
-        AutomationWorkflow.organization_id == org_id
-    ).group_by(AutomationWorkflow.trigger_type).all()
-    
+    trigger_counts = (
+        db.query(AutomationWorkflow.trigger_type, func.count(AutomationWorkflow.id))
+        .filter(AutomationWorkflow.organization_id == org_id)
+        .group_by(AutomationWorkflow.trigger_type)
+        .all()
+    )
+
     for trigger_type, count in trigger_counts:
         by_trigger[trigger_type] = count
-    
+
     return WorkflowStats(
         total_workflows=total,
         enabled_workflows=enabled,
@@ -259,33 +305,117 @@ def get_workflow_options(db: Session, org_id: UUID) -> WorkflowOptions:
     """Get available options for workflow builder UI."""
     # Trigger types with descriptions
     trigger_types = [
-        {"value": "case_created", "label": "Case Created", "description": "When a new case is created"},
-        {"value": "status_changed", "label": "Status Changed", "description": "When case status changes"},
-        {"value": "case_assigned", "label": "Case Assigned", "description": "When case is assigned"},
-        {"value": "case_updated", "label": "Case Updated", "description": "When specific fields change"},
-        {"value": "task_due", "label": "Task Due", "description": "Before a task is due"},
-        {"value": "task_overdue", "label": "Task Overdue", "description": "When a task becomes overdue"},
-        {"value": "scheduled", "label": "Scheduled", "description": "On a recurring schedule"},
-        {"value": "inactivity", "label": "Inactivity", "description": "When case has no activity"},
-        {"value": "match_proposed", "label": "Match Proposed", "description": "When a match is proposed"},
-        {"value": "match_accepted", "label": "Match Accepted", "description": "When a match is accepted"},
-        {"value": "match_rejected", "label": "Match Rejected", "description": "When a match is rejected"},
-        {"value": "appointment_scheduled", "label": "Appointment Scheduled", "description": "When an appointment is scheduled"},
-        {"value": "appointment_completed", "label": "Appointment Completed", "description": "When an appointment is completed"},
-        {"value": "note_added", "label": "Note Added", "description": "When a note is added to a case"},
-        {"value": "document_uploaded", "label": "Document Uploaded", "description": "When a document is uploaded"},
+        {
+            "value": "case_created",
+            "label": "Case Created",
+            "description": "When a new case is created",
+        },
+        {
+            "value": "status_changed",
+            "label": "Status Changed",
+            "description": "When case status changes",
+        },
+        {
+            "value": "case_assigned",
+            "label": "Case Assigned",
+            "description": "When case is assigned",
+        },
+        {
+            "value": "case_updated",
+            "label": "Case Updated",
+            "description": "When specific fields change",
+        },
+        {
+            "value": "task_due",
+            "label": "Task Due",
+            "description": "Before a task is due",
+        },
+        {
+            "value": "task_overdue",
+            "label": "Task Overdue",
+            "description": "When a task becomes overdue",
+        },
+        {
+            "value": "scheduled",
+            "label": "Scheduled",
+            "description": "On a recurring schedule",
+        },
+        {
+            "value": "inactivity",
+            "label": "Inactivity",
+            "description": "When case has no activity",
+        },
+        {
+            "value": "match_proposed",
+            "label": "Match Proposed",
+            "description": "When a match is proposed",
+        },
+        {
+            "value": "match_accepted",
+            "label": "Match Accepted",
+            "description": "When a match is accepted",
+        },
+        {
+            "value": "match_rejected",
+            "label": "Match Rejected",
+            "description": "When a match is rejected",
+        },
+        {
+            "value": "appointment_scheduled",
+            "label": "Appointment Scheduled",
+            "description": "When an appointment is scheduled",
+        },
+        {
+            "value": "appointment_completed",
+            "label": "Appointment Completed",
+            "description": "When an appointment is completed",
+        },
+        {
+            "value": "note_added",
+            "label": "Note Added",
+            "description": "When a note is added to a case",
+        },
+        {
+            "value": "document_uploaded",
+            "label": "Document Uploaded",
+            "description": "When a document is uploaded",
+        },
     ]
-    
+
     # Action types
     action_types = [
-        {"value": "send_email", "label": "Send Email", "description": "Send email using template"},
-        {"value": "create_task", "label": "Create Task", "description": "Create a task on the case"},
-        {"value": "assign_case", "label": "Assign Case", "description": "Assign to user or queue"},
-        {"value": "send_notification", "label": "Send Notification", "description": "Send in-app notification"},
-        {"value": "update_field", "label": "Update Field", "description": "Update a case field"},
-        {"value": "add_note", "label": "Add Note", "description": "Add a note to the case"},
+        {
+            "value": "send_email",
+            "label": "Send Email",
+            "description": "Send email using template",
+        },
+        {
+            "value": "create_task",
+            "label": "Create Task",
+            "description": "Create a task on the case",
+        },
+        {
+            "value": "assign_case",
+            "label": "Assign Case",
+            "description": "Assign to user or queue",
+        },
+        {
+            "value": "send_notification",
+            "label": "Send Notification",
+            "description": "Send in-app notification",
+        },
+        {
+            "value": "update_field",
+            "label": "Update Field",
+            "description": "Update a case field",
+        },
+        {
+            "value": "add_note",
+            "label": "Add Note",
+            "description": "Add a note to the case",
+        },
     ]
-    
+
     # Condition operators
     condition_operators = [
         {"value": "equals", "label": "Equals"},
@@ -299,38 +429,44 @@ def get_workflow_options(db: Session, org_id: UUID) -> WorkflowOptions:
         {"value": "greater_than", "label": "Greater than"},
         {"value": "less_than", "label": "Less than"},
     ]
-    
+
     # Email templates
-    templates = db.query(EmailTemplate).filter(
-        EmailTemplate.organization_id == org_id,
-        EmailTemplate.is_active.is_(True),
-    ).all()
+    templates = (
+        db.query(EmailTemplate)
+        .filter(
+            EmailTemplate.organization_id == org_id,
+            EmailTemplate.is_active.is_(True),
+        )
+        .all()
+    )
     email_templates = [{"id": str(t.id), "name": t.name} for t in templates]
-    
+
     # Users in org
     from app.db.models import Membership
-    memberships = db.query(Membership).filter(
-        Membership.organization_id == org_id
-    ).all()
+
+    memberships = (
+        db.query(Membership).filter(Membership.organization_id == org_id).all()
+    )
     users = []
     for m in memberships:
         user = db.query(User).filter(User.id == m.user_id).first()
         if user:
             users.append({"id": str(user.id), "display_name": user.display_name})
-    
+
     # Queues
     queues = db.query(Queue).filter(Queue.organization_id == org_id).all()
     queue_options = [{"id": str(q.id), "name": q.name} for q in queues]
-    
+
     # Stages (status options)
     from app.services import pipeline_service
+
     pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
     stages = pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
     statuses = [
         {"id": str(s.id), "value": s.slug, "label": s.label, "is_active": s.is_active}
         for s in stages
     ]
-    
+
     return WorkflowOptions(
         trigger_types=trigger_types,
         action_types=action_types,
@@ -349,6 +485,7 @@ def get_workflow_options(db: Session, org_id: UUID) -> WorkflowOptions:
 # Execution History
 # =============================================================================
 
+
 def list_executions(
     db: Session,
     workflow_id: UUID,
@@ -359,10 +496,15 @@ def list_executions(
     query = db.query(WorkflowExecution).filter(
         WorkflowExecution.workflow_id == workflow_id
     )
-    
+
     total = query.count()
-    items = query.order_by(WorkflowExecution.executed_at.desc()).offset(offset).limit(limit).all()
-    
+    items = (
+        query.order_by(WorkflowExecution.executed_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
     return items, total
 
 
@@ -376,47 +518,62 @@ def list_org_executions(
 ) -> tuple[list[dict], int]:
     """
     List all workflow executions for an organization with filters.
-    
+
     Returns executions with workflow name joined for display.
     """
-    query = db.query(WorkflowExecution).join(
-        AutomationWorkflow, WorkflowExecution.workflow_id == AutomationWorkflow.id
-    ).filter(
-        WorkflowExecution.organization_id == org_id
+    query = (
+        db.query(WorkflowExecution)
+        .join(
+            AutomationWorkflow, WorkflowExecution.workflow_id == AutomationWorkflow.id
+        )
+        .filter(WorkflowExecution.organization_id == org_id)
     )
-    
+
     if status:
         query = query.filter(WorkflowExecution.status == status)
-    
+
     if workflow_id:
         query = query.filter(WorkflowExecution.workflow_id == workflow_id)
-    
+
     total = query.count()
-    items = query.order_by(WorkflowExecution.executed_at.desc()).offset(offset).limit(limit).all()
-    
+    items = (
+        query.order_by(WorkflowExecution.executed_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
     # Build response with workflow name
     result = []
     for exec in items:
-        workflow = db.query(AutomationWorkflow).filter(
-            AutomationWorkflow.id == exec.workflow_id
-        ).first()
-        
-        result.append({
-            "id": exec.id,
-            "workflow_id": exec.workflow_id,
-            "workflow_name": workflow.name if workflow else "Unknown",
-            "status": exec.status,
-            "entity_type": exec.entity_type,
-            "entity_id": exec.entity_id,
-            "action_count": len(exec.actions_executed) if exec.actions_executed else 0,
-            "duration_ms": exec.duration_ms or 0,
-            "executed_at": exec.executed_at.isoformat(),
-            "trigger_event": exec.trigger_event,
-            "actions_executed": exec.actions_executed or [],
-            "error_message": exec.error_message,
-            "skip_reason": None if exec.matched_conditions else "Conditions not met",
-        })
-    
+        workflow = (
+            db.query(AutomationWorkflow)
+            .filter(AutomationWorkflow.id == exec.workflow_id)
+            .first()
+        )
+
+        result.append(
+            {
+                "id": exec.id,
+                "workflow_id": exec.workflow_id,
+                "workflow_name": workflow.name if workflow else "Unknown",
+                "status": exec.status,
+                "entity_type": exec.entity_type,
+                "entity_id": exec.entity_id,
+                "action_count": len(exec.actions_executed)
+                if exec.actions_executed
+                else 0,
+                "duration_ms": exec.duration_ms or 0,
+                "executed_at": exec.executed_at.isoformat(),
+                "trigger_event": exec.trigger_event,
+                "actions_executed": exec.actions_executed or [],
+                "error_message": exec.error_message,
+                "skip_reason": None
+                if exec.matched_conditions
+                else "Conditions not met",
+            }
+        )
+
     return result, total
 
 
@@ -424,38 +581,58 @@ def get_execution_stats(db: Session, org_id: UUID) -> dict:
     """Get execution statistics for the dashboard."""
     now = datetime.now(timezone.utc)
     day_ago = now - timedelta(hours=24)
-    
+
     # Total in last 24h
-    total_24h = db.query(func.count(WorkflowExecution.id)).filter(
-        WorkflowExecution.organization_id == org_id,
-        WorkflowExecution.executed_at >= day_ago,
-    ).scalar() or 0
-    
-    # Failed in last 24h
-    failed_24h = db.query(func.count(WorkflowExecution.id)).filter(
-        WorkflowExecution.organization_id == org_id,
-        WorkflowExecution.executed_at >= day_ago,
-        WorkflowExecution.status == WorkflowExecutionStatus.FAILED.value,
-    ).scalar() or 0
-    
-    # Success rate
-    if total_24h > 0:
-        successes = db.query(func.count(WorkflowExecution.id)).filter(
+    total_24h = (
+        db.query(func.count(WorkflowExecution.id))
+        .filter(
             WorkflowExecution.organization_id == org_id,
             WorkflowExecution.executed_at >= day_ago,
-            WorkflowExecution.status == WorkflowExecutionStatus.SUCCESS.value,
-        ).scalar() or 0
+        )
+        .scalar()
+        or 0
+    )
+
+    # Failed in last 24h
+    failed_24h = (
+        db.query(func.count(WorkflowExecution.id))
+        .filter(
+            WorkflowExecution.organization_id == org_id,
+            WorkflowExecution.executed_at >= day_ago,
+            WorkflowExecution.status == WorkflowExecutionStatus.FAILED.value,
+        )
+        .scalar()
+        or 0
+    )
+
+    # Success rate
+    if total_24h > 0:
+        successes = (
+            db.query(func.count(WorkflowExecution.id))
+            .filter(
+                WorkflowExecution.organization_id == org_id,
+                WorkflowExecution.executed_at >= day_ago,
+                WorkflowExecution.status == WorkflowExecutionStatus.SUCCESS.value,
+            )
+            .scalar()
+            or 0
+        )
         success_rate = round(successes / total_24h * 100, 1)
     else:
         success_rate = 0.0
-    
+
     # Average duration
-    avg_duration = db.query(func.avg(WorkflowExecution.duration_ms)).filter(
-        WorkflowExecution.organization_id == org_id,
-        WorkflowExecution.executed_at >= day_ago,
-        WorkflowExecution.duration_ms.isnot(None),
-    ).scalar() or 0
-    
+    avg_duration = (
+        db.query(func.avg(WorkflowExecution.duration_ms))
+        .filter(
+            WorkflowExecution.organization_id == org_id,
+            WorkflowExecution.executed_at >= day_ago,
+            WorkflowExecution.duration_ms.isnot(None),
+        )
+        .scalar()
+        or 0
+    )
+
     return {
         "total_24h": total_24h,
         "failed_24h": failed_24h,
@@ -468,18 +645,22 @@ def get_execution_stats(db: Session, org_id: UUID) -> dict:
 # User Preferences
 # =============================================================================
 
+
 def get_user_preferences(
     db: Session,
     user_id: UUID,
     org_id: UUID,
 ) -> list[UserWorkflowPreference]:
     """Get user's workflow preferences."""
-    return db.query(UserWorkflowPreference).join(
-        AutomationWorkflow
-    ).filter(
-        UserWorkflowPreference.user_id == user_id,
-        AutomationWorkflow.organization_id == org_id,
-    ).all()
+    return (
+        db.query(UserWorkflowPreference)
+        .join(AutomationWorkflow)
+        .filter(
+            UserWorkflowPreference.user_id == user_id,
+            AutomationWorkflow.organization_id == org_id,
+        )
+        .all()
+    )
 
 
 def update_user_preference(
@@ -489,11 +670,15 @@ def update_user_preference(
     is_opted_out: bool,
 ) -> UserWorkflowPreference:
     """Update user's preference for a workflow."""
-    pref = db.query(UserWorkflowPreference).filter(
-        UserWorkflowPreference.user_id == user_id,
-        UserWorkflowPreference.workflow_id == workflow_id,
-    ).first()
-    
+    pref = (
+        db.query(UserWorkflowPreference)
+        .filter(
+            UserWorkflowPreference.user_id == user_id,
+            UserWorkflowPreference.workflow_id == workflow_id,
+        )
+        .first()
+    )
+
     if pref:
         pref.is_opted_out = is_opted_out
     else:
@@ -503,7 +688,7 @@ def update_user_preference(
             is_opted_out=is_opted_out,
         )
         db.add(pref)
-    
+
     db.commit()
     db.refresh(pref)
     return pref
@@ -515,11 +700,15 @@ def is_user_opted_out(
     workflow_id: UUID,
 ) -> bool:
     """Check if user has opted out of a workflow."""
-    pref = db.query(UserWorkflowPreference).filter(
-        UserWorkflowPreference.user_id == user_id,
-        UserWorkflowPreference.workflow_id == workflow_id,
-    ).first()
-    
+    pref = (
+        db.query(UserWorkflowPreference)
+        .filter(
+            UserWorkflowPreference.user_id == user_id,
+            UserWorkflowPreference.workflow_id == workflow_id,
+        )
+        .first()
+    )
+
     return pref.is_opted_out if pref else False
 
 
@@ -562,6 +751,7 @@ def to_workflow_read(db: Session, workflow: AutomationWorkflow) -> WorkflowRead:
 # Validation Helpers
 # =============================================================================
 
+
 def _validate_trigger_config(trigger_type: WorkflowTriggerType, config: dict) -> None:
     """Validate trigger config matches the trigger type schema."""
     validators = {
@@ -571,7 +761,7 @@ def _validate_trigger_config(trigger_type: WorkflowTriggerType, config: dict) ->
         WorkflowTriggerType.INACTIVITY: InactivityTriggerConfig,
         WorkflowTriggerType.CASE_UPDATED: CaseUpdatedTriggerConfig,
     }
-    
+
     validator = validators.get(trigger_type)
     if validator:
         validator.model_validate(config)
@@ -580,66 +770,91 @@ def _validate_trigger_config(trigger_type: WorkflowTriggerType, config: dict) ->
 def _validate_action_config(db: Session, org_id: UUID, action: dict) -> None:
     """Validate action config and referenced entities exist in org."""
     action_type = action.get("action_type")
-    
+
     if action_type == "send_email":
         config = SendEmailActionConfig.model_validate(action)
         # Verify template exists in org
-        template = db.query(EmailTemplate).filter(
-            EmailTemplate.id == config.template_id,
-            EmailTemplate.organization_id == org_id,
-        ).first()
+        template = (
+            db.query(EmailTemplate)
+            .filter(
+                EmailTemplate.id == config.template_id,
+                EmailTemplate.organization_id == org_id,
+            )
+            .first()
+        )
         if not template:
-            raise ValueError(f"Email template {config.template_id} not found in organization")
-    
+            raise ValueError(
+                f"Email template {config.template_id} not found in organization"
+            )
+
     elif action_type == "create_task":
         config = CreateTaskActionConfig.model_validate(action)
         # If assignee is UUID, verify user exists in org
         if isinstance(config.assignee, UUID):
             from app.db.models import Membership
-            membership = db.query(Membership).filter(
-                Membership.user_id == config.assignee,
-                Membership.organization_id == org_id,
-            ).first()
+
+            membership = (
+                db.query(Membership)
+                .filter(
+                    Membership.user_id == config.assignee,
+                    Membership.organization_id == org_id,
+                )
+                .first()
+            )
             if not membership:
                 raise ValueError(f"User {config.assignee} not found in organization")
-    
+
     elif action_type == "assign_case":
         config = AssignCaseActionConfig.model_validate(action)
         # Verify owner exists in org
         if config.owner_type == OwnerType.USER:
             from app.db.models import Membership
-            membership = db.query(Membership).filter(
-                Membership.user_id == config.owner_id,
-                Membership.organization_id == org_id,
-            ).first()
+
+            membership = (
+                db.query(Membership)
+                .filter(
+                    Membership.user_id == config.owner_id,
+                    Membership.organization_id == org_id,
+                )
+                .first()
+            )
             if not membership:
                 raise ValueError(f"User {config.owner_id} not found in organization")
         elif config.owner_type == OwnerType.QUEUE:
-            queue = db.query(Queue).filter(
-                Queue.id == config.owner_id,
-                Queue.organization_id == org_id,
-            ).first()
+            queue = (
+                db.query(Queue)
+                .filter(
+                    Queue.id == config.owner_id,
+                    Queue.organization_id == org_id,
+                )
+                .first()
+            )
             if not queue:
                 raise ValueError(f"Queue {config.owner_id} not found in organization")
-    
+
     elif action_type == "send_notification":
         config = SendNotificationActionConfig.model_validate(action)
         # If recipients is list of UUIDs, verify all exist
         if isinstance(config.recipients, list):
             from app.db.models import Membership
+
             for user_id in config.recipients:
-                membership = db.query(Membership).filter(
-                    Membership.user_id == user_id,
-                    Membership.organization_id == org_id,
-                ).first()
+                membership = (
+                    db.query(Membership)
+                    .filter(
+                        Membership.user_id == user_id,
+                        Membership.organization_id == org_id,
+                    )
+                    .first()
+                )
                 if not membership:
                     raise ValueError(f"User {user_id} not found in organization")
-    
+
     elif action_type == "update_field":
         UpdateFieldActionConfig.model_validate(action)
-    
+
     elif action_type == "add_note":
         AddNoteActionConfig.model_validate(action)
-    
+
     else:
         raise ValueError(f"Unknown action type: {action_type}")

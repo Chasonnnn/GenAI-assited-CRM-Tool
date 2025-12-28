@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 class TemplateBase(BaseModel):
     """Base template fields."""
+
     name: str = Field(max_length=100)
     description: str | None = None
     icon: str = Field(default="template", max_length=50)
@@ -16,6 +17,7 @@ class TemplateBase(BaseModel):
 
 class TemplateCreate(TemplateBase):
     """Schema for creating a template from workflow config."""
+
     trigger_type: str
     trigger_config: dict = Field(default_factory=dict)
     conditions: list[dict] = Field(default_factory=list)
@@ -25,6 +27,7 @@ class TemplateCreate(TemplateBase):
 
 class TemplateFromWorkflow(BaseModel):
     """Schema for creating a template from an existing workflow."""
+
     workflow_id: UUID
     name: str = Field(max_length=100)
     description: str | None = None
@@ -33,6 +36,7 @@ class TemplateFromWorkflow(BaseModel):
 
 class TemplateRead(TemplateBase):
     """Schema for reading a template."""
+
     id: UUID
     trigger_type: str
     trigger_config: dict
@@ -44,12 +48,13 @@ class TemplateRead(TemplateBase):
     usage_count: int
     created_by_name: str | None = None
     created_at: datetime
-    
+
     model_config = {"from_attributes": True}
 
 
 class TemplateListItem(BaseModel):
     """Schema for template list item."""
+
     id: UUID
     name: str
     description: str | None
@@ -59,12 +64,13 @@ class TemplateListItem(BaseModel):
     is_global: bool
     usage_count: int
     created_at: datetime
-    
+
     model_config = {"from_attributes": True}
 
 
 class UseTemplateRequest(BaseModel):
     """Request to create a workflow from a template."""
+
     name: str = Field(max_length=100)
     description: str | None = None
     is_enabled: bool = True

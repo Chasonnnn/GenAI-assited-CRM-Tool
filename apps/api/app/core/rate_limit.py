@@ -18,6 +18,7 @@ else:
     # Try Redis, fall back to memory if connection fails
     try:
         import redis
+
         # Test connection upfront
         r = redis.from_url(REDIS_URL, socket_connect_timeout=1)
         r.ping()

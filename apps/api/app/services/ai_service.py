@@ -14,11 +14,16 @@ def list_conversations_for_entity(
     entity_id: UUID,
 ) -> list[AIConversation]:
     """List conversations for an entity (org-scoped)."""
-    return db.query(AIConversation).filter(
-        AIConversation.organization_id == org_id,
-        AIConversation.entity_type == entity_type,
-        AIConversation.entity_id == entity_id,
-    ).order_by(AIConversation.updated_at.desc()).all()
+    return (
+        db.query(AIConversation)
+        .filter(
+            AIConversation.organization_id == org_id,
+            AIConversation.entity_type == entity_type,
+            AIConversation.entity_id == entity_id,
+        )
+        .order_by(AIConversation.updated_at.desc())
+        .all()
+    )
 
 
 def get_action_approval(db: Session, approval_id: UUID) -> AIActionApproval | None:
@@ -61,14 +66,15 @@ def list_pending_actions(
     entity_id: UUID | None = None,
 ) -> list[AIActionApproval]:
     """List pending AI approvals for a user."""
-    query = db.query(AIActionApproval).join(
-        AIMessage, AIActionApproval.message_id == AIMessage.id
-    ).join(
-        AIConversation, AIMessage.conversation_id == AIConversation.id
-    ).filter(
-        AIConversation.user_id == user_id,
-        AIConversation.organization_id == org_id,
-        AIActionApproval.status == "pending",
+    query = (
+        db.query(AIActionApproval)
+        .join(AIMessage, AIActionApproval.message_id == AIMessage.id)
+        .join(AIConversation, AIMessage.conversation_id == AIConversation.id)
+        .filter(
+            AIConversation.user_id == user_id,
+            AIConversation.organization_id == org_id,
+            AIActionApproval.status == "pending",
+        )
     )
 
     if entity_type:

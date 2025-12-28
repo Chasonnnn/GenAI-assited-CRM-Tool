@@ -94,27 +94,41 @@ def _load_json(archive: zipfile.ZipFile, name: str, default: Any) -> Any:
 def _ensure_empty_org(db: Session, org_id: UUID) -> None:
     checks = {
         "cases": db.query(Case).filter(Case.organization_id == org_id).count(),
-        "pipelines": db.query(Pipeline).filter(Pipeline.organization_id == org_id).count(),
-        "pipeline_stages": db.query(PipelineStage).join(
-            Pipeline, PipelineStage.pipeline_id == Pipeline.id
-        ).filter(Pipeline.organization_id == org_id).count(),
-        "workflows": db.query(AutomationWorkflow).filter(AutomationWorkflow.organization_id == org_id).count(),
-        "email_templates": db.query(EmailTemplate).filter(EmailTemplate.organization_id == org_id).count(),
-        "meta_leads": db.query(MetaLead).filter(MetaLead.organization_id == org_id).count(),
+        "pipelines": db.query(Pipeline)
+        .filter(Pipeline.organization_id == org_id)
+        .count(),
+        "pipeline_stages": db.query(PipelineStage)
+        .join(Pipeline, PipelineStage.pipeline_id == Pipeline.id)
+        .filter(Pipeline.organization_id == org_id)
+        .count(),
+        "workflows": db.query(AutomationWorkflow)
+        .filter(AutomationWorkflow.organization_id == org_id)
+        .count(),
+        "email_templates": db.query(EmailTemplate)
+        .filter(EmailTemplate.organization_id == org_id)
+        .count(),
+        "meta_leads": db.query(MetaLead)
+        .filter(MetaLead.organization_id == org_id)
+        .count(),
         "queues": db.query(Queue).filter(Queue.organization_id == org_id).count(),
-        "queue_members": db.query(QueueMember).join(
-            Queue, QueueMember.queue_id == Queue.id
-        ).filter(Queue.organization_id == org_id).count(),
-        "notification_settings": db.query(UserNotificationSettings).filter(
-            UserNotificationSettings.organization_id == org_id
-        ).count(),
-        "integrations": db.query(UserIntegration).join(
-            User, UserIntegration.user_id == User.id
-        ).join(
-            Membership, Membership.user_id == User.id
-        ).filter(Membership.organization_id == org_id).count(),
-        "ai_settings": db.query(AISettings).filter(AISettings.organization_id == org_id).count(),
-        "meta_pages": db.query(MetaPageMapping).filter(MetaPageMapping.organization_id == org_id).count(),
+        "queue_members": db.query(QueueMember)
+        .join(Queue, QueueMember.queue_id == Queue.id)
+        .filter(Queue.organization_id == org_id)
+        .count(),
+        "notification_settings": db.query(UserNotificationSettings)
+        .filter(UserNotificationSettings.organization_id == org_id)
+        .count(),
+        "integrations": db.query(UserIntegration)
+        .join(User, UserIntegration.user_id == User.id)
+        .join(Membership, Membership.user_id == User.id)
+        .filter(Membership.organization_id == org_id)
+        .count(),
+        "ai_settings": db.query(AISettings)
+        .filter(AISettings.organization_id == org_id)
+        .count(),
+        "meta_pages": db.query(MetaPageMapping)
+        .filter(MetaPageMapping.organization_id == org_id)
+        .count(),
     }
 
     blocking = {key: value for key, value in checks.items() if value}
@@ -132,7 +146,9 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
         queues_payload = _load_json(archive, "queues.json", [])
         queue_members_payload = _load_json(archive, "queue_members.json", [])
         role_permissions_payload = _load_json(archive, "role_permissions.json", [])
-        user_overrides_payload = _load_json(archive, "user_permission_overrides.json", [])
+        user_overrides_payload = _load_json(
+            archive, "user_permission_overrides.json", []
+        )
         pipelines_payload = _load_json(archive, "pipelines.json", [])
         templates_payload = _load_json(archive, "email_templates.json", [])
         workflows_payload = _load_json(archive, "workflows.json", [])
@@ -155,9 +171,7 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
 
     export_user_ids = {UUID(item["id"]) for item in users_payload if item.get("id")}
     export_emails = {
-        item.get("email", "").lower()
-        for item in users_payload
-        if item.get("email")
+        item.get("email", "").lower() for item in users_payload if item.get("email")
     }
 
     existing_users_by_id = {
@@ -166,7 +180,9 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
     }
     existing_users_by_email = {
         user.email.lower(): user
-        for user in db.query(User).filter(func.lower(User.email).in_(export_emails)).all()
+        for user in db.query(User)
+        .filter(func.lower(User.email).in_(export_emails))
+        .all()
     }
 
     user_id_map: dict[UUID, UUID] = {}
@@ -215,8 +231,10 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
                 signature_website=user_data.get("signature_website"),
                 signature_logo_url=user_data.get("signature_logo_url"),
                 signature_html=user_data.get("signature_html"),
-                created_at=_parse_datetime(user_data.get("created_at")) or datetime.utcnow(),
-                updated_at=_parse_datetime(user_data.get("updated_at")) or datetime.utcnow(),
+                created_at=_parse_datetime(user_data.get("created_at"))
+                or datetime.utcnow(),
+                updated_at=_parse_datetime(user_data.get("updated_at"))
+                or datetime.utcnow(),
             )
             db.add(user)
 
@@ -229,7 +247,9 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
 
     existing_memberships_by_user = {
         membership.user_id: membership
-        for membership in db.query(Membership).filter(Membership.organization_id == org_id).all()
+        for membership in db.query(Membership)
+        .filter(Membership.organization_id == org_id)
+        .all()
     }
 
     for membership_data in memberships_payload:
@@ -246,7 +266,8 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
                 user_id=user_id,
                 organization_id=org_id,
                 role=membership_data.get("role"),
-                created_at=_parse_datetime(membership_data.get("created_at")) or datetime.utcnow(),
+                created_at=_parse_datetime(membership_data.get("created_at"))
+                or datetime.utcnow(),
             )
             db.add(membership)
 
@@ -257,8 +278,10 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             name=queue_data.get("name"),
             description=queue_data.get("description"),
             is_active=queue_data.get("is_active", True),
-            created_at=_parse_datetime(queue_data.get("created_at")) or datetime.utcnow(),
-            updated_at=_parse_datetime(queue_data.get("updated_at")) or datetime.utcnow(),
+            created_at=_parse_datetime(queue_data.get("created_at"))
+            or datetime.utcnow(),
+            updated_at=_parse_datetime(queue_data.get("updated_at"))
+            or datetime.utcnow(),
         )
         db.add(queue)
 
@@ -267,7 +290,8 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             id=UUID(queue_member_data["id"]),
             queue_id=UUID(queue_member_data["queue_id"]),
             user_id=_map_user_id(UUID(queue_member_data["user_id"])),
-            created_at=_parse_datetime(queue_member_data.get("created_at")) or datetime.utcnow(),
+            created_at=_parse_datetime(queue_member_data.get("created_at"))
+            or datetime.utcnow(),
         )
         db.add(member)
 
@@ -278,8 +302,10 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             name=pipeline_data.get("name"),
             is_default=pipeline_data.get("is_default", False),
             current_version=pipeline_data.get("current_version") or 1,
-            created_at=_parse_datetime(pipeline_data.get("created_at")) or datetime.utcnow(),
-            updated_at=_parse_datetime(pipeline_data.get("updated_at")) or datetime.utcnow(),
+            created_at=_parse_datetime(pipeline_data.get("created_at"))
+            or datetime.utcnow(),
+            updated_at=_parse_datetime(pipeline_data.get("updated_at"))
+            or datetime.utcnow(),
         )
         db.add(pipeline)
         for stage_data in pipeline_data.get("stages", []):
@@ -293,8 +319,10 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
                 stage_type=stage_data.get("stage_type"),
                 is_active=stage_data.get("is_active", True),
                 deleted_at=_parse_datetime(stage_data.get("deleted_at")),
-                created_at=_parse_datetime(stage_data.get("created_at")) or datetime.utcnow(),
-                updated_at=_parse_datetime(stage_data.get("updated_at")) or datetime.utcnow(),
+                created_at=_parse_datetime(stage_data.get("created_at"))
+                or datetime.utcnow(),
+                updated_at=_parse_datetime(stage_data.get("updated_at"))
+                or datetime.utcnow(),
             )
             db.add(stage)
 
@@ -302,7 +330,9 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
         template = EmailTemplate(
             id=UUID(template_data["id"]),
             organization_id=org_id,
-            created_by_user_id=_map_user_id(_parse_uuid(template_data.get("created_by_user_id"))),
+            created_by_user_id=_map_user_id(
+                _parse_uuid(template_data.get("created_by_user_id"))
+            ),
             name=template_data.get("name"),
             subject=template_data.get("subject"),
             body=template_data.get("body"),
@@ -311,8 +341,10 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             system_key=template_data.get("system_key"),
             category=template_data.get("category"),
             current_version=template_data.get("current_version") or 1,
-            created_at=_parse_datetime(template_data.get("created_at")) or datetime.utcnow(),
-            updated_at=_parse_datetime(template_data.get("updated_at")) or datetime.utcnow(),
+            created_at=_parse_datetime(template_data.get("created_at"))
+            or datetime.utcnow(),
+            updated_at=_parse_datetime(template_data.get("updated_at"))
+            or datetime.utcnow(),
         )
         db.add(template)
 
@@ -337,16 +369,26 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             recurrence_interval_hours=workflow_data.get("recurrence_interval_hours"),
             recurrence_stop_on_status=workflow_data.get("recurrence_stop_on_status"),
             rate_limit_per_hour=workflow_data.get("rate_limit_per_hour"),
-            rate_limit_per_entity_per_day=workflow_data.get("rate_limit_per_entity_per_day"),
+            rate_limit_per_entity_per_day=workflow_data.get(
+                "rate_limit_per_entity_per_day"
+            ),
             is_system_workflow=workflow_data.get("is_system_workflow", False),
             system_key=workflow_data.get("system_key"),
             requires_review=workflow_data.get("requires_review", False),
             reviewed_at=_parse_datetime(workflow_data.get("reviewed_at")),
-            reviewed_by_user_id=_map_user_id(_parse_uuid(workflow_data.get("reviewed_by_user_id"))),
-            created_by_user_id=_map_user_id(_parse_uuid(workflow_data.get("created_by_user_id"))),
-            updated_by_user_id=_map_user_id(_parse_uuid(workflow_data.get("updated_by_user_id"))),
-            created_at=_parse_datetime(workflow_data.get("created_at")) or datetime.utcnow(),
-            updated_at=_parse_datetime(workflow_data.get("updated_at")) or datetime.utcnow(),
+            reviewed_by_user_id=_map_user_id(
+                _parse_uuid(workflow_data.get("reviewed_by_user_id"))
+            ),
+            created_by_user_id=_map_user_id(
+                _parse_uuid(workflow_data.get("created_by_user_id"))
+            ),
+            updated_by_user_id=_map_user_id(
+                _parse_uuid(workflow_data.get("updated_by_user_id"))
+            ),
+            created_at=_parse_datetime(workflow_data.get("created_at"))
+            or datetime.utcnow(),
+            updated_at=_parse_datetime(workflow_data.get("updated_at"))
+            or datetime.utcnow(),
         )
         db.add(workflow)
 
@@ -360,7 +402,8 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             task_assigned=settings_data.get("task_assigned", True),
             task_reminders=settings_data.get("task_reminders", True),
             appointments=settings_data.get("appointments", True),
-            updated_at=_parse_datetime(settings_data.get("updated_at")) or datetime.utcnow(),
+            updated_at=_parse_datetime(settings_data.get("updated_at"))
+            or datetime.utcnow(),
         )
         db.merge(settings_row)
 
@@ -372,14 +415,22 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             provider=ai_settings_payload.get("provider", "openai"),
             model=ai_settings_payload.get("model"),
             context_notes_limit=ai_settings_payload.get("context_notes_limit"),
-            conversation_history_limit=ai_settings_payload.get("conversation_history_limit"),
-            consent_accepted_at=_parse_datetime(ai_settings_payload.get("consent_accepted_at")),
-            consent_accepted_by=_map_user_id(_parse_uuid(ai_settings_payload.get("consent_accepted_by"))),
+            conversation_history_limit=ai_settings_payload.get(
+                "conversation_history_limit"
+            ),
+            consent_accepted_at=_parse_datetime(
+                ai_settings_payload.get("consent_accepted_at")
+            ),
+            consent_accepted_by=_map_user_id(
+                _parse_uuid(ai_settings_payload.get("consent_accepted_by"))
+            ),
             anonymize_pii=ai_settings_payload.get("anonymize_pii", True),
             current_version=ai_settings_payload.get("current_version") or 1,
             api_key_encrypted=None,
-            created_at=_parse_datetime(ai_settings_payload.get("created_at")) or datetime.utcnow(),
-            updated_at=_parse_datetime(ai_settings_payload.get("updated_at")) or datetime.utcnow(),
+            created_at=_parse_datetime(ai_settings_payload.get("created_at"))
+            or datetime.utcnow(),
+            updated_at=_parse_datetime(ai_settings_payload.get("updated_at"))
+            or datetime.utcnow(),
         )
         if ai_settings_payload.get("has_api_key") and ai_settings.is_enabled:
             ai_settings.is_enabled = False
@@ -396,8 +447,10 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             last_success_at=_parse_datetime(meta_page_data.get("last_success_at")),
             last_error=meta_page_data.get("last_error"),
             last_error_at=_parse_datetime(meta_page_data.get("last_error_at")),
-            created_at=_parse_datetime(meta_page_data.get("created_at")) or datetime.utcnow(),
-            updated_at=_parse_datetime(meta_page_data.get("updated_at")) or datetime.utcnow(),
+            created_at=_parse_datetime(meta_page_data.get("created_at"))
+            or datetime.utcnow(),
+            updated_at=_parse_datetime(meta_page_data.get("updated_at"))
+            or datetime.utcnow(),
             access_token_encrypted=None,
         )
         db.add(meta_page)
@@ -410,12 +463,16 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             role=permission_data.get("role"),
             permission=permission_data.get("permission"),
             is_granted=permission_data.get("is_granted", True),
-            created_at=_parse_datetime(permission_data.get("created_at")) or datetime.utcnow(),
-            updated_at=_parse_datetime(permission_data.get("updated_at")) or datetime.utcnow(),
+            created_at=_parse_datetime(permission_data.get("created_at"))
+            or datetime.utcnow(),
+            updated_at=_parse_datetime(permission_data.get("updated_at"))
+            or datetime.utcnow(),
         )
         db.add(permission)
 
-    db.query(UserPermissionOverride).filter(UserPermissionOverride.organization_id == org_id).delete()
+    db.query(UserPermissionOverride).filter(
+        UserPermissionOverride.organization_id == org_id
+    ).delete()
     for override_data in user_overrides_payload:
         override = UserPermissionOverride(
             id=UUID(override_data["id"]),
@@ -423,8 +480,10 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             user_id=_map_user_id(UUID(override_data["user_id"])),
             permission=override_data.get("permission"),
             override_type=override_data.get("override_type"),
-            created_at=_parse_datetime(override_data.get("created_at")) or datetime.utcnow(),
-            updated_at=_parse_datetime(override_data.get("updated_at")) or datetime.utcnow(),
+            created_at=_parse_datetime(override_data.get("created_at"))
+            or datetime.utcnow(),
+            updated_at=_parse_datetime(override_data.get("updated_at"))
+            or datetime.utcnow(),
         )
         db.add(override)
 
@@ -449,7 +508,9 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
 
 def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
     if db.query(Case).filter(Case.organization_id == org_id).count():
-        raise ValueError("Organization already has cases; import requires an empty org.")
+        raise ValueError(
+            "Organization already has cases; import requires an empty org."
+        )
     text_content = content.decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(text_content))
     if not reader.fieldnames:
@@ -457,20 +518,25 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
 
     stage_ids = {
         stage.id
-        for stage in db.query(PipelineStage).join(
-            Pipeline, PipelineStage.pipeline_id == Pipeline.id
-        ).filter(Pipeline.organization_id == org_id).all()
+        for stage in db.query(PipelineStage)
+        .join(Pipeline, PipelineStage.pipeline_id == Pipeline.id)
+        .filter(Pipeline.organization_id == org_id)
+        .all()
     }
-    users_in_org = db.query(User).join(
-        Membership, Membership.user_id == User.id
-    ).filter(Membership.organization_id == org_id).all()
+    users_in_org = (
+        db.query(User)
+        .join(Membership, Membership.user_id == User.id)
+        .filter(Membership.organization_id == org_id)
+        .all()
+    )
     user_ids = {user.id for user in users_in_org}
     users_by_email = {
-        user.email.lower(): user.id
-        for user in users_in_org
-        if user.email
+        user.email.lower(): user.id for user in users_in_org if user.email
     }
-    queue_ids = {queue.id for queue in db.query(Queue).filter(Queue.organization_id == org_id).all()}
+    queue_ids = {
+        queue.id
+        for queue in db.query(Queue).filter(Queue.organization_id == org_id).all()
+    }
 
     meta_leads_to_link: list[tuple[UUID, UUID]] = []
     imported = 0
@@ -491,7 +557,9 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
         meta_lead_id = _parse_uuid(row.get("meta_lead_id"))
         meta_lead_external_id = row.get("meta_lead_external_id")
         if meta_lead_id and not meta_lead_external_id:
-            raise ValueError(f"Missing meta_lead_external_id for case {row.get('id') or 'unknown'}")
+            raise ValueError(
+                f"Missing meta_lead_external_id for case {row.get('id') or 'unknown'}"
+            )
         if not meta_lead_id or not meta_lead_external_id:
             continue
         if meta_lead_id in created_meta_leads:
@@ -510,13 +578,16 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
             meta_page_id=row.get("meta_lead_page_id"),
             field_data=_parse_json(row.get("meta_lead_field_data")),
             raw_payload=_parse_json(row.get("meta_lead_raw_payload")),
-            is_converted=meta_lead_is_converted if meta_lead_is_converted is not None else True,
+            is_converted=meta_lead_is_converted
+            if meta_lead_is_converted is not None
+            else True,
             converted_case_id=None,
             conversion_error=row.get("meta_lead_conversion_error"),
             status=row.get("meta_lead_status") or "converted",
             fetch_error=row.get("meta_lead_fetch_error"),
             meta_created_time=_parse_datetime(row.get("meta_lead_meta_created_time")),
-            received_at=_parse_datetime(row.get("meta_lead_received_at")) or datetime.utcnow(),
+            received_at=_parse_datetime(row.get("meta_lead_received_at"))
+            or datetime.utcnow(),
             converted_at=_parse_datetime(row.get("meta_lead_converted_at")),
         )
         db.add(meta_lead)
@@ -557,15 +628,23 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
 
         created_by_user_id = _parse_uuid(row.get("created_by_user_id"))
         if created_by_user_id:
-            created_by_user_id = _resolve_user_id(created_by_user_id, row.get("created_by_email"))
+            created_by_user_id = _resolve_user_id(
+                created_by_user_id, row.get("created_by_email")
+            )
             if created_by_user_id and created_by_user_id not in user_ids:
-                raise ValueError(f"Created-by user {created_by_user_id} not found for case {case_id}")
+                raise ValueError(
+                    f"Created-by user {created_by_user_id} not found for case {case_id}"
+                )
 
         archived_by_user_id = _parse_uuid(row.get("archived_by_user_id"))
         if archived_by_user_id:
-            archived_by_user_id = _resolve_user_id(archived_by_user_id, row.get("archived_by_email"))
+            archived_by_user_id = _resolve_user_id(
+                archived_by_user_id, row.get("archived_by_email")
+            )
             if archived_by_user_id and archived_by_user_id not in user_ids:
-                raise ValueError(f"Archived-by user {archived_by_user_id} not found for case {case_id}")
+                raise ValueError(
+                    f"Archived-by user {archived_by_user_id} not found for case {case_id}"
+                )
 
         if not row.get("case_number"):
             raise ValueError(f"Missing case_number for case {case_id}")
@@ -624,9 +703,9 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
     db.flush()
 
     for meta_lead_id, case_id in meta_leads_to_link:
-        db.query(MetaLead).filter(MetaLead.id == meta_lead_id).update({
-            MetaLead.converted_case_id: case_id
-        })
+        db.query(MetaLead).filter(MetaLead.id == meta_lead_id).update(
+            {MetaLead.converted_case_id: case_id}
+        )
 
     db.commit()
     return imported

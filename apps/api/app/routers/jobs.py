@@ -23,7 +23,7 @@ def list_jobs(
     job_type: JobType | None = None,
     limit: int = 50,
     db: Session = Depends(get_db),
-    session = Depends(get_current_session),
+    session=Depends(get_current_session),
 ):
     """List recent jobs for the organization (developer only)."""
     jobs = job_service.list_jobs(
@@ -40,7 +40,7 @@ def list_jobs(
 def get_job(
     job_id: UUID,
     db: Session = Depends(get_db),
-    session = Depends(get_current_session),
+    session=Depends(get_current_session),
 ):
     """Get a job by ID (developer only)."""
     job = job_service.get_job(db, job_id, org_id=session.org_id)

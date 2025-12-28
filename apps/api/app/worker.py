@@ -43,7 +43,7 @@ BATCH_SIZE = int(os.getenv("WORKER_BATCH_SIZE", "10"))
 async def send_email_async(email_log: EmailLog) -> None:
     """
     Send an email using Resend API.
-    
+
     If RESEND_API_KEY is not set, logs the email instead of sending.
     """
     if not RESEND_API_KEY:
@@ -51,20 +51,25 @@ async def send_email_async(email_log: EmailLog) -> None:
             f"[DRY RUN] Would send email to {email_log.recipient_email}: {email_log.subject}"
         )
         return
-    
+
     # In production, use Resend or another email provider
     # For now, we'll just import and use resend if available
     try:
         import resend
+
         resend.api_key = RESEND_API_KEY
-        
-        result = resend.Emails.send({
-            "from": EMAIL_FROM,
-            "to": [email_log.recipient_email],
-            "subject": email_log.subject,
-            "html": email_log.body,
-        })
-        logger.info(f"Email sent to {email_log.recipient_email}, ID: {result.get('id')}")
+
+        result = resend.Emails.send(
+            {
+                "from": EMAIL_FROM,
+                "to": [email_log.recipient_email],
+                "subject": email_log.subject,
+                "html": email_log.body,
+            }
+        )
+        logger.info(
+            f"Email sent to {email_log.recipient_email}, ID: {result.get('id')}"
+        )
     except ImportError:
         logger.warning("resend package not installed, skipping email send")
         raise Exception("resend package not installed")
@@ -75,28 +80,31 @@ async def send_email_async(email_log: EmailLog) -> None:
 
 async def process_job(db, job) -> None:
     """Process a single job based on its type."""
-    logger.info(f"Processing job {job.id} (type={job.job_type}, attempt={job.attempts})")
-    
+    logger.info(
+        f"Processing job {job.id} (type={job.job_type}, attempt={job.attempts})"
+    )
+
     if job.job_type == JobType.SEND_EMAIL.value:
         email_log_id = job.payload.get("email_log_id")
         if not email_log_id:
             raise Exception("Missing email_log_id in job payload")
-        
+
         email_log = db.query(EmailLog).filter(EmailLog.id == UUID(email_log_id)).first()
         if not email_log:
             raise Exception(f"EmailLog {email_log_id} not found")
-        
+
         await send_email_async(email_log)
         email_service.mark_email_sent(db, email_log)
-        
+
     elif job.job_type == JobType.REMINDER.value:
         # Process reminder - create notification and/or send email
         logger.info(f"Processing reminder: {job.payload}")
         payload = job.payload or {}
-        
+
         # Create in-app notification if user_id provided
         if payload.get("user_id") and payload.get("message"):
             from app.db.models import Notification
+
             notification = Notification(
                 organization_id=job.organization_id,
                 user_id=payload["user_id"],
@@ -108,10 +116,11 @@ async def process_job(db, job) -> None:
             )
             db.add(notification)
             db.commit()
-            
+
         # Optionally send reminder email
         if payload.get("send_email") and payload.get("user_id"):
             from app.db.models import User
+
             user = db.query(User).filter(User.id == payload["user_id"]).first()
             if user and user.email:
                 email_service.send_reminder_email(
@@ -121,25 +130,24 @@ async def process_job(db, job) -> None:
                     subject=payload.get("title", "Reminder"),
                     message=payload["message"],
                 )
-        
+
     elif job.job_type == JobType.WEBHOOK_RETRY.value:
         # Retry failed webhook delivery
         logger.info(f"Processing webhook retry: {job.payload}")
         payload = job.payload or {}
-        
+
         # Extract webhook details
         webhook_url = payload.get("url")
         webhook_data = payload.get("data")
         webhook_headers = payload.get("headers", {})
-        
+
         if webhook_url and webhook_data:
             import httpx
+
             try:
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     response = await client.post(
-                        webhook_url,
-                        json=webhook_data,
-                        headers=webhook_headers
+                        webhook_url, json=webhook_data, headers=webhook_headers
                     )
                     response.raise_for_status()
                     logger.info(f"Webhook retry successful: {webhook_url}")
@@ -148,14 +156,15 @@ async def process_job(db, job) -> None:
                 raise  # Will trigger job retry mechanism
         else:
             logger.warning("Invalid webhook retry payload: missing url or data")
-        
+
     elif job.job_type == JobType.NOTIFICATION.value:
         # Process notification - create in-app notification record
         logger.info(f"Processing notification: {job.payload}")
         payload = job.payload or {}
-        
+
         if payload.get("user_id") and payload.get("message"):
             from app.db.models import Notification
+
             notification = Notification(
                 organization_id=job.organization_id,
                 user_id=payload["user_id"],
@@ -168,19 +177,19 @@ async def process_job(db, job) -> None:
             db.add(notification)
             db.commit()
             logger.info(f"Created notification for user {payload['user_id']}")
-        
+
     elif job.job_type == JobType.META_LEAD_FETCH.value:
         await process_meta_lead_fetch(db, job)
-        
+
     elif job.job_type == JobType.META_CAPI_EVENT.value:
         await process_meta_capi_event(db, job)
-        
+
     elif job.job_type == JobType.WORKFLOW_EMAIL.value:
         await process_workflow_email(db, job)
-        
+
     elif job.job_type == JobType.WORKFLOW_SWEEP.value:
         await process_workflow_sweep(db, job)
-        
+
     elif job.job_type == JobType.CSV_IMPORT.value:
         await process_csv_import(db, job)
 
@@ -189,10 +198,10 @@ async def process_job(db, job) -> None:
 
     elif job.job_type == JobType.DATA_PURGE.value:
         await process_data_purge(db, job)
-    
+
     elif job.job_type == JobType.CAMPAIGN_SEND.value:
         await process_campaign_send(db, job)
-        
+
     else:
         raise Exception(f"Unknown job type: {job.job_type}")
 
@@ -201,20 +210,22 @@ def _record_job_success(db, job) -> None:
     """Record successful job for integration health."""
     from app.services import ops_service
     from app.db.enums import IntegrationType
-    
+
     # Map job types to integration types
     job_to_integration = {
         JobType.META_LEAD_FETCH.value: IntegrationType.META_LEADS,
         JobType.META_CAPI_EVENT.value: IntegrationType.META_CAPI,
     }
-    
+
     integration_type = job_to_integration.get(job.job_type)
     if integration_type and job.organization_id:
         try:
             # Check both page_id and meta_page_id (CAPI uses latter)
             integration_key = None
             if job.payload:
-                integration_key = job.payload.get("page_id") or job.payload.get("meta_page_id")
+                integration_key = job.payload.get("page_id") or job.payload.get(
+                    "meta_page_id"
+                )
             ops_service.record_success(
                 db=db,
                 org_id=job.organization_id,
@@ -225,25 +236,29 @@ def _record_job_success(db, job) -> None:
             logger.warning(f"Failed to record job success: {e}")
 
 
-def _record_job_failure(db, job, error_msg: str, exception: Exception | None = None) -> None:
+def _record_job_failure(
+    db, job, error_msg: str, exception: Exception | None = None
+) -> None:
     """Record failed job for integration health and create alert if final failure."""
     from app.services import ops_service, alert_service
     from app.db.enums import IntegrationType, AlertType, AlertSeverity
-    
+
     # Map job types to integration types
     job_to_integration = {
         JobType.META_LEAD_FETCH.value: IntegrationType.META_LEADS,
         JobType.META_CAPI_EVENT.value: IntegrationType.META_CAPI,
     }
-    
+
     integration_type = job_to_integration.get(job.job_type)
     if integration_type and job.organization_id:
         try:
             # Check both page_id and meta_page_id (CAPI uses latter)
             integration_key = None
             if job.payload:
-                integration_key = job.payload.get("page_id") or job.payload.get("meta_page_id")
-            
+                integration_key = job.payload.get("page_id") or job.payload.get(
+                    "meta_page_id"
+                )
+
             # Record error in integration health
             ops_service.record_error(
                 db=db,
@@ -252,7 +267,7 @@ def _record_job_failure(db, job, error_msg: str, exception: Exception | None = N
                 error_message=error_msg,
                 integration_key=integration_key,
             )
-            
+
             # Create alert if this is the final failure (max attempts reached)
             if job.attempts >= job.max_attempts:
                 # Map to alert types
@@ -260,11 +275,13 @@ def _record_job_failure(db, job, error_msg: str, exception: Exception | None = N
                     JobType.META_LEAD_FETCH.value: AlertType.META_FETCH_FAILED,
                     JobType.META_CAPI_EVENT.value: AlertType.WORKER_JOB_FAILED,
                 }
-                alert_type = alert_type_map.get(job.job_type, AlertType.WORKER_JOB_FAILED)
-                
+                alert_type = alert_type_map.get(
+                    job.job_type, AlertType.WORKER_JOB_FAILED
+                )
+
                 # Use actual exception class name for fingerprinting
                 error_class = type(exception).__name__ if exception else "UnknownError"
-                
+
                 alert_service.create_or_update_alert(
                     db=db,
                     org_id=job.organization_id,
@@ -282,7 +299,7 @@ def _record_job_failure(db, job, error_msg: str, exception: Exception | None = N
 async def process_meta_lead_fetch(db, job) -> None:
     """
     Process a Meta Lead Ads fetch job.
-    
+
     1. Get page mapping and decrypt token
     2. Fetch lead details from Meta API
     3. Normalize field data
@@ -293,62 +310,74 @@ async def process_meta_lead_fetch(db, job) -> None:
     from app.db.models import MetaPageMapping, MetaLead
     from app.core.encryption import decrypt_token
     from app.services import meta_api, meta_lead_service
-    
+
     leadgen_id = job.payload.get("leadgen_id")
     page_id = job.payload.get("page_id")
-    
+
     if not leadgen_id or not page_id:
         raise Exception("Missing leadgen_id or page_id in job payload")
-    
+
     # Get page mapping
-    mapping = db.query(MetaPageMapping).filter(
-        MetaPageMapping.page_id == page_id,
-        MetaPageMapping.is_active == True,
-    ).first()
-    
+    mapping = (
+        db.query(MetaPageMapping)
+        .filter(
+            MetaPageMapping.page_id == page_id,
+            MetaPageMapping.is_active.is_(True),
+        )
+        .first()
+    )
+
     if not mapping:
         raise Exception(f"No active mapping for page {page_id}")
-    
+
     # Decrypt access token
     try:
-        access_token = decrypt_token(mapping.access_token_encrypted) if mapping.access_token_encrypted else ""
+        access_token = (
+            decrypt_token(mapping.access_token_encrypted)
+            if mapping.access_token_encrypted
+            else ""
+        )
     except Exception as e:
         mapping.last_error = f"Token decryption failed: {str(e)[:100]}"
         mapping.last_error_at = datetime.utcnow()
         db.commit()
         raise Exception(f"Token decryption failed: {e}")
-    
+
     # Fetch lead from Meta API
     lead_data, error = await meta_api.fetch_lead_details(leadgen_id, access_token)
-    
+
     if error:
         # Update mapping with error
         mapping.last_error = error
         mapping.last_error_at = datetime.utcnow()
         db.commit()
-        
+
         # Check if we have an existing meta_lead to update
-        existing = db.query(MetaLead).filter(
-            MetaLead.organization_id == mapping.organization_id,
-            MetaLead.meta_lead_id == leadgen_id,
-        ).first()
+        existing = (
+            db.query(MetaLead)
+            .filter(
+                MetaLead.organization_id == mapping.organization_id,
+                MetaLead.meta_lead_id == leadgen_id,
+            )
+            .first()
+        )
         if existing:
             existing.status = "fetch_failed"
             existing.fetch_error = error
             db.commit()
-        
+
         raise Exception(error)
-    
+
     # Normalize field data
     field_data = meta_api.normalize_field_data(lead_data.get("field_data", []))
-    
+
     # Add ad_id for campaign tracking (stored in field_data for conversion)
     if lead_data.get("ad_id"):
         field_data["meta_ad_id"] = lead_data["ad_id"]
-    
+
     # Parse Meta timestamp
     meta_created_time = meta_api.parse_meta_timestamp(lead_data.get("created_time"))
-    
+
     # Store meta lead (handles dedupe)
     meta_lead, store_error = meta_lead_service.store_meta_lead(
         db=db,
@@ -360,32 +389,34 @@ async def process_meta_lead_fetch(db, job) -> None:
         meta_page_id=page_id,
         meta_created_time=meta_created_time,
     )
-    
+
     if store_error:
         raise Exception(store_error)
-    
+
     # Update success tracking (even for idempotent re-stores)
     mapping.last_success_at = datetime.utcnow()
     mapping.last_error = None
     db.commit()
-    
-    logger.info(f"Meta lead {leadgen_id} stored successfully for org {mapping.organization_id}")
-    
+
+    logger.info(
+        f"Meta lead {leadgen_id} stored successfully for org {mapping.organization_id}"
+    )
+
     # Auto-convert to case so it appears in Cases list immediately
     if meta_lead.is_converted:
         meta_lead.status = "converted"
         db.commit()
         return
-    
+
     meta_lead.status = "stored"
     db.commit()
-    
+
     case, convert_error = meta_lead_service.convert_to_case(
         db=db,
         meta_lead=meta_lead,
         user_id=None,  # No assignee - managers can bulk-assign later
     )
-    
+
     if convert_error:
         logger.warning(f"Meta lead auto-conversion failed: {convert_error}")
         meta_lead.status = "convert_failed"
@@ -399,7 +430,7 @@ async def process_meta_lead_fetch(db, job) -> None:
 async def process_meta_capi_event(db, job) -> None:
     """
     Process a Meta CAPI conversion event job.
-    
+
     Payload:
       - meta_lead_id (leadgen id)
       - case_status
@@ -410,24 +441,28 @@ async def process_meta_capi_event(db, job) -> None:
     from app.core.encryption import decrypt_token
     from app.db.models import MetaPageMapping
     from app.services import meta_capi
-    
+
     meta_lead_id = job.payload.get("meta_lead_id")
     case_status = job.payload.get("case_status")
     email = job.payload.get("email")
     phone = job.payload.get("phone")
     meta_page_id = job.payload.get("meta_page_id")
-    
+
     if not meta_lead_id or not case_status:
         raise Exception("Missing meta_lead_id or case_status in job payload")
-    
+
     access_token = None
     page_mapping = None
     if meta_page_id:
-        page_mapping = db.query(MetaPageMapping).filter(
-            MetaPageMapping.page_id == str(meta_page_id),
-            MetaPageMapping.is_active == True,
-        ).first()
-    
+        page_mapping = (
+            db.query(MetaPageMapping)
+            .filter(
+                MetaPageMapping.page_id == str(meta_page_id),
+                MetaPageMapping.is_active.is_(True),
+            )
+            .first()
+        )
+
     if page_mapping and page_mapping.access_token_encrypted:
         try:
             access_token = decrypt_token(page_mapping.access_token_encrypted)
@@ -436,11 +471,11 @@ async def process_meta_capi_event(db, job) -> None:
             page_mapping.last_error_at = datetime.utcnow()
             db.commit()
             raise Exception(f"Token decryption failed: {e}")
-    
+
     meta_status = meta_capi.map_case_status_to_meta_status(str(case_status))
     if not meta_status:
         raise Exception(f"Unsupported case status for Meta CAPI: {case_status}")
-    
+
     success, error = await meta_capi.send_status_event(
         meta_lead_id=str(meta_lead_id),
         case_status=str(case_status),
@@ -449,7 +484,7 @@ async def process_meta_capi_event(db, job) -> None:
         phone=str(phone) if phone else None,
         access_token=access_token,
     )
-    
+
     if not success:
         if page_mapping:
             page_mapping.last_error = error
@@ -460,50 +495,56 @@ async def process_meta_capi_event(db, job) -> None:
 
 async def worker_loop() -> None:
     """Main worker loop - polls for and processes pending jobs."""
-    logger.info(f"Worker starting (poll interval: {POLL_INTERVAL_SECONDS}s, batch size: {BATCH_SIZE})")
-    
+    logger.info(
+        f"Worker starting (poll interval: {POLL_INTERVAL_SECONDS}s, batch size: {BATCH_SIZE})"
+    )
+
     if not RESEND_API_KEY:
         logger.warning("RESEND_API_KEY not set - emails will be logged but not sent")
-    
+
     while True:
         with SessionLocal() as db:
             try:
                 jobs = job_service.get_pending_jobs(db, limit=BATCH_SIZE)
-                
+
                 if jobs:
                     logger.info(f"Found {len(jobs)} pending jobs")
-                
+
                 for job in jobs:
                     try:
                         job_service.mark_job_running(db, job)
                         await process_job(db, job)
                         job_service.mark_job_completed(db, job)
                         logger.info(f"Job {job.id} completed successfully")
-                        
+
                         # Record success for integration health (Meta jobs)
                         _record_job_success(db, job)
-                        
+
                     except Exception as e:
                         error_msg = str(e)
                         job_service.mark_job_failed(db, job, error_msg)
                         logger.error(f"Job {job.id} failed: {error_msg}")
-                        
+
                         # Record failure for integration health
                         _record_job_failure(db, job, error_msg, exception=e)
-                        
+
                         # Also mark email as failed if applicable
                         if job.job_type == JobType.SEND_EMAIL.value:
                             email_log_id = job.payload.get("email_log_id")
                             if email_log_id:
-                                email_log = db.query(EmailLog).filter(
-                                    EmailLog.id == UUID(email_log_id)
-                                ).first()
+                                email_log = (
+                                    db.query(EmailLog)
+                                    .filter(EmailLog.id == UUID(email_log_id))
+                                    .first()
+                                )
                                 if email_log:
-                                    email_service.mark_email_failed(db, email_log, error_msg)
-                                    
+                                    email_service.mark_email_failed(
+                                        db, email_log, error_msg
+                                    )
+
             except Exception as e:
                 logger.error(f"Error in worker loop: {e}")
-        
+
         await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
 
@@ -511,10 +552,11 @@ async def worker_loop() -> None:
 # Workflow Job Handlers
 # =============================================================================
 
+
 async def process_workflow_email(db, job) -> None:
     """
     Process a WORKFLOW_EMAIL job - send email triggered by workflow action.
-    
+
     Payload:
         - template_id: UUID of email template
         - case_id: UUID of case (for variable resolution)
@@ -523,20 +565,22 @@ async def process_workflow_email(db, job) -> None:
     """
     from app.db.models import EmailTemplate, EmailLog
     from app.services import email_service
-    
+
     template_id = job.payload.get("template_id")
     case_id = job.payload.get("case_id")
     recipient_email = job.payload.get("recipient_email")
     variables = job.payload.get("variables", {})
-    
+
     if not template_id or not recipient_email:
         raise Exception("Missing template_id or recipient_email in workflow email job")
-    
+
     # Get template
-    template = db.query(EmailTemplate).filter(EmailTemplate.id == UUID(template_id)).first()
+    template = (
+        db.query(EmailTemplate).filter(EmailTemplate.id == UUID(template_id)).first()
+    )
     if not template:
         raise Exception(f"Email template {template_id} not found")
-    
+
     # Resolve subject and body with variables
     subject = template.subject
     body = template.body
@@ -544,7 +588,7 @@ async def process_workflow_email(db, job) -> None:
         placeholder = "{{" + key + "}}"
         subject = subject.replace(placeholder, str(value) if value else "")
         body = body.replace(placeholder, str(value) if value else "")
-    
+
     # Create email log
     email_log = EmailLog(
         organization_id=job.organization_id,
@@ -558,18 +602,18 @@ async def process_workflow_email(db, job) -> None:
     )
     db.add(email_log)
     db.commit()
-    
+
     # Send email
     await send_email_async(email_log)
     email_service.mark_email_sent(db, email_log)
-    
+
     logger.info(f"Workflow email sent to {recipient_email} for case {case_id}")
 
 
 async def process_csv_import(db, job) -> None:
     """
     Process CSV import job in background.
-    
+
     Payload:
         - import_id: UUID of the CaseImport record
         - file_content_base64: Base64-encoded CSV content
@@ -578,35 +622,37 @@ async def process_csv_import(db, job) -> None:
     from app.services import import_service
     from app.db.models import CaseImport
     import base64
-    
+
     payload = job.payload or {}
     import_id = payload.get("import_id")
     file_content_b64 = payload.get("file_content_base64")
     dedupe_action = payload.get("dedupe_action", "skip")
-    
+
     if not import_id or not file_content_b64:
         raise Exception("Missing import_id or file_content_base64 in payload")
-    
+
     # Decode file content
     try:
         file_content = base64.b64decode(file_content_b64)
     except Exception as e:
         raise Exception(f"Failed to decode file content: {e}")
-    
+
     # Get import record
-    import_record = db.query(CaseImport).filter(
-        CaseImport.id == UUID(import_id)
-    ).first()
-    
+    import_record = (
+        db.query(CaseImport).filter(CaseImport.id == UUID(import_id)).first()
+    )
+
     if not import_record:
         raise Exception(f"Import record {import_id} not found")
-    
+
     # Update status to running
     import_record.status = "running"
     db.commit()
-    
-    logger.info(f"Starting CSV import job: {import_id}, rows={import_record.total_rows}")
-    
+
+    logger.info(
+        f"Starting CSV import job: {import_id}, rows={import_record.total_rows}"
+    )
+
     try:
         # Execute the import
         import_service.execute_import(
@@ -660,52 +706,52 @@ async def process_data_purge(db, job) -> None:
 async def process_workflow_sweep(db, job) -> None:
     """
     Process a WORKFLOW_SWEEP job - daily sweep for scheduled and inactivity workflows.
-    
+
     Payload:
         - org_id: Organization to sweep (optional, sweeps all if not provided)
         - sweep_type: 'scheduled', 'inactivity', 'task_due', 'task_overdue', or 'all'
     """
     from app.services import workflow_triggers
     from app.db.models import Organization
-    
+
     sweep_type = job.payload.get("sweep_type", "all")
     org_id = job.payload.get("org_id")
-    
+
     if org_id:
         orgs = [db.query(Organization).filter(Organization.id == UUID(org_id)).first()]
         orgs = [o for o in orgs if o]
     else:
         orgs = db.query(Organization).all()
-    
+
     logger.info(f"Starting workflow sweep: type={sweep_type}, orgs={len(orgs)}")
-    
+
     for org in orgs:
         try:
             if sweep_type in ("all", "scheduled"):
                 workflow_triggers.trigger_scheduled_workflows(db, org.id)
-            
+
             if sweep_type in ("all", "inactivity"):
                 workflow_triggers.trigger_inactivity_workflows(db, org.id)
-            
+
             if sweep_type in ("all", "task_due"):
                 workflow_triggers.trigger_task_due_sweep(db, org.id)
-            
+
             if sweep_type in ("all", "task_overdue"):
                 workflow_triggers.trigger_task_overdue_sweep(db, org.id)
-            
+
             db.commit()
             logger.info(f"Workflow sweep complete for org {org.id}")
         except Exception as e:
             logger.error(f"Workflow sweep failed for org {org.id}: {e}")
             db.rollback()
-    
+
     logger.info(f"Workflow sweep finished for {len(orgs)} organizations")
 
 
 async def process_campaign_send(db, job) -> None:
     """
     Process a CAMPAIGN_SEND job - execute bulk email campaign.
-    
+
     Payload:
         - campaign_id: UUID of the campaign
         - run_id: UUID of the campaign run
@@ -713,30 +759,29 @@ async def process_campaign_send(db, job) -> None:
     """
     from uuid import UUID
     from app.services import campaign_service
-    
+
     payload = job.payload or {}
     campaign_id = payload.get("campaign_id")
     run_id = payload.get("run_id")
-    user_id = payload.get("user_id")
-    
+
     if not campaign_id or not run_id:
         raise Exception("Missing campaign_id or run_id in campaign send job")
-    
+
     logger.info(f"Starting campaign send: campaign={campaign_id}, run={run_id}")
-    
+
     try:
         # Check if campaign was cancelled before executing
         from app.db.models import Campaign
         from app.db.enums import CampaignStatus
-        
+
         campaign = db.query(Campaign).filter(Campaign.id == UUID(campaign_id)).first()
         if not campaign:
             raise Exception(f"Campaign {campaign_id} not found")
-        
+
         if campaign.status == CampaignStatus.CANCELLED.value:
             logger.info(f"Campaign {campaign_id} was cancelled, skipping execution")
             return  # Don't execute cancelled campaigns
-        
+
         # Execute the campaign send
         result = campaign_service.execute_campaign_run(
             db=db,
@@ -744,7 +789,7 @@ async def process_campaign_send(db, job) -> None:
             campaign_id=UUID(campaign_id),
             run_id=UUID(run_id),
         )
-        
+
         logger.info(
             f"Campaign send completed: campaign={campaign_id}, "
             f"sent={result.get('sent_count', 0)}, "

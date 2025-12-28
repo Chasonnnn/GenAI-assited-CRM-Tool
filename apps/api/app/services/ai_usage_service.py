@@ -2,6 +2,7 @@
 
 Logs token usage and provides analytics for cost monitoring.
 """
+
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -46,18 +47,22 @@ def get_org_usage_summary(
 ) -> dict[str, Any]:
     """Get usage summary for an organization."""
     since = datetime.utcnow() - timedelta(days=days)
-    
-    result = db.query(
-        func.count(AIUsageLog.id).label("total_requests"),
-        func.sum(AIUsageLog.prompt_tokens).label("total_prompt_tokens"),
-        func.sum(AIUsageLog.completion_tokens).label("total_completion_tokens"),
-        func.sum(AIUsageLog.total_tokens).label("total_tokens"),
-        func.sum(AIUsageLog.estimated_cost_usd).label("total_cost_usd"),
-    ).filter(
-        AIUsageLog.organization_id == organization_id,
-        AIUsageLog.created_at >= since,
-    ).first()
-    
+
+    result = (
+        db.query(
+            func.count(AIUsageLog.id).label("total_requests"),
+            func.sum(AIUsageLog.prompt_tokens).label("total_prompt_tokens"),
+            func.sum(AIUsageLog.completion_tokens).label("total_completion_tokens"),
+            func.sum(AIUsageLog.total_tokens).label("total_tokens"),
+            func.sum(AIUsageLog.estimated_cost_usd).label("total_cost_usd"),
+        )
+        .filter(
+            AIUsageLog.organization_id == organization_id,
+            AIUsageLog.created_at >= since,
+        )
+        .first()
+    )
+
     return {
         "period_days": days,
         "total_requests": result.total_requests or 0,
@@ -75,16 +80,20 @@ def get_user_usage_summary(
 ) -> dict[str, Any]:
     """Get usage summary for a specific user."""
     since = datetime.utcnow() - timedelta(days=days)
-    
-    result = db.query(
-        func.count(AIUsageLog.id).label("total_requests"),
-        func.sum(AIUsageLog.total_tokens).label("total_tokens"),
-        func.sum(AIUsageLog.estimated_cost_usd).label("total_cost_usd"),
-    ).filter(
-        AIUsageLog.user_id == user_id,
-        AIUsageLog.created_at >= since,
-    ).first()
-    
+
+    result = (
+        db.query(
+            func.count(AIUsageLog.id).label("total_requests"),
+            func.sum(AIUsageLog.total_tokens).label("total_tokens"),
+            func.sum(AIUsageLog.estimated_cost_usd).label("total_cost_usd"),
+        )
+        .filter(
+            AIUsageLog.user_id == user_id,
+            AIUsageLog.created_at >= since,
+        )
+        .first()
+    )
+
     return {
         "period_days": days,
         "total_requests": result.total_requests or 0,
@@ -100,17 +109,22 @@ def get_usage_by_model(
 ) -> list[dict[str, Any]]:
     """Get usage breakdown by model."""
     since = datetime.utcnow() - timedelta(days=days)
-    
-    results = db.query(
-        AIUsageLog.model,
-        func.count(AIUsageLog.id).label("requests"),
-        func.sum(AIUsageLog.total_tokens).label("tokens"),
-        func.sum(AIUsageLog.estimated_cost_usd).label("cost"),
-    ).filter(
-        AIUsageLog.organization_id == organization_id,
-        AIUsageLog.created_at >= since,
-    ).group_by(AIUsageLog.model).all()
-    
+
+    results = (
+        db.query(
+            AIUsageLog.model,
+            func.count(AIUsageLog.id).label("requests"),
+            func.sum(AIUsageLog.total_tokens).label("tokens"),
+            func.sum(AIUsageLog.estimated_cost_usd).label("cost"),
+        )
+        .filter(
+            AIUsageLog.organization_id == organization_id,
+            AIUsageLog.created_at >= since,
+        )
+        .group_by(AIUsageLog.model)
+        .all()
+    )
+
     return [
         {
             "model": r.model,
@@ -129,21 +143,23 @@ def get_daily_usage(
 ) -> list[dict[str, Any]]:
     """Get daily usage for the past N days."""
     since = datetime.utcnow() - timedelta(days=days)
-    
-    results = db.query(
-        func.date(AIUsageLog.created_at).label("date"),
-        func.count(AIUsageLog.id).label("requests"),
-        func.sum(AIUsageLog.total_tokens).label("tokens"),
-        func.sum(AIUsageLog.estimated_cost_usd).label("cost"),
-    ).filter(
-        AIUsageLog.organization_id == organization_id,
-        AIUsageLog.created_at >= since,
-    ).group_by(
-        func.date(AIUsageLog.created_at)
-    ).order_by(
-        func.date(AIUsageLog.created_at)
-    ).all()
-    
+
+    results = (
+        db.query(
+            func.date(AIUsageLog.created_at).label("date"),
+            func.count(AIUsageLog.id).label("requests"),
+            func.sum(AIUsageLog.total_tokens).label("tokens"),
+            func.sum(AIUsageLog.estimated_cost_usd).label("cost"),
+        )
+        .filter(
+            AIUsageLog.organization_id == organization_id,
+            AIUsageLog.created_at >= since,
+        )
+        .group_by(func.date(AIUsageLog.created_at))
+        .order_by(func.date(AIUsageLog.created_at))
+        .all()
+    )
+
     return [
         {
             "date": r.date.isoformat() if r.date else None,
@@ -163,19 +179,24 @@ def get_top_users(
 ) -> list[dict[str, Any]]:
     """Get top users by token usage."""
     since = datetime.utcnow() - timedelta(days=days)
-    
-    results = db.query(
-        AIUsageLog.user_id,
-        func.count(AIUsageLog.id).label("requests"),
-        func.sum(AIUsageLog.total_tokens).label("tokens"),
-        func.sum(AIUsageLog.estimated_cost_usd).label("cost"),
-    ).filter(
-        AIUsageLog.organization_id == organization_id,
-        AIUsageLog.created_at >= since,
-    ).group_by(AIUsageLog.user_id).order_by(
-        func.sum(AIUsageLog.total_tokens).desc()
-    ).limit(limit).all()
-    
+
+    results = (
+        db.query(
+            AIUsageLog.user_id,
+            func.count(AIUsageLog.id).label("requests"),
+            func.sum(AIUsageLog.total_tokens).label("tokens"),
+            func.sum(AIUsageLog.estimated_cost_usd).label("cost"),
+        )
+        .filter(
+            AIUsageLog.organization_id == organization_id,
+            AIUsageLog.created_at >= since,
+        )
+        .group_by(AIUsageLog.user_id)
+        .order_by(func.sum(AIUsageLog.total_tokens).desc())
+        .limit(limit)
+        .all()
+    )
+
     return [
         {
             "user_id": str(r.user_id),

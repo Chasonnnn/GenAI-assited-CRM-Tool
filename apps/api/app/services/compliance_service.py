@@ -190,7 +190,9 @@ def _redact_value(key: str, value: Any, person_linked: bool) -> Any:
         return _redact_datetime(value)
 
     normalized_key = key.lower() if key else ""
-    if person_linked and any(pattern.search(normalized_key) for pattern in DATE_KEY_PATTERNS):
+    if person_linked and any(
+        pattern.search(normalized_key) for pattern in DATE_KEY_PATTERNS
+    ):
         if isinstance(value, datetime):
             return _redact_datetime(value)
         if isinstance(value, str) and len(value) >= 7:
@@ -239,7 +241,9 @@ def _resolve_actor_names(db: Session, logs: list[AuditLog]) -> dict[UUID, str]:
     return {actor.id: actor.display_name for actor in actors}
 
 
-def _build_export_rows(db: Session, logs: list[AuditLog], redact_mode: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def _build_export_rows(
+    db: Session, logs: list[AuditLog], redact_mode: str
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     actor_names = _resolve_actor_names(db, logs)
     rows: list[dict[str, Any]] = []
 
@@ -273,8 +277,12 @@ def _build_export_rows(db: Session, logs: list[AuditLog], redact_mode: str) -> t
             "request_id": str(log.request_id) if log.request_id else None,
             "prev_hash": log.prev_hash,
             "entry_hash": log.entry_hash,
-            "before_version_id": str(log.before_version_id) if log.before_version_id else None,
-            "after_version_id": str(log.after_version_id) if log.after_version_id else None,
+            "before_version_id": str(log.before_version_id)
+            if log.before_version_id
+            else None,
+            "after_version_id": str(log.after_version_id)
+            if log.after_version_id
+            else None,
             "created_at": log.created_at,
         }
 
@@ -356,18 +364,26 @@ def create_export_job(
         raise ValueError("start_date must be before end_date")
 
     one_hour_ago = datetime.utcnow() - timedelta(hours=1)
-    recent_exports = db.query(ExportJob).filter(
-        ExportJob.organization_id == org_id,
-        ExportJob.created_at >= one_hour_ago,
-    ).count()
+    recent_exports = (
+        db.query(ExportJob)
+        .filter(
+            ExportJob.organization_id == org_id,
+            ExportJob.created_at >= one_hour_ago,
+        )
+        .count()
+    )
     if recent_exports >= settings.EXPORT_RATE_LIMIT_PER_HOUR:
         raise ValueError("Export rate limit exceeded")
 
-    log_count = db.query(AuditLog).filter(
-        AuditLog.organization_id == org_id,
-        AuditLog.created_at >= start_date,
-        AuditLog.created_at <= end_date,
-    ).count()
+    log_count = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.organization_id == org_id,
+            AuditLog.created_at >= start_date,
+            AuditLog.created_at <= end_date,
+        )
+        .count()
+    )
     if log_count > settings.EXPORT_MAX_RECORDS:
         raise ValueError("Export exceeds maximum record limit")
 
@@ -409,16 +425,24 @@ def create_export_job(
 
 
 def list_export_jobs(db: Session, org_id: UUID, limit: int = 50) -> list[ExportJob]:
-    return db.query(ExportJob).filter(
-        ExportJob.organization_id == org_id
-    ).order_by(ExportJob.created_at.desc()).limit(limit).all()
+    return (
+        db.query(ExportJob)
+        .filter(ExportJob.organization_id == org_id)
+        .order_by(ExportJob.created_at.desc())
+        .limit(limit)
+        .all()
+    )
 
 
 def get_export_job(db: Session, org_id: UUID, export_job_id: UUID) -> ExportJob | None:
-    return db.query(ExportJob).filter(
-        ExportJob.organization_id == org_id,
-        ExportJob.id == export_job_id,
-    ).first()
+    return (
+        db.query(ExportJob)
+        .filter(
+            ExportJob.organization_id == org_id,
+            ExportJob.id == export_job_id,
+        )
+        .first()
+    )
 
 
 def generate_download_url(job: ExportJob) -> str | None:
@@ -463,11 +487,16 @@ def process_export_job(db: Session, export_job_id: UUID) -> ExportJob:
     db.commit()
 
     try:
-        logs = db.query(AuditLog).filter(
-            AuditLog.organization_id == job.organization_id,
-            AuditLog.created_at >= job.date_range_start,
-            AuditLog.created_at <= job.date_range_end,
-        ).order_by(AuditLog.created_at, AuditLog.id).all()
+        logs = (
+            db.query(AuditLog)
+            .filter(
+                AuditLog.organization_id == job.organization_id,
+                AuditLog.created_at >= job.date_range_start,
+                AuditLog.created_at <= job.date_range_end,
+            )
+            .order_by(AuditLog.created_at, AuditLog.id)
+            .all()
+        )
 
         rows, chain_metadata = _build_export_rows(db, logs, job.redact_mode)
 
@@ -477,11 +506,15 @@ def process_export_job(db: Session, export_job_id: UUID) -> ExportJob:
             "created_at": datetime.utcnow().isoformat(),
             "redacted": redacted,
             "date_redaction": "year_month" if redacted else "none",
-            "chain_verifiable": False if redacted else chain_metadata["chain_contiguous"],
+            "chain_verifiable": False
+            if redacted
+            else chain_metadata["chain_contiguous"],
             "chain_contiguous": chain_metadata["chain_contiguous"],
             "range_start_prev_hash": chain_metadata["range_start_prev_hash"],
             "record_count": len(rows),
-            "disclaimer": "Redacted export. Original hashes included for reference only." if redacted else "Full export.",
+            "disclaimer": "Redacted export. Original hashes included for reference only."
+            if redacted
+            else "Full export.",
         }
 
         filename = f"audit_export_{job.id}.{job.format}"
@@ -511,7 +544,9 @@ def process_export_job(db: Session, export_job_id: UUID) -> ExportJob:
             else:
                 _write_json(file_path, rows)
             _write_metadata_file(metadata_path, metadata)
-            job.file_path = os.path.relpath(file_path, os.path.abspath(settings.EXPORT_LOCAL_DIR))
+            job.file_path = os.path.relpath(
+                file_path, os.path.abspath(settings.EXPORT_LOCAL_DIR)
+            )
 
         job.record_count = len(rows)
         job.status = EXPORT_STATUS_COMPLETED
@@ -531,9 +566,12 @@ def resolve_local_export_path(file_path: str) -> str:
 
 
 def list_retention_policies(db: Session, org_id: UUID) -> list[DataRetentionPolicy]:
-    return db.query(DataRetentionPolicy).filter(
-        DataRetentionPolicy.organization_id == org_id
-    ).order_by(DataRetentionPolicy.entity_type).all()
+    return (
+        db.query(DataRetentionPolicy)
+        .filter(DataRetentionPolicy.organization_id == org_id)
+        .order_by(DataRetentionPolicy.entity_type)
+        .all()
+    )
 
 
 def upsert_retention_policy(
@@ -546,10 +584,14 @@ def upsert_retention_policy(
 ) -> DataRetentionPolicy:
     if entity_type == "audit_logs":
         raise ValueError("audit_logs are archive-only and cannot be purged")
-    policy = db.query(DataRetentionPolicy).filter(
-        DataRetentionPolicy.organization_id == org_id,
-        DataRetentionPolicy.entity_type == entity_type,
-    ).first()
+    policy = (
+        db.query(DataRetentionPolicy)
+        .filter(
+            DataRetentionPolicy.organization_id == org_id,
+            DataRetentionPolicy.entity_type == entity_type,
+        )
+        .first()
+    )
     if policy:
         policy.retention_days = retention_days
         policy.is_active = is_active
@@ -578,9 +620,12 @@ def upsert_retention_policy(
 
 
 def list_legal_holds(db: Session, org_id: UUID) -> list[LegalHold]:
-    return db.query(LegalHold).filter(
-        LegalHold.organization_id == org_id
-    ).order_by(LegalHold.created_at.desc()).all()
+    return (
+        db.query(LegalHold)
+        .filter(LegalHold.organization_id == org_id)
+        .order_by(LegalHold.created_at.desc())
+        .all()
+    )
 
 
 def create_legal_hold(
@@ -620,11 +665,15 @@ def release_legal_hold(
     user_id: UUID,
     hold_id: UUID,
 ) -> LegalHold | None:
-    hold = db.query(LegalHold).filter(
-        LegalHold.organization_id == org_id,
-        LegalHold.id == hold_id,
-        LegalHold.released_at.is_(None),
-    ).first()
+    hold = (
+        db.query(LegalHold)
+        .filter(
+            LegalHold.organization_id == org_id,
+            LegalHold.id == hold_id,
+            LegalHold.released_at.is_(None),
+        )
+        .first()
+    )
     if not hold:
         return None
     hold.released_at = datetime.utcnow()
@@ -643,13 +692,23 @@ def release_legal_hold(
     return hold
 
 
-def _get_active_legal_holds(db: Session, org_id: UUID) -> tuple[bool, set[UUID], dict[str, set[UUID]]]:
-    holds = db.query(LegalHold).filter(
-        LegalHold.organization_id == org_id,
-        LegalHold.released_at.is_(None),
-    ).all()
+def _get_active_legal_holds(
+    db: Session, org_id: UUID
+) -> tuple[bool, set[UUID], dict[str, set[UUID]]]:
+    holds = (
+        db.query(LegalHold)
+        .filter(
+            LegalHold.organization_id == org_id,
+            LegalHold.released_at.is_(None),
+        )
+        .all()
+    )
     org_hold = any(hold.entity_type is None for hold in holds)
-    case_hold_ids = {hold.entity_id for hold in holds if hold.entity_type == "case" and hold.entity_id}
+    case_hold_ids = {
+        hold.entity_id
+        for hold in holds
+        if hold.entity_type == "case" and hold.entity_id
+    }
     entity_hold_ids: dict[str, set[UUID]] = {}
     for hold in holds:
         if hold.entity_type and hold.entity_id:
@@ -698,7 +757,9 @@ def _build_retention_query(
             Task.completed_at < cutoff,
         )
         if case_hold_ids:
-            query = query.filter(or_(Task.case_id.is_(None), ~Task.case_id.in_(case_hold_ids)))
+            query = query.filter(
+                or_(Task.case_id.is_(None), ~Task.case_id.in_(case_hold_ids))
+            )
         if entity_hold_ids.get("task"):
             query = query.filter(~Task.id.in_(entity_hold_ids["task"]))
         return query
@@ -738,7 +799,9 @@ def _build_retention_query(
         if case_hold_ids:
             query = query.filter(~CaseActivityLog.case_id.in_(case_hold_ids))
         if entity_hold_ids.get("case_activity"):
-            query = query.filter(~CaseActivityLog.id.in_(entity_hold_ids["case_activity"]))
+            query = query.filter(
+                ~CaseActivityLog.id.in_(entity_hold_ids["case_activity"])
+            )
         return query
     raise ValueError(f"Unsupported retention entity type: {entity_type}")
 

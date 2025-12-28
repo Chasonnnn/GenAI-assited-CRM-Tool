@@ -7,12 +7,13 @@ Create Date: 2025-12-16
 Ensures consistent upsert behavior by replacing NULL integration_key
 with 'default' in rollup tables.
 """
+
 from alembic import op
 
 
 # revision identifiers, used by Alembic.
-revision = '0009_backfill_integration_key'
-down_revision = '0008_integration_health'
+revision = "0009_backfill_integration_key"
+down_revision = "0008_integration_health"
 branch_labels = None
 depends_on = None
 
@@ -24,13 +25,13 @@ def upgrade() -> None:
         SET integration_key = 'default'
         WHERE integration_key IS NULL
     """)
-    
+
     op.execute("""
         UPDATE integration_error_rollup
         SET integration_key = 'default'
         WHERE integration_key IS NULL
     """)
-    
+
     # Optionally make NOT NULL with default (commented out for now in case
     # you want to keep NULL as a valid sentinel in the future)
     # op.alter_column('integration_health', 'integration_key',

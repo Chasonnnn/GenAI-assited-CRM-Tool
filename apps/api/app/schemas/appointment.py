@@ -11,8 +11,10 @@ from pydantic import BaseModel, EmailStr, Field
 # Appointment Types
 # =============================================================================
 
+
 class AppointmentTypeCreate(BaseModel):
     """Schema for creating an appointment type."""
+
     name: str = Field(..., min_length=1, max_length=100)
     description: str | None = None
     duration_minutes: int = Field(30, ge=15, le=480)
@@ -24,6 +26,7 @@ class AppointmentTypeCreate(BaseModel):
 
 class AppointmentTypeUpdate(BaseModel):
     """Schema for updating an appointment type."""
+
     name: str | None = Field(None, min_length=1, max_length=100)
     description: str | None = None
     duration_minutes: int | None = Field(None, ge=15, le=480)
@@ -36,6 +39,7 @@ class AppointmentTypeUpdate(BaseModel):
 
 class AppointmentTypeRead(BaseModel):
     """Schema for reading an appointment type."""
+
     id: UUID
     user_id: UUID
     name: str
@@ -55,8 +59,10 @@ class AppointmentTypeRead(BaseModel):
 # Availability Rules
 # =============================================================================
 
+
 class AvailabilityRuleInput(BaseModel):
     """Schema for a single availability rule."""
+
     day_of_week: int = Field(..., ge=0, le=6, description="Monday=0, Sunday=6")
     start_time: str = Field(..., pattern=r"^\d{2}:\d{2}$", description="HH:MM format")
     end_time: str = Field(..., pattern=r"^\d{2}:\d{2}$", description="HH:MM format")
@@ -64,12 +70,14 @@ class AvailabilityRuleInput(BaseModel):
 
 class AvailabilityRulesSet(BaseModel):
     """Schema for setting all availability rules."""
+
     rules: list[AvailabilityRuleInput]
     timezone: str = Field("America/Los_Angeles", max_length=50)
 
 
 class AvailabilityRuleRead(BaseModel):
     """Schema for reading an availability rule."""
+
     id: UUID
     day_of_week: int
     start_time: time
@@ -81,8 +89,10 @@ class AvailabilityRuleRead(BaseModel):
 # Availability Overrides
 # =============================================================================
 
+
 class AvailabilityOverrideCreate(BaseModel):
     """Schema for creating an availability override."""
+
     override_date: date
     is_unavailable: bool = True
     start_time: str | None = Field(None, pattern=r"^\d{2}:\d{2}$")
@@ -92,6 +102,7 @@ class AvailabilityOverrideCreate(BaseModel):
 
 class AvailabilityOverrideRead(BaseModel):
     """Schema for reading an availability override."""
+
     id: UUID
     override_date: date
     is_unavailable: bool
@@ -105,8 +116,10 @@ class AvailabilityOverrideRead(BaseModel):
 # Booking Links
 # =============================================================================
 
+
 class BookingLinkRead(BaseModel):
     """Schema for reading a booking link."""
+
     id: UUID
     user_id: UUID
     public_slug: str
@@ -120,8 +133,10 @@ class BookingLinkRead(BaseModel):
 # Appointments
 # =============================================================================
 
+
 class AppointmentCreate(BaseModel):
     """Schema for creating an appointment (public booking)."""
+
     appointment_type_id: UUID
     client_name: str = Field(..., min_length=1, max_length=255)
     client_email: EmailStr
@@ -134,16 +149,19 @@ class AppointmentCreate(BaseModel):
 
 class AppointmentReschedule(BaseModel):
     """Schema for rescheduling an appointment."""
+
     scheduled_start: datetime
 
 
 class AppointmentCancel(BaseModel):
     """Schema for cancelling an appointment."""
+
     reason: str | None = Field(None, max_length=1000)
 
 
 class AppointmentRead(BaseModel):
     """Schema for reading an appointment."""
+
     id: UUID
     user_id: UUID
     appointment_type_id: UUID | None
@@ -178,6 +196,7 @@ class AppointmentRead(BaseModel):
 
 class AppointmentListItem(BaseModel):
     """Schema for appointment list item."""
+
     id: UUID
     appointment_type_name: str | None
     client_name: str
@@ -199,6 +218,7 @@ class AppointmentListItem(BaseModel):
 
 class AppointmentListResponse(BaseModel):
     """Schema for appointment list response."""
+
     items: list[AppointmentListItem]
     total: int
     page: int
@@ -210,8 +230,10 @@ class AppointmentListResponse(BaseModel):
 # Link Updates
 # =============================================================================
 
+
 class AppointmentLinkUpdate(BaseModel):
     """Update an appointment's case/intended parent linkage."""
+
     case_id: UUID | None = None
     intended_parent_id: UUID | None = None
 
@@ -220,14 +242,17 @@ class AppointmentLinkUpdate(BaseModel):
 # Time Slots
 # =============================================================================
 
+
 class TimeSlotRead(BaseModel):
     """Schema for an available time slot."""
+
     start: datetime
     end: datetime
 
 
 class AvailableSlotsResponse(BaseModel):
     """Schema for available slots response."""
+
     slots: list[TimeSlotRead]
     appointment_type: AppointmentTypeRead | None
 
@@ -236,8 +261,10 @@ class AvailableSlotsResponse(BaseModel):
 # Public Booking Page
 # =============================================================================
 
+
 class StaffInfoRead(BaseModel):
     """Schema for staff info on public booking page."""
+
     user_id: UUID
     display_name: str
     avatar_url: str | None
@@ -245,6 +272,7 @@ class StaffInfoRead(BaseModel):
 
 class PublicBookingPageRead(BaseModel):
     """Schema for public booking page data."""
+
     staff: StaffInfoRead
     appointment_types: list[AppointmentTypeRead]
     org_name: str | None

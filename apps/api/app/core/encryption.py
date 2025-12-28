@@ -15,7 +15,7 @@ def get_fernet() -> Fernet:
         if not settings.META_ENCRYPTION_KEY:
             raise RuntimeError(
                 "META_ENCRYPTION_KEY not configured. "
-                "Generate with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+                'Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
             )
         _fernet = Fernet(settings.META_ENCRYPTION_KEY.encode())
     return _fernet

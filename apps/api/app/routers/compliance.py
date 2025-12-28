@@ -93,7 +93,9 @@ def release_legal_hold(
         hold_id=hold_id,
     )
     if not hold:
-        raise HTTPException(status_code=404, detail="Legal hold not found or already released")
+        raise HTTPException(
+            status_code=404, detail="Legal hold not found or already released"
+        )
     return hold
 
 
@@ -108,10 +110,15 @@ def purge_preview(
         db=db,
         org_id=session.org_id,
         user_id=session.user_id,
-        results=[{"entity_type": item.entity_type, "count": item.count} for item in results],
+        results=[
+            {"entity_type": item.entity_type, "count": item.count} for item in results
+        ],
     )
     return PurgePreviewResponse(
-        items=[PurgePreviewItem(entity_type=item.entity_type, count=item.count) for item in results]
+        items=[
+            PurgePreviewItem(entity_type=item.entity_type, count=item.count)
+            for item in results
+        ]
     )
 
 

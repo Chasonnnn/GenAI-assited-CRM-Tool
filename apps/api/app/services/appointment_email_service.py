@@ -15,7 +15,11 @@ from sqlalchemy.orm import Session
 from app.db.models import Appointment, AppointmentEmailLog, Organization, User
 from app.db.enums import AppointmentEmailType
 from app.services import email_service
-from app.services.appointment_service import log_appointment_email, mark_email_sent, mark_email_failed
+from app.services.appointment_service import (
+    log_appointment_email,
+    mark_email_sent,
+    mark_email_failed,
+)
 
 
 # =============================================================================
@@ -72,7 +76,6 @@ DEFAULT_TEMPLATES: dict[AppointmentEmailType, dict[str, str]] = {
 </body>
 </html>""",
     },
-    
     AppointmentEmailType.CONFIRMED: {
         "name": "appointment_confirmed",
         "subject": "Appointment Confirmed - {{appointment_type}} on {{scheduled_date}}",
@@ -115,7 +118,6 @@ DEFAULT_TEMPLATES: dict[AppointmentEmailType, dict[str, str]] = {
 </body>
 </html>""",
     },
-    
     AppointmentEmailType.RESCHEDULED: {
         "name": "appointment_rescheduled",
         "subject": "Appointment Rescheduled - {{appointment_type}}",
@@ -168,7 +170,6 @@ DEFAULT_TEMPLATES: dict[AppointmentEmailType, dict[str, str]] = {
 </body>
 </html>""",
     },
-    
     AppointmentEmailType.CANCELLED: {
         "name": "appointment_cancelled",
         "subject": "Appointment Cancelled - {{appointment_type}}",
@@ -205,7 +206,6 @@ DEFAULT_TEMPLATES: dict[AppointmentEmailType, dict[str, str]] = {
 </body>
 </html>""",
     },
-    
     AppointmentEmailType.REMINDER: {
         "name": "appointment_reminder",
         "subject": "Reminder: {{appointment_type}} Tomorrow at {{scheduled_time}}",
@@ -276,61 +276,67 @@ def build_appointment_variables(
         client_tz = ZoneInfo(client_tz_name)
     except Exception:
         client_tz = ZoneInfo("America/Los_Angeles")
-    
+
     # Convert UTC time to client's timezone for display
     scheduled_start = appointment.scheduled_start
     if scheduled_start:
         scheduled_start_local = scheduled_start.astimezone(client_tz)
     else:
         scheduled_start_local = None
-    
+
     variables = {
         # Client info
         "client_name": appointment.client_name or "",
         "client_email": appointment.client_email or "",
         "client_phone": appointment.client_phone or "",
-        
         # Appointment info
-        "appointment_type": appointment.appointment_type.name if appointment.appointment_type else "",
-        "scheduled_date": scheduled_start_local.strftime("%A, %B %d, %Y") if scheduled_start_local else "",
-        "scheduled_time": scheduled_start_local.strftime("%I:%M %p %Z") if scheduled_start_local else "",
+        "appointment_type": appointment.appointment_type.name
+        if appointment.appointment_type
+        else "",
+        "scheduled_date": scheduled_start_local.strftime("%A, %B %d, %Y")
+        if scheduled_start_local
+        else "",
+        "scheduled_time": scheduled_start_local.strftime("%I:%M %p %Z")
+        if scheduled_start_local
+        else "",
         "duration": str(appointment.duration_minutes or 0),
-        "meeting_mode": MEETING_MODE_DISPLAY.get(appointment.meeting_mode or "", appointment.meeting_mode or ""),
-        
+        "meeting_mode": MEETING_MODE_DISPLAY.get(
+            appointment.meeting_mode or "", appointment.meeting_mode or ""
+        ),
         # Staff info
         "staff_name": staff.display_name if staff else "",
         "staff_email": staff.email if staff else "",
-        
         # Org info
         "org_name": org.name if org else "",
-        
         # Links - use correct self-service paths (frontend routes)
-        "reschedule_url": f"{base_url}/book/reschedule/{appointment.reschedule_token}" if appointment.reschedule_token else "",
-        "cancel_url": f"{base_url}/book/cancel/{appointment.cancel_token}" if appointment.cancel_token else "",
-        
+        "reschedule_url": f"{base_url}/book/reschedule/{appointment.reschedule_token}"
+        if appointment.reschedule_token
+        else "",
+        "cancel_url": f"{base_url}/book/cancel/{appointment.cancel_token}"
+        if appointment.cancel_token
+        else "",
         # Zoom (if available)
         "zoom_join_url": appointment.zoom_join_url or "",
         "zoom_meeting_id": appointment.zoom_meeting_id or "",
-        
         # Cancellation
         "cancellation_reason": appointment.cancellation_reason or "",
-        
         # Client notes
         "client_notes": appointment.client_notes or "",
     }
-    
+
     # Old time for reschedule emails (also convert to client timezone)
     if old_start:
         old_start_local = old_start.astimezone(client_tz)
         variables["old_scheduled_date"] = old_start_local.strftime("%A, %B %d, %Y")
         variables["old_scheduled_time"] = old_start_local.strftime("%I:%M %p %Z")
-    
+
     return variables
 
 
 # =============================================================================
 # Template Management
 # =============================================================================
+
 
 def get_or_create_template(
     db: Session,
@@ -341,15 +347,15 @@ def get_or_create_template(
     """Get or create the template for an appointment email type."""
     template_name = _get_template_name(email_type)
     template = email_service.get_template_by_name(db, template_name, org_id)
-    
+
     if template:
         return template.id
-    
+
     # Create default template
     default = DEFAULT_TEMPLATES.get(email_type)
     if not default:
         return None
-    
+
     template = email_service.create_template(
         db=db,
         org_id=org_id,
@@ -365,6 +371,7 @@ def get_or_create_template(
 # Email Sending
 # =============================================================================
 
+
 def send_appointment_email(
     db: Session,
     appointment: Appointment,
@@ -375,32 +382,32 @@ def send_appointment_email(
 ) -> AppointmentEmailLog | None:
     """
     Send an appointment notification email.
-    
+
     Creates or reuses templates, builds variables, queues the email,
     and logs it in AppointmentEmailLog.
     """
     # Get org and staff
-    org = db.query(Organization).filter(
-        Organization.id == appointment.organization_id
-    ).first()
-    staff = db.query(User).filter(
-        User.id == appointment.user_id
-    ).first()
-    
+    org = (
+        db.query(Organization)
+        .filter(Organization.id == appointment.organization_id)
+        .first()
+    )
+    staff = db.query(User).filter(User.id == appointment.user_id).first()
+
     if not org or not staff:
         return None
-    
+
     # Get or create template
     # Use a system user ID for template creation (first admin of org)
     template_id = get_or_create_template(
-        db, 
-        org.id, 
+        db,
+        org.id,
         staff.id,
         email_type,
     )
     if not template_id:
         return None
-    
+
     # Build variables
     variables = build_appointment_variables(
         appointment=appointment,
@@ -409,16 +416,14 @@ def send_appointment_email(
         base_url=base_url,
         old_start=old_start,
     )
-    
+
     # Get template for subject
     template = email_service.get_template(db, template_id, org.id)
     if not template:
         return None
-    
-    subject, _ = email_service.render_template(
-        template.subject, "", variables
-    )
-    
+
+    subject, _ = email_service.render_template(template.subject, "", variables)
+
     # Log the email
     email_log = log_appointment_email(
         db=db,
@@ -428,7 +433,7 @@ def send_appointment_email(
         recipient_email=appointment.client_email,
         subject=subject,
     )
-    
+
     # Queue the email
     try:
         result = email_service.send_from_template(
@@ -444,7 +449,7 @@ def send_appointment_email(
             mark_email_sent(db, email_log, str(job.id) if job else None)
     except Exception as e:
         mark_email_failed(db, email_log, str(e))
-    
+
     return email_log
 
 
@@ -457,13 +462,13 @@ def schedule_reminder_email(
     """Schedule a reminder email for hours_before the appointment."""
     if not appointment.scheduled_start:
         return None
-    
+
     remind_at = appointment.scheduled_start - timedelta(hours=hours_before)
-    
+
     # Don't schedule if reminder time is in the past
     if remind_at <= datetime.now(timezone.utc):
         return None
-    
+
     return send_appointment_email(
         db=db,
         appointment=appointment,
@@ -476,6 +481,7 @@ def schedule_reminder_email(
 # =============================================================================
 # Convenience Functions
 # =============================================================================
+
 
 def send_request_received(
     db: Session, appointment: Appointment, base_url: str = ""
@@ -496,10 +502,7 @@ def send_confirmed(
 
 
 def send_rescheduled(
-    db: Session, 
-    appointment: Appointment, 
-    old_start: datetime,
-    base_url: str = ""
+    db: Session, appointment: Appointment, old_start: datetime, base_url: str = ""
 ) -> AppointmentEmailLog | None:
     """Send reschedule notification to client."""
     return send_appointment_email(
@@ -517,8 +520,8 @@ def send_cancelled(
 
 
 def send_reminder(
-    db: Session, 
-    appointment: Appointment, 
+    db: Session,
+    appointment: Appointment,
     base_url: str = "",
     hours_before: int = 24,
 ) -> AppointmentEmailLog | None:

@@ -6,6 +6,7 @@ from alembic import context
 
 # Import the Base and models for autogenerate support
 from app.db.base import Base
+
 # Import all models here so they are registered with Base.metadata
 import app.db.models  # noqa: F401
 
@@ -110,9 +111,7 @@ def run_migrations_online() -> None:
         with connection.begin():
             _ensure_alembic_version_table(connection)
 
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()

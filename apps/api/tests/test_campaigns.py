@@ -12,11 +12,12 @@ from uuid import uuid4
 # Test Fixtures
 # =============================================================================
 
+
 @pytest.fixture
 def test_template(db, test_org):
     """Create a test email template."""
     from app.db.models import EmailTemplate
-    
+
     template = EmailTemplate(
         id=uuid4(),
         organization_id=test_org.id,
@@ -34,7 +35,7 @@ def test_template(db, test_org):
 def test_campaign(db, test_org, test_user, test_template):
     """Create a test campaign."""
     from app.db.models import Campaign
-    
+
     campaign = Campaign(
         id=uuid4(),
         organization_id=test_org.id,
@@ -55,11 +56,12 @@ def test_campaign(db, test_org, test_user, test_template):
 # Campaign Model Tests
 # =============================================================================
 
+
 def test_campaign_model_creation(db, test_org, test_user, test_template):
     """Test Campaign model can be created with all fields."""
     from app.db.models import Campaign
     from datetime import datetime, timezone
-    
+
     campaign = Campaign(
         id=uuid4(),
         organization_id=test_org.id,
@@ -74,7 +76,7 @@ def test_campaign_model_creation(db, test_org, test_user, test_template):
     )
     db.add(campaign)
     db.flush()
-    
+
     assert campaign.id is not None
     assert campaign.created_at is not None
     assert campaign.status == "scheduled"
@@ -84,7 +86,7 @@ def test_campaign_run_model(db, test_org, test_campaign):
     """Test CampaignRun model creation."""
     from app.db.models import CampaignRun
     from datetime import datetime, timezone
-    
+
     run = CampaignRun(
         id=uuid4(),
         organization_id=test_org.id,  # Required field
@@ -98,7 +100,7 @@ def test_campaign_run_model(db, test_org, test_campaign):
     )
     db.add(run)
     db.flush()
-    
+
     assert run.id is not None
     assert run.status == "running"
 
@@ -107,7 +109,7 @@ def test_campaign_recipient_model(db, test_org, test_campaign):
     """Test CampaignRecipient model creation."""
     from app.db.models import CampaignRun, CampaignRecipient
     from datetime import datetime, timezone
-    
+
     run = CampaignRun(
         id=uuid4(),
         organization_id=test_org.id,  # Required field
@@ -121,7 +123,7 @@ def test_campaign_recipient_model(db, test_org, test_campaign):
     )
     db.add(run)
     db.flush()
-    
+
     recipient = CampaignRecipient(
         id=uuid4(),
         run_id=run.id,
@@ -132,7 +134,7 @@ def test_campaign_recipient_model(db, test_org, test_campaign):
     )
     db.add(recipient)
     db.flush()
-    
+
     assert recipient.id is not None
     assert recipient.status == "pending"
 
@@ -140,7 +142,7 @@ def test_campaign_recipient_model(db, test_org, test_campaign):
 def test_email_suppression_model(db, test_org):
     """Test EmailSuppression model creation."""
     from app.db.models import EmailSuppression
-    
+
     suppression = EmailSuppression(
         id=uuid4(),
         organization_id=test_org.id,
@@ -149,7 +151,7 @@ def test_email_suppression_model(db, test_org):
     )
     db.add(suppression)
     db.flush()
-    
+
     assert suppression.id is not None
     assert suppression.reason == "opt_out"
 
@@ -158,12 +160,13 @@ def test_email_suppression_model(db, test_org):
 # Campaign Service Tests
 # =============================================================================
 
+
 def test_campaign_service_list(db, test_org, test_campaign):
     """Test campaign service list function."""
     from app.services import campaign_service
-    
+
     campaigns, total = campaign_service.list_campaigns(db, test_org.id)
-    
+
     assert total == 1
     assert len(campaigns) == 1
     assert campaigns[0].name == "Test Campaign"
@@ -172,9 +175,9 @@ def test_campaign_service_list(db, test_org, test_campaign):
 def test_campaign_service_get(db, test_org, test_campaign):
     """Test campaign service get function."""
     from app.services import campaign_service
-    
+
     campaign = campaign_service.get_campaign(db, test_org.id, test_campaign.id)
-    
+
     assert campaign is not None
     assert campaign.name == "Test Campaign"
 
@@ -183,18 +186,18 @@ def test_campaign_service_create(db, test_org, test_user, test_template):
     """Test campaign service create function."""
     from app.services import campaign_service
     from app.schemas.campaign import CampaignCreate
-    
+
     create_data = CampaignCreate(
         name="New Service Campaign",
         email_template_id=test_template.id,
         recipient_type="case",
         filter_criteria={},
     )
-    
+
     campaign = campaign_service.create_campaign(
         db, test_org.id, test_user.id, create_data
     )
-    
+
     assert campaign is not None
     assert campaign.name == "New Service Campaign"
     assert campaign.status == "draft"
@@ -204,10 +207,13 @@ def test_is_email_suppressed(db, test_org):
     """Test suppression checking function."""
     from app.services import campaign_service
     from app.db.models import EmailSuppression
-    
+
     # Not suppressed yet
-    assert campaign_service.is_email_suppressed(db, test_org.id, "test@example.com") is False
-    
+    assert (
+        campaign_service.is_email_suppressed(db, test_org.id, "test@example.com")
+        is False
+    )
+
     # Add suppression
     suppression = EmailSuppression(
         id=uuid4(),
@@ -217,19 +223,22 @@ def test_is_email_suppressed(db, test_org):
     )
     db.add(suppression)
     db.flush()
-    
+
     # Now suppressed
-    assert campaign_service.is_email_suppressed(db, test_org.id, "test@example.com") is True
+    assert (
+        campaign_service.is_email_suppressed(db, test_org.id, "test@example.com")
+        is True
+    )
 
 
 def test_add_to_suppression(db, test_org, test_user):
     """Test adding email to suppression list."""
     from app.services import campaign_service
-    
+
     result = campaign_service.add_to_suppression(
         db, test_org.id, "newsuppressed@example.com", "opt_out", test_user.id
     )
-    
+
     assert result is not None
     assert result.email == "newsuppressed@example.com"
     assert result.reason == "opt_out"
@@ -239,12 +248,13 @@ def test_add_to_suppression(db, test_org, test_user):
 # Job Type Tests
 # =============================================================================
 
+
 def test_campaign_send_job_type_exists():
     """CAMPAIGN_SEND should exist in JobType enum."""
     from app.db.enums import JobType
-    
+
     # This was the critical bug - job type was missing
-    assert hasattr(JobType, 'CAMPAIGN_SEND')
+    assert hasattr(JobType, "CAMPAIGN_SEND")
     assert JobType.CAMPAIGN_SEND.value == "campaign_send"
 
 
@@ -253,7 +263,7 @@ def test_campaign_send_job_creation(db, test_org, test_user, test_campaign):
     from app.services import campaign_service
     from app.db.models import Job
     from app.db.enums import JobType
-    
+
     # Enqueue campaign
     message, run_id, scheduled_at = campaign_service.enqueue_campaign_send(
         db=db,
@@ -262,16 +272,20 @@ def test_campaign_send_job_creation(db, test_org, test_user, test_campaign):
         user_id=test_user.id,
         send_now=True,
     )
-    
+
     assert run_id is not None
     assert "queued" in message.lower()
-    
+
     # Verify job was created with correct type
-    job = db.query(Job).filter(
-        Job.organization_id == test_org.id,
-        Job.job_type == JobType.CAMPAIGN_SEND.value,
-    ).first()
-    
+    job = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.CAMPAIGN_SEND.value,
+        )
+        .first()
+    )
+
     assert job is not None
     assert job.payload["campaign_id"] == str(test_campaign.id)
     assert job.payload["run_id"] == str(run_id)
@@ -283,11 +297,11 @@ def test_campaign_send_job_scheduled_run_at(db, test_org, test_user, test_campai
     from app.services import campaign_service
     from app.db.models import Job
     from app.db.enums import JobType
-    
+
     scheduled_at = datetime.now(timezone.utc) + timedelta(hours=2)
     test_campaign.scheduled_at = scheduled_at
     db.flush()
-    
+
     message, run_id, returned_scheduled = campaign_service.enqueue_campaign_send(
         db=db,
         org_id=test_org.id,
@@ -295,23 +309,29 @@ def test_campaign_send_job_scheduled_run_at(db, test_org, test_user, test_campai
         user_id=test_user.id,
         send_now=False,
     )
-    
+
     assert run_id is not None
     assert "scheduled" in message.lower()
     assert returned_scheduled == scheduled_at
-    
-    job = db.query(Job).filter(
-        Job.organization_id == test_org.id,
-        Job.job_type == JobType.CAMPAIGN_SEND.value,
-    ).first()
-    
+
+    job = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.CAMPAIGN_SEND.value,
+        )
+        .first()
+    )
+
     assert job is not None
     assert job.payload["campaign_id"] == str(test_campaign.id)
     assert job.payload["run_id"] == str(run_id)
     assert job.run_at.replace(tzinfo=None) == scheduled_at.replace(tzinfo=None)
 
 
-def test_campaign_send_requires_scheduled_at_when_send_now_false(db, test_org, test_user, test_campaign):
+def test_campaign_send_requires_scheduled_at_when_send_now_false(
+    db, test_org, test_user, test_campaign
+):
     """send_now=False should require campaign.scheduled_at."""
     from app.services import campaign_service
 
@@ -329,21 +349,24 @@ def test_campaign_send_requires_scheduled_at_when_send_now_false(db, test_org, t
 # Campaign Execution Tests
 # =============================================================================
 
+
 def test_execute_campaign_run_function_exists():
     """execute_campaign_run function should exist."""
     from app.services import campaign_service
-    
-    assert hasattr(campaign_service, 'execute_campaign_run')
+
+    assert hasattr(campaign_service, "execute_campaign_run")
     assert callable(campaign_service.execute_campaign_run)
 
 
-def test_execute_campaign_run_with_no_recipients(db, test_org, test_user, test_template):
+def test_execute_campaign_run_with_no_recipients(
+    db, test_org, test_user, test_template
+):
     """Executing campaign with no matching recipients should complete without errors."""
     from app.services import campaign_service
     from app.schemas.campaign import CampaignCreate
     from app.db.models import CampaignRun
     from uuid import uuid4
-    
+
     # Create campaign with filter that matches nothing
     create_data = CampaignCreate(
         name="Empty Campaign",
@@ -351,11 +374,11 @@ def test_execute_campaign_run_with_no_recipients(db, test_org, test_user, test_t
         recipient_type="case",
         filter_criteria={"stage_ids": [str(uuid4())]},  # Non-existent stage
     )
-    
+
     campaign = campaign_service.create_campaign(
         db, test_org.id, test_user.id, create_data
     )
-    
+
     # Create a run
     run = CampaignRun(
         id=uuid4(),
@@ -369,7 +392,7 @@ def test_execute_campaign_run_with_no_recipients(db, test_org, test_user, test_t
     )
     db.add(run)
     db.flush()
-    
+
     # Execute
     result = campaign_service.execute_campaign_run(
         db=db,
@@ -377,13 +400,15 @@ def test_execute_campaign_run_with_no_recipients(db, test_org, test_user, test_t
         campaign_id=campaign.id,
         run_id=run.id,
     )
-    
+
     assert result["sent_count"] == 0
     assert result["failed_count"] == 0
     assert result["total_count"] == 0
 
 
-def test_campaign_run_skips_existing_recipient(db, test_org, test_user, test_template, default_stage):
+def test_campaign_run_skips_existing_recipient(
+    db, test_org, test_user, test_template, default_stage
+):
     """Runs should be idempotent when a recipient already exists."""
     from app.db.models import Case, CampaignRun, CampaignRecipient
     from app.schemas.campaign import CampaignCreate
@@ -410,7 +435,9 @@ def test_campaign_run_skips_existing_recipient(db, test_org, test_user, test_tem
         recipient_type="case",
         filter_criteria={"stage_ids": [str(default_stage.id)]},
     )
-    campaign = campaign_service.create_campaign(db, test_org.id, test_user.id, create_data)
+    campaign = campaign_service.create_campaign(
+        db, test_org.id, test_user.id, create_data
+    )
 
     run = CampaignRun(
         id=uuid4(),

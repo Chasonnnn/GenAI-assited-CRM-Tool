@@ -12,11 +12,12 @@ from uuid import uuid4
 # Test Fixtures
 # =============================================================================
 
+
 @pytest.fixture
 def test_workflow(db, test_org, test_user):
     """Create a test workflow."""
     from app.db.models import AutomationWorkflow
-    
+
     workflow = AutomationWorkflow(
         id=uuid4(),
         organization_id=test_org.id,
@@ -26,9 +27,7 @@ def test_workflow(db, test_org, test_user):
         trigger_config={},
         conditions=[],
         condition_logic="AND",
-        actions=[
-            {"action_type": "add_note", "content": "Welcome to our agency!"}
-        ],
+        actions=[{"action_type": "add_note", "content": "Welcome to our agency!"}],
         is_enabled=False,
         is_system_workflow=False,
         created_by_user_id=test_user.id,
@@ -42,10 +41,11 @@ def test_workflow(db, test_org, test_user):
 # Workflow Model Tests
 # =============================================================================
 
+
 def test_workflow_model_creation(db, test_org, test_user):
     """Test AutomationWorkflow model can be created with all fields."""
     from app.db.models import AutomationWorkflow
-    
+
     workflow = AutomationWorkflow(
         id=uuid4(),
         organization_id=test_org.id,
@@ -54,13 +54,11 @@ def test_workflow_model_creation(db, test_org, test_user):
         icon="mail",
         trigger_type="inactivity",
         trigger_config={"days": 7},
-        conditions=[
-            {"field": "state", "operator": "equals", "value": "TX"}
-        ],
+        conditions=[{"field": "state", "operator": "equals", "value": "TX"}],
         condition_logic="AND",
         actions=[
             {"action_type": "send_email", "template_id": str(uuid4())},
-            {"action_type": "add_note", "content": "Followed up"}
+            {"action_type": "add_note", "content": "Followed up"},
         ],
         is_enabled=True,
         is_system_workflow=False,
@@ -68,7 +66,7 @@ def test_workflow_model_creation(db, test_org, test_user):
     )
     db.add(workflow)
     db.flush()
-    
+
     assert workflow.id is not None
     assert workflow.created_at is not None
     assert workflow.trigger_config["days"] == 7
@@ -77,7 +75,7 @@ def test_workflow_model_creation(db, test_org, test_user):
 def test_workflow_model_with_recurrence(db, test_org, test_user):
     """Test workflow model with recurrence fields."""
     from app.db.models import AutomationWorkflow
-    
+
     workflow = AutomationWorkflow(
         id=uuid4(),
         organization_id=test_org.id,
@@ -93,7 +91,7 @@ def test_workflow_model_with_recurrence(db, test_org, test_user):
     )
     db.add(workflow)
     db.flush()
-    
+
     assert workflow.recurrence_mode == "recurring"
     assert workflow.recurrence_interval_hours == 168
 
@@ -102,12 +100,13 @@ def test_workflow_model_with_recurrence(db, test_org, test_user):
 # Workflow Service Tests
 # =============================================================================
 
+
 def test_workflow_service_list(db, test_org, test_workflow):
     """Test workflow service list function."""
     from app.services import workflow_service
-    
+
     workflows = workflow_service.list_workflows(db, test_org.id)
-    
+
     assert len(workflows) == 1
     assert workflows[0].name == "Test Workflow"
 
@@ -115,10 +114,10 @@ def test_workflow_service_list(db, test_org, test_workflow):
 def test_workflow_service_get(db, test_org, test_workflow):
     """Test workflow service get function."""
     from app.services import workflow_service
-    
+
     # Note: get_workflow takes (db, workflow_id, org_id)
     workflow = workflow_service.get_workflow(db, test_workflow.id, test_org.id)
-    
+
     assert workflow is not None
     assert workflow.name == "Test Workflow"
 
@@ -128,17 +127,17 @@ def test_workflow_service_create(db, test_org, test_user):
     from app.services import workflow_service
     from app.schemas.workflow import WorkflowCreate
     from app.db.enums import WorkflowTriggerType
-    
+
     create_data = WorkflowCreate(
         name="New Service Workflow",
         trigger_type=WorkflowTriggerType.CASE_CREATED,  # Use enum
         actions=[{"action_type": "add_note", "content": "Created!"}],
     )
-    
+
     workflow = workflow_service.create_workflow(
         db, test_org.id, test_user.id, create_data
     )
-    
+
     assert workflow is not None
     assert workflow.name == "New Service Workflow"
     # Note: is_enabled defaults to True per schema
@@ -148,17 +147,17 @@ def test_workflow_service_update(db, test_org, test_user, test_workflow):
     """Test workflow service update function."""
     from app.services import workflow_service
     from app.schemas.workflow import WorkflowUpdate
-    
+
     update_data = WorkflowUpdate(
         name="Updated Workflow",
         is_enabled=True,
     )
-    
+
     # Note: update_workflow takes (db, workflow, user_id, data)
     workflow = workflow_service.update_workflow(
         db, test_workflow, test_user.id, update_data
     )
-    
+
     assert workflow is not None
     assert workflow.name == "Updated Workflow"
     assert workflow.is_enabled is True
@@ -167,10 +166,10 @@ def test_workflow_service_update(db, test_org, test_user, test_workflow):
 def test_workflow_service_delete(db, test_org, test_workflow):
     """Test workflow service delete function."""
     from app.services import workflow_service
-    
+
     # Note: delete_workflow takes (db, workflow)
     workflow_service.delete_workflow(db, test_workflow)
-    
+
     # Verify deleted
     workflow = workflow_service.get_workflow(db, test_workflow.id, test_org.id)
     assert workflow is None
@@ -180,6 +179,7 @@ def test_workflow_service_delete(db, test_org, test_workflow):
 # AI Workflow Generation Tests (Unit Tests)
 # =============================================================================
 
+
 def test_ai_workflow_service_validation():
     """Test AI workflow validation logic."""
     from app.services.ai_workflow_service import (
@@ -187,14 +187,14 @@ def test_ai_workflow_service_validation():
         AVAILABLE_TRIGGERS,
         AVAILABLE_ACTIONS,
     )
-    
+
     # Valid workflow
     workflow = GeneratedWorkflow(
         name="Test AI Workflow",
         trigger_type="case_created",
         actions=[{"action_type": "add_note", "content": "Hello!"}],
     )
-    
+
     assert workflow.name == "Test AI Workflow"
     assert workflow.trigger_type in AVAILABLE_TRIGGERS
     assert workflow.actions[0]["action_type"] in AVAILABLE_ACTIONS
@@ -203,7 +203,7 @@ def test_ai_workflow_service_validation():
 def test_ai_workflow_service_triggers():
     """Test that all documented triggers are available."""
     from app.services.ai_workflow_service import AVAILABLE_TRIGGERS
-    
+
     expected_triggers = [
         "case_created",
         "status_changed",
@@ -217,7 +217,7 @@ def test_ai_workflow_service_triggers():
         "appointment_scheduled",
         "appointment_completed",
     ]
-    
+
     for trigger in expected_triggers:
         assert trigger in AVAILABLE_TRIGGERS, f"Missing trigger: {trigger}"
 
@@ -225,7 +225,7 @@ def test_ai_workflow_service_triggers():
 def test_ai_workflow_service_actions():
     """Test that all documented actions are available."""
     from app.services.ai_workflow_service import AVAILABLE_ACTIONS
-    
+
     expected_actions = [
         "send_email",
         "create_task",
@@ -234,7 +234,7 @@ def test_ai_workflow_service_actions():
         "add_note",
         "send_notification",
     ]
-    
+
     for action in expected_actions:
         assert action in AVAILABLE_ACTIONS, f"Missing action: {action}"
 
@@ -242,7 +242,7 @@ def test_ai_workflow_service_actions():
 def test_generated_workflow_model():
     """Test GeneratedWorkflow model validation."""
     from app.services.ai_workflow_service import GeneratedWorkflow
-    
+
     # Minimal valid workflow
     workflow = GeneratedWorkflow(
         name="Minimal Workflow",
@@ -251,7 +251,7 @@ def test_generated_workflow_model():
     )
     assert workflow.condition_logic == "AND"
     assert workflow.conditions == []
-    
+
     # Full workflow
     full_workflow = GeneratedWorkflow(
         name="Full Workflow",
@@ -275,10 +275,11 @@ def test_generated_workflow_model():
 # Workflow Engine Task Mapping
 # =============================================================================
 
+
 def _create_case_for_workflow(db, test_org, test_user, default_stage):
     from app.db.models import Case
     from app.db.enums import OwnerType
-    
+
     case = Case(
         id=uuid4(),
         organization_id=test_org.id,
@@ -299,7 +300,7 @@ def _create_case_for_workflow(db, test_org, test_user, default_stage):
 def _create_task_for_workflow(db, test_org, test_user, case_id=None):
     from app.db.models import Task
     from app.db.enums import OwnerType
-    
+
     task = Task(
         id=uuid4(),
         organization_id=test_org.id,
@@ -319,10 +320,10 @@ def test_task_triggered_workflow_maps_to_case(db, test_org, test_user, default_s
     from app.db.models import AutomationWorkflow, EntityNote
     from app.db.enums import WorkflowTriggerType
     from app.services.workflow_engine import engine
-    
+
     case = _create_case_for_workflow(db, test_org, test_user, default_stage)
     task = _create_task_for_workflow(db, test_org, test_user, case_id=case.id)
-    
+
     workflow = AutomationWorkflow(
         id=uuid4(),
         organization_id=test_org.id,
@@ -338,7 +339,7 @@ def test_task_triggered_workflow_maps_to_case(db, test_org, test_user, default_s
     )
     db.add(workflow)
     db.flush()
-    
+
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.TASK_DUE,
@@ -347,25 +348,31 @@ def test_task_triggered_workflow_maps_to_case(db, test_org, test_user, default_s
         event_data={"task_id": str(task.id), "case_id": str(case.id)},
         org_id=test_org.id,
     )
-    
-    note = db.query(EntityNote).filter(
-        EntityNote.organization_id == test_org.id,
-        EntityNote.entity_id == case.id,
-    ).first()
-    
+
+    note = (
+        db.query(EntityNote)
+        .filter(
+            EntityNote.organization_id == test_org.id,
+            EntityNote.entity_id == case.id,
+        )
+        .first()
+    )
+
     assert note is not None
     assert "Task is due" in note.content
 
 
-def test_task_triggered_workflow_skips_without_case(db, test_org, test_user, default_stage):
+def test_task_triggered_workflow_skips_without_case(
+    db, test_org, test_user, default_stage
+):
     """Task-triggered actions should skip when no case is linked."""
     from app.db.models import AutomationWorkflow, EntityNote
     from app.db.enums import WorkflowTriggerType, WorkflowExecutionStatus
     from app.services.workflow_engine import engine
-    
+
     _create_case_for_workflow(db, test_org, test_user, default_stage)
     task = _create_task_for_workflow(db, test_org, test_user, case_id=None)
-    
+
     workflow = AutomationWorkflow(
         id=uuid4(),
         organization_id=test_org.id,
@@ -381,7 +388,7 @@ def test_task_triggered_workflow_skips_without_case(db, test_org, test_user, def
     )
     db.add(workflow)
     db.flush()
-    
+
     executions = engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.TASK_DUE,
@@ -390,13 +397,17 @@ def test_task_triggered_workflow_skips_without_case(db, test_org, test_user, def
         event_data={"task_id": str(task.id)},
         org_id=test_org.id,
     )
-    
+
     assert len(executions) == 1
     assert executions[0].status == WorkflowExecutionStatus.PARTIAL.value
     assert "Task is not linked to a case" in (executions[0].error_message or "")
-    
-    note = db.query(EntityNote).filter(
-        EntityNote.organization_id == test_org.id,
-    ).first()
-    
+
+    note = (
+        db.query(EntityNote)
+        .filter(
+            EntityNote.organization_id == test_org.id,
+        )
+        .first()
+    )
+
     assert note is None

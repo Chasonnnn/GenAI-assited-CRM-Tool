@@ -18,9 +18,10 @@ MAX_PER_PAGE = 100
 @dataclass
 class PaginationParams:
     """Pagination parameters from query string."""
+
     page: int
     per_page: int
-    
+
     @property
     def offset(self) -> int:
         return (self.page - 1) * self.per_page
@@ -28,11 +29,16 @@ class PaginationParams:
 
 def get_pagination(
     page: int = Query(DEFAULT_PAGE, ge=1, description="Page number (1-indexed)"),
-    per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE, description=f"Items per page (max {MAX_PER_PAGE})"),
+    per_page: int = Query(
+        DEFAULT_PER_PAGE,
+        ge=1,
+        le=MAX_PER_PAGE,
+        description=f"Items per page (max {MAX_PER_PAGE})",
+    ),
 ) -> PaginationParams:
     """
     Pagination dependency.
-    
+
     Usage:
         @router.get("/items")
         def list_items(pagination: PaginationParams = Depends(get_pagination)):
@@ -44,15 +50,22 @@ def get_pagination(
 @dataclass
 class PaginatedResponse(Generic[T]):
     """Standard paginated response structure."""
+
     items: list[T]
     total: int
     page: int
     per_page: int
     pages: int
-    
+
     @classmethod
-    def create(cls, items: list[T], total: int, pagination: PaginationParams) -> "PaginatedResponse[T]":
-        pages = (total + pagination.per_page - 1) // pagination.per_page if pagination.per_page > 0 else 0
+    def create(
+        cls, items: list[T], total: int, pagination: PaginationParams
+    ) -> "PaginatedResponse[T]":
+        pages = (
+            (total + pagination.per_page - 1) // pagination.per_page
+            if pagination.per_page > 0
+            else 0
+        )
         return cls(
             items=items,
             total=total,
@@ -62,10 +75,12 @@ class PaginatedResponse(Generic[T]):
         )
 
 
-def paginate_query(query: SQLAlchemyQuery, pagination: PaginationParams) -> tuple[list, int]:
+def paginate_query(
+    query: SQLAlchemyQuery, pagination: PaginationParams
+) -> tuple[list, int]:
     """
     Apply pagination to a SQLAlchemy query.
-    
+
     Returns:
         (items, total_count)
     """

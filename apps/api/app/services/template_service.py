@@ -16,7 +16,7 @@ def list_templates(
 ) -> list[WorkflowTemplate]:
     """
     List available templates (global + org-specific).
-    
+
     Returns templates visible to the organization.
     """
     query = db.query(WorkflowTemplate).filter(
@@ -25,10 +25,10 @@ def list_templates(
             WorkflowTemplate.organization_id == org_id,
         )
     )
-    
+
     if category:
         query = query.filter(WorkflowTemplate.category == category)
-    
+
     return query.order_by(
         WorkflowTemplate.is_global.desc(),
         WorkflowTemplate.usage_count.desc(),
@@ -42,13 +42,17 @@ def get_template(
     org_id: UUID,
 ) -> WorkflowTemplate | None:
     """Get a template by ID if accessible to the org."""
-    return db.query(WorkflowTemplate).filter(
-        WorkflowTemplate.id == template_id,
-        or_(
-            WorkflowTemplate.is_global.is_(True),
-            WorkflowTemplate.organization_id == org_id,
+    return (
+        db.query(WorkflowTemplate)
+        .filter(
+            WorkflowTemplate.id == template_id,
+            or_(
+                WorkflowTemplate.is_global.is_(True),
+                WorkflowTemplate.organization_id == org_id,
+            ),
         )
-    ).first()
+        .first()
+    )
 
 
 def create_template(
@@ -66,10 +70,14 @@ def create_template(
     icon: str = "template",
 ) -> WorkflowTemplate:
     """Create a new org-specific template."""
-    existing = db.query(WorkflowTemplate).filter(
-        WorkflowTemplate.organization_id == org_id,
-        WorkflowTemplate.name == name,
-    ).first()
+    existing = (
+        db.query(WorkflowTemplate)
+        .filter(
+            WorkflowTemplate.organization_id == org_id,
+            WorkflowTemplate.name == name,
+        )
+        .first()
+    )
     if existing:
         raise ValueError("Template name already exists")
 
@@ -108,14 +116,18 @@ def create_template_from_workflow(
     category: str = "general",
 ) -> WorkflowTemplate:
     """Create a template from an existing workflow."""
-    workflow = db.query(AutomationWorkflow).filter(
-        AutomationWorkflow.id == workflow_id,
-        AutomationWorkflow.organization_id == org_id,
-    ).first()
-    
+    workflow = (
+        db.query(AutomationWorkflow)
+        .filter(
+            AutomationWorkflow.id == workflow_id,
+            AutomationWorkflow.organization_id == org_id,
+        )
+        .first()
+    )
+
     if not workflow:
         raise ValueError("Workflow not found")
-    
+
     return create_template(
         db=db,
         org_id=org_id,
@@ -143,14 +155,14 @@ def use_template(
     action_overrides: dict | None = None,
 ) -> AutomationWorkflow:
     """Create a workflow from a template.
-    
+
     Returns workflow.
     If actions have missing required fields, a validation error is raised.
     """
     template = get_template(db, template_id, org_id)
     if not template:
         raise ValueError("Template not found")
-    
+
     # Apply action overrides if provided
     actions = template.actions.copy() if template.actions else []
     if action_overrides:
@@ -171,19 +183,20 @@ def use_template(
     for i, action in enumerate(actions):
         action_type = action.get("action_type")
         if action_type == "send_email" and not action.get("template_id"):
-            raise ValueError(f"Action {i+1} (send_email) missing email template")
-    
+            raise ValueError(f"Action {i + 1} (send_email) missing email template")
+
     from app.services import workflow_service
     from app.db.enums import WorkflowTriggerType
+
     workflow_service._validate_trigger_config(
         WorkflowTriggerType(template.trigger_type),
         template.trigger_config or {},
     )
     for action in actions:
         workflow_service._validate_action_config(db, org_id, action)
-    
+
     effective_enabled = is_enabled
-    
+
     # Create workflow copy
     workflow = AutomationWorkflow(
         organization_id=org_id,
@@ -200,10 +213,10 @@ def use_template(
         updated_by_user_id=user_id,
     )
     db.add(workflow)
-    
+
     # Update template usage count
     template.usage_count += 1
-    
+
     db.commit()
     db.refresh(workflow)
     return workflow
@@ -215,15 +228,19 @@ def delete_template(
     template_id: UUID,
 ) -> bool:
     """Delete an org-specific template (cannot delete global templates)."""
-    template = db.query(WorkflowTemplate).filter(
-        WorkflowTemplate.id == template_id,
-        WorkflowTemplate.organization_id == org_id,
-        WorkflowTemplate.is_global.is_(False),
-    ).first()
-    
+    template = (
+        db.query(WorkflowTemplate)
+        .filter(
+            WorkflowTemplate.id == template_id,
+            WorkflowTemplate.organization_id == org_id,
+            WorkflowTemplate.is_global.is_(False),
+        )
+        .first()
+    )
+
     if not template:
         return False
-    
+
     db.delete(template)
     db.commit()
     return True
@@ -242,7 +259,10 @@ def seed_global_templates(db: Session) -> int:
             "conditions": [],
             "condition_logic": "AND",
             "actions": [
-                {"action_type": "send_email", "template_id": None}  # User selects template
+                {
+                    "action_type": "send_email",
+                    "template_id": None,
+                }  # User selects template
             ],
         },
         {
@@ -255,7 +275,11 @@ def seed_global_templates(db: Session) -> int:
             "conditions": [],
             "condition_logic": "AND",
             "actions": [
-                {"action_type": "create_task", "title": "Follow up on inactive case", "due_days": 1}
+                {
+                    "action_type": "create_task",
+                    "title": "Follow up on inactive case",
+                    "due_days": 1,
+                }
             ],
         },
         {
@@ -268,7 +292,11 @@ def seed_global_templates(db: Session) -> int:
             "conditions": [],
             "condition_logic": "AND",
             "actions": [
-                {"action_type": "send_notification", "title": "New case assigned", "recipients": "owner"}
+                {
+                    "action_type": "send_notification",
+                    "title": "New case assigned",
+                    "recipients": "owner",
+                }
             ],
         },
         {
@@ -281,7 +309,11 @@ def seed_global_templates(db: Session) -> int:
             "conditions": [],
             "condition_logic": "AND",
             "actions": [
-                {"action_type": "send_notification", "title": "Case status updated", "recipients": "all_managers"}
+                {
+                    "action_type": "send_notification",
+                    "title": "Case status updated",
+                    "recipients": "all_managers",
+                }
             ],
         },
         {
@@ -294,18 +326,26 @@ def seed_global_templates(db: Session) -> int:
             "conditions": [],
             "condition_logic": "AND",
             "actions": [
-                {"action_type": "send_notification", "title": "Task due soon", "recipients": "owner"}
+                {
+                    "action_type": "send_notification",
+                    "title": "Task due soon",
+                    "recipients": "owner",
+                }
             ],
         },
     ]
-    
+
     created = 0
     for data in templates_data:
-        existing = db.query(WorkflowTemplate).filter(
-            WorkflowTemplate.is_global.is_(True),
-            WorkflowTemplate.name == data["name"],
-        ).first()
-        
+        existing = (
+            db.query(WorkflowTemplate)
+            .filter(
+                WorkflowTemplate.is_global.is_(True),
+                WorkflowTemplate.name == data["name"],
+            )
+            .first()
+        )
+
         if not existing:
             template = WorkflowTemplate(
                 is_global=True,
@@ -315,8 +355,8 @@ def seed_global_templates(db: Session) -> int:
             )
             db.add(template)
             created += 1
-    
+
     if created > 0:
         db.commit()
-    
+
     return created

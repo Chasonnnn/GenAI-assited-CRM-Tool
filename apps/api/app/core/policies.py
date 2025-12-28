@@ -8,6 +8,7 @@ from app.core.permissions import PermissionKey as P
 @dataclass(frozen=True)
 class ResourcePolicy:
     """Default permission + per-action overrides for a resource."""
+
     default: P | None
     actions: dict[str, P]
 
@@ -73,4 +74,3 @@ POLICIES: dict[str, ResourcePolicy] = {
 def get_policy(resource: str) -> ResourcePolicy:
     """Fetch a resource policy or raise KeyError."""
     return POLICIES[resource]
-

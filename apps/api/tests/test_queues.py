@@ -41,24 +41,33 @@ def test_system_case_defaults_to_unassigned_queue(db, test_org):
 @pytest.mark.asyncio
 async def test_queue_assign_claim_release_flow(authed_client):
     # Create two queues
-    q1 = await authed_client.post("/queues", json={"name": f"Queue A {uuid.uuid4().hex[:6]}", "description": ""})
+    q1 = await authed_client.post(
+        "/queues", json={"name": f"Queue A {uuid.uuid4().hex[:6]}", "description": ""}
+    )
     assert q1.status_code == 201, q1.text
     queue_a = q1.json()
 
-    q2 = await authed_client.post("/queues", json={"name": f"Queue B {uuid.uuid4().hex[:6]}", "description": ""})
+    q2 = await authed_client.post(
+        "/queues", json={"name": f"Queue B {uuid.uuid4().hex[:6]}", "description": ""}
+    )
     assert q2.status_code == 201, q2.text
     queue_b = q2.json()
 
     # Create a case (user-owned by default)
     c = await authed_client.post(
         "/cases",
-        json={"full_name": "Claim Flow", "email": f"claim-{uuid.uuid4().hex[:8]}@example.com"},
+        json={
+            "full_name": "Claim Flow",
+            "email": f"claim-{uuid.uuid4().hex[:8]}@example.com",
+        },
     )
     assert c.status_code == 201, c.text
     case_id = c.json()["id"]
 
     # Assign to queue A
-    assign = await authed_client.post(f"/queues/cases/{case_id}/assign", json={"queue_id": queue_a["id"]})
+    assign = await authed_client.post(
+        f"/queues/cases/{case_id}/assign", json={"queue_id": queue_a["id"]}
+    )
     assert assign.status_code == 200, assign.text
 
     after_assign = await authed_client.get(f"/cases/{case_id}")
@@ -78,7 +87,9 @@ async def test_queue_assign_claim_release_flow(authed_client):
     assert data["owner_id"] is not None
 
     # Release to queue B
-    release = await authed_client.post(f"/queues/cases/{case_id}/release", json={"queue_id": queue_b["id"]})
+    release = await authed_client.post(
+        f"/queues/cases/{case_id}/release", json={"queue_id": queue_b["id"]}
+    )
     assert release.status_code == 200, release.text
 
     after_release = await authed_client.get(f"/cases/{case_id}")

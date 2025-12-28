@@ -4,7 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
+from app.core.deps import (
+    get_current_session,
+    get_db,
+    require_csrf_header,
+    require_permission,
+)
 from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
 from app.services import org_service
@@ -16,8 +21,10 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 # Organization Settings
 # =============================================================================
 
+
 class OrgSettingsRead(BaseModel):
     """Organization settings response."""
+
     id: str
     name: str
     address: str | None
@@ -27,6 +34,7 @@ class OrgSettingsRead(BaseModel):
 
 class OrgSettingsUpdate(BaseModel):
     """Organization settings update request."""
+
     name: str | None = None
     address: str | None = None
     phone: str | None = None
@@ -42,13 +50,13 @@ def get_org_settings(
     org = org_service.get_org_by_id(db, session.org_id)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
-    
+
     return OrgSettingsRead(
         id=str(org.id),
         name=org.name,
-        address=getattr(org, 'address', None),
-        phone=getattr(org, 'phone', None),
-        email=getattr(org, 'contact_email', None),
+        address=getattr(org, "address", None),
+        phone=getattr(org, "phone", None),
+        email=getattr(org, "contact_email", None),
     )
 
 
@@ -59,12 +67,14 @@ def get_org_settings(
 )
 def update_org_settings(
     body: OrgSettingsUpdate,
-    session: UserSession = Depends(require_permission(POLICIES["org_settings"].default)),
+    session: UserSession = Depends(
+        require_permission(POLICIES["org_settings"].default)
+    ),
     db: Session = Depends(get_db),
 ):
     """
     Update organization settings.
-    
+
     Requires manage_org permission (Admin only).
     """
     org = org_service.get_org_by_id(db, session.org_id)
@@ -78,11 +88,11 @@ def update_org_settings(
         phone=body.phone,
         email=body.email,
     )
-    
+
     return OrgSettingsRead(
         id=str(org.id),
         name=org.name,
-        address=getattr(org, 'address', None),
-        phone=getattr(org, 'phone', None),
-        email=getattr(org, 'contact_email', None),
+        address=getattr(org, "address", None),
+        phone=getattr(org, "phone", None),
+        email=getattr(org, "contact_email", None),
     )

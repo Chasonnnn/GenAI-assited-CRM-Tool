@@ -13,8 +13,10 @@ from app.utils.normalization import normalize_phone, normalize_state
 # Create / Update
 # =============================================================================
 
+
 class IntendedParentCreate(BaseModel):
     """Schema for creating an intended parent."""
+
     full_name: str = Field(..., min_length=1, max_length=255)
     email: EmailStr
     phone: str | None = Field(None, max_length=50)
@@ -37,6 +39,7 @@ class IntendedParentCreate(BaseModel):
 
 class IntendedParentUpdate(BaseModel):
     """Schema for updating an intended parent."""
+
     full_name: str | None = Field(None, min_length=1, max_length=255)
     email: EmailStr | None = None
     phone: str | None = Field(None, max_length=50)
@@ -59,6 +62,7 @@ class IntendedParentUpdate(BaseModel):
 
 class IntendedParentStatusUpdate(BaseModel):
     """Schema for changing status."""
+
     status: str = Field(..., min_length=1)
     reason: str | None = Field(None, max_length=500)
 
@@ -67,10 +71,12 @@ class IntendedParentStatusUpdate(BaseModel):
 # Read / Response
 # =============================================================================
 
+
 class IntendedParentRead(BaseModel):
     """Full intended parent details."""
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     organization_id: UUID
     full_name: str
@@ -92,8 +98,9 @@ class IntendedParentRead(BaseModel):
 
 class IntendedParentListItem(BaseModel):
     """Minimal fields for list view."""
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     full_name: str
     email: str
@@ -111,8 +118,9 @@ class IntendedParentListItem(BaseModel):
 
 class IntendedParentStatusHistoryItem(BaseModel):
     """Status history entry."""
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     old_status: str | None
     new_status: str
@@ -126,8 +134,9 @@ class IntendedParentStatusHistoryItem(BaseModel):
 # Stats
 # =============================================================================
 
+
 class IntendedParentStats(BaseModel):
     """IP counts by status."""
+
     total: int
     by_status: dict[str, int]
-

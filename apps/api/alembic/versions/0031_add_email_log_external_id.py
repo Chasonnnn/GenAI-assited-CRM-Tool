@@ -4,6 +4,7 @@ Revision ID: 0031_add_email_log_external_id
 Revises: 201ff7c41d70
 Create Date: 2025-12-19
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -19,7 +20,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Add external_id column to email_logs."""
-    op.add_column("email_logs", sa.Column("external_id", sa.String(length=255), nullable=True))
+    op.add_column(
+        "email_logs", sa.Column("external_id", sa.String(length=255), nullable=True)
+    )
 
 
 def downgrade() -> None:

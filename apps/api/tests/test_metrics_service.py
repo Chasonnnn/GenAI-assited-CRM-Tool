@@ -1,4 +1,5 @@
 """Tests for request metrics rollups and AI conversation constraints."""
+
 import uuid
 from datetime import datetime, timezone
 
@@ -12,7 +13,9 @@ from app.services import metrics_service
 def test_record_request_dedupes_null_org(db, monkeypatch):
     """Null org metrics should upsert into a single rollup row."""
     fixed_bucket = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
-    monkeypatch.setattr(metrics_service, "get_minute_bucket", lambda _=None: fixed_bucket)
+    monkeypatch.setattr(
+        metrics_service, "get_minute_bucket", lambda _=None: fixed_bucket
+    )
 
     route = "/tests/metrics"
 
@@ -33,12 +36,16 @@ def test_record_request_dedupes_null_org(db, monkeypatch):
         org_id=None,
     )
 
-    rows = db.query(RequestMetricsRollup).filter(
-        RequestMetricsRollup.organization_id.is_(None),
-        RequestMetricsRollup.route == route,
-        RequestMetricsRollup.method == "GET",
-        RequestMetricsRollup.period_start == fixed_bucket,
-    ).all()
+    rows = (
+        db.query(RequestMetricsRollup)
+        .filter(
+            RequestMetricsRollup.organization_id.is_(None),
+            RequestMetricsRollup.route == route,
+            RequestMetricsRollup.method == "GET",
+            RequestMetricsRollup.period_start == fixed_bucket,
+        )
+        .all()
+    )
 
     assert len(rows) == 1
     row = rows[0]

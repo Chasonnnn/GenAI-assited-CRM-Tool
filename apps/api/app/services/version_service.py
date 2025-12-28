@@ -100,35 +100,36 @@ def compute_audit_hash(
 ) -> str:
     """
     Compute hash for audit log entry.
-    
+
     Hash = SHA256(all immutable fields joined with |)
-    
+
     Expanded coverage ensures tampering with ANY column is detectable.
     v2 hash includes: actor, target, ip, user_agent, version links.
     """
-    data = "|".join([
-        prev_hash,
-        entry_id,
-        org_id,
-        event_type,
-        created_at,
-        details_json,
-        actor_user_id,
-        target_type,
-        target_id,
-        ip_address,
-        user_agent,
-        request_id,
-        before_version_id,
-        after_version_id,
-    ])
+    data = "|".join(
+        [
+            prev_hash,
+            entry_id,
+            org_id,
+            event_type,
+            created_at,
+            details_json,
+            actor_user_id,
+            target_type,
+            target_id,
+            ip_address,
+            user_agent,
+            request_id,
+            before_version_id,
+            after_version_id,
+        ]
+    )
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
-
 
 
 def get_last_audit_hash(db: Session, org_id: UUID) -> str:
     """Get the hash of the most recent audit log entry for an org.
-    
+
     Uses created_at + id for deterministic ordering under concurrency.
     """
     result = db.execute(
@@ -145,6 +146,7 @@ def get_last_audit_hash(db: Session, org_id: UUID) -> str:
 # Version Management
 # =============================================================================
 
+
 def create_version(
     db: Session,
     org_id: UUID,
@@ -156,24 +158,30 @@ def create_version(
 ) -> EntityVersion:
     """
     Create a new version snapshot.
-    
+
     Automatically increments version number.
     Encrypts payload and computes checksum.
     """
+
     def is_version_conflict(error: IntegrityError) -> bool:
-        constraint_name = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
+        constraint_name = getattr(
+            getattr(error.orig, "diag", None), "constraint_name", None
+        )
         if constraint_name and "entity_versions" in constraint_name:
             return True
         message = str(error.orig) if error.orig else str(error)
         return "entity_versions" in message and "version" in message
 
     for attempt in range(3):
-        current_max = db.execute(
-            select(func.max(EntityVersion.version))
-            .where(EntityVersion.organization_id == org_id)
-            .where(EntityVersion.entity_type == entity_type)
-            .where(EntityVersion.entity_id == entity_id)
-        ).scalar() or 0
+        current_max = (
+            db.execute(
+                select(func.max(EntityVersion.version))
+                .where(EntityVersion.organization_id == org_id)
+                .where(EntityVersion.entity_type == entity_type)
+                .where(EntityVersion.entity_id == entity_id)
+            ).scalar()
+            or 0
+        )
 
         next_version = current_max + 1
 
@@ -246,14 +254,18 @@ def get_version_history(
     limit: int = 50,
 ) -> list[EntityVersion]:
     """Get version history for an entity (newest first)."""
-    return list(db.execute(
-        select(EntityVersion)
-        .where(EntityVersion.organization_id == org_id)
-        .where(EntityVersion.entity_type == entity_type)
-        .where(EntityVersion.entity_id == entity_id)
-        .order_by(EntityVersion.version.desc())
-        .limit(limit)
-    ).scalars().all())
+    return list(
+        db.execute(
+            select(EntityVersion)
+            .where(EntityVersion.organization_id == org_id)
+            .where(EntityVersion.entity_type == entity_type)
+            .where(EntityVersion.entity_id == entity_id)
+            .order_by(EntityVersion.version.desc())
+            .limit(limit)
+        )
+        .scalars()
+        .all()
+    )
 
 
 def rollback_to_version(
@@ -266,16 +278,16 @@ def rollback_to_version(
 ) -> tuple[EntityVersion | None, str | None]:
     """
     Rollback to a previous version.
-    
+
     Creates a NEW version with the old payload (never rewrites history).
-    
+
     Returns:
         (new_version, error) - error is set if rollback failed
     """
     target = get_version(db, org_id, entity_type, entity_id, target_version)
     if not target:
         return None, f"Version {target_version} not found"
-    
+
     # Decrypt and verify old payload
     try:
         payload = decrypt_payload(target.payload_encrypted)
@@ -283,7 +295,7 @@ def rollback_to_version(
             return None, "Checksum verification failed - data may be corrupted"
     except Exception as e:
         return None, f"Failed to decrypt version: {e}"
-    
+
     # Create new version with old payload
     new_version = create_version(
         db=db,
@@ -294,7 +306,7 @@ def rollback_to_version(
         created_by_user_id=user_id,
         comment=f"Rollback from v{target_version}",
     )
-    
+
     return new_version, None
 
 
@@ -302,8 +314,10 @@ def rollback_to_version(
 # Optimistic Locking
 # =============================================================================
 
+
 class VersionConflictError(Exception):
     """Raised when expected_version doesn't match current version."""
+
     def __init__(self, expected: int, actual: int):
         self.expected = expected
         self.actual = actual
@@ -316,7 +330,7 @@ def check_version(
 ) -> None:
     """
     Check if expected version matches current.
-    
+
     Raises:
         VersionConflictError if mismatch
     """
@@ -334,7 +348,7 @@ SECRET_FIELDS = {"api_key", "access_token", "refresh_token", "secret", "password
 def redact_secrets(payload: dict[str, Any], key_id: str = "current") -> dict[str, Any]:
     """
     Recursively redact secret fields from payload.
-    
+
     Replaces values with [REDACTED:{key_id}] for audit trail.
     """
     result = {}

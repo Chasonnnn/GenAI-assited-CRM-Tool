@@ -3,6 +3,7 @@ System alerts service.
 
 Manages deduplicated, actionable alerts with fingerprinting.
 """
+
 import hashlib
 from datetime import datetime, timezone, timedelta
 from uuid import UUID
@@ -22,7 +23,7 @@ def fingerprint(
 ) -> str:
     """
     Generate a stable, PII-safe fingerprint for alert deduplication.
-    
+
     No timestamps or random IDs - ensures dedupe works correctly.
     """
     normalized = f"{alert_type.value}:{integration_key or 'default'}:{error_class or 'unknown'}:{http_status or 0}"
@@ -43,19 +44,23 @@ def create_or_update_alert(
 ) -> SystemAlert:
     """
     Create a new alert or update an existing one if fingerprint matches.
-    
+
     Updates: last_seen_at, occurrence_count, message, details
     Reopens resolved/snoozed alerts if they recur.
     """
     dedupe_key = fingerprint(alert_type, integration_key, error_class, http_status)
     now = datetime.now(timezone.utc)
-    
+
     # Try to find existing alert
-    existing = db.query(SystemAlert).filter(
-        SystemAlert.organization_id == org_id,
-        SystemAlert.dedupe_key == dedupe_key,
-    ).first()
-    
+    existing = (
+        db.query(SystemAlert)
+        .filter(
+            SystemAlert.organization_id == org_id,
+            SystemAlert.dedupe_key == dedupe_key,
+        )
+        .first()
+    )
+
     if existing:
         # Update existing alert
         existing.last_seen_at = now
@@ -63,7 +68,7 @@ def create_or_update_alert(
         existing.message = message
         if details:
             existing.details = details
-        
+
         # Reopen if resolved/snoozed and recurring
         if existing.status in (AlertStatus.RESOLVED.value, AlertStatus.SNOOZED.value):
             # Check if snooze expired
@@ -72,11 +77,11 @@ def create_or_update_alert(
                 existing.snoozed_until = None
             elif existing.status == AlertStatus.RESOLVED.value:
                 existing.status = AlertStatus.OPEN.value
-        
+
         db.commit()
         db.refresh(existing)
         return existing
-    
+
     # Create new alert
     alert = SystemAlert(
         organization_id=org_id,
@@ -104,18 +109,19 @@ def list_alerts(
     offset: int = 0,
 ) -> list[SystemAlert]:
     """List alerts with optional filtering."""
-    query = db.query(SystemAlert).filter(
-        SystemAlert.organization_id == org_id
-    )
-    
+    query = db.query(SystemAlert).filter(SystemAlert.organization_id == org_id)
+
     if status:
         query = query.filter(SystemAlert.status == status.value)
     if severity:
         query = query.filter(SystemAlert.severity == severity.value)
-    
-    return query.order_by(
-        SystemAlert.last_seen_at.desc()
-    ).offset(offset).limit(limit).all()
+
+    return (
+        query.order_by(SystemAlert.last_seen_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
 
 
 def count_alerts(
@@ -125,9 +131,7 @@ def count_alerts(
     severity: AlertSeverity | None = None,
 ) -> int:
     """Count alerts with optional status and severity filter."""
-    query = db.query(SystemAlert).filter(
-        SystemAlert.organization_id == org_id
-    )
+    query = db.query(SystemAlert).filter(SystemAlert.organization_id == org_id)
     if status:
         query = query.filter(SystemAlert.status == status.value)
     if severity:
@@ -137,10 +141,14 @@ def count_alerts(
 
 def get_alert_for_org(db: Session, org_id: UUID, alert_id: UUID) -> SystemAlert | None:
     """Get a single alert scoped to org."""
-    return db.query(SystemAlert).filter(
-        SystemAlert.id == alert_id,
-        SystemAlert.organization_id == org_id,
-    ).first()
+    return (
+        db.query(SystemAlert)
+        .filter(
+            SystemAlert.id == alert_id,
+            SystemAlert.organization_id == org_id,
+        )
+        .first()
+    )
 
 
 def resolve_alert(
@@ -152,7 +160,7 @@ def resolve_alert(
     alert = db.query(SystemAlert).filter(SystemAlert.id == alert_id).first()
     if not alert:
         return None
-    
+
     alert.status = AlertStatus.RESOLVED.value
     alert.resolved_at = datetime.now(timezone.utc)
     alert.resolved_by_user_id = user_id
@@ -169,7 +177,7 @@ def acknowledge_alert(
     alert = db.query(SystemAlert).filter(SystemAlert.id == alert_id).first()
     if not alert:
         return None
-    
+
     alert.status = AlertStatus.ACKNOWLEDGED.value
     db.commit()
     db.refresh(alert)
@@ -185,7 +193,7 @@ def snooze_alert(
     alert = db.query(SystemAlert).filter(SystemAlert.id == alert_id).first()
     if not alert:
         return None
-    
+
     alert.status = AlertStatus.SNOOZED.value
     alert.snoozed_until = datetime.now(timezone.utc) + timedelta(hours=hours)
     db.commit()
@@ -206,11 +214,11 @@ def get_alert_summary(
               AND status = 'open'
             GROUP BY severity
         """),
-        {"org_id": org_id}
+        {"org_id": org_id},
     )
-    
+
     summary = {"warn": 0, "error": 0, "critical": 0}
     for row in result:
         summary[row[0]] = row[1]
-    
+
     return summary

@@ -3,6 +3,7 @@ Integration health and error tracking service.
 
 Manages integration health status and hourly error rollups.
 """
+
 from datetime import datetime, timezone, timedelta
 from uuid import UUID
 
@@ -14,7 +15,7 @@ from app.db.models import IntegrationHealth, IntegrationErrorRollup
 from app.db.enums import IntegrationType, IntegrationStatus, ConfigStatus
 
 # Use 'default' instead of NULL for integration_key to ensure proper upsert deduplication
-DEFAULT_INTEGRATION_KEY = 'default'
+DEFAULT_INTEGRATION_KEY = "default"
 
 
 def get_hour_bucket(dt: datetime | None = None) -> datetime:
@@ -32,12 +33,16 @@ def get_or_create_health(
 ) -> IntegrationHealth:
     """Get or create an IntegrationHealth record."""
     key = integration_key or DEFAULT_INTEGRATION_KEY
-    health = db.query(IntegrationHealth).filter(
-        IntegrationHealth.organization_id == org_id,
-        IntegrationHealth.integration_type == integration_type.value,
-        IntegrationHealth.integration_key == key,
-    ).first()
-    
+    health = (
+        db.query(IntegrationHealth)
+        .filter(
+            IntegrationHealth.organization_id == org_id,
+            IntegrationHealth.integration_type == integration_type.value,
+            IntegrationHealth.integration_key == key,
+        )
+        .first()
+    )
+
     if not health:
         health = IntegrationHealth(
             organization_id=org_id,
@@ -49,7 +54,7 @@ def get_or_create_health(
         db.add(health)
         db.commit()
         db.refresh(health)
-    
+
     return health
 
 
@@ -61,12 +66,12 @@ def record_success(
 ) -> IntegrationHealth:
     """Record a successful integration operation."""
     health = get_or_create_health(db, org_id, integration_type, integration_key)
-    
+
     health.last_success_at = datetime.now(timezone.utc)
     health.status = IntegrationStatus.HEALTHY.value
     health.last_error = None  # Clear last error on success
     db.commit()
-    
+
     return health
 
 
@@ -79,37 +84,41 @@ def record_error(
 ) -> IntegrationHealth:
     """
     Record an integration error.
-    
+
     Updates IntegrationHealth and increments the hourly error rollup.
     """
     now = datetime.now(timezone.utc)
     hour_bucket = get_hour_bucket(now)
-    
+
     # Update health status
     health = get_or_create_health(db, org_id, integration_type, integration_key)
     health.last_error_at = now
     health.last_error = error_message[:1000]  # Truncate for safety
     health.status = IntegrationStatus.ERROR.value
-    
+
     # Upsert error rollup (increment count)
     key = integration_key or DEFAULT_INTEGRATION_KEY
-    stmt = insert(IntegrationErrorRollup).values(
-        organization_id=org_id,
-        integration_type=integration_type.value,
-        integration_key=key,
-        period_start=hour_bucket,
-        error_count=1,
-        last_error=error_message[:1000],
-    ).on_conflict_do_update(
-        constraint="uq_integration_error_rollup",
-        set_={
-            "error_count": IntegrationErrorRollup.error_count + 1,
-            "last_error": error_message[:1000],
-        }
+    stmt = (
+        insert(IntegrationErrorRollup)
+        .values(
+            organization_id=org_id,
+            integration_type=integration_type.value,
+            integration_key=key,
+            period_start=hour_bucket,
+            error_count=1,
+            last_error=error_message[:1000],
+        )
+        .on_conflict_do_update(
+            constraint="uq_integration_error_rollup",
+            set_={
+                "error_count": IntegrationErrorRollup.error_count + 1,
+                "last_error": error_message[:1000],
+            },
+        )
     )
     db.execute(stmt)
     db.commit()
-    
+
     return health
 
 
@@ -122,7 +131,7 @@ def get_error_count_24h(
     """Get error count for last 24 hours from rollups."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     key = integration_key or DEFAULT_INTEGRATION_KEY
-    
+
     result = db.execute(
         text("""
             SELECT COALESCE(SUM(error_count), 0) as total
@@ -137,7 +146,7 @@ def get_error_count_24h(
             "integration_type": integration_type.value,
             "integration_key": key,
             "cutoff": cutoff,
-        }
+        },
     )
     row = result.fetchone()
     return int(row[0]) if row else 0
@@ -153,11 +162,11 @@ def update_config_status(
     """Update the configuration status of an integration."""
     health = get_or_create_health(db, org_id, integration_type, integration_key)
     health.config_status = config_status.value
-    
+
     # If token expired/missing, mark as degraded
     if config_status in (ConfigStatus.EXPIRED_TOKEN, ConfigStatus.MISSING_TOKEN):
         health.status = IntegrationStatus.DEGRADED.value
-    
+
     db.commit()
     return health
 
@@ -168,30 +177,36 @@ def list_integration_health(
 ) -> list[dict]:
     """
     List all integrations and their health status.
-    
+
     Returns enriched data including 24h error counts.
     """
-    healths = db.query(IntegrationHealth).filter(
-        IntegrationHealth.organization_id == org_id
-    ).all()
-    
+    healths = (
+        db.query(IntegrationHealth)
+        .filter(IntegrationHealth.organization_id == org_id)
+        .all()
+    )
+
     result = []
     for h in healths:
         error_count = get_error_count_24h(
-            db, org_id, 
-            IntegrationType(h.integration_type),
-            h.integration_key
+            db, org_id, IntegrationType(h.integration_type), h.integration_key
         )
-        result.append({
-            "id": str(h.id),
-            "integration_type": h.integration_type,
-            "integration_key": h.integration_key,
-            "status": h.status,
-            "config_status": h.config_status,
-            "last_success_at": h.last_success_at.isoformat() if h.last_success_at else None,
-            "last_error_at": h.last_error_at.isoformat() if h.last_error_at else None,
-            "last_error": h.last_error,
-            "error_count_24h": error_count,
-        })
-    
+        result.append(
+            {
+                "id": str(h.id),
+                "integration_type": h.integration_type,
+                "integration_key": h.integration_key,
+                "status": h.status,
+                "config_status": h.config_status,
+                "last_success_at": h.last_success_at.isoformat()
+                if h.last_success_at
+                else None,
+                "last_error_at": h.last_error_at.isoformat()
+                if h.last_error_at
+                else None,
+                "last_error": h.last_error,
+                "error_count_24h": error_count,
+            }
+        )
+
     return result

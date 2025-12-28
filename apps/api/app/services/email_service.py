@@ -31,6 +31,7 @@ def _template_payload(template: EmailTemplate) -> dict:
         "is_active": template.is_active,
     }
 
+
 def create_template(
     db: Session,
     org_id: UUID,
@@ -51,7 +52,7 @@ def create_template(
     )
     db.add(template)
     db.flush()
-    
+
     # Create initial version snapshot
     version_service.create_version(
         db=db,
@@ -62,7 +63,7 @@ def create_template(
         created_by_user_id=user_id,
         comment="Created",
     )
-    
+
     db.commit()
     db.refresh(template)
     return template
@@ -81,14 +82,14 @@ def update_template(
 ) -> EmailTemplate:
     """
     Update an email template with version control.
-    
+
     Creates version snapshot on changes.
     Supports optimistic locking via expected_version.
     """
     # Optimistic locking
     if expected_version is not None:
         version_service.check_version(template.current_version, expected_version)
-    
+
     if name is not None:
         template.name = name
     if subject is not None:
@@ -97,11 +98,11 @@ def update_template(
         template.body = body
     if is_active is not None:
         template.is_active = is_active
-    
+
     # Increment version and snapshot
     template.current_version += 1
     template.updated_at = datetime.now(timezone.utc)
-    
+
     version_service.create_version(
         db=db,
         org_id=template.organization_id,
@@ -111,7 +112,7 @@ def update_template(
         created_by_user_id=user_id,
         comment=comment or "Updated",
     )
-    
+
     db.commit()
     db.refresh(template)
     return template
@@ -141,7 +142,7 @@ def rollback_template(
 ) -> tuple[EmailTemplate | None, str | None]:
     """
     Rollback template to a previous version.
-    
+
     Creates a NEW version with old payload.
     Returns (updated_template, error).
     """
@@ -153,10 +154,10 @@ def rollback_template(
         target_version=target_version,
         user_id=user_id,
     )
-    
+
     if error:
         return None, error
-    
+
     # Apply rolled-back payload
     payload = version_service.decrypt_payload(new_version.payload_encrypted)
     template.name = payload.get("name", template.name)
@@ -165,25 +166,34 @@ def rollback_template(
     template.is_active = payload.get("is_active", template.is_active)
     template.current_version = new_version.version
     template.updated_at = datetime.now(timezone.utc)
-    
+
     db.commit()
     db.refresh(template)
     return template, None
 
+
 def get_template(db: Session, template_id: UUID, org_id: UUID) -> EmailTemplate | None:
     """Get template by ID, scoped to org."""
-    return db.query(EmailTemplate).filter(
-        EmailTemplate.id == template_id,
-        EmailTemplate.organization_id == org_id,
-    ).first()
+    return (
+        db.query(EmailTemplate)
+        .filter(
+            EmailTemplate.id == template_id,
+            EmailTemplate.organization_id == org_id,
+        )
+        .first()
+    )
 
 
 def get_template_by_name(db: Session, name: str, org_id: UUID) -> EmailTemplate | None:
     """Get template by name, scoped to org."""
-    return db.query(EmailTemplate).filter(
-        EmailTemplate.name == name,
-        EmailTemplate.organization_id == org_id,
-    ).first()
+    return (
+        db.query(EmailTemplate)
+        .filter(
+            EmailTemplate.name == name,
+            EmailTemplate.organization_id == org_id,
+        )
+        .first()
+    )
 
 
 def list_templates(
@@ -192,11 +202,9 @@ def list_templates(
     active_only: bool = True,
 ) -> list[EmailTemplate]:
     """List email templates for an organization."""
-    query = db.query(EmailTemplate).filter(
-        EmailTemplate.organization_id == org_id
-    )
+    query = db.query(EmailTemplate).filter(EmailTemplate.organization_id == org_id)
     if active_only:
-        query = query.filter(EmailTemplate.is_active == True)
+        query = query.filter(EmailTemplate.is_active.is_(True))
     return query.order_by(EmailTemplate.name).all()
 
 
@@ -213,16 +221,17 @@ def render_template(
 ) -> tuple[str, str]:
     """
     Render a template with variable substitution.
-    
+
     Variables in format {{variable_name}} are replaced with values.
     Missing variables are replaced with empty string.
-    
+
     Returns (rendered_subject, rendered_body).
     """
+
     def replace_var(match: re.Match) -> str:
         var_name = match.group(1)
         return variables.get(var_name, "")
-    
+
     rendered_subject = VARIABLE_PATTERN.sub(replace_var, subject)
     rendered_body = VARIABLE_PATTERN.sub(replace_var, body)
     return rendered_subject, rendered_body
@@ -262,53 +271,59 @@ def build_appointment_template_variables(
 ) -> dict[str, str]:
     """
     Build template variables for an appointment context.
-    
+
     Formats appointment times in the client's timezone (or org timezone fallback).
     Uses client_timezone from the appointment for user-facing display.
     """
     from zoneinfo import ZoneInfo
     from app.db.models import Organization
-    
+
     # Get org for fallback timezone
-    org = db.query(Organization).filter(
-        Organization.id == appointment.organization_id
-    ).first()
-    
+    org = (
+        db.query(Organization)
+        .filter(Organization.id == appointment.organization_id)
+        .first()
+    )
+
     # Use appointment's client_timezone, fall back to org timezone
-    tz_name = getattr(appointment, 'client_timezone', None) or (org.timezone if org else 'America/Los_Angeles')
+    tz_name = getattr(appointment, "client_timezone", None) or (
+        org.timezone if org else "America/Los_Angeles"
+    )
     try:
         local_tz = ZoneInfo(tz_name)
     except Exception:
-        local_tz = ZoneInfo('America/Los_Angeles')
-    
+        local_tz = ZoneInfo("America/Los_Angeles")
+
     # Convert UTC times to local timezone
     local_start = appointment.scheduled_start.astimezone(local_tz)
-    
+
     # Format date and time in user-friendly format
-    appointment_date = local_start.strftime("%A, %B %d, %Y")  # "Monday, December 25, 2024"
-    appointment_time = local_start.strftime("%I:%M %p %Z")    # "2:30 PM PST"
-    
+    appointment_date = local_start.strftime(
+        "%A, %B %d, %Y"
+    )  # "Monday, December 25, 2024"
+    appointment_time = local_start.strftime("%I:%M %p %Z")  # "2:30 PM PST"
+
     # Get location (virtual link or physical address)
     location = ""
-    if hasattr(appointment, 'video_link') and appointment.video_link:
+    if hasattr(appointment, "video_link") and appointment.video_link:
         location = appointment.video_link
-    elif hasattr(appointment, 'location') and appointment.location:
+    elif hasattr(appointment, "location") and appointment.location:
         location = appointment.location
     else:
         location = "To be confirmed"
-    
+
     variables = {
         "appointment_date": appointment_date,
         "appointment_time": appointment_time,
         "appointment_location": location,
         "org_name": org.name if org else "",
     }
-    
+
     # Merge in case variables if provided
     if case:
         case_vars = build_case_template_variables(db, case)
         variables.update(case_vars)
-    
+
     return variables
 
 
@@ -324,7 +339,7 @@ def send_email(
 ) -> tuple[EmailLog, Job]:
     """
     Queue an email for sending.
-    
+
     Creates an EmailLog record and schedules a job to send it.
     Returns (email_log, job).
     """
@@ -340,7 +355,7 @@ def send_email(
     )
     db.add(email_log)
     db.flush()  # Get ID before creating job
-    
+
     # Schedule job to send
     job = schedule_job(
         db=db,
@@ -349,12 +364,12 @@ def send_email(
         payload={"email_log_id": str(email_log.id)},
         run_at=schedule_at,
     )
-    
+
     # Link job to email log
     email_log.job_id = job.id
     db.commit()
     db.refresh(email_log)
-    
+
     return email_log, job
 
 
@@ -369,14 +384,14 @@ def send_from_template(
 ) -> tuple[EmailLog, Job] | None:
     """
     Queue an email using a template.
-    
+
     Renders the template with variables and queues for sending.
     Returns (email_log, job) or None if template not found.
     """
     template = get_template(db, template_id, org_id)
     if not template:
         return None
-    
+
     subject, body = render_template(template.subject, template.body, variables)
     return send_email(
         db=db,
@@ -413,10 +428,14 @@ def mark_email_failed(db: Session, email_log: EmailLog, error: str) -> EmailLog:
 
 def get_email_log(db: Session, email_id: UUID, org_id: UUID) -> EmailLog | None:
     """Get email log by ID, scoped to org."""
-    return db.query(EmailLog).filter(
-        EmailLog.id == email_id,
-        EmailLog.organization_id == org_id,
-    ).first()
+    return (
+        db.query(EmailLog)
+        .filter(
+            EmailLog.id == email_id,
+            EmailLog.organization_id == org_id,
+        )
+        .first()
+    )
 
 
 def list_email_logs(
@@ -445,9 +464,11 @@ def _sync_campaign_recipient(
     from app.db.models import CampaignRecipient, CampaignRun, Campaign
     from app.db.enums import CampaignRecipientStatus, CampaignStatus
 
-    cr = db.query(CampaignRecipient).filter(
-        CampaignRecipient.external_message_id == str(email_log.id)
-    ).first()
+    cr = (
+        db.query(CampaignRecipient)
+        .filter(CampaignRecipient.external_message_id == str(email_log.id))
+        .first()
+    )
     if not cr:
         return
 
@@ -462,20 +483,16 @@ def _sync_campaign_recipient(
 
     db.commit()
 
-    run = db.query(CampaignRun).filter(
-        CampaignRun.id == cr.run_id
-    ).first()
+    run = db.query(CampaignRun).filter(CampaignRun.id == cr.run_id).first()
     if not run:
         return
 
-    status_rows = db.query(
-        CampaignRecipient.status,
-        func.count(CampaignRecipient.id)
-    ).filter(
-        CampaignRecipient.run_id == run.id
-    ).group_by(
-        CampaignRecipient.status
-    ).all()
+    status_rows = (
+        db.query(CampaignRecipient.status, func.count(CampaignRecipient.id))
+        .filter(CampaignRecipient.run_id == run.id)
+        .group_by(CampaignRecipient.status)
+        .all()
+    )
     status_counts = {status: count for status, count in status_rows}
 
     run.sent_count = status_counts.get(CampaignRecipientStatus.SENT.value, 0)
@@ -490,9 +507,7 @@ def _sync_campaign_recipient(
         run.status = "running"
         run.completed_at = None
 
-    campaign = db.query(Campaign).filter(
-        Campaign.id == run.campaign_id
-    ).first()
+    campaign = db.query(Campaign).filter(Campaign.id == run.campaign_id).first()
     if campaign:
         campaign.sent_count = run.sent_count
         campaign.failed_count = run.failed_count

@@ -31,6 +31,7 @@ RECOVERY_CODE_LENGTH = 8  # Characters per code
 # TOTP Functions
 # =============================================================================
 
+
 def generate_totp_secret() -> str:
     """Generate a random base32 TOTP secret (32 characters)."""
     return pyotp.random_base32()
@@ -39,7 +40,7 @@ def generate_totp_secret() -> str:
 def get_totp_provisioning_uri(secret: str, email: str) -> str:
     """
     Generate the provisioning URI for authenticator apps.
-    
+
     This creates a URI that can be encoded as a QR code for apps
     like Google Authenticator, Authy, or 1Password.
     """
@@ -50,17 +51,17 @@ def get_totp_provisioning_uri(secret: str, email: str) -> str:
 def verify_totp_code(secret: str, code: str) -> bool:
     """
     Verify a 6-digit TOTP code.
-    
+
     Allows 1 time step tolerance (±30 seconds) for clock drift.
     """
     if not secret or not code:
         return False
-    
+
     # Sanitize input
     code = code.strip().replace(" ", "").replace("-", "")
     if len(code) != 6 or not code.isdigit():
         return False
-    
+
     totp = pyotp.TOTP(secret)
     return totp.verify(code, valid_window=1)
 
@@ -69,10 +70,11 @@ def verify_totp_code(secret: str, code: str) -> bool:
 # Recovery Codes
 # =============================================================================
 
+
 def generate_recovery_codes(count: int = RECOVERY_CODE_COUNT) -> list[str]:
     """
     Generate a list of random recovery codes.
-    
+
     Format: 8 alphanumeric characters (uppercase + digits, no ambiguous chars)
     """
     # Avoid ambiguous characters: 0, O, 1, I, L
@@ -98,7 +100,7 @@ def hash_recovery_codes(codes: list[str]) -> list[str]:
 def verify_recovery_code(code: str, hashed_codes: list[str]) -> Tuple[bool, int]:
     """
     Check if a recovery code matches any stored hash.
-    
+
     Returns:
         (is_valid, index) - index of matching code, or -1 if not found
     """
@@ -113,44 +115,47 @@ def verify_recovery_code(code: str, hashed_codes: list[str]) -> Tuple[bool, int]
 # MFA Enrollment
 # =============================================================================
 
+
 def setup_totp_for_user(db: Session, user: User) -> Tuple[str, str]:
     """
     Start TOTP setup for a user.
-    
+
     Returns:
         (secret, provisioning_uri) - secret to store, URI for QR code
     """
     secret = generate_totp_secret()
     uri = get_totp_provisioning_uri(secret, user.email)
-    
+
     # Store secret but don't enable yet (user must verify first)
     user.totp_secret = secret
     db.commit()
-    
+
     return secret, uri
 
 
-def complete_totp_setup(db: Session, user: User, code: str) -> Tuple[bool, list[str] | None]:
+def complete_totp_setup(
+    db: Session, user: User, code: str
+) -> Tuple[bool, list[str] | None]:
     """
     Complete TOTP setup by verifying the initial code.
-    
+
     If successful:
     - Enables MFA for the user
     - Generates and returns recovery codes (plaintext, one-time display)
-    
+
     Returns:
         (success, recovery_codes or None)
     """
     if not user.totp_secret:
         return False, None
-    
+
     if not verify_totp_code(user.totp_secret, code):
         return False, None
-    
+
     # Generate recovery codes
     plaintext_codes = generate_recovery_codes(RECOVERY_CODE_COUNT)
     hashed_codes = hash_recovery_codes(plaintext_codes)
-    
+
     # Enable MFA
     now = datetime.now(timezone.utc)
     user.mfa_enabled = True
@@ -158,7 +163,7 @@ def complete_totp_setup(db: Session, user: User, code: str) -> Tuple[bool, list[
     user.mfa_recovery_codes = hashed_codes
     user.mfa_required_at = now
     db.commit()
-    
+
     return True, plaintext_codes
 
 
@@ -178,66 +183,67 @@ def disable_mfa(db: Session, user: User) -> None:
 # MFA Verification
 # =============================================================================
 
+
 def verify_mfa_code(user: User, code: str) -> Tuple[bool, str]:
     """
     Verify an MFA code (TOTP or recovery).
-    
+
     Returns:
         (is_valid, method) - method is "totp" or "recovery"
     """
     if not user.mfa_enabled:
         return False, ""
-    
+
     # Try TOTP first
     if user.totp_secret and verify_totp_code(user.totp_secret, code):
         return True, "totp"
-    
+
     # Try recovery codes
     if user.mfa_recovery_codes:
         is_valid, idx = verify_recovery_code(code, user.mfa_recovery_codes)
         if is_valid:
             return True, "recovery"
-    
+
     return False, ""
 
 
 def consume_recovery_code(db: Session, user: User, code: str) -> bool:
     """
     Use a recovery code (one-time use).
-    
+
     Removes the code from the user's list after successful verification.
     Returns True if code was valid and consumed.
     """
     if not user.mfa_recovery_codes:
         return False
-    
+
     is_valid, idx = verify_recovery_code(code, user.mfa_recovery_codes)
     if not is_valid:
         return False
-    
+
     # Remove the used code
     codes = list(user.mfa_recovery_codes)
     codes.pop(idx)
     user.mfa_recovery_codes = codes
     db.commit()
-    
+
     return True
 
 
 def regenerate_recovery_codes(db: Session, user: User) -> list[str]:
     """
     Generate new recovery codes, replacing existing ones.
-    
+
     Requires MFA to be enabled. Returns plaintext codes for display.
     """
     if not user.mfa_enabled:
         raise ValueError("MFA must be enabled to regenerate recovery codes")
-    
+
     plaintext_codes = generate_recovery_codes(RECOVERY_CODE_COUNT)
     hashed_codes = hash_recovery_codes(plaintext_codes)
     user.mfa_recovery_codes = hashed_codes
     db.commit()
-    
+
     return plaintext_codes
 
 
@@ -245,15 +251,22 @@ def regenerate_recovery_codes(db: Session, user: User) -> list[str]:
 # MFA Status
 # =============================================================================
 
+
 def get_mfa_status(user: User) -> dict:
     """Get MFA enrollment status for a user."""
     return {
         "mfa_enabled": user.mfa_enabled,
         "totp_enabled": user.totp_enabled_at is not None,
-        "totp_enabled_at": user.totp_enabled_at.isoformat() if user.totp_enabled_at else None,
+        "totp_enabled_at": user.totp_enabled_at.isoformat()
+        if user.totp_enabled_at
+        else None,
         "duo_enabled": user.duo_enrolled_at is not None,
-        "duo_enrolled_at": user.duo_enrolled_at.isoformat() if user.duo_enrolled_at else None,
-        "recovery_codes_remaining": len(user.mfa_recovery_codes) if user.mfa_recovery_codes else 0,
+        "duo_enrolled_at": user.duo_enrolled_at.isoformat()
+        if user.duo_enrolled_at
+        else None,
+        "recovery_codes_remaining": len(user.mfa_recovery_codes)
+        if user.mfa_recovery_codes
+        else 0,
         "mfa_required": True,  # Global requirement
     }
 
@@ -266,4 +279,6 @@ def is_mfa_required(user: User) -> bool:
 
 def has_mfa_setup(user: User) -> bool:
     """Check if user has set up MFA."""
-    return user.mfa_enabled and (user.totp_enabled_at is not None or user.duo_enrolled_at is not None)
+    return user.mfa_enabled and (
+        user.totp_enabled_at is not None or user.duo_enrolled_at is not None
+    )

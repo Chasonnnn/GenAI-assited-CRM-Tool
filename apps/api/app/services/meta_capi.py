@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # CAPI endpoint
 CAPI_URL = f"https://graph.facebook.com/{settings.META_API_VERSION}"
 
-# HTTP client settings  
+# HTTP client settings
 HTTPX_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 
 # Meta Ads CRM status labels (must match configured labels in Meta)
@@ -59,10 +59,10 @@ META_DISQUALIFIED_STATUSES = {"disqualified"}
 def hash_for_capi(value: str) -> str:
     """
     Hash a value for CAPI using SHA256 (Meta's required format).
-    
+
     Values should be lowercase and trimmed before hashing.
     """
-    return hashlib.sha256(value.lower().strip().encode('utf-8')).hexdigest()
+    return hashlib.sha256(value.lower().strip().encode("utf-8")).hexdigest()
 
 
 async def send_lead_event(
@@ -75,7 +75,7 @@ async def send_lead_event(
 ) -> tuple[bool, str | None]:
     """
     Send a conversion event to Meta CAPI.
-    
+
     Args:
         lead_id: The original Meta leadgen_id
         event_name: Event type (Lead, CompleteRegistration, etc.)
@@ -83,75 +83,79 @@ async def send_lead_event(
         custom_data: Additional data (lead_status, value, etc.)
         access_token: CAPI access token
         event_id: Unique event ID for deduplication
-        
+
     Returns:
         (success, error) tuple
     """
     if not settings.META_CAPI_ENABLED:
         logger.debug("Meta CAPI disabled, skipping event")
         return True, None
-    
+
     if not settings.META_PIXEL_ID:
         logger.warning("Meta CAPI: META_PIXEL_ID not configured")
         return False, "META_PIXEL_ID not configured"
-    
+
     if settings.META_TEST_MODE:
-        logger.info(f"[TEST MODE] Would send CAPI event: {event_name} for lead {lead_id}")
+        logger.info(
+            f"[TEST MODE] Would send CAPI event: {event_name} for lead {lead_id}"
+        )
         return True, None
-    
+
     # Use provided token or system token from config
-    token = access_token or getattr(settings, 'META_CAPI_ACCESS_TOKEN', None)
+    token = access_token or getattr(settings, "META_CAPI_ACCESS_TOKEN", None)
     if not token:
         logger.warning("Meta CAPI: No access token available")
         return False, "No access token provided for CAPI"
-    
+
     # Build event payload
     event_time = int(time.time())
-    
+
     # User data with lead_id (and optionally hashed identifiers)
     final_user_data = {"lead_id": lead_id}
     if user_data:
         final_user_data.update(user_data)
-    
+
     event_data = {
         "event_name": event_name,
         "event_time": event_time,
         "action_source": "system_generated",
         "user_data": final_user_data,
     }
-    
+
     # Add event_id for deduplication
     if event_id:
         event_data["event_id"] = event_id
-    
+
     if custom_data:
         event_data["custom_data"] = custom_data
-    
+
     payload = {
         "data": [event_data],
         "access_token": token,
     }
-    
+
     # Add appsecret_proof for security
     if settings.META_APP_SECRET:
         payload["appsecret_proof"] = compute_appsecret_proof(token)
-    
+
     url = f"{CAPI_URL}/{settings.META_PIXEL_ID}/events"
-    
+
     try:
         async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
             resp = await client.post(url, json=payload)
-            
+
             if resp.status_code != 200:
                 error_body = resp.text[:500]
                 logger.error(f"Meta CAPI error {resp.status_code}: {error_body}")
                 return False, f"CAPI error {resp.status_code}: {error_body}"
-            
+
             result = resp.json()
             events_received = result.get("events_received", 0)
-            logger.info(f"Meta CAPI: sent {event_name} event for lead {lead_id}, received: {events_received}")
+            logger.info(
+                f"Meta CAPI: sent {event_name} event for lead {lead_id}, received: {events_received}"
+            )
             return True, None
-            
+
     except httpx.TimeoutException:
         logger.error(f"Meta CAPI timeout for lead {lead_id}")
         return False, "Meta CAPI timeout"
@@ -178,11 +182,7 @@ def map_case_status_to_meta_status(case_status: str) -> str | None:
 
 def _normalize_event_id_value(value: str) -> str:
     """Normalize text for stable event_id values (ASCII-safe)."""
-    return (
-        value.lower()
-        .replace(" ", "_")
-        .replace("/", "_")
-    )
+    return value.lower().replace(" ", "_").replace("/", "_")
 
 
 async def send_status_event(
@@ -195,7 +195,7 @@ async def send_status_event(
 ) -> tuple[bool, str | None]:
     """
     Send a lead status update to Meta CAPI.
-    
+
     Args:
         meta_lead_id: Original Meta leadgen_id
         case_status: The CRM status that triggered this
@@ -210,14 +210,14 @@ async def send_status_event(
         user_data["em"] = hash_for_capi(email)
     if phone:
         # Remove non-digits and hash
-        phone_digits = ''.join(c for c in phone if c.isdigit())
+        phone_digits = "".join(c for c in phone if c.isdigit())
         if len(phone_digits) >= 10:
             user_data["ph"] = hash_for_capi(phone_digits)
-    
+
     # Generate event_id for deduplication
     meta_status_id = _normalize_event_id_value(meta_status)
     event_id = f"capi_{meta_lead_id}_{meta_status_id}"
-    
+
     return await send_lead_event(
         lead_id=meta_lead_id,
         event_name="Lead",  # Lead status update (Meta reads lead_status)
@@ -234,7 +234,7 @@ async def send_status_event(
 def should_send_capi_event(from_status: str, to_status: str) -> bool:
     """
     Determine if this status change should trigger a CAPI event.
-    
+
     Triggers on:
     - Any transition into a different Meta status bucket
     """

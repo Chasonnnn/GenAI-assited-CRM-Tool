@@ -16,12 +16,13 @@ Indexes exist for:
 
 No additional indexes needed at this time.
 """
+
 from typing import Sequence, Union
 
 
 # revision identifiers, used by Alembic.
-revision: str = '0012_add_indexes'
-down_revision: Union[str, Sequence[str], None] = 'ab9ee2996572'
+revision: str = "0012_add_indexes"
+down_revision: Union[str, Sequence[str], None] = "ab9ee2996572"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

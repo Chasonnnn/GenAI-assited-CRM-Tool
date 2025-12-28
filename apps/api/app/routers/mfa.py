@@ -8,13 +8,17 @@ Provides:
 - MFA verification during login
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+import secrets
+
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db, require_csrf_header
+from app.core.config import settings
+from app.core.deps import COOKIE_NAME, get_current_session, get_db, require_csrf_header
+from app.core.security import create_session_token
 from app.schemas.auth import UserSession
-from app.services import mfa_service, user_service, membership_service
+from app.services import duo_service, membership_service, mfa_service, user_service
 
 
 router = APIRouter()
@@ -24,8 +28,10 @@ router = APIRouter()
 # Schemas
 # =============================================================================
 
+
 class MFAStatusResponse(BaseModel):
     """MFA enrollment status."""
+
     mfa_enabled: bool
     totp_enabled: bool
     totp_enabled_at: str | None
@@ -37,6 +43,7 @@ class MFAStatusResponse(BaseModel):
 
 class TOTPSetupResponse(BaseModel):
     """TOTP setup data for QR code generation."""
+
     secret: str
     provisioning_uri: str
     qr_code_data: str  # Same as provisioning_uri (for QR libraries)
@@ -44,11 +51,13 @@ class TOTPSetupResponse(BaseModel):
 
 class TOTPVerifyRequest(BaseModel):
     """TOTP code verification request."""
+
     code: str = Field(..., min_length=6, max_length=8)
 
 
 class TOTPSetupCompleteResponse(BaseModel):
     """TOTP setup completion response with recovery codes."""
+
     success: bool
     recovery_codes: list[str]
     message: str
@@ -56,17 +65,20 @@ class TOTPSetupCompleteResponse(BaseModel):
 
 class RecoveryCodesResponse(BaseModel):
     """Recovery codes response."""
+
     codes: list[str]
     count: int
 
 
 class MFAVerifyRequest(BaseModel):
     """MFA verification during login."""
+
     code: str = Field(..., min_length=6, max_length=12)
 
 
 class MFAVerifyResponse(BaseModel):
     """MFA verification result."""
+
     valid: bool
     method: str | None = None  # "totp" or "recovery"
 
@@ -74,6 +86,7 @@ class MFAVerifyResponse(BaseModel):
 # =============================================================================
 # Endpoints
 # =============================================================================
+
 
 @router.get("/status", response_model=MFAStatusResponse)
 def get_mfa_status(
@@ -84,7 +97,7 @@ def get_mfa_status(
     user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     return mfa_service.get_mfa_status(user)
 
 
@@ -99,23 +112,23 @@ def setup_totp(
 ):
     """
     Start TOTP setup - generates a new secret and provisioning URI.
-    
+
     Returns data for displaying a QR code in authenticator apps.
     User must verify with a code before TOTP is enabled.
     """
     user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     # Don't allow re-setup if already enabled (must disable first)
     if user.mfa_enabled and user.totp_enabled_at:
         raise HTTPException(
             status_code=400,
-            detail="TOTP already enabled. Disable MFA first to reconfigure."
+            detail="TOTP already enabled. Disable MFA first to reconfigure.",
         )
-    
+
     secret, uri = mfa_service.setup_totp_for_user(db, user)
-    
+
     return TOTPSetupResponse(
         secret=secret,
         provisioning_uri=uri,
@@ -135,28 +148,28 @@ def verify_totp_setup(
 ):
     """
     Complete TOTP setup by verifying the first code.
-    
+
     On success:
     - Enables MFA for the user
     - Returns one-time display of recovery codes
-    
+
     IMPORTANT: Recovery codes are only shown once. User must save them.
     """
     user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     if not user.totp_secret:
         raise HTTPException(
             status_code=400,
-            detail="No TOTP setup in progress. Call /mfa/totp/setup first."
+            detail="No TOTP setup in progress. Call /mfa/totp/setup first.",
         )
-    
+
     success, recovery_codes = mfa_service.complete_totp_setup(db, user, body.code)
-    
+
     if not success:
         raise HTTPException(status_code=400, detail="Invalid code. Please try again.")
-    
+
     return TOTPSetupCompleteResponse(
         success=True,
         recovery_codes=recovery_codes or [],
@@ -175,19 +188,19 @@ def regenerate_recovery_codes(
 ):
     """
     Generate new recovery codes, replacing existing ones.
-    
+
     Requires MFA to be enabled. This invalidates all previous codes.
     Returns plaintext codes for one-time display.
     """
     user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     if not user.mfa_enabled:
         raise HTTPException(status_code=400, detail="MFA must be enabled first")
-    
+
     codes = mfa_service.regenerate_recovery_codes(db, user)
-    
+
     return RecoveryCodesResponse(codes=codes, count=len(codes))
 
 
@@ -203,33 +216,29 @@ def verify_mfa_code(
 ):
     """
     Verify an MFA code (TOTP or recovery).
-    
+
     This endpoint is used during login flow when MFA challenge is required.
     For recovery codes, the code is consumed (single-use).
     """
     user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     if not user.mfa_enabled:
         raise HTTPException(status_code=400, detail="MFA not enabled for this user")
-    
+
     is_valid, method = mfa_service.verify_mfa_code(user, body.code)
-    
+
     if is_valid and method == "recovery":
         # Consume the recovery code
         mfa_service.consume_recovery_code(db, user, body.code)
-    
+
     return MFAVerifyResponse(valid=is_valid, method=method if is_valid else None)
-
-
-from fastapi import Response
-from app.core.security import create_session_token
-from app.core.deps import COOKIE_NAME
 
 
 class MFACompleteResponse(BaseModel):
     """MFA completion response."""
+
     success: bool
     message: str
 
@@ -247,38 +256,38 @@ def complete_mfa_challenge(
 ):
     """
     Complete MFA challenge and upgrade session.
-    
+
     On successful MFA verification:
     1. Issues new session token with mfa_verified=True
     2. Sets updated cookie
-    
+
     Frontend should redirect to dashboard after success.
     """
     user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     if not user.mfa_enabled:
         raise HTTPException(status_code=400, detail="MFA not enabled for this user")
-    
+
     # Verify the code
     is_valid, method = mfa_service.verify_mfa_code(user, body.code)
-    
+
     if not is_valid:
         raise HTTPException(status_code=400, detail="Invalid MFA code")
-    
+
     # Consume recovery code if used
     if method == "recovery":
         mfa_service.consume_recovery_code(db, user, body.code)
-    
+
     # Get membership for new token
     membership = membership_service.get_membership_by_user_id(db, user.id)
-    
+
     if not membership:
         raise HTTPException(status_code=403, detail="No organization membership")
-    
+
     # Issue new session with mfa_verified=True
-    
+
     new_token = create_session_token(
         user.id,
         membership.organization_id,
@@ -287,7 +296,7 @@ def complete_mfa_challenge(
         mfa_verified=True,  # Now verified!
         mfa_required=True,
     )
-    
+
     # Set new cookie
     response.set_cookie(
         key=COOKIE_NAME,
@@ -298,7 +307,7 @@ def complete_mfa_challenge(
         secure=settings.cookie_secure,
         path="/",
     )
-    
+
     return MFACompleteResponse(
         success=True,
         message=f"MFA verified successfully via {method}",
@@ -315,19 +324,19 @@ def disable_mfa(
 ):
     """
     Disable MFA for the current user.
-    
+
     This removes TOTP secret and recovery codes.
     User can re-enroll later.
-    
+
     Note: In production, you may want to require password or recovery code
     verification before allowing MFA disable.
     """
     user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     mfa_service.disable_mfa(db, user)
-    
+
     return {"message": "MFA disabled successfully"}
 
 
@@ -335,12 +344,10 @@ def disable_mfa(
 # Duo Endpoints
 # =============================================================================
 
-from app.services import duo_service
-import secrets
-
 
 class DuoStatusResponse(BaseModel):
     """Duo availability status."""
+
     available: bool
     enrolled: bool
     enrolled_at: str | None = None
@@ -348,12 +355,14 @@ class DuoStatusResponse(BaseModel):
 
 class DuoInitiateResponse(BaseModel):
     """Duo auth initiation response."""
+
     auth_url: str
     state: str
 
 
 class DuoCallbackRequest(BaseModel):
     """Duo callback verification request."""
+
     code: str
     state: str
 
@@ -367,7 +376,7 @@ def get_duo_status(
     user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     return DuoStatusResponse(
         available=duo_service.is_available(),
         enrolled=user.duo_enrolled_at is not None,
@@ -393,27 +402,27 @@ def initiate_duo_auth(
 ):
     """
     Start Duo authentication flow.
-    
+
     Returns a URL to redirect the user to for Duo Universal Prompt.
     The state token should be stored in session for verification.
     """
     if not duo_service.is_available():
         raise HTTPException(status_code=503, detail="Duo is not configured")
-    
+
     user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     # Generate secure state token for CSRF protection
     state = secrets.token_urlsafe(32)
-    
+
     # Create auth URL with user's email
     auth_url = duo_service.create_auth_url(
         user_id=user.id,
         username=user.email,
         state=state,
     )
-    
+
     return DuoInitiateResponse(auth_url=auth_url, state=state)
 
 
@@ -429,16 +438,16 @@ def verify_duo_callback(
 ):
     """
     Verify Duo callback after user completes authentication.
-    
+
     On success, marks the user as Duo-enrolled and enables MFA.
     """
     if not duo_service.is_available():
         raise HTTPException(status_code=503, detail="Duo is not configured")
-    
+
     user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     # Verify the callback
     is_valid, auth_result = duo_service.verify_callback(
         code=body.code,
@@ -446,19 +455,20 @@ def verify_duo_callback(
         expected_state=expected_state,
         username=user.email,
     )
-    
+
     if not is_valid:
         raise HTTPException(status_code=400, detail="Duo verification failed")
-    
+
     # Mark user as Duo enrolled and enable MFA
     from datetime import datetime, timezone
+
     user.duo_enrolled_at = datetime.now(timezone.utc)
     user.duo_user_id = auth_result.get("sub") if auth_result else None
-    
+
     if not user.mfa_enabled:
         user.mfa_enabled = True
         user.mfa_required_at = datetime.now(timezone.utc)
-        
+
         # Generate recovery codes if not already present
         if not user.mfa_recovery_codes:
             plaintext_codes = mfa_service.generate_recovery_codes()
@@ -469,6 +479,6 @@ def verify_duo_callback(
                 "message": "Duo enrolled successfully",
                 "recovery_codes": plaintext_codes,
             }
-    
+
     db.commit()
     return {"success": True, "message": "Duo authentication successful"}

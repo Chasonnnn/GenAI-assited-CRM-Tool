@@ -3,6 +3,7 @@
 Manages org-level AI configuration with BYOK key storage.
 v2: With version control (API keys are redacted in snapshots).
 """
+
 import uuid
 from datetime import datetime, timezone
 
@@ -41,7 +42,7 @@ def decrypt_api_key(encrypted_key: str) -> str:
 def _ai_settings_payload(ai_settings: AISettings) -> dict:
     """
     Extract versionable payload from AI settings.
-    
+
     NOTE: API key is stored as [REDACTED] - never store secrets in versions.
     """
     return {
@@ -57,9 +58,11 @@ def _ai_settings_payload(ai_settings: AISettings) -> dict:
 
 def get_ai_settings(db: Session, organization_id: uuid.UUID) -> AISettings | None:
     """Get AI settings for an organization."""
-    return db.query(AISettings).filter(
-        AISettings.organization_id == organization_id
-    ).first()
+    return (
+        db.query(AISettings)
+        .filter(AISettings.organization_id == organization_id)
+        .first()
+    )
 
 
 def get_or_create_ai_settings(
@@ -71,7 +74,7 @@ def get_or_create_ai_settings(
     ai_settings = get_ai_settings(db, organization_id)
     if ai_settings:
         return ai_settings
-    
+
     # Create default settings
     ai_settings = AISettings(
         organization_id=organization_id,
@@ -82,7 +85,7 @@ def get_or_create_ai_settings(
     )
     db.add(ai_settings)
     db.flush()
-    
+
     # Create initial version snapshot
     version_service.create_version(
         db=db,
@@ -93,7 +96,7 @@ def get_or_create_ai_settings(
         created_by_user_id=user_id or organization_id,  # Fallback for system
         comment="Initial version",
     )
-    
+
     db.commit()
     db.refresh(ai_settings)
     return ai_settings
@@ -116,11 +119,11 @@ def update_ai_settings(
 ) -> AISettings:
     """Update AI settings with version control."""
     ai_settings = get_or_create_ai_settings(db, organization_id, user_id)
-    
+
     # Optimistic locking
     if expected_version is not None:
         version_service.check_version(ai_settings.current_version, expected_version)
-    
+
     if is_enabled is not None:
         ai_settings.is_enabled = is_enabled
     if provider is not None:
@@ -135,10 +138,10 @@ def update_ai_settings(
         ai_settings.conversation_history_limit = conversation_history_limit
     if anonymize_pii is not None:
         ai_settings.anonymize_pii = anonymize_pii
-    
+
     ai_settings.current_version += 1
     ai_settings.updated_at = datetime.now(timezone.utc)
-    
+
     # Create version snapshot
     version_service.create_version(
         db=db,
@@ -149,7 +152,7 @@ def update_ai_settings(
         created_by_user_id=user_id,
         comment=comment or "Updated",
     )
-    
+
     db.commit()
     db.refresh(ai_settings)
     return ai_settings
@@ -175,20 +178,22 @@ def is_consent_required(ai_settings: AISettings) -> bool:
     return ai_settings.is_enabled and ai_settings.consent_accepted_at is None
 
 
-def get_ai_provider_for_org(db: Session, organization_id: uuid.UUID) -> AIProvider | None:
+def get_ai_provider_for_org(
+    db: Session, organization_id: uuid.UUID
+) -> AIProvider | None:
     """Get a configured AI provider for an organization.
-    
+
     Returns None if AI is not enabled or not configured.
     """
     ai_settings = get_ai_settings(db, organization_id)
-    
+
     if not ai_settings:
         return None
     if not ai_settings.is_enabled:
         return None
     if not ai_settings.api_key_encrypted:
         return None
-    
+
     api_key = decrypt_api_key(ai_settings.api_key_encrypted)
     return get_provider(ai_settings.provider, api_key, ai_settings.model)
 
@@ -204,12 +209,12 @@ async def test_api_key(provider: str, api_key: str) -> bool:
 
 def mask_api_key(api_key_encrypted: str | None) -> str | None:
     """Return masked version of API key for display.
-    
+
     Shows first 4 and last 4 characters: sk-ab...yz
     """
     if not api_key_encrypted:
         return None
-    
+
     try:
         decrypted = decrypt_api_key(api_key_encrypted)
         if len(decrypted) <= 8:
@@ -222,6 +227,7 @@ def mask_api_key(api_key_encrypted: str | None) -> str | None:
 # =============================================================================
 # Version Control
 # =============================================================================
+
 
 def get_ai_settings_versions(
     db: Session,
@@ -247,7 +253,7 @@ def rollback_ai_settings(
 ) -> tuple[AISettings | None, str | None]:
     """
     Rollback AI settings to a previous version.
-    
+
     NOTE: API key is NOT rolled back (always [REDACTED] in snapshots).
     """
     new_version, error = version_service.rollback_to_version(
@@ -258,23 +264,27 @@ def rollback_ai_settings(
         target_version=target_version,
         user_id=user_id,
     )
-    
+
     if error:
         return None, error
-    
+
     # Apply rolled-back payload (except API key)
     payload = version_service.decrypt_payload(new_version.payload_encrypted)
     ai_settings.is_enabled = payload.get("is_enabled", ai_settings.is_enabled)
     ai_settings.provider = payload.get("provider", ai_settings.provider)
     ai_settings.model = payload.get("model", ai_settings.model)
-    ai_settings.context_notes_limit = payload.get("context_notes_limit", ai_settings.context_notes_limit)
-    ai_settings.conversation_history_limit = payload.get("conversation_history_limit", ai_settings.conversation_history_limit)
+    ai_settings.context_notes_limit = payload.get(
+        "context_notes_limit", ai_settings.context_notes_limit
+    )
+    ai_settings.conversation_history_limit = payload.get(
+        "conversation_history_limit", ai_settings.conversation_history_limit
+    )
     ai_settings.anonymize_pii = payload.get("anonymize_pii", ai_settings.anonymize_pii)
     # NOTE: api_key is NOT rolled back - it's always [REDACTED] in versions
-    
+
     ai_settings.current_version = new_version.version
     ai_settings.updated_at = datetime.now(timezone.utc)
-    
+
     db.commit()
     db.refresh(ai_settings)
     return ai_settings, None

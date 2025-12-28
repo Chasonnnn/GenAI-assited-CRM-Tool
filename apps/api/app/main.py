@@ -1,4 +1,5 @@
 """FastAPI application entry point."""
+
 import logging
 
 from fastapi import FastAPI
@@ -60,7 +61,7 @@ if settings.SENTRY_DSN and settings.ENV != "dev":
     import sentry_sdk
     from sentry_sdk.integrations.fastapi import FastApiIntegration
     from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
-    
+
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
         environment=settings.ENV,
@@ -109,13 +110,17 @@ app.include_router(auth.router, prefix="/auth", tags=["auth"])
 
 # Cases module routers
 app.include_router(cases.router, prefix="/cases", tags=["cases"])
-app.include_router(notes.router, tags=["notes"])  # Mixed paths: /cases/{id}/notes and /notes/{id}
+app.include_router(
+    notes.router, tags=["notes"]
+)  # Mixed paths: /cases/{id}/notes and /notes/{id}
 app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 
 app.include_router(cases_import.router)  # Already has /cases/import prefix
 
 # Intended Parents module
-app.include_router(intended_parents.router, prefix="/intended-parents", tags=["intended-parents"])
+app.include_router(
+    intended_parents.router, prefix="/intended-parents", tags=["intended-parents"]
+)
 
 # Notifications (user-scoped)
 app.include_router(notifications.router, prefix="/me", tags=["notifications"])
@@ -219,11 +224,12 @@ if settings.ENV == "dev":
 # Health Check
 # ============================================================================
 
+
 @app.get("/health")
 def health():
     """
     Health check endpoint.
-    
+
     Verifies database connectivity and returns environment info.
     """
     with engine.connect() as conn:

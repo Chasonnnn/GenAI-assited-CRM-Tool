@@ -52,7 +52,9 @@ async def test_ai_consent_accept_contract(db, authed_client: AsyncClient, test_a
 
 
 @pytest.mark.asyncio
-async def test_ai_chat_returns_approval_id_per_action(db, authed_client: AsyncClient, test_auth, default_stage, monkeypatch):
+async def test_ai_chat_returns_approval_id_per_action(
+    db, authed_client: AsyncClient, test_auth, default_stage, monkeypatch
+):
     # Minimal case required by /ai/chat contract
     case = Case(
         case_number=f"C{uuid.uuid4().hex[:9]}",
@@ -82,8 +84,7 @@ async def test_ai_chat_returns_approval_id_per_action(db, authed_client: AsyncCl
         async def chat(self, messages):  # noqa: ARG002
             return ChatResponse(
                 content=(
-                    "Sure.\n"
-                    '<action>{"type":"add_note","content":"Test note"}</action>'
+                    'Sure.\n<action>{"type":"add_note","content":"Test note"}</action>'
                 ),
                 prompt_tokens=10,
                 completion_tokens=5,
@@ -120,9 +121,7 @@ async def test_ai_chat_returns_approval_id_per_action(db, authed_client: AsyncCl
 
     approval_id = uuid.UUID(action["approval_id"])
     approval = (
-        db.query(AIActionApproval)
-        .filter(AIActionApproval.id == approval_id)
-        .first()
+        db.query(AIActionApproval).filter(AIActionApproval.id == approval_id).first()
     )
     assert approval is not None
     assert approval.action_type == "add_note"

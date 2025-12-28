@@ -9,21 +9,22 @@ Per "No Backward Compatibility" rule:
 - Drops the case_notes table
 - This is a one-way migration (no downgrade to restore old table)
 """
+
 from typing import Sequence, Union
 
 from alembic import op
 
 
 # revision identifiers, used by Alembic.
-revision: str = '0013_migrate_casenotes'
-down_revision: Union[str, Sequence[str], None] = '0012_add_indexes'
+revision: str = "0013_migrate_casenotes"
+down_revision: Union[str, Sequence[str], None] = "0012_add_indexes"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
     """Migrate case_notes to entity_notes, then drop case_notes table."""
-    
+
     # 1. Copy all case_notes into entity_notes
     op.execute("""
         INSERT INTO entity_notes (id, organization_id, entity_type, entity_id, author_id, content, created_at)
@@ -38,9 +39,9 @@ def upgrade() -> None:
         FROM case_notes
         ON CONFLICT (id) DO NOTHING
     """)
-    
+
     # 2. Drop the old case_notes table
-    op.drop_table('case_notes')
+    op.drop_table("case_notes")
 
 
 def downgrade() -> None:

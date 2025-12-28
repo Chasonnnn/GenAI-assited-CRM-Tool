@@ -2,6 +2,7 @@
 
 Handles AI conversations with context injection and action parsing.
 """
+
 import asyncio
 import json
 import logging
@@ -15,7 +16,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import (
-    AIConversation, AIMessage, AIActionApproval, AIUsageLog, Case, EntityNote, Task, UserIntegration
+    AIConversation,
+    AIMessage,
+    AIActionApproval,
+    AIUsageLog,
+    Case,
+    EntityNote,
+    Task,
+    UserIntegration,
 )
 from app.services.ai_provider import ChatMessage, ChatResponse
 from app.services import ai_settings_service
@@ -113,15 +121,15 @@ Example action:
 
 
 def _build_dynamic_context(
-    case: Case, 
-    notes: list[EntityNote], 
-    tasks: list[Task], 
+    case: Case,
+    notes: list[EntityNote],
+    tasks: list[Task],
     user_integrations: list[str],
     anonymize: bool = False,
     pii_mapping: PIIMapping | None = None,
 ) -> str:
     """Build dynamic context string for the current case.
-    
+
     If anonymize=True and pii_mapping is provided, PII will be replaced with placeholders.
     """
     # Get values, anonymize if needed
@@ -129,7 +137,7 @@ def _build_dynamic_context(
     full_name = case.full_name or ""
     email = case.email or "N/A"
     phone = case.phone or "N/A"
-    
+
     if anonymize and pii_mapping:
         if full_name:
             full_name = pii_mapping.add_name(full_name)
@@ -137,10 +145,10 @@ def _build_dynamic_context(
             email = pii_mapping.add_email(email)
         if phone != "N/A":
             phone = pii_mapping.add_phone(phone)
-    
+
     status_value = case.status_label or "N/A"
     source_value = case.source if isinstance(case.source, str) else case.source.value
-    
+
     lines = [
         "## Current Case Context",
         f"- Case #: {case.case_number}",
@@ -150,14 +158,16 @@ def _build_dynamic_context(
         f"- Phone: {phone}",
         f"- State: {case.state or 'N/A'}",
     ]
-    
+
     if case.date_of_birth:
         lines.append(f"- Date of Birth: {case.date_of_birth}")
     if case.source:
         lines.append(f"- Source: {source_value}")
     if case.last_contacted_at:
-        lines.append(f"- Last Contacted: {case.last_contacted_at.strftime('%Y-%m-%d')} via {case.last_contact_method or 'unknown'}")
-    
+        lines.append(
+            f"- Last Contacted: {case.last_contacted_at.strftime('%Y-%m-%d')} via {case.last_contact_method or 'unknown'}"
+        )
+
     # Add notes (plain text, limited)
     if notes:
         lines.append("\n## Recent Notes")
@@ -168,25 +178,29 @@ def _build_dynamic_context(
             # Split into first/last for matching
             parts = case.full_name.split()
             known_names.extend(parts)
-        
+
         for note in notes[:5]:  # Limit to 5 notes
             plain_text = nh3.clean(note.content, tags=set())  # Strip HTML
-            truncated = plain_text[:200] + "..." if len(plain_text) > 200 else plain_text
-            
+            truncated = (
+                plain_text[:200] + "..." if len(plain_text) > 200 else plain_text
+            )
+
             # Anonymize note content if enabled
             if anonymize and pii_mapping:
                 truncated = anonymize_text(truncated, pii_mapping, known_names)
-            
+
             lines.append(f"- [{note.created_at.strftime('%Y-%m-%d')}] {truncated}")
-    
+
     # Add tasks (Task uses is_completed, not status)
     pending_tasks = [t for t in tasks if not t.is_completed]
     if pending_tasks:
         lines.append("\n## Pending Tasks")
         for task in pending_tasks[:3]:
-            due = f" (due {task.due_date.strftime('%Y-%m-%d')})" if task.due_date else ""
+            due = (
+                f" (due {task.due_date.strftime('%Y-%m-%d')})" if task.due_date else ""
+            )
             lines.append(f"- {task.title}{due}")
-    
+
     # Add user integrations
     lines.append("\n## Your Connected Integrations")
     if "gmail" in user_integrations:
@@ -195,16 +209,16 @@ def _build_dynamic_context(
         lines.append("- ✗ Gmail not connected (can only draft emails)")
     if "zoom" in user_integrations:
         lines.append("- ✓ Zoom (can create meetings)")
-    
+
     return "\n".join(lines)
 
 
 def _parse_actions(content: str) -> list[dict[str, Any]]:
     """Extract action JSON from <action> tags in AI response."""
     actions = []
-    pattern = r'<action>\s*(.*?)\s*</action>'
+    pattern = r"<action>\s*(.*?)\s*</action>"
     matches = re.findall(pattern, content, re.DOTALL)
-    
+
     for match in matches:
         try:
             action = json.loads(match)
@@ -212,18 +226,19 @@ def _parse_actions(content: str) -> list[dict[str, Any]]:
                 actions.append(action)
         except json.JSONDecodeError:
             logger.warning(f"Failed to parse action JSON: {match}")
-    
+
     return actions
 
 
 def _clean_content(content: str) -> str:
     """Remove action tags from content for display."""
-    return re.sub(r'<action>.*?</action>', '', content, flags=re.DOTALL).strip()
+    return re.sub(r"<action>.*?</action>", "", content, flags=re.DOTALL).strip()
 
 
 # ============================================================================
 # Core Chat Functions
 # ============================================================================
+
 
 def get_or_create_conversation(
     db: Session,
@@ -233,16 +248,20 @@ def get_or_create_conversation(
     entity_id: uuid.UUID,
 ) -> AIConversation:
     """Get or create a conversation for a user and entity."""
-    conversation = db.query(AIConversation).filter(
-        AIConversation.organization_id == organization_id,
-        AIConversation.user_id == user_id,
-        AIConversation.entity_type == entity_type,
-        AIConversation.entity_id == entity_id,
-    ).first()
-    
+    conversation = (
+        db.query(AIConversation)
+        .filter(
+            AIConversation.organization_id == organization_id,
+            AIConversation.user_id == user_id,
+            AIConversation.entity_type == entity_type,
+            AIConversation.entity_id == entity_id,
+        )
+        .first()
+    )
+
     if conversation:
         return conversation
-    
+
     conversation = AIConversation(
         organization_id=organization_id,
         user_id=user_id,
@@ -254,12 +273,16 @@ def get_or_create_conversation(
         db.commit()
     except IntegrityError:
         db.rollback()
-        conversation = db.query(AIConversation).filter(
-            AIConversation.organization_id == organization_id,
-            AIConversation.user_id == user_id,
-            AIConversation.entity_type == entity_type,
-            AIConversation.entity_id == entity_id,
-        ).first()
+        conversation = (
+            db.query(AIConversation)
+            .filter(
+                AIConversation.organization_id == organization_id,
+                AIConversation.user_id == user_id,
+                AIConversation.entity_type == entity_type,
+                AIConversation.entity_id == entity_id,
+            )
+            .first()
+        )
         if conversation:
             return conversation
         raise
@@ -273,10 +296,14 @@ def get_conversation_history(
     limit: int = 10,
 ) -> list[AIMessage]:
     """Get recent messages in a conversation."""
-    messages = db.query(AIMessage).filter(
-        AIMessage.conversation_id == conversation_id
-    ).order_by(AIMessage.created_at.desc()).limit(limit).all()
-    
+    messages = (
+        db.query(AIMessage)
+        .filter(AIMessage.conversation_id == conversation_id)
+        .order_by(AIMessage.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
     messages.reverse()  # Oldest first
     return messages
 
@@ -290,18 +317,19 @@ def get_case_context(
     case = db.query(Case).filter(Case.id == case_id).first()
     if not case:
         return None, [], []
-    
+
     # Get notes via EntityNote (entity_type='case')
-    notes = db.query(EntityNote).filter(
-        EntityNote.entity_type == "case",
-        EntityNote.entity_id == case_id
-    ).order_by(EntityNote.created_at.desc()).limit(notes_limit).all()
-    
+    notes = (
+        db.query(EntityNote)
+        .filter(EntityNote.entity_type == "case", EntityNote.entity_id == case_id)
+        .order_by(EntityNote.created_at.desc())
+        .limit(notes_limit)
+        .all()
+    )
+
     # Get tasks (Task uses case_id, not entity_type/entity_id)
-    tasks = db.query(Task).filter(
-        Task.case_id == case_id
-    ).all()
-    
+    tasks = db.query(Task).filter(Task.case_id == case_id).all()
+
     return case, notes, tasks
 
 
@@ -311,14 +339,19 @@ def get_task_context(
     organization_id: uuid.UUID,
 ) -> tuple[Task | None, Case | None]:
     """Load task with optional related case for context."""
-    task = db.query(Task).filter(
-        Task.id == task_id,
-        Task.organization_id == organization_id,
-    ).options(joinedload(Task.case)).first()
-    
+    task = (
+        db.query(Task)
+        .filter(
+            Task.id == task_id,
+            Task.organization_id == organization_id,
+        )
+        .options(joinedload(Task.case))
+        .first()
+    )
+
     if not task:
         return None, None
-    
+
     return task, task.case
 
 
@@ -334,9 +367,13 @@ def _build_task_context(
         f"- Type: {task.task_type}",
         f"- Status: {'Completed' if task.is_completed else 'Open'}",
     ]
-    
+
     if task.description:
-        desc = task.description[:300] + "..." if len(task.description) > 300 else task.description
+        desc = (
+            task.description[:300] + "..."
+            if len(task.description) > 300
+            else task.description
+        )
         lines.append(f"- Description: {desc}")
     if task.due_date:
         lines.append(f"- Due Date: {task.due_date}")
@@ -344,13 +381,13 @@ def _build_task_context(
         lines.append(f"- Due Time: {task.due_time}")
     if task.priority:
         lines.append(f"- Priority: {task.priority}")
-    
+
     if case:
         lines.append("\n## Related Case")
         lines.append(f"- Case #: {case.case_number}")
         lines.append(f"- Name: {case.full_name or 'N/A'}")
         lines.append(f"- Status: {case.status_label or 'N/A'}")
-    
+
     # Add user integrations
     lines.append("\n## Your Connected Integrations")
     if "gmail" in user_integrations:
@@ -359,15 +396,17 @@ def _build_task_context(
         lines.append("- ✗ Gmail not connected (can only draft emails)")
     if "zoom" in user_integrations:
         lines.append("- ✓ Zoom (can create meetings)")
-    
+
     return "\n".join(lines)
 
 
 def get_user_integrations(db: Session, user_id: uuid.UUID) -> list[str]:
     """Get list of connected integration types for a user."""
-    integrations = db.query(UserIntegration.integration_type).filter(
-        UserIntegration.user_id == user_id
-    ).all()
+    integrations = (
+        db.query(UserIntegration.integration_type)
+        .filter(UserIntegration.user_id == user_id)
+        .all()
+    )
     return [i[0] for i in integrations]
 
 
@@ -381,7 +420,7 @@ def chat(
     user_integrations: list[str] | None = None,
 ) -> dict[str, Any]:
     """Process a chat message and return AI response.
-    
+
     Returns:
         {
             "content": "AI response text",
@@ -391,7 +430,7 @@ def chat(
     """
     if user_integrations is None:
         user_integrations = get_user_integrations(db, user_id)
-    
+
     # Get AI provider
     provider = ai_settings_service.get_ai_provider_for_org(db, organization_id)
     if not provider:
@@ -400,26 +439,26 @@ def chat(
             "proposed_actions": [],
             "tokens_used": {"prompt": 0, "completion": 0, "total": 0},
         }
-    
+
     # Get settings for limits and privacy
     ai_settings = ai_settings_service.get_ai_settings(db, organization_id)
     notes_limit = ai_settings.context_notes_limit or 5
     history_limit = ai_settings.conversation_history_limit or 10
     should_anonymize = ai_settings.anonymize_pii
-    
+
     # Create PII mapping for anonymization/rehydration
     pii_mapping = PIIMapping() if should_anonymize else None
-    
+
     # Get or create conversation
     conversation = get_or_create_conversation(
         db, organization_id, user_id, entity_type, entity_id
     )
-    
+
     # Load context based on entity type
     case = None
     system_prompt = SYSTEM_PROMPT
     dynamic_context = ""
-    
+
     if entity_type == "case":
         case, notes, tasks = get_case_context(db, entity_id, notes_limit)
         if not case:
@@ -429,7 +468,10 @@ def chat(
                 "tokens_used": {"prompt": 0, "completion": 0, "total": 0},
             }
         dynamic_context = _build_dynamic_context(
-            case, notes, tasks, user_integrations,
+            case,
+            notes,
+            tasks,
+            user_integrations,
             anonymize=should_anonymize,
             pii_mapping=pii_mapping,
         )
@@ -449,7 +491,7 @@ def chat(
         dynamic_context = f"User's connected integrations: {', '.join(user_integrations) if user_integrations else 'none'}"
     else:
         dynamic_context = "No context available for this entity type."
-    
+
     # Anonymize user message if enabled
     anonymized_message = message
     if should_anonymize and pii_mapping and case:
@@ -458,14 +500,14 @@ def chat(
             known_names.append(case.full_name)
             known_names.extend(case.full_name.split())
         anonymized_message = anonymize_text(message, pii_mapping, known_names)
-    
+
     # Build messages for AI
     history = get_conversation_history(db, conversation.id, history_limit)
-    
+
     ai_messages = [
         ChatMessage(role="system", content=system_prompt + "\n\n" + dynamic_context),
     ]
-    
+
     # Add conversation history (anonymize if PII anonymization is enabled)
     for msg in history:
         content = msg.content
@@ -476,10 +518,10 @@ def chat(
                 known_names.extend(case.full_name.split())
             content = anonymize_text(content, pii_mapping, known_names)
         ai_messages.append(ChatMessage(role=msg.role, content=content))
-    
+
     # Add current user message (anonymized if enabled)
     ai_messages.append(ChatMessage(role="user", content=anonymized_message))
-    
+
     # Call AI provider (async, need to run in event loop)
     try:
         response: ChatResponse = asyncio.run(provider.chat(ai_messages))
@@ -490,11 +532,11 @@ def chat(
             "proposed_actions": [],
             "tokens_used": {"prompt": 0, "completion": 0, "total": 0},
         }
-    
+
     # Parse actions from response
     proposed_actions = _parse_actions(response.content)
     clean_content = _clean_content(response.content)
-    
+
     # Rehydrate response with real PII values
     if should_anonymize and pii_mapping:
         clean_content = rehydrate_text(clean_content, pii_mapping)
@@ -503,7 +545,7 @@ def chat(
             for key, value in action.items():
                 if isinstance(value, str):
                     action[key] = rehydrate_text(value, pii_mapping)
-    
+
     # Save user message
     user_message = AIMessage(
         conversation_id=conversation.id,
@@ -511,7 +553,7 @@ def chat(
         content=message,
     )
     db.add(user_message)
-    
+
     # Save assistant message
     assistant_message = AIMessage(
         conversation_id=conversation.id,
@@ -521,7 +563,7 @@ def chat(
     )
     db.add(assistant_message)
     db.flush()  # Get assistant_message.id
-    
+
     # Create action approvals for each proposed action
     approval_responses = []
     if proposed_actions:
@@ -535,15 +577,17 @@ def chat(
             )
             db.add(approval)
             db.flush()  # Get approval.id
-            
+
             # Build response matching frontend ProposedAction type
-            approval_responses.append({
-                "approval_id": str(approval.id),
-                "action_type": approval.action_type,
-                "action_data": approval.action_payload,  # Map to frontend field name
-                "status": approval.status,
-            })
-    
+            approval_responses.append(
+                {
+                    "approval_id": str(approval.id),
+                    "action_type": approval.action_type,
+                    "action_data": approval.action_payload,  # Map to frontend field name
+                    "status": approval.status,
+                }
+            )
+
     # Log usage
     usage_log = AIUsageLog(
         organization_id=organization_id,
@@ -556,12 +600,12 @@ def chat(
         estimated_cost_usd=response.estimated_cost_usd,
     )
     db.add(usage_log)
-    
+
     # Update conversation timestamp
     conversation.updated_at = datetime.utcnow()
-    
+
     db.commit()
-    
+
     return {
         "content": clean_content,
         "proposed_actions": approval_responses,  # Now includes approval_id
@@ -582,12 +626,12 @@ def get_user_conversations(
 ) -> list[AIConversation]:
     """Get conversations for a user."""
     query = db.query(AIConversation).filter(AIConversation.user_id == user_id)
-    
+
     if entity_type:
         query = query.filter(AIConversation.entity_type == entity_type)
     if entity_id:
         query = query.filter(AIConversation.entity_id == entity_id)
-    
+
     return query.order_by(AIConversation.updated_at.desc()).all()
 
 
@@ -596,8 +640,10 @@ def get_conversation_messages(
     conversation_id: uuid.UUID,
 ) -> list[AIMessage]:
     """Get all messages in a conversation with action approvals."""
-    return db.query(AIMessage).options(
-        joinedload(AIMessage.action_approvals)
-    ).filter(
-        AIMessage.conversation_id == conversation_id
-    ).order_by(AIMessage.created_at).all()
+    return (
+        db.query(AIMessage)
+        .options(joinedload(AIMessage.action_approvals))
+        .filter(AIMessage.conversation_id == conversation_id)
+        .order_by(AIMessage.created_at)
+        .all()
+    )

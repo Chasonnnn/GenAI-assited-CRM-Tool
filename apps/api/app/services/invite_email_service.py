@@ -30,8 +30,12 @@ def _build_invite_html(
 ) -> str:
     """Build HTML email body for invite."""
     inviter_text = f" by {inviter_name}" if inviter_name else ""
-    expiry_text = f"<p style='color: #666; font-size: 13px;'>This invitation expires {expires_at}.</p>" if expires_at else ""
-    
+    expiry_text = (
+        f"<p style='color: #666; font-size: 13px;'>This invitation expires {expires_at}.</p>"
+        if expires_at
+        else ""
+    )
+
     return f"""
 <!DOCTYPE html>
 <html>
@@ -85,7 +89,7 @@ def _build_invite_text(
     """Build plain text email body for invite."""
     inviter_text = f" by {inviter_name}" if inviter_name else ""
     expiry_text = f"\nThis invitation expires {expires_at}.\n" if expires_at else ""
-    
+
     return f"""You're invited to join {org_name}
 
 You've been invited{inviter_text} to join {org_name} as a {role.title()}.
@@ -103,43 +107,48 @@ async def send_invite_email(
 ) -> dict:
     """
     Send invitation email to invitee.
-    
+
     Uses the inviting user's Gmail account to send the email.
-    
+
     Returns:
         {"success": True, "message_id": "..."} or {"success": False, "error": "..."}
     """
     # Get org name
-    org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
+    org = (
+        db.query(Organization).filter(Organization.id == invite.organization_id).first()
+    )
     org_name = org.name if org else "the organization"
-    
+
     # Get inviter name
     inviter_name = None
     if invite.invited_by_user_id:
         inviter = db.query(User).filter(User.id == invite.invited_by_user_id).first()
         inviter_name = inviter.full_name if inviter else None
-    
+
     # Format expiry
     expires_at = None
     if invite.expires_at:
         from datetime import datetime
+
         days_remaining = (invite.expires_at - datetime.utcnow()).days
         if days_remaining > 0:
             expires_at = f"in {days_remaining} day{'s' if days_remaining != 1 else ''}"
         else:
             expires_at = "soon"
-    
+
     # Build URLs and content
     invite_url = _build_invite_url(invite.id)
     subject = f"You're invited to join {org_name}"
-    html_body = _build_invite_html(org_name, inviter_name, invite.role, invite_url, expires_at)
-    
+    html_body = _build_invite_html(
+        org_name, inviter_name, invite.role, invite_url, expires_at
+    )
+
     # Send via inviter's Gmail (or system default)
     sender_user_id = invite.invited_by_user_id
     if not sender_user_id:
         logger.warning(f"No inviter for invite {invite.id}, cannot send email")
         return {"success": False, "error": "No inviter to send from"}
-    
+
     result = await gmail_service.send_email(
         db=db,
         user_id=str(sender_user_id),
@@ -148,10 +157,10 @@ async def send_invite_email(
         body=html_body,
         html=True,
     )
-    
+
     if result.get("success"):
         logger.info(f"Sent invite email to {invite.email} for org {org_name}")
     else:
         logger.error(f"Failed to send invite email: {result.get('error')}")
-    
+
     return result

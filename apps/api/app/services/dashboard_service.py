@@ -47,28 +47,36 @@ def get_upcoming_items(
     )
 
     case_ids = {t.case_id for t in tasks if t.case_id}
-    cases = {} if not case_ids else {
-        c.id: c for c in db.query(Case).filter(
-            Case.organization_id == org_id,
-            Case.id.in_(case_ids)
-        ).all()
-    }
+    cases = (
+        {}
+        if not case_ids
+        else {
+            c.id: c
+            for c in db.query(Case)
+            .filter(Case.organization_id == org_id, Case.id.in_(case_ids))
+            .all()
+        }
+    )
 
     task_items = []
     for task in tasks:
         case = cases.get(task.case_id) if task.case_id else None
         is_overdue = task.due_date < today if task.due_date else False
-        task_items.append({
-            "id": str(task.id),
-            "type": "task",
-            "title": task.title,
-            "time": task.due_time.strftime("%H:%M") if task.due_time else None,
-            "case_id": str(task.case_id) if task.case_id else None,
-            "case_number": case.case_number if case else None,
-            "date": task.due_date.isoformat() if task.due_date else today.isoformat(),
-            "is_overdue": is_overdue,
-            "task_type": task.task_type or "general",
-        })
+        task_items.append(
+            {
+                "id": str(task.id),
+                "type": "task",
+                "title": task.title,
+                "time": task.due_time.strftime("%H:%M") if task.due_time else None,
+                "case_id": str(task.case_id) if task.case_id else None,
+                "case_number": case.case_number if case else None,
+                "date": task.due_date.isoformat()
+                if task.due_date
+                else today.isoformat(),
+                "is_overdue": is_overdue,
+                "task_type": task.task_type or "general",
+            }
+        )
 
     meeting_filters = [
         ZoomMeeting.organization_id == org_id,
@@ -87,27 +95,35 @@ def get_upcoming_items(
     )
 
     meeting_case_ids = {m.case_id for m in meetings if m.case_id}
-    meeting_cases = {} if not meeting_case_ids else {
-        c.id: c for c in db.query(Case).filter(
-            Case.organization_id == org_id,
-            Case.id.in_(meeting_case_ids)
-        ).all()
-    }
+    meeting_cases = (
+        {}
+        if not meeting_case_ids
+        else {
+            c.id: c
+            for c in db.query(Case)
+            .filter(Case.organization_id == org_id, Case.id.in_(meeting_case_ids))
+            .all()
+        }
+    )
 
     meeting_items = []
     for meeting in meetings:
         case = meeting_cases.get(meeting.case_id) if meeting.case_id else None
         meeting_date = meeting.start_time.date() if meeting.start_time else today
-        meeting_items.append({
-            "id": str(meeting.id),
-            "type": "meeting",
-            "title": meeting.topic,
-            "time": meeting.start_time.strftime("%H:%M") if meeting.start_time else None,
-            "case_id": str(meeting.case_id) if meeting.case_id else None,
-            "case_number": case.case_number if case else None,
-            "date": meeting_date.isoformat(),
-            "is_overdue": False,
-            "join_url": meeting.join_url,
-        })
+        meeting_items.append(
+            {
+                "id": str(meeting.id),
+                "type": "meeting",
+                "title": meeting.topic,
+                "time": meeting.start_time.strftime("%H:%M")
+                if meeting.start_time
+                else None,
+                "case_id": str(meeting.case_id) if meeting.case_id else None,
+                "case_number": case.case_number if case else None,
+                "date": meeting_date.isoformat(),
+                "is_overdue": False,
+                "join_url": meeting.join_url,
+            }
+        )
 
     return task_items, meeting_items

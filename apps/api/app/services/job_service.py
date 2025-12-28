@@ -12,14 +12,14 @@ from app.db.enums import JobStatus, JobType
 # =============================================================================
 # TODO: Task Due/Overdue Notifications (Week 8b - deferred)
 # =============================================================================
-# 
+#
 # Implement a daily worker sweep for task notifications:
-# 
-# 1. notify_tasks_due_today(): 
+#
+# 1. notify_tasks_due_today():
 #    - Query tasks with due_date = today AND is_completed = False
 #    - Send TASK_DUE_TODAY notification to assignee
 #    - Dedupe key: f"task_due_today:{task.id}:{date}"
-# 
+#
 # 2. notify_tasks_overdue():
 #    - Query tasks with due_date < today AND is_completed = False
 #    - Send TASK_OVERDUE notification to assignee
@@ -40,7 +40,7 @@ def schedule_job(
 ) -> Job:
     """
     Schedule a new background job.
-    
+
     If run_at is None, the job runs immediately.
     If idempotency_key is provided, duplicate jobs with same key will fail
     with IntegrityError (caller should catch and handle).
@@ -62,14 +62,20 @@ def schedule_job(
 def get_pending_jobs(db: Session, limit: int = 10) -> list[Job]:
     """
     Get pending jobs that are due to run.
-    
+
     Returns jobs where status='pending' and run_at <= now, ordered by run_at.
     """
     now = datetime.utcnow()
-    return db.query(Job).filter(
-        Job.status == JobStatus.PENDING.value,
-        Job.run_at <= now,
-    ).order_by(Job.run_at).limit(limit).all()
+    return (
+        db.query(Job)
+        .filter(
+            Job.status == JobStatus.PENDING.value,
+            Job.run_at <= now,
+        )
+        .order_by(Job.run_at)
+        .limit(limit)
+        .all()
+    )
 
 
 def get_job(db: Session, job_id: UUID, org_id: UUID | None = None) -> Job | None:
@@ -118,7 +124,7 @@ def mark_job_completed(db: Session, job: Job) -> Job:
 def mark_job_failed(db: Session, job: Job, error: str) -> Job:
     """
     Mark a job as failed.
-    
+
     If attempts < max_attempts, reset to pending for retry.
     """
     job.last_error = error

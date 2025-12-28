@@ -14,9 +14,11 @@ from app.services.workflow_engine import engine
 # Case Triggers (called from case_service.py)
 # =============================================================================
 
+
 def trigger_case_created(db: Session, case: Case) -> None:
     """Trigger workflows when a new case is created."""
     from app.services import pipeline_service
+
     stage = pipeline_service.get_stage_by_id(db, case.stage_id)
     stage_slug = stage.slug if stage else None
     engine.trigger(
@@ -48,7 +50,7 @@ def trigger_status_changed(
     """Trigger workflows when case status changes."""
     if old_stage_id == new_stage_id:
         return
-    
+
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.STATUS_CHANGED,
@@ -102,7 +104,7 @@ def trigger_case_updated(
     """Trigger workflows when specific case fields change."""
     if not changed_fields:
         return
-    
+
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.CASE_UPDATED,
@@ -123,14 +125,19 @@ def trigger_case_updated(
 # Task Triggers (called from worker sweep)
 # =============================================================================
 
+
 def trigger_task_due(db: Session, task: Task) -> None:
     """Trigger workflows when a task is about to be due."""
-    case = task.case if hasattr(task, 'case') else None
-    org_id = task.organization_id if hasattr(task, 'organization_id') else (case.organization_id if case else None)
-    
+    case = task.case if hasattr(task, "case") else None
+    org_id = (
+        task.organization_id
+        if hasattr(task, "organization_id")
+        else (case.organization_id if case else None)
+    )
+
     if not org_id:
         return
-    
+
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.TASK_DUE,
@@ -149,12 +156,16 @@ def trigger_task_due(db: Session, task: Task) -> None:
 
 def trigger_task_overdue(db: Session, task: Task) -> None:
     """Trigger workflows when a task is overdue."""
-    case = task.case if hasattr(task, 'case') else None
-    org_id = task.organization_id if hasattr(task, 'organization_id') else (case.organization_id if case else None)
-    
+    case = task.case if hasattr(task, "case") else None
+    org_id = (
+        task.organization_id
+        if hasattr(task, "organization_id")
+        else (case.organization_id if case else None)
+    )
+
     if not org_id:
         return
-    
+
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.TASK_OVERDUE,
@@ -175,24 +186,29 @@ def trigger_task_overdue(db: Session, task: Task) -> None:
 # Sweep Triggers (called from worker.py)
 # =============================================================================
 
+
 def trigger_scheduled_workflows(db: Session, org_id: UUID) -> None:
     """Trigger scheduled workflows for an org (called by daily sweep)."""
     from datetime import datetime, timezone
     from app.db.models import AutomationWorkflow
-    
+
     now = datetime.now(timezone.utc)
-    
-    workflows = db.query(AutomationWorkflow).filter(
-        AutomationWorkflow.organization_id == org_id,
-        AutomationWorkflow.trigger_type == WorkflowTriggerType.SCHEDULED.value,
-        AutomationWorkflow.is_enabled.is_(True),
-    ).all()
-    
+
+    workflows = (
+        db.query(AutomationWorkflow)
+        .filter(
+            AutomationWorkflow.organization_id == org_id,
+            AutomationWorkflow.trigger_type == WorkflowTriggerType.SCHEDULED.value,
+            AutomationWorkflow.is_enabled.is_(True),
+        )
+        .all()
+    )
+
     for workflow in workflows:
         config = workflow.trigger_config
         cron = config.get("cron", "")
         tz = config.get("timezone", "America/Los_Angeles")
-        
+
         # Simple cron matching (for daily/weekly schedules)
         # Full cron parsing would require croniter library
         if _should_run_cron(cron, now, tz):
@@ -215,19 +231,23 @@ def trigger_inactivity_workflows(db: Session, org_id: UUID) -> None:
     """Trigger inactivity workflows for cases with no recent activity."""
     from datetime import datetime, timezone, timedelta
     from app.db.models import AutomationWorkflow
-    
+
     now = datetime.now(timezone.utc)
-    
-    workflows = db.query(AutomationWorkflow).filter(
-        AutomationWorkflow.organization_id == org_id,
-        AutomationWorkflow.trigger_type == WorkflowTriggerType.INACTIVITY.value,
-        AutomationWorkflow.is_enabled.is_(True),
-    ).all()
-    
+
+    workflows = (
+        db.query(AutomationWorkflow)
+        .filter(
+            AutomationWorkflow.organization_id == org_id,
+            AutomationWorkflow.trigger_type == WorkflowTriggerType.INACTIVITY.value,
+            AutomationWorkflow.is_enabled.is_(True),
+        )
+        .all()
+    )
+
     for workflow in workflows:
         days = workflow.trigger_config.get("days", 7)
         threshold = now - timedelta(days=days)
-        
+
         # Find cases with no activity since threshold
         # Using updated_at as proxy for activity
         for case in _iter_cases(db, org_id, updated_before=threshold):
@@ -238,7 +258,9 @@ def trigger_inactivity_workflows(db: Session, org_id: UUID) -> None:
                 entity_id=case.id,
                 event_data={
                     "days_inactive": days,
-                    "last_activity": case.updated_at.isoformat() if case.updated_at else None,
+                    "last_activity": case.updated_at.isoformat()
+                    if case.updated_at
+                    else None,
                 },
                 org_id=org_id,
                 source=WorkflowEventSource.SYSTEM,
@@ -253,7 +275,7 @@ def _iter_cases(
 ):
     """Iterate through active cases in batches to avoid truncating large orgs."""
     from app.db.models import Case
-    
+
     last_id = None
     while True:
         query = db.query(Case).filter(
@@ -277,7 +299,7 @@ def trigger_task_due_sweep(db: Session, org_id: UUID) -> None:
     from datetime import datetime, timedelta
     from zoneinfo import ZoneInfo
     from app.db.models import AutomationWorkflow, Task, Case, Organization
-    
+
     org = db.query(Organization).filter(Organization.id == org_id).first()
     tz_name = org.timezone if org and org.timezone else "UTC"
     try:
@@ -285,31 +307,41 @@ def trigger_task_due_sweep(db: Session, org_id: UUID) -> None:
     except Exception:
         org_tz = ZoneInfo("UTC")
     now = datetime.now(org_tz)
-    
-    workflows = db.query(AutomationWorkflow).filter(
-        AutomationWorkflow.organization_id == org_id,
-        AutomationWorkflow.trigger_type == WorkflowTriggerType.TASK_DUE.value,
-        AutomationWorkflow.is_enabled.is_(True),
-    ).all()
-    
+
+    workflows = (
+        db.query(AutomationWorkflow)
+        .filter(
+            AutomationWorkflow.organization_id == org_id,
+            AutomationWorkflow.trigger_type == WorkflowTriggerType.TASK_DUE.value,
+            AutomationWorkflow.is_enabled.is_(True),
+        )
+        .all()
+    )
+
     for workflow in workflows:
         hours_before = workflow.trigger_config.get("hours_before", 24)
         window_start = now + timedelta(hours=hours_before - 1)
         window_end = now + timedelta(hours=hours_before + 1)
-        
+
         # Find tasks due within the window
-        tasks = db.query(Task).join(Case).filter(
-            Case.organization_id == org_id,
-            Task.due_date.isnot(None),
-            Task.is_completed.is_(False),
-        ).all()
-        
+        tasks = (
+            db.query(Task)
+            .join(Case)
+            .filter(
+                Case.organization_id == org_id,
+                Task.due_date.isnot(None),
+                Task.is_completed.is_(False),
+            )
+            .all()
+        )
+
         for task in tasks:
             if task.due_date:
                 from datetime import datetime as dt
+
                 due_dt = dt.combine(task.due_date, task.due_time or dt.min.time())
                 due_dt = due_dt.replace(tzinfo=org_tz)
-                
+
                 if window_start <= due_dt <= window_end:
                     trigger_task_due(db, task)
 
@@ -319,7 +351,7 @@ def trigger_task_overdue_sweep(db: Session, org_id: UUID) -> None:
     from datetime import datetime
     from zoneinfo import ZoneInfo
     from app.db.models import Task, Case, Organization
-    
+
     org = db.query(Organization).filter(Organization.id == org_id).first()
     tz_name = org.timezone if org and org.timezone else "UTC"
     try:
@@ -328,14 +360,19 @@ def trigger_task_overdue_sweep(db: Session, org_id: UUID) -> None:
         org_tz = ZoneInfo("UTC")
     now = datetime.now(org_tz)
     today = now.date()
-    
-    overdue_tasks = db.query(Task).join(Case).filter(
-        Case.organization_id == org_id,
-        Task.due_date.isnot(None),
-        Task.due_date < today,
-        Task.is_completed.is_(False),
-    ).all()
-    
+
+    overdue_tasks = (
+        db.query(Task)
+        .join(Case)
+        .filter(
+            Case.organization_id == org_id,
+            Task.due_date.isnot(None),
+            Task.due_date < today,
+            Task.is_completed.is_(False),
+        )
+        .all()
+    )
+
     for task in overdue_tasks:
         trigger_task_overdue(db, task)
 
@@ -343,6 +380,7 @@ def trigger_task_overdue_sweep(db: Session, org_id: UUID) -> None:
 # =============================================================================
 # Match Triggers (called from match_service.py)
 # =============================================================================
+
 
 def trigger_match_proposed(db: Session, match: Match) -> None:
     """Trigger workflows when a match is proposed."""
@@ -354,7 +392,9 @@ def trigger_match_proposed(db: Session, match: Match) -> None:
         event_data={
             "match_id": str(match.id),
             "case_id": str(match.case_id),
-            "intended_parent_id": str(match.intended_parent_id) if match.intended_parent_id else None,
+            "intended_parent_id": str(match.intended_parent_id)
+            if match.intended_parent_id
+            else None,
             "status": match.status,
         },
         org_id=match.organization_id,
@@ -372,7 +412,9 @@ def trigger_match_accepted(db: Session, match: Match) -> None:
         event_data={
             "match_id": str(match.id),
             "case_id": str(match.case_id),
-            "intended_parent_id": str(match.intended_parent_id) if match.intended_parent_id else None,
+            "intended_parent_id": str(match.intended_parent_id)
+            if match.intended_parent_id
+            else None,
             "status": match.status,
             "accepted_at": match.accepted_at.isoformat() if match.accepted_at else None,
         },
@@ -391,7 +433,9 @@ def trigger_match_rejected(db: Session, match: Match) -> None:
         event_data={
             "match_id": str(match.id),
             "case_id": str(match.case_id),
-            "intended_parent_id": str(match.intended_parent_id) if match.intended_parent_id else None,
+            "intended_parent_id": str(match.intended_parent_id)
+            if match.intended_parent_id
+            else None,
             "status": match.status,
         },
         org_id=match.organization_id,
@@ -403,33 +447,43 @@ def trigger_match_rejected(db: Session, match: Match) -> None:
 # Document Triggers (called from attachment_service.py AFTER scan passes)
 # =============================================================================
 
+
 def trigger_document_uploaded(db: Session, attachment: Attachment) -> None:
     """
     Trigger workflows when a document is uploaded and passed virus scan.
-    
+
     Note: Only call this after scan_status = 'clean', not on initial upload.
     Skip if file is quarantined.
     """
     # Get org_id from the related entity
     org_id = None
     case_id = None
-    
+
     if attachment.case_id:
         case = db.query(Case).filter(Case.id == attachment.case_id).first()
         if case:
             org_id = case.organization_id
             case_id = case.id
-    
+
     # Fallback: check intended_parent_id for IP attachments
-    if not org_id and hasattr(attachment, 'intended_parent_id') and attachment.intended_parent_id:
+    if (
+        not org_id
+        and hasattr(attachment, "intended_parent_id")
+        and attachment.intended_parent_id
+    ):
         from app.db.models import IntendedParent
-        ip = db.query(IntendedParent).filter(IntendedParent.id == attachment.intended_parent_id).first()
+
+        ip = (
+            db.query(IntendedParent)
+            .filter(IntendedParent.id == attachment.intended_parent_id)
+            .first()
+        )
         if ip:
             org_id = ip.organization_id
-    
+
     if not org_id:
         return
-    
+
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.DOCUMENT_UPLOADED,
@@ -440,7 +494,9 @@ def trigger_document_uploaded(db: Session, attachment: Attachment) -> None:
             "filename": attachment.filename,
             "content_type": attachment.content_type,
             "case_id": str(case_id) if case_id else None,
-            "uploaded_by": str(attachment.uploaded_by_user_id) if attachment.uploaded_by_user_id else None,
+            "uploaded_by": str(attachment.uploaded_by_user_id)
+            if attachment.uploaded_by_user_id
+            else None,
         },
         org_id=org_id,
         source=WorkflowEventSource.USER,
@@ -452,10 +508,11 @@ def trigger_document_uploaded(db: Session, attachment: Attachment) -> None:
 # High-volume trigger - consider throttling
 # =============================================================================
 
+
 def trigger_note_added(db: Session, note: EntityNote) -> None:
     """
     Trigger workflows when a note is added to an entity.
-    
+
     Warning: This is a high-volume trigger. Workflows using this trigger
     should have conditions to avoid excessive execution.
     """
@@ -479,6 +536,7 @@ def trigger_note_added(db: Session, note: EntityNote) -> None:
 # Appointment Triggers (called from appointment_service.py)
 # =============================================================================
 
+
 def trigger_appointment_scheduled(db: Session, appointment: Appointment) -> None:
     """Trigger workflows when an appointment is scheduled/approved."""
     engine.trigger(
@@ -489,11 +547,19 @@ def trigger_appointment_scheduled(db: Session, appointment: Appointment) -> None
         event_data={
             "appointment_id": str(appointment.id),
             "case_id": str(appointment.case_id) if appointment.case_id else None,
-            "intended_parent_id": str(appointment.intended_parent_id) if appointment.intended_parent_id else None,
+            "intended_parent_id": str(appointment.intended_parent_id)
+            if appointment.intended_parent_id
+            else None,
             "user_id": str(appointment.user_id),
-            "scheduled_start": appointment.scheduled_start.isoformat() if appointment.scheduled_start else None,
-            "scheduled_end": appointment.scheduled_end.isoformat() if appointment.scheduled_end else None,
-            "appointment_type": appointment.appointment_type.name if appointment.appointment_type else None,
+            "scheduled_start": appointment.scheduled_start.isoformat()
+            if appointment.scheduled_start
+            else None,
+            "scheduled_end": appointment.scheduled_end.isoformat()
+            if appointment.scheduled_end
+            else None,
+            "appointment_type": appointment.appointment_type.name
+            if appointment.appointment_type
+            else None,
             "status": appointment.status,
         },
         org_id=appointment.organization_id,
@@ -511,10 +577,16 @@ def trigger_appointment_completed(db: Session, appointment: Appointment) -> None
         event_data={
             "appointment_id": str(appointment.id),
             "case_id": str(appointment.case_id) if appointment.case_id else None,
-            "intended_parent_id": str(appointment.intended_parent_id) if appointment.intended_parent_id else None,
+            "intended_parent_id": str(appointment.intended_parent_id)
+            if appointment.intended_parent_id
+            else None,
             "user_id": str(appointment.user_id),
-            "scheduled_start": appointment.scheduled_start.isoformat() if appointment.scheduled_start else None,
-            "scheduled_end": appointment.scheduled_end.isoformat() if appointment.scheduled_end else None,
+            "scheduled_start": appointment.scheduled_start.isoformat()
+            if appointment.scheduled_start
+            else None,
+            "scheduled_end": appointment.scheduled_end.isoformat()
+            if appointment.scheduled_end
+            else None,
             "status": appointment.status,
         },
         org_id=appointment.organization_id,
@@ -525,35 +597,36 @@ def trigger_appointment_completed(db: Session, appointment: Appointment) -> None
 def _should_run_cron(cron: str, now, tz: str) -> bool:
     """
     Simple cron matching for common patterns.
-    
+
     Supports:
     - "0 9 * * *" = daily at 9am
     - "0 9 * * 1" = Monday at 9am
     - "0 9 * * 1-5" = weekdays at 9am
-    
+
     For full cron support, install croniter.
     """
     try:
         from zoneinfo import ZoneInfo
+
         local_tz = ZoneInfo(tz)
         local_now = now.astimezone(local_tz)
     except Exception:
         local_now = now
-    
+
     parts = cron.split()
     if len(parts) != 5:
         return False
-    
+
     minute, hour, dom, month, dow = parts
-    
+
     # Check hour (simple exact match)
     if hour != "*" and int(hour) != local_now.hour:
         return False
-    
+
     # Check minute (simple exact match)
     if minute != "*" and int(minute) != local_now.minute:
         return False
-    
+
     # Check day of week
     if dow != "*":
         if "-" in dow:
@@ -562,5 +635,5 @@ def _should_run_cron(cron: str, now, tz: str) -> bool:
                 return False
         elif int(dow) != local_now.weekday():
             return False
-    
+
     return True

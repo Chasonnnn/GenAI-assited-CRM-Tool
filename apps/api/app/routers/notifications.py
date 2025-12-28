@@ -25,6 +25,7 @@ router = APIRouter()
 
 class NotificationRead(BaseModel):
     """Notification response."""
+
     id: str
     type: str
     title: str
@@ -33,23 +34,26 @@ class NotificationRead(BaseModel):
     entity_id: str | None
     read_at: str | None
     created_at: str
-    
+
     model_config = {"from_attributes": True}
 
 
 class NotificationListResponse(BaseModel):
     """Paginated notification list."""
+
     items: list[NotificationRead]
     unread_count: int
 
 
 class UnreadCountResponse(BaseModel):
     """Unread count only (for polling)."""
+
     count: int
 
 
 class NotificationSettingsRead(BaseModel):
     """User notification settings."""
+
     case_assigned: bool
     case_status_changed: bool
     case_handoff: bool
@@ -60,6 +64,7 @@ class NotificationSettingsRead(BaseModel):
 
 class NotificationSettingsUpdate(BaseModel):
     """Update notification settings."""
+
     case_assigned: bool | None = None
     case_status_changed: bool | None = None
     case_handoff: bool | None = None
@@ -76,7 +81,9 @@ class NotificationSettingsUpdate(BaseModel):
 @router.get("/notifications", response_model=NotificationListResponse)
 def list_notifications(
     unread_only: bool = Query(False),
-    notification_types: str | None = Query(None, description="Comma-separated notification types"),
+    notification_types: str | None = Query(
+        None, description="Comma-separated notification types"
+    ),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     session: UserSession = Depends(get_current_session),
@@ -87,7 +94,7 @@ def list_notifications(
     types_list = None
     if notification_types:
         types_list = [t.strip() for t in notification_types.split(",") if t.strip()]
-    
+
     notifications = notification_service.get_notifications(
         db=db,
         user_id=session.user_id,
@@ -97,26 +104,28 @@ def list_notifications(
         limit=limit,
         offset=offset,
     )
-    
+
     unread_count = notification_service.get_unread_count(
         db=db,
         user_id=session.user_id,
         org_id=session.org_id,
     )
-    
+
     items = []
     for n in notifications:
-        items.append(NotificationRead(
-            id=str(n.id),
-            type=n.type,
-            title=n.title,
-            body=n.body,
-            entity_type=n.entity_type,
-            entity_id=str(n.entity_id) if n.entity_id else None,
-            read_at=n.read_at.isoformat() if n.read_at else None,
-            created_at=n.created_at.isoformat(),
-        ))
-    
+        items.append(
+            NotificationRead(
+                id=str(n.id),
+                type=n.type,
+                title=n.title,
+                body=n.body,
+                entity_type=n.entity_type,
+                entity_id=str(n.entity_id) if n.entity_id else None,
+                read_at=n.read_at.isoformat() if n.read_at else None,
+                created_at=n.created_at.isoformat(),
+            )
+        )
+
     return NotificationListResponse(items=items, unread_count=unread_count)
 
 
@@ -151,10 +160,10 @@ def mark_notification_read(
         user_id=session.user_id,
         org_id=session.org_id,
     )
-    
+
     if not notification:
         raise HTTPException(status_code=404, detail="Notification not found")
-    
+
     return NotificationRead(
         id=str(notification.id),
         type=notification.type,

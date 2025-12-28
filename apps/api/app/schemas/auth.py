@@ -9,6 +9,7 @@ from app.db.enums import Role
 
 class TokenPayload(BaseModel):
     """Decoded JWT payload structure."""
+
     sub: UUID  # user_id
     org_id: UUID
     role: str
@@ -20,10 +21,11 @@ class TokenPayload(BaseModel):
 class UserSession(BaseModel):
     """
     Full session context for authenticated requests.
-    
+
     This is returned by get_current_session dependency
     and contains all information needed for authorization.
     """
+
     user_id: UUID
     org_id: UUID
     role: Role  # Validated enum
@@ -35,6 +37,7 @@ class UserSession(BaseModel):
 
 class MeResponse(BaseModel):
     """Response schema for GET /auth/me endpoint."""
+
     user_id: UUID
     email: str
     display_name: str
@@ -48,4 +51,3 @@ class MeResponse(BaseModel):
     mfa_enabled: bool = False
     mfa_required: bool = True
     mfa_verified: bool = False
-

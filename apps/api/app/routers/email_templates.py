@@ -2,10 +2,16 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_session, require_permission, require_csrf_header
+from app.core.deps import (
+    get_db,
+    get_current_session,
+    require_permission,
+    require_csrf_header,
+)
 from app.core.policies import POLICIES
 
 from app.schemas.email import (
@@ -18,14 +24,17 @@ from app.schemas.email import (
 )
 from app.services import email_service
 
-router = APIRouter(tags=["Email Templates"], dependencies=[Depends(require_permission(POLICIES["email_templates"].default))])
+router = APIRouter(
+    tags=["Email Templates"],
+    dependencies=[Depends(require_permission(POLICIES["email_templates"].default))],
+)
 
 
 @router.get("", response_model=list[EmailTemplateListItem])
 def list_templates(
     active_only: bool = True,
     db: Session = Depends(get_db),
-    session = Depends(get_current_session),
+    session=Depends(get_current_session),
 ):
     """List email templates for the organization."""
     templates = email_service.list_templates(
@@ -34,11 +43,16 @@ def list_templates(
     return templates
 
 
-@router.post("", response_model=EmailTemplateRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "",
+    response_model=EmailTemplateRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_csrf_header)],
+)
 def create_template(
     data: EmailTemplateCreate,
     db: Session = Depends(get_db),
-    session = Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
+    session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
 ):
     """Create a new email template (manager only)."""
     # Check for duplicate name
@@ -48,7 +62,7 @@ def create_template(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Template with name '{data.name}' already exists",
         )
-    
+
     template = email_service.create_template(
         db,
         org_id=session.org_id,
@@ -64,7 +78,7 @@ def create_template(
 def get_template(
     template_id: UUID,
     db: Session = Depends(get_db),
-    session = Depends(get_current_session),
+    session=Depends(get_current_session),
 ):
     """Get an email template by ID."""
     template = email_service.get_template(db, template_id, session.org_id)
@@ -73,20 +87,24 @@ def get_template(
     return template
 
 
-@router.patch("/{template_id}", response_model=EmailTemplateRead, dependencies=[Depends(require_csrf_header)])
+@router.patch(
+    "/{template_id}",
+    response_model=EmailTemplateRead,
+    dependencies=[Depends(require_csrf_header)],
+)
 def update_template(
     template_id: UUID,
     data: EmailTemplateUpdate,
     db: Session = Depends(get_db),
-    session = Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
+    session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
 ):
     """Update an email template (manager only). Creates version snapshot."""
     from app.services import version_service
-    
+
     template = email_service.get_template(db, template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
-    
+
     # Check for duplicate name if changing
     if data.name and data.name != template.name:
         existing = email_service.get_template_by_name(db, data.name, session.org_id)
@@ -95,10 +113,11 @@ def update_template(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Template with name '{data.name}' already exists",
             )
-    
+
     try:
         updated = email_service.update_template(
-            db, template,
+            db,
+            template,
             user_id=session.user_id,
             name=data.name,
             subject=data.subject,
@@ -107,30 +126,42 @@ def update_template(
             expected_version=data.expected_version,
         )
     except version_service.VersionConflictError as e:
-        raise HTTPException(status_code=409, detail=f"Version conflict: expected {e.expected}, got {e.actual}")
-    
+        raise HTTPException(
+            status_code=409,
+            detail=f"Version conflict: expected {e.expected}, got {e.actual}",
+        )
+
     return updated
 
 
-@router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_csrf_header)])
+@router.delete(
+    "/{template_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_csrf_header)],
+)
 def delete_template(
     template_id: UUID,
     db: Session = Depends(get_db),
-    session = Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
+    session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
 ):
     """Soft delete (deactivate) an email template (manager only)."""
     template = email_service.get_template(db, template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
-    
+
     email_service.delete_template(db, template)
 
 
-@router.post("/send", response_model=EmailLogRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/send",
+    response_model=EmailLogRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_csrf_header)],
+)
 def send_email(
     data: EmailSendRequest,
     db: Session = Depends(get_db),
-    session = Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
+    session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
 ):
     """Send an email using a template (queues for async sending). Manager only."""
     result = email_service.send_from_template(
@@ -142,10 +173,10 @@ def send_email(
         case_id=data.case_id,
         schedule_at=data.schedule_at,
     )
-    
+
     if not result:
         raise HTTPException(status_code=404, detail="Template not found")
-    
+
     email_log, job = result
     return email_log
 
@@ -153,13 +184,9 @@ def send_email(
 # =============================================================================
 # Version Control Endpoints (Developer-only)
 # =============================================================================
-
-from pydantic import BaseModel
-from fastapi import Query
-
-
 class TemplateVersionRead(BaseModel):
     """Version history entry."""
+
     id: UUID
     version: int
     created_by_user_id: UUID | None
@@ -169,6 +196,7 @@ class TemplateVersionRead(BaseModel):
 
 class RollbackRequest(BaseModel):
     """Rollback request."""
+
     target_version: int
 
 
@@ -177,14 +205,16 @@ def get_template_versions(
     template_id: UUID,
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
-    session = Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
+    session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
 ):
     """Get version history for a template. Developer-only."""
     template = email_service.get_template(db, template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
-    
-    versions = email_service.get_template_versions(db, session.org_id, template_id, limit)
+
+    versions = email_service.get_template_versions(
+        db, session.org_id, template_id, limit
+    )
     return [
         TemplateVersionRead(
             id=v.id,
@@ -197,26 +227,30 @@ def get_template_versions(
     ]
 
 
-@router.post("/{template_id}/rollback", response_model=EmailTemplateRead, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/{template_id}/rollback",
+    response_model=EmailTemplateRead,
+    dependencies=[Depends(require_csrf_header)],
+)
 def rollback_template(
     template_id: UUID,
     data: RollbackRequest,
     db: Session = Depends(get_db),
-    session = Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
+    session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
 ):
     """Rollback template to a previous version. Developer-only."""
     template = email_service.get_template(db, template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
-    
+
     updated, error = email_service.rollback_template(
         db=db,
         template=template,
         target_version=data.target_version,
         user_id=session.user_id,
     )
-    
+
     if error:
         raise HTTPException(status_code=400, detail=error)
-    
+
     return updated

@@ -5,7 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_session, require_csrf_header, require_permission
+from app.core.deps import (
+    get_db,
+    get_current_session,
+    require_csrf_header,
+    require_permission,
+)
 from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
 from app.services import queue_service
@@ -28,6 +33,7 @@ router = APIRouter(
 # =============================================================================
 # Schemas
 # =============================================================================
+
 
 class QueueCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
@@ -68,6 +74,7 @@ class QueueMemberAdd(BaseModel):
 
 class ClaimRequest(BaseModel):
     """Empty body - claimer is the current user."""
+
     pass
 
 
@@ -82,6 +89,7 @@ class AssignToQueueRequest(BaseModel):
 # =============================================================================
 # Queue CRUD Endpoints
 # =============================================================================
+
 
 @router.get("", response_model=list[QueueResponse])
 def list_queues(
@@ -107,14 +115,19 @@ def get_queue(
     return _queue_to_response(queue)
 
 
-@router.post("", response_model=QueueResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "",
+    response_model=QueueResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_csrf_header)],
+)
 def create_queue(
     data: QueueCreate,
     session: UserSession = Depends(require_permission(POLICIES["queues"].default)),
     db: Session = Depends(get_db),
 ):
     """Create a new queue."""
-    
+
     try:
         queue = queue_service.create_queue(
             db, session.org_id, data.name, data.description
@@ -125,7 +138,11 @@ def create_queue(
         raise HTTPException(status_code=409, detail=str(e))
 
 
-@router.patch("/{queue_id}", response_model=QueueResponse, dependencies=[Depends(require_csrf_header)])
+@router.patch(
+    "/{queue_id}",
+    response_model=QueueResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
 def update_queue(
     queue_id: UUID,
     data: QueueUpdate,
@@ -133,10 +150,12 @@ def update_queue(
     db: Session = Depends(get_db),
 ):
     """Update a queue."""
-    
+
     try:
         queue = queue_service.update_queue(
-            db, session.org_id, queue_id,
+            db,
+            session.org_id,
+            queue_id,
             name=data.name,
             description=data.description,
             is_active=data.is_active,
@@ -149,14 +168,18 @@ def update_queue(
         raise HTTPException(status_code=409, detail=str(e))
 
 
-@router.delete("/{queue_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_csrf_header)])
+@router.delete(
+    "/{queue_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_csrf_header)],
+)
 def delete_queue(
     queue_id: UUID,
     session: UserSession = Depends(require_permission(POLICIES["queues"].default)),
     db: Session = Depends(get_db),
 ):
     """Soft-delete a queue (set inactive)."""
-    
+
     try:
         queue_service.delete_queue(db, session.org_id, queue_id)
         db.commit()
@@ -168,7 +191,12 @@ def delete_queue(
 # Claim / Release Endpoints (on cases)
 # =============================================================================
 
-@router.post("/cases/{case_id}/claim", response_model=dict, dependencies=[Depends(require_csrf_header)])
+
+@router.post(
+    "/cases/{case_id}/claim",
+    response_model=dict,
+    dependencies=[Depends(require_csrf_header)],
+)
 def claim_case(
     case_id: UUID,
     session: UserSession = Depends(get_current_session),
@@ -176,15 +204,13 @@ def claim_case(
 ):
     """
     Claim a case from a queue.
-    
+
     - Case must be in a queue (owner_type="queue")
     - Sets owner to current user
     - Returns 409 if already claimed by a user
     """
     try:
-        case = queue_service.claim_case(
-            db, session.org_id, case_id, session.user_id
-        )
+        case = queue_service.claim_case(db, session.org_id, case_id, session.user_id)
         db.commit()
         return {"message": "Case claimed", "case_id": str(case.id)}
     except CaseNotFoundError:
@@ -195,7 +221,11 @@ def claim_case(
         raise HTTPException(status_code=403, detail=str(e))
 
 
-@router.post("/cases/{case_id}/release", response_model=dict, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/cases/{case_id}/release",
+    response_model=dict,
+    dependencies=[Depends(require_csrf_header)],
+)
 def release_case(
     case_id: UUID,
     data: ReleaseRequest,
@@ -204,7 +234,7 @@ def release_case(
 ):
     """
     Release a case back to a queue.
-    
+
     - Case must be owned by a user
     - Transfers ownership to specified queue
     """
@@ -220,7 +250,11 @@ def release_case(
         raise HTTPException(status_code=404, detail="Queue not found or inactive")
 
 
-@router.post("/cases/{case_id}/assign", response_model=dict, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/cases/{case_id}/assign",
+    response_model=dict,
+    dependencies=[Depends(require_csrf_header)],
+)
 def assign_case_to_queue(
     case_id: UUID,
     data: AssignToQueueRequest,
@@ -229,7 +263,7 @@ def assign_case_to_queue(
 ):
     """
     Assign a case to a queue.
-    
+
     Works whether case is currently user-owned or queue-owned.
     """
     try:
@@ -248,6 +282,7 @@ def assign_case_to_queue(
 # Queue Member Management
 # =============================================================================
 
+
 @router.get("/{queue_id}/members", response_model=list[QueueMemberResponse])
 def list_queue_members(
     queue_id: UUID,
@@ -258,7 +293,7 @@ def list_queue_members(
     queue = queue_service.get_queue(db, session.org_id, queue_id)
     if not queue:
         raise HTTPException(status_code=404, detail="Queue not found")
-    
+
     return [
         QueueMemberResponse(
             id=m.id,
@@ -272,7 +307,12 @@ def list_queue_members(
     ]
 
 
-@router.post("/{queue_id}/members", response_model=QueueMemberResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/{queue_id}/members",
+    response_model=QueueMemberResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_csrf_header)],
+)
 def add_queue_member(
     queue_id: UUID,
     data: QueueMemberAdd,
@@ -280,11 +320,11 @@ def add_queue_member(
     db: Session = Depends(get_db),
 ):
     """Add a user to a queue."""
-    
+
     queue = queue_service.get_queue(db, session.org_id, queue_id)
     if not queue:
         raise HTTPException(status_code=404, detail="Queue not found")
-    
+
     try:
         member, user = queue_service.add_queue_member(
             db=db,
@@ -295,8 +335,10 @@ def add_queue_member(
     except QueueMemberUserNotFoundError:
         raise HTTPException(status_code=404, detail="User not found")
     except QueueMemberExistsError:
-        raise HTTPException(status_code=409, detail="User is already a member of this queue")
-    
+        raise HTTPException(
+            status_code=409, detail="User is already a member of this queue"
+        )
+
     return QueueMemberResponse(
         id=member.id,
         queue_id=member.queue_id,
@@ -307,7 +349,11 @@ def add_queue_member(
     )
 
 
-@router.delete("/{queue_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_csrf_header)])
+@router.delete(
+    "/{queue_id}/members/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_csrf_header)],
+)
 def remove_queue_member(
     queue_id: UUID,
     user_id: UUID,
@@ -315,7 +361,7 @@ def remove_queue_member(
     db: Session = Depends(get_db),
 ):
     """Remove a user from a queue."""
-    
+
     try:
         queue_service.remove_queue_member(db=db, queue_id=queue_id, user_id=user_id)
     except QueueMemberNotFoundError:
@@ -326,6 +372,7 @@ def remove_queue_member(
 # Helpers
 # =============================================================================
 
+
 def _queue_to_response(queue) -> QueueResponse:
     """Convert queue model to response with member_ids."""
     return QueueResponse(
@@ -334,5 +381,7 @@ def _queue_to_response(queue) -> QueueResponse:
         name=queue.name,
         description=queue.description,
         is_active=queue.is_active,
-        member_ids=[m.user_id for m in queue.members] if hasattr(queue, 'members') else [],
+        member_ids=[m.user_id for m in queue.members]
+        if hasattr(queue, "members")
+        else [],
     )

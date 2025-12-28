@@ -5,6 +5,7 @@ Tests the /cases/stats endpoint including:
 - Basic stats (total, by_status, this_week, this_month)
 - Period comparisons (last_week, last_month, percentage changes)
 """
+
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -18,14 +19,19 @@ from app.services import case_service
 # Fixtures
 # =============================================================================
 
+
 @pytest.fixture
 def stats_pipeline(db, test_org):
     """Create pipeline with stages for stats tests."""
-    pipeline = db.query(Pipeline).filter(
-        Pipeline.organization_id == test_org.id,
-        Pipeline.is_default == True
-    ).first()
-    
+    pipeline = (
+        db.query(Pipeline)
+        .filter(
+            Pipeline.organization_id == test_org.id,
+            Pipeline.is_default.is_(True),
+        )
+        .first()
+    )
+
     if not pipeline:
         pipeline = Pipeline(
             id=uuid.uuid4(),
@@ -36,13 +42,16 @@ def stats_pipeline(db, test_org):
         )
         db.add(pipeline)
         db.flush()
-    
+
     # Create stages
-    stage = db.query(PipelineStage).filter(
-        PipelineStage.pipeline_id == pipeline.id,
-        PipelineStage.slug == "new_unread"
-    ).first()
-    
+    stage = (
+        db.query(PipelineStage)
+        .filter(
+            PipelineStage.pipeline_id == pipeline.id, PipelineStage.slug == "new_unread"
+        )
+        .first()
+    )
+
     if not stage:
         stage = PipelineStage(
             id=uuid.uuid4(),
@@ -56,7 +65,7 @@ def stats_pipeline(db, test_org):
         )
         db.add(stage)
         db.flush()
-    
+
     return pipeline, stage
 
 
@@ -66,7 +75,7 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
     pipeline, stage = stats_pipeline
     cases = []
     now = datetime.now(timezone.utc)
-    
+
     # Cases created this week (3 cases) - within last 7 days
     for i in range(3):
         case = Case(
@@ -85,7 +94,7 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
         )
         db.add(case)
         cases.append(case)
-    
+
     # Cases created last week (5 cases) - 8-12 days ago (clearly in 7-14 window)
     for i in range(5):
         case = Case(
@@ -104,7 +113,7 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
         )
         db.add(case)
         cases.append(case)
-    
+
     # Cases created this month but not this/last week (4 cases) - 15-20 days ago
     for i in range(4):
         case = Case(
@@ -123,7 +132,7 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
         )
         db.add(case)
         cases.append(case)
-    
+
     # Cases created last month (2 cases) - 35-40 days ago (in 30-60 day window)
     for i in range(2):
         case = Case(
@@ -142,7 +151,7 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
         )
         db.add(case)
         cases.append(case)
-    
+
     db.flush()
     return cases
 
@@ -151,76 +160,77 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
 # Tests
 # =============================================================================
 
+
 class TestCaseStats:
     """Tests for case_service.get_case_stats"""
-    
+
     def test_get_stats_returns_all_fields(self, db, test_org, cases_for_stats):
         """Stats includes all expected fields including period comparisons."""
         stats = case_service.get_case_stats(db, test_org.id)
-        
+
         # Basic fields
         assert "total" in stats
         assert "by_status" in stats
         assert "this_week" in stats
         assert "this_month" in stats
-        
+
         # Period comparison fields
         assert "last_week" in stats
         assert "last_month" in stats
         assert "week_change_pct" in stats
         assert "month_change_pct" in stats
         assert "pending_tasks" in stats
-    
+
     def test_this_week_count(self, db, test_org, cases_for_stats):
         """This week count is accurate."""
         stats = case_service.get_case_stats(db, test_org.id)
-        
+
         # We created 3 cases this week
         assert stats["this_week"] == 3
-    
+
     def test_last_week_count(self, db, test_org, cases_for_stats):
         """Last week count is accurate."""
         stats = case_service.get_case_stats(db, test_org.id)
-        
+
         # We created 5 cases last week (7-14 days ago)
         assert stats["last_week"] == 5
-    
+
     def test_week_change_percentage(self, db, test_org, cases_for_stats):
         """Week-over-week percentage is calculated correctly."""
         stats = case_service.get_case_stats(db, test_org.id)
-        
+
         # this_week=3, last_week=5
         # Change = ((3 - 5) / 5) * 100 = -40%
         assert stats["week_change_pct"] == -40.0
-    
+
     def test_this_month_count(self, db, test_org, cases_for_stats):
         """This month count includes all cases in last 30 days."""
         stats = case_service.get_case_stats(db, test_org.id)
-        
+
         # 3 (this week) + 5 (last week) + 4 (this month earlier) = 12
         # (Cases at 20-23 days ago are within 30 days)
         assert stats["this_month"] == 12
-    
+
     def test_last_month_count(self, db, test_org, cases_for_stats):
         """Last month count is accurate."""
         stats = case_service.get_case_stats(db, test_org.id)
-        
+
         # We created 2 cases 35-36 days ago (in the 30-60 day window)
         assert stats["last_month"] == 2
-    
+
     def test_month_change_percentage(self, db, test_org, cases_for_stats):
         """Month-over-month percentage is calculated correctly."""
         stats = case_service.get_case_stats(db, test_org.id)
-        
+
         # this_month=12, last_month=2
         # Change = ((12 - 2) / 2) * 100 = 500%
         assert stats["month_change_pct"] == 500.0
-    
+
     def test_empty_org_returns_zeros(self, db):
         """Empty org returns zero values with 0.0 for percentages."""
         empty_org_id = uuid.uuid4()
         stats = case_service.get_case_stats(db, empty_org_id)
-        
+
         assert stats["total"] == 0
         assert stats["this_week"] == 0
         assert stats["last_week"] == 0
@@ -232,13 +242,13 @@ class TestCaseStats:
 
 class TestCaseStatsEndpoint:
     """Tests for GET /cases/stats endpoint"""
-    
+
     @pytest.mark.asyncio
     async def test_stats_endpoint_returns_200(self, authed_client, cases_for_stats):
         """Stats endpoint returns 200 with all fields."""
         response = await authed_client.get("/cases/stats")
         assert response.status_code == 200
-        
+
         data = response.json()
         assert "total" in data
         assert "by_status" in data
@@ -249,7 +259,7 @@ class TestCaseStatsEndpoint:
         assert "last_month" in data
         assert "month_change_pct" in data
         assert "pending_tasks" in data
-    
+
     @pytest.mark.asyncio
     async def test_stats_endpoint_requires_auth(self, client):
         """Stats endpoint requires authentication."""

@@ -90,13 +90,15 @@ def get_default_stage_defs() -> list[dict]:
     """Generate default pipeline stage definitions."""
     stages = []
     for order, slug in enumerate(DEFAULT_STAGE_ORDER, start=1):
-        stages.append({
-            "slug": slug,
-            "label": slug.replace("_", " ").title(),
-            "color": DEFAULT_COLORS.get(slug, "#6B7280"),
-            "order": order,
-            "stage_type": STAGE_TYPE_MAP.get(slug, "intake"),
-        })
+        stages.append(
+            {
+                "slug": slug,
+                "label": slug.replace("_", " ").title(),
+                "color": DEFAULT_COLORS.get(slug, "#6B7280"),
+                "order": order,
+                "stage_type": STAGE_TYPE_MAP.get(slug, "intake"),
+            }
+        )
     return stages
 
 
@@ -126,15 +128,19 @@ def get_or_create_default_pipeline(
 ) -> Pipeline:
     """
     Get the default pipeline for an org, creating if not exists.
-    
+
     Called on first access to ensure every org has a pipeline.
     Creates initial version snapshot.
     """
-    pipeline = db.query(Pipeline).filter(
-        Pipeline.organization_id == org_id,
-        Pipeline.is_default.is_(True),
-    ).first()
-    
+    pipeline = (
+        db.query(Pipeline)
+        .filter(
+            Pipeline.organization_id == org_id,
+            Pipeline.is_default.is_(True),
+        )
+        .first()
+    )
+
     if not pipeline:
         pipeline = Pipeline(
             organization_id=org_id,
@@ -147,20 +153,22 @@ def get_or_create_default_pipeline(
 
         # Create default stage rows
         stage_defs = get_default_stage_defs()
-        db.add_all([
-            PipelineStage(
-                pipeline_id=pipeline.id,
-                slug=stage["slug"],
-                label=stage["label"],
-                color=stage["color"],
-                order=stage["order"],
-                stage_type=stage["stage_type"],
-                is_active=True,
-            )
-            for stage in stage_defs
-        ])
+        db.add_all(
+            [
+                PipelineStage(
+                    pipeline_id=pipeline.id,
+                    slug=stage["slug"],
+                    label=stage["label"],
+                    color=stage["color"],
+                    order=stage["order"],
+                    stage_type=stage["stage_type"],
+                    is_active=True,
+                )
+                for stage in stage_defs
+            ]
+        )
         db.flush()
-        
+
         # Create initial version snapshot
         version_service.create_version(
             db=db,
@@ -173,23 +181,32 @@ def get_or_create_default_pipeline(
         )
         db.commit()
         db.refresh(pipeline)
-    
+
     return pipeline
 
 
 def get_pipeline(db: Session, org_id: UUID, pipeline_id: UUID) -> Pipeline | None:
     """Get pipeline by ID (org-scoped)."""
-    return db.query(Pipeline).filter(
-        Pipeline.id == pipeline_id,
-        Pipeline.organization_id == org_id,
-    ).first()
+    return (
+        db.query(Pipeline)
+        .filter(
+            Pipeline.id == pipeline_id,
+            Pipeline.organization_id == org_id,
+        )
+        .first()
+    )
 
 
 def list_pipelines(db: Session, org_id: UUID) -> list[Pipeline]:
     """List all pipelines for an org."""
-    return db.query(Pipeline).filter(
-        Pipeline.organization_id == org_id,
-    ).order_by(Pipeline.is_default.desc(), Pipeline.name).all()
+    return (
+        db.query(Pipeline)
+        .filter(
+            Pipeline.organization_id == org_id,
+        )
+        .order_by(Pipeline.is_default.desc(), Pipeline.name)
+        .all()
+    )
 
 
 def sync_missing_stages(
@@ -199,38 +216,42 @@ def sync_missing_stages(
 ) -> int:
     """
     Add missing default stages to an existing pipeline.
-    
+
     Compares existing stages against DEFAULT_STAGE_ORDER and adds any missing ones.
     Returns count of stages added.
     """
     # Get existing stage slugs
     existing_slugs = {s.slug for s in pipeline.stages if not s.deleted_at}
-    
+
     # Find missing slugs
     default_defs = get_default_stage_defs()
     missing = [d for d in default_defs if d["slug"] not in existing_slugs]
-    
+
     if not missing:
         return 0
-    
+
     # Get max order from existing stages
     max_order = max((s.order for s in pipeline.stages), default=0)
-    
+
     # Add missing stages
     for i, stage_def in enumerate(missing):
-        db.add(PipelineStage(
-            pipeline_id=pipeline.id,
-            slug=stage_def["slug"],
-            label=stage_def["label"],
-            color=stage_def["color"],
-            order=max_order + i + 1,  # Append after existing
-            stage_type=stage_def["stage_type"],
-            is_active=True,
-        ))
+        db.add(
+            PipelineStage(
+                pipeline_id=pipeline.id,
+                slug=stage_def["slug"],
+                label=stage_def["label"],
+                color=stage_def["color"],
+                order=max_order + i + 1,  # Append after existing
+                stage_type=stage_def["stage_type"],
+                is_active=True,
+            )
+        )
 
     db.flush()
-    _bump_pipeline_version(db, pipeline, user_id, f"Added {len(missing)} missing stages")
-    
+    _bump_pipeline_version(
+        db, pipeline, user_id, f"Added {len(missing)} missing stages"
+    )
+
     db.commit()
     db.refresh(pipeline)
     return len(missing)
@@ -245,7 +266,9 @@ def update_pipeline_stages(
     comment: str | None = None,
 ) -> Pipeline:
     """Stage updates are handled via /stages endpoints in v2."""
-    raise ValueError("Stage updates must use /settings/pipelines/{id}/stages endpoints.")
+    raise ValueError(
+        "Stage updates must use /settings/pipelines/{id}/stages endpoints."
+    )
 
 
 def update_pipeline_name(
@@ -257,12 +280,12 @@ def update_pipeline_name(
 ) -> Pipeline:
     """
     Update pipeline name with version control.
-    
+
     Creates version snapshot on name change.
     """
     pipeline.name = name
     _bump_pipeline_version(db, pipeline, user_id, comment or "Renamed")
-    
+
     db.commit()
     db.refresh(pipeline)
     return pipeline
@@ -277,7 +300,7 @@ def create_pipeline(
 ) -> Pipeline:
     """
     Create a new non-default pipeline with initial version.
-    
+
     Uses default stages if not provided.
     """
     pipeline = Pipeline(
@@ -290,20 +313,22 @@ def create_pipeline(
     db.flush()
 
     stage_defs = stages or get_default_stage_defs()
-    db.add_all([
-        PipelineStage(
-            pipeline_id=pipeline.id,
-            slug=stage["slug"],
-            label=stage["label"],
-            color=stage["color"],
-            order=stage.get("order", i + 1),
-            stage_type=stage.get("stage_type", "intake"),
-            is_active=stage.get("is_active", True),
-        )
-        for i, stage in enumerate(stage_defs)
-    ])
+    db.add_all(
+        [
+            PipelineStage(
+                pipeline_id=pipeline.id,
+                slug=stage["slug"],
+                label=stage["label"],
+                color=stage["color"],
+                order=stage.get("order", i + 1),
+                stage_type=stage.get("stage_type", "intake"),
+                is_active=stage.get("is_active", True),
+            )
+            for i, stage in enumerate(stage_defs)
+        ]
+    )
     db.flush()
-    
+
     # Create initial version snapshot
     version_service.create_version(
         db=db,
@@ -314,7 +339,7 @@ def create_pipeline(
         created_by_user_id=user_id,
         comment="Created",
     )
-    
+
     db.commit()
     db.refresh(pipeline)
     return pipeline
@@ -323,13 +348,13 @@ def create_pipeline(
 def delete_pipeline(db: Session, pipeline: Pipeline) -> bool:
     """
     Delete a pipeline.
-    
+
     Cannot delete the default pipeline.
     Note: Versions are retained for audit history.
     """
     if pipeline.is_default:
         return False
-    
+
     db.delete(pipeline)
     db.commit()
     return True
@@ -343,9 +368,13 @@ def _bump_pipeline_version(
 ) -> None:
     """Create a new pipeline version snapshot after stage changes."""
     db.flush()
-    locked_pipeline = db.query(Pipeline).options(selectinload(Pipeline.stages)).filter(
-        Pipeline.id == pipeline.id
-    ).with_for_update().first()
+    locked_pipeline = (
+        db.query(Pipeline)
+        .options(selectinload(Pipeline.stages))
+        .filter(Pipeline.id == pipeline.id)
+        .with_for_update()
+        .first()
+    )
     if not locked_pipeline:
         return
 
@@ -365,6 +394,7 @@ def _bump_pipeline_version(
 # =============================================================================
 # Version Control
 # =============================================================================
+
 
 def get_pipeline_versions(
     db: Session,
@@ -390,9 +420,9 @@ def rollback_pipeline(
 ) -> tuple[Pipeline | None, str | None]:
     """
     Rollback pipeline to a previous version.
-    
+
     Creates a NEW version with old payload (never rewrites history).
-    
+
     Returns:
         (updated_pipeline, error) - error is set if rollback failed
     """
@@ -405,13 +435,13 @@ def rollback_pipeline(
         target_version=target_version,
         user_id=user_id,
     )
-    
+
     if error:
         return None, error
-    
+
     # Get the rolled-back payload and apply to pipeline
     payload = version_service.decrypt_payload(new_version.payload_encrypted)
-    
+
     pipeline.name = payload.get("name", pipeline.name)
     pipeline.current_version = new_version.version
     pipeline.updated_at = datetime.now(timezone.utc)
@@ -458,13 +488,14 @@ def rollback_pipeline(
 
     db.commit()
     db.refresh(pipeline)
-    
+
     return pipeline, None
 
 
 # =============================================================================
 # Stage CRUD (v2.1 - PipelineStage rows)
 # =============================================================================
+
 
 def get_stages(
     db: Session,
@@ -483,12 +514,18 @@ def get_stage_by_id(db: Session, stage_id: UUID) -> PipelineStage | None:
     return db.query(PipelineStage).filter(PipelineStage.id == stage_id).first()
 
 
-def get_stage_by_slug(db: Session, pipeline_id: UUID, slug: str) -> PipelineStage | None:
+def get_stage_by_slug(
+    db: Session, pipeline_id: UUID, slug: str
+) -> PipelineStage | None:
     """Get a stage by slug (unique per pipeline)."""
-    return db.query(PipelineStage).filter(
-        PipelineStage.pipeline_id == pipeline_id,
-        PipelineStage.slug == slug,
-    ).first()
+    return (
+        db.query(PipelineStage)
+        .filter(
+            PipelineStage.pipeline_id == pipeline_id,
+            PipelineStage.slug == slug,
+        )
+        .first()
+    )
 
 
 def validate_stage_slug(db: Session, pipeline_id: UUID, slug: str) -> bool:
@@ -511,25 +548,29 @@ def create_stage(
 ) -> PipelineStage:
     """
     Create a new pipeline stage.
-    
+
     Slug and stage_type are immutable after creation.
     Raises ValueError if slug already exists or stage_type is invalid.
     """
     # Validate stage_type
     if stage_type not in ("intake", "post_approval", "terminal"):
         raise ValueError(f"Invalid stage_type: {stage_type}")
-    
+
     # Validate slug uniqueness
     if not validate_stage_slug(db, pipeline_id, slug):
         raise ValueError(f"Slug '{slug}' already exists or is invalid")
-    
+
     # Auto-calculate order if not provided
     if order is None:
-        max_order = db.query(PipelineStage).filter(
-            PipelineStage.pipeline_id == pipeline_id,
-        ).count()
+        max_order = (
+            db.query(PipelineStage)
+            .filter(
+                PipelineStage.pipeline_id == pipeline_id,
+            )
+            .count()
+        )
         order = max_order + 1
-    
+
     stage = PipelineStage(
         pipeline_id=pipeline_id,
         slug=slug,
@@ -560,33 +601,33 @@ def update_stage(
 ) -> PipelineStage:
     """
     Update stage label, color, or order.
-    
+
     Slug and stage_type are IMMUTABLE - any attempt to change them is ignored.
     Syncs case status_label when label changes.
     """
     label_changed = False
-    
+
     if label is not None and label != stage.label:
         stage.label = label
         label_changed = True
-    
+
     if color is not None:
         stage.color = color
-    
+
     if order is not None:
         stage.order = order
-    
+
     stage.updated_at = datetime.now(timezone.utc)
     pipeline = db.query(Pipeline).filter(Pipeline.id == stage.pipeline_id).first()
     if pipeline:
         _bump_pipeline_version(db, pipeline, user_id, f"Updated stage {stage.slug}")
     db.commit()
     db.refresh(stage)
-    
+
     # Sync case labels if label changed
     if label_changed:
         sync_case_labels(db, stage.id, stage.label)
-    
+
     return stage
 
 
@@ -598,13 +639,13 @@ def delete_stage(
 ) -> int:
     """
     Soft-delete a stage and migrate cases to another stage.
-    
+
     Returns the number of cases migrated.
     Raises ValueError if migrate_to is invalid or same stage.
     """
     if stage.id == migrate_to_stage_id:
         raise ValueError("Cannot migrate cases to the same stage")
-    
+
     # Validate migrate_to stage
     target = get_stage_by_id(db, migrate_to_stage_id)
     if not target:
@@ -613,13 +654,19 @@ def delete_stage(
         raise ValueError("Target stage is not active")
     if target.pipeline_id != stage.pipeline_id:
         raise ValueError("Target stage must be in the same pipeline")
-    
+
     # Migrate cases
-    migrated = db.query(Case).filter(Case.stage_id == stage.id).update({
-        Case.stage_id: migrate_to_stage_id,
-        Case.status_label: target.label,
-    })
-    
+    migrated = (
+        db.query(Case)
+        .filter(Case.stage_id == stage.id)
+        .update(
+            {
+                Case.stage_id: migrate_to_stage_id,
+                Case.status_label: target.label,
+            }
+        )
+    )
+
     # Soft-delete stage
     stage.is_active = False
     stage.deleted_at = datetime.now(timezone.utc)
@@ -641,7 +688,7 @@ def reorder_stages(
 ) -> list[PipelineStage]:
     """
     Reorder stages by providing an ordered list of stage IDs.
-    
+
     Normalizes order values to 1, 2, 3...
     Only active stages can be reordered.
     """
@@ -650,14 +697,16 @@ def reorder_stages(
     active_ids = set(stage_map.keys())
     ordered_ids = list(dict.fromkeys(ordered_stage_ids))
     if set(ordered_ids) != active_ids:
-        raise ValueError("ordered_stage_ids must include every active stage exactly once")
-    
+        raise ValueError(
+            "ordered_stage_ids must include every active stage exactly once"
+        )
+
     # Validate all IDs are valid active stages
     for i, stage_id in enumerate(ordered_ids):
         if stage_id not in stage_map:
             raise ValueError(f"Stage ID {stage_id} not found or not active")
         stage_map[stage_id].order = i + 1
-    
+
     pipeline = db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
     if pipeline:
         _bump_pipeline_version(db, pipeline, user_id, "Reordered stages")
@@ -668,13 +717,19 @@ def reorder_stages(
 def sync_case_labels(db: Session, stage_id: UUID, new_label: str) -> int:
     """
     Sync Case.status_label when a stage's label changes.
-    
+
     History snapshots are NOT updated (frozen at change time).
     Returns number of cases updated.
     """
-    updated = db.query(Case).filter(Case.stage_id == stage_id).update({
-        Case.status_label: new_label,
-    })
+    updated = (
+        db.query(Case)
+        .filter(Case.stage_id == stage_id)
+        .update(
+            {
+                Case.status_label: new_label,
+            }
+        )
+    )
     db.commit()
     return updated
 
@@ -686,7 +741,7 @@ def validate_case_stage(
 ) -> bool:
     """
     Validate that a stage_id is valid for a pipeline.
-    
+
     Stage must exist, be active, and belong to the pipeline.
     """
     stage = get_stage_by_id(db, stage_id)
@@ -697,7 +752,12 @@ def validate_case_stage(
 
 def get_default_stage(db: Session, pipeline_id: UUID) -> PipelineStage | None:
     """Get the first active stage (usually 'new_unread') as default."""
-    return db.query(PipelineStage).filter(
-        PipelineStage.pipeline_id == pipeline_id,
-        PipelineStage.is_active.is_(True),
-    ).order_by(PipelineStage.order).first()
+    return (
+        db.query(PipelineStage)
+        .filter(
+            PipelineStage.pipeline_id == pipeline_id,
+            PipelineStage.is_active.is_(True),
+        )
+        .order_by(PipelineStage.order)
+        .first()
+    )

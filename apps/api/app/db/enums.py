@@ -6,17 +6,18 @@ from enum import Enum
 class Role(str, Enum):
     """
     User roles with increasing privilege levels.
-    
+
     - INTAKE_SPECIALIST: Intake pipeline (Stage A statuses)
-    - CASE_MANAGER: Post-approval workflow (Stage B statuses)  
+    - CASE_MANAGER: Post-approval workflow (Stage B statuses)
     - ADMIN: Business admin (org settings, invites, role overrides)
     - DEVELOPER: Platform admin (integrations, feature flags, logs)
     """
+
     INTAKE_SPECIALIST = "intake_specialist"
     CASE_MANAGER = "case_manager"
     ADMIN = "admin"
     DEVELOPER = "developer"
-    
+
     @classmethod
     def has_value(cls, value: str) -> bool:
         """Check if value is a valid role."""
@@ -25,6 +26,7 @@ class Role(str, Enum):
 
 class AuthProvider(str, Enum):
     """Supported identity providers."""
+
     GOOGLE = "google"
     MICROSOFT = "microsoft"  # Future
 
@@ -32,14 +34,15 @@ class AuthProvider(str, Enum):
 class CaseStatus(str, Enum):
     """
     Case status enum covering Intake (Stage A) and Post-approval (Stage B).
-    
+
     Stage A (Intake Pipeline):
         new_unread → contacted → qualified → applied → followup_scheduled
         → application_submitted → under_review → approved → pending_handoff/disqualified
-    
+
     Stage B (Post-Approval, Case Manager only):
         pending_match → matched → meds_started → exam_passed → embryo_transferred → delivered
     """
+
     # Stage A: Intake Pipeline
     NEW_UNREAD = "new_unread"
     CONTACTED = "contacted"
@@ -51,7 +54,7 @@ class CaseStatus(str, Enum):
     APPROVED = "approved"
     PENDING_HANDOFF = "pending_handoff"  # Awaiting case manager review
     DISQUALIFIED = "disqualified"
-    
+
     # Stage B: Post-Approval (Case Manager only)
     PENDING_MATCH = "pending_match"
     MATCHED = "matched"
@@ -59,7 +62,7 @@ class CaseStatus(str, Enum):
     EXAM_PASSED = "exam_passed"
     EMBRYO_TRANSFERRED = "embryo_transferred"
     DELIVERED = "delivered"
-    
+
     # Archive pseudo-status (for history tracking)
     ARCHIVED = "archived"
     RESTORED = "restored"
@@ -68,18 +71,28 @@ class CaseStatus(str, Enum):
     def intake_visible(cls) -> list[str]:
         """Statuses visible to intake specialists (Stage A)."""
         return [
-            cls.NEW_UNREAD.value, cls.CONTACTED.value, cls.QUALIFIED.value,
-            cls.APPLIED.value, cls.FOLLOWUP_SCHEDULED.value,
-            cls.APPLICATION_SUBMITTED.value, cls.UNDER_REVIEW.value,
-            cls.APPROVED.value, cls.PENDING_HANDOFF.value, cls.DISQUALIFIED.value
+            cls.NEW_UNREAD.value,
+            cls.CONTACTED.value,
+            cls.QUALIFIED.value,
+            cls.APPLIED.value,
+            cls.FOLLOWUP_SCHEDULED.value,
+            cls.APPLICATION_SUBMITTED.value,
+            cls.UNDER_REVIEW.value,
+            cls.APPROVED.value,
+            cls.PENDING_HANDOFF.value,
+            cls.DISQUALIFIED.value,
         ]
-    
+
     @classmethod
     def case_manager_only(cls) -> list[str]:
         """Statuses only accessible by case_manager+ (Stage B)."""
         return [
-            cls.PENDING_MATCH.value, cls.MATCHED.value, cls.MEDS_STARTED.value,
-            cls.EXAM_PASSED.value, cls.EMBRYO_TRANSFERRED.value, cls.DELIVERED.value
+            cls.PENDING_MATCH.value,
+            cls.MATCHED.value,
+            cls.MEDS_STARTED.value,
+            cls.EXAM_PASSED.value,
+            cls.EMBRYO_TRANSFERRED.value,
+            cls.DELIVERED.value,
         ]
 
     @classmethod
@@ -90,6 +103,7 @@ class CaseStatus(str, Enum):
 
 class CaseSource(str, Enum):
     """How the case was created."""
+
     MANUAL = "manual"
     META = "meta"
     WEBSITE = "website"
@@ -99,6 +113,7 @@ class CaseSource(str, Enum):
 
 class CaseActivityType(str, Enum):
     """Types of activities logged in case history."""
+
     CASE_CREATED = "case_created"
     INFO_EDITED = "info_edited"
     STATUS_CHANGED = "status_changed"
@@ -126,10 +141,11 @@ class CaseActivityType(str, Enum):
 class MatchStatus(str, Enum):
     """
     Status of a match between surrogate (Case) and intended parent.
-    
+
     Workflow: proposed → reviewing → accepted/rejected
     A cancelled status marks withdrawn proposals.
     """
+
     PROPOSED = "proposed"  # Initial match proposal
     REVIEWING = "reviewing"  # Under review by coordinator
     ACCEPTED = "accepted"  # Match finalized
@@ -140,7 +156,7 @@ class MatchStatus(str, Enum):
 class MatchEventType(str, Enum):
     """
     Types of events for Match calendar.
-    
+
     Color coding:
     - 🟠 Orange: Medications
     - 🔵 Blue: Medical exams
@@ -148,6 +164,7 @@ class MatchEventType(str, Enum):
     - 🔴 Red: Delivery/critical dates
     - ⚪ Gray: Custom/other
     """
+
     MEDICATION = "medication"
     MEDICAL_EXAM = "medical_exam"
     LEGAL = "legal"
@@ -158,34 +175,36 @@ class MatchEventType(str, Enum):
 class MatchEventPerson(str, Enum):
     """
     Who the match event is for.
-    
+
     Color coding:
     - 🟢 Green: IP events
     - 🟣 Purple: Surrogate events
     """
+
     SURROGATE = "surrogate"
     IP = "ip"
 
 
 class NotificationType(str, Enum):
     """Types of in-app notifications."""
+
     # Case notifications
     CASE_ASSIGNED = "case_assigned"
     CASE_STATUS_CHANGED = "case_status_changed"
     CASE_HANDOFF_READY = "case_handoff_ready"
     CASE_HANDOFF_ACCEPTED = "case_handoff_accepted"
     CASE_HANDOFF_DENIED = "case_handoff_denied"
-    
+
     # Task notifications
     TASK_ASSIGNED = "task_assigned"
-    TASK_DUE_SOON = "task_due_soon"    # Due within 24h
-    TASK_OVERDUE = "task_overdue"      # Past due date
-    
+    TASK_DUE_SOON = "task_due_soon"  # Due within 24h
+    TASK_OVERDUE = "task_overdue"  # Past due date
+
     # Appointment notifications
-    APPOINTMENT_REQUESTED = "appointment_requested"   # New appointment request
-    APPOINTMENT_CONFIRMED = "appointment_confirmed"   # Appointment confirmed
-    APPOINTMENT_CANCELLED = "appointment_cancelled"   # Appointment cancelled
-    APPOINTMENT_REMINDER = "appointment_reminder"     # Reminder before appointment
+    APPOINTMENT_REQUESTED = "appointment_requested"  # New appointment request
+    APPOINTMENT_CONFIRMED = "appointment_confirmed"  # Appointment confirmed
+    APPOINTMENT_CANCELLED = "appointment_cancelled"  # Appointment cancelled
+    APPOINTMENT_REMINDER = "appointment_reminder"  # Reminder before appointment
 
 
 # Note: is_priority is a boolean field on Case model, not an enum
@@ -194,18 +213,20 @@ class NotificationType(str, Enum):
 
 class TaskType(str, Enum):
     """Types of tasks."""
+
     MEETING = "meeting"
     FOLLOW_UP = "follow_up"
     CONTACT = "contact"
     REVIEW = "review"
     MEDICATION = "medication"  # For medication schedules
-    EXAM = "exam"              # For medical exams
+    EXAM = "exam"  # For medical exams
     APPOINTMENT = "appointment"  # For appointments
     OTHER = "other"
 
 
 class JobType(str, Enum):
     """Types of background jobs."""
+
     SEND_EMAIL = "send_email"
     REMINDER = "reminder"
     WEBHOOK_RETRY = "webhook_retry"
@@ -222,6 +243,7 @@ class JobType(str, Enum):
 
 class JobStatus(str, Enum):
     """Status of background jobs."""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -230,6 +252,7 @@ class JobStatus(str, Enum):
 
 class EmailStatus(str, Enum):
     """Status of outbound emails."""
+
     PENDING = "pending"
     SENT = "sent"
     FAILED = "failed"
@@ -238,15 +261,16 @@ class EmailStatus(str, Enum):
 class IntendedParentStatus(str, Enum):
     """
     Intended Parent status workflow.
-    
+
     new → in_review → matched → inactive
     Plus archive/restore pseudo-statuses for history tracking.
     """
+
     NEW = "new"
     IN_REVIEW = "in_review"
     MATCHED = "matched"
     INACTIVE = "inactive"
-    
+
     # Archive pseudo-statuses (for history tracking)
     ARCHIVED = "archived"
     RESTORED = "restored"
@@ -254,12 +278,14 @@ class IntendedParentStatus(str, Enum):
 
 class EntityType(str, Enum):
     """Entity types for polymorphic relationships (e.g., notes)."""
+
     CASE = "case"
     INTENDED_PARENT = "intended_parent"
 
 
 class OwnerType(str, Enum):
     """Owner type for cases - Salesforce-style single owner model."""
+
     USER = "user"
     QUEUE = "queue"
 
@@ -280,8 +306,10 @@ DEFAULT_IP_STATUS = IntendedParentStatus.NEW
 # Week 10: Integration Health + Alerts Enums
 # =============================================================================
 
+
 class IntegrationType(str, Enum):
     """Types of integrations tracked for health monitoring."""
+
     META_LEADS = "meta_leads"
     META_CAPI = "meta_capi"
     WORKER = "worker"
@@ -289,6 +317,7 @@ class IntegrationType(str, Enum):
 
 class IntegrationStatus(str, Enum):
     """Health status of an integration."""
+
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     ERROR = "error"
@@ -296,6 +325,7 @@ class IntegrationStatus(str, Enum):
 
 class ConfigStatus(str, Enum):
     """Configuration status of an integration."""
+
     CONFIGURED = "configured"
     MISSING_TOKEN = "missing_token"
     EXPIRED_TOKEN = "expired_token"
@@ -303,6 +333,7 @@ class ConfigStatus(str, Enum):
 
 class AlertType(str, Enum):
     """Types of system alerts."""
+
     META_FETCH_FAILED = "meta_fetch_failed"
     META_CONVERT_FAILED = "meta_convert_failed"
     META_TOKEN_EXPIRING = "meta_token_expiring"
@@ -313,6 +344,7 @@ class AlertType(str, Enum):
 
 class AlertSeverity(str, Enum):
     """Severity levels for alerts."""
+
     WARN = "warn"
     ERROR = "error"
     CRITICAL = "critical"
@@ -320,6 +352,7 @@ class AlertSeverity(str, Enum):
 
 class AlertStatus(str, Enum):
     """Status of an alert."""
+
     OPEN = "open"
     ACKNOWLEDGED = "acknowledged"
     RESOLVED = "resolved"
@@ -330,8 +363,10 @@ class AlertStatus(str, Enum):
 # Automation Workflows
 # =============================================================================
 
+
 class WorkflowTriggerType(str, Enum):
     """Events that can trigger a workflow."""
+
     CASE_CREATED = "case_created"
     STATUS_CHANGED = "status_changed"
     CASE_ASSIGNED = "case_assigned"
@@ -355,12 +390,14 @@ class WorkflowTriggerType(str, Enum):
 
 class RecurrenceMode(str, Enum):
     """Recurrence mode for workflows."""
-    ONE_TIME = "one_time"      # Fire once per entity per trigger event
-    RECURRING = "recurring"     # Fire on schedule until resolved/stopped
+
+    ONE_TIME = "one_time"  # Fire once per entity per trigger event
+    RECURRING = "recurring"  # Fire on schedule until resolved/stopped
 
 
 class WorkflowActionType(str, Enum):
     """Actions a workflow can execute."""
+
     SEND_EMAIL = "send_email"
     CREATE_TASK = "create_task"
     ASSIGN_CASE = "assign_case"
@@ -371,6 +408,7 @@ class WorkflowActionType(str, Enum):
 
 class WorkflowConditionOperator(str, Enum):
     """Operators for workflow conditions."""
+
     EQUALS = "equals"
     NOT_EQUALS = "not_equals"
     CONTAINS = "contains"
@@ -385,6 +423,7 @@ class WorkflowConditionOperator(str, Enum):
 
 class WorkflowExecutionStatus(str, Enum):
     """Execution result status."""
+
     SUCCESS = "success"
     PARTIAL = "partial"  # some actions succeeded
     FAILED = "failed"
@@ -393,6 +432,7 @@ class WorkflowExecutionStatus(str, Enum):
 
 class WorkflowEventSource(str, Enum):
     """Source that triggered a workflow event."""
+
     USER = "user"
     SYSTEM = "system"
     WORKFLOW = "workflow"
@@ -400,6 +440,7 @@ class WorkflowEventSource(str, Enum):
 
 class CampaignStatus(str, Enum):
     """Status of a campaign."""
+
     DRAFT = "draft"
     SCHEDULED = "scheduled"
     SENDING = "sending"
@@ -410,6 +451,7 @@ class CampaignStatus(str, Enum):
 
 class CampaignRecipientStatus(str, Enum):
     """Status of a campaign recipient."""
+
     PENDING = "pending"
     SENT = "sent"
     DELIVERED = "delivered"
@@ -419,6 +461,7 @@ class CampaignRecipientStatus(str, Enum):
 
 class SuppressionReason(str, Enum):
     """Reason for email suppression."""
+
     OPT_OUT = "opt_out"
     BOUNCED = "bounced"
     ARCHIVED = "archived"
@@ -433,7 +476,12 @@ class SuppressionReason(str, Enum):
 ROLES_CAN_ASSIGN = {Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER}
 
 # Roles that can archive/restore cases (all roles can archive their own cases)
-ROLES_CAN_ARCHIVE = {Role.INTAKE_SPECIALIST, Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER}
+ROLES_CAN_ARCHIVE = {
+    Role.INTAKE_SPECIALIST,
+    Role.CASE_MANAGER,
+    Role.ADMIN,
+    Role.DEVELOPER,
+}
 
 # Roles that can hard-delete cases (requires is_archived=true)
 ROLES_CAN_HARD_DELETE = {Role.ADMIN, Role.DEVELOPER}
@@ -458,10 +506,11 @@ ROLES_CAN_VIEW_ALERTS = {Role.ADMIN, Role.DEVELOPER}
 # Audit Trail
 # =============================================================================
 
+
 class AuditEventType(str, Enum):
     """
     Security and compliance audit events.
-    
+
     Groups:
     - AUTH_*: Authentication events
     - SETTINGS_*: Configuration changes
@@ -470,23 +519,24 @@ class AuditEventType(str, Enum):
     - AI_*: AI feature usage
     - INTEGRATION_*: Third-party connections
     """
+
     # Authentication
     AUTH_LOGIN_SUCCESS = "auth_login_success"
     AUTH_LOGIN_FAILED = "auth_login_failed"
     AUTH_LOGOUT = "auth_logout"
     AUTH_SESSION_REVOKED = "auth_session_revoked"
-    
+
     # Settings changes
     SETTINGS_ORG_UPDATED = "settings_org_updated"
     SETTINGS_AI_UPDATED = "settings_ai_updated"
     SETTINGS_AI_CONSENT_ACCEPTED = "settings_ai_consent_accepted"
     SETTINGS_API_KEY_ROTATED = "settings_api_key_rotated"  # AI provider key
-    
+
     # Versioned config changes (with before/after version links)
     CONFIG_PIPELINE_UPDATED = "config_pipeline_updated"
     CONFIG_TEMPLATE_UPDATED = "config_template_updated"
     CONFIG_ROLLED_BACK = "config_rolled_back"
-    
+
     # Data operations
     DATA_EXPORT_CASES = "data_export_cases"
     DATA_EXPORT_ANALYTICS = "data_export_analytics"
@@ -502,18 +552,18 @@ class AuditEventType(str, Enum):
     COMPLIANCE_RETENTION_UPDATED = "compliance_retention_updated"
     COMPLIANCE_PURGE_PREVIEWED = "compliance_purge_previewed"
     COMPLIANCE_PURGE_EXECUTED = "compliance_purge_executed"
-    
+
     # AI actions
     AI_ACTION_APPROVED = "ai_action_approved"
     AI_ACTION_REJECTED = "ai_action_rejected"
     AI_ACTION_FAILED = "ai_action_failed"
     AI_ACTION_DENIED = "ai_action_denied"
-    
+
     # Integrations
     INTEGRATION_CONNECTED = "integration_connected"
     INTEGRATION_DISCONNECTED = "integration_disconnected"
     INTEGRATION_TOKEN_REFRESHED = "integration_token_refreshed"
-    
+
     # User management
     USER_INVITED = "user_invited"
     USER_ROLE_CHANGED = "user_role_changed"
@@ -529,8 +579,10 @@ class AuditEventType(str, Enum):
 # Appointments & Scheduling
 # =============================================================================
 
+
 class MeetingMode(str, Enum):
     """Meeting mode for appointments."""
+
     ZOOM = "zoom"
     PHONE = "phone"
     IN_PERSON = "in_person"
@@ -539,22 +591,24 @@ class MeetingMode(str, Enum):
 class AppointmentStatus(str, Enum):
     """
     Appointment lifecycle status.
-    
+
     Flow: pending → confirmed → completed
               ↘ cancelled
               ↘ no_show
               ↘ expired
     """
-    PENDING = "pending"      # Awaiting approval
+
+    PENDING = "pending"  # Awaiting approval
     CONFIRMED = "confirmed"  # Approved, scheduled
     COMPLETED = "completed"  # Meeting took place
     CANCELLED = "cancelled"  # Cancelled by client or staff
-    NO_SHOW = "no_show"      # Client didn't show up
-    EXPIRED = "expired"      # Pending request expired before approval
+    NO_SHOW = "no_show"  # Client didn't show up
+    EXPIRED = "expired"  # Pending request expired before approval
 
 
 class AppointmentEmailType(str, Enum):
     """Types of emails sent for appointments."""
+
     REQUEST_RECEIVED = "request_received"
     CONFIRMED = "confirmed"
     RESCHEDULED = "rescheduled"

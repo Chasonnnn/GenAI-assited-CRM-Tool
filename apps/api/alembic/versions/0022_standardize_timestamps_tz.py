@@ -138,4 +138,3 @@ def downgrade() -> None:
         "ALTER TABLE auth_identities "
         "RENAME CONSTRAINT uq_auth_identity TO auth_identities_provider_provider_subject_key"
     )
-
