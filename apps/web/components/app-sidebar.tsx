@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useState, useCallback } from "react"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 
@@ -136,8 +137,13 @@ export function AppSidebar({ children }: AppSidebarProps) {
     // Sync collapsible state with pathname on mount/navigation
     React.useEffect(() => {
         if (pathname?.startsWith("/automation")) setAutomationOpen(true)
-        if (pathname?.startsWith("/settings")) setSettingsOpen(true)
-        if (pathname?.startsWith("/tasks") || pathname?.startsWith("/appointments")) setTasksOpen(true)
+        // Exclude /settings/appointments which is now under Tasks & Scheduling
+        if (pathname?.startsWith("/settings") && !pathname?.startsWith("/settings/appointments")) {
+            setSettingsOpen(true)
+        }
+        if (pathname?.startsWith("/tasks") || pathname?.startsWith("/appointments") || pathname === "/settings/appointments") {
+            setTasksOpen(true)
+        }
     }, [pathname])
 
     const settingsItems: Array<{ title: string; url: string; tab?: string | null }> = [
@@ -154,7 +160,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
     const automationItems: Array<{ title: string; url: string; tab?: string | null }> = [
         { title: "Workflows", url: "/automation", tab: null },
-        { title: "Templates", url: "/automation/templates" },
+        { title: "Workflow Templates", url: "/automation/templates" },
         { title: "Campaigns", url: "/automation/campaigns" },
         { title: "Email Templates", url: "/automation/email-templates" },
         { title: "AI Builder", url: "/automation/ai-builder" },
@@ -209,6 +215,25 @@ export function AppSidebar({ children }: AppSidebarProps) {
         window.location.href = "/login"
     }
 
+    // Search command palette state
+    const [searchOpen, setSearchOpen] = useState(false)
+    const openSearch = useCallback(() => setSearchOpen(true), [])
+
+    // Register ⌘K / Ctrl+K keyboard shortcut
+    React.useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+                e.preventDefault()
+                setSearchOpen(true)
+            }
+        }
+        document.addEventListener("keydown", handleKeyDown)
+        return () => document.removeEventListener("keydown", handleKeyDown)
+    }, [])
+
+    // Dynamic import to avoid circular deps
+    const SearchCommandDialog = React.lazy(() => import("@/components/search-command").then(mod => ({ default: mod.SearchCommandDialog })))
+
     return (
         <SidebarProvider>
             <Sidebar collapsible="icon">
@@ -250,6 +275,25 @@ export function AppSidebar({ children }: AppSidebarProps) {
                 </SidebarHeader>
 
                 <SidebarContent>
+                    {/* Global Search - above navigation */}
+                    <SidebarGroup className="py-0">
+                        <SidebarMenu>
+                            <SidebarMenuItem>
+                                <SidebarMenuButton
+                                    tooltip="Search (⌘K)"
+                                    className="w-full justify-start gap-2 bg-sidebar-accent/50 hover:bg-sidebar-accent"
+                                    onClick={openSearch}
+                                >
+                                    <Search className="h-4 w-4" />
+                                    <span className="flex-1 text-left text-muted-foreground">Search</span>
+                                    <kbd className="pointer-events-none hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
+                                        <span className="text-xs">⌘</span>K
+                                    </kbd>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+                        </SidebarMenu>
+                    </SidebarGroup>
+
                     <SidebarGroup>
                         <SidebarGroupLabel>Navigation</SidebarGroupLabel>
                         <SidebarMenu>
@@ -348,18 +392,6 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                     </SidebarMenuButton>
                                 </Link>
                             </SidebarMenuItem>
-                            {/* Search */}
-                            <SidebarMenuItem>
-                                <Link href={searchNavigation.url}>
-                                    <SidebarMenuButton
-                                        isActive={pathname === searchNavigation.url || pathname?.startsWith(searchNavigation.url + "/")}
-                                        tooltip={searchNavigation.title}
-                                    >
-                                        <searchNavigation.icon />
-                                        <span>{searchNavigation.title}</span>
-                                    </SidebarMenuButton>
-                                </Link>
-                            </SidebarMenuItem>
                             {/* AI Assistant - only shown if enabled for org */}
                             {user?.ai_enabled && (
                                 <SidebarMenuItem>
@@ -384,7 +416,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                     <CollapsibleTrigger
                                         render={
                                             <SidebarMenuButton
-                                                isActive={pathname?.startsWith("/settings")}
+                                                isActive={pathname?.startsWith("/settings") && !pathname?.startsWith("/settings/appointments")}
                                                 tooltip={settingsNavigation.title}
                                             >
                                                 <settingsNavigation.icon />
@@ -496,6 +528,11 @@ export function AppSidebar({ children }: AppSidebarProps) {
                 </header>
                 <main className="flex-1">{children}</main>
             </SidebarInset>
+
+            {/* Search Command Palette */}
+            <React.Suspense fallback={null}>
+                <SearchCommandDialog open={searchOpen} onOpenChange={setSearchOpen} />
+            </React.Suspense>
         </SidebarProvider>
     )
 }

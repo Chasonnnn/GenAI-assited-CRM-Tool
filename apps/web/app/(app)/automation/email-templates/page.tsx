@@ -44,6 +44,7 @@ import {
     useTemplateVersions,
 } from "@/lib/hooks/use-email-templates"
 import { useSignature, useUpdateSignature } from "@/lib/hooks/use-signature"
+import { RichTextEditor } from "@/components/rich-text-editor"
 import type { EmailTemplateListItem, EmailTemplate } from "@/lib/api/email-templates"
 
 // Available template variables
@@ -167,15 +168,25 @@ export default function EmailTemplatesPage() {
             .replace(/\{\{case_number\}\}/g, "CASE-2024-001")
             .replace(/\{\{status_label\}\}/g, "Qualified")
             .replace(/\{\{owner_name\}\}/g, "Sara Manager")
-            .replace(/\{\{org_name\}\}/g, "ABC Surrogacy")
+            .replace(/\{\{org_name\}\}/g, signatureCompany || "ABC Surrogacy")
             .replace(/\{\{appointment_date\}\}/g, "January 15, 2025")
             .replace(/\{\{appointment_time\}\}/g, "2:00 PM PST")
             .replace(/\{\{appointment_location\}\}/g, "Virtual Meeting")
 
+        // If content doesn't contain HTML tags, convert line breaks to paragraphs
+        const hasHtmlTags = /<[a-z][\s\S]*>/i.test(html)
+        if (!hasHtmlTags) {
+            // Split by double newlines for paragraphs, single newlines for line breaks
+            html = html
+                .split(/\n\n+/)
+                .map(para => `<p style="margin: 0 0 1em 0;">${para.replace(/\n/g, '<br>')}</p>`)
+                .join('')
+        }
+
         // Append signature if set
         const signature = buildSignatureHtml()
         if (signature) {
-            html += `<br><br>${signature}`
+            html += `<div style="margin-top: 24px;">${signature}</div>`
         }
 
         setPreviewHtml(sanitizeHtml(html))
@@ -550,14 +561,15 @@ export default function EmailTemplatesPage() {
                                     </DropdownMenuContent>
                                 </DropdownMenu>
                             </div>
-                            <Textarea
-                                id="body"
-                                placeholder="<p>Hello {{full_name}},</p><p>Welcome to our agency...</p>"
-                                value={templateBody}
-                                onChange={(e) => setTemplateBody(e.target.value)}
-                                rows={12}
-                                className="font-mono text-sm"
+                            <RichTextEditor
+                                content={templateBody}
+                                onChange={(html) => setTemplateBody(html)}
+                                placeholder="Write your email content here... Use the toolbar to format text."
+                                minHeight="200px"
                             />
+                            <p className="text-xs text-muted-foreground">
+                                Use the Insert Variable button above to add dynamic placeholders like {"{{full_name}}"}
+                            </p>
                         </div>
                     </div>
 
@@ -588,17 +600,35 @@ export default function EmailTemplatesPage() {
                             Preview with sample data
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="border rounded-lg p-4 bg-white overflow-y-auto max-h-[60vh]">
-                        <p className="text-sm font-medium mb-2 text-muted-foreground">
-                            Subject: {templateSubject
-                                .replace(/\{\{full_name\}\}/g, "John Smith")
-                                .replace(/\{\{org_name\}\}/g, "ABC Surrogacy")}
-                        </p>
-                        <hr className="my-2" />
-                        <div
-                            className="prose prose-sm max-w-none"
-                            dangerouslySetInnerHTML={{ __html: previewHtml }}
-                        />
+                    <div className="border rounded-lg bg-white overflow-y-auto max-h-[60vh]">
+                        {/* Email header section */}
+                        <div className="bg-muted/30 border-b px-4 py-3 space-y-2">
+                            <div className="flex items-center gap-2 text-sm">
+                                <span className="font-medium text-muted-foreground w-16">From:</span>
+                                <span className="text-foreground">
+                                    {signatureName || "Your Name"} &lt;{signatureEmail || "you@company.com"}&gt;
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm">
+                                <span className="font-medium text-muted-foreground w-16">To:</span>
+                                <span className="text-foreground">John Smith &lt;john@example.com&gt;</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm">
+                                <span className="font-medium text-muted-foreground w-16">Subject:</span>
+                                <span className="font-medium text-foreground">
+                                    {templateSubject
+                                        .replace(/\{\{full_name\}\}/g, "John Smith")
+                                        .replace(/\{\{org_name\}\}/g, signatureCompany || "ABC Surrogacy")}
+                                </span>
+                            </div>
+                        </div>
+                        {/* Email body section */}
+                        <div className="p-4">
+                            <div
+                                className="prose prose-sm max-w-none"
+                                dangerouslySetInnerHTML={{ __html: previewHtml }}
+                            />
+                        </div>
                     </div>
                 </DialogContent>
             </Dialog>

@@ -14,6 +14,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
     Dialog,
     DialogContent,
     DialogDescription,
@@ -101,6 +111,7 @@ export default function CampaignsPage() {
     const [scheduleFor, setScheduleFor] = useState<"now" | "later">("now")
     const [scheduledDate, setScheduledDate] = useState("")
     const [previewCampaignId, setPreviewCampaignId] = useState<string | null>(null)
+    const [deleteDialogId, setDeleteDialogId] = useState<string | null>(null)
 
     // API hooks
     const { data: campaigns, isLoading } = useCampaigns(statusFilter)
@@ -190,14 +201,16 @@ export default function CampaignsPage() {
         }
     }
 
-    const handleDeleteCampaign = async (id: string) => {
-        if (!confirm("Are you sure you want to delete this campaign?")) return
+    const handleDeleteCampaign = async () => {
+        if (!deleteDialogId) return
 
         try {
-            await deleteCampaign.mutateAsync(id)
+            await deleteCampaign.mutateAsync(deleteDialogId)
             toast.success("Campaign deleted")
         } catch {
             toast.error("Failed to delete campaign. Only drafts can be deleted.")
+        } finally {
+            setDeleteDialogId(null)
         }
     }
 
@@ -371,7 +384,7 @@ export default function CampaignsPage() {
                                                                     </DropdownMenuItem>
                                                                     {campaign.status === "draft" && (
                                                                         <DropdownMenuItem
-                                                                            onClick={() => handleDeleteCampaign(campaign.id)}
+                                                                            onClick={() => setDeleteDialogId(campaign.id)}
                                                                             className="text-destructive"
                                                                         >
                                                                             <TrashIcon className="mr-2 size-4" />
@@ -425,23 +438,23 @@ export default function CampaignsPage() {
                     <DialogHeader>
                         <DialogTitle>Create Campaign</DialogTitle>
                         <DialogDescription>
-                            Step {wizardStep} of 5
+                            Step {wizardStep} of 6
                         </DialogDescription>
                     </DialogHeader>
 
                     {/* Progress Indicator */}
-                    <div className="flex items-center gap-2 py-4">
-                        {[1, 2, 3, 4, 5].map((step) => (
-                            <div key={step} className="flex items-center flex-1">
+                    <div className="flex items-center justify-between py-4">
+                        {[1, 2, 3, 4, 5, 6].map((step, index) => (
+                            <div key={step} className="flex items-center flex-1 last:flex-none">
                                 <div
-                                    className={`flex size-8 items-center justify-center rounded-full text-sm font-medium ${step <= wizardStep
+                                    className={`flex size-8 items-center justify-center rounded-full text-sm font-medium shrink-0 ${step <= wizardStep
                                         ? "bg-primary text-primary-foreground"
                                         : "bg-muted text-muted-foreground"
                                         }`}
                                 >
                                     {step}
                                 </div>
-                                {step < 5 && (
+                                {step < 6 && (
                                     <div
                                         className={`flex-1 h-0.5 mx-2 ${step < wizardStep ? "bg-primary" : "bg-muted"
                                             }`}
@@ -486,10 +499,16 @@ export default function CampaignsPage() {
                                         value={selectedTemplateId}
                                         onValueChange={(v) => v && setSelectedTemplateId(v)}
                                     >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Choose a template" />
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue placeholder="Choose a template">
+                                                {(value: string | null) => {
+                                                    if (!value) return "Choose a template"
+                                                    const template = templates?.find(t => t.id === value)
+                                                    return template?.name ?? "Choose a template"
+                                                }}
+                                            </SelectValue>
                                         </SelectTrigger>
-                                        <SelectContent>
+                                        <SelectContent className="min-w-[300px]">
                                             {templates?.map((template) => (
                                                 <SelectItem key={template.id} value={template.id}>
                                                     {template.name}
@@ -524,7 +543,13 @@ export default function CampaignsPage() {
                                         onValueChange={(v) => setRecipientType(v as "case" | "intended_parent")}
                                     >
                                         <SelectTrigger>
-                                            <SelectValue />
+                                            <SelectValue placeholder="Select type">
+                                                {(value: string | null) => {
+                                                    if (value === "case") return "Cases (Surrogates)"
+                                                    if (value === "intended_parent") return "Intended Parents"
+                                                    return "Select type"
+                                                }}
+                                            </SelectValue>
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="case">Cases (Surrogates)</SelectItem>
@@ -569,7 +594,7 @@ export default function CampaignsPage() {
 
                         {wizardStep === 4 && (
                             <div className="space-y-4">
-                                <h3 className="font-medium">Preview Recipients</h3>
+                                <h3 className="font-medium">Review Selection</h3>
                                 <Card>
                                     <CardContent className="py-4 space-y-3">
                                         <div className="flex justify-between">
@@ -602,7 +627,12 @@ export default function CampaignsPage() {
                                         )}
                                     </CardContent>
                                 </Card>
+                            </div>
+                        )}
 
+                        {wizardStep === 5 && (
+                            <div className="space-y-4">
+                                <h3 className="font-medium">Recipient Preview</h3>
                                 <RecipientPreviewCard
                                     totalCount={previewFilters.data?.total_count || 0}
                                     sampleRecipients={
@@ -621,11 +651,12 @@ export default function CampaignsPage() {
                                             },
                                         })
                                     }}
+                                    maxVisible={3}
                                 />
                             </div>
                         )}
 
-                        {wizardStep === 5 && (
+                        {wizardStep === 6 && (
                             <div className="space-y-4">
                                 <h3 className="font-medium">Schedule & Send</h3>
 
@@ -688,13 +719,13 @@ export default function CampaignsPage() {
                                 Back
                             </Button>
                         )}
-                        {wizardStep < 5 ? (
+                        {wizardStep < 6 ? (
                             <Button
                                 onClick={() => {
                                     const nextStep = wizardStep + 1
                                     setWizardStep(nextStep)
-                                    // Fetch recipient preview when entering Step 4
-                                    if (nextStep === 4) {
+                                    // Fetch recipient preview when entering Step 5
+                                    if (nextStep === 5) {
                                         previewFilters.mutate({
                                             recipientType,
                                             filterCriteria: {
@@ -738,6 +769,27 @@ export default function CampaignsPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
+
+            {/* Delete Confirmation Dialog */}
+            <AlertDialog open={!!deleteDialogId} onOpenChange={(open) => !open && setDeleteDialogId(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Are you sure you want to delete this campaign? This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDeleteCampaign}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </div >
     )
 }

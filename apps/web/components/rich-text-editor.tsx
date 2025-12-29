@@ -2,18 +2,23 @@
 
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import Underline from '@tiptap/extension-underline'
+import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Button } from '@/components/ui/button'
 import { Toggle } from '@/components/ui/toggle'
 import {
     BoldIcon,
     ItalicIcon,
+    UnderlineIcon,
     ListIcon,
     ListOrderedIcon,
+    LinkIcon,
     Undo2Icon,
     Redo2Icon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useCallback, useEffect } from 'react'
 
 interface RichTextEditorProps {
     content?: string
@@ -23,6 +28,8 @@ interface RichTextEditorProps {
     submitLabel?: string
     isSubmitting?: boolean
     className?: string
+    minHeight?: string
+    maxHeight?: string
 }
 
 export function RichTextEditor({
@@ -33,12 +40,21 @@ export function RichTextEditor({
     submitLabel = 'Submit',
     isSubmitting = false,
     className,
+    minHeight = '80px',
+    maxHeight = '300px',
 }: RichTextEditorProps) {
     const editor = useEditor({
         immediatelyRender: false, // Fix SSR hydration mismatch
         extensions: [
             StarterKit.configure({
                 heading: false, // Disable headings for notes
+            }),
+            Underline,
+            Link.configure({
+                openOnClick: false,
+                HTMLAttributes: {
+                    class: 'text-primary underline cursor-pointer',
+                },
             }),
             Placeholder.configure({
                 placeholder,
@@ -47,13 +63,20 @@ export function RichTextEditor({
         content,
         editorProps: {
             attributes: {
-                class: 'prose prose-sm max-w-none focus:outline-none min-h-[80px] px-3 py-2',
+                class: `prose prose-sm max-w-none focus:outline-none min-h-[${minHeight}] px-3 py-2`,
             },
         },
         onUpdate: ({ editor }) => {
             onChange?.(editor.getHTML())
         },
     })
+
+    // Sync content when it changes externally
+    useEffect(() => {
+        if (editor && content !== editor.getHTML()) {
+            editor.commands.setContent(content)
+        }
+    }, [content, editor])
 
     const handleSubmit = () => {
         if (!editor) return
@@ -63,6 +86,20 @@ export function RichTextEditor({
         onSubmit?.(html)
         editor.commands.clearContent()
     }
+
+    const addLink = useCallback(() => {
+        if (!editor) return
+        const previousUrl = editor.getAttributes('link').href || ''
+        const url = window.prompt('Enter URL:', previousUrl)
+
+        if (url === null) return
+        if (url === '') {
+            editor.chain().focus().extendMarkRange('link').unsetLink().run()
+            return
+        }
+
+        editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+    }, [editor])
 
     if (!editor) return null
 
@@ -86,6 +123,14 @@ export function RichTextEditor({
                 >
                     <ItalicIcon className="size-4" />
                 </Toggle>
+                <Toggle
+                    size="sm"
+                    pressed={editor.isActive('underline')}
+                    onPressedChange={() => editor.chain().focus().toggleUnderline().run()}
+                    aria-label="Underline"
+                >
+                    <UnderlineIcon className="size-4" />
+                </Toggle>
                 <div className="w-px h-4 bg-border mx-1" />
                 <Toggle
                     size="sm"
@@ -102,6 +147,15 @@ export function RichTextEditor({
                     aria-label="Ordered List"
                 >
                     <ListOrderedIcon className="size-4" />
+                </Toggle>
+                <div className="w-px h-4 bg-border mx-1" />
+                <Toggle
+                    size="sm"
+                    pressed={editor.isActive('link')}
+                    onPressedChange={addLink}
+                    aria-label="Add Link"
+                >
+                    <LinkIcon className="size-4" />
                 </Toggle>
                 <div className="w-px h-4 bg-border mx-1" />
                 <Button
@@ -135,8 +189,10 @@ export function RichTextEditor({
                 )}
             </div>
 
-            {/* Editor Content */}
-            <EditorContent editor={editor} />
+            {/* Editor Content - with scroll support */}
+            <div className="overflow-y-auto" style={{ maxHeight }}>
+                <EditorContent editor={editor} />
+            </div>
         </div>
     )
 }

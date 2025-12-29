@@ -138,12 +138,23 @@ function InviteTeamModal({ onClose }: { onClose: () => void }) {
                         <Label htmlFor="role">Role</Label>
                         <Select value={role} onValueChange={(v) => v && setRole(v)}>
                             <SelectTrigger>
-                                <SelectValue />
+                                <SelectValue placeholder="Select role">
+                                    {(value: string | null) => {
+                                        const labels: Record<string, string> = {
+                                            intake_specialist: "Intake Specialist",
+                                            case_manager: "Case Manager",
+                                            admin: "Admin",
+                                            developer: "Developer",
+                                        }
+                                        return value ? labels[value] || value : "Select role"
+                                    }}
+                                </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="intake_specialist">Intake Specialist</SelectItem>
                                 <SelectItem value="case_manager">Case Manager</SelectItem>
                                 <SelectItem value="admin">Admin</SelectItem>
+                                <SelectItem value="developer">Developer</SelectItem>
                             </SelectContent>
                         </Select>
                         <p className="text-xs text-muted-foreground">
@@ -361,24 +372,28 @@ function MembersTab() {
                                         ? formatDistanceToNow(new Date(member.last_login_at), { addSuffix: true })
                                         : "Never"}
                                 </TableCell>
-                                <TableCell className="text-right space-x-2">
-                                    <Link href={`/settings/team/members/${member.id}`}>
-                                        <Button variant="ghost" size="sm">
-                                            <Settings2 className="size-4 mr-1" />
-                                            Manage
-                                        </Button>
-                                    </Link>
-                                    {member.user_id !== user?.user_id && (
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => handleRemove(member.id, member.email)}
-                                            disabled={removeMember.isPending}
-                                            className="text-destructive hover:text-destructive"
-                                        >
-                                            <X className="size-4" />
-                                        </Button>
-                                    )}
+                                <TableCell className="text-right">
+                                    <div className="flex items-center justify-end gap-2">
+                                        <Link href={`/settings/team/members/${member.id}`}>
+                                            <Button variant="ghost" size="sm">
+                                                <Settings2 className="size-4 mr-1" />
+                                                Manage
+                                            </Button>
+                                        </Link>
+                                        {member.user_id !== user?.user_id ? (
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => handleRemove(member.id, member.email)}
+                                                disabled={removeMember.isPending}
+                                                className="text-destructive hover:text-destructive"
+                                            >
+                                                <X className="size-4" />
+                                            </Button>
+                                        ) : (
+                                            <div className="w-8" />
+                                        )}
+                                    </div>
                                 </TableCell>
                             </TableRow>
                         )

@@ -1087,7 +1087,14 @@ export function UnifiedCalendar({ taskFilter }: { taskFilter?: { my_tasks?: bool
 
                 <Select value={viewType} onValueChange={(v) => v && setViewType(v as ViewType)}>
                     <SelectTrigger className="w-32">
-                        <SelectValue />
+                        <SelectValue placeholder="View">
+                            {(value: string | null) => {
+                                if (value === "month") return "Month"
+                                if (value === "week") return "Week"
+                                if (value === "day") return "Day"
+                                return "View"
+                            }}
+                        </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="month">Month</SelectItem>

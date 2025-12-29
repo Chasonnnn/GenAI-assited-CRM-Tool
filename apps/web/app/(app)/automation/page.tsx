@@ -495,7 +495,12 @@ export default function AutomationPage() {
                                 </CardContent>
                             </Card>
                         ) : (
-                            workflows.map((workflow: WorkflowListItem) => {
+                            [...workflows].sort((a, b) => {
+                                // Enabled workflows first
+                                if (a.is_enabled !== b.is_enabled) return b.is_enabled ? 1 : -1
+                                // Then by name
+                                return a.name.localeCompare(b.name)
+                            }).map((workflow: WorkflowListItem) => {
                                 const IconComponent = triggerIcons[workflow.trigger_type] || WorkflowIcon
                                 return (
                                     <Card key={workflow.id}>
