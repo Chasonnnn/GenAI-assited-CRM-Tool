@@ -575,7 +575,14 @@ export function MatchTasksCalendar({ caseId, ipId, onAddTask }: MatchTasksCalend
                     {/* View selector */}
                     <Select value={viewType} onValueChange={(v) => v && setViewType(v as ViewType)}>
                         <SelectTrigger className="w-24 h-8">
-                            <SelectValue />
+                            <SelectValue placeholder="View">
+                                {(value: string | null) => {
+                                    if (value === "month") return "Month"
+                                    if (value === "week") return "Week"
+                                    if (value === "day") return "Day"
+                                    return "View"
+                                }}
+                            </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="month">Month</SelectItem>

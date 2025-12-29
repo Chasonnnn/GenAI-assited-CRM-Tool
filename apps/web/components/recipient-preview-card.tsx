@@ -12,6 +12,7 @@ interface RecipientPreviewCardProps {
     sampleRecipients: { email: string; name: string | null }[]
     isLoading: boolean
     onRefresh: () => void
+    maxVisible?: number
 }
 
 function getInitials(name: string | null, email: string): string {
@@ -29,6 +30,7 @@ export function RecipientPreviewCard({
     sampleRecipients,
     isLoading,
     onRefresh,
+    maxVisible = 5,
 }: RecipientPreviewCardProps) {
     return (
         <Card>
@@ -91,28 +93,36 @@ export function RecipientPreviewCard({
                                 {sampleRecipients.length} of {totalCount}
                             </Badge>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                            {sampleRecipients.slice(0, 5).map((recipient, index) => (
+                        <div
+                            className="overflow-y-auto space-y-2 pr-1"
+                            style={{ maxHeight: `${maxVisible * 56}px` }}
+                        >
+                            {sampleRecipients.map((recipient, index) => (
                                 <div
                                     key={index}
-                                    className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 flex-shrink-0 max-w-[200px]"
+                                    className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 flex-shrink-0"
                                 >
                                     <Avatar className="size-7">
                                         <AvatarFallback className="text-xs bg-primary/10 text-primary">
                                             {getInitials(recipient.name, recipient.email)}
                                         </AvatarFallback>
                                     </Avatar>
-                                    <div className="flex flex-col">
-                                        <span className="text-sm font-medium truncate max-w-[140px]">
+                                    <div className="flex flex-col min-w-0 flex-1">
+                                        <span className="text-sm font-medium truncate">
                                             {recipient.name || recipient.email.split("@")[0]}
                                         </span>
-                                        <span className="text-xs text-muted-foreground truncate max-w-[140px]">
+                                        <span className="text-xs text-muted-foreground truncate">
                                             {recipient.email}
                                         </span>
                                     </div>
                                 </div>
                             ))}
                         </div>
+                        {sampleRecipients.length > maxVisible && (
+                            <p className="text-xs text-muted-foreground text-center mt-2">
+                                Scroll to see all {sampleRecipients.length} sample recipients
+                            </p>
+                        )}
                     </div>
                 )}
 

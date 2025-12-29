@@ -14,7 +14,7 @@ import {
   LoaderIcon,
   AlertCircleIcon,
 } from "lucide-react"
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis, Cell } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { useCaseStats } from "@/lib/hooks/use-cases"
@@ -83,7 +83,8 @@ export default function DashboardPage() {
   const { user } = useAuth()
   const { data: stats, isLoading: statsLoading, isError: statsError } = useCaseStats()
   const { data: tasksData, isLoading: tasksLoading, isError: tasksError } = useTasks({ my_tasks: true, is_completed: false, per_page: 5 })
-  const { data: trendData, isLoading: trendLoading, isError: trendError } = useCasesTrend({ period: 'day' })
+  const [trendPeriod, setTrendPeriod] = useState<'day' | 'week' | 'month'>('day')
+  const { data: trendData, isLoading: trendLoading, isError: trendError } = useCasesTrend({ period: trendPeriod })
   const { data: statusData, isLoading: statusLoading, isError: statusError } = useCasesByStatus()
   const { data: defaultPipeline } = useDefaultPipeline()
   const completeTask = useCompleteTask()
@@ -303,9 +304,22 @@ export default function DashboardPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Cases Trend Chart */}
         <Card>
-          <CardHeader className="pb-4">
-            <CardTitle className="text-lg">Cases Trend</CardTitle>
-            <CardDescription className="text-sm">New cases over the last 30 days</CardDescription>
+          <CardHeader className="pb-4 flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-lg">Cases Trend</CardTitle>
+              <CardDescription className="text-sm">
+                {trendPeriod === 'day' ? 'Daily' : trendPeriod === 'week' ? 'Weekly' : 'Monthly'} new cases
+              </CardDescription>
+            </div>
+            <select
+              value={trendPeriod}
+              onChange={(e) => setTrendPeriod(e.target.value as 'day' | 'week' | 'month')}
+              className="h-8 rounded-md border border-input bg-background px-3 text-xs ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            >
+              <option value="day">Daily</option>
+              <option value="week">Weekly</option>
+              <option value="month">Monthly</option>
+            </select>
           </CardHeader>
           <CardContent className="pb-4">
             {trendLoading ? (
@@ -417,108 +431,6 @@ export default function DashboardPage() {
                   </Bar>
                 </BarChart>
               </ChartContainer>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Tasks & Activity Section */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* My Tasks Card */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>My Tasks</CardTitle>
-            <Link href="/tasks">
-              <Button variant="link" className="h-auto p-0 text-sm">
-                View All
-              </Button>
-            </Link>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {tasksLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <LoaderIcon className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : tasksError ? (
-              <div className="flex items-center justify-center py-8 text-destructive">
-                <AlertCircleIcon className="mr-2 h-4 w-4" />
-                Unable to load tasks
-              </div>
-            ) : tasksData?.items.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No pending tasks</p>
-            ) : (
-              tasksData?.items.map((task: TaskListItem) => {
-                const dueBadge = getDueBadge(task.due_date, task.is_completed)
-                return (
-                  <div key={task.id} className="flex items-start gap-3">
-                    <Checkbox
-                      id={`task-${task.id}`}
-                      className="mt-1"
-                      checked={task.is_completed}
-                      onCheckedChange={() => handleTaskToggle(task.id, task.is_completed)}
-                    />
-                    <div className="flex-1 space-y-1">
-                      <label
-                        htmlFor={`task-${task.id}`}
-                        className={`text-sm font-medium leading-none ${task.is_completed ? 'line-through text-muted-foreground' : ''}`}
-                      >
-                        {task.title}
-                      </label>
-                      <div className="flex items-center gap-2">
-                        {dueBadge && (
-                          <Badge
-                            variant={dueBadge.variant === 'destructive' ? 'destructive' : 'secondary'}
-                            className={`text-xs ${dueBadge.variant.startsWith('bg-') ? dueBadge.variant : ''}`}
-                          >
-                            {dueBadge.label}
-                          </Badge>
-                        )}
-                        {task.case_number && (
-                          <Link
-                            href={`/cases/${task.case_id}`}
-                            className="text-xs text-muted-foreground hover:underline"
-                          >
-                            #{task.case_number}
-                          </Link>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Cases by Status Breakdown */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Status Breakdown</CardTitle>
-            <Link href="/cases">
-              <Button variant="link" className="h-auto p-0 text-sm">
-                View All
-              </Button>
-            </Link>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {statsLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <LoaderIcon className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : statsError ? (
-              <div className="flex items-center justify-center py-8 text-destructive">
-                <AlertCircleIcon className="mr-2 h-4 w-4" />
-                Unable to load status data
-              </div>
-            ) : stats?.by_status && Object.keys(stats.by_status).length > 0 ? (
-              Object.entries(stats.by_status).map(([status, count]) => (
-                <div key={status} className="flex items-center justify-between">
-                  <span className="text-sm capitalize">{status.replace(/_/g, ' ')}</span>
-                  <span className="text-sm font-medium">{count}</span>
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-4">No cases yet</p>
             )}
           </CardContent>
         </Card>
