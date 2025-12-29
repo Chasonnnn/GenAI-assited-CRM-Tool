@@ -566,6 +566,7 @@ export default function EmailTemplatesPage() {
                                 onChange={(html) => setTemplateBody(html)}
                                 placeholder="Write your email content here... Use the toolbar to format text."
                                 minHeight="200px"
+                                maxHeight="350px"
                             />
                             <p className="text-xs text-muted-foreground">
                                 Use the Insert Variable button above to add dynamic placeholders like {"{{full_name}}"}
