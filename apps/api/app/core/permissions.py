@@ -83,6 +83,7 @@ class PermissionKey(str, Enum):
     EMAIL_TEMPLATES_MANAGE = "manage_email_templates"
     OPS_MANAGE = "manage_ops"
     JOBS_MANAGE = "manage_jobs"
+    FORMS_MANAGE = "manage_forms"
 
 
 # =============================================================================
@@ -237,6 +238,12 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
         "Create and configure case queues",
         PermissionCategory.SETTINGS,
     ),
+    "manage_forms": PermissionDef(
+        "manage_forms",
+        "Manage Forms",
+        "Create and publish application forms",
+        PermissionCategory.SETTINGS,
+    ),
     "view_reports": PermissionDef(
         "view_reports",
         "View Reports",
@@ -376,6 +383,7 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "manage_integrations",
         "manage_automation",
         "manage_queues",
+        "manage_forms",
         "view_reports",
         "use_ai_assistant",
         "approve_ai_actions",

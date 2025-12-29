@@ -152,6 +152,7 @@ def update_case(
     data: CaseUpdate,
     user_id: UUID | None = None,
     org_id: UUID | None = None,
+    commit: bool = True,
 ) -> Case:
     """
     Update case fields.
@@ -213,8 +214,12 @@ def update_case(
 
             setattr(case, field, value)
 
-    db.commit()
-    db.refresh(case)
+    if commit:
+        db.commit()
+        db.refresh(case)
+    else:
+        db.flush()
+        db.refresh(case)
 
     # Log activity if changes were made and user_id provided
     if user_id and org_id:
@@ -226,7 +231,10 @@ def update_case(
                 actor_user_id=user_id,
                 changes=changes,
             )
-            db.commit()
+            if commit:
+                db.commit()
+            else:
+                db.flush()
 
         if priority_changed:
             activity_service.log_priority_changed(
@@ -236,7 +244,10 @@ def update_case(
                 actor_user_id=user_id,
                 is_priority=case.is_priority,
             )
-            db.commit()
+            if commit:
+                db.commit()
+            else:
+                db.flush()
 
     return case
 

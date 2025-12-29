@@ -459,6 +459,22 @@ class CampaignRecipientStatus(str, Enum):
     SKIPPED = "skipped"
 
 
+class FormStatus(str, Enum):
+    """Status of a form configuration."""
+
+    DRAFT = "draft"
+    PUBLISHED = "published"
+    ARCHIVED = "archived"
+
+
+class FormSubmissionStatus(str, Enum):
+    """Status of a submitted form response."""
+
+    PENDING_REVIEW = "pending_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 class SuppressionReason(str, Enum):
     """Reason for email suppression."""
 
@@ -575,6 +591,11 @@ class AuditEventType(str, Enum):
     ATTACHMENT_UPLOADED = "attachment_uploaded"
     ATTACHMENT_DOWNLOADED = "attachment_downloaded"
     ATTACHMENT_DELETED = "attachment_deleted"
+
+    # Forms
+    FORM_SUBMISSION_RECEIVED = "form_submission_received"
+    FORM_SUBMISSION_APPROVED = "form_submission_approved"
+    FORM_SUBMISSION_REJECTED = "form_submission_rejected"
 
 
 # =============================================================================

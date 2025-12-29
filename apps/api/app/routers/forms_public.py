@@ -1,0 +1,88 @@
+"""Public form endpoints for applicants."""
+
+import json
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.core.deps import get_db
+from app.core.rate_limit import limiter
+from app.db.enums import FormStatus
+from app.schemas.forms import FormPublicRead, FormSubmissionPublicResponse, FormSchema
+from app.services import form_service
+
+router = APIRouter(prefix="/forms/public", tags=["forms-public"])
+
+
+def _schema_or_none(schema_json: dict | None) -> FormSchema | None:
+    if not schema_json:
+        return None
+    try:
+        return FormSchema.model_validate(schema_json)
+    except Exception:
+        return None
+
+
+@router.get("/{token}", response_model=FormPublicRead)
+def get_public_form(token: str, db: Session = Depends(get_db)):
+    token_record = form_service.get_valid_token(db, token)
+    if not token_record:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    form = form_service.get_form(db, token_record.organization_id, token_record.form_id)
+    if not form or form.status != FormStatus.PUBLISHED.value:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    schema = _schema_or_none(form.published_schema_json)
+    if not schema:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    return FormPublicRead(
+        form_id=form.id,
+        name=form.name,
+        description=form.description,
+        form_schema=schema,
+        max_file_size_bytes=form.max_file_size_bytes,
+        max_file_count=form.max_file_count,
+        allowed_mime_types=form.allowed_mime_types,
+    )
+
+
+@router.post("/{token}/submit", response_model=FormSubmissionPublicResponse)
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_FORMS}/minute")
+async def submit_public_form(
+    token: str,
+    request: Request,
+    answers: str = Form(...),
+    files: list[UploadFile] | None = File(default=None),
+    db: Session = Depends(get_db),
+):
+    token_record = form_service.get_valid_token(db, token)
+    if not token_record:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    form = form_service.get_form(db, token_record.organization_id, token_record.form_id)
+    if not form or form.status != FormStatus.PUBLISHED.value:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    try:
+        answers_data = json.loads(answers)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Invalid answers JSON") from exc
+
+    try:
+        submission = form_service.create_submission(
+            db=db,
+            token=token_record,
+            form=form,
+            answers=answers_data,
+            files=files or [],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return FormSubmissionPublicResponse(
+        id=submission.id,
+        status=submission.status,
+    )
