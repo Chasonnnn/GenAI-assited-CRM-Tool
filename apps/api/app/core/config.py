@@ -99,6 +99,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_WEBHOOK: int = 100  # Meta webhooks
     RATE_LIMIT_API: int = 60  # General API
     RATE_LIMIT_SEARCH: int = 30  # Global search
+    RATE_LIMIT_PUBLIC_FORMS: int = 10  # Public form submissions
 
     # Compliance exports
     EXPORT_STORAGE_BACKEND: str = "local"  # local or s3

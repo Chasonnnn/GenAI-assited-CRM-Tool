@@ -68,6 +68,7 @@ POLICIES: dict[str, ResourcePolicy] = {
     "integrations": ResourcePolicy(default=P.INTEGRATIONS_MANAGE, actions={}),
     "meta_leads": ResourcePolicy(default=P.META_LEADS_MANAGE, actions={}),
     "org_settings": ResourcePolicy(default=P.ORG_MANAGE, actions={}),
+    "forms": ResourcePolicy(default=P.FORMS_MANAGE, actions={}),
 }
 
 

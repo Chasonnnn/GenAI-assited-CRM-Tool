@@ -33,6 +33,8 @@ from app.routers import (
     dashboard,
     dev,
     email_templates,
+    forms,
+    forms_public,
     integrations,
     internal,
     intended_parents,
@@ -220,6 +222,10 @@ app.include_router(campaigns.router, prefix="/campaigns", tags=["campaigns"])
 
 # Workflow Templates (Marketplace - Manager+)
 app.include_router(templates.router)
+
+# Application Forms
+app.include_router(forms.router)
+app.include_router(forms_public.router)
 
 app.include_router(admin_meta.router)  # Already has prefix in router definition
 
