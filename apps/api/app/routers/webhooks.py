@@ -40,7 +40,7 @@ async def verify_meta_webhook(
 
 
 @router.post("/meta")
-@limiter.limit("100/minute")
+@limiter.limit(f"{settings.RATE_LIMIT_WEBHOOK}/minute")
 async def receive_meta_webhook(
     request: Request,
     db: Session = Depends(get_db),

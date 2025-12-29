@@ -40,7 +40,7 @@ OAUTH_STATE_MAX_AGE = 300  # 5 minutes
 
 
 @router.get("/google/login")
-@limiter.limit("5/minute")
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 def google_login(request: Request):
     """
     Initiate Google OAuth flow.

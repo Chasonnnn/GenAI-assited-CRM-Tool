@@ -1,14 +1,17 @@
 """FastAPI application entry point."""
 
 import logging
+import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
+from app.core.gcp_monitoring import report_exception, setup_gcp_monitoring
+from app.core.structured_logging import build_log_context
 from app.core.rate_limit import limiter
 from app.db.session import engine
 from app.routers import (
@@ -55,6 +58,16 @@ from app.routers import (
 )
 
 # ============================================================================
+# GCP Monitoring (Cloud Logging + Error Reporting)
+# ============================================================================
+
+gcp_monitoring = setup_gcp_monitoring(settings.GCP_SERVICE_NAME)
+if gcp_monitoring.logging_enabled:
+    logging.info("GCP Cloud Logging: enabled")
+if gcp_monitoring.error_reporter:
+    logging.info("GCP Error Reporting: enabled")
+
+# ============================================================================
 # Sentry Integration (optional, for production error tracking)
 # ============================================================================
 
@@ -86,6 +99,39 @@ app = FastAPI(
     docs_url="/docs" if settings.ENV == "dev" else None,
     redoc_url="/redoc" if settings.ENV == "dev" else None,
 )
+
+# Report server errors to GCP Error Reporting when enabled.
+@app.middleware("http")
+async def gcp_error_reporting_middleware(request, call_next):
+    try:
+        return await call_next(request)
+    except HTTPException as exc:
+        if exc.status_code >= 500:
+            report_exception(gcp_monitoring.error_reporter, request)
+            session = getattr(request.state, "user_session", None)
+            context = build_log_context(
+                user_id=str(session.user_id) if session else None,
+                org_id=str(session.org_id) if session else None,
+                request_id=request.headers.get("x-request-id"),
+                route=request.url.path,
+                method=request.method,
+            )
+            logging.exception("Unhandled HTTPException", extra=context)
+        raise
+    except RateLimitExceeded:
+        raise
+    except Exception:
+        report_exception(gcp_monitoring.error_reporter, request)
+        session = getattr(request.state, "user_session", None)
+        context = build_log_context(
+            user_id=str(session.user_id) if session else None,
+            org_id=str(session.org_id) if session else None,
+            request_id=request.headers.get("x-request-id"),
+            route=request.url.path,
+            method=request.method,
+        )
+        logging.exception("Unhandled exception", extra=context)
+        raise
 
 # Add rate limiter
 app.state.limiter = limiter
@@ -225,17 +271,60 @@ if settings.ENV == "dev":
 
 
 # ============================================================================
-# Health Check
+# Health Checks
 # ============================================================================
+
+logger = logging.getLogger(__name__)
+
+
+def _check_db_connection() -> None:
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as exc:
+        logger.warning("Readiness DB check failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database unavailable",
+        ) from exc
+
+
+def _check_redis_connection() -> None:
+    redis_url = os.getenv("REDIS_URL")
+    if not redis_url or redis_url == "memory://":
+        return
+
+    try:
+        import redis
+
+        client = redis.from_url(redis_url, socket_connect_timeout=1)
+        client.ping()
+    except Exception as exc:
+        logger.warning("Readiness Redis check failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Redis unavailable",
+        ) from exc
+
+
+@app.get("/healthz")
+@limiter.exempt
+def healthz():
+    """Liveness probe (no external dependencies)."""
+    return {"status": "ok"}
+
+
+@app.get("/readyz")
+@limiter.exempt
+def readyz():
+    """Readiness probe (checks database connectivity)."""
+    _check_db_connection()
+    _check_redis_connection()
+    return {"status": "ok", "env": settings.ENV, "version": settings.VERSION}
 
 
 @app.get("/health")
+@limiter.exempt
 def health():
-    """
-    Health check endpoint.
-
-    Verifies database connectivity and returns environment info.
-    """
-    with engine.connect() as conn:
-        conn.execute(text("SELECT 1"))
-    return {"status": "ok", "env": settings.ENV, "version": settings.VERSION}
+    """Legacy health endpoint (alias to readiness check)."""
+    return readyz()
