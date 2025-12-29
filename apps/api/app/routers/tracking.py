@@ -11,6 +11,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
+from app.core.rate_limit import limiter
 from app.services import tracking_service
 
 
@@ -70,6 +71,7 @@ TRANSPARENT_GIF = bytes(
 
 
 @router.get("/open/{token}")
+@limiter.exempt
 async def track_open(
     token: str,
     request: Request,
@@ -108,6 +110,7 @@ async def track_open(
 
 
 @router.get("/click/{token}")
+@limiter.exempt
 async def track_click(
     token: str,
     url: str,

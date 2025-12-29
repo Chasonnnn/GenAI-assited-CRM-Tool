@@ -1,17 +1,26 @@
 """Search router - global search endpoint."""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db
+from app.core.config import settings
+from app.core.deps import get_current_session, get_db, require_permission
+from app.core.policies import POLICIES
+from app.core.rate_limit import limiter
 from app.schemas.auth import UserSession
-from app.services import search_service
+from app.services import permission_service, search_service
 
-router = APIRouter(prefix="/search", tags=["Search"])
+router = APIRouter(
+    prefix="/search",
+    tags=["Search"],
+    dependencies=[Depends(require_permission(POLICIES["cases"].default))],
+)
 
 
 @router.get("")
+@limiter.limit(f"{settings.RATE_LIMIT_SEARCH}/minute")
 def global_search(
+    request: Request,  # Required for slowapi rate limiter
     q: str = Query(..., min_length=1, max_length=200, description="Search query"),
     types: str = Query(
         "case,note,attachment,intended_parent",
@@ -44,18 +53,19 @@ def global_search(
     if not entity_types:
         entity_types = list(valid_types)
 
-    # Build permissions dict from session
-    permissions = {
-        "view_case_notes": session.has_permission("view_case_notes"),
-        "view_intended_parents": session.has_permission("view_intended_parents"),
-        "is_admin": "admin" in (session.roles or []),
-    }
-
+    effective_permissions = permission_service.get_effective_permissions(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        role=session.role.value,
+    )
     return search_service.global_search(
         db=db,
-        org_id=session.organization_id,
+        org_id=session.org_id,
         query=q,
-        permissions=permissions,
+        user_id=session.user_id,
+        role=session.role.value,
+        permissions=effective_permissions,
         entity_types=entity_types,
         limit=limit,
         offset=offset,

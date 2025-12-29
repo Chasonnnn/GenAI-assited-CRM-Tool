@@ -1,5 +1,7 @@
 """Application configuration with environment variables."""
 
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -86,10 +88,17 @@ class Settings(BaseSettings):
     # Error Tracking (optional, set in production)
     SENTRY_DSN: str = ""  # Get from https://sentry.io
 
+    # GCP Monitoring (Cloud Logging + Error Reporting)
+    GCP_MONITORING_ENABLED: bool = True
+    GCP_PROJECT_ID: str = ""
+    GCP_SERVICE_NAME: str = "crm-api"
+    GCP_ERROR_REPORTING_SAMPLE_RATE: float = 1.0
+
     # Rate Limiting (requests per minute)
     RATE_LIMIT_AUTH: int = 5  # Login attempts
     RATE_LIMIT_WEBHOOK: int = 100  # Meta webhooks
     RATE_LIMIT_API: int = 60  # General API
+    RATE_LIMIT_SEARCH: int = 30  # Global search
 
     # Compliance exports
     EXPORT_STORAGE_BACKEND: str = "local"  # local or s3
@@ -120,6 +129,11 @@ class Settings(BaseSettings):
     def duo_enabled(self) -> bool:
         """Check if Duo is configured."""
         return bool(self.DUO_CLIENT_ID and self.DUO_CLIENT_SECRET and self.DUO_API_HOST)
+
+    @property
+    def gcp_project_id(self) -> str:
+        """Return explicit GCP project or Cloud Run project id."""
+        return self.GCP_PROJECT_ID or os.getenv("GOOGLE_CLOUD_PROJECT", "")
 
     @property
     def cors_origins_list(self) -> list[str]:

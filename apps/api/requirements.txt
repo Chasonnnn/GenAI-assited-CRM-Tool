@@ -44,6 +44,8 @@ slowapi==0.1.9
 
 # Error tracking (optional)
 sentry-sdk[fastapi]==1.40.0
+google-cloud-logging==3.10.0
+google-cloud-error-reporting==1.9.1
 
 # Timezone support (for containers without system tzdata)
 tzdata==2024.1

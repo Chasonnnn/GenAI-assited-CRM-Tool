@@ -18,17 +18,23 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from uuid import UUID
 
+from app.core.config import settings
+from app.core.gcp_monitoring import report_exception, setup_gcp_monitoring
+from app.core.structured_logging import build_log_context
 from app.db.session import SessionLocal
 from app.db.models import EmailLog
 from app.db.enums import JobType
 from app.services import job_service, email_service
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+monitoring = setup_gcp_monitoring(f"{settings.GCP_SERVICE_NAME}-worker")
+
+# Configure logging (fallback when Cloud Logging isn't enabled)
+if not monitoring.logging_enabled:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 logger = logging.getLogger(__name__)
 
 # Email sending configuration
@@ -807,6 +813,17 @@ def main() -> None:
         asyncio.run(worker_loop())
     except KeyboardInterrupt:
         logger.info("Worker shutting down")
+    except Exception:
+        report_exception(monitoring.error_reporter)
+        logger.exception(
+            "Worker crashed",
+            extra=build_log_context(
+                request_id=os.getenv("CLOUD_RUN_TASK_INDEX"),
+                route="worker",
+                method="background",
+            ),
+        )
+        raise
 
 
 if __name__ == "__main__":
