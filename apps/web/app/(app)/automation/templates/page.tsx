@@ -24,7 +24,6 @@ import {
     BellIcon,
     ActivityIcon,
     AlertCircleIcon,
-    CheckCircleIcon,
     GlobeIcon,
     BuildingIcon,
     SparklesIcon,
@@ -137,7 +136,7 @@ async function fetchTemplateCategories(): Promise<TemplateCategoriesResponse> {
     return api.get<TemplateCategoriesResponse>("/templates/categories")
 }
 
-async function useTemplateApi(templateId: string, data: UseTemplateFormData) {
+async function applyTemplateApi(templateId: string, data: UseTemplateFormData) {
     return api.post(`/templates/${templateId}/use`, data)
 }
 
@@ -174,7 +173,7 @@ export default function TemplatesPage() {
     })
 
     const useTemplateMutation = useMutation({
-        mutationFn: () => useTemplateApi(selectedTemplate!.id, formData),
+        mutationFn: () => applyTemplateApi(selectedTemplate!.id, formData),
         onSuccess: () => {
             toast.success("Workflow created from template!")
             queryClient.invalidateQueries({ queryKey: ["workflows"] })

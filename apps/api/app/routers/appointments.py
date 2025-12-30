@@ -38,7 +38,12 @@ from app.schemas.appointment import (
     TimeSlotRead,
     AvailableSlotsResponse,
 )
-from app.services import appointment_service, appointment_email_service, user_service, org_service
+from app.services import (
+    appointment_service,
+    appointment_email_service,
+    user_service,
+    org_service,
+)
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 from app.core.config import settings
 

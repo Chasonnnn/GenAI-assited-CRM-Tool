@@ -1,14 +1,18 @@
 """Authentication service - user resolution, invite handling, session creation."""
 
 from datetime import datetime, timezone
+import logging
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
+from fastapi import Request
 
 from app.core.security import create_session_token
 from app.db.enums import AuthProvider, Role
 from app.db.models import AuthIdentity, Membership, OrgInvite, User
 from app.services.google_oauth import GoogleUserInfo
+
+logger = logging.getLogger(__name__)
 
 
 def find_user_by_identity(
@@ -104,7 +108,9 @@ def create_user_from_invite(
 
 
 def resolve_user_and_create_session(
-    db: Session, google_user: GoogleUserInfo
+    db: Session,
+    google_user: GoogleUserInfo,
+    request: Request | None = None,
 ) -> tuple[str | None, str | None]:
     """
     Find or create user based on Google identity.
@@ -118,15 +124,35 @@ def resolve_user_and_create_session(
     Returns:
         (session_token, error_code) - one will be None
     """
+
+    def _log_login_failed(org_id, reason: str) -> None:
+        if not org_id:
+            return
+        try:
+            from app.services import audit_service
+
+            audit_service.log_login_failed(
+                db=db,
+                org_id=org_id,
+                email=google_user.email,
+                reason=reason,
+                request=request,
+            )
+            db.commit()
+        except Exception as exc:
+            logger.warning("Failed to log login failure: %s", exc)
+
     # Check for existing auth identity
     user = find_user_by_identity(db, AuthProvider.GOOGLE, google_user.sub)
 
     if user:
         # Existing user - validate and create session
-        if not user.is_active:
-            return None, "account_disabled"
-
         membership = db.query(Membership).filter(Membership.user_id == user.id).first()
+        if not user.is_active:
+            _log_login_failed(
+                membership.organization_id if membership else None, "account_disabled"
+            )
+            return None, "account_disabled"
 
         if not membership:
             return None, "no_membership"
@@ -148,6 +174,19 @@ def resolve_user_and_create_session(
             mfa_verified=mfa_verified,
             mfa_required=mfa_required,
         )
+        try:
+            from app.services import audit_service
+
+            audit_service.log_login_success(
+                db=db,
+                org_id=membership.organization_id,
+                user_id=user.id,
+                request=request,
+                provider="google",
+            )
+            db.commit()
+        except Exception as exc:
+            logger.warning("Failed to log login success: %s", exc)
         return token, None
 
     # New user - check for valid invite
@@ -156,13 +195,16 @@ def resolve_user_and_create_session(
     if not invite:
         expired = get_expired_invite(db, google_user.email)
         if expired:
+            _log_login_failed(expired.organization_id, "invite_expired")
             return None, "invite_expired"
+        # No org context available to log
         return None, "not_invited"
 
     # Validate role from invite
     try:
         Role(invite.role)
     except ValueError:
+        _log_login_failed(invite.organization_id, "invalid_invite_role")
         return None, "invalid_invite_role"
 
     # Create user from invite
@@ -181,4 +223,17 @@ def resolve_user_and_create_session(
         mfa_verified=False,
         mfa_required=True,
     )
+    try:
+        from app.services import audit_service
+
+        audit_service.log_login_success(
+            db=db,
+            org_id=membership.organization_id,
+            user_id=user.id,
+            request=request,
+            provider="google",
+        )
+        db.commit()
+    except Exception as exc:
+        logger.warning("Failed to log login success: %s", exc)
     return token, None

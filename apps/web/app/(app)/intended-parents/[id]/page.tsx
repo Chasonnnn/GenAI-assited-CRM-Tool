@@ -56,7 +56,6 @@ import {
     useRestoreIntendedParent,
     useDeleteIntendedParent,
     useCreateIntendedParentNote,
-    useDeleteIntendedParentNote,
 } from "@/lib/hooks/use-intended-parents"
 import { useSetAIContext } from "@/lib/context/ai-context"
 import { ProposeMatchFromIPDialog } from "@/components/matches/ProposeMatchFromIPDialog"
@@ -106,7 +105,6 @@ export default function IntendedParentDetailPage() {
     const restoreMutation = useRestoreIntendedParent()
     const deleteMutation = useDeleteIntendedParent()
     const createNoteMutation = useCreateIntendedParentNote()
-    const deleteNoteMutation = useDeleteIntendedParentNote()
 
     // Set AI context for this intended parent
     useSetAIContext(

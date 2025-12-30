@@ -9,7 +9,7 @@ Handles:
 
 import hmac
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -190,7 +190,7 @@ def _mock_lead_data(leadgen_id: str) -> dict:
     """Return mock data for test mode."""
     return {
         "id": leadgen_id,
-        "created_time": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S+0000"),
+        "created_time": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+0000"),
         "field_data": [
             {"name": "full_name", "values": [f"Test User {leadgen_id[:8]}"]},
             {"name": "email", "values": [f"test_{leadgen_id[:8]}@example.com"]},

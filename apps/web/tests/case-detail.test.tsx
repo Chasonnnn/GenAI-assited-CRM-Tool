@@ -150,7 +150,8 @@ describe('CaseDetailPage', () => {
         mockPush.mockReset()
         mockClaimCase.mockReset()
         mockReleaseCase.mockReset()
-            ; (navigator.clipboard.writeText as any).mockClear?.()
+        const clipboardWriteText = navigator.clipboard.writeText as unknown as { mockClear?: () => void }
+        clipboardWriteText.mockClear?.()
     })
 
     it('renders case header and allows copying email', () => {

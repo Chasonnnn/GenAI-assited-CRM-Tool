@@ -56,7 +56,7 @@ const integrationTypeConfig: Record<string, { icon: typeof FacebookIcon; label: 
 
 export default function IntegrationsPage() {
     const { data: healthData, isLoading, refetch, isFetching } = useIntegrationHealth()
-    const { data: userIntegrations, isLoading: isLoadingUser } = useUserIntegrations()
+    const { data: userIntegrations } = useUserIntegrations()
     const connectZoom = useConnectZoom()
     const connectGmail = useConnectGmail()
     const disconnectIntegration = useDisconnectIntegration()

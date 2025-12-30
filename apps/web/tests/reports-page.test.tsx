@@ -1,3 +1,4 @@
+import type { PropsWithChildren } from "react"
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import ReportsPage from '../app/(app)/reports/page'
@@ -7,22 +8,22 @@ vi.mock('@/lib/auth-context', () => ({
 }))
 
 vi.mock('recharts', () => ({
-    Bar: ({ children }: any) => <div>{children}</div>,
-    BarChart: ({ children }: any) => <div>{children}</div>,
+    Bar: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    BarChart: ({ children }: PropsWithChildren) => <div>{children}</div>,
     CartesianGrid: () => <div />,
     XAxis: () => <div />,
     YAxis: () => <div />,
-    Line: ({ children }: any) => <div>{children}</div>,
-    LineChart: ({ children }: any) => <div>{children}</div>,
-    Pie: ({ children }: any) => <div>{children}</div>,
-    PieChart: ({ children }: any) => <div>{children}</div>,
+    Line: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    LineChart: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    Pie: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    PieChart: ({ children }: PropsWithChildren) => <div>{children}</div>,
 }))
 
 vi.mock('@/components/ui/chart', () => ({
-    ChartContainer: ({ children }: any) => <div>{children}</div>,
-    ChartTooltip: ({ children }: any) => <div>{children}</div>,
+    ChartContainer: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    ChartTooltip: ({ children }: PropsWithChildren) => <div>{children}</div>,
     ChartTooltipContent: () => <div />,
-    ChartLegend: ({ children }: any) => <div>{children}</div>,
+    ChartLegend: ({ children }: PropsWithChildren) => <div>{children}</div>,
     ChartLegendContent: () => <div />,
 }))
 

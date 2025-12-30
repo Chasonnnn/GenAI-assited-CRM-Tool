@@ -66,9 +66,9 @@ export function ProposeMatchFromIPDialog({
             setCompatibilityScore("")
             setNotes("")
             onSuccess?.()
-        } catch (e: any) {
-            console.error("Failed to propose match:", e)
-            setError(e?.message || "Failed to propose match. Please try again.")
+        } catch (e: unknown) {
+            console.error("Failed to propose match:", e instanceof Error ? e.message : e)
+            setError(e instanceof Error ? e.message : "Failed to propose match. Please try again.")
         }
     }
 

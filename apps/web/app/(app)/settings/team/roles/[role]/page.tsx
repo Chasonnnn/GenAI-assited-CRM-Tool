@@ -13,13 +13,6 @@ import { useRoleDetail, useUpdateRolePermissions } from "@/lib/hooks/use-permiss
 import { useAuth } from "@/lib/auth-context"
 import { toast } from "sonner"
 
-const ROLE_LABELS: Record<string, string> = {
-    intake_specialist: "Intake Specialist",
-    case_manager: "Case Manager",
-    admin: "Admin",
-    developer: "Developer",
-}
-
 const CATEGORY_ORDER = [
     "Navigation",
     "Cases",
@@ -57,7 +50,8 @@ export default function RoleDetailPage() {
             }
 
             if (newValue === originalValue) {
-                const { [permKey]: _, ...rest } = prev
+                const rest = { ...prev }
+                delete rest[permKey]
                 return rest
             }
             return { ...prev, [permKey]: newValue }

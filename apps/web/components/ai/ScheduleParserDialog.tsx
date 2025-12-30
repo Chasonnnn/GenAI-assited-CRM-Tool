@@ -135,7 +135,7 @@ export function ScheduleParserDialog({
         }
     }
 
-    const handleTaskChange = (id: string, field: keyof EditableTask, value: any) => {
+    const handleTaskChange = <K extends keyof EditableTask>(id: string, field: K, value: EditableTask[K]) => {
         setBulkRequestId(null) // task edits change the payload; reset idempotency key
         setEditableTasks((prev) =>
             prev.map((task) => (task.id === id ? { ...task, [field]: value } : task))
@@ -352,7 +352,7 @@ Medication Schedule:
                                                 <Select
                                                     value={task.task_type}
                                                     onValueChange={(val) =>
-                                                        handleTaskChange(task.id, "task_type", val)
+                                                        handleTaskChange(task.id, "task_type", val || task.task_type)
                                                     }
                                                 >
                                                     <SelectTrigger className="h-8">

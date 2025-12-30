@@ -48,8 +48,6 @@ import {
     Zap,
     Bot,
     ChevronRightIcon,
-    CalendarIcon,
-    CalendarDays,
     HeartHandshake,
     Search,
 } from "lucide-react"
@@ -84,12 +82,6 @@ const reportsNavigation = {
     title: "Reports",
     url: "/reports",
     icon: BarChart3,
-}
-
-const searchNavigation = {
-    title: "Search",
-    url: "/search",
-    icon: Search,
 }
 
 const aiNavigation = {

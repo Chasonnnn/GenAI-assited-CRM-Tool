@@ -16,8 +16,14 @@ const mockRollbackTemplate = vi.fn()
 
 const versionModalSpy = vi.fn()
 
+type VersionHistoryModalProps = {
+    open: boolean
+    entityType?: string
+    title?: string
+}
+
 vi.mock('@/components/version-history-modal', () => ({
-    VersionHistoryModal: (props: any) => {
+    VersionHistoryModal: (props: VersionHistoryModalProps) => {
         versionModalSpy(props)
         if (!props.open) return null
         return (

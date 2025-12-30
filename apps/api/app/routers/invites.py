@@ -1,9 +1,9 @@
 """Invitation management endpoints for settings."""
 
 from uuid import UUID
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
@@ -71,7 +71,7 @@ def _invite_to_read(invite) -> InviteRead:
             minutes=invite_service.INVITE_RESEND_COOLDOWN_MINUTES
         )
         cooldown_seconds = max(
-            0, int((cooldown_end - datetime.utcnow()).total_seconds())
+            0, int((cooldown_end - datetime.now(timezone.utc)).total_seconds())
         )
 
     return InviteRead(
@@ -113,6 +113,7 @@ async def list_invites(
 @router.post("", response_model=InviteRead, dependencies=[Depends(require_csrf_header)])
 async def create_invite(
     body: InviteCreate,
+    request: Request,
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
 ):
@@ -145,6 +146,16 @@ async def create_invite(
             email=body.email,
             role=body.role,
             invited_by_user_id=session.user_id,
+        )
+        from app.services import audit_service
+
+        audit_service.log_user_invited(
+            db=db,
+            org_id=session.org_id,
+            actor_user_id=session.user_id,
+            invited_email=body.email,
+            role=body.role,
+            request=request,
         )
         db.commit()
 

@@ -408,7 +408,7 @@ def send_from_template(
 def mark_email_sent(db: Session, email_log: EmailLog) -> EmailLog:
     """Mark an email as sent."""
     email_log.status = EmailStatus.SENT.value
-    email_log.sent_at = datetime.utcnow()
+    email_log.sent_at = datetime.now(timezone.utc)
     email_log.error = None
     db.commit()
     db.refresh(email_log)

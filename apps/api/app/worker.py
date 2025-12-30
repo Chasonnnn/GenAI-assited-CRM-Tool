@@ -12,6 +12,8 @@ import asyncio
 import logging
 import os
 import sys
+from datetime import datetime, timezone
+from urllib.parse import urlsplit
 
 # Add the app directory to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -46,6 +48,26 @@ POLL_INTERVAL_SECONDS = int(os.getenv("WORKER_POLL_INTERVAL", "10"))
 BATCH_SIZE = int(os.getenv("WORKER_BATCH_SIZE", "10"))
 
 
+def _mask_email(email: str | None) -> str:
+    if not email:
+        return ""
+    try:
+        from app.services import audit_service
+
+        return audit_service.hash_email(email)
+    except Exception:
+        local, _, domain = email.partition("@")
+        prefix = local[:3] if local else ""
+        return f"{prefix}...@{domain}" if domain else f"{prefix}..."
+
+
+def _safe_url(url: str | None) -> str:
+    if not url:
+        return ""
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}{parts.path}"
+
+
 async def send_email_async(email_log: EmailLog) -> None:
     """
     Send an email using Resend API.
@@ -53,9 +75,7 @@ async def send_email_async(email_log: EmailLog) -> None:
     If RESEND_API_KEY is not set, logs the email instead of sending.
     """
     if not RESEND_API_KEY:
-        logger.info(
-            f"[DRY RUN] Would send email to {email_log.recipient_email}: {email_log.subject}"
-        )
+        logger.info("[DRY RUN] Email send skipped for email_log=%s", email_log.id)
         return
 
     # In production, use Resend or another email provider
@@ -74,7 +94,10 @@ async def send_email_async(email_log: EmailLog) -> None:
             }
         )
         logger.info(
-            f"Email sent to {email_log.recipient_email}, ID: {result.get('id')}"
+            "Email sent for email_log=%s recipient=%s message_id=%s",
+            email_log.id,
+            _mask_email(email_log.recipient_email),
+            result.get("id"),
         )
     except ImportError:
         logger.warning("resend package not installed, skipping email send")
@@ -104,7 +127,7 @@ async def process_job(db, job) -> None:
 
     elif job.job_type == JobType.REMINDER.value:
         # Process reminder - create notification and/or send email
-        logger.info(f"Processing reminder: {job.payload}")
+        logger.info("Processing reminder job %s", job.id)
         payload = job.payload or {}
 
         # Create in-app notification if user_id provided
@@ -139,7 +162,7 @@ async def process_job(db, job) -> None:
 
     elif job.job_type == JobType.WEBHOOK_RETRY.value:
         # Retry failed webhook delivery
-        logger.info(f"Processing webhook retry: {job.payload}")
+        logger.info("Processing webhook retry job %s", job.id)
         payload = job.payload or {}
 
         # Extract webhook details
@@ -156,16 +179,20 @@ async def process_job(db, job) -> None:
                         webhook_url, json=webhook_data, headers=webhook_headers
                     )
                     response.raise_for_status()
-                    logger.info(f"Webhook retry successful: {webhook_url}")
+                    logger.info("Webhook retry successful: %s", _safe_url(webhook_url))
             except Exception as e:
-                logger.error(f"Webhook retry failed: {webhook_url} - {str(e)}")
+                logger.error(
+                    "Webhook retry failed: %s (%s)",
+                    _safe_url(webhook_url),
+                    type(e).__name__,
+                )
                 raise  # Will trigger job retry mechanism
         else:
             logger.warning("Invalid webhook retry payload: missing url or data")
 
     elif job.job_type == JobType.NOTIFICATION.value:
         # Process notification - create in-app notification record
-        logger.info(f"Processing notification: {job.payload}")
+        logger.info("Processing notification job %s", job.id)
         payload = job.payload or {}
 
         if payload.get("user_id") and payload.get("message"):
@@ -312,7 +339,6 @@ async def process_meta_lead_fetch(db, job) -> None:
     4. Store in meta_leads table
     5. Update status on success/failure
     """
-    from datetime import datetime
     from app.db.models import MetaPageMapping, MetaLead
     from app.core.encryption import decrypt_token
     from app.services import meta_api, meta_lead_service
@@ -345,7 +371,7 @@ async def process_meta_lead_fetch(db, job) -> None:
         )
     except Exception as e:
         mapping.last_error = f"Token decryption failed: {str(e)[:100]}"
-        mapping.last_error_at = datetime.utcnow()
+        mapping.last_error_at = datetime.now(timezone.utc)
         db.commit()
         raise Exception(f"Token decryption failed: {e}")
 
@@ -355,7 +381,7 @@ async def process_meta_lead_fetch(db, job) -> None:
     if error:
         # Update mapping with error
         mapping.last_error = error
-        mapping.last_error_at = datetime.utcnow()
+        mapping.last_error_at = datetime.now(timezone.utc)
         db.commit()
 
         # Check if we have an existing meta_lead to update
@@ -400,7 +426,7 @@ async def process_meta_lead_fetch(db, job) -> None:
         raise Exception(store_error)
 
     # Update success tracking (even for idempotent re-stores)
-    mapping.last_success_at = datetime.utcnow()
+    mapping.last_success_at = datetime.now(timezone.utc)
     mapping.last_error = None
     db.commit()
 
@@ -443,7 +469,6 @@ async def process_meta_capi_event(db, job) -> None:
       - email, phone (optional)
       - meta_page_id (optional, used to find a page token)
     """
-    from datetime import datetime
     from app.core.encryption import decrypt_token
     from app.db.models import MetaPageMapping
     from app.services import meta_capi
@@ -474,7 +499,7 @@ async def process_meta_capi_event(db, job) -> None:
             access_token = decrypt_token(page_mapping.access_token_encrypted)
         except Exception as e:
             page_mapping.last_error = f"Token decryption failed: {str(e)[:100]}"
-            page_mapping.last_error_at = datetime.utcnow()
+            page_mapping.last_error_at = datetime.now(timezone.utc)
             db.commit()
             raise Exception(f"Token decryption failed: {e}")
 
@@ -494,7 +519,7 @@ async def process_meta_capi_event(db, job) -> None:
     if not success:
         if page_mapping:
             page_mapping.last_error = error
-            page_mapping.last_error_at = datetime.utcnow()
+            page_mapping.last_error_at = datetime.now(timezone.utc)
             db.commit()
         raise Exception(error or "Meta CAPI failed")
 
@@ -529,7 +554,7 @@ async def worker_loop() -> None:
                     except Exception as e:
                         error_msg = str(e)
                         job_service.mark_job_failed(db, job, error_msg)
-                        logger.error(f"Job {job.id} failed: {error_msg}")
+                        logger.error("Job %s failed: %s", job.id, type(e).__name__)
 
                         # Record failure for integration health
                         _record_job_failure(db, job, error_msg, exception=e)
@@ -613,7 +638,11 @@ async def process_workflow_email(db, job) -> None:
     await send_email_async(email_log)
     email_service.mark_email_sent(db, email_log)
 
-    logger.info(f"Workflow email sent to {recipient_email} for case {case_id}")
+    logger.info(
+        "Workflow email sent for case=%s recipient=%s",
+        case_id,
+        _mask_email(recipient_email),
+    )
 
 
 async def process_csv_import(db, job) -> None:
@@ -803,7 +832,11 @@ async def process_campaign_send(db, job) -> None:
             f"skipped={result.get('skipped_count', 0)}"
         )
     except Exception as e:
-        logger.error(f"Campaign send failed: campaign={campaign_id} - {str(e)}")
+        logger.error(
+            "Campaign send failed: campaign=%s error=%s",
+            campaign_id,
+            type(e).__name__,
+        )
         raise
 
 

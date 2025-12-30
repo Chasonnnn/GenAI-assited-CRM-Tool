@@ -21,8 +21,6 @@ import {
     removeSuppression,
     type CampaignCreate,
     type CampaignUpdate,
-    type Campaign,
-    type CampaignListItem,
     type FilterCriteria,
 } from "@/lib/api/campaigns";
 

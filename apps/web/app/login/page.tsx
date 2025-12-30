@@ -14,21 +14,27 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [showOtherOptions, setShowOtherOptions] = useState(false)
 
-  const handleDuoSSOLogin = async () => {
+  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
+
+  const handleDuoSSOLogin = () => {
     setIsLoading(true)
-    // Simulate Duo SSO process
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setIsLoading(false)
-    console.log("[v0] Duo SSO login initiated")
+    try {
+      window.location.assign(`${apiBase}/auth/google/login`)
+    } catch {
+      // Ignore navigation errors in non-browser runtimes.
+    }
   }
 
-  const handleUsernameLogin = async (e: React.FormEvent) => {
+  const handleUsernameLogin = (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    // Simulate username + Duo push authentication
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setIsLoading(false)
-    console.log("[v0] Username + Duo push initiated for:", username)
+    const hint = username.trim()
+    const hintParam = hint ? `?login_hint=${encodeURIComponent(hint)}` : ""
+    try {
+      window.location.assign(`${apiBase}/auth/google/login${hintParam}`)
+    } catch {
+      // Ignore navigation errors in non-browser runtimes.
+    }
   }
 
   return (

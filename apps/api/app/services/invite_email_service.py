@@ -128,9 +128,9 @@ async def send_invite_email(
     # Format expiry
     expires_at = None
     if invite.expires_at:
-        from datetime import datetime
+        from datetime import datetime, timezone
 
-        days_remaining = (invite.expires_at - datetime.utcnow()).days
+        days_remaining = (invite.expires_at - datetime.now(timezone.utc)).days
         if days_remaining > 0:
             expires_at = f"in {days_remaining} day{'s' if days_remaining != 1 else ''}"
         else:
@@ -159,7 +159,13 @@ async def send_invite_email(
     )
 
     if result.get("success"):
-        logger.info(f"Sent invite email to {invite.email} for org {org_name}")
+        from app.services import audit_service
+
+        logger.info(
+            "Sent invite email to %s for org %s",
+            audit_service.hash_email(invite.email),
+            org_name,
+        )
     else:
         logger.error(f"Failed to send invite email: {result.get('error')}")
 

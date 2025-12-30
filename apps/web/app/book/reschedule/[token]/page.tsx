@@ -9,7 +9,6 @@
 import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import {
     Select,
     SelectContent,
@@ -18,8 +17,6 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import {
-    CalendarIcon,
-    ClockIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
     LoaderIcon,
@@ -27,7 +24,7 @@ import {
     AlertCircleIcon,
     GlobeIcon,
 } from "lucide-react"
-import { format, addDays, startOfDay, parseISO, isSameDay } from "date-fns"
+import { format, startOfDay, parseISO, isSameDay } from "date-fns"
 import type { TimeSlot, PublicAppointmentView } from "@/lib/api/appointments"
 import {
     getAppointmentForReschedule,
@@ -77,8 +74,8 @@ export default function ReschedulePage({ params }: PageProps) {
             try {
                 const data = await getAppointmentForReschedule(params.token)
                 setAppointment(data as PublicAppointmentView)
-            } catch (err: any) {
-                setError(err.message || "Appointment not found")
+            } catch (err: unknown) {
+                setError(err instanceof Error ? err.message : "Appointment not found")
             } finally {
                 setIsLoading(false)
             }
@@ -108,8 +105,8 @@ export default function ReschedulePage({ params }: PageProps) {
                 timezone
             )
             setSlots(response.slots)
-        } catch (err: any) {
-            console.error("Failed to fetch slots:", err)
+        } catch (err: unknown) {
+            console.error("Failed to fetch slots:", err instanceof Error ? err.message : err)
             setSlots([])
         } finally {
             setIsLoadingSlots(false)
@@ -124,8 +121,8 @@ export default function ReschedulePage({ params }: PageProps) {
         try {
             await rescheduleByToken(params.token, selectedSlot.start)
             setIsConfirmed(true)
-        } catch (err: any) {
-            setError(err.message || "Failed to reschedule")
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "Failed to reschedule")
         } finally {
             setIsSubmitting(false)
         }

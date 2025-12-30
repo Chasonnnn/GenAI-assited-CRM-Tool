@@ -6,7 +6,7 @@ import csv
 import io
 import json
 import zipfile
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -232,9 +232,9 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
                 signature_logo_url=user_data.get("signature_logo_url"),
                 signature_html=user_data.get("signature_html"),
                 created_at=_parse_datetime(user_data.get("created_at"))
-                or datetime.utcnow(),
+                or datetime.now(timezone.utc),
                 updated_at=_parse_datetime(user_data.get("updated_at"))
-                or datetime.utcnow(),
+                or datetime.now(timezone.utc),
             )
             db.add(user)
 
@@ -267,7 +267,7 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
                 organization_id=org_id,
                 role=membership_data.get("role"),
                 created_at=_parse_datetime(membership_data.get("created_at"))
-                or datetime.utcnow(),
+                or datetime.now(timezone.utc),
             )
             db.add(membership)
 
@@ -279,9 +279,9 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             description=queue_data.get("description"),
             is_active=queue_data.get("is_active", True),
             created_at=_parse_datetime(queue_data.get("created_at"))
-            or datetime.utcnow(),
+            or datetime.now(timezone.utc),
             updated_at=_parse_datetime(queue_data.get("updated_at"))
-            or datetime.utcnow(),
+            or datetime.now(timezone.utc),
         )
         db.add(queue)
 
@@ -291,7 +291,7 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             queue_id=UUID(queue_member_data["queue_id"]),
             user_id=_map_user_id(UUID(queue_member_data["user_id"])),
             created_at=_parse_datetime(queue_member_data.get("created_at"))
-            or datetime.utcnow(),
+            or datetime.now(timezone.utc),
         )
         db.add(member)
 
@@ -303,9 +303,9 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             is_default=pipeline_data.get("is_default", False),
             current_version=pipeline_data.get("current_version") or 1,
             created_at=_parse_datetime(pipeline_data.get("created_at"))
-            or datetime.utcnow(),
+            or datetime.now(timezone.utc),
             updated_at=_parse_datetime(pipeline_data.get("updated_at"))
-            or datetime.utcnow(),
+            or datetime.now(timezone.utc),
         )
         db.add(pipeline)
         for stage_data in pipeline_data.get("stages", []):
@@ -320,9 +320,9 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
                 is_active=stage_data.get("is_active", True),
                 deleted_at=_parse_datetime(stage_data.get("deleted_at")),
                 created_at=_parse_datetime(stage_data.get("created_at"))
-                or datetime.utcnow(),
+                or datetime.now(timezone.utc),
                 updated_at=_parse_datetime(stage_data.get("updated_at"))
-                or datetime.utcnow(),
+                or datetime.now(timezone.utc),
             )
             db.add(stage)
 
@@ -342,9 +342,9 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             category=template_data.get("category"),
             current_version=template_data.get("current_version") or 1,
             created_at=_parse_datetime(template_data.get("created_at"))
-            or datetime.utcnow(),
+            or datetime.now(timezone.utc),
             updated_at=_parse_datetime(template_data.get("updated_at"))
-            or datetime.utcnow(),
+            or datetime.now(timezone.utc),
         )
         db.add(template)
 
@@ -386,9 +386,9 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
                 _parse_uuid(workflow_data.get("updated_by_user_id"))
             ),
             created_at=_parse_datetime(workflow_data.get("created_at"))
-            or datetime.utcnow(),
+            or datetime.now(timezone.utc),
             updated_at=_parse_datetime(workflow_data.get("updated_at"))
-            or datetime.utcnow(),
+            or datetime.now(timezone.utc),
         )
         db.add(workflow)
 
@@ -403,7 +403,7 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             task_reminders=settings_data.get("task_reminders", True),
             appointments=settings_data.get("appointments", True),
             updated_at=_parse_datetime(settings_data.get("updated_at"))
-            or datetime.utcnow(),
+            or datetime.now(timezone.utc),
         )
         db.merge(settings_row)
 
@@ -428,9 +428,9 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             current_version=ai_settings_payload.get("current_version") or 1,
             api_key_encrypted=None,
             created_at=_parse_datetime(ai_settings_payload.get("created_at"))
-            or datetime.utcnow(),
+            or datetime.now(timezone.utc),
             updated_at=_parse_datetime(ai_settings_payload.get("updated_at"))
-            or datetime.utcnow(),
+            or datetime.now(timezone.utc),
         )
         if ai_settings_payload.get("has_api_key") and ai_settings.is_enabled:
             ai_settings.is_enabled = False
@@ -448,9 +448,9 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             last_error=meta_page_data.get("last_error"),
             last_error_at=_parse_datetime(meta_page_data.get("last_error_at")),
             created_at=_parse_datetime(meta_page_data.get("created_at"))
-            or datetime.utcnow(),
+            or datetime.now(timezone.utc),
             updated_at=_parse_datetime(meta_page_data.get("updated_at"))
-            or datetime.utcnow(),
+            or datetime.now(timezone.utc),
             access_token_encrypted=None,
         )
         db.add(meta_page)
@@ -464,9 +464,9 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             permission=permission_data.get("permission"),
             is_granted=permission_data.get("is_granted", True),
             created_at=_parse_datetime(permission_data.get("created_at"))
-            or datetime.utcnow(),
+            or datetime.now(timezone.utc),
             updated_at=_parse_datetime(permission_data.get("updated_at"))
-            or datetime.utcnow(),
+            or datetime.now(timezone.utc),
         )
         db.add(permission)
 
@@ -481,9 +481,9 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             permission=override_data.get("permission"),
             override_type=override_data.get("override_type"),
             created_at=_parse_datetime(override_data.get("created_at"))
-            or datetime.utcnow(),
+            or datetime.now(timezone.utc),
             updated_at=_parse_datetime(override_data.get("updated_at"))
-            or datetime.utcnow(),
+            or datetime.now(timezone.utc),
         )
         db.add(override)
 
@@ -587,7 +587,7 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
             fetch_error=row.get("meta_lead_fetch_error"),
             meta_created_time=_parse_datetime(row.get("meta_lead_meta_created_time")),
             received_at=_parse_datetime(row.get("meta_lead_received_at"))
-            or datetime.utcnow(),
+            or datetime.now(timezone.utc),
             converted_at=_parse_datetime(row.get("meta_lead_converted_at")),
         )
         db.add(meta_lead)
@@ -694,8 +694,10 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
             archived_by_user_id=archived_by_user_id,
             last_contacted_at=_parse_datetime(row.get("last_contacted_at")),
             last_contact_method=row.get("last_contact_method"),
-            created_at=_parse_datetime(row.get("created_at")) or datetime.utcnow(),
-            updated_at=_parse_datetime(row.get("updated_at")) or datetime.utcnow(),
+            created_at=_parse_datetime(row.get("created_at"))
+            or datetime.now(timezone.utc),
+            updated_at=_parse_datetime(row.get("updated_at"))
+            or datetime.now(timezone.utc),
         )
         db.add(case)
         imported += 1

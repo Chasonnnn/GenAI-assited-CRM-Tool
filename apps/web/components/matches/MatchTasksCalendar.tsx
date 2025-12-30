@@ -44,7 +44,6 @@ import {
     isSameMonth,
     addMonths,
     subMonths,
-    addDays,
     parseISO,
     isToday,
 } from "date-fns"
@@ -61,16 +60,6 @@ interface MatchTasksCalendarProps {
     caseId: string
     ipId?: string
     onAddTask?: () => void
-}
-
-// Calendar item type for unified display
-type CalendarItem = {
-    id: string
-    title: string
-    time?: string
-    date: string
-    type: "task" | "appointment"
-    source: "surrogate" | "ip" | "appointment"
 }
 
 // Task Item Component

@@ -201,7 +201,7 @@ def get_ai_activity(
     limit: int,
 ) -> tuple[dict[str, int], list[AuditLog], dict[UUID, str | None]]:
     """Get recent AI activity counts and logs."""
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
     ai_event_types = [
         AuditEventType.AI_ACTION_APPROVED.value,
@@ -210,7 +210,7 @@ def get_ai_activity(
         AuditEventType.AI_ACTION_DENIED.value,
     ]
 
-    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     counts = {}
     for event_type in ai_event_types:
         counts[event_type] = (
@@ -820,6 +820,28 @@ def log_user_role_changed(
         target_type="user",
         target_id=target_user_id,
         details={"old_role": old_role, "new_role": new_role},
+        request=request,
+    )
+
+
+def log_user_deactivated(
+    db: Session,
+    org_id: UUID,
+    actor_user_id: UUID,
+    target_user_id: UUID,
+    reason: str | None = None,
+    request: Request | None = None,
+) -> AuditLog:
+    """Log user deactivation or removal."""
+    details = {"reason": reason} if reason else None
+    return log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.USER_DEACTIVATED,
+        actor_user_id=actor_user_id,
+        target_type="user",
+        target_id=target_user_id,
+        details=details,
         request=request,
     )
 

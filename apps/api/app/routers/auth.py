@@ -41,7 +41,7 @@ OAUTH_STATE_MAX_AGE = 300  # 5 minutes
 
 @router.get("/google/login")
 @limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
-def google_login(request: Request):
+def google_login(request: Request, login_hint: str | None = None):
     """
     Initiate Google OAuth flow.
 
@@ -70,6 +70,8 @@ def google_login(request: Request):
         "state": state,
         "nonce": nonce,
     }
+    if login_hint and "@" in login_hint:
+        params["login_hint"] = login_hint
     google_auth_url = (
         f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
     )
@@ -168,7 +170,9 @@ async def google_callback(
         return error_response
 
     # Resolve user and create session (delegated to service layer)
-    session_token, error_code = resolve_user_and_create_session(db, google_user)
+    session_token, error_code = resolve_user_and_create_session(
+        db, google_user, request=request
+    )
 
     if error_code:
         error_response.headers["location"] = _get_error_redirect(error_code)

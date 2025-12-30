@@ -144,5 +144,5 @@ export function useSetAIContext(ctx: EntityContext | null) {
         return () => {
             clearContext()
         }
-    }, [ctx?.entityId, ctx?.entityType, canUseAI, setContext, clearContext])
+    }, [ctx, canUseAI, setContext, clearContext])
 }

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -36,7 +36,9 @@ def export_cases(
     )
     db.commit()
 
-    filename = f"cases_export_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
+    filename = (
+        f"cases_export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
+    )
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return StreamingResponse(
         admin_export_service.stream_cases_csv(db, session.org_id),
@@ -63,7 +65,9 @@ def export_config(
     db.commit()
 
     payload = admin_export_service.build_org_config_zip(db, session.org_id)
-    filename = f"org_config_export_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.zip"
+    filename = (
+        f"org_config_export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.zip"
+    )
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return Response(content=payload, media_type="application/zip", headers=headers)
 
@@ -104,6 +108,8 @@ async def export_analytics(
     )
     db.commit()
 
-    filename = f"analytics_export_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.zip"
+    filename = (
+        f"analytics_export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.zip"
+    )
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return Response(content=payload, media_type="application/zip", headers=headers)

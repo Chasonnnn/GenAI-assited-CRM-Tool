@@ -10,12 +10,22 @@ from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import get_db
 from app.core.rate_limit import limiter
 from app.services import tracking_service
 
 
 logger = logging.getLogger(__name__)
+
+
+def _mask_token(token: str) -> str:
+    if not token:
+        return ""
+    if len(token) <= 8:
+        return f"{token[:4]}..."
+    return f"{token[:4]}...{token[-4:]}"
+
 
 router = APIRouter(prefix="/tracking", tags=["tracking"])
 
@@ -95,7 +105,11 @@ async def track_open(
             user_agent=user_agent,
         )
     except Exception as e:
-        logger.warning(f"Failed to record open for token {token}: {e}")
+        logger.warning(
+            "Failed to record open for token %s: %s",
+            _mask_token(token),
+            type(e).__name__,
+        )
 
     # Always return the tracking pixel
     return Response(
@@ -136,14 +150,19 @@ async def track_click(
             user_agent=user_agent,
         )
     except Exception as e:
-        logger.warning(f"Failed to record click for token {token}: {e}")
+        logger.warning(
+            "Failed to record click for token %s: %s",
+            _mask_token(token),
+            type(e).__name__,
+        )
         original_url = None
 
     # Redirect to original URL (or fallback if not found)
     if original_url:
         return RedirectResponse(url=original_url, status_code=302)
     else:
-        # Token not found - still try to redirect using the provided URL
-        from urllib.parse import unquote
-
-        return RedirectResponse(url=unquote(url), status_code=302)
+        # Token not found - redirect to a safe fallback
+        return RedirectResponse(
+            url=settings.FRONTEND_URL.rstrip("/") + "/",
+            status_code=302,
+        )

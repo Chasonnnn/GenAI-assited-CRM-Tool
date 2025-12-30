@@ -1,4 +1,5 @@
 import * as React from "react"
+import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
@@ -55,10 +56,9 @@ function Button({
   children,
   ...props
 }: ButtonProps) {
-  // Note: asChild is kept for backwards compatibility with existing code
-  // but for Base UI components, use render={} prop on the parent component instead
+  const Comp = asChild ? Slot : "button"
   return (
-    <button
+    <Comp
       data-slot="button"
       data-variant={variant}
       data-size={size}
@@ -66,7 +66,7 @@ function Button({
       {...props}
     >
       {children}
-    </button>
+    </Comp>
   )
 }
 

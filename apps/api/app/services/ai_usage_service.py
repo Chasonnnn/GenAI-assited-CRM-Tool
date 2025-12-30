@@ -4,7 +4,7 @@ Logs token usage and provides analytics for cost monitoring.
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -46,7 +46,7 @@ def get_org_usage_summary(
     days: int = 30,
 ) -> dict[str, Any]:
     """Get usage summary for an organization."""
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
 
     result = (
         db.query(
@@ -79,7 +79,7 @@ def get_user_usage_summary(
     days: int = 30,
 ) -> dict[str, Any]:
     """Get usage summary for a specific user."""
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
 
     result = (
         db.query(
@@ -108,7 +108,7 @@ def get_usage_by_model(
     days: int = 30,
 ) -> list[dict[str, Any]]:
     """Get usage breakdown by model."""
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
 
     results = (
         db.query(
@@ -142,7 +142,7 @@ def get_daily_usage(
     days: int = 30,
 ) -> list[dict[str, Any]]:
     """Get daily usage for the past N days."""
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
 
     results = (
         db.query(
@@ -178,7 +178,7 @@ def get_top_users(
     limit: int = 10,
 ) -> list[dict[str, Any]]:
     """Get top users by token usage."""
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
 
     results = (
         db.query(

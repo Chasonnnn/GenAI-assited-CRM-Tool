@@ -33,21 +33,6 @@ function ComboboxTrigger({
   )
 }
 
-function ComboboxClear({ className, ...props }: ComboboxPrimitive.Clear.Props) {
-  return (
-    <ComboboxPrimitive.Clear
-      data-slot="combobox-clear"
-      className={cn(
-        "size-6 p-0 rounded-4xl text-sm shadow-none flex items-center justify-center gap-2 hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50",
-        className
-      )}
-      {...props}
-    >
-      <XIcon className="pointer-events-none size-4" />
-    </ComboboxPrimitive.Clear>
-  )
-}
-
 function ComboboxInput({
   className,
   children,
@@ -257,7 +242,6 @@ function ComboboxChip({
 
 function ComboboxChipsInput({
   className,
-  children,
   ...props
 }: ComboboxPrimitive.Input.Props) {
   return (
