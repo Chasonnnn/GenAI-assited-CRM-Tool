@@ -11,7 +11,6 @@
  */
 
 import { useState } from "react"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -44,8 +43,8 @@ import {
     useApproveAppointment,
     useCancelAppointment,
 } from "@/lib/hooks/use-appointments"
-import type { AppointmentListItem, Appointment } from "@/lib/api/appointments"
-import { format, parseISO, isPast, isFuture } from "date-fns"
+import type { AppointmentListItem } from "@/lib/api/appointments"
+import { format, parseISO } from "date-fns"
 
 // Status badge colors
 const STATUS_STYLES = {
@@ -259,7 +258,7 @@ function AppointmentDetailDialog({
                         </div>
                     </div>
 
-                    {/* Meeting Mode */}
+                    {/* Appointment Format */}
                     <div className="flex items-center gap-3">
                         <ModeIcon className="size-5 text-muted-foreground" />
                         <p className="font-medium capitalize">{appointment.meeting_mode.replace("_", " ")}</p>

@@ -4,7 +4,7 @@ import json
 import os
 import secrets
 import uuid
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -73,9 +73,7 @@ def create_form(
         if max_file_size_bytes is not None
         else DEFAULT_MAX_FILE_SIZE_BYTES
     )
-    max_count = (
-        max_file_count if max_file_count is not None else DEFAULT_MAX_FILE_COUNT
-    )
+    max_count = max_file_count if max_file_count is not None else DEFAULT_MAX_FILE_COUNT
     form = Form(
         organization_id=org_id,
         name=name,
@@ -168,7 +166,9 @@ def upload_form_logo(
     return logo
 
 
-def get_form_logo(db: Session, org_id: uuid.UUID, logo_id: uuid.UUID) -> FormLogo | None:
+def get_form_logo(
+    db: Session, org_id: uuid.UUID, logo_id: uuid.UUID
+) -> FormLogo | None:
     return (
         db.query(FormLogo)
         .filter(FormLogo.organization_id == org_id, FormLogo.id == logo_id)
@@ -268,7 +268,7 @@ def create_submission_token(
         raise ValueError("Submission already exists for this case")
 
     token = _generate_token(db)
-    expires_at = datetime.utcnow() + timedelta(days=expires_in_days)
+    expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
 
     record = FormSubmissionToken(
         organization_id=org_id,
@@ -288,9 +288,7 @@ def create_submission_token(
 
 def get_valid_token(db: Session, token: str) -> FormSubmissionToken | None:
     record = (
-        db.query(FormSubmissionToken)
-        .filter(FormSubmissionToken.token == token)
-        .first()
+        db.query(FormSubmissionToken).filter(FormSubmissionToken.token == token).first()
     )
     if not record:
         return None
@@ -298,7 +296,10 @@ def get_valid_token(db: Session, token: str) -> FormSubmissionToken | None:
         return None
     if record.used_submissions >= record.max_submissions:
         return None
-    if record.expires_at < datetime.utcnow():
+    expires_at = record.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
         return None
     return record
 
@@ -320,7 +321,9 @@ def create_submission(
 
     existing = (
         db.query(FormSubmission)
-        .filter(FormSubmission.form_id == form.id, FormSubmission.case_id == token.case_id)
+        .filter(
+            FormSubmission.form_id == form.id, FormSubmission.case_id == token.case_id
+        )
         .first()
     )
     if existing:
@@ -346,7 +349,7 @@ def create_submission(
 
     token.used_submissions += 1
     if token.used_submissions >= token.max_submissions:
-        token.revoked_at = datetime.utcnow()
+        token.revoked_at = datetime.now(timezone.utc)
 
     audit_service.log_event(
         db=db,
@@ -496,7 +499,7 @@ def approve_submission(
             commit=False,
         )
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     submission.status = FormSubmissionStatus.APPROVED.value
     submission.reviewed_at = now
     submission.reviewed_by_user_id = reviewer_id
@@ -531,7 +534,7 @@ def reject_submission(
         raise ValueError("Submission is not pending review")
 
     submission.status = FormSubmissionStatus.REJECTED.value
-    submission.reviewed_at = datetime.utcnow()
+    submission.reviewed_at = datetime.now(timezone.utc)
     submission.reviewed_by_user_id = reviewer_id
     submission.review_notes = review_notes
 
@@ -556,9 +559,7 @@ def reject_submission(
 def _generate_token(db: Session) -> str:
     token = secrets.token_urlsafe(32)
     while (
-        db.query(FormSubmissionToken)
-        .filter(FormSubmissionToken.token == token)
-        .first()
+        db.query(FormSubmissionToken).filter(FormSubmissionToken.token == token).first()
         is not None
     ):
         token = secrets.token_urlsafe(32)

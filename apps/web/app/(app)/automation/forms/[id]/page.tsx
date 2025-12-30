@@ -184,6 +184,370 @@ function buildMappings(pages: FormPage[]): { field_key: string; case_field: stri
     )
 }
 
+const YES_NO_OPTIONS = ["Yes", "No"]
+const COMPLIANCE_NOTICE =
+    "By submitting this form, you consent to the collection and use of your information, including health-related details, for eligibility review and care coordination. Access is limited to authorized staff and retained per policy."
+const COMPLIANCE_NOTICE_ES =
+    "Al enviar este formulario, usted autoriza la recopilacion y uso de su informacion, incluidos datos de salud, para evaluar elegibilidad y coordinar la atencion. El acceso se limita al personal autorizado y se conserva segun la politica."
+
+const TRANSLATION_MAP: Record<string, string> = {
+    "Surrogacy Application": "Solicitud de gestacion subrogada",
+    "Applicant Intake": "Ingreso de solicitantes",
+    "Intended Parent Intake": "Ingreso de padres intencionados",
+    "Contact Info": "Informacion de contacto",
+    "Eligibility": "Elegibilidad",
+    "Background": "Antecedentes",
+    "Documents": "Documentos",
+    "Full Name": "Nombre completo",
+    "Email": "Correo electronico",
+    "Phone": "Telefono",
+    "State": "Estado",
+    "Address": "Direccion",
+    "Date of Birth": "Fecha de nacimiento",
+    "US Citizen/PR": "Ciudadania EEUU o residencia",
+    "Has Child": "Tiene hijo",
+    "Non-Smoker": "No fumador",
+    "Surrogate Experience": "Experiencia como gestante",
+    "Number of Deliveries": "Numero de partos",
+    "Number of C-Sections": "Numero de cesareas",
+    "Height (ft)": "Altura (pies)",
+    "Weight (lb)": "Peso (libras)",
+    "Supporting Documents": "Documentos de respaldo",
+    "Consent to Privacy Notice": "Consentimiento de aviso de privacidad",
+}
+
+const READING_LEVEL_HINTS = [
+    "Keep each question under 12 words.",
+    "Use simple yes/no options for eligibility checks.",
+    "Explain acronyms like C-section the first time.",
+]
+
+type FormDraft = {
+    formName: string
+    description: string
+    publicTitle: string
+    privacyNotice: string
+    pages: FormPage[]
+    requiredSections: string[]
+    optionalSections: string[]
+    suggestedFieldTypes: string[]
+    conditionalLogic: string[]
+    readingLevelHints: string[]
+    translationDraft: string
+}
+
+const buildFieldId = () => {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+        return crypto.randomUUID()
+    }
+    return `field-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+const buildDraftField = ({
+    label,
+    type,
+    required = false,
+    helperText = "",
+    caseFieldMapping = "",
+    options,
+}: {
+    label: string
+    type: string
+    required?: boolean
+    helperText?: string
+    caseFieldMapping?: string
+    options?: string[]
+}): FormField => ({
+    id: buildFieldId(),
+    type,
+    label,
+    helperText,
+    required,
+    caseFieldMapping,
+    options,
+})
+
+const translateLabel = (label: string) => TRANSLATION_MAP[label] || label
+
+const buildTranslationDraft = (publicTitle: string, pages: FormPage[]) => {
+    const sectionLines = pages.map((page) => `${page.name} -> ${translateLabel(page.name)}`)
+    const fieldLabels = pages.flatMap((page) => page.fields.map((field) => field.label))
+    const uniqueFields = Array.from(new Set(fieldLabels))
+    const fieldLines = uniqueFields.slice(0, 12).map((label) => `${label} -> ${translateLabel(label)}`)
+    const overflow = uniqueFields.length > 12 ? `; +${uniqueFields.length - 12} more` : ""
+
+    return [
+        `Title: ${translateLabel(publicTitle)}`,
+        `Sections: ${sectionLines.join("; ")}`,
+        `Fields: ${fieldLines.join("; ")}${overflow}`,
+        `Privacy notice (ES): ${COMPLIANCE_NOTICE_ES}`,
+    ].join("\n")
+}
+
+const generateFormDraft = (prompt: string): FormDraft => {
+    const trimmed = prompt.trim()
+    const lower = trimmed.toLowerCase()
+
+    const isSurrogacy = lower.includes("surrogate") || lower.includes("surrogacy")
+    const isIntendedParent = /\bintended parent\b/.test(lower) || /\bip\b/.test(lower)
+    const needsDocuments =
+        lower.includes("document") ||
+        lower.includes("upload") ||
+        lower.includes("file") ||
+        lower.includes("insurance") ||
+        lower.includes("id")
+    const needsBackground =
+        lower.includes("history") ||
+        lower.includes("experience") ||
+        lower.includes("pregnan") ||
+        lower.includes("delivery") ||
+        lower.includes("c-section")
+    const needsMedical =
+        lower.includes("medical") ||
+        lower.includes("health") ||
+        lower.includes("clinic") ||
+        lower.includes("doctor") ||
+        lower.includes("hipaa") ||
+        lower.includes("phi")
+    const includeAddress =
+        lower.includes("address") ||
+        lower.includes("street") ||
+        lower.includes("city") ||
+        lower.includes("zip") ||
+        lower.includes("location")
+
+    const publicTitle = isSurrogacy
+        ? "Surrogacy Application"
+        : isIntendedParent
+            ? "Intended Parent Intake"
+            : "Applicant Intake"
+    const formName = `${publicTitle} Form`
+    const description =
+        trimmed || "Collect applicant details to support intake and eligibility review."
+
+    const contactFields: FormField[] = [
+        buildDraftField({
+            label: "Full Name",
+            type: "text",
+            required: true,
+            caseFieldMapping: "full_name",
+            helperText: "Use your legal name.",
+        }),
+        buildDraftField({
+            label: "Email",
+            type: "email",
+            required: true,
+            caseFieldMapping: "email",
+            helperText: "We will send updates here.",
+        }),
+        buildDraftField({
+            label: "Phone",
+            type: "phone",
+            required: true,
+            caseFieldMapping: "phone",
+            helperText: "Best number for calls or texts.",
+        }),
+        buildDraftField({
+            label: "State",
+            type: "text",
+            required: true,
+            caseFieldMapping: "state",
+            helperText: "Use two-letter state code.",
+        }),
+    ]
+
+    if (includeAddress) {
+        contactFields.push(
+            buildDraftField({
+                label: "Address",
+                type: "address",
+                required: false,
+                helperText: "Street, city, and zip.",
+            }),
+        )
+    }
+
+    const eligibilityFields: FormField[] = [
+        buildDraftField({
+            label: "Date of Birth",
+            type: "date",
+            required: true,
+            caseFieldMapping: "date_of_birth",
+            helperText: "Used to confirm eligibility.",
+        }),
+        buildDraftField({
+            label: "US Citizen/PR",
+            type: "radio",
+            required: true,
+            caseFieldMapping: "is_citizen_or_pr",
+            helperText: "Select yes or no.",
+            options: YES_NO_OPTIONS,
+        }),
+        buildDraftField({
+            label: "Has Child",
+            type: "radio",
+            required: true,
+            caseFieldMapping: "has_child",
+            helperText: "Select yes or no.",
+            options: YES_NO_OPTIONS,
+        }),
+        buildDraftField({
+            label: "Non-Smoker",
+            type: "radio",
+            required: true,
+            caseFieldMapping: "is_non_smoker",
+            helperText: "Select yes or no.",
+            options: YES_NO_OPTIONS,
+        }),
+        buildDraftField({
+            label: "Consent to Privacy Notice",
+            type: "checkbox",
+            required: true,
+            helperText: "Required to submit this form.",
+            options: ["I agree to the privacy notice"],
+        }),
+    ]
+
+    const backgroundFields: FormField[] = []
+
+    if (needsBackground || needsMedical) {
+        backgroundFields.push(
+            buildDraftField({
+                label: "Surrogate Experience",
+                type: "radio",
+                required: false,
+                caseFieldMapping: "has_surrogate_experience",
+                helperText: "Select yes or no.",
+                options: YES_NO_OPTIONS,
+            }),
+        )
+    }
+
+    if (needsMedical || lower.includes("height") || lower.includes("weight")) {
+        backgroundFields.push(
+            buildDraftField({
+                label: "Height (ft)",
+                type: "number",
+                required: false,
+                caseFieldMapping: "height_ft",
+                helperText: "Numbers only.",
+            }),
+            buildDraftField({
+                label: "Weight (lb)",
+                type: "number",
+                required: false,
+                caseFieldMapping: "weight_lb",
+                helperText: "Numbers only.",
+            }),
+        )
+    }
+
+    if (needsBackground || lower.includes("delivery") || lower.includes("c-section")) {
+        backgroundFields.push(
+            buildDraftField({
+                label: "Number of Deliveries",
+                type: "number",
+                required: false,
+                caseFieldMapping: "num_deliveries",
+                helperText: "Enter 0 if none.",
+            }),
+            buildDraftField({
+                label: "Number of C-Sections",
+                type: "number",
+                required: false,
+                caseFieldMapping: "num_csections",
+                helperText: "Enter 0 if none.",
+            }),
+        )
+    }
+
+    if (needsMedical || lower.includes("race")) {
+        backgroundFields.push(
+            buildDraftField({
+                label: "Race",
+                type: "text",
+                required: false,
+                caseFieldMapping: "race",
+                helperText: "Optional.",
+            }),
+        )
+    }
+
+    const pages: FormPage[] = [
+        { id: 1, name: "Contact Info", fields: contactFields },
+        { id: 2, name: "Eligibility", fields: eligibilityFields },
+    ]
+
+    if (backgroundFields.length > 0) {
+        pages.push({ id: pages.length + 1, name: "Background", fields: backgroundFields })
+    }
+
+    if (needsDocuments) {
+        pages.push({
+            id: pages.length + 1,
+            name: "Documents",
+            fields: [
+                buildDraftField({
+                    label: "Supporting Documents",
+                    type: "file",
+                    required: false,
+                    helperText: "Upload files if you have them now.",
+                }),
+            ],
+        })
+    }
+
+    const requiredSections = ["Contact Info", "Eligibility"]
+    const optionalSections = pages
+        .map((page) => page.name)
+        .filter((name) => !requiredSections.includes(name))
+
+    const typeLabels = new Map(
+        [...fieldTypes.basic, ...fieldTypes.advanced].map((type) => [type.id, type.label]),
+    )
+    const suggestedFieldTypes = Array.from(
+        new Set(pages.flatMap((page) => page.fields.map((field) => typeLabels.get(field.type) || field.type))),
+    )
+
+    const conditionalLogic: string[] = []
+    if (backgroundFields.some((field) => field.label === "Surrogate Experience")) {
+        conditionalLogic.push(
+            "If Surrogate Experience is No, skip delivery history questions.",
+        )
+    }
+    if (eligibilityFields.some((field) => field.label === "US Citizen/PR")) {
+        conditionalLogic.push(
+            "If US Citizen/PR is No, request visa or work authorization details.",
+        )
+    }
+    if (eligibilityFields.some((field) => field.label === "Non-Smoker")) {
+        conditionalLogic.push(
+            "If Non-Smoker is No, ask about tobacco or nicotine use.",
+        )
+    }
+    if (needsDocuments) {
+        conditionalLogic.push(
+            "Show document uploads only after eligibility is confirmed.",
+        )
+    }
+
+    const translationDraft = buildTranslationDraft(publicTitle, pages)
+
+    return {
+        formName,
+        description,
+        publicTitle,
+        privacyNotice: COMPLIANCE_NOTICE,
+        pages,
+        requiredSections,
+        optionalSections,
+        suggestedFieldTypes,
+        conditionalLogic,
+        readingLevelHints: READING_LEVEL_HINTS,
+        translationDraft,
+    }
+}
+
 // Page component
 export default function FormBuilderPage() {
     const params = useParams<{ id: string }>()
@@ -214,6 +578,9 @@ export default function FormBuilderPage() {
     const [isPublished, setIsPublished] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [isPublishing, setIsPublishing] = useState(false)
+    const [draftPrompt, setDraftPrompt] = useState("")
+    const [formDraft, setFormDraft] = useState<FormDraft | null>(null)
+    const [isDrafting, setIsDrafting] = useState(false)
 
     // Page/field state
     const [pages, setPages] = useState<FormPage[]>([{ id: 1, name: "Page 1", fields: [] }])
@@ -230,6 +597,8 @@ export default function FormBuilderPage() {
 
     useEffect(() => {
         setHasHydrated(false)
+        setFormDraft(null)
+        setDraftPrompt("")
     }, [formId])
 
     useEffect(() => {
@@ -376,7 +745,7 @@ export default function FormBuilderPage() {
         e.preventDefault()
         e.stopPropagation()
         const newField = buildNewField()
-        let nextSelectedField = newField?.id || draggedFieldId
+        const nextSelectedField = newField?.id || draggedFieldId
 
         setPages((prev) =>
             prev.map((page) => {
@@ -537,6 +906,36 @@ export default function FormBuilderPage() {
         } catch {
             toast.error("Failed to upload logo")
         }
+    }
+
+    const handleGenerateDraft = () => {
+        const prompt = draftPrompt.trim()
+        if (prompt.length < 10) {
+            toast.error("Provide a short prompt (at least 10 characters)")
+            return
+        }
+        setIsDrafting(true)
+        const draft = generateFormDraft(prompt)
+        setFormDraft(draft)
+        setIsDrafting(false)
+        toast.success("Draft generated. Review and apply when ready.")
+    }
+
+    const handleApplyDraft = () => {
+        if (!formDraft) return
+        const hasExistingFields = pages.some((page) => page.fields.length > 0)
+        if (hasExistingFields) {
+            const confirmed = window.confirm("Replace current fields with this draft?")
+            if (!confirmed) return
+        }
+        setFormName(formDraft.formName)
+        setFormDescription(formDraft.description)
+        setPublicTitle(formDraft.publicTitle)
+        setPrivacyNotice(formDraft.privacyNotice)
+        setPages(formDraft.pages)
+        setActivePage(formDraft.pages[0]?.id || 1)
+        setSelectedField(null)
+        toast.success("Draft applied to the form.")
     }
 
     // Publish handler
@@ -940,6 +1339,110 @@ export default function FormBuilderPage() {
                         </div>
                     ) : (
                         <div className="space-y-6">
+                            <div className="rounded-lg border border-stone-200 bg-stone-50 p-4 dark:border-stone-800 dark:bg-stone-900">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-sm font-semibold">Generate from Prompt</h3>
+                                    <Badge variant="outline">Draft</Badge>
+                                </div>
+                                <p className="mt-2 text-xs text-stone-500 dark:text-stone-400">
+                                    Describe the form you want and apply the draft to create sections, fields, and compliance text.
+                                </p>
+                                <div className="mt-3 space-y-2">
+                                    <Textarea
+                                        value={draftPrompt}
+                                        onChange={(e) => setDraftPrompt(e.target.value)}
+                                        placeholder="Example: Surrogacy intake form with eligibility questions, medical background, and document upload."
+                                        rows={4}
+                                    />
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            size="sm"
+                                            onClick={handleGenerateDraft}
+                                            disabled={isDrafting}
+                                        >
+                                            {isDrafting && <Loader2Icon className="mr-2 size-4 animate-spin" />}
+                                            Generate Draft
+                                        </Button>
+                                        {formDraft && (
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={handleApplyDraft}
+                                            >
+                                                Apply Draft
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {formDraft && (
+                                    <div className="mt-4 space-y-4 text-xs text-stone-600 dark:text-stone-400">
+                                        <div>
+                                            <p className="text-[11px] font-semibold uppercase text-stone-500 dark:text-stone-400">
+                                                Sections
+                                            </p>
+                                            <p>Required: {formDraft.requiredSections.join(", ")}</p>
+                                            {formDraft.optionalSections.length > 0 && (
+                                                <p>Optional: {formDraft.optionalSections.join(", ")}</p>
+                                            )}
+                                        </div>
+
+                                        <div>
+                                            <p className="text-[11px] font-semibold uppercase text-stone-500 dark:text-stone-400">
+                                                Field Types
+                                            </p>
+                                            <div className="mt-2 flex flex-wrap gap-2">
+                                                {formDraft.suggestedFieldTypes.map((type) => (
+                                                    <Badge key={type} variant="secondary" className="text-[11px]">
+                                                        {type}
+                                                    </Badge>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <p className="text-[11px] font-semibold uppercase text-stone-500 dark:text-stone-400">
+                                                Conditional Logic
+                                            </p>
+                                            <div className="mt-2 space-y-1">
+                                                {formDraft.conditionalLogic.length > 0 ? (
+                                                    formDraft.conditionalLogic.map((item) => (
+                                                        <p key={item}>• {item}</p>
+                                                    ))
+                                                ) : (
+                                                    <p>No conditional logic suggestions yet.</p>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <p className="text-[11px] font-semibold uppercase text-stone-500 dark:text-stone-400">
+                                                Reading-Level Hints
+                                            </p>
+                                            <div className="mt-2 space-y-1">
+                                                {formDraft.readingLevelHints.map((hint) => (
+                                                    <p key={hint}>• {hint}</p>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <p className="text-[11px] font-semibold uppercase text-stone-500 dark:text-stone-400">
+                                                Compliance Text
+                                            </p>
+                                            <Textarea value={formDraft.privacyNotice} readOnly rows={3} />
+                                        </div>
+
+                                        <div>
+                                            <p className="text-[11px] font-semibold uppercase text-stone-500 dark:text-stone-400">
+                                                Auto-Translation Draft
+                                            </p>
+                                            <Textarea value={formDraft.translationDraft} readOnly rows={4} />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
                             <div>
                                 <h3 className="mb-4 text-sm font-semibold">Form Settings</h3>
 

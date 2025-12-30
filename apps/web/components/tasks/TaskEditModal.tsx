@@ -47,7 +47,7 @@ interface TaskEditModalProps {
 const TASK_TYPES = [
     { value: "call", label: "Call" },
     { value: "email", label: "Email" },
-    { value: "meeting", label: "Meeting" },
+    { value: "meeting", label: "Appointment" },
     { value: "follow_up", label: "Follow Up" },
     { value: "other", label: "Other" },
 ]

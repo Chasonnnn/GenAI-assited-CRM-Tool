@@ -8,7 +8,7 @@ import json
 import logging
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import nh3
@@ -225,7 +225,7 @@ def _parse_actions(content: str) -> list[dict[str, Any]]:
             if isinstance(action, dict) and "type" in action:
                 actions.append(action)
         except json.JSONDecodeError:
-            logger.warning(f"Failed to parse action JSON: {match}")
+            logger.warning("Failed to parse action JSON from AI response")
 
     return actions
 
@@ -410,7 +410,7 @@ def get_user_integrations(db: Session, user_id: uuid.UUID) -> list[str]:
     return [i[0] for i in integrations]
 
 
-def chat(
+async def chat_async(
     db: Session,
     organization_id: uuid.UUID,
     user_id: uuid.UUID,
@@ -522,9 +522,9 @@ def chat(
     # Add current user message (anonymized if enabled)
     ai_messages.append(ChatMessage(role="user", content=anonymized_message))
 
-    # Call AI provider (async, need to run in event loop)
+    # Call AI provider
     try:
-        response: ChatResponse = asyncio.run(provider.chat(ai_messages))
+        response: ChatResponse = await provider.chat(ai_messages)
     except Exception as e:
         logger.exception(f"AI provider error: {e}")
         return {
@@ -602,7 +602,7 @@ def chat(
     db.add(usage_log)
 
     # Update conversation timestamp
-    conversation.updated_at = datetime.utcnow()
+    conversation.updated_at = datetime.now(timezone.utc)
 
     db.commit()
 
@@ -615,7 +615,32 @@ def chat(
             "total": response.total_tokens,
             "estimated_cost_usd": str(response.estimated_cost_usd),
         },
+        "conversation_id": str(conversation.id),
+        "assistant_message_id": str(assistant_message.id),
     }
+
+
+def chat(
+    db: Session,
+    organization_id: uuid.UUID,
+    user_id: uuid.UUID,
+    entity_type: str,
+    entity_id: uuid.UUID,
+    message: str,
+    user_integrations: list[str] | None = None,
+) -> dict[str, Any]:
+    """Synchronous wrapper for chat_async (used by API routes)."""
+    return asyncio.run(
+        chat_async(
+            db=db,
+            organization_id=organization_id,
+            user_id=user_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            message=message,
+            user_integrations=user_integrations,
+        )
+    )
 
 
 def get_user_conversations(

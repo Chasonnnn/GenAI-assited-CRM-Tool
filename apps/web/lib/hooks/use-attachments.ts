@@ -46,7 +46,7 @@ export function useDeleteAttachment() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: ({ attachmentId, caseId }: { attachmentId: string; caseId: string }) =>
+        mutationFn: ({ attachmentId, caseId: _caseId }: { attachmentId: string; caseId: string }) =>
             attachmentsApi.delete(attachmentId),
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: ["attachments", variables.caseId] })

@@ -202,6 +202,8 @@ def test_auth(test_user, test_org):
         org_id=test_org.id,
         role=Role.DEVELOPER.value,
         token_version=test_user.token_version,
+        mfa_verified=True,
+        mfa_required=True,
     )
     return TestAuth(
         user=test_user,

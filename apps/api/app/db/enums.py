@@ -239,8 +239,10 @@ class JobType(str, Enum):
     WORKFLOW_EMAIL = "workflow_email"
     CSV_IMPORT = "csv_import"  # Background CSV imports for large files
     EXPORT_GENERATION = "export_generation"
+    ADMIN_EXPORT = "admin_export"
     DATA_PURGE = "data_purge"
     CAMPAIGN_SEND = "campaign_send"  # Bulk email campaign execution
+    AI_CHAT = "ai_chat"
 
 
 class JobStatus(str, Enum):
@@ -561,6 +563,7 @@ class AuditEventType(str, Enum):
     DATA_EXPORT_CONFIG = "data_export_config"
     DATA_VIEW_CASE = "data_view_case"
     DATA_VIEW_NOTE = "data_view_note"
+    PHI_VIEWED = "phi_viewed"
     DATA_IMPORT_STARTED = "data_import_started"
     DATA_IMPORT_COMPLETED = "data_import_completed"
 

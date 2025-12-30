@@ -4,7 +4,7 @@ Tests for AI workflow generation and action execution.
 
 import uuid
 
-
+from app.core.encryption import hash_email
 from app.db.models import Case, EntityNote, Task, EmailTemplate, PipelineStage
 from app.services.ai_workflow_service import GeneratedWorkflow, validate_workflow
 from app.services.ai_action_executor import (
@@ -14,6 +14,7 @@ from app.services.ai_action_executor import (
     get_executor,
     ACTION_PERMISSIONS,
 )
+from app.utils.normalization import normalize_email
 
 
 # =============================================================================
@@ -205,13 +206,15 @@ class TestAddNoteExecutor:
 
     def test_execute_creates_note(self, db, test_user, test_org, default_stage):
         """Should create a note on the case."""
+        normalized_email = normalize_email("test@example.com")
         case = Case(
             id=uuid.uuid4(),
             organization_id=test_org.id,
             stage_id=default_stage.id,
             status_label=default_stage.label,
             full_name="Test Case",
-            email="test@example.com",
+            email=normalized_email,
+            email_hash=hash_email(normalized_email),
             source="manual",
             case_number=f"C-{uuid.uuid4().hex[:6]}",
             owner_type="user",
@@ -257,13 +260,15 @@ class TestCreateTaskExecutor:
 
     def test_execute_creates_task(self, db, test_user, test_org, default_stage):
         """Should create a task for the case."""
+        normalized_email = normalize_email("test@example.com")
         case = Case(
             id=uuid.uuid4(),
             organization_id=test_org.id,
             stage_id=default_stage.id,
             status_label=default_stage.label,
             full_name="Test Case",
-            email="test@example.com",
+            email=normalized_email,
+            email_hash=hash_email(normalized_email),
             source="manual",
             case_number=f"C-{uuid.uuid4().hex[:6]}",
             owner_type="user",
@@ -324,13 +329,15 @@ class TestUpdateStatusExecutor:
         db.add(new_stage)
         db.flush()
 
+        normalized_email = normalize_email("test@example.com")
         case = Case(
             id=uuid.uuid4(),
             organization_id=test_org.id,
             stage_id=default_stage.id,
             status_label=default_stage.label,
             full_name="Test Case",
-            email="test@example.com",
+            email=normalized_email,
+            email_hash=hash_email(normalized_email),
             source="manual",
             case_number=f"C-{uuid.uuid4().hex[:6]}",
             owner_type="user",

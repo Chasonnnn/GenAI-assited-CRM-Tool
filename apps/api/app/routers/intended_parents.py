@@ -9,12 +9,11 @@ from sqlalchemy.orm import Session
 from app.core.deps import (
     get_db,
     get_current_session,
-    require_roles,
     require_csrf_header,
     require_permission,
 )
 from app.core.policies import POLICIES
-from app.db.enums import AuditEventType, Role, IntendedParentStatus, EntityType
+from app.db.enums import AuditEventType, IntendedParentStatus, EntityType, Role
 from app.schemas.intended_parent import (
     IntendedParentCreate,
     IntendedParentUpdate,
@@ -26,6 +25,7 @@ from app.schemas.intended_parent import (
 )
 from app.schemas.entity_note import EntityNoteCreate, EntityNoteRead, EntityNoteListItem
 from app.services import ip_service, note_service, user_service
+from app.utils.normalization import normalize_email
 
 router = APIRouter(
     tags=["Intended Parents"],
@@ -40,11 +40,12 @@ router = APIRouter(
 
 @router.get("", response_model=dict)
 def list_intended_parents(
+    request: Request,
     status: list[str] = Query(None, description="Filter by status (multi-select)"),
     state: str | None = None,
     budget_min: Decimal | None = None,
     budget_max: Decimal | None = None,
-    q: str | None = Query(None, description="Search name/email/phone"),
+    q: str | None = Query(None, description="Search name or exact email/phone"),
     owner_id: UUID | None = None,
     include_archived: bool = False,
     created_after: str | None = Query(None, description="Created after (ISO format)"),
@@ -77,6 +78,39 @@ def list_intended_parents(
         sort_order=sort_order,
     )
     pages = (total + per_page - 1) // per_page  # ceiling division
+    from app.services import audit_service
+
+    q_type = None
+    if q:
+        if "@" in q:
+            q_type = "email"
+        else:
+            digit_count = sum(1 for ch in q if ch.isdigit())
+            q_type = "phone" if digit_count >= 7 else "text"
+
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="intended_parent_list",
+        target_id=None,
+        request=request,
+        details={
+            "count": len(items),
+            "page": page,
+            "per_page": per_page,
+            "include_archived": include_archived,
+            "status": status,
+            "state": state,
+            "owner_id": str(owner_id) if owner_id else None,
+            "budget_min": str(budget_min) if budget_min is not None else None,
+            "budget_max": str(budget_max) if budget_max is not None else None,
+            "created_after": created_after,
+            "created_before": created_before,
+            "q_type": q_type,
+        },
+    )
+    db.commit()
     return {
         "items": [IntendedParentListItem.model_validate(ip) for ip in items],
         "total": total,
@@ -148,6 +182,17 @@ def get_intended_parent(
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
+    from app.services import audit_service
+
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="intended_parent",
+        target_id=ip.id,
+        details={"view": "intended_parent_detail"},
+    )
+    db.commit()
     return ip
 
 
@@ -170,13 +215,15 @@ def update_intended_parent(
         raise HTTPException(status_code=404, detail="Intended parent not found")
 
     # Check for duplicate email if changing
-    if data.email and data.email.lower().strip() != ip.email.lower():
-        existing = ip_service.get_ip_by_email(db, data.email, session.org_id)
-        if existing:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Intended parent with email '{data.email}' already exists",
-            )
+    if data.email:
+        normalized_email = normalize_email(data.email)
+        if normalized_email != ip.email:
+            existing = ip_service.get_ip_by_email(db, data.email, session.org_id)
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Intended parent with email '{data.email}' already exists",
+                )
 
     updated = ip_service.update_intended_parent(
         db,
@@ -264,7 +311,7 @@ def archive_intended_parent(
 def restore_intended_parent(
     ip_id: UUID,
     db: Session = Depends(get_db),
-    session=Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session=Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
 ):
     """Restore an archived intended parent (manager only)."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -292,7 +339,7 @@ def restore_intended_parent(
 def delete_intended_parent(
     ip_id: UUID,
     db: Session = Depends(get_db),
-    session=Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session=Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
 ):
     """Hard delete an archived intended parent (manager only)."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -377,6 +424,15 @@ def list_notes(
         target_id=ip_id,
         details={"notes_count": len(notes)},
         request=request,
+    )
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="intended_parent",
+        target_id=ip_id,
+        request=request,
+        details={"view": "notes", "notes_count": len(notes)},
     )
     db.commit()
 

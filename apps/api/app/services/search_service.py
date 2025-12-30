@@ -14,6 +14,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.core.encryption import hash_email, hash_phone
 from app.db.enums import OwnerType, Role
 
 
@@ -66,6 +67,24 @@ def _build_tsquery_fallback(
 ) -> str:
     """Fallback to plainto_tsquery for simple queries."""
     return f"plainto_tsquery('{dictionary}', :{param_name})"
+
+
+def _extract_hashes(query: str) -> tuple[str | None, str | None]:
+    """Extract deterministic hashes for email/phone queries."""
+    email_hash = None
+    phone_hash = None
+    if "@" in query:
+        try:
+            email_hash = hash_email(query)
+        except Exception:
+            email_hash = None
+    digit_count = sum(1 for ch in query if ch.isdigit())
+    if digit_count >= 7:
+        try:
+            phone_hash = hash_phone(query) or None
+        except Exception:
+            phone_hash = None
+    return email_hash, phone_hash
 
 
 # =============================================================================
@@ -244,8 +263,53 @@ def _search_cases(
     case_access_clause: str,
     case_access_params: dict,
 ) -> list[SearchResult]:
-    """Search cases by full_name, case_number, email, phone."""
-    results = []
+    """Search cases by full_name, case_number, and exact email/phone matches."""
+    results: list[SearchResult] = []
+    seen_ids: set[str] = set()
+
+    email_hash, phone_hash = _extract_hashes(query)
+    if email_hash or phone_hash:
+        hash_clauses = []
+        params = {
+            "org_id": str(org_id),
+            "limit": limit,
+            "offset": offset,
+            **case_access_params,
+        }
+        if email_hash:
+            hash_clauses.append("c.email_hash = :email_hash")
+            params["email_hash"] = email_hash
+        if phone_hash:
+            hash_clauses.append("c.phone_hash = :phone_hash")
+            params["phone_hash"] = phone_hash
+
+        sql = text(f"""
+            SELECT
+                c.id,
+                c.full_name,
+                c.case_number,
+                1.0 as rank
+            FROM cases c
+            LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
+            WHERE c.organization_id = :org_id
+              AND ({" OR ".join(hash_clauses)})
+              AND {case_access_clause}
+            ORDER BY c.created_at DESC
+            LIMIT :limit OFFSET :offset
+        """)
+        rows = db.execute(sql, params).fetchall()
+        for row in rows:
+            result = SearchResult(
+                entity_type="case",
+                entity_id=str(row.id),
+                title=row.full_name or f"Case {row.case_number}",
+                snippet=row.case_number or "",
+                rank=float(row.rank),
+                case_id=str(row.id),
+                case_name=row.full_name,
+            )
+            results.append(result)
+            seen_ids.add(str(row.id))
 
     try:
         tsquery = _build_tsquery(dictionary="simple")
@@ -255,7 +319,6 @@ def _search_cases(
                 c.id,
                 c.full_name,
                 c.case_number,
-                c.email,
                 ts_rank(c.search_vector, {tsquery}) as rank
             FROM cases c
             LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
@@ -278,12 +341,14 @@ def _search_cases(
         ).fetchall()
 
         for row in rows:
+            if str(row.id) in seen_ids:
+                continue
             results.append(
                 SearchResult(
                     entity_type="case",
                     entity_id=str(row.id),
                     title=row.full_name or f"Case {row.case_number}",
-                    snippet=row.email or "",  # Minimal: just email as context
+                    snippet=row.case_number or "",
                     rank=float(row.rank),
                     case_id=str(row.id),
                     case_name=row.full_name,
@@ -320,6 +385,8 @@ def _search_cases(
                 },
             ).fetchall()
             for row in rows:
+                if str(row.id) in seen_ids:
+                    continue
                 results.append(
                     SearchResult(
                         entity_type="case",
@@ -580,9 +647,7 @@ def _search_attachments(
             tsquery = _build_tsquery_fallback(dictionary="simple")
             _run_queries(tsquery)
         except Exception as fallback_error:
-            logger.warning(
-                f"Attachment search fallback failed: {fallback_error}"
-            )
+            logger.warning(f"Attachment search fallback failed: {fallback_error}")
 
     return results
 
@@ -594,8 +659,46 @@ def _search_intended_parents(
     limit: int,
     offset: int,
 ) -> list[SearchResult]:
-    """Search intended parents by full_name, email, phone."""
-    results = []
+    """Search intended parents by full_name and exact email/phone matches."""
+    results: list[SearchResult] = []
+    seen_ids: set[str] = set()
+
+    email_hash, phone_hash = _extract_hashes(query)
+    if email_hash or phone_hash:
+        hash_clauses = []
+        params = {"org_id": str(org_id), "limit": limit, "offset": offset}
+        if email_hash:
+            hash_clauses.append("email_hash = :email_hash")
+            params["email_hash"] = email_hash
+        if phone_hash:
+            hash_clauses.append("phone_hash = :phone_hash")
+            params["phone_hash"] = phone_hash
+
+        sql = text(f"""
+            SELECT
+                id,
+                full_name,
+                1.0 as rank
+            FROM intended_parents
+            WHERE organization_id = :org_id
+              AND ({" OR ".join(hash_clauses)})
+            ORDER BY created_at DESC
+            LIMIT :limit OFFSET :offset
+        """)
+        rows = db.execute(sql, params).fetchall()
+        for row in rows:
+            results.append(
+                SearchResult(
+                    entity_type="intended_parent",
+                    entity_id=str(row.id),
+                    title=row.full_name or "Intended Parent",
+                    snippet="",
+                    rank=float(row.rank),
+                    case_id=None,
+                    case_name=None,
+                )
+            )
+            seen_ids.add(str(row.id))
 
     try:
         tsquery = _build_tsquery(dictionary="simple")
@@ -604,7 +707,6 @@ def _search_intended_parents(
             SELECT
                 id,
                 full_name,
-                email,
                 ts_rank(search_vector, {tsquery}) as rank
             FROM intended_parents
             WHERE organization_id = :org_id
@@ -624,12 +726,14 @@ def _search_intended_parents(
         ).fetchall()
 
         for row in rows:
+            if str(row.id) in seen_ids:
+                continue
             results.append(
                 SearchResult(
                     entity_type="intended_parent",
                     entity_id=str(row.id),
-                    title=row.full_name or row.email or "Intended Parent",
-                    snippet=row.email or "",
+                    title=row.full_name or "Intended Parent",
+                    snippet="",
                     rank=float(row.rank),
                     case_id=None,
                     case_name=None,
@@ -643,7 +747,6 @@ def _search_intended_parents(
                 SELECT
                     id,
                     full_name,
-                    email,
                     ts_rank(search_vector, {tsquery}) as rank
                 FROM intended_parents
                 WHERE organization_id = :org_id
@@ -661,20 +764,20 @@ def _search_intended_parents(
                 },
             ).fetchall()
             for row in rows:
+                if str(row.id) in seen_ids:
+                    continue
                 results.append(
                     SearchResult(
                         entity_type="intended_parent",
                         entity_id=str(row.id),
-                        title=row.full_name or row.email or "Intended Parent",
-                        snippet=row.email or "",
+                        title=row.full_name or "Intended Parent",
+                        snippet="",
                         rank=float(row.rank),
                         case_id=None,
                         case_name=None,
                     )
                 )
         except Exception as fallback_error:
-            logger.warning(
-                f"Intended parent search fallback failed: {fallback_error}"
-            )
+            logger.warning(f"Intended parent search fallback failed: {fallback_error}")
 
     return results

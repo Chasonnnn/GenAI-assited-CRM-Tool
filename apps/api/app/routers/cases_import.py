@@ -6,7 +6,7 @@ Provides REST interface for bulk case imports via CSV upload.
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
@@ -94,6 +94,7 @@ class ImportDetailResponse(BaseModel):
     dependencies=[Depends(require_csrf_header)],
 )
 async def preview_csv_import(
+    request: Request,
     file: UploadFile = File(..., description="CSV file to preview"),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
@@ -124,6 +125,24 @@ async def preview_csv_import(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to parse CSV: {str(e)}",
         )
+
+    from app.services import audit_service
+
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="case_import_preview",
+        target_id=None,
+        request=request,
+        details={
+            "total_rows": preview.total_rows,
+            "validation_errors": preview.validation_errors,
+            "duplicate_emails_db": preview.duplicate_emails_db,
+            "duplicate_emails_csv": preview.duplicate_emails_csv,
+        },
+    )
+    db.commit()
 
     return ImportPreviewResponse(
         total_rows=preview.total_rows,
@@ -234,6 +253,7 @@ def list_imports(
 @router.get("/{import_id}", response_model=ImportDetailResponse)
 def get_import_details(
     import_id: UUID,
+    request: Request,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
@@ -248,6 +268,25 @@ def get_import_details(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Import not found"
         )
+
+    from app.services import audit_service
+
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="case_import_detail",
+        target_id=import_record.id,
+        request=request,
+        details={
+            "status": import_record.status,
+            "total_rows": import_record.total_rows,
+            "imported_count": import_record.imported_count,
+            "skipped_count": import_record.skipped_count,
+            "error_count": import_record.error_count,
+        },
+    )
+    db.commit()
 
     return ImportDetailResponse(
         id=import_record.id,

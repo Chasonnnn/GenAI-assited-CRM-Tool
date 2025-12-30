@@ -3,7 +3,7 @@
 from datetime import date as date_type, datetime, timezone, timedelta
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -300,6 +300,7 @@ def create_match(
 
 @router.get("/", response_model=MatchListResponse)
 def list_matches(
+    request: Request,
     status_filter: str | None = Query(
         None, alias="status", description="Filter by status"
     ),
@@ -355,6 +356,29 @@ def list_matches(
         for m in matches
     ]
 
+    from app.services import audit_service
+
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="match_list",
+        target_id=None,
+        request=request,
+        details={
+            "count": len(matches),
+            "page": page,
+            "per_page": per_page,
+            "status": status_filter,
+            "case_id": str(case_id) if case_id else None,
+            "intended_parent_id": str(intended_parent_id)
+            if intended_parent_id
+            else None,
+            "q_type": "text" if q else None,
+        },
+    )
+    db.commit()
+
     return MatchListResponse(items=items, total=total, page=page, per_page=per_page)
 
 
@@ -409,6 +433,21 @@ def get_match(
         db.commit()
         db.refresh(match)
 
+    from app.services import audit_service
+
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="match",
+        target_id=match.id,
+        details={
+            "case_id": str(match.case_id),
+            "intended_parent_id": str(match.intended_parent_id),
+        },
+    )
+    db.commit()
+
     return _match_to_read(match, db, str(session.org_id))
 
 
@@ -435,7 +474,7 @@ def accept_match(
 
     Requires: Manager+ role
     """
-    from app.services import activity_service, case_service, pipeline_service
+    from app.services import activity_service, case_service, dashboard_service, pipeline_service
 
     match = match_service.get_match(db, match_id, session.org_id)
     if not match:
@@ -532,6 +571,7 @@ def accept_match(
         )
 
     db.refresh(match)
+    dashboard_service.push_dashboard_stats(db, session.org_id)
 
     # Fire workflow trigger for match accepted
     workflow_triggers.trigger_match_accepted(db, match)

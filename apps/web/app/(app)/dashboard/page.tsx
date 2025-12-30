@@ -1,16 +1,12 @@
 "use client"
 
 import Link from "next/link"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   CheckSquareIcon,
   UsersIcon,
   TrendingUpIcon,
   TrendingDownIcon,
-  ArrowUpIcon,
   LoaderIcon,
   AlertCircleIcon,
 } from "lucide-react"
@@ -18,7 +14,7 @@ import { useMemo, useState } from "react"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis, Cell } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { useCaseStats } from "@/lib/hooks/use-cases"
-import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-tasks"
+import { useTasks } from "@/lib/hooks/use-tasks"
 import { useCasesTrend, useCasesByStatus } from "@/lib/hooks/use-analytics"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useAuth } from "@/lib/auth-context"
@@ -26,51 +22,10 @@ import { useDashboardSocket } from "@/lib/hooks/use-dashboard-socket"
 import type { TaskListItem } from "@/lib/types/task"
 import { parseDateInput, startOfLocalDay } from "@/lib/utils/date"
 
-// Format relative time
-function formatRelativeTime(dateString: string): string {
-  const date = parseDateInput(dateString)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMs / 3600000)
-  const diffDays = Math.floor(diffMs / 86400000)
-
-  if (diffMins < 60) return `${diffMins}m ago`
-  if (diffHours < 24) return `${diffHours}h ago`
-  if (diffDays === 1) return 'Yesterday'
-  return `${diffDays}d ago`
-}
-
 // Check if task is overdue
 function isOverdue(dueDate: string | null): boolean {
   if (!dueDate) return false
   return parseDateInput(dueDate) < startOfLocalDay()
-}
-
-// Check if task is due today
-function isDueToday(dueDate: string | null): boolean {
-  if (!dueDate) return false
-  const due = parseDateInput(dueDate)
-  const today = startOfLocalDay()
-  return due.getTime() === today.getTime()
-}
-
-// Get due badge variant
-function getDueBadge(dueDate: string | null, isCompleted: boolean): { label: string; variant: string } | null {
-  if (isCompleted || !dueDate) return null
-  if (isOverdue(dueDate)) return { label: 'Overdue', variant: 'destructive' }
-  if (isDueToday(dueDate)) return { label: 'Today', variant: 'bg-amber-500 hover:bg-amber-500/80' }
-
-  const due = parseDateInput(dueDate)
-  const tomorrow = startOfLocalDay()
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  if (due.getTime() === tomorrow.getTime()) return { label: 'Tomorrow', variant: 'secondary' }
-
-  const nextWeek = startOfLocalDay()
-  nextWeek.setDate(nextWeek.getDate() + 7)
-  if (due <= nextWeek) return { label: 'This Week', variant: 'secondary' }
-
-  return { label: 'Upcoming', variant: 'secondary' }
 }
 
 // Get user's first name
@@ -87,19 +42,9 @@ export default function DashboardPage() {
   const { data: trendData, isLoading: trendLoading, isError: trendError } = useCasesTrend({ period: trendPeriod })
   const { data: statusData, isLoading: statusLoading, isError: statusError } = useCasesByStatus()
   const { data: defaultPipeline } = useDefaultPipeline()
-  const completeTask = useCompleteTask()
-  const uncompleteTask = useUncompleteTask()
 
   // WebSocket for real-time updates (falls back to polling if disconnected)
   useDashboardSocket()
-
-  const handleTaskToggle = async (taskId: string, isCompleted: boolean) => {
-    if (isCompleted) {
-      await uncompleteTask.mutateAsync(taskId)
-    } else {
-      await completeTask.mutateAsync(taskId)
-    }
-  }
 
   // Count overdue tasks
   const overdueCount = tasksError
@@ -375,10 +320,10 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Cases by Status Chart */}
+        {/* Cases by Stage Chart */}
         <Card>
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg">Cases by Status</CardTitle>
+            <CardTitle className="text-lg">Cases by Stage</CardTitle>
             <CardDescription className="text-sm">Current pipeline distribution</CardDescription>
           </CardHeader>
           <CardContent className="pb-4">

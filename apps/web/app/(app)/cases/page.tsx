@@ -124,8 +124,6 @@ function FloatingActionBar({
 }
 
 const VALID_SOURCES: (CaseSource | "all")[] = ["all", "manual", "meta", "website", "referral"]
-const VALID_DATE_RANGES: DateRangePreset[] = ["all", "today", "week", "month", "custom"]
-
 export default function CasesPage() {
     const searchParams = useSearchParams()
     const router = useRouter()

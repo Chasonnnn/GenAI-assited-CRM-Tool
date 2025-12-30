@@ -182,7 +182,7 @@ export interface MatchEventCreate {
     end_date?: string | null
 }
 
-export interface MatchEventUpdate extends Partial<MatchEventCreate> { }
+export type MatchEventUpdate = Partial<MatchEventCreate>
 
 export interface MatchEventRead {
     id: string

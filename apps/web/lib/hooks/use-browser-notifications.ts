@@ -18,7 +18,7 @@ interface UseBrowserNotificationsOptions {
     onNotificationClick?: (notification: Notification, data?: { entityType?: string; entityId?: string }) => void
 }
 
-export function useBrowserNotifications(options: UseBrowserNotificationsOptions = {}) {
+export function useBrowserNotifications(hookOptions: UseBrowserNotificationsOptions = {}) {
     const router = useRouter()
     const [isSupported, setIsSupported] = useState(false)
     const [permission, setPermission] = useState<NotificationPermission>('default')
@@ -86,6 +86,11 @@ export function useBrowserNotifications(options: UseBrowserNotificationsOptions 
                     // Default: go to notifications page
                     router.push('/notifications')
                 }
+
+                hookOptions.onNotificationClick?.(notification, {
+                    entityType: options?.entityType,
+                    entityId: options?.entityId,
+                })
             }
 
             return notification
@@ -93,7 +98,7 @@ export function useBrowserNotifications(options: UseBrowserNotificationsOptions 
             console.error('[Notifications] Failed to show notification:', error)
             return null
         }
-    }, [isSupported, permission, router])
+    }, [hookOptions, isSupported, permission, router])
 
     return {
         isSupported,

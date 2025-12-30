@@ -1,3 +1,4 @@
+import type { PropsWithChildren } from "react"
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import AIAssistantPage from '../app/(app)/ai-assistant/page'
@@ -9,7 +10,7 @@ vi.mock('@/components/ui/sidebar', () => ({
 
 // Use a simple native <select> for deterministic tests
 vi.mock('@/components/ui/select', () => ({
-    Select: ({ value, onValueChange, children }: any) => (
+    Select: ({ value, onValueChange, children }: PropsWithChildren<{ value?: string; onValueChange: (value: string) => void }>) => (
         <select
             data-testid="select"
             value={value ?? ''}
@@ -21,8 +22,8 @@ vi.mock('@/components/ui/select', () => ({
     ),
     SelectTrigger: () => null,
     SelectValue: () => null,
-    SelectContent: ({ children }: any) => <>{children}</>,
-    SelectItem: ({ value, children }: any) => <option value={value}>{children}</option>,
+    SelectContent: ({ children }: PropsWithChildren) => <>{children}</>,
+    SelectItem: ({ value, children }: PropsWithChildren<{ value: string }>) => <option value={value}>{children}</option>,
 }))
 
 const mockUseQuery = vi.fn()
@@ -92,4 +93,3 @@ describe('AIAssistantPage', () => {
         expect(await screen.findByText('approved')).toBeInTheDocument()
     })
 })
-

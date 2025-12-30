@@ -258,7 +258,7 @@ export default function PipelinesSettingsPage() {
             }
 
             setEditedStages(null)
-        } catch (e) {
+        } catch {
             // Error handled by mutation
         }
     }
@@ -269,7 +269,7 @@ export default function PipelinesSettingsPage() {
         try {
             await rollbackPipeline.mutateAsync({ id: pipeline.id, version })
             setEditedStages(null)
-        } catch (e) {
+        } catch {
             // Error handled by mutation
         }
     }
@@ -292,7 +292,7 @@ export default function PipelinesSettingsPage() {
             <div>
                 <h1 className="text-2xl font-bold">Pipeline Settings</h1>
                 <p className="text-sm text-muted-foreground">
-                    Configure case status stages and their display order
+                    Configure case stages and their display order
                 </p>
             </div>
 

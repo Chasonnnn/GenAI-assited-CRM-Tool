@@ -40,7 +40,6 @@ import {
     useQueues,
     useCreateQueue,
     useUpdateQueue,
-    useDeleteQueue,
     useQueueMembers,
     useAddQueueMember,
     useRemoveQueueMember,
@@ -58,7 +57,6 @@ export default function QueuesSettingsPage() {
     const { data: queues, isLoading, error } = useQueues(true) // Include inactive
     const createQueueMutation = useCreateQueue()
     const updateQueueMutation = useUpdateQueue()
-    const deleteQueueMutation = useDeleteQueue()
 
     const [createDialogOpen, setCreateDialogOpen] = React.useState(false)
     const [editDialogOpen, setEditDialogOpen] = React.useState(false)
@@ -115,9 +113,9 @@ export default function QueuesSettingsPage() {
         })
     }
 
-    const handleDeleteQueue = async (queueId: string) => {
-        if (!confirm("Are you sure you want to deactivate this queue?")) return
-        await deleteQueueMutation.mutateAsync(queueId)
+    const resolveErrorMessage = (error: unknown, fallback: string) => {
+        if (error instanceof Error && error.message) return error.message
+        return fallback
     }
 
     const openEditDialog = (queue: Queue) => {
@@ -138,8 +136,8 @@ export default function QueuesSettingsPage() {
             await addMemberMutation.mutateAsync({ queueId: managingQueue.id, userId: selectedUserId })
             setSelectedUserId("")
             toast.success("Member added to queue")
-        } catch (error: any) {
-            toast.error(error?.message || "Failed to add member")
+        } catch (error: unknown) {
+            toast.error(resolveErrorMessage(error, "Failed to add member"))
         }
     }
 
@@ -148,8 +146,8 @@ export default function QueuesSettingsPage() {
         try {
             await removeMemberMutation.mutateAsync({ queueId: managingQueue.id, userId })
             toast.success("Member removed from queue")
-        } catch (error: any) {
-            toast.error(error?.message || "Failed to remove member")
+        } catch (error: unknown) {
+            toast.error(resolveErrorMessage(error, "Failed to remove member"))
         }
     }
 

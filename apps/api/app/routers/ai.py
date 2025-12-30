@@ -5,7 +5,7 @@ Endpoints for AI settings, chat, and actions.
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -16,13 +16,13 @@ from sqlalchemy.orm import Session
 from app.core.deps import (
     get_db,
     get_current_session,
-    require_roles,
+    require_all_permissions,
     require_csrf_header,
     require_permission,
 )
 from app.core.permissions import PermissionKey as P
 from app.core.case_access import check_case_access
-from app.db.enums import CaseActivityType, Role
+from app.db.enums import CaseActivityType, JobStatus, JobType, Role
 from app.schemas.auth import UserSession
 from app.services import (
     ai_chat_service,
@@ -30,6 +30,7 @@ from app.services import (
     ai_settings_service,
     case_service,
     ip_service,
+    job_service,
     match_service,
     note_service,
     oauth_service,
@@ -144,6 +145,20 @@ class ChatResponseModel(BaseModel):
     content: str
     proposed_actions: list[dict[str, Any]]
     tokens_used: dict[str, Any]
+    conversation_id: str | None = None
+    assistant_message_id: str | None = None
+
+
+class ChatJobResponse(BaseModel):
+    job_id: str
+    status: str
+
+
+class ChatJobStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    error: str | None = None
+    result: ChatResponseModel | None = None
 
 
 # ============================================================================
@@ -154,7 +169,7 @@ class ChatResponseModel(BaseModel):
 @router.get("/settings", response_model=AISettingsResponse)
 def get_settings(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission(P.AI_SETTINGS_MANAGE)),
 ) -> AISettingsResponse:
     """Get AI settings for the organization."""
     settings = ai_settings_service.get_or_create_ai_settings(
@@ -184,8 +199,9 @@ def get_settings(
 )
 def update_settings(
     update: AISettingsUpdate,
+    request: Request,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission(P.AI_SETTINGS_MANAGE)),
 ) -> AISettingsResponse:
     """Update AI settings for the organization. Creates version snapshot."""
     from app.services import version_service
@@ -209,6 +225,39 @@ def update_settings(
             status_code=409,
             detail=f"Version conflict: expected {e.expected}, got {e.actual}",
         )
+    changed_fields = [
+        field
+        for field, value in {
+            "is_enabled": update.is_enabled,
+            "provider": update.provider,
+            "api_key": update.api_key,
+            "model": update.model,
+            "context_notes_limit": update.context_notes_limit,
+            "conversation_history_limit": update.conversation_history_limit,
+            "anonymize_pii": update.anonymize_pii,
+        }.items()
+        if value is not None
+    ]
+    if changed_fields:
+        from app.services import audit_service
+
+        audit_service.log_settings_changed(
+            db=db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+            setting_area="ai",
+            changes={"fields": changed_fields},
+            request=request,
+        )
+        if update.api_key is not None:
+            audit_service.log_api_key_rotated(
+                db=db,
+                org_id=session.org_id,
+                user_id=session.user_id,
+                provider=update.provider or settings.provider,
+                request=request,
+            )
+        db.commit()
 
     return AISettingsResponse(
         is_enabled=settings.is_enabled,
@@ -233,7 +282,7 @@ def update_settings(
 )
 async def test_api_key(
     request: TestKeyRequest,
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission(P.AI_SETTINGS_MANAGE)),
 ) -> TestKeyResponse:
     """Test if an API key is valid."""
     valid = await ai_settings_service.test_api_key(request.provider, request.api_key)
@@ -248,7 +297,7 @@ async def test_api_key(
 @router.get("/consent", response_model=ConsentResponse)
 def get_consent(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission(P.AI_SETTINGS_MANAGE)),
 ) -> ConsentResponse:
     """Get consent text and status."""
     settings = ai_settings_service.get_or_create_ai_settings(
@@ -268,11 +317,21 @@ def get_consent(
 
 @router.post("/consent/accept", dependencies=[Depends(require_csrf_header)])
 def accept_consent(
+    request: Request,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission(P.AI_SETTINGS_MANAGE)),
 ) -> dict[str, Any]:
     """Accept the AI data processing consent."""
     settings = ai_settings_service.accept_consent(db, session.org_id, session.user_id)
+    from app.services import audit_service
+
+    audit_service.log_consent_accepted(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        request=request,
+    )
+    db.commit()
 
     return {
         "accepted": True,
@@ -380,6 +439,115 @@ def chat(
         content=response["content"],
         proposed_actions=response["proposed_actions"],
         tokens_used=response["tokens_used"],
+        conversation_id=response.get("conversation_id"),
+        assistant_message_id=response.get("assistant_message_id"),
+    )
+
+
+@router.post(
+    "/chat/async",
+    response_model=ChatJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_csrf_header)],
+)
+@limiter.limit("60/minute")
+def chat_async(
+    request: Request,  # Required by limiter
+    body: ChatRequest,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_permission(P.AI_USE)),
+) -> ChatJobResponse:
+    """Queue a chat message for async processing."""
+    settings = ai_settings_service.get_ai_settings(db, session.org_id)
+    if settings and ai_settings_service.is_consent_required(settings):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="AI consent not accepted. A manager must accept the data processing consent before using AI.",
+        )
+
+    entity_type = body.entity_type or "global"
+    entity_id = body.entity_id
+
+    if entity_type == "global" or entity_id is None:
+        entity_type = "global"
+        entity_id = session.user_id
+
+    if entity_type == "case":
+        case = case_service.get_case(db, session.org_id, entity_id)
+        if not case:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Case not found",
+            )
+        check_case_access(
+            case=case,
+            user_role=session.role,
+            user_id=session.user_id,
+            db=db,
+            org_id=session.org_id,
+        )
+    elif entity_type == "task":
+        task = task_service.get_task(db, entity_id, session.org_id)
+        if not task:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Task not found",
+            )
+        if (
+            task.created_by_user_id != session.user_id
+            and task.assigned_to_user_id != session.user_id
+        ):
+            is_manager = session.role in (Role.ADMIN, Role.CASE_MANAGER, Role.DEVELOPER)
+            if not is_manager:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not authorized to access this task",
+                )
+
+    job = job_service.schedule_job(
+        db=db,
+        org_id=session.org_id,
+        job_type=JobType.AI_CHAT,
+        payload={
+            "entity_type": entity_type,
+            "entity_id": str(entity_id),
+            "message": body.message,
+            "user_id": str(session.user_id),
+        },
+    )
+
+    return ChatJobResponse(job_id=str(job.id), status=job.status)
+
+
+@router.get("/chat/jobs/{job_id}", response_model=ChatJobStatusResponse)
+def get_chat_job(
+    job_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_permission(P.AI_USE)),
+) -> ChatJobStatusResponse:
+    """Get async chat job status."""
+    job = job_service.get_job(db, job_id, session.org_id)
+    if not job or job.job_type != JobType.AI_CHAT.value:
+        raise HTTPException(status_code=404, detail="Chat job not found")
+
+    result_payload = None
+    payload = job.payload or {}
+    if job.status == JobStatus.COMPLETED.value:
+        result = payload.get("result") or {}
+        if result:
+            result_payload = ChatResponseModel(
+                content=result.get("content", ""),
+                proposed_actions=result.get("proposed_actions", []),
+                tokens_used=result.get("tokens_used", {}),
+                conversation_id=result.get("conversation_id"),
+                assistant_message_id=result.get("assistant_message_id"),
+            )
+
+    return ChatJobStatusResponse(
+        job_id=str(job.id),
+        status=job.status,
+        error=job.last_error,
+        result=result_payload,
     )
 
 
@@ -548,7 +716,7 @@ def get_all_conversations(
     entity_type: str,
     entity_id: uuid.UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission(P.AI_CONVERSATIONS_VIEW_ALL)),
 ) -> dict[str, Any]:
     """Get all users' conversations for an entity (developer only, for audit)."""
     conversations = ai_service.list_conversations_for_entity(
@@ -659,11 +827,6 @@ def approve_action(
         }
 
         if approval.action_type == "add_note":
-            content = (
-                approval.action_payload.get("content")
-                or approval.action_payload.get("body")
-                or approval.action_payload.get("text")
-            )
             activity_service.log_activity(
                 db=db,
                 case_id=case_id,
@@ -673,7 +836,6 @@ def approve_action(
                 details={
                     **details_base,
                     "note_id": result.get("note_id"),
-                    "content": content,
                 },
             )
         elif approval.action_type == "send_email":
@@ -685,7 +847,6 @@ def approve_action(
                 actor_user_id=session.user_id,
                 details={
                     **details_base,
-                    "subject": approval.action_payload.get("subject"),
                     "provider": "gmail",
                 },
             )
@@ -813,7 +974,7 @@ def reject_action(
 
     # Mark as rejected
     approval.status = "rejected"
-    approval.executed_at = datetime.utcnow()
+    approval.executed_at = datetime.now(timezone.utc)
 
     # Audit log
     from app.services import audit_service
@@ -873,7 +1034,7 @@ def get_pending_actions(
 def get_usage_summary(
     days: int = 30,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission(P.AI_USAGE_VIEW)),
 ) -> dict[str, Any]:
     """Get organization usage summary."""
     from app.services import ai_usage_service
@@ -885,7 +1046,7 @@ def get_usage_summary(
 def get_usage_by_model(
     days: int = 30,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission(P.AI_USAGE_VIEW)),
 ) -> dict[str, Any]:
     """Get usage breakdown by AI model."""
     from app.services import ai_usage_service
@@ -897,7 +1058,7 @@ def get_usage_by_model(
 def get_daily_usage(
     days: int = 30,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission(P.AI_USAGE_VIEW)),
 ) -> dict[str, Any]:
     """Get daily usage breakdown."""
     from app.services import ai_usage_service
@@ -910,7 +1071,7 @@ def get_top_users(
     days: int = 30,
     limit: int = 10,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission(P.AI_USAGE_VIEW)),
 ) -> dict[str, Any]:
     """Get top users by AI usage."""
     from app.services import ai_usage_service
@@ -1300,7 +1461,7 @@ Be professional, warm, and concise."""
 def analyze_dashboard(
     request: Request,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_all_permissions([P.AI_USE, P.REPORTS_VIEW])),
 ) -> AnalyzeDashboardResponse:
     """Analyze dashboard data and provide AI-powered insights."""
     from app.services import ai_settings_service
@@ -1314,7 +1475,7 @@ def analyze_dashboard(
         )
 
     # Gather dashboard stats
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     case_stats = case_service.get_case_stats(db, session.org_id)
     total_cases = case_stats["total"]
@@ -1494,7 +1655,9 @@ def generate_workflow(
     request: Request,
     body: GenerateWorkflowRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(
+        require_all_permissions([P.AI_USE, P.AUTOMATION_MANAGE])
+    ),
 ) -> GenerateWorkflowResponse:
     """
     Generate a workflow configuration from natural language description.
@@ -1528,7 +1691,9 @@ def generate_workflow(
 def validate_workflow(
     body: ValidateWorkflowRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(
+        require_all_permissions([P.AI_USE, P.AUTOMATION_MANAGE])
+    ),
 ) -> ValidateWorkflowResponse:
     """
     Validate a workflow configuration.
@@ -1564,7 +1729,9 @@ def validate_workflow(
 def save_ai_workflow(
     body: SaveWorkflowRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(
+        require_all_permissions([P.AI_USE, P.AUTOMATION_MANAGE])
+    ),
 ) -> SaveWorkflowResponse:
     """
     Save an approved AI-generated workflow.

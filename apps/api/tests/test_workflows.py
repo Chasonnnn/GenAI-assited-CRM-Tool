@@ -4,9 +4,12 @@ Tests for Workflows and AI Workflow Generation.
 Tests workflow models, service logic, and AI workflow generation.
 """
 
-import pytest
 from uuid import uuid4
 
+import pytest
+
+from app.core.encryption import hash_email
+from app.utils.normalization import normalize_email
 
 # =============================================================================
 # Test Fixtures
@@ -280,6 +283,7 @@ def _create_case_for_workflow(db, test_org, test_user, default_stage):
     from app.db.models import Case
     from app.db.enums import OwnerType
 
+    normalized_email = normalize_email("case@example.com")
     case = Case(
         id=uuid4(),
         organization_id=test_org.id,
@@ -289,7 +293,8 @@ def _create_case_for_workflow(db, test_org, test_user, default_stage):
         owner_type=OwnerType.USER.value,
         owner_id=test_user.id,
         full_name="Test Case",
-        email="case@example.com",
+        email=normalized_email,
+        email_hash=hash_email(normalized_email),
         created_by_user_id=test_user.id,
     )
     db.add(case)

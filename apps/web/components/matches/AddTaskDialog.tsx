@@ -43,7 +43,7 @@ export interface TaskFormData {
 }
 
 const TASK_TYPES = [
-    { value: "meeting", label: "Meeting" },
+    { value: "meeting", label: "Appointment" },
     { value: "follow_up", label: "Follow Up" },
     { value: "contact", label: "Contact" },
     { value: "review", label: "Review" },

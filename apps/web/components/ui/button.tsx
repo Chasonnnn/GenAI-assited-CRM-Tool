@@ -37,9 +37,7 @@ const buttonVariants = cva(
 
 interface ButtonProps
   extends React.ComponentProps<"button">,
-  VariantProps<typeof buttonVariants> {
-  asChild?: boolean
-}
+  VariantProps<typeof buttonVariants> {}
 
 /**
  * Button component with variants.
@@ -51,12 +49,9 @@ function Button({
   className,
   variant = "default",
   size = "default",
-  asChild = false,
   children,
   ...props
 }: ButtonProps) {
-  // Note: asChild is kept for backwards compatibility with existing code
-  // but for Base UI components, use render={} prop on the parent component instead
   return (
     <button
       data-slot="button"

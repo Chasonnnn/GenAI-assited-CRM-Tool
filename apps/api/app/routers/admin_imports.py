@@ -6,9 +6,10 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Request
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import get_db, require_csrf_header, require_roles
+from app.core.deps import get_db, require_csrf_header, require_permission
 from app.core.rate_limit import limiter
-from app.db.enums import AuditEventType, Role
+from app.core.permissions import PermissionKey as P
+from app.db.enums import AuditEventType
 from app.schemas.auth import UserSession
 from app.services import admin_import_service, audit_service
 
@@ -29,7 +30,7 @@ async def import_all(
     request: Request,
     config_zip: UploadFile = File(..., description="Organization config ZIP"),
     cases_csv: UploadFile = File(..., description="Cases CSV"),
-    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission(P.ADMIN_IMPORTS_MANAGE)),
     db: Session = Depends(get_db),
     _csrf: None = Depends(require_csrf_header),
 ):
@@ -75,7 +76,7 @@ async def import_all(
 async def import_config(
     request: Request,
     config_zip: UploadFile = File(..., description="Organization config ZIP"),
-    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission(P.ADMIN_IMPORTS_MANAGE)),
     db: Session = Depends(get_db),
     _csrf: None = Depends(require_csrf_header),
 ):
@@ -111,7 +112,7 @@ async def import_config(
 async def import_cases(
     request: Request,
     cases_csv: UploadFile = File(..., description="Cases CSV"),
-    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission(P.ADMIN_IMPORTS_MANAGE)),
     db: Session = Depends(get_db),
     _csrf: None = Depends(require_csrf_header),
 ):

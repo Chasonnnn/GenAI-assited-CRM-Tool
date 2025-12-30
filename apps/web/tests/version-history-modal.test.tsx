@@ -1,25 +1,26 @@
+import type { PropsWithChildren } from "react"
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { VersionHistoryModal } from '../components/version-history-modal'
 
 vi.mock('@/components/ui/dialog', () => ({
-    Dialog: ({ open, children }: any) => (open ? <div>{children}</div> : null),
-    DialogContent: ({ children }: any) => <div>{children}</div>,
-    DialogDescription: ({ children }: any) => <div>{children}</div>,
-    DialogHeader: ({ children }: any) => <div>{children}</div>,
-    DialogTitle: ({ children }: any) => <h2>{children}</h2>,
+    Dialog: ({ open, children }: PropsWithChildren<{ open?: boolean }>) => (open ? <div>{children}</div> : null),
+    DialogContent: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    DialogDescription: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    DialogHeader: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    DialogTitle: ({ children }: PropsWithChildren) => <h2>{children}</h2>,
 }))
 
 vi.mock('@/components/ui/alert-dialog', () => ({
-    AlertDialog: ({ children }: any) => <div>{children}</div>,
-    AlertDialogTrigger: ({ children }: any) => <div>{children}</div>,
-    AlertDialogContent: ({ children }: any) => <div>{children}</div>,
-    AlertDialogHeader: ({ children }: any) => <div>{children}</div>,
-    AlertDialogTitle: ({ children }: any) => <div>{children}</div>,
-    AlertDialogDescription: ({ children }: any) => <div>{children}</div>,
-    AlertDialogFooter: ({ children }: any) => <div>{children}</div>,
-    AlertDialogCancel: ({ children }: any) => <button type="button">{children}</button>,
-    AlertDialogAction: ({ children, onClick, disabled }: any) => (
+    AlertDialog: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    AlertDialogTrigger: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    AlertDialogContent: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    AlertDialogHeader: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    AlertDialogTitle: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    AlertDialogDescription: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    AlertDialogFooter: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    AlertDialogCancel: ({ children }: PropsWithChildren) => <button type="button">{children}</button>,
+    AlertDialogAction: ({ children, onClick, disabled }: PropsWithChildren<{ onClick?: () => void; disabled?: boolean }>) => (
         <button type="button" onClick={onClick} disabled={disabled}>
             {children}
         </button>
@@ -92,4 +93,3 @@ describe('VersionHistoryModal', () => {
         expect(screen.queryByText(/rollback/i)).not.toBeInTheDocument()
     })
 })
-

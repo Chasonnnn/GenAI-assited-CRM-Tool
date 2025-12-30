@@ -41,8 +41,8 @@ export default function CancelPage({ params }: PageProps) {
             try {
                 const data = await getAppointmentForCancel(params.token)
                 setAppointment(data as PublicAppointmentView)
-            } catch (err: any) {
-                setError(err.message || "Appointment not found")
+            } catch (err: unknown) {
+                setError(err instanceof Error ? err.message : "Appointment not found")
             } finally {
                 setIsLoading(false)
             }
@@ -56,8 +56,8 @@ export default function CancelPage({ params }: PageProps) {
         try {
             await cancelByToken(params.token, reason || undefined)
             setIsConfirmed(true)
-        } catch (err: any) {
-            setError(err.message || "Failed to cancel")
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "Failed to cancel")
         } finally {
             setIsSubmitting(false)
         }
