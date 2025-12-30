@@ -4,8 +4,12 @@ Tests for Campaigns Module.
 Tests the campaign model creation and service logic.
 """
 
-import pytest
 from uuid import uuid4
+
+import pytest
+
+from app.core.encryption import hash_email
+from app.utils.normalization import normalize_email
 
 
 # =============================================================================
@@ -414,13 +418,15 @@ def test_campaign_run_skips_existing_recipient(
     from app.schemas.campaign import CampaignCreate
     from app.services import campaign_service
 
+    normalized_email = normalize_email("idempotent@example.com")
     case = Case(
         id=uuid4(),
         organization_id=test_org.id,
         stage_id=default_stage.id,
         full_name="Case One",
         status_label=default_stage.label,
-        email="idempotent@example.com",
+        email=normalized_email,
+        email_hash=hash_email(normalized_email),
         source="manual",
         case_number=f"C-{uuid4().hex[:6]}",
         owner_type="user",

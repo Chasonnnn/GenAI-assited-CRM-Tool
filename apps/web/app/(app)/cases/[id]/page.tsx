@@ -166,11 +166,15 @@ function formatActivityDetails(type: string, details: Record<string, unknown>): 
             return details.reason ? withAiPrefix(String(details.reason)) : aiOnly()
         case 'note_added': {
             const content = details.content ? stripHtml(String(details.content)) : ''
-            return content ? withAiPrefix(content.slice(0, 100) + (content.length > 100 ? '...' : '')) : aiOnly()
+            return content
+                ? withAiPrefix(content.slice(0, 100) + (content.length > 100 ? '...' : ''))
+                : withAiPrefix('Note added')
         }
         case 'note_deleted': {
             const preview = details.preview ? stripHtml(String(details.preview)) : ''
-            return preview ? withAiPrefix(preview.slice(0, 100) + (preview.length > 100 ? '...' : '')) : aiOnly()
+            return preview
+                ? withAiPrefix(preview.slice(0, 100) + (preview.length > 100 ? '...' : ''))
+                : withAiPrefix('Note deleted')
         }
         case 'task_created':
             return details.title ? withAiPrefix(`Task: ${String(details.title)}`) : aiOnly()

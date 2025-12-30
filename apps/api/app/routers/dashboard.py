@@ -1,6 +1,6 @@
 """Dashboard router - API endpoints for dashboard widgets."""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -58,6 +58,7 @@ class UpcomingResponse(BaseModel):
 
 @router.get("/upcoming", response_model=UpcomingResponse)
 def get_upcoming(
+    request: Request,
     days: int = Query(7, ge=1, le=14, description="Number of days to look ahead"),
     include_overdue: bool = Query(True, description="Include overdue tasks"),
     db: Session = Depends(get_db),
@@ -76,6 +77,24 @@ def get_upcoming(
         days=days,
         include_overdue=include_overdue,
     )
+
+    from app.services import audit_service
+
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="dashboard_upcoming",
+        target_id=None,
+        request=request,
+        details={
+            "days": days,
+            "include_overdue": include_overdue,
+            "tasks_count": len(tasks),
+            "meetings_count": len(meetings),
+        },
+    )
+    db.commit()
 
     return UpcomingResponse(
         tasks=[UpcomingTask(**item) for item in tasks],

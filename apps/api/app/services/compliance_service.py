@@ -574,6 +574,39 @@ def list_retention_policies(db: Session, org_id: UUID) -> list[DataRetentionPoli
     )
 
 
+def seed_default_retention_policies(
+    db: Session,
+    org_id: UUID,
+) -> list[DataRetentionPolicy]:
+    """Create default retention policies for a new organization."""
+    default_entities = [
+        "cases",
+        "matches",
+        "tasks",
+        "entity_notes",
+        "case_activity",
+    ]
+    existing = {policy.entity_type for policy in list_retention_policies(db, org_id)}
+    created: list[DataRetentionPolicy] = []
+    for entity_type in default_entities:
+        if entity_type in existing:
+            continue
+        policy = DataRetentionPolicy(
+            organization_id=org_id,
+            entity_type=entity_type,
+            retention_days=settings.DEFAULT_RETENTION_DAYS,
+            is_active=True,
+            created_by_user_id=None,
+        )
+        db.add(policy)
+        created.append(policy)
+    if created:
+        db.commit()
+        for policy in created:
+            db.refresh(policy)
+    return created
+
+
 def upsert_retention_policy(
     db: Session,
     org_id: UUID,

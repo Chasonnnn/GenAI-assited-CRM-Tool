@@ -17,7 +17,6 @@ from app.services.org_service import (
     create_org,
     get_org_by_id,
     get_org_by_slug,
-    update_org,
 )
 from app.services.user_service import (
     disable_user,
@@ -57,7 +56,6 @@ __all__ = [
     "get_org_by_id",
     "get_org_by_slug",
     "create_org",
-    "update_org",
     # Service modules
     "case_service",
     "note_service",

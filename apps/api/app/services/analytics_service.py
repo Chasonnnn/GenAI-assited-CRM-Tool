@@ -4,14 +4,23 @@ Provides query functions for case trends, status distributions, and geographic d
 Works without AI - purely script-generated aggregations.
 """
 
+import hashlib
+import json
 import uuid
 from datetime import datetime, timedelta, date, timezone
-from typing import Any
+from typing import Any, Callable
 
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from app.db.models import Case, CaseStatusHistory, PipelineStage, MetaLead
+from app.core.config import settings
+from app.db.models import (
+    AnalyticsSnapshot,
+    Case,
+    CaseStatusHistory,
+    PipelineStage,
+    MetaLead,
+)
 from app.db.enums import OwnerType
 
 
@@ -27,6 +36,131 @@ FUNNEL_SLUGS = [
     "matched",
     "meds_started",
 ]
+
+
+def _build_snapshot_key(params: dict[str, Any]) -> str:
+    payload = json.dumps(params, sort_keys=True, default=str)
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _get_cached_snapshot(
+    db: Session,
+    org_id: uuid.UUID,
+    snapshot_type: str,
+    snapshot_key: str,
+) -> Any | None:
+    if settings.ANALYTICS_CACHE_TTL_SECONDS <= 0:
+        return None
+    now = datetime.now(timezone.utc)
+    snapshot = (
+        db.query(AnalyticsSnapshot)
+        .filter(
+            AnalyticsSnapshot.organization_id == org_id,
+            AnalyticsSnapshot.snapshot_type == snapshot_type,
+            AnalyticsSnapshot.snapshot_key == snapshot_key,
+        )
+        .first()
+    )
+    if not snapshot:
+        return None
+    if snapshot.expires_at and snapshot.expires_at <= now:
+        return None
+    return snapshot.payload
+
+
+def _store_snapshot(
+    db: Session,
+    org_id: uuid.UUID,
+    snapshot_type: str,
+    snapshot_key: str,
+    payload: Any,
+    range_start: datetime | None = None,
+    range_end: datetime | None = None,
+) -> None:
+    if settings.ANALYTICS_CACHE_TTL_SECONDS <= 0:
+        return
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(seconds=settings.ANALYTICS_CACHE_TTL_SECONDS)
+    snapshot = (
+        db.query(AnalyticsSnapshot)
+        .filter(
+            AnalyticsSnapshot.organization_id == org_id,
+            AnalyticsSnapshot.snapshot_type == snapshot_type,
+            AnalyticsSnapshot.snapshot_key == snapshot_key,
+        )
+        .first()
+    )
+    if snapshot:
+        snapshot.payload = payload
+        snapshot.range_start = range_start
+        snapshot.range_end = range_end
+        snapshot.expires_at = expires_at
+        snapshot.created_at = now
+    else:
+        snapshot = AnalyticsSnapshot(
+            organization_id=org_id,
+            snapshot_type=snapshot_type,
+            snapshot_key=snapshot_key,
+            payload=payload,
+            range_start=range_start,
+            range_end=range_end,
+            created_at=now,
+            expires_at=expires_at,
+        )
+        db.add(snapshot)
+    db.commit()
+
+
+def _get_or_compute_snapshot(
+    db: Session,
+    org_id: uuid.UUID,
+    snapshot_type: str,
+    params: dict[str, Any],
+    compute: Callable[[], Any],
+    range_start: datetime | None = None,
+    range_end: datetime | None = None,
+) -> Any:
+    snapshot_key = _build_snapshot_key({"snapshot_type": snapshot_type, **params})
+    cached = _get_cached_snapshot(db, org_id, snapshot_type, snapshot_key)
+    if cached is not None:
+        return cached
+    payload = compute()
+    _store_snapshot(
+        db,
+        org_id,
+        snapshot_type,
+        snapshot_key,
+        payload,
+        range_start=range_start,
+        range_end=range_end,
+    )
+    return payload
+
+
+async def _get_or_compute_snapshot_async(
+    db: Session,
+    org_id: uuid.UUID,
+    snapshot_type: str,
+    params: dict[str, Any],
+    compute,
+    range_start: datetime | None = None,
+    range_end: datetime | None = None,
+) -> Any:
+    snapshot_key = _build_snapshot_key({"snapshot_type": snapshot_type, **params})
+    cached = _get_cached_snapshot(db, org_id, snapshot_type, snapshot_key)
+    if cached is not None:
+        return cached
+    payload = await compute()
+    _store_snapshot(
+        db,
+        org_id,
+        snapshot_type,
+        snapshot_key,
+        payload,
+        range_start=range_start,
+        range_end=range_end,
+    )
+    return payload
 
 
 def _get_default_pipeline_stages(
@@ -56,6 +190,27 @@ def parse_date_range(
         start = end - timedelta(days=default_days)
 
     return start, end
+
+
+def get_cached_analytics_summary(
+    db: Session,
+    organization_id: uuid.UUID,
+    start: datetime,
+    end: datetime,
+) -> dict[str, Any]:
+    params = {
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+    }
+    return _get_or_compute_snapshot(
+        db,
+        organization_id,
+        "summary",
+        params,
+        lambda: get_analytics_summary(db, organization_id, start, end),
+        range_start=start,
+        range_end=end,
+    )
 
 
 def get_analytics_summary(
@@ -203,6 +358,31 @@ def get_cases_trend(
     return trend
 
 
+def get_cached_cases_trend(
+    db: Session,
+    organization_id: uuid.UUID,
+    start: datetime,
+    end: datetime,
+    group_by: str = "day",
+) -> list[dict[str, Any]]:
+    params = {
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "group_by": group_by,
+    }
+    return _get_or_compute_snapshot(
+        db,
+        organization_id,
+        "cases_trend",
+        params,
+        lambda: get_cases_trend(
+            db, organization_id, start=start, end=end, group_by=group_by
+        ),
+        range_start=start,
+        range_end=end,
+    )
+
+
 # ============================================================================
 # Cases by Status
 # ============================================================================
@@ -236,6 +416,45 @@ def get_cases_by_status(
     )
 
     return [{"status": r.status, "count": r.count} for r in results]
+
+
+def get_cached_cases_by_status(
+    db: Session,
+    organization_id: uuid.UUID,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    source: str | None = None,
+) -> list[dict[str, Any]]:
+    params = {
+        "start_date": start_date.isoformat() if start_date else None,
+        "end_date": end_date.isoformat() if end_date else None,
+        "source": source,
+    }
+    range_start = (
+        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
+        if start_date
+        else None
+    )
+    range_end = (
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
+        if end_date
+        else None
+    )
+    return _get_or_compute_snapshot(
+        db,
+        organization_id,
+        "cases_by_status",
+        params,
+        lambda: get_cases_by_status(
+            db,
+            organization_id,
+            start_date=start_date,
+            end_date=end_date,
+            source=source,
+        ),
+        range_start=range_start,
+        range_end=range_end,
+    )
 
 
 def get_status_trend(
@@ -317,6 +536,45 @@ def get_cases_by_state(
     return [{"state": r.state, "count": r.count} for r in results]
 
 
+def get_cached_cases_by_state(
+    db: Session,
+    organization_id: uuid.UUID,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    source: str | None = None,
+) -> list[dict[str, Any]]:
+    params = {
+        "start_date": start_date.isoformat() if start_date else None,
+        "end_date": end_date.isoformat() if end_date else None,
+        "source": source,
+    }
+    range_start = (
+        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
+        if start_date
+        else None
+    )
+    range_end = (
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
+        if end_date
+        else None
+    )
+    return _get_or_compute_snapshot(
+        db,
+        organization_id,
+        "cases_by_state",
+        params,
+        lambda: get_cases_by_state(
+            db,
+            organization_id,
+            start_date=start_date,
+            end_date=end_date,
+            source=source,
+        ),
+        range_start=range_start,
+        range_end=range_end,
+    )
+
+
 # ============================================================================
 # Cases by Source
 # ============================================================================
@@ -345,6 +603,42 @@ def get_cases_by_source(
     results = query.group_by(Case.source).order_by(func.count(Case.id).desc()).all()
 
     return [{"source": r.source, "count": r.count} for r in results]
+
+
+def get_cached_cases_by_source(
+    db: Session,
+    organization_id: uuid.UUID,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> list[dict[str, Any]]:
+    params = {
+        "start_date": start_date.isoformat() if start_date else None,
+        "end_date": end_date.isoformat() if end_date else None,
+    }
+    range_start = (
+        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
+        if start_date
+        else None
+    )
+    range_end = (
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
+        if end_date
+        else None
+    )
+    return _get_or_compute_snapshot(
+        db,
+        organization_id,
+        "cases_by_source",
+        params,
+        lambda: get_cases_by_source(
+            db,
+            organization_id,
+            start_date=start_date,
+            end_date=end_date,
+        ),
+        range_start=range_start,
+        range_end=range_end,
+    )
 
 
 # ============================================================================
@@ -450,6 +744,45 @@ def get_cases_by_assignee(
     return payload
 
 
+def get_cached_cases_by_assignee(
+    db: Session,
+    organization_id: uuid.UUID,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    label: str = "email",
+) -> list[dict[str, Any]]:
+    params = {
+        "start_date": start_date.isoformat() if start_date else None,
+        "end_date": end_date.isoformat() if end_date else None,
+        "label": label,
+    }
+    range_start = (
+        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
+        if start_date
+        else None
+    )
+    range_end = (
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
+        if end_date
+        else None
+    )
+    return _get_or_compute_snapshot(
+        db,
+        organization_id,
+        "cases_by_assignee",
+        params,
+        lambda: get_cases_by_assignee(
+            db,
+            organization_id,
+            start_date=start_date,
+            end_date=end_date,
+            label=label,
+        ),
+        range_start=range_start,
+        range_end=range_end,
+    )
+
+
 # ============================================================================
 # Conversion Funnel
 # ============================================================================
@@ -499,6 +832,42 @@ def get_conversion_funnel(
         )
 
     return funnel_data
+
+
+def get_cached_conversion_funnel(
+    db: Session,
+    organization_id: uuid.UUID,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> list[dict[str, Any]]:
+    params = {
+        "start_date": start_date.isoformat() if start_date else None,
+        "end_date": end_date.isoformat() if end_date else None,
+    }
+    range_start = (
+        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
+        if start_date
+        else None
+    )
+    range_end = (
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
+        if end_date
+        else None
+    )
+    return _get_or_compute_snapshot(
+        db,
+        organization_id,
+        "conversion_funnel",
+        params,
+        lambda: get_conversion_funnel(
+            db,
+            organization_id,
+            start_date=start_date,
+            end_date=end_date,
+        ),
+        range_start=range_start,
+        range_end=range_end,
+    )
 
 
 # ============================================================================
@@ -600,6 +969,42 @@ def get_summary_kpis(
         "needs_attention": needs_attention,
         "period_days": period_days,
     }
+
+
+def get_cached_summary_kpis(
+    db: Session,
+    organization_id: uuid.UUID,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> dict[str, Any]:
+    params = {
+        "start_date": start_date.isoformat() if start_date else None,
+        "end_date": end_date.isoformat() if end_date else None,
+    }
+    range_start = (
+        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
+        if start_date
+        else None
+    )
+    range_end = (
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
+        if end_date
+        else None
+    )
+    return _get_or_compute_snapshot(
+        db,
+        organization_id,
+        "summary_kpis",
+        params,
+        lambda: get_summary_kpis(
+            db,
+            organization_id,
+            start_date=start_date,
+            end_date=end_date,
+        ),
+        range_start=range_start,
+        range_end=range_end,
+    )
 
 
 def get_meta_performance(
@@ -728,6 +1133,27 @@ def get_meta_performance(
     }
 
 
+def get_cached_meta_performance(
+    db: Session,
+    organization_id: uuid.UUID,
+    start: datetime,
+    end: datetime,
+) -> dict[str, Any]:
+    params = {
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+    }
+    return _get_or_compute_snapshot(
+        db,
+        organization_id,
+        "meta_performance",
+        params,
+        lambda: get_meta_performance(db, organization_id, start, end),
+        range_start=start,
+        range_end=end,
+    )
+
+
 # ============================================================================
 # Campaign Filter
 # ============================================================================
@@ -764,6 +1190,19 @@ def get_campaigns(
         }
         for r in results
     ]
+
+
+def get_cached_campaigns(
+    db: Session,
+    organization_id: uuid.UUID,
+) -> list[dict[str, Any]]:
+    return _get_or_compute_snapshot(
+        db,
+        organization_id,
+        "campaigns",
+        {"scope": "all"},
+        lambda: get_campaigns(db, organization_id),
+    )
 
 
 def get_funnel_with_filter(
@@ -815,6 +1254,45 @@ def get_funnel_with_filter(
     return funnel_data
 
 
+def get_cached_funnel_with_filter(
+    db: Session,
+    organization_id: uuid.UUID,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    ad_id: str | None = None,
+) -> list[dict[str, Any]]:
+    params = {
+        "start_date": start_date.isoformat() if start_date else None,
+        "end_date": end_date.isoformat() if end_date else None,
+        "ad_id": ad_id,
+    }
+    range_start = (
+        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
+        if start_date
+        else None
+    )
+    range_end = (
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
+        if end_date
+        else None
+    )
+    return _get_or_compute_snapshot(
+        db,
+        organization_id,
+        "funnel_compare",
+        params,
+        lambda: get_funnel_with_filter(
+            db,
+            organization_id,
+            start_date=start_date,
+            end_date=end_date,
+            ad_id=ad_id,
+        ),
+        range_start=range_start,
+        range_end=range_end,
+    )
+
+
 def get_cases_by_state_with_filter(
     db: Session,
     organization_id: uuid.UUID,
@@ -842,6 +1320,45 @@ def get_cases_by_state_with_filter(
     results = query.group_by(Case.state).order_by(func.count(Case.id).desc()).all()
 
     return [{"state": r.state, "count": r.count} for r in results]
+
+
+def get_cached_cases_by_state_with_filter(
+    db: Session,
+    organization_id: uuid.UUID,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    ad_id: str | None = None,
+) -> list[dict[str, Any]]:
+    params = {
+        "start_date": start_date.isoformat() if start_date else None,
+        "end_date": end_date.isoformat() if end_date else None,
+        "ad_id": ad_id,
+    }
+    range_start = (
+        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
+        if start_date
+        else None
+    )
+    range_end = (
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
+        if end_date
+        else None
+    )
+    return _get_or_compute_snapshot(
+        db,
+        organization_id,
+        "cases_by_state_compare",
+        params,
+        lambda: get_cases_by_state_with_filter(
+            db,
+            organization_id,
+            start_date=start_date,
+            end_date=end_date,
+            ad_id=ad_id,
+        ),
+        range_start=range_start,
+        range_end=range_end,
+    )
 
 
 async def get_meta_spend_summary(
@@ -1078,6 +1595,33 @@ async def get_meta_spend_summary(
         "time_series": time_series_points,
         "breakdowns": breakdown_points,
     }
+
+
+async def get_cached_meta_spend_summary(
+    db: Session,
+    organization_id: uuid.UUID,
+    start: datetime,
+    end: datetime,
+    time_increment: int | None = None,
+    breakdowns: list[str] | None = None,
+) -> dict[str, Any]:
+    params = {
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "time_increment": time_increment,
+        "breakdowns": breakdowns or [],
+    }
+    return await _get_or_compute_snapshot_async(
+        db,
+        organization_id,
+        "meta_spend",
+        params,
+        lambda: get_meta_spend_summary(
+            start=start, end=end, time_increment=time_increment, breakdowns=breakdowns
+        ),
+        range_start=start,
+        range_end=end,
+    )
 
 
 # =============================================================================

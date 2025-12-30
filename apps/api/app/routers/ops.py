@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import (
     get_current_session,
     get_db,
@@ -21,7 +22,7 @@ from app.core.deps import (
 from app.core.policies import POLICIES
 from app.db.enums import AlertStatus, AlertSeverity
 from app.schemas.auth import UserSession
-from app.services import ops_service, alert_service
+from app.services import ops_service, alert_service, metrics_service
 
 
 router = APIRouter(
@@ -71,6 +72,19 @@ class AlertSummaryResponse(BaseModel):
 class AlertsListResponse(BaseModel):
     items: list[AlertResponse]
     total: int
+
+
+class WorkflowSliResponse(BaseModel):
+    workflow: str
+    window_minutes: int
+    prefixes: list[str]
+    request_count: int
+    success_rate: float
+    error_rate: float
+    avg_latency_ms: int
+    slo_success_rate: float
+    slo_avg_latency_ms: int
+    meets_slo: bool
 
 
 # Valid enum values for typed query params
@@ -149,6 +163,52 @@ def list_alerts(
         ],
         total=total,
     )
+
+
+@router.get("/sli", response_model=list[WorkflowSliResponse])
+def get_workflow_sli(
+    window_minutes: int = Query(
+        settings.SLO_WINDOW_MINUTES, ge=5, le=1440, description="Window in minutes"
+    ),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """Get SLI/SLO rollups for core workflows."""
+    workflow_prefixes = {
+        "cases": ["/cases", "/intended-parents", "/matches", "/notes", "/attachments"],
+        "tasks": ["/tasks"],
+        "dashboard": ["/dashboard", "/analytics"],
+        "automation": ["/workflows", "/campaigns"],
+    }
+
+    results: list[WorkflowSliResponse] = []
+    for workflow, prefixes in workflow_prefixes.items():
+        rollup = metrics_service.get_sli_rollup(
+            db=db,
+            org_id=session.org_id,
+            prefixes=prefixes,
+            window_minutes=window_minutes,
+        )
+        meets_slo = rollup["success_rate"] >= settings.SLO_SUCCESS_RATE and (
+            rollup["avg_latency_ms"] <= settings.SLO_AVG_LATENCY_MS
+            or rollup["request_count"] == 0
+        )
+        results.append(
+            WorkflowSliResponse(
+                workflow=workflow,
+                window_minutes=window_minutes,
+                prefixes=prefixes,
+                request_count=int(rollup["request_count"]),
+                success_rate=float(rollup["success_rate"]),
+                error_rate=float(rollup["error_rate"]),
+                avg_latency_ms=int(rollup["avg_latency_ms"]),
+                slo_success_rate=settings.SLO_SUCCESS_RATE,
+                slo_avg_latency_ms=settings.SLO_AVG_LATENCY_MS,
+                meets_slo=meets_slo,
+            )
+        )
+
+    return results
 
 
 @router.post("/alerts/{alert_id}/resolve", dependencies=[Depends(require_csrf_header)])

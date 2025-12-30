@@ -10,14 +10,16 @@ Internal authenticated endpoints for staff to manage:
 from datetime import date, timedelta
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.deps import (
     get_current_session,
     get_db,
     require_csrf_header,
+    require_permission,
 )
+from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
 from app.schemas.appointment import (
     AppointmentTypeCreate,
@@ -41,13 +43,16 @@ from app.schemas.appointment import (
 from app.services import (
     appointment_service,
     appointment_email_service,
+    audit_service,
     user_service,
     org_service,
 )
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 from app.core.config import settings
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[Depends(require_permission(POLICIES["appointments"].default))]
+)
 
 
 # =============================================================================
@@ -462,6 +467,7 @@ def get_booking_preview_slots(
 
 @router.get("", response_model=AppointmentListResponse)
 def list_appointments(
+    request: Request,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
@@ -494,6 +500,23 @@ def list_appointments(
     pages = (total + per_page - 1) // per_page if per_page > 0 else 0
 
     context = appointment_service.get_appointment_context(db, appointments)
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="appointment_list",
+        target_id=None,
+        request=request,
+        details={
+            "status": status,
+            "count": len(appointments),
+            "case_id": str(case_id) if case_id else None,
+            "intended_parent_id": str(intended_parent_id)
+            if intended_parent_id
+            else None,
+        },
+    )
+    db.commit()
     return AppointmentListResponse(
         items=[
             appointment_service.to_appointment_list_item(a, context)
@@ -509,6 +532,7 @@ def list_appointments(
 @router.get("/{appointment_id}", response_model=AppointmentRead)
 def get_appointment(
     appointment_id: UUID,
+    request: Request,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
@@ -522,6 +546,16 @@ def get_appointment(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     context = appointment_service.get_appointment_context(db, [appt])
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="appointment",
+        target_id=appt.id,
+        request=request,
+        details={"case_id": str(appt.case_id) if appt.case_id else None},
+    )
+    db.commit()
     return appointment_service.to_appointment_read(appt, context)
 
 

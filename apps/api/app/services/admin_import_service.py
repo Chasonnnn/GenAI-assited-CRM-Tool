@@ -14,6 +14,7 @@ from uuid import UUID
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.encryption import hash_email, hash_phone
 from app.db.enums import OwnerType
 from app.db.models import (
     AISettings,
@@ -34,6 +35,7 @@ from app.db.models import (
     UserNotificationSettings,
     UserPermissionOverride,
 )
+from app.utils.normalization import normalize_email, normalize_phone
 
 
 def _parse_uuid(value: str | None) -> UUID | None:
@@ -657,6 +659,16 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
         if not row.get("email"):
             raise ValueError(f"Missing email for case {case_id}")
 
+        normalized_email = normalize_email(row.get("email"))
+        raw_phone = row.get("phone")
+        if raw_phone:
+            try:
+                normalized_phone = normalize_phone(raw_phone)
+            except ValueError:
+                normalized_phone = raw_phone.strip()
+        else:
+            normalized_phone = None
+
         if meta_lead_id and meta_lead_external_id:
             meta_leads_to_link.append((meta_lead_id, case_id))
 
@@ -675,8 +687,10 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
             meta_ad_id=row.get("meta_ad_id"),
             meta_form_id=row.get("meta_form_id"),
             full_name=row.get("full_name"),
-            email=row.get("email"),
-            phone=row.get("phone"),
+            email=normalized_email,
+            email_hash=hash_email(normalized_email),
+            phone=normalized_phone,
+            phone_hash=hash_phone(normalized_phone) if normalized_phone else None,
             state=row.get("state"),
             date_of_birth=_parse_date(row.get("date_of_birth")),
             race=row.get("race"),

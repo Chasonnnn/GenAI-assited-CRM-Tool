@@ -15,9 +15,10 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.encryption import hash_email
 from app.db.enums import CaseSource
 from app.db.models import Case, CaseImport
 from app.schemas.case import CaseCreate
@@ -170,12 +171,13 @@ def preview_import(
 
     # Check for duplicates in DB (active cases only)
     if csv_emails:
+        email_hashes = [hash_email(email) for email in csv_emails]
         existing = (
             db.execute(
-                select(func.lower(Case.email)).where(
+                select(Case.email_hash).where(
                     Case.organization_id == org_id,
                     Case.is_archived.is_(False),
-                    func.lower(Case.email).in_(csv_emails),
+                    Case.email_hash.in_(email_hashes),
                 )
             )
             .scalars()
@@ -279,7 +281,7 @@ def execute_import(
     # Get existing emails in org (active cases only)
     existing_emails = set(
         db.execute(
-            select(func.lower(Case.email)).where(
+            select(Case.email_hash).where(
                 Case.organization_id == org_id,
                 Case.is_archived.is_(False),
             )
@@ -299,16 +301,17 @@ def execute_import(
             continue
 
         email = row_data.get("email", "").lower()
+        email_hash = hash_email(email) if email else None
 
         # Check dedupe
-        if email:
-            if email in existing_emails:
+        if email_hash:
+            if email_hash in existing_emails:
                 result.skipped += 1
                 continue
-            if email in seen_emails:
+            if email_hash in seen_emails:
                 result.skipped += 1
                 continue
-            seen_emails.add(email)
+            seen_emails.add(email_hash)
 
         # Validate
         try:

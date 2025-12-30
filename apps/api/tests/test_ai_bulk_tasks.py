@@ -8,13 +8,17 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 
 from app.core.deps import COOKIE_NAME, get_db
+from app.core.encryption import hash_email
 from app.core.security import create_session_token
 from app.db.enums import Role
 from app.db.models import Case, IntendedParent, Match, Membership, Task, User
 from app.main import app
+from app.utils.normalization import normalize_email
 
 
 def _create_case(db, org_id, user_id, stage):
+    email = f"bulk-task-{uuid.uuid4().hex[:8]}@example.com"
+    normalized_email = normalize_email(email)
     case = Case(
         id=uuid.uuid4(),
         organization_id=org_id,
@@ -25,7 +29,8 @@ def _create_case(db, org_id, user_id, stage):
         owner_id=user_id,
         created_by_user_id=user_id,
         full_name="Bulk Task Case",
-        email=f"bulk-task-{uuid.uuid4().hex[:8]}@example.com",
+        email=normalized_email,
+        email_hash=hash_email(normalized_email),
     )
     db.add(case)
     db.flush()
@@ -33,11 +38,14 @@ def _create_case(db, org_id, user_id, stage):
 
 
 def _create_intended_parent(db, org_id):
+    email = f"bulk-task-ip-{uuid.uuid4().hex[:8]}@example.com"
+    normalized_email = normalize_email(email)
     ip = IntendedParent(
         id=uuid.uuid4(),
         organization_id=org_id,
         full_name="Bulk Task IP",
-        email=f"bulk-task-ip-{uuid.uuid4().hex[:8]}@example.com",
+        email=normalized_email,
+        email_hash=hash_email(normalized_email),
     )
     db.add(ip)
     db.flush()

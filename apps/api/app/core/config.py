@@ -82,6 +82,10 @@ class Settings(BaseSettings):
     # Token Encryption (for storing OAuth tokens, AI API keys)
     FERNET_KEY: str = ""  # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
+    # PII Field Encryption (cases, intended parents, etc.)
+    DATA_ENCRYPTION_KEY: str = ""  # Fernet key for PII encryption at rest
+    PII_HASH_KEY: str = ""  # HMAC key for deterministic PII hashes
+
     # Gmail OAuth (per-user, different from Google Login OAuth)
     GMAIL_REDIRECT_URI: str = "http://localhost:8000/integrations/gmail/callback"
 
@@ -101,6 +105,21 @@ class Settings(BaseSettings):
     RATE_LIMIT_SEARCH: int = 30  # Global search
     RATE_LIMIT_PUBLIC_FORMS: int = 10  # Public form submissions
 
+    # Analytics caching
+    ANALYTICS_CACHE_TTL_SECONDS: int = 300
+
+    # Observability (OpenTelemetry)
+    OTEL_ENABLED: bool = False
+    OTEL_SERVICE_NAME: str = "crm-api"
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = ""
+    OTEL_EXPORTER_OTLP_HEADERS: str = ""
+    OTEL_SAMPLE_RATE: float = 0.1
+
+    # SLO defaults (core workflows)
+    SLO_SUCCESS_RATE: float = 0.99
+    SLO_AVG_LATENCY_MS: int = 500
+    SLO_WINDOW_MINUTES: int = 60
+
     # Compliance exports
     EXPORT_STORAGE_BACKEND: str = "local"  # local or s3
     EXPORT_LOCAL_DIR: str = ".exports"
@@ -110,6 +129,7 @@ class Settings(BaseSettings):
     EXPORT_URL_TTL_SECONDS: int = 3600
     EXPORT_MAX_RECORDS: int = 50000
     EXPORT_RATE_LIMIT_PER_HOUR: int = 5
+    DEFAULT_RETENTION_DAYS: int = 2190  # 6 years
 
     # Attachment Storage
     STORAGE_BACKEND: str = "local"  # local or s3

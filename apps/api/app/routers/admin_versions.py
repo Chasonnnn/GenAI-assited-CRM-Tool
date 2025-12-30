@@ -15,8 +15,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_roles
-from app.db.enums import Role
+from app.core.deps import get_db, require_permission
+from app.core.permissions import PermissionKey as P
 from app.schemas.auth import UserSession
 from app.services import version_service
 
@@ -61,7 +61,7 @@ def get_entity_versions(
     entity_id: UUID,
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission(P.ADMIN_VERSIONS_MANAGE)),
 ):
     """
     Get version history for any versioned entity.
@@ -108,7 +108,7 @@ def get_version_detail(
     entity_id: UUID,
     version: int,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_roles([Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission(P.ADMIN_VERSIONS_MANAGE)),
 ):
     """
     Get a specific version with decrypted payload.

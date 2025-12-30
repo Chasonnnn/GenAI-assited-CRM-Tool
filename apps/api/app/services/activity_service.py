@@ -7,6 +7,14 @@ from app.db.enums import CaseActivityType
 from app.db.models import CaseActivityLog
 
 
+REDACTED_VALUE = "[redacted]"
+
+
+def _redact_changes(changes: dict[str, any]) -> dict[str, str]:
+    """Redact all change values to avoid logging raw PII."""
+    return {field: REDACTED_VALUE for field in changes.keys()}
+
+
 def log_activity(
     db: Session,
     case_id: UUID,
@@ -64,19 +72,18 @@ def log_info_edited(
     actor_user_id: UUID,
     changes: dict[str, any],  # {"field_name": "new_value"}
 ) -> CaseActivityLog:
-    """Log case info edit with new values."""
+    """Log case info edit with redacted values."""
     return log_activity(
         db=db,
         case_id=case_id,
         organization_id=organization_id,
         activity_type=CaseActivityType.INFO_EDITED,
         actor_user_id=actor_user_id,
-        details={"changes": changes},
+        details={"changes": _redact_changes(changes)},
     )
 
 
 # NOTE: log_status_changed removed - status transitions are tracked in CaseStatusHistory (canonical source)
-# STATUS_CHANGED enum kept for backward compatibility with existing activity log entries
 
 
 def log_assigned(
@@ -212,7 +219,7 @@ def log_note_added(
     note_id: UUID,
     content: str,
 ) -> CaseActivityLog:
-    """Log note creation with full content."""
+    """Log note creation without storing content."""
     return log_activity(
         db=db,
         case_id=case_id,
@@ -221,7 +228,6 @@ def log_note_added(
         actor_user_id=actor_user_id,
         details={
             "note_id": str(note_id),
-            "content": content,
         },
     )
 
@@ -234,7 +240,7 @@ def log_note_deleted(
     note_id: UUID,
     content_preview: str,
 ) -> CaseActivityLog:
-    """Log note deletion with content preview."""
+    """Log note deletion without storing content."""
     return log_activity(
         db=db,
         case_id=case_id,
@@ -243,7 +249,6 @@ def log_note_deleted(
         actor_user_id=actor_user_id,
         details={
             "note_id": str(note_id),
-            "preview": content_preview[:200] if content_preview else "",
         },
     )
 
@@ -257,7 +262,7 @@ def log_email_sent(
     subject: str,
     provider: str,
 ) -> CaseActivityLog:
-    """Log email sent to case contact."""
+    """Log email sent without storing subject/body."""
     return log_activity(
         db=db,
         case_id=case_id,
@@ -266,7 +271,6 @@ def log_email_sent(
         actor_user_id=actor_user_id,
         details={
             "email_log_id": str(email_log_id),
-            "subject": subject,
             "provider": provider,
         },
     )
