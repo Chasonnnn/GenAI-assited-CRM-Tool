@@ -320,10 +320,10 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Cases by Status Chart */}
+        {/* Cases by Stage Chart */}
         <Card>
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg">Cases by Status</CardTitle>
+            <CardTitle className="text-lg">Cases by Stage</CardTitle>
             <CardDescription className="text-sm">Current pipeline distribution</CardDescription>
           </CardHeader>
           <CardContent className="pb-4">

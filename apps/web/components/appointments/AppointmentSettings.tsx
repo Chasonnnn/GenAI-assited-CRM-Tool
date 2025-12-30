@@ -564,7 +564,7 @@ function AppointmentTypesCard() {
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                <Label>Meeting Mode</Label>
+                                <Label>Appointment Format</Label>
                                 <Select
                                     value={formData.meeting_mode}
                                     onValueChange={(v) =>

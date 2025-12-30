@@ -258,7 +258,7 @@ function AppointmentDetailDialog({
                         </div>
                     </div>
 
-                    {/* Meeting Mode */}
+                    {/* Appointment Format */}
                     <div className="flex items-center gap-3">
                         <ModeIcon className="size-5 text-muted-foreground" />
                         <p className="font-medium capitalize">{appointment.meeting_mode.replace("_", " ")}</p>

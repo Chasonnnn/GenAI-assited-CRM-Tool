@@ -101,6 +101,6 @@ describe('DashboardPage', () => {
 
         // Check chart sections exist
         expect(screen.getByText('Cases Trend')).toBeInTheDocument()
-        expect(screen.getByText('Cases by Status')).toBeInTheDocument()
+        expect(screen.getByText('Cases by Stage')).toBeInTheDocument()
     })
 })

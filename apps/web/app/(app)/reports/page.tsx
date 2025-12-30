@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { TrendingUpIcon, TrendingDownIcon, SparklesIcon, UsersIcon, CheckCircle2Icon, Loader2Icon, AlertCircleIcon, FacebookIcon, DollarSignIcon } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Line, LineChart, Pie, PieChart } from "recharts"
@@ -174,6 +174,10 @@ export default function ReportsPage() {
         count: item.count,
     }))
 
+    const totalStatusCount = useMemo(() => {
+        return statusChartData.reduce((sum, item) => sum + item.count, 0)
+    }, [statusChartData])
+
     // Compute trend statistics from real data
     const computeTrendPercentage = useMemo(() => {
         if (!trend || trend.length < 2) return null
@@ -197,6 +201,57 @@ export default function ReportsPage() {
     const totalCasesInPeriod = useMemo(() => {
         return trendChartData.reduce((sum, d) => sum + d.count, 0)
     }, [trendChartData])
+
+    const formatShortDate = (value: string) => {
+        if (!value) return ""
+        const parsed = new Date(`${value}T00:00:00`)
+        if (Number.isNaN(parsed.getTime())) return value
+        return parsed.toLocaleDateString()
+    }
+
+    const insightSummary = useMemo(() => {
+        const trendText =
+            computeTrendPercentage === null
+                ? "Trend: not enough data yet."
+                : computeTrendPercentage >= 0
+                    ? `Trend: up ${computeTrendPercentage}% vs prior period.`
+                    : `Trend: down ${Math.abs(computeTrendPercentage)}% vs prior period.`
+
+        let anomalyText = "Anomalies: not enough daily data."
+        if (trendChartData.length >= 4) {
+            const counts = trendChartData.map((point) => point.count)
+            const average = counts.reduce((sum, value) => sum + value, 0) / counts.length
+            if (average > 0) {
+                const maxPoint = trendChartData.reduce((max, point) =>
+                    point.count > max.count ? point : max, trendChartData[0])
+                const minPoint = trendChartData.reduce((min, point) =>
+                    point.count < min.count ? point : min, trendChartData[0])
+                const spikeDelta = (maxPoint.count - average) / average
+                const dipDelta = (average - minPoint.count) / average
+
+                if (spikeDelta >= 0.6) {
+                    anomalyText = `Anomaly: spike on ${formatShortDate(maxPoint.date)} (${maxPoint.count} cases, +${Math.round(spikeDelta * 100)}% vs avg).`
+                } else if (dipDelta >= 0.6) {
+                    anomalyText = `Anomaly: dip on ${formatShortDate(minPoint.date)} (${minPoint.count} cases, -${Math.round(dipDelta * 100)}% vs avg).`
+                } else {
+                    anomalyText = "Anomalies: no major spikes or dips."
+                }
+            } else {
+                anomalyText = "Anomalies: no volume yet."
+            }
+        }
+
+        const bottleneckText =
+            topStatus && totalStatusCount > 0
+                ? `Bottleneck: ${topStatus.status} holds ${Math.round((topStatus.count / totalStatusCount) * 100)}% of active cases.`
+                : "Bottleneck: no dominant stage yet."
+
+        return {
+            trend: trendText,
+            anomaly: anomalyText,
+            bottleneck: bottleneckText,
+        }
+    }, [computeTrendPercentage, trendChartData, topStatus, totalStatusCount])
 
     const campaignLabelById = useMemo(() => {
         const map = new Map<string, string>()
@@ -451,12 +506,38 @@ export default function ReportsPage() {
                     )}
                 </div>
 
+                <Card className="animate-in fade-in-50 duration-500">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <SparklesIcon className="size-4 text-muted-foreground" />
+                            AI Summary
+                        </CardTitle>
+                        <CardDescription>Lightweight insights from the current report data.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid gap-3 md:grid-cols-3">
+                            <div className="rounded-lg border border-border bg-background p-3">
+                                <p className="text-xs font-semibold uppercase text-muted-foreground">Trend Shift</p>
+                                <p className="mt-1 text-sm font-medium">{insightSummary.trend}</p>
+                            </div>
+                            <div className="rounded-lg border border-border bg-background p-3">
+                                <p className="text-xs font-semibold uppercase text-muted-foreground">Anomalies</p>
+                                <p className="mt-1 text-sm font-medium">{insightSummary.anomaly}</p>
+                            </div>
+                            <div className="rounded-lg border border-border bg-background p-3">
+                                <p className="text-xs font-semibold uppercase text-muted-foreground">Bottlenecks</p>
+                                <p className="mt-1 text-sm font-medium">{insightSummary.bottleneck}</p>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
                 {/* Charts Grid */}
                 <div className="grid gap-6 md:grid-cols-2">
-                    {/* Cases by Status */}
+                    {/* Cases by Stage */}
                     <Card className="animate-in fade-in-50 duration-500 delay-400">
                         <CardHeader>
-                            <CardTitle>Cases by Status</CardTitle>
+                            <CardTitle>Cases by Stage</CardTitle>
                         </CardHeader>
                         <CardContent>
                             {byStatusLoading ? (
@@ -489,7 +570,7 @@ export default function ReportsPage() {
                                 {byStatusError ? 'Unable to load status data' : topStatus ? `${topStatus.status}: ${topStatus.count} cases` : 'No data yet'}
                             </div>
                             <div className="text-muted-foreground leading-none">
-                                {byStatusError ? 'Please try again later' : 'Current distribution by status'}
+                                {byStatusError ? 'Please try again later' : 'Current distribution by stage'}
                             </div>
                         </CardFooter>
                     </Card>

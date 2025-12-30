@@ -46,7 +46,7 @@ export default function ZoomSettingsPage() {
                     </div>
                     <div>
                         <h1 className="text-2xl font-bold">Zoom Integration</h1>
-                        <p className="text-sm text-muted-foreground">Manage your Zoom connection and view meeting history</p>
+                        <p className="text-sm text-muted-foreground">Manage your Zoom connection and view appointment history</p>
                     </div>
                 </div>
             </div>
@@ -113,7 +113,7 @@ export default function ZoomSettingsPage() {
                     ) : (
                         <div className="space-y-4">
                             <p className="text-sm text-muted-foreground">
-                                Connect your Zoom account to schedule meetings directly from cases and intended parents.
+                                Connect your Zoom account to schedule appointments directly from cases and intended parents.
                             </p>
                             <Button onClick={handleConnect} disabled={connectZoom.isPending}>
                                 {connectZoom.isPending ? (
@@ -128,12 +128,12 @@ export default function ZoomSettingsPage() {
                 </CardContent>
             </Card>
 
-            {/* Meeting History */}
+            {/* Appointment History */}
             {status?.connected && (
                 <Card>
                     <CardHeader>
-                        <CardTitle>Meeting History</CardTitle>
-                        <CardDescription>Recent Zoom meetings created via the app</CardDescription>
+                        <CardTitle>Appointment History</CardTitle>
+                        <CardDescription>Recent Zoom appointments created via the app</CardDescription>
                     </CardHeader>
                     <CardContent>
                         {meetingsLoading ? (
@@ -143,9 +143,9 @@ export default function ZoomSettingsPage() {
                         ) : meetings.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-12 text-center">
                                 <CalendarIcon className="h-12 w-12 text-muted-foreground/50 mb-3" />
-                                <p className="text-sm font-medium text-muted-foreground">No meetings yet</p>
+                                <p className="text-sm font-medium text-muted-foreground">No appointments yet</p>
                                 <p className="text-xs text-muted-foreground/60 mt-1">
-                                    Meetings created from cases will appear here
+                                    Appointments created from cases will appear here
                                 </p>
                             </div>
                         ) : (

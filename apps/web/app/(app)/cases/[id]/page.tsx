@@ -1150,7 +1150,7 @@ export default function CaseDetailPage() {
             <Dialog open={zoomDialogOpen} onOpenChange={setZoomDialogOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>📹 Schedule Zoom Meeting</DialogTitle>
+                        <DialogTitle>📹 Schedule Zoom Appointment</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                         <div>
@@ -1159,7 +1159,7 @@ export default function CaseDetailPage() {
                                 id="zoom-topic"
                                 value={zoomTopic}
                                 onChange={(e) => setZoomTopic(e.target.value)}
-                                placeholder="Meeting topic"
+                                placeholder="Appointment topic"
                                 className="mt-2"
                                 disabled={!!lastMeetingResult}
                             />
@@ -1190,7 +1190,7 @@ export default function CaseDetailPage() {
                             </select>
                         </div>
                         <div className="text-xs text-muted-foreground">
-                            A meeting task is created automatically.
+                            An appointment task is created automatically.
                         </div>
                     </div>
                     <DialogFooter>
@@ -1260,7 +1260,7 @@ export default function CaseDetailPage() {
                                 }}
                                 disabled={!zoomTopic || !zoomStartAt || createZoomMeetingMutation.isPending}
                             >
-                                {createZoomMeetingMutation.isPending ? 'Creating...' : 'Create Meeting'}
+                                {createZoomMeetingMutation.isPending ? 'Creating...' : 'Create Appointment'}
                             </Button>
                         )}
                     </DialogFooter>

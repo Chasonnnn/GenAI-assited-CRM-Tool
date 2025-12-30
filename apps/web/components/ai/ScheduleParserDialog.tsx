@@ -41,7 +41,7 @@ const TASK_TYPES = [
     { value: "exam", label: "Exam" },
     { value: "appointment", label: "Appointment" },
     { value: "follow_up", label: "Follow-up" },
-    { value: "meeting", label: "Meeting" },
+    { value: "meeting", label: "Appointment (Zoom)" },
     { value: "contact", label: "Contact" },
     { value: "review", label: "Review" },
     { value: "other", label: "Other" },
