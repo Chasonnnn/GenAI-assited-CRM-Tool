@@ -9,15 +9,15 @@ describe('LoginPage', () => {
         expect(screen.getByText('Welcome Back')).toBeInTheDocument()
 
         fireEvent.click(screen.getByText('Other sign-in methods'))
-        expect(screen.getByLabelText('Username')).toBeInTheDocument()
+        expect(screen.getByLabelText('Email (optional)')).toBeInTheDocument()
     })
 
-    it('shows loading state for Duo SSO button', () => {
+    it('shows loading state for Google sign-in button', () => {
         vi.useFakeTimers()
 
         render(<LoginPage />)
 
-        const button = screen.getByRole('button', { name: /sign in with duo sso/i })
+        const button = screen.getByRole('button', { name: /sign in with google/i })
         fireEvent.click(button)
 
         expect(button).toBeDisabled()
@@ -26,4 +26,3 @@ describe('LoginPage', () => {
         vi.useRealTimers()
     })
 })
-

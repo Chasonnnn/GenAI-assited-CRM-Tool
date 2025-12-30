@@ -65,6 +65,7 @@ import {
     useAvailabilityRules,
     useSetAvailabilityRules,
 } from "@/lib/hooks/use-appointments"
+import { useUserIntegrations } from "@/lib/hooks/use-user-integrations"
 import type { AppointmentType } from "@/lib/api/appointments"
 
 // =============================================================================
@@ -72,11 +73,14 @@ import type { AppointmentType } from "@/lib/api/appointments"
 // =============================================================================
 
 function GmailWarningBanner() {
-    // In a full implementation, this would check user's Google connection status
-    // For now, we show a dismissible info banner about Gmail integration
     const [dismissed, setDismissed] = useState(false)
+    const { data: integrations, isLoading, isError } = useUserIntegrations()
+    const gmailConnected = integrations?.some(
+        (integration) =>
+            integration.integration_type === "gmail" && integration.connected
+    )
 
-    if (dismissed) return null
+    if (dismissed || isLoading || isError || gmailConnected) return null
 
     return (
         <Alert className="mb-6 border-amber-500/50 bg-amber-50 dark:bg-amber-950/20">
@@ -87,7 +91,7 @@ function GmailWarningBanner() {
             <AlertDescription className="text-amber-700 dark:text-amber-300">
                 <p className="mb-2">
                     Connect your Gmail account to enable calendar sync, automated email confirmations,
-                    and meeting reminders for your appointments.
+                    and appointment reminders for your clients.
                 </p>
                 <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" className="border-amber-500 text-amber-700 hover:bg-amber-100">
@@ -484,7 +488,7 @@ function AppointmentTypesCard() {
                 <div>
                     <CardTitle>Appointment Types</CardTitle>
                     <CardDescription>
-                        Different types of meetings clients can book
+                        Different appointment types clients can book
                     </CardDescription>
                 </div>
                 <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

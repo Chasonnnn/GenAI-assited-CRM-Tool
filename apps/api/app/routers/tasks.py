@@ -24,7 +24,7 @@ from app.schemas.task import (
     TaskRead,
     TaskUpdate,
 )
-from app.services import task_service, ip_service
+from app.services import dashboard_service, task_service, ip_service
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 
 router = APIRouter(
@@ -196,6 +196,7 @@ def create_task(
         user_id=session.user_id,
         data=data,
     )
+    dashboard_service.push_dashboard_stats(db, session.org_id)
     context = task_service.get_task_context(db, [task])
     return task_service.to_task_read(task, context)
 
@@ -313,6 +314,7 @@ def complete_task(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     task = task_service.complete_task(db, task, session.user_id)
+    dashboard_service.push_dashboard_stats(db, session.org_id)
     context = task_service.get_task_context(db, [task])
     return task_service.to_task_read(task, context)
 
@@ -343,6 +345,7 @@ def uncomplete_task(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     task = task_service.uncomplete_task(db, task)
+    dashboard_service.push_dashboard_stats(db, session.org_id)
     context = task_service.get_task_context(db, [task])
     return task_service.to_task_read(task, context)
 
@@ -413,6 +416,7 @@ def bulk_complete_tasks(
 
     # Commit all changes once at the end for efficiency
     db.commit()
+    dashboard_service.push_dashboard_stats(db, session.org_id)
 
     return BulkCompleteResponse(
         completed=results["completed"], failed=results["failed"]
@@ -449,4 +453,5 @@ def delete_task(
         )
 
     task_service.delete_task(db, task)
+    dashboard_service.push_dashboard_stats(db, session.org_id)
     return None
