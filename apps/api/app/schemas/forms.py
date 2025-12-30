@@ -134,6 +134,11 @@ class FormSubmissionFileRead(BaseModel):
     scan_status: str
 
 
+class FormSubmissionFileDownloadResponse(BaseModel):
+    download_url: str
+    filename: str
+
+
 class FormSubmissionRead(BaseModel):
     id: UUID
     form_id: UUID

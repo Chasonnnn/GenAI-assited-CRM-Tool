@@ -25,6 +25,7 @@ from app.schemas.forms import FormSchema, FormField
 from app.services import audit_service, case_service
 from app.services.attachment_service import (
     calculate_checksum,
+    generate_signed_url,
     store_file,
     strip_exif_data,
 )
@@ -340,6 +341,55 @@ def list_submission_files(
         .order_by(FormSubmissionFile.created_at.asc())
         .all()
     )
+
+
+def get_submission_file(
+    db: Session, org_id: uuid.UUID, submission_id: uuid.UUID, file_id: uuid.UUID
+) -> FormSubmissionFile | None:
+    return (
+        db.query(FormSubmissionFile)
+        .filter(
+            FormSubmissionFile.organization_id == org_id,
+            FormSubmissionFile.submission_id == submission_id,
+            FormSubmissionFile.id == file_id,
+            FormSubmissionFile.deleted_at.is_(None),
+        )
+        .first()
+    )
+
+
+def get_submission_file_download_url(
+    db: Session,
+    org_id: uuid.UUID,
+    submission: FormSubmission,
+    file_record: FormSubmissionFile,
+    user_id: uuid.UUID,
+) -> str | None:
+    if file_record.quarantined:
+        return None
+
+    ext = (
+        file_record.filename.rsplit(".", 1)[-1].lower()
+        if "." in file_record.filename
+        else ""
+    )
+    audit_service.log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.FORM_SUBMISSION_FILE_DOWNLOADED,
+        actor_user_id=user_id,
+        target_type="form_submission_file",
+        target_id=file_record.id,
+        details={
+            "case_id": str(submission.case_id),
+            "submission_id": str(submission.id),
+            "file_ext": ext,
+            "file_size": file_record.file_size,
+        },
+    )
+    db.flush()
+
+    return generate_signed_url(file_record.storage_key)
 
 
 def approve_submission(

@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.case_access import check_case_access
@@ -29,6 +29,7 @@ from app.schemas.forms import (
     FormFieldMappingItem,
     FormSchema,
     FormSubmissionFileRead,
+    FormSubmissionFileDownloadResponse,
 )
 from app.services import form_service
 
@@ -432,3 +433,52 @@ def reject_submission(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     files = form_service.list_submission_files(db, session.org_id, submission.id)
     return _submission_read(submission, files)
+
+
+@router.get(
+    "/submissions/{submission_id}/files/{file_id}/download",
+    response_model=FormSubmissionFileDownloadResponse,
+    dependencies=[Depends(require_permission(POLICIES["cases"].default))],
+)
+def download_submission_file(
+    submission_id: UUID,
+    file_id: UUID,
+    request: Request,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    submission = form_service.get_submission(db, session.org_id, submission_id)
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    case = db.query(Case).filter(Case.id == submission.case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+
+    file_record = form_service.get_submission_file(
+        db, session.org_id, submission_id, file_id
+    )
+    if not file_record:
+        raise HTTPException(status_code=404, detail="File not found")
+    if file_record.quarantined:
+        raise HTTPException(status_code=403, detail="File is pending virus scan")
+
+    url = form_service.get_submission_file_download_url(
+        db=db,
+        org_id=session.org_id,
+        submission=submission,
+        file_record=file_record,
+        user_id=session.user_id,
+    )
+    db.commit()
+
+    if not url:
+        raise HTTPException(status_code=500, detail="Failed to generate download URL")
+
+    if url.startswith("/"):
+        url = f"{request.base_url}".rstrip("/") + url
+
+    return FormSubmissionFileDownloadResponse(
+        download_url=url,
+        filename=file_record.filename,
+    )

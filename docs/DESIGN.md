@@ -14,6 +14,13 @@ This document describes the design decisions, patterns, and features implemented
 8. [Notes & Tasks](#notes--tasks)
 9. [Pagination & Search](#pagination--search)
 10. [Meta Lead Integration](#meta-lead-integration)
+11. [AI Assistant](#ai-assistant)
+12. [Queue/Ownership System](#queueownership-system-v0900)
+13. [Matches Module](#matches-module-v01400)
+14. [Automation System](#automation-system)
+15. [Form Builder](#form-builder-v01600)
+16. [Global Search](#global-search-v01501)
+17. [GCP Deployment](#gcp-deployment-v01600)
 
 ---
 
@@ -628,4 +635,170 @@ trigger_status_changed(db, case, old_status, new_status, org_id)
 
 ---
 
-*Last updated: 2025-12-25 (v0.15.00)*
+## Form Builder (v0.16.00)
+
+### Overview
+Dynamic form creation system for collecting applicant information via secure, token-based public forms. Form submissions are linked to Cases and can auto-update Case data upon approval.
+
+### Data Model
+
+#### Form Table
+```sql
+id                UUID PRIMARY KEY
+organization_id   UUID NOT NULL → organizations.id
+name              VARCHAR(255) NOT NULL
+description       TEXT
+form_schema       JSONB NOT NULL  -- Page/field definitions
+published_schema  JSONB           -- Frozen schema at publish time
+status            VARCHAR(20)     -- draft, published, archived
+created_at        TIMESTAMP
+updated_at        TIMESTAMP
+published_at      TIMESTAMP
+```
+
+#### FormSubmission Table
+```sql
+id                UUID PRIMARY KEY
+form_id           UUID NOT NULL → forms.id
+case_id           UUID NOT NULL → cases.id
+organization_id   UUID NOT NULL → organizations.id
+status            VARCHAR(20)   -- pending_review, approved, rejected
+answers           JSONB NOT NULL
+schema_snapshot   JSONB         -- Copy of form schema at submit time
+reviewed_at       TIMESTAMP
+reviewed_by       UUID → users.id
+review_notes      TEXT
+```
+
+#### FormSubmissionToken Table
+```sql
+token             VARCHAR(64) PRIMARY KEY  -- Secure random token
+form_id           UUID NOT NULL → forms.id
+case_id           UUID NOT NULL → cases.id
+expires_at        TIMESTAMP NOT NULL
+used_at           TIMESTAMP
+```
+
+#### FormFieldMapping Table
+```sql
+id                UUID PRIMARY KEY
+form_id           UUID NOT NULL → forms.id
+field_key         VARCHAR(255) NOT NULL
+case_field        VARCHAR(255) NOT NULL  -- Target Case column
+```
+
+### Form Schema Structure
+```json
+{
+  "pages": [
+    {
+      "title": "Personal Information",
+      "fields": [
+        {
+          "key": "full_name",
+          "label": "Full Name",
+          "type": "text",
+          "required": true,
+          "help_text": "Enter your legal name"
+        },
+        {
+          "key": "is_citizen",
+          "label": "US Citizen or PR?",
+          "type": "radio",
+          "options": [
+            {"label": "Yes", "value": "yes"},
+            {"label": "No", "value": "no"}
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Supported Field Types
+| Type | Description |
+|------|-------------|
+| `text` | Single-line text input |
+| `email` | Email with validation |
+| `phone` | Phone with E.164 normalization |
+| `date` | Date picker |
+| `number` | Numeric input |
+| `select` | Dropdown single-select |
+| `multiselect` | Dropdown multi-select |
+| `radio` | Radio button group |
+| `checkbox` | Checkbox group |
+| `file` | File upload |
+| `address` | Address fields |
+
+### Case Field Mapping
+Form fields can map to Case columns for auto-population:
+- `full_name`, `email`, `phone`, `state`
+- `date_of_birth`, `height_ft`, `weight_lb`
+- Boolean eligibility fields (`is_citizen_or_pr`, `has_child`, etc.)
+
+### Security Features
+- **Token-based access**: Public forms use secure, expiring tokens
+- **File validation**: Size limits, MIME type checks, EXIF stripping
+- **Virus scanning**: Integration point for AV scanning (quarantine mode)
+- **Audit logging**: All submissions and reviews logged
+
+### API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/forms` | GET, POST | List/create forms |
+| `/forms/{id}` | GET, PATCH, DELETE | CRUD operations |
+| `/forms/{id}/publish` | POST | Publish form |
+| `/forms/{id}/mappings` | GET, PUT | Field mappings |
+| `/forms/{id}/tokens` | POST | Generate submission token |
+| `/public/forms/{token}` | GET | Get form by token (unauthenticated) |
+| `/public/forms/{token}/submit` | POST | Submit form (unauthenticated) |
+| `/forms/submissions/{id}/approve` | POST | Approve and map to case |
+| `/forms/submissions/{id}/reject` | POST | Reject submission |
+
+---
+
+## Global Search (v0.15.01)
+
+### Full-Text Search
+PostgreSQL `tsvector` columns with GIN indexes on:
+- `cases.search_vector`
+- `intended_parents.search_vector`
+- `entity_notes.search_vector`
+- `attachments.search_vector`
+
+### Search Query
+Uses `websearch_to_tsquery()` with `plainto_tsquery()` fallback:
+```sql
+SELECT * FROM cases 
+WHERE search_vector @@ websearch_to_tsquery('simple', 'john smith')
+  AND organization_id = :org_id
+ORDER BY ts_rank(search_vector, query) DESC
+```
+
+### Results
+- Relevance-ranked
+- Snippets with highlights via `ts_headline()`
+- Permission-gated (notes require `view_case_notes`)
+
+### Frontend
+- `SearchCommand` component (⌘K / Ctrl+K)
+- Real-time results as you type
+- Navigation to selected result
+
+---
+
+## GCP Deployment (v0.16.00)
+
+### Health Probes
+- `/health/live` — Liveness probe
+- `/health/ready` — Readiness probe (checks DB connection)
+
+### Cloud Monitoring
+- Structured logging for Cloud Logging
+- Error reporting integration
+- Custom metrics for job processing
+
+---
+
+*Last updated: 2025-12-29 (v0.16.00)*
