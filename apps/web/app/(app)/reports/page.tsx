@@ -489,7 +489,7 @@ export default function ReportsPage() {
                                 {byStatusError ? 'Unable to load status data' : topStatus ? `${topStatus.status}: ${topStatus.count} cases` : 'No data yet'}
                             </div>
                             <div className="text-muted-foreground leading-none">
-                                {byStatusError ? 'Please try again later' : aiEnabled ? 'AI insight coming soon' : 'Current distribution by status'}
+                                {byStatusError ? 'Please try again later' : 'Current distribution by status'}
                             </div>
                         </CardFooter>
                     </Card>
@@ -545,7 +545,7 @@ export default function ReportsPage() {
                                 )}
                             </div>
                             <div className="text-muted-foreground leading-none">
-                                {trendError ? 'Please try again later' : aiEnabled ? 'AI insight coming soon' : `${trendChartData.length} data points`}
+                                {trendError ? 'Please try again later' : `${trendChartData.length} data points`}
                             </div>
                         </CardFooter>
                     </Card>
@@ -587,7 +587,7 @@ export default function ReportsPage() {
                                 {!byAssigneeError && topPerformer && <TrendingUpIcon className="size-4" />}
                             </div>
                             <div className="text-muted-foreground leading-none">
-                                {byAssigneeError ? 'Please try again later' : aiEnabled ? 'AI insight coming soon' : `${assigneeChartData.length} team members`}
+                                {byAssigneeError ? 'Please try again later' : `${assigneeChartData.length} team members`}
                             </div>
                         </CardFooter>
                     </Card>

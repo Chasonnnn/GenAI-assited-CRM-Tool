@@ -474,7 +474,7 @@ def accept_match(
 
     Requires: Manager+ role
     """
-    from app.services import activity_service, case_service, pipeline_service
+    from app.services import activity_service, case_service, dashboard_service, pipeline_service
 
     match = match_service.get_match(db, match_id, session.org_id)
     if not match:
@@ -571,6 +571,7 @@ def accept_match(
         )
 
     db.refresh(match)
+    dashboard_service.push_dashboard_stats(db, session.org_id)
 
     # Fire workflow trigger for match accepted
     workflow_triggers.trigger_match_accepted(db, match)

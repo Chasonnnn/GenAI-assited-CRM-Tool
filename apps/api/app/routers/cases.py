@@ -33,6 +33,7 @@ from app.schemas.case import (
 )
 from app.services import (
     case_service,
+    dashboard_service,
     import_service,
     membership_service,
     queue_service,
@@ -613,6 +614,7 @@ def create_case(
             )
         raise
 
+    dashboard_service.push_dashboard_stats(db, session.org_id)
     return _case_to_read(case, db)
 
 
@@ -952,6 +954,8 @@ def change_status(
         )
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
+
+    dashboard_service.push_dashboard_stats(db, session.org_id)
     return _case_to_read(case, db)
 
 
@@ -1072,6 +1076,7 @@ def archive_case(
         raise HTTPException(status_code=404, detail="Case not found")
 
     case = case_service.archive_case(db, case, session.user_id)
+    dashboard_service.push_dashboard_stats(db, session.org_id)
     return _case_to_read(case, db)
 
 
@@ -1102,6 +1107,7 @@ def restore_case(
     if error:
         raise HTTPException(status_code=409, detail=error)
 
+    dashboard_service.push_dashboard_stats(db, session.org_id)
     return _case_to_read(case, db)
 
 
@@ -1130,7 +1136,9 @@ def delete_case(
             status_code=400, detail="Case must be archived before permanent deletion"
         )
 
-    case_service.hard_delete_case(db, case)
+    deleted = case_service.hard_delete_case(db, case)
+    if deleted:
+        dashboard_service.push_dashboard_stats(db, session.org_id)
     return None
 
 
