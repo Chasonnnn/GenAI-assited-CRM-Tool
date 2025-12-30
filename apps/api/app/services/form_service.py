@@ -27,6 +27,7 @@ from app.schemas.forms import FormSchema, FormField
 from app.services import audit_service, case_service
 from app.services.attachment_service import (
     calculate_checksum,
+    _get_local_storage_path,
     generate_signed_url,
     store_file,
     strip_exif_data,
@@ -192,8 +193,7 @@ def get_form_logo_download_url(logo: FormLogo) -> str | None:
 
 
 def get_form_logo_local_path(logo: FormLogo) -> str:
-    base_path = getattr(settings, "LOCAL_STORAGE_PATH", "/tmp/crm-attachments")
-    return os.path.join(base_path, logo.storage_key)
+    return os.path.join(_get_local_storage_path(), logo.storage_key)
 
 
 def publish_form(db: Session, form: Form, user_id: uuid.UUID) -> Form:

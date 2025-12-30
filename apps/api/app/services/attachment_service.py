@@ -2,6 +2,7 @@
 
 import hashlib
 import os
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from typing import BinaryIO
@@ -56,7 +57,9 @@ def _get_storage_backend() -> str:
 
 def _get_local_storage_path() -> str:
     """Get local storage directory path."""
-    path = getattr(settings, "LOCAL_STORAGE_PATH", "/tmp/crm-attachments")
+    path = getattr(settings, "LOCAL_STORAGE_PATH", None)
+    if not path:
+        path = os.path.join(tempfile.gettempdir(), "crm-attachments")
     os.makedirs(path, exist_ok=True)
     return path
 
