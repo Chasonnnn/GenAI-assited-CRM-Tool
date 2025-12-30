@@ -266,7 +266,12 @@ export default function WorkflowExecutionsPage() {
             <div className="flex flex-wrap items-center gap-3">
                 <Select value={statusFilter} onValueChange={(v) => v && setStatusFilter(v)}>
                     <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="All Statuses" />
+                        <SelectValue placeholder="All Statuses">
+                            {(value: string | null) => {
+                                if (!value || value === "all") return "All Statuses"
+                                return statusConfig[value as keyof typeof statusConfig]?.label ?? value
+                            }}
+                        </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="all">All Statuses</SelectItem>
@@ -279,7 +284,13 @@ export default function WorkflowExecutionsPage() {
 
                 <Select value={workflowFilter} onValueChange={(v) => v && setWorkflowFilter(v)}>
                     <SelectTrigger className="w-[220px]">
-                        <SelectValue placeholder="All Workflows" />
+                        <SelectValue placeholder="All Workflows">
+                            {(value: string | null) => {
+                                if (!value || value === "all") return "All Workflows"
+                                const workflow = workflows?.find(w => w.id === value)
+                                return workflow?.name ?? value
+                            }}
+                        </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="all">All Workflows</SelectItem>

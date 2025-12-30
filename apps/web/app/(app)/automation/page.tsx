@@ -621,7 +621,13 @@ export default function AutomationPage() {
                                     <Label>Trigger Type *</Label>
                                     <Select value={triggerType} onValueChange={(v) => v && setTriggerType(v)}>
                                         <SelectTrigger className="mt-1.5">
-                                            <SelectValue placeholder="Select trigger" />
+                                            <SelectValue placeholder="Select trigger">
+                                                {(value: string | null) => {
+                                                    if (!value) return "Select trigger"
+                                                    const trigger = options?.trigger_types.find(t => t.value === value)
+                                                    return trigger?.label ?? value
+                                                }}
+                                            </SelectValue>
                                         </SelectTrigger>
                                         <SelectContent>
                                             {options?.trigger_types.map((t) => (
@@ -638,7 +644,13 @@ export default function AutomationPage() {
                                             onValueChange={(v) => v && setTriggerConfig({ ...triggerConfig, to_status: v })}
                                         >
                                             <SelectTrigger className="mt-1.5">
-                                                <SelectValue placeholder="Select status" />
+                                                <SelectValue placeholder="Select status">
+                                                    {(value: string | null) => {
+                                                        if (!value) return "Select status"
+                                                        const status = options?.statuses.find(s => s.value === value)
+                                                        return status?.label ?? value
+                                                    }}
+                                                </SelectValue>
                                             </SelectTrigger>
                                             <SelectContent>
                                                 {options?.statuses.map((s) => (
@@ -683,7 +695,12 @@ export default function AutomationPage() {
                                                             onValueChange={(v) => v && updateCondition(index, { field: v })}
                                                         >
                                                             <SelectTrigger className="flex-1">
-                                                                <SelectValue placeholder="Field" />
+                                                                <SelectValue placeholder="Field">
+                                                                    {(value: string | null) => {
+                                                                        if (!value) return "Field"
+                                                                        return conditionFieldLabels[value] || value
+                                                                    }}
+                                                                </SelectValue>
                                                             </SelectTrigger>
                                                             <SelectContent>
                                                                 {options?.condition_fields.map((f) => (
@@ -696,7 +713,13 @@ export default function AutomationPage() {
                                                             onValueChange={(v) => v && updateCondition(index, { operator: v })}
                                                         >
                                                             <SelectTrigger className="w-32">
-                                                                <SelectValue placeholder="Operator" />
+                                                                <SelectValue placeholder="Operator">
+                                                                    {(value: string | null) => {
+                                                                        if (!value) return "Operator"
+                                                                        const operator = options?.condition_operators.find(o => o.value === value)
+                                                                        return operator?.label ?? value
+                                                                    }}
+                                                                </SelectValue>
                                                             </SelectTrigger>
                                                             <SelectContent>
                                                                 {options?.condition_operators.map((o) => (
@@ -756,7 +779,13 @@ export default function AutomationPage() {
                                                         onValueChange={(v) => v && updateAction(index, { action_type: v })}
                                                     >
                                                         <SelectTrigger className="flex-1">
-                                                            <SelectValue placeholder="Action type" />
+                                                            <SelectValue placeholder="Action type">
+                                                                {(value: string | null) => {
+                                                                    if (!value) return "Action type"
+                                                                    const actionType = options?.action_types.find(a => a.value === value)
+                                                                    return actionType?.label ?? value
+                                                                }}
+                                                            </SelectValue>
                                                         </SelectTrigger>
                                                         <SelectContent>
                                                             {options?.action_types.map((a) => (
@@ -774,7 +803,13 @@ export default function AutomationPage() {
                                                         onValueChange={(v) => v && updateAction(index, { template_id: v })}
                                                     >
                                                         <SelectTrigger>
-                                                            <SelectValue placeholder="Select email template" />
+                                                            <SelectValue placeholder="Select email template">
+                                                                {(value: string | null) => {
+                                                                    if (!value) return "Select email template"
+                                                                    const template = options?.email_templates.find(t => t.id === value)
+                                                                    return template?.name ?? value
+                                                                }}
+                                                            </SelectValue>
                                                         </SelectTrigger>
                                                         <SelectContent>
                                                             {options?.email_templates.map((t) => (
