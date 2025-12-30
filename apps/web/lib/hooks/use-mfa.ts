@@ -12,6 +12,7 @@ import * as mfaApi from '../api/mfa';
 export const mfaKeys = {
     all: ['mfa'] as const,
     status: () => [...mfaKeys.all, 'status'] as const,
+    duoStatus: () => [...mfaKeys.all, 'duo-status'] as const,
 };
 
 // =============================================================================
@@ -26,6 +27,17 @@ export function useMFAStatus() {
         queryKey: mfaKeys.status(),
         queryFn: mfaApi.getMFAStatus,
         staleTime: 30 * 1000, // 30 seconds
+    });
+}
+
+/**
+ * Check Duo availability and enrollment status.
+ */
+export function useDuoStatus() {
+    return useQuery({
+        queryKey: mfaKeys.duoStatus(),
+        queryFn: mfaApi.getDuoStatus,
+        staleTime: 30 * 1000,
     });
 }
 
@@ -101,5 +113,14 @@ export function useDisableMFA() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: mfaKeys.status() });
         },
+    });
+}
+
+/**
+ * Initiate Duo Universal Prompt.
+ */
+export function useInitiateDuoAuth() {
+    return useMutation({
+        mutationFn: mfaApi.initiateDuoAuth,
     });
 }

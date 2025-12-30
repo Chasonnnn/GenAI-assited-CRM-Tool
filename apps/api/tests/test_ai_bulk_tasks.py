@@ -97,6 +97,8 @@ async def case_manager_client(db, test_org, case_manager_user):
         org_id=test_org.id,
         role=Role.CASE_MANAGER.value,
         token_version=case_manager_user.token_version,
+        mfa_verified=True,
+        mfa_required=True,
     )
 
     def override_get_db():

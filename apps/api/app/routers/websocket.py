@@ -38,10 +38,18 @@ async def websocket_notifications(
     user_id = None
     org_id = None
 
+    def _mfa_verified(payload: dict) -> bool:
+        if payload.get("mfa_required", True) and not payload.get("mfa_verified", False):
+            return False
+        return True
+
     # Try token from query param first
     if token:
         try:
             payload = decode_session_token(token)
+            if not _mfa_verified(payload):
+                await websocket.close(code=4003, reason="MFA required")
+                return
             user_id = UUID(payload["sub"])
             if "org_id" in payload:
                 org_id = UUID(payload["org_id"])
@@ -55,6 +63,9 @@ async def websocket_notifications(
         if cookie:
             try:
                 payload = decode_session_token(cookie)
+                if not _mfa_verified(payload):
+                    await websocket.close(code=4003, reason="MFA required")
+                    return
                 user_id = UUID(payload["sub"])
                 if "org_id" in payload:
                     org_id = UUID(payload["org_id"])

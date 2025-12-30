@@ -897,17 +897,23 @@ export default function CaseDetailPage() {
                                     </CardHeader>
                                     <CardContent className="space-y-4">
                                         <div className="grid grid-cols-2 gap-2">
-                                            {(['follow_up', 'status_update', 'meeting_request', 'document_request', 'introduction'] as EmailType[]).map((emailType) => (
-                                                <Button
-                                                    key={emailType}
-                                                    variant={selectedEmailType === emailType ? 'default' : 'outline'}
-                                                    size="sm"
-                                                    onClick={() => setSelectedEmailType(emailType)}
-                                                    className="capitalize text-xs"
-                                                >
-                                                    {emailType.replace(/_/g, ' ')}
-                                                </Button>
-                                            ))}
+                                            {(['follow_up', 'status_update', 'meeting_request', 'document_request', 'introduction'] as EmailType[]).map((emailType) => {
+                                                const label =
+                                                    emailType === 'meeting_request'
+                                                        ? 'appointment request'
+                                                        : emailType.replace(/_/g, ' ')
+                                                return (
+                                                    <Button
+                                                        key={emailType}
+                                                        variant={selectedEmailType === emailType ? 'default' : 'outline'}
+                                                        size="sm"
+                                                        onClick={() => setSelectedEmailType(emailType)}
+                                                        className="capitalize text-xs"
+                                                    >
+                                                        {label}
+                                                    </Button>
+                                                )
+                                            })}
                                         </div>
 
                                         <Button

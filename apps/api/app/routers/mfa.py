@@ -192,6 +192,9 @@ def regenerate_recovery_codes(
     Requires MFA to be enabled. This invalidates all previous codes.
     Returns plaintext codes for one-time display.
     """
+    if session.mfa_required and not session.mfa_verified:
+        raise HTTPException(status_code=403, detail="MFA verification required")
+
     user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -331,6 +334,9 @@ def disable_mfa(
     Note: In production, you may want to require password or recovery code
     verification before allowing MFA disable.
     """
+    if session.mfa_required and not session.mfa_verified:
+        raise HTTPException(status_code=403, detail="MFA verification required")
+
     user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -432,6 +438,7 @@ def initiate_duo_auth(
 )
 def verify_duo_callback(
     body: DuoCallbackRequest,
+    response: Response,
     expected_state: str,  # Should come from session in production
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
@@ -465,20 +472,46 @@ def verify_duo_callback(
     user.duo_enrolled_at = datetime.now(timezone.utc)
     user.duo_user_id = auth_result.get("sub") if auth_result else None
 
+    recovery_codes: list[str] | None = None
     if not user.mfa_enabled:
         user.mfa_enabled = True
         user.mfa_required_at = datetime.now(timezone.utc)
 
         # Generate recovery codes if not already present
         if not user.mfa_recovery_codes:
-            plaintext_codes = mfa_service.generate_recovery_codes()
-            user.mfa_recovery_codes = mfa_service.hash_recovery_codes(plaintext_codes)
-            db.commit()
-            return {
-                "success": True,
-                "message": "Duo enrolled successfully",
-                "recovery_codes": plaintext_codes,
-            }
+            recovery_codes = mfa_service.generate_recovery_codes()
+            user.mfa_recovery_codes = mfa_service.hash_recovery_codes(recovery_codes)
 
     db.commit()
-    return {"success": True, "message": "Duo authentication successful"}
+
+    # Issue new session with mfa_verified=True
+    membership = membership_service.get_membership_by_user_id(db, user.id)
+    if not membership:
+        raise HTTPException(status_code=403, detail="No organization membership")
+
+    new_token = create_session_token(
+        user.id,
+        membership.organization_id,
+        membership.role,
+        user.token_version,
+        mfa_verified=True,
+        mfa_required=True,
+    )
+
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=new_token,
+        max_age=settings.JWT_EXPIRES_HOURS * 3600,
+        httponly=True,
+        samesite="lax",
+        secure=settings.cookie_secure,
+        path="/",
+    )
+
+    payload = {
+        "success": True,
+        "message": "Duo authentication successful",
+    }
+    if recovery_codes:
+        payload["recovery_codes"] = recovery_codes
+    return payload
