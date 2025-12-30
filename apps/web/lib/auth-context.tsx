@@ -3,8 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import api from '@/lib/api';
 
-// TEMPORARY: Set to true to bypass auth for testing
-const DEV_BYPASS_AUTH = true;
+const DEV_BYPASS_AUTH = process.env.NEXT_PUBLIC_DEV_BYPASS_AUTH === 'true';
 
 // Interface matches backend MeResponse schema
 interface User {
@@ -18,6 +17,9 @@ interface User {
     org_timezone: string;
     role: string;
     ai_enabled: boolean;
+    mfa_enabled: boolean;
+    mfa_required: boolean;
+    mfa_verified: boolean;
 }
 
 // Mock user for testing when auth is bypassed
@@ -32,6 +34,9 @@ const MOCK_USER: User = {
     org_timezone: 'America/Los_Angeles',
     role: 'admin',
     ai_enabled: true, // Enable AI for testing
+    mfa_enabled: true,
+    mfa_required: false,
+    mfa_verified: true,
 };
 
 interface AuthContextType {
@@ -101,6 +106,15 @@ export function useRequireAuth() {
     useEffect(() => {
         if (!DEV_BYPASS_AUTH && !isLoading && !user) {
             window.location.href = '/login';
+        }
+        if (
+            !DEV_BYPASS_AUTH &&
+            !isLoading &&
+            user &&
+            user.mfa_required &&
+            !user.mfa_verified
+        ) {
+            window.location.href = '/mfa';
         }
     }, [user, isLoading]);
 

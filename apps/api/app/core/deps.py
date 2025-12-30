@@ -17,6 +17,21 @@ COOKIE_NAME = "crm_session"
 CSRF_HEADER = "X-Requested-With"
 CSRF_HEADER_VALUE = "XMLHttpRequest"
 
+# MFA enforcement allowlist (paths that can be accessed before MFA verification)
+MFA_BYPASS_PREFIXES = ("/mfa",)
+MFA_BYPASS_ROUTES = {
+    ("GET", "/auth/me"),
+    ("POST", "/auth/logout"),
+}
+
+
+def _is_mfa_bypass_allowed(request: Request) -> bool:
+    path = request.url.path
+    method = request.method.upper()
+    if any(path.startswith(prefix) for prefix in MFA_BYPASS_PREFIXES):
+        return True
+    return (method, path) in MFA_BYPASS_ROUTES
+
 
 def get_db() -> Generator[Session, None, None]:
     """
@@ -138,6 +153,11 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
         mfa_verified=mfa_verified,
         mfa_required=mfa_required,
     )
+
+    if session.mfa_required and not session.mfa_verified:
+        if not _is_mfa_bypass_allowed(request):
+            raise HTTPException(status_code=403, detail="MFA verification required")
+
     request.state.user_session = session
     return session
 

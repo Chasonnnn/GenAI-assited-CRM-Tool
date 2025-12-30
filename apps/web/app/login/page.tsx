@@ -76,7 +76,9 @@ export default function LoginPage() {
             <div className="text-xs font-semibold text-gray-500 tracking-widest">SURROGACY CRM</div>
             <CardTitle className="text-3xl font-bold text-gray-900">Welcome Back</CardTitle>
           </div>
-          <CardDescription className="text-gray-500">Sign in with Single Sign-On</CardDescription>
+          <CardDescription className="text-gray-500">
+            Sign in with Google SSO, then complete Duo verification
+          </CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-5">
@@ -138,7 +140,7 @@ export default function LoginPage() {
                 </form>
 
                 <p className="text-xs text-center text-gray-400">
-                  You will be redirected to Google to complete authentication
+                  You will be redirected to Google, then prompted for Duo verification
                 </p>
               </div>
             )}

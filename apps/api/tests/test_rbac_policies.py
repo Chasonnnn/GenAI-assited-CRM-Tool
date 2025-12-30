@@ -46,6 +46,8 @@ async def _client_with_revoked_permission(db, test_org, permission: P) -> AsyncC
         org_id=test_org.id,
         role=Role.ADMIN.value,
         token_version=user.token_version,
+        mfa_verified=True,
+        mfa_required=True,
     )
 
     def override_get_db():
