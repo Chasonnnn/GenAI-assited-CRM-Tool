@@ -7,12 +7,14 @@ Provides:
 """
 
 from typing import Tuple
+import logging
 from uuid import UUID
 
 import duo_universal
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Duo Client
@@ -111,7 +113,7 @@ def verify_callback(
         )
         return True, token
     except Exception as e:
-        print(f"Duo verification failed: {e}")
+        logger.warning("Duo verification failed: %s", type(e).__name__)
         return False, None
 
 

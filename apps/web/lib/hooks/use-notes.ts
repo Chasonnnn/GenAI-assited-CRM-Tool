@@ -45,7 +45,7 @@ export function useDeleteNote() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ noteId, caseId }: { noteId: string; caseId: string }) =>
+        mutationFn: ({ noteId, caseId: _caseId }: { noteId: string; caseId: string }) =>
             notesApi.deleteNote(noteId),
         onSuccess: (_, { caseId }) => {
             queryClient.invalidateQueries({ queryKey: noteKeys.forCase(caseId) });

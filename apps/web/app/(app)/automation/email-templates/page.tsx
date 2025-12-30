@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
     Dialog,
@@ -26,7 +25,6 @@ import {
     MailIcon,
     EditIcon,
     TrashIcon,
-    CopyIcon,
     EyeIcon,
     UserIcon,
     PhoneIcon,
@@ -41,11 +39,10 @@ import {
     useCreateEmailTemplate,
     useUpdateEmailTemplate,
     useDeleteEmailTemplate,
-    useTemplateVersions,
 } from "@/lib/hooks/use-email-templates"
 import { useSignature, useUpdateSignature } from "@/lib/hooks/use-signature"
 import { RichTextEditor } from "@/components/rich-text-editor"
-import type { EmailTemplateListItem, EmailTemplate } from "@/lib/api/email-templates"
+import type { EmailTemplateListItem } from "@/lib/api/email-templates"
 
 // Available template variables
 const TEMPLATE_VARIABLES = [
@@ -90,7 +87,7 @@ export default function EmailTemplatesPage() {
     const deleteTemplate = useDeleteEmailTemplate()
 
     // Signature hooks
-    const { data: signatureData, isLoading: signatureLoading } = useSignature()
+    const { data: signatureData } = useSignature()
     const updateSignatureMutation = useUpdateSignature()
 
     // Get full template details when editing

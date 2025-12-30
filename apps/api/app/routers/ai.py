@@ -5,7 +5,7 @@ Endpoints for AI settings, chat, and actions.
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -184,6 +184,7 @@ def get_settings(
 )
 def update_settings(
     update: AISettingsUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> AISettingsResponse:
@@ -209,6 +210,39 @@ def update_settings(
             status_code=409,
             detail=f"Version conflict: expected {e.expected}, got {e.actual}",
         )
+    changed_fields = [
+        field
+        for field, value in {
+            "is_enabled": update.is_enabled,
+            "provider": update.provider,
+            "api_key": update.api_key,
+            "model": update.model,
+            "context_notes_limit": update.context_notes_limit,
+            "conversation_history_limit": update.conversation_history_limit,
+            "anonymize_pii": update.anonymize_pii,
+        }.items()
+        if value is not None
+    ]
+    if changed_fields:
+        from app.services import audit_service
+
+        audit_service.log_settings_changed(
+            db=db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+            setting_area="ai",
+            changes={"fields": changed_fields},
+            request=request,
+        )
+        if update.api_key is not None:
+            audit_service.log_api_key_rotated(
+                db=db,
+                org_id=session.org_id,
+                user_id=session.user_id,
+                provider=update.provider or settings.provider,
+                request=request,
+            )
+        db.commit()
 
     return AISettingsResponse(
         is_enabled=settings.is_enabled,
@@ -268,11 +302,21 @@ def get_consent(
 
 @router.post("/consent/accept", dependencies=[Depends(require_csrf_header)])
 def accept_consent(
+    request: Request,
     db: Session = Depends(get_db),
     session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
 ) -> dict[str, Any]:
     """Accept the AI data processing consent."""
     settings = ai_settings_service.accept_consent(db, session.org_id, session.user_id)
+    from app.services import audit_service
+
+    audit_service.log_consent_accepted(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        request=request,
+    )
+    db.commit()
 
     return {
         "accepted": True,
@@ -813,7 +857,7 @@ def reject_action(
 
     # Mark as rejected
     approval.status = "rejected"
-    approval.executed_at = datetime.utcnow()
+    approval.executed_at = datetime.now(timezone.utc)
 
     # Audit log
     from app.services import audit_service
@@ -1314,7 +1358,7 @@ def analyze_dashboard(
         )
 
     # Gather dashboard stats
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     case_stats = case_service.get_case_stats(db, session.org_id)
     total_cases = case_stats["total"]

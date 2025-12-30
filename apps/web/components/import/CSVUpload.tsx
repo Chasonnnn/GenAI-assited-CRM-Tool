@@ -42,17 +42,20 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         setIsDragging(false)
     }, [])
 
-    const handleDrop = useCallback((e: DragEvent<HTMLDivElement>) => {
-        e.preventDefault()
-        setIsDragging(false)
-
-        const droppedFile = e.dataTransfer.files[0]
-        if (droppedFile) {
-            handleFileSelect(droppedFile)
+    const resolveErrorDetail = (error: unknown, fallback: string) => {
+        if (
+            typeof error === "object" &&
+            error !== null &&
+            "response" in error &&
+            typeof (error as { response?: { data?: { detail?: string } } }).response?.data?.detail === "string"
+        ) {
+            return (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || fallback
         }
-    }, [])
+        if (error instanceof Error && error.message) return error.message
+        return fallback
+    }
 
-    const handleFileSelect = async (selectedFile: File) => {
+    const handleFileSelect = useCallback(async (selectedFile: File) => {
         // Validate file type
         if (!selectedFile.name.endsWith(".csv")) {
             setError("Please upload a CSV file")
@@ -66,11 +69,21 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         try {
             const previewData = await previewMutation.mutateAsync(selectedFile)
             setPreview(previewData)
-        } catch (err: any) {
-            setError(err.response?.data?.detail || "Failed to preview CSV")
+        } catch (err: unknown) {
+            setError(resolveErrorDetail(err, "Failed to preview CSV"))
             setFile(null)
         }
-    }
+    }, [previewMutation])
+
+    const handleDrop = useCallback((e: DragEvent<HTMLDivElement>) => {
+        e.preventDefault()
+        setIsDragging(false)
+
+        const droppedFile = e.dataTransfer.files[0]
+        if (droppedFile) {
+            handleFileSelect(droppedFile)
+        }
+    }, [handleFileSelect])
 
     const detectColumnMapping = (header: string): boolean => {
         const normalizedHeader = header.toLowerCase().trim().replace(/\s+/g, "_").replace(/-/g, "_")
@@ -94,15 +107,9 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
             setFile(null)
             setPreview(null)
             onImportComplete?.()
-        } catch (err: any) {
-            setError(err.response?.data?.detail || "Import failed")
+        } catch (err: unknown) {
+            setError(resolveErrorDetail(err, "Import failed"))
         }
-    }
-
-    const formatFileSize = (bytes: number): string => {
-        if (bytes < 1024) return bytes + " B"
-        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB"
-        return (bytes / (1024 * 1024)).toFixed(1) + " MB"
     }
 
     return (

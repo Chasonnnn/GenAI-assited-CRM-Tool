@@ -376,7 +376,7 @@ export default function FormBuilderPage() {
         e.preventDefault()
         e.stopPropagation()
         const newField = buildNewField()
-        let nextSelectedField = newField?.id || draggedFieldId
+        const nextSelectedField = newField?.id || draggedFieldId
 
         setPages((prev) =>
             prev.map((page) => {

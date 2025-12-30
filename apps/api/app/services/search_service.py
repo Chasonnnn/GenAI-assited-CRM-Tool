@@ -580,9 +580,7 @@ def _search_attachments(
             tsquery = _build_tsquery_fallback(dictionary="simple")
             _run_queries(tsquery)
         except Exception as fallback_error:
-            logger.warning(
-                f"Attachment search fallback failed: {fallback_error}"
-            )
+            logger.warning(f"Attachment search fallback failed: {fallback_error}")
 
     return results
 
@@ -673,8 +671,6 @@ def _search_intended_parents(
                     )
                 )
         except Exception as fallback_error:
-            logger.warning(
-                f"Intended parent search fallback failed: {fallback_error}"
-            )
+            logger.warning(f"Intended parent search fallback failed: {fallback_error}")
 
     return results

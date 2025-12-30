@@ -36,13 +36,6 @@ import { useAuth } from "@/lib/auth-context"
 import { toast } from "sonner"
 import { formatDistanceToNow, format } from "date-fns"
 
-const ROLE_LABELS: Record<string, string> = {
-    intake_specialist: "Intake Specialist",
-    case_manager: "Case Manager",
-    admin: "Admin",
-    developer: "Developer",
-}
-
 function AddOverrideDialog({
     open,
     onOpenChange,

@@ -10,7 +10,7 @@ Tests the analytics router endpoints including:
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -117,7 +117,7 @@ def sample_cases(db, test_org, test_user, analytics_pipeline_stages):
                 created_by_user_id=test_user.id,
                 owner_type="user",
                 owner_id=test_user.id,
-                created_at=datetime.utcnow() - timedelta(days=j),
+                created_at=datetime.now(timezone.utc) - timedelta(days=j),
             )
             db.add(case)
             cases.append(case)
@@ -153,8 +153,8 @@ def sample_meta_leads(db, test_org, sample_cases, analytics_pipeline_stages):
         organization_id=test_org.id,
         meta_page_id="test-page",
         meta_lead_id=f"lead-{uuid.uuid4().hex[:8]}",
-        meta_created_time=datetime.utcnow() - timedelta(days=5),
-        received_at=datetime.utcnow() - timedelta(days=5),
+        meta_created_time=datetime.now(timezone.utc) - timedelta(days=5),
+        received_at=datetime.now(timezone.utc) - timedelta(days=5),
         is_converted=False,
         status="processed",
     )
@@ -168,11 +168,11 @@ def sample_meta_leads(db, test_org, sample_cases, analytics_pipeline_stages):
             organization_id=test_org.id,
             meta_page_id="test-page",
             meta_lead_id=f"lead-{uuid.uuid4().hex[:8]}",
-            meta_created_time=datetime.utcnow() - timedelta(days=3),
-            received_at=datetime.utcnow() - timedelta(days=3),
+            meta_created_time=datetime.now(timezone.utc) - timedelta(days=3),
+            received_at=datetime.now(timezone.utc) - timedelta(days=3),
             is_converted=True,
             converted_case_id=qualified_case.id,
-            converted_at=datetime.utcnow() - timedelta(days=2),
+            converted_at=datetime.now(timezone.utc) - timedelta(days=2),
             status="converted",
         )
         db.add(lead2)
@@ -185,11 +185,11 @@ def sample_meta_leads(db, test_org, sample_cases, analytics_pipeline_stages):
             organization_id=test_org.id,
             meta_page_id="test-page",
             meta_lead_id=f"lead-{uuid.uuid4().hex[:8]}",
-            meta_created_time=datetime.utcnow() - timedelta(days=4),
-            received_at=datetime.utcnow() - timedelta(days=4),
+            meta_created_time=datetime.now(timezone.utc) - timedelta(days=4),
+            received_at=datetime.now(timezone.utc) - timedelta(days=4),
             is_converted=True,
             converted_case_id=converted_case.id,
-            converted_at=datetime.utcnow() - timedelta(days=1),
+            converted_at=datetime.now(timezone.utc) - timedelta(days=1),
             status="converted",
         )
         db.add(lead3)
@@ -202,11 +202,11 @@ def sample_meta_leads(db, test_org, sample_cases, analytics_pipeline_stages):
             organization_id=test_org.id,
             meta_page_id="test-page",
             meta_lead_id=f"lead-{uuid.uuid4().hex[:8]}",
-            meta_created_time=datetime.utcnow() - timedelta(days=7),
-            received_at=datetime.utcnow() - timedelta(days=7),
+            meta_created_time=datetime.now(timezone.utc) - timedelta(days=7),
+            received_at=datetime.now(timezone.utc) - timedelta(days=7),
             is_converted=True,
             converted_case_id=approved_case.id,
-            converted_at=datetime.utcnow() - timedelta(days=1),
+            converted_at=datetime.now(timezone.utc) - timedelta(days=1),
             status="converted",
         )
         db.add(lead4)
@@ -239,8 +239,10 @@ class TestAnalyticsSummary:
     @pytest.mark.asyncio
     async def test_summary_with_date_range(self, authed_client, sample_cases):
         """Summary respects date range filters."""
-        from_date = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
-        to_date = datetime.utcnow().strftime("%Y-%m-%d")
+        from_date = (datetime.now(timezone.utc) - timedelta(days=7)).strftime(
+            "%Y-%m-%d"
+        )
+        to_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
         response = await authed_client.get(
             f"/analytics/summary?from_date={from_date}&to_date={to_date}"
@@ -356,8 +358,10 @@ class TestMetaPerformance:
         self, authed_client, sample_meta_leads
     ):
         """Meta performance respects date range."""
-        from_date = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d")
-        to_date = datetime.utcnow().strftime("%Y-%m-%d")
+        from_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime(
+            "%Y-%m-%d"
+        )
+        to_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
         response = await authed_client.get(
             f"/analytics/meta/performance?from_date={from_date}&to_date={to_date}"
@@ -376,8 +380,10 @@ class TestMetaPerformance:
         sample_meta_leads,
     ):
         """Meta performance filters by meta_created_time when available."""
-        from_date = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d")
-        to_date = datetime.utcnow().strftime("%Y-%m-%d")
+        from_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime(
+            "%Y-%m-%d"
+        )
+        to_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         response = await authed_client.get(
             f"/analytics/meta/performance?from_date={from_date}&to_date={to_date}"
         )
@@ -389,8 +395,8 @@ class TestMetaPerformance:
             organization_id=test_org.id,
             meta_page_id="test-page",
             meta_lead_id=f"lead-{uuid.uuid4().hex[:8]}",
-            meta_created_time=datetime.utcnow() - timedelta(days=90),
-            received_at=datetime.utcnow() - timedelta(days=1),
+            meta_created_time=datetime.now(timezone.utc) - timedelta(days=90),
+            received_at=datetime.now(timezone.utc) - timedelta(days=1),
             is_converted=False,
             status="processed",
         )

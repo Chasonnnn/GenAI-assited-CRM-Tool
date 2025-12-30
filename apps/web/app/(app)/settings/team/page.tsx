@@ -33,7 +33,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import {
-    Loader2, UserPlus, Mail, RotateCcw, X, Clock, Check, XCircle,
+    Loader2, UserPlus, Mail, RotateCcw, X,
     Users, Shield, Settings2, UserCog
 } from "lucide-react"
 import { useInvites, useCreateInvite, useResendInvite, useRevokeInvite } from "@/lib/hooks/use-invites"
@@ -55,41 +55,6 @@ const ROLE_COLORS: Record<string, string> = {
     case_manager: "bg-green-100 text-green-800",
     admin: "bg-purple-100 text-purple-800",
     developer: "bg-orange-100 text-orange-800",
-}
-
-function getStatusBadge(status: string) {
-    switch (status) {
-        case "pending":
-            return (
-                <Badge variant="outline" className="text-yellow-600 border-yellow-300 bg-yellow-50">
-                    <Clock className="size-3 mr-1" />
-                    Pending
-                </Badge>
-            )
-        case "accepted":
-            return (
-                <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50">
-                    <Check className="size-3 mr-1" />
-                    Accepted
-                </Badge>
-            )
-        case "expired":
-            return (
-                <Badge variant="outline" className="text-gray-600 border-gray-300 bg-gray-50">
-                    <Clock className="size-3 mr-1" />
-                    Expired
-                </Badge>
-            )
-        case "revoked":
-            return (
-                <Badge variant="outline" className="text-red-600 border-red-300 bg-red-50">
-                    <XCircle className="size-3 mr-1" />
-                    Revoked
-                </Badge>
-            )
-        default:
-            return <Badge variant="outline">{status}</Badge>
-    }
 }
 
 function InviteTeamModal({ onClose }: { onClose: () => void }) {
@@ -509,8 +474,6 @@ export default function TeamSettingsPage() {
     const [showInviteModal, setShowInviteModal] = useState(false)
     const { data: inviteData } = useInvites()
     const { data: members } = useMembers()
-    const { user } = useAuth()
-    const isDeveloper = user?.role === "developer"
 
     const pendingCount = inviteData?.pending_count || 0
     const memberCount = members?.length || 0

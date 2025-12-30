@@ -1,6 +1,6 @@
 """Intended Parent service - business logic for IP CRUD and status management."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
@@ -204,8 +204,8 @@ def update_intended_parent(
     if owner_id is not None:
         ip.owner_id = owner_id
 
-    ip.last_activity = datetime.utcnow()
-    ip.updated_at = datetime.utcnow()
+    ip.last_activity = datetime.now(timezone.utc)
+    ip.updated_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(ip)
@@ -227,8 +227,8 @@ def update_ip_status(
     """Change status and record in history."""
     old_status = ip.status
     ip.status = new_status
-    ip.last_activity = datetime.utcnow()
-    ip.updated_at = datetime.utcnow()
+    ip.last_activity = datetime.now(timezone.utc)
+    ip.updated_at = datetime.now(timezone.utc)
 
     history = IntendedParentStatusHistory(
         intended_parent_id=ip.id,
@@ -268,9 +268,9 @@ def archive_intended_parent(
     """Soft delete (archive) an intended parent. Sets status to 'archived'."""
     old_status = ip.status
     ip.is_archived = True
-    ip.archived_at = datetime.utcnow()
+    ip.archived_at = datetime.now(timezone.utc)
     ip.status = IntendedParentStatus.ARCHIVED.value  # Actually change the status
-    ip.last_activity = datetime.utcnow()
+    ip.last_activity = datetime.now(timezone.utc)
 
     # Record in history
     history = IntendedParentStatusHistory(
@@ -314,7 +314,7 @@ def restore_intended_parent(
     ip.is_archived = False
     ip.archived_at = None
     ip.status = previous_status
-    ip.last_activity = datetime.utcnow()
+    ip.last_activity = datetime.now(timezone.utc)
 
     history_entry = IntendedParentStatusHistory(
         intended_parent_id=ip.id,

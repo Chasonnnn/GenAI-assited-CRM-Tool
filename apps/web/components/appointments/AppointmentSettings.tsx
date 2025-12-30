@@ -64,11 +64,8 @@ import {
     useDeleteAppointmentType,
     useAvailabilityRules,
     useSetAvailabilityRules,
-    useAvailabilityOverrides,
-    useCreateAvailabilityOverride,
-    useDeleteAvailabilityOverride,
 } from "@/lib/hooks/use-appointments"
-import type { AppointmentType, AvailabilityRule, AvailabilityOverrideCreate } from "@/lib/api/appointments"
+import type { AppointmentType } from "@/lib/api/appointments"
 
 // =============================================================================
 // Gmail Connection Warning Banner

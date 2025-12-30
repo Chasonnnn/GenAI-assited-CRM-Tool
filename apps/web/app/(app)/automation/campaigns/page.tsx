@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -63,13 +63,11 @@ import {
     useDeleteCampaign,
     useDuplicateCampaign,
     useSendCampaign,
-    useCampaignPreview,
     usePreviewFilters,
 } from "@/lib/hooks/use-campaigns"
 import { useEmailTemplates } from "@/lib/hooks/use-email-templates"
 import { getDefaultPipeline } from "@/lib/api/pipelines"
 import { useQuery } from "@tanstack/react-query"
-import type { CampaignListItem } from "@/lib/api/campaigns"
 import { RecipientPreviewCard } from "@/components/recipient-preview-card"
 
 // Status badge styles
@@ -110,7 +108,6 @@ export default function CampaignsPage() {
     const [selectedStates, setSelectedStates] = useState<string[]>([])
     const [scheduleFor, setScheduleFor] = useState<"now" | "later">("now")
     const [scheduledDate, setScheduledDate] = useState("")
-    const [previewCampaignId, setPreviewCampaignId] = useState<string | null>(null)
     const [deleteDialogId, setDeleteDialogId] = useState<string | null>(null)
 
     // API hooks
@@ -143,7 +140,6 @@ export default function CampaignsPage() {
         setScheduleFor("now")
         setScheduledDate("")
         setShowCreateWizard(false)
-        setPreviewCampaignId(null)
     }
 
     const handleCreateCampaign = async () => {
@@ -444,7 +440,7 @@ export default function CampaignsPage() {
 
                     {/* Progress Indicator */}
                     <div className="flex items-center justify-between py-4">
-                        {[1, 2, 3, 4, 5, 6].map((step, index) => (
+                        {[1, 2, 3, 4, 5, 6].map((step) => (
                             <div key={step} className="flex items-center flex-1 last:flex-none">
                                 <div
                                     className={`flex size-8 items-center justify-center rounded-full text-sm font-medium shrink-0 ${step <= wizardStep

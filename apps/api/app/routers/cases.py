@@ -641,7 +641,7 @@ async def send_case_email(
         oauth_service,
         activity_service,
     )
-    from datetime import datetime
+    from datetime import datetime, timezone
     import os
 
     # Get case
@@ -734,7 +734,7 @@ async def send_case_email(
 
         if result.get("success"):
             email_log.status = EmailStatus.SENT.value
-            email_log.sent_at = datetime.utcnow()
+            email_log.sent_at = datetime.now(timezone.utc)
             email_log.external_id = result.get("message_id")
             db.commit()
 

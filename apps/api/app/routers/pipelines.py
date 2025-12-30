@@ -654,4 +654,3 @@ async def delete_stage(
         return {"deleted": True, "migrated_cases": migrated}
     except ValueError as e:
         raise HTTPException(400, str(e))
-

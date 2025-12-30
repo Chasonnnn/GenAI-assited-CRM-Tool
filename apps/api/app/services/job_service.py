@@ -1,6 +1,6 @@
 """Job service - business logic for background job scheduling and processing."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -49,7 +49,7 @@ def schedule_job(
         organization_id=org_id,
         job_type=job_type.value,
         payload=payload,
-        run_at=run_at or datetime.utcnow(),
+        run_at=run_at or datetime.now(timezone.utc),
         status=JobStatus.PENDING.value,
         idempotency_key=idempotency_key,
     )
@@ -65,7 +65,7 @@ def get_pending_jobs(db: Session, limit: int = 10) -> list[Job]:
 
     Returns jobs where status='pending' and run_at <= now, ordered by run_at.
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     return (
         db.query(Job)
         .filter(
@@ -114,7 +114,7 @@ def mark_job_running(db: Session, job: Job) -> Job:
 def mark_job_completed(db: Session, job: Job) -> Job:
     """Mark a job as completed."""
     job.status = JobStatus.COMPLETED.value
-    job.completed_at = datetime.utcnow()
+    job.completed_at = datetime.now(timezone.utc)
     job.last_error = None
     db.commit()
     db.refresh(job)

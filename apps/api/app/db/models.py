@@ -1,7 +1,7 @@
 """SQLAlchemy ORM models for authentication, tenant management, and cases."""
 
 import uuid
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from decimal import Decimal
 
 from sqlalchemy import (
@@ -147,7 +147,8 @@ class User(Base):
         nullable=True,  # Hashed recovery codes
     )
     mfa_required_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(), nullable=True  # When MFA enforcement started for this user
+        TIMESTAMP(),
+        nullable=True,  # When MFA enforcement started for this user
     )
 
     # Relationships
@@ -1172,7 +1173,9 @@ class IntendedParent(Base):
         server_default=text("now()"), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), onupdate=datetime.utcnow, nullable=False
+        server_default=text("now()"),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
     )
 
     # Full-text search vector (managed by trigger)
@@ -3107,7 +3110,10 @@ class Form(Base):
         TIMESTAMP(), server_default=text("now()"), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(), server_default=text("now()"), onupdate=text("now()"), nullable=False
+        TIMESTAMP(),
+        server_default=text("now()"),
+        onupdate=text("now()"),
+        nullable=False,
     )
 
     organization: Mapped["Organization"] = relationship()

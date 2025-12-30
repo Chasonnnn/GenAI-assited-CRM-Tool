@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect, useCallback } from "react"
+import { useState, useMemo, useCallback } from "react"
 import { useParams, useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { toast } from "sonner"
@@ -26,7 +26,6 @@ import {
     MailIcon,
     PhoneIcon,
     MapPinIcon,
-    CalendarIcon,
     CakeIcon,
     DollarSignIcon,
     StickyNoteIcon,
@@ -418,7 +417,7 @@ export default function MatchDetailPage() {
                 await createIPNoteMutation.mutateAsync({ id: match.intended_parent_id, data: { content } })
             }
             toast.success("Note added successfully")
-        } catch (error) {
+        } catch {
             toast.error("Failed to add note")
         }
     }
@@ -432,7 +431,7 @@ export default function MatchDetailPage() {
                 await uploadIPAttachmentMutation.mutateAsync({ ipId: match.intended_parent_id, file })
             }
             toast.success("File uploaded successfully")
-        } catch (error) {
+        } catch {
             toast.error("Failed to upload file")
         }
     }
@@ -450,7 +449,7 @@ export default function MatchDetailPage() {
                 queryClient.invalidateQueries({ queryKey: ["ip-attachments", match.intended_parent_id] })
             }
             toast.success("File deleted successfully")
-        } catch (error) {
+        } catch {
             toast.error("Failed to delete file")
         }
     }
@@ -477,7 +476,7 @@ export default function MatchDetailPage() {
             }
             queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
             toast.success("Task created successfully")
-        } catch (error) {
+        } catch {
             toast.error("Failed to create task")
         }
     }

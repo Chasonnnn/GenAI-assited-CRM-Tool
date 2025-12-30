@@ -1220,7 +1220,7 @@ export default function CaseDetailPage() {
                                             })
                                             setZoomDialogOpen(false)
                                             setLastMeetingResult(null)
-                                        } catch (err) {
+                                        } catch {
                                             // Error handled by react-query
                                         }
                                     }}
@@ -1250,7 +1250,7 @@ export default function CaseDetailPage() {
                                             start_time: formatMeetingTimeForInvite(zoomStartAt),
                                         })
                                         navigator.clipboard.writeText(result.join_url)
-                                    } catch (err) {
+                                    } catch {
                                         // Error handled by react-query
                                     }
                                 }}

@@ -258,7 +258,7 @@ export default function PipelinesSettingsPage() {
             }
 
             setEditedStages(null)
-        } catch (e) {
+        } catch {
             // Error handled by mutation
         }
     }
@@ -269,7 +269,7 @@ export default function PipelinesSettingsPage() {
         try {
             await rollbackPipeline.mutateAsync({ id: pipeline.id, version })
             setEditedStages(null)
-        } catch (e) {
+        } catch {
             // Error handled by mutation
         }
     }

@@ -33,7 +33,7 @@ export function NotificationBell() {
     const markAllRead = useMarkAllRead()
 
     // Real-time WebSocket connection
-    const { isConnected, lastNotification, unreadCount: wsUnreadCount } = useNotificationSocket()
+    const { lastNotification, unreadCount: wsUnreadCount } = useNotificationSocket()
 
     // Browser notifications
     const { permission, showNotification } = useBrowserNotifications()

@@ -126,6 +126,7 @@ def purge_preview(
             {"entity_type": item.entity_type, "count": item.count} for item in results
         ],
     )
+    db.commit()
     return PurgePreviewResponse(
         items=[
             PurgePreviewItem(entity_type=item.entity_type, count=item.count)

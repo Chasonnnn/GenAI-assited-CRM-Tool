@@ -72,9 +72,7 @@ def _form_read(form: Form) -> FormRead:
     )
 
 
-def _submission_read(
-    submission: FormSubmission, files: list
-) -> FormSubmissionRead:
+def _submission_read(submission: FormSubmission, files: list) -> FormSubmissionRead:
     return FormSubmissionRead(
         id=submission.id,
         form_id=submission.form_id,
@@ -368,7 +366,9 @@ def get_case_submission(
     if not case or case.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Case not found")
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
-    submission = form_service.get_submission_by_case(db, session.org_id, form.id, case.id)
+    submission = form_service.get_submission_by_case(
+        db, session.org_id, form.id, case.id
+    )
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
     files = form_service.list_submission_files(db, session.org_id, submission.id)
@@ -394,9 +394,7 @@ def list_submissions(
     )
     output = []
     for submission in submissions:
-        files = form_service.list_submission_files(
-            db, session.org_id, submission.id
-        )
+        files = form_service.list_submission_files(db, session.org_id, submission.id)
         output.append(_submission_read(submission, files))
     return output
 

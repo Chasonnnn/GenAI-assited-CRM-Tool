@@ -218,11 +218,21 @@ export default function TasksPage() {
             <div
                 key={task.id}
                 className={`flex items-start gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-accent/50 ${task.is_completed ? 'opacity-60' : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleTaskClick(task.id)}
+                onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault()
+                        handleTaskClick(task.id)
+                    }
+                }}
             >
                 <Checkbox
                     className="mt-0.5"
                     checked={task.is_completed}
                     onCheckedChange={() => handleTaskToggle(task.id, task.is_completed)}
+                    onClick={(event) => event.stopPropagation()}
                 />
                 <div className="flex-1 space-y-1">
                     <div className="flex items-center gap-2">
@@ -234,7 +244,11 @@ export default function TasksPage() {
                         )}
                     </div>
                     {task.case_id && (
-                        <Link href={`/cases/${task.case_id}`} className="text-sm text-muted-foreground hover:underline">
+                        <Link
+                            href={`/cases/${task.case_id}`}
+                            className="text-sm text-muted-foreground hover:underline"
+                            onClick={(event) => event.stopPropagation()}
+                        >
                             Case #{task.case_number}
                         </Link>
                     )}

@@ -156,7 +156,6 @@ export type { MatchListResponse, MatchStatsResponse, MatchRead, MatchListItem, M
 
 import {
     listMatchEvents,
-    getMatchEvent,
     createMatchEvent,
     updateMatchEvent,
     deleteMatchEvent,

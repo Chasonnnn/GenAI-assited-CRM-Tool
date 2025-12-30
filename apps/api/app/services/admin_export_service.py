@@ -6,7 +6,7 @@ import csv
 import io
 import json
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Iterable, Iterator, Sequence
 from uuid import UUID
 
@@ -589,7 +589,7 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
 
     manifest = {
         "organization_id": str(org_id),
-        "exported_at": datetime.utcnow().isoformat(),
+        "exported_at": datetime.now(timezone.utc).isoformat(),
         "version": settings.VERSION,
     }
 

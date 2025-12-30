@@ -567,7 +567,7 @@ def get_summary_kpis(
     )
 
     # Cases needing attention (not contacted in 7+ days)
-    stale_date = datetime.utcnow() - timedelta(days=7)
+    stale_date = datetime.now(timezone.utc) - timedelta(days=7)
     stages = _get_default_pipeline_stages(db, organization_id)
     stage_by_slug = {s.slug: s for s in stages if s.is_active}
     attention_stage_ids = [

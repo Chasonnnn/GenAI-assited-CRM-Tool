@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import { MatchTasksCalendar } from '../components/matches/MatchTasksCalendar'
-import { format, addMonths, subMonths, startOfWeek } from 'date-fns'
+import { format, addMonths, subMonths } from 'date-fns'
 
 const mockUseTasks = vi.fn()
 const mockUseAppointments = vi.fn()

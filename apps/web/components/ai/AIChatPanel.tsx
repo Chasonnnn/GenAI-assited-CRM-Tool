@@ -22,7 +22,7 @@ import {
 } from "lucide-react"
 import { useConversation, useSendMessage, useApproveAction, useRejectAction } from "@/lib/hooks/use-ai"
 import type { ProposedAction } from "@/lib/api/ai"
-import { ScheduleParserDialog, type EntityType } from "@/components/ai/ScheduleParserDialog"
+import { ScheduleParserDialog } from "@/components/ai/ScheduleParserDialog"
 
 interface AIChatPanelProps {
     entityType?: "case" | "task" | null  // null/undefined = global mode

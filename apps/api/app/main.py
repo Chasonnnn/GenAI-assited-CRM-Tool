@@ -102,6 +102,7 @@ app = FastAPI(
     redoc_url="/redoc" if settings.ENV == "dev" else None,
 )
 
+
 # Report server errors to GCP Error Reporting when enabled.
 @app.middleware("http")
 async def gcp_error_reporting_middleware(request, call_next):
@@ -134,6 +135,7 @@ async def gcp_error_reporting_middleware(request, call_next):
         )
         logging.exception("Unhandled exception", extra=context)
         raise
+
 
 # Add rate limiter
 app.state.limiter = limiter

@@ -4,7 +4,7 @@ Admin endpoints for Meta Lead Ads page management.
 Replaces CLI commands with web UI for managing Meta page tokens.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -118,7 +118,7 @@ def create_meta_page(
 
     # Encrypt token
     encrypted = encrypt_token(data.access_token)
-    expires_at = datetime.utcnow() + timedelta(days=data.expires_days)
+    expires_at = datetime.now(timezone.utc) + timedelta(days=data.expires_days)
 
     # Create mapping
     return meta_page_service.create_mapping(
@@ -159,7 +159,7 @@ def update_meta_page(
         encrypted = None
 
     if data.expires_days is not None:
-        expires_at = datetime.utcnow() + timedelta(days=data.expires_days)
+        expires_at = datetime.now(timezone.utc) + timedelta(days=data.expires_days)
     else:
         expires_at = None
 

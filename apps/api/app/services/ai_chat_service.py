@@ -8,7 +8,7 @@ import json
 import logging
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import nh3
@@ -225,7 +225,7 @@ def _parse_actions(content: str) -> list[dict[str, Any]]:
             if isinstance(action, dict) and "type" in action:
                 actions.append(action)
         except json.JSONDecodeError:
-            logger.warning(f"Failed to parse action JSON: {match}")
+            logger.warning("Failed to parse action JSON from AI response")
 
     return actions
 
@@ -602,7 +602,7 @@ def chat(
     db.add(usage_log)
 
     # Update conversation timestamp
-    conversation.updated_at = datetime.utcnow()
+    conversation.updated_at = datetime.now(timezone.utc)
 
     db.commit()
 

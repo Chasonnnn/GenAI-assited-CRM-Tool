@@ -1,6 +1,6 @@
 """Invitation management service with rate limiting."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 import uuid
 
@@ -25,7 +25,7 @@ def get_invite_status(
         return "revoked"
     if invite.accepted_at:
         return "accepted"
-    if invite.expires_at and invite.expires_at < datetime.utcnow():
+    if invite.expires_at and invite.expires_at < datetime.now(timezone.utc):
         return "expired"
     return "pending"
 
@@ -120,7 +120,7 @@ def create_invite(
         email=email,
         role=role,
         invited_by_user_id=invited_by_user_id,
-        expires_at=datetime.utcnow() + timedelta(days=INVITE_EXPIRY_DAYS),
+        expires_at=datetime.now(timezone.utc) + timedelta(days=INVITE_EXPIRY_DAYS),
         resend_count=0,
     )
     db.add(invite)
@@ -141,8 +141,8 @@ def can_resend(invite: OrgInvite) -> tuple[bool, str | None]:
         cooldown_end = invite.last_resent_at + timedelta(
             minutes=INVITE_RESEND_COOLDOWN_MINUTES
         )
-        if datetime.utcnow() < cooldown_end:
-            remaining = int((cooldown_end - datetime.utcnow()).total_seconds())
+        if datetime.now(timezone.utc) < cooldown_end:
+            remaining = int((cooldown_end - datetime.now(timezone.utc)).total_seconds())
             return False, f"Wait {remaining} seconds before resending"
 
     # Check daily limit
@@ -159,9 +159,9 @@ def resend_invite(db: Session, invite: OrgInvite) -> None:
         raise ValueError(error)
 
     invite.resend_count += 1
-    invite.last_resent_at = datetime.utcnow()
+    invite.last_resent_at = datetime.now(timezone.utc)
     # Extend expiry on resend
-    invite.expires_at = datetime.utcnow() + timedelta(days=INVITE_EXPIRY_DAYS)
+    invite.expires_at = datetime.now(timezone.utc) + timedelta(days=INVITE_EXPIRY_DAYS)
 
     db.flush()
 
@@ -177,7 +177,7 @@ def revoke_invite(
     if invite.revoked_at:
         raise ValueError("Invite already revoked")
 
-    invite.revoked_at = datetime.utcnow()
+    invite.revoked_at = datetime.now(timezone.utc)
     invite.revoked_by_user_id = revoked_by_user_id
 
     db.flush()
@@ -274,7 +274,7 @@ def accept_invite(
     )
     db.add(membership)
 
-    invite.accepted_at = datetime.utcnow()
+    invite.accepted_at = datetime.now(timezone.utc)
 
     if not user.active_org_id:
         user.active_org_id = invite.organization_id

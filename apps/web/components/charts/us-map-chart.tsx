@@ -9,22 +9,6 @@ import { scaleQuantize } from "d3-scale"
 // US Albers map projection
 const geoUrl = "https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json"
 
-// State abbreviation to name mapping for tooltips (reserved for future use)
- 
-const stateNames: Record<string, string> = {
-    AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
-    CO: "Colorado", CT: "Connecticut", DE: "Delaware", FL: "Florida", GA: "Georgia",
-    HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa",
-    KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland",
-    MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri",
-    MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey",
-    NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota", OH: "Ohio",
-    OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina",
-    SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont",
-    VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
-    DC: "District of Columbia",
-}
-
 // FIPS to state abbreviation mapping
 const fipsToState: Record<string, string> = {
     "01": "AL", "02": "AK", "04": "AZ", "05": "AR", "06": "CA",
