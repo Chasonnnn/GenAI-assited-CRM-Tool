@@ -14,7 +14,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from app.core.encryption import hash_email, hash_phone
 from app.db.models import Case, PipelineStage, MetaLead
+from app.utils.normalization import normalize_email
 
 
 # =============================================================================
@@ -104,14 +106,19 @@ def sample_cases(db, test_org, test_user, analytics_pipeline_stages):
     ):
         stage = stages[stage_slug]
         for j in range(count):
+            email = f"test{i}{j}@example.com"
+            normalized_email = normalize_email(email)
+            phone = "555-0100"
             case = Case(
                 id=uuid.uuid4(),
                 organization_id=test_org.id,
                 stage_id=stage.id,
                 full_name=f"Test User {i}{j}",
                 status_label=stage.label,
-                email=f"test{i}{j}@example.com",
-                phone="555-0100",
+                email=normalized_email,
+                email_hash=hash_email(normalized_email),
+                phone=phone,
+                phone_hash=hash_phone(phone),
                 source="website",
                 case_number=f"C-{i:03d}-{j:03d}",
                 created_by_user_id=test_user.id,

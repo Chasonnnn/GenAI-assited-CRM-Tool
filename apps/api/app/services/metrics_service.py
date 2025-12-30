@@ -4,9 +4,10 @@ Request metrics service.
 Records API request metrics using DB upserts for multi-replica safety.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from uuid import UUID
 
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert
 
@@ -176,3 +177,62 @@ def get_request_metrics(
             )
 
     return metrics
+
+
+def get_sli_rollup(
+    db: Session,
+    org_id: UUID,
+    prefixes: list[str],
+    window_minutes: int,
+) -> dict[str, int | float]:
+    """Aggregate SLI metrics for a set of route prefixes."""
+    from_time = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+    prefix_filters = [
+        RequestMetricsRollup.route.like(f"{prefix}%") for prefix in prefixes
+    ]
+    if not prefix_filters:
+        return {
+            "request_count": 0,
+            "success_rate": 0.0,
+            "error_rate": 0.0,
+            "avg_latency_ms": 0,
+        }
+
+    totals = (
+        db.query(
+            func.coalesce(func.sum(RequestMetricsRollup.request_count), 0),
+            func.coalesce(func.sum(RequestMetricsRollup.status_2xx), 0),
+            func.coalesce(func.sum(RequestMetricsRollup.status_4xx), 0),
+            func.coalesce(func.sum(RequestMetricsRollup.status_5xx), 0),
+            func.coalesce(func.sum(RequestMetricsRollup.total_duration_ms), 0),
+        )
+        .filter(
+            RequestMetricsRollup.organization_id == org_id,
+            RequestMetricsRollup.period_start >= from_time,
+            or_(*prefix_filters),
+        )
+        .first()
+    )
+
+    if not totals:
+        return {
+            "request_count": 0,
+            "success_rate": 0.0,
+            "error_rate": 0.0,
+            "avg_latency_ms": 0,
+        }
+
+    request_count = int(totals[0] or 0)
+    success_count = int(totals[1] or 0)
+    error_count = int((totals[2] or 0) + (totals[3] or 0))
+    total_duration = int(totals[4] or 0)
+    avg_latency = int(total_duration / request_count) if request_count else 0
+    success_rate = success_count / request_count if request_count else 0.0
+    error_rate = error_count / request_count if request_count else 0.0
+
+    return {
+        "request_count": request_count,
+        "success_rate": round(success_rate, 4),
+        "error_rate": round(error_rate, 4),
+        "avg_latency_ms": avg_latency,
+    }

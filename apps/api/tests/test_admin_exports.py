@@ -5,9 +5,13 @@ from httpx import AsyncClient, ASGITransport
 
 from app.core.deps import COOKIE_NAME, get_db
 from app.core.security import create_session_token
+from app.core.encryption import hash_email
 from app.db.enums import Role, OwnerType, CaseSource
 from app.db.models import Case, Membership, User
 from app.main import app
+from app.services import job_service
+from app.worker import process_admin_export
+from app.utils.normalization import normalize_email
 
 
 @pytest.fixture(scope="function")
@@ -57,20 +61,31 @@ async def non_dev_client(db, test_org):
 class TestAdminExports:
     @pytest.mark.asyncio
     async def test_cases_export_requires_developer(self, non_dev_client):
-        response = await non_dev_client.get("/admin/exports/cases")
+        response = await non_dev_client.post("/admin/exports/cases")
         assert response.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_cases_export_csv(self, authed_client):
-        response = await authed_client.get("/admin/exports/cases")
-        assert response.status_code == 200
-        assert response.headers["content-type"].startswith("text/csv")
-        assert "case_number" in response.text.splitlines()[0]
+    async def test_cases_export_csv(self, authed_client, db, test_org):
+        response = await authed_client.post("/admin/exports/cases")
+        assert response.status_code == 202
+        job_id = response.json()["job_id"]
+
+        job = job_service.get_job(db, uuid.UUID(job_id), test_org.id)
+        assert job is not None
+        await process_admin_export(db, job)
+        job_service.mark_job_completed(db, job)
+
+        download = await authed_client.get(f"/admin/exports/jobs/{job_id}/file")
+        assert download.status_code == 200
+        assert download.headers["content-type"].startswith("text/csv")
+        assert "case_number" in download.text.splitlines()[0]
 
     @pytest.mark.asyncio
     async def test_cases_export_csv_escapes_formula(
         self, authed_client, db, test_org, test_user, default_stage
     ):
+        email = "=bad@example.com"
+        normalized_email = normalize_email(email)
         case = Case(
             id=uuid.uuid4(),
             case_number=str(uuid.uuid4().int)[-5:],
@@ -82,23 +97,51 @@ class TestAdminExports:
             status_label=default_stage.label,
             source=CaseSource.IMPORT.value,
             full_name="=HACK",
-            email="=bad@example.com",
+            email=normalized_email,
+            email_hash=hash_email(normalized_email),
         )
         db.add(case)
         db.commit()
 
-        response = await authed_client.get("/admin/exports/cases")
-        assert response.status_code == 200
-        assert "'=HACK" in response.text
+        response = await authed_client.post("/admin/exports/cases")
+        assert response.status_code == 202
+        job_id = response.json()["job_id"]
+
+        job = job_service.get_job(db, uuid.UUID(job_id), test_org.id)
+        assert job is not None
+        await process_admin_export(db, job)
+        job_service.mark_job_completed(db, job)
+
+        download = await authed_client.get(f"/admin/exports/jobs/{job_id}/file")
+        assert download.status_code == 200
+        assert "'=HACK" in download.text
 
     @pytest.mark.asyncio
-    async def test_config_export_zip(self, authed_client):
-        response = await authed_client.get("/admin/exports/config")
-        assert response.status_code == 200
-        assert response.headers["content-type"].startswith("application/zip")
+    async def test_config_export_zip(self, authed_client, db, test_org):
+        response = await authed_client.post("/admin/exports/config")
+        assert response.status_code == 202
+        job_id = response.json()["job_id"]
+
+        job = job_service.get_job(db, uuid.UUID(job_id), test_org.id)
+        assert job is not None
+        await process_admin_export(db, job)
+        job_service.mark_job_completed(db, job)
+
+        download = await authed_client.get(f"/admin/exports/jobs/{job_id}/file")
+        assert download.status_code == 200
+        assert download.headers["content-type"].startswith("application/zip")
 
     @pytest.mark.asyncio
-    async def test_analytics_export_zip(self, authed_client):
-        response = await authed_client.get("/admin/exports/analytics")
-        assert response.status_code == 200
-        assert response.headers["content-type"].startswith("application/zip")
+    async def test_analytics_export_zip(self, authed_client, db, test_org):
+        response = await authed_client.post("/admin/exports/analytics")
+        assert response.status_code == 202
+        job_id = response.json()["job_id"]
+
+        job = job_service.get_job(db, uuid.UUID(job_id), test_org.id)
+        assert job is not None
+        await process_admin_export(db, job)
+        job_service.mark_job_completed(db, job)
+
+        download = await authed_client.get(f"/admin/exports/jobs/{job_id}/file")
+        assert download.status_code == 200
+        assert download.headers["content-type"].startswith("application/zip")

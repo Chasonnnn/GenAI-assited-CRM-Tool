@@ -5,10 +5,14 @@ import uuid
 
 import pytest
 
+from app.core.encryption import hash_email
 from app.db.models import Case
+from app.utils.normalization import normalize_email
 
 
 def _create_case(db, org_id, user_id, stage):
+    email = f"form-test-{uuid.uuid4().hex[:8]}@example.com"
+    normalized_email = normalize_email(email)
     case = Case(
         id=uuid.uuid4(),
         organization_id=org_id,
@@ -19,7 +23,8 @@ def _create_case(db, org_id, user_id, stage):
         owner_id=user_id,
         created_by_user_id=user_id,
         full_name="Original Name",
-        email=f"form-test-{uuid.uuid4().hex[:8]}@example.com",
+        email=normalized_email,
+        email_hash=hash_email(normalized_email),
     )
     db.add(case)
     db.flush()

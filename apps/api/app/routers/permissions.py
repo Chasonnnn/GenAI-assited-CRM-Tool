@@ -342,7 +342,6 @@ def update_member(
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e))
 
-    db.commit()
     if membership.role != old_role:
         from app.services import audit_service
 
@@ -355,7 +354,7 @@ def update_member(
             new_role=membership.role,
             request=request,
         )
-        db.commit()
+    db.commit()
 
     # Return updated detail
     return get_member(member_id, db, session)
@@ -395,7 +394,6 @@ def remove_member(
 
     # Delete membership
     db.delete(membership)
-    db.commit()
     from app.services import audit_service
 
     audit_service.log_user_deactivated(

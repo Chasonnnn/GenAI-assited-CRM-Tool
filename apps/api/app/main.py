@@ -2,18 +2,22 @@
 
 import logging
 import os
+from time import perf_counter
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
+from app.core.deps import COOKIE_NAME, CSRF_HEADER, CSRF_HEADER_VALUE
 from app.core.gcp_monitoring import report_exception, setup_gcp_monitoring
 from app.core.structured_logging import build_log_context
 from app.core.rate_limit import limiter
-from app.db.session import engine
+from app.core.telemetry import configure_telemetry
+from app.db.session import SessionLocal, engine
 from app.routers import (
     admin_exports,
     admin_imports,
@@ -58,6 +62,7 @@ from app.routers import (
     websocket as ws_router,
     workflows,
 )
+from app.services import metrics_service
 
 # ============================================================================
 # GCP Monitoring (Cloud Logging + Error Reporting)
@@ -102,6 +107,8 @@ app = FastAPI(
     redoc_url="/redoc" if settings.ENV == "dev" else None,
 )
 
+configure_telemetry(app, engine)
+
 
 # Report server errors to GCP Error Reporting when enabled.
 @app.middleware("http")
@@ -135,6 +142,63 @@ async def gcp_error_reporting_middleware(request, call_next):
         )
         logging.exception("Unhandled exception", extra=context)
         raise
+
+
+def _record_metrics(request: Request, status_code: int, duration_ms: int) -> None:
+    route = request.scope.get("route")
+    route_path = getattr(route, "path", request.url.path)
+    session = getattr(request.state, "user_session", None)
+    org_id = session.org_id if session else None
+    db = SessionLocal()
+    try:
+        metrics_service.record_request(
+            db=db,
+            route=route_path,
+            method=request.method,
+            status_code=status_code,
+            duration_ms=duration_ms,
+            org_id=org_id,
+        )
+    finally:
+        db.close()
+
+
+@app.middleware("http")
+async def metrics_middleware(request: Request, call_next):
+    start = perf_counter()
+    try:
+        response = await call_next(request)
+    except HTTPException as exc:
+        duration_ms = int((perf_counter() - start) * 1000)
+        _record_metrics(request, exc.status_code, duration_ms)
+        raise
+    except RateLimitExceeded:
+        duration_ms = int((perf_counter() - start) * 1000)
+        _record_metrics(request, status.HTTP_429_TOO_MANY_REQUESTS, duration_ms)
+        raise
+    except Exception:
+        duration_ms = int((perf_counter() - start) * 1000)
+        _record_metrics(request, status.HTTP_500_INTERNAL_SERVER_ERROR, duration_ms)
+        raise
+
+    duration_ms = int((perf_counter() - start) * 1000)
+    _record_metrics(request, response.status_code, duration_ms)
+    return response
+
+
+# Enforce CSRF on state-changing requests when session cookie is present.
+@app.middleware("http")
+async def csrf_protection_middleware(request: Request, call_next):
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        if request.cookies.get(COOKIE_NAME):
+            if request.headers.get(CSRF_HEADER) != CSRF_HEADER_VALUE:
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "detail": f"Missing CSRF header. Include '{CSRF_HEADER}: {CSRF_HEADER_VALUE}'"
+                    },
+                )
+    return await call_next(request)
 
 
 # Add rate limiter

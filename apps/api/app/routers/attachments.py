@@ -8,7 +8,13 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.case_access import check_case_access, can_modify_case
-from app.core.deps import get_current_session, get_db, require_csrf_header
+from app.core.deps import (
+    get_db,
+    require_any_permissions,
+    require_csrf_header,
+    require_permission,
+)
+from app.core.policies import POLICIES
 from app.db.enums import Role
 from app.db.models import Case
 from app.schemas.auth import UserSession
@@ -77,7 +83,9 @@ async def upload_attachment(
     case_id: UUID,
     file: Annotated[UploadFile, File()],
     db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(
+        require_permission(POLICIES["cases"].actions["edit"])
+    ),
     _: str = Depends(require_csrf_header),
 ):
     """
@@ -128,8 +136,9 @@ async def upload_attachment(
 @router.get("/cases/{case_id}/attachments", response_model=list[AttachmentRead])
 async def list_attachments(
     case_id: UUID,
+    request: Request,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["cases"].default)),
 ):
     """List attachments for a case (excludes quarantined and deleted)."""
     case = _get_case_with_access(db, case_id, session)
@@ -140,6 +149,19 @@ async def list_attachments(
         case_id=case.id,
         include_quarantined=False,
     )
+
+    from app.services import audit_service
+
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="case_attachments",
+        target_id=case.id,
+        request=request,
+        details={"count": len(attachments)},
+    )
+    db.commit()
 
     return [
         AttachmentRead(
@@ -176,8 +198,11 @@ def _get_ip_with_access(db: Session, ip_id: UUID, session: UserSession):
 )
 async def list_ip_attachments(
     ip_id: UUID,
+    request: Request,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(
+        require_permission(POLICIES["intended_parents"].default)
+    ),
 ):
     """List attachments for an intended parent."""
     ip = _get_ip_with_access(db, ip_id, session)
@@ -188,6 +213,19 @@ async def list_ip_attachments(
         intended_parent_id=ip.id,
         include_quarantined=False,
     )
+
+    from app.services import audit_service
+
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="intended_parent_attachments",
+        target_id=ip.id,
+        request=request,
+        details={"count": len(attachments)},
+    )
+    db.commit()
 
     return [
         AttachmentRead(
@@ -211,7 +249,9 @@ async def upload_ip_attachment(
     ip_id: UUID,
     file: Annotated[UploadFile, File()],
     db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(
+        require_permission(POLICIES["intended_parents"].actions["edit"])
+    ),
     _: str = Depends(require_csrf_header),
 ):
     """Upload a file attachment to an intended parent."""
@@ -258,7 +298,14 @@ async def download_attachment(
     attachment_id: UUID,
     request: Request,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(
+        require_any_permissions(
+            [
+                POLICIES["cases"].default,
+                POLICIES["intended_parents"].default,
+            ]
+        )
+    ),
 ):
     """Get signed download URL for an attachment."""
     attachment = attachment_service.get_attachment(
@@ -286,6 +333,21 @@ async def download_attachment(
         attachment_id=attachment_id,
         user_id=session.user_id,
     )
+    from app.services import audit_service
+
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="attachment",
+        target_id=attachment_id,
+        details={
+            "case_id": str(attachment.case_id) if attachment.case_id else None,
+            "intended_parent_id": str(attachment.intended_parent_id)
+            if attachment.intended_parent_id
+            else None,
+        },
+    )
     db.commit()
 
     if not url:
@@ -304,7 +366,14 @@ async def download_attachment(
 async def delete_attachment(
     attachment_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(
+        require_any_permissions(
+            [
+                POLICIES["cases"].actions["edit"],
+                POLICIES["intended_parents"].actions["edit"],
+            ]
+        )
+    ),
     _: str = Depends(require_csrf_header),
 ):
     """Soft-delete an attachment (uploader or Manager+ only)."""
@@ -347,7 +416,14 @@ async def delete_attachment(
 async def download_local_attachment(
     storage_key: str,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(
+        require_any_permissions(
+            [
+                POLICIES["cases"].default,
+                POLICIES["intended_parents"].default,
+            ]
+        )
+    ),
 ):
     """Serve local attachments (dev only)."""
     from fastapi.responses import FileResponse
@@ -368,6 +444,24 @@ async def download_local_attachment(
         _get_case_with_access(db, attachment.case_id, session)
     elif attachment.intended_parent_id:
         _get_ip_with_access(db, attachment.intended_parent_id, session)
+
+    from app.services import audit_service
+
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="attachment",
+        target_id=attachment.id,
+        details={
+            "case_id": str(attachment.case_id) if attachment.case_id else None,
+            "intended_parent_id": str(attachment.intended_parent_id)
+            if attachment.intended_parent_id
+            else None,
+            "storage": "local",
+        },
+    )
+    db.commit()
 
     file_path = f"{_get_local_storage_path()}/{storage_key}"
     return FileResponse(

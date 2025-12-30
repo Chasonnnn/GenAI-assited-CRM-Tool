@@ -8,6 +8,9 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from httpx import AsyncClient
 
+from app.core.encryption import hash_email
+from app.utils.normalization import normalize_email
+
 
 @pytest.mark.asyncio
 async def test_zoom_connect_sets_state_cookie_and_returns_auth_url(
@@ -134,6 +137,7 @@ async def test_create_zoom_meeting_returns_response_when_service_mocked(
     from app.services import zoom_service
 
     # Create a minimal case in-org
+    normalized_email = normalize_email("case@example.com")
     case = Case(
         case_number="00001",
         organization_id=test_auth.org.id,
@@ -142,7 +146,8 @@ async def test_create_zoom_meeting_returns_response_when_service_mocked(
         owner_type=OwnerType.USER.value,
         owner_id=test_auth.user.id,
         full_name="Test Case",
-        email="case@example.com",
+        email=normalized_email,
+        email_hash=hash_email(normalized_email),
     )
     db.add(case)
     db.flush()

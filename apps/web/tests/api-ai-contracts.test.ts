@@ -46,10 +46,16 @@ describe('AI API client contract', () => {
         expect(api.post).toHaveBeenCalledWith('/ai/consent/accept')
     })
 
-    it('uses /ai/chat for chat messages', async () => {
-        apiMock.post.mockResolvedValue({ content: 'ok', proposed_actions: [], tokens_used: { prompt: 0, completion: 0, total: 0 } })
+    it('uses /ai/chat/async for chat messages', async () => {
+        apiMock.post.mockResolvedValue({ job_id: 'j1', status: 'pending' })
+        apiMock.get.mockResolvedValue({
+            job_id: 'j1',
+            status: 'completed',
+            result: { content: 'ok', proposed_actions: [], tokens_used: { prompt: 0, completion: 0, total: 0 } },
+        })
         await sendChatMessage({ entity_type: 'case', entity_id: 'c1', message: 'hello' })
-        expect(api.post).toHaveBeenCalledWith('/ai/chat', { entity_type: 'case', entity_id: 'c1', message: 'hello' })
+        expect(api.post).toHaveBeenCalledWith('/ai/chat/async', { entity_type: 'case', entity_id: 'c1', message: 'hello' })
+        expect(api.get).toHaveBeenCalledWith('/ai/chat/jobs/j1')
     })
 
     it('uses /ai/actions/{id}/approve|reject for action decisions', async () => {

@@ -6,9 +6,11 @@ import os
 import pytest
 
 from app.core.config import settings
+from app.core.encryption import hash_email
 from app.db.enums import AuditEventType, TaskType
 from app.db.models import AuditLog, Task
 from app.services import compliance_service
+from app.utils.normalization import normalize_email
 
 
 def _create_audit_log(db, org_id, user_id, **overrides):
@@ -241,26 +243,30 @@ def test_specific_entity_legal_hold_blocks_related(db, test_org, test_user):
     db.flush()
 
     # Create two old archived cases
+    case1_email = normalize_email("case1@test.com")
     case1 = Case(
         organization_id=test_org.id,
         case_number="TEST-001",
         stage_id=stage.id,
         status_label=stage.label,
         full_name="Case One",
-        email="case1@test.com",
+        email=case1_email,
+        email_hash=hash_email(case1_email),
         source="manual",
         created_by_user_id=test_user.id,
         owner_type="user",
         owner_id=test_user.id,
         archived_at=datetime.now(timezone.utc) - timedelta(days=30),
     )
+    case2_email = normalize_email("case2@test.com")
     case2 = Case(
         organization_id=test_org.id,
         case_number="TEST-002",
         stage_id=stage.id,
         status_label=stage.label,
         full_name="Case Two",
-        email="case2@test.com",
+        email=case2_email,
+        email_hash=hash_email(case2_email),
         source="manual",
         created_by_user_id=test_user.id,
         owner_type="user",

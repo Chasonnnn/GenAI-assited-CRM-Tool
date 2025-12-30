@@ -11,8 +11,10 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from app.core.encryption import hash_email
 from app.db.models import Case, PipelineStage, Pipeline
 from app.services import case_service
+from app.utils.normalization import normalize_email
 
 
 # =============================================================================
@@ -78,13 +80,16 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
 
     # Cases created this week (3 cases) - within last 7 days
     for i in range(3):
+        email = f"thisweek{i}@test.com"
+        normalized_email = normalize_email(email)
         case = Case(
             id=uuid.uuid4(),
             organization_id=test_org.id,
             stage_id=stage.id,
             full_name=f"This Week Case {i}",
             status_label=stage.label,
-            email=f"thisweek{i}@test.com",
+            email=normalized_email,
+            email_hash=hash_email(normalized_email),
             source="website",
             case_number=f"TW-{i:03d}",
             created_by_user_id=test_user.id,
@@ -97,13 +102,16 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
 
     # Cases created last week (5 cases) - 8-12 days ago (clearly in 7-14 window)
     for i in range(5):
+        email = f"lastweek{i}@test.com"
+        normalized_email = normalize_email(email)
         case = Case(
             id=uuid.uuid4(),
             organization_id=test_org.id,
             stage_id=stage.id,
             full_name=f"Last Week Case {i}",
             status_label=stage.label,
-            email=f"lastweek{i}@test.com",
+            email=normalized_email,
+            email_hash=hash_email(normalized_email),
             source="website",
             case_number=f"LW-{i:03d}",
             created_by_user_id=test_user.id,
@@ -116,13 +124,16 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
 
     # Cases created this month but not this/last week (4 cases) - 15-20 days ago
     for i in range(4):
+        email = f"thismonth{i}@test.com"
+        normalized_email = normalize_email(email)
         case = Case(
             id=uuid.uuid4(),
             organization_id=test_org.id,
             stage_id=stage.id,
             full_name=f"This Month Case {i}",
             status_label=stage.label,
-            email=f"thismonth{i}@test.com",
+            email=normalized_email,
+            email_hash=hash_email(normalized_email),
             source="website",
             case_number=f"TM-{i:03d}",
             created_by_user_id=test_user.id,
@@ -135,13 +146,16 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
 
     # Cases created last month (2 cases) - 35-40 days ago (in 30-60 day window)
     for i in range(2):
+        email = f"lastmonth{i}@test.com"
+        normalized_email = normalize_email(email)
         case = Case(
             id=uuid.uuid4(),
             organization_id=test_org.id,
             stage_id=stage.id,
             full_name=f"Last Month Case {i}",
             status_label=stage.label,
-            email=f"lastmonth{i}@test.com",
+            email=normalized_email,
+            email_hash=hash_email(normalized_email),
             source="website",
             case_number=f"LM-{i:03d}",
             created_by_user_id=test_user.id,

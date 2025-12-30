@@ -11,9 +11,11 @@ import uuid
 import pytest
 from httpx import AsyncClient
 
+from app.core.encryption import hash_email
 from app.db.models import AIActionApproval, AISettings, Case
 from app.services import ai_settings_service
 from app.services.ai_provider import ChatResponse
+from app.utils.normalization import normalize_email
 
 
 @pytest.mark.asyncio
@@ -56,6 +58,7 @@ async def test_ai_chat_returns_approval_id_per_action(
     db, authed_client: AsyncClient, test_auth, default_stage, monkeypatch
 ):
     # Minimal case required by /ai/chat contract
+    email = f"case-{uuid.uuid4().hex[:8]}@test.com"
     case = Case(
         case_number=f"C{uuid.uuid4().hex[:9]}",
         organization_id=test_auth.org.id,
@@ -64,7 +67,8 @@ async def test_ai_chat_returns_approval_id_per_action(
         owner_type="user",
         owner_id=test_auth.user.id,
         full_name="Test Case",
-        email=f"case-{uuid.uuid4().hex[:8]}@test.com",
+        email=normalize_email(email),
+        email_hash=hash_email(email),
     )
     db.add(case)
     db.flush()

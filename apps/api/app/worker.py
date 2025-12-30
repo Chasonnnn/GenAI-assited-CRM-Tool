@@ -229,11 +229,17 @@ async def process_job(db, job) -> None:
     elif job.job_type == JobType.EXPORT_GENERATION.value:
         await process_export_generation(db, job)
 
+    elif job.job_type == JobType.ADMIN_EXPORT.value:
+        await process_admin_export(db, job)
+
     elif job.job_type == JobType.DATA_PURGE.value:
         await process_data_purge(db, job)
 
     elif job.job_type == JobType.CAMPAIGN_SEND.value:
         await process_campaign_send(db, job)
+
+    elif job.job_type == JobType.AI_CHAT.value:
+        await process_ai_chat(db, job)
 
     else:
         raise Exception(f"Unknown job type: {job.job_type}")
@@ -719,6 +725,111 @@ async def process_export_generation(db, job) -> None:
         raise Exception("Missing export_job_id in job payload")
 
     compliance_service.process_export_job(db, UUID(export_job_id))
+
+
+async def process_admin_export(db, job) -> None:
+    """Process admin export job."""
+    from app.services import admin_export_service, analytics_service
+
+    payload = job.payload or {}
+    export_type = payload.get("export_type")
+    filename = payload.get("filename")
+
+    if not export_type:
+        raise Exception("Missing export_type in job payload")
+
+    if not filename:
+        filename = admin_export_service.build_export_filename(export_type)
+
+    if export_type == "cases_csv":
+        file_path = admin_export_service.store_cases_csv(
+            db, job.organization_id, filename
+        )
+    elif export_type == "org_config_zip":
+        export_bytes = admin_export_service.build_org_config_zip(
+            db, job.organization_id
+        )
+        file_path = admin_export_service.store_export_bytes(
+            job.organization_id, filename, export_bytes
+        )
+    elif export_type == "analytics_zip":
+        from_date = payload.get("from_date")
+        to_date = payload.get("to_date")
+        ad_id = payload.get("ad_id")
+        start, end = analytics_service.parse_date_range(from_date, to_date)
+        meta_spend = await analytics_service.get_cached_meta_spend_summary(
+            db=db,
+            organization_id=job.organization_id,
+            start=start,
+            end=end,
+            time_increment=None,
+            breakdowns=None,
+        )
+        export_bytes = admin_export_service.build_analytics_zip(
+            db=db,
+            org_id=job.organization_id,
+            start=start,
+            end=end,
+            ad_id=ad_id,
+            meta_spend=meta_spend,
+        )
+        file_path = admin_export_service.store_export_bytes(
+            job.organization_id, filename, export_bytes
+        )
+    else:
+        raise Exception(f"Unsupported admin export type: {export_type}")
+
+    payload = {
+        **payload,
+        "file_path": file_path,
+        "filename": filename,
+    }
+    job.payload = payload
+
+
+async def process_ai_chat(db, job) -> None:
+    """Process AI chat job."""
+    from app.services import ai_chat_service, oauth_service
+
+    payload = job.payload or {}
+    user_id = payload.get("user_id")
+    message = payload.get("message")
+    entity_type = payload.get("entity_type") or "global"
+    entity_id = payload.get("entity_id")
+
+    if not user_id or not message:
+        raise Exception("Missing user_id or message in AI chat payload")
+
+    user_uuid = UUID(user_id)
+    if entity_type == "global" or not entity_id:
+        entity_type = "global"
+        entity_uuid = user_uuid
+    else:
+        entity_uuid = UUID(entity_id)
+
+    integrations = oauth_service.get_user_integrations(db, user_uuid)
+    user_integrations = [i.integration_type for i in integrations]
+
+    result = await ai_chat_service.chat_async(
+        db=db,
+        organization_id=job.organization_id,
+        user_id=user_uuid,
+        entity_type=entity_type,
+        entity_id=entity_uuid,
+        message=message,
+        user_integrations=user_integrations,
+    )
+
+    updated_payload = dict(payload)
+    updated_payload.pop("message", None)
+    updated_payload["result"] = {
+        "content": result.get("content"),
+        "proposed_actions": result.get("proposed_actions", []),
+        "tokens_used": result.get("tokens_used", {}),
+        "conversation_id": result.get("conversation_id"),
+        "assistant_message_id": result.get("assistant_message_id"),
+    }
+    job.payload = updated_payload
 
 
 async def process_data_purge(db, job) -> None:

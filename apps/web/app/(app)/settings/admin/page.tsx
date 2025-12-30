@@ -34,29 +34,68 @@ export default function AdminDataPage() {
 
     const handleExport = useCallback(async (type: "cases" | "config" | "analytics") => {
         setIsExporting(type)
+        const headers = { "X-Requested-With": "XMLHttpRequest" }
+
+        const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
         try {
-            const response = await fetch(`${API_BASE}/admin/exports/${type}`, {
+            const createResponse = await fetch(`${API_BASE}/admin/exports/${type}`, {
+                method: "POST",
                 credentials: "include",
-                headers: { "X-Requested-With": "XMLHttpRequest" },
+                headers,
             })
 
-            if (!response.ok) {
-                throw new Error(`Export failed: ${response.status}`)
+            if (!createResponse.ok) {
+                throw new Error(`Export failed: ${createResponse.status}`)
             }
 
-            const disposition = response.headers.get("content-disposition") || ""
-            const match = disposition.match(/filename="([^"]+)"/)
-            const filename = match?.[1] || `${type}_export.${type === "cases" ? "csv" : "zip"}`
+            const createData = await createResponse.json()
+            const jobId = createData.job_id as string
 
-            const blob = await response.blob()
-            const url = URL.createObjectURL(blob)
-            const a = document.createElement("a")
-            a.href = url
-            a.download = filename
-            document.body.appendChild(a)
-            a.click()
-            a.remove()
-            URL.revokeObjectURL(url)
+            let jobStatus = createData.status as string
+            let jobError: string | null = null
+
+            for (let attempt = 0; attempt < 60; attempt += 1) {
+                if (jobStatus === "completed") break
+                if (jobStatus === "failed") break
+
+                await sleep(2000)
+                const statusResponse = await fetch(`${API_BASE}/admin/exports/jobs/${jobId}`, {
+                    credentials: "include",
+                    headers,
+                })
+                if (!statusResponse.ok) {
+                    throw new Error(`Export status failed: ${statusResponse.status}`)
+                }
+                const statusData = await statusResponse.json()
+                jobStatus = statusData.status
+                jobError = statusData.error || null
+            }
+
+            if (jobStatus !== "completed") {
+                throw new Error(jobError || "Export failed or timed out")
+            }
+
+            const downloadResponse = await fetch(`${API_BASE}/admin/exports/jobs/${jobId}/download`, {
+                credentials: "include",
+                headers,
+            })
+            if (!downloadResponse.ok) {
+                throw new Error(`Export download failed: ${downloadResponse.status}`)
+            }
+
+            const downloadData = await downloadResponse.json()
+            const downloadUrl = downloadData.download_url as string
+            const filename = downloadData.filename as string
+
+            const link = document.createElement("a")
+            link.href = downloadUrl
+            link.target = "_blank"
+            link.rel = "noopener"
+            link.download = filename
+            document.body.appendChild(link)
+            link.click()
+            link.remove()
 
             toast.success("Export complete", { description: `Downloaded ${filename}` })
         } catch (error) {

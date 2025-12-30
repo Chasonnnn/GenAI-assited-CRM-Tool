@@ -29,6 +29,7 @@ class PermissionCategory(str, Enum):
     CASES = "Cases"
     INTENDED_PARENTS = "Intended Parents"
     TASKS = "Tasks"
+    APPOINTMENTS = "Appointments"
     TEAM = "Team"
     SETTINGS = "Settings"
     AI = "AI Assistant"
@@ -61,6 +62,8 @@ class PermissionKey(str, Enum):
     TASKS_EDIT = "edit_tasks"
     TASKS_DELETE = "delete_tasks"
 
+    APPOINTMENTS_MANAGE = "manage_appointments"
+
     TEAM_MANAGE = "manage_team"
     ROLES_VIEW = "view_roles"
     ROLES_MANAGE = "manage_roles"
@@ -74,9 +77,13 @@ class PermissionKey(str, Enum):
     REPORTS_VIEW = "view_reports"
     AI_USE = "use_ai_assistant"
     AI_APPROVE_ACTIONS = "approve_ai_actions"
+    AI_SETTINGS_MANAGE = "manage_ai_settings"
+    AI_USAGE_VIEW = "view_ai_usage"
+    AI_CONVERSATIONS_VIEW_ALL = "view_ai_conversations_all"
 
     EXPORT_DATA = "export_data"
     COMPLIANCE_MANAGE = "manage_compliance"
+    COMPLIANCE_PURGE = "purge_compliance_data"
 
     META_LEADS_MANAGE = "manage_meta_leads"
     EMAIL_TEMPLATES_VIEW = "view_email_templates"
@@ -84,6 +91,9 @@ class PermissionKey(str, Enum):
     OPS_MANAGE = "manage_ops"
     JOBS_MANAGE = "manage_jobs"
     FORMS_MANAGE = "manage_forms"
+    ADMIN_EXPORTS_MANAGE = "manage_admin_exports"
+    ADMIN_IMPORTS_MANAGE = "manage_admin_imports"
+    ADMIN_VERSIONS_MANAGE = "manage_admin_versions"
 
 
 # =============================================================================
@@ -182,6 +192,13 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
     "delete_tasks": PermissionDef(
         "delete_tasks", "Delete Tasks", "Delete tasks", PermissionCategory.TASKS
     ),
+    # Appointments
+    "manage_appointments": PermissionDef(
+        "manage_appointments",
+        "Manage Appointments",
+        "Configure appointment types, availability, and bookings",
+        PermissionCategory.APPOINTMENTS,
+    ),
     # Team & Settings
     "manage_team": PermissionDef(
         "manage_team",
@@ -262,6 +279,25 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
         "Execute AI-proposed actions (send email, create task, etc.)",
         PermissionCategory.AI,
     ),
+    "manage_ai_settings": PermissionDef(
+        "manage_ai_settings",
+        "Manage AI Settings",
+        "Enable AI and configure providers/models",
+        PermissionCategory.AI,
+    ),
+    "view_ai_usage": PermissionDef(
+        "view_ai_usage",
+        "View AI Usage",
+        "Access AI usage analytics and summaries",
+        PermissionCategory.AI,
+    ),
+    "view_ai_conversations_all": PermissionDef(
+        "view_ai_conversations_all",
+        "View All AI Conversations",
+        "Audit AI conversations across users",
+        PermissionCategory.AI,
+        developer_only=True,
+    ),
     # Compliance
     "export_data": PermissionDef(
         "export_data",
@@ -274,6 +310,13 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
         "Manage Compliance",
         "Legal holds, purge requests, HIPAA exports",
         PermissionCategory.COMPLIANCE,
+    ),
+    "purge_compliance_data": PermissionDef(
+        "purge_compliance_data",
+        "Purge Compliance Data",
+        "Execute retention-based data purges",
+        PermissionCategory.COMPLIANCE,
+        developer_only=True,
     ),
     # New granular permissions
     "manage_meta_leads": PermissionDef(
@@ -304,6 +347,27 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
         "manage_jobs",
         "Manage Background Jobs",
         "Trigger and view job status",
+        PermissionCategory.SETTINGS,
+        developer_only=True,
+    ),
+    "manage_admin_exports": PermissionDef(
+        "manage_admin_exports",
+        "Manage Admin Exports",
+        "Generate developer-only data exports",
+        PermissionCategory.SETTINGS,
+        developer_only=True,
+    ),
+    "manage_admin_imports": PermissionDef(
+        "manage_admin_imports",
+        "Manage Admin Imports",
+        "Restore org data from admin imports",
+        PermissionCategory.SETTINGS,
+        developer_only=True,
+    ),
+    "manage_admin_versions": PermissionDef(
+        "manage_admin_versions",
+        "Manage Admin Versions",
+        "View and roll back versioned configs",
         PermissionCategory.SETTINGS,
         developer_only=True,
     ),
@@ -355,6 +419,7 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "delete_tasks",
         "view_reports",
         "view_email_templates",
+        "manage_appointments",
     },
     "admin": {
         "view_dashboard",
@@ -387,6 +452,8 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "view_reports",
         "use_ai_assistant",
         "approve_ai_actions",
+        "manage_ai_settings",
+        "view_ai_usage",
         "export_data",
         "manage_compliance",
         "manage_meta_leads",
@@ -394,6 +461,7 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "manage_email_templates",
         "manage_ops",
         "manage_pipelines",
+        "manage_appointments",
     },
     "developer": set(PERMISSION_REGISTRY.keys()),  # All permissions
 }
