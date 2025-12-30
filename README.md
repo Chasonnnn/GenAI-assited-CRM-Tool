@@ -1,131 +1,151 @@
 # Surrogacy CRM Platform
 
-**Version:** 0.15.00 | **Format:** a.bc.de (major.feature.patch)
+**Version:** 0.16.00 | **Last Updated:** December 29, 2025
 
-A modern, multi-tenant CRM and case management platform built for surrogacy agencies. Features lead pipeline management with **customizable stages**, intended parent profiles, case workflow tracking, **IP-Surrogate matching with shared calendar**, **context-aware AI chatbot with schedule parsing**, **appointment scheduling with public booking and Google Calendar integration**, **powerful automation engine with workflows and campaigns**, **multi-factor authentication (TOTP + Duo)**, and enterprise audit/versioning.
+A modern, multi-tenant CRM platform purpose-built for surrogacy agencies. Manage cases from lead intake through delivery with customizable pipelines, intended parent matching, AI-powered assistance, and comprehensive automation.
 
-## Tech Stack
+---
+
+## ✨ Key Features
+
+### Case Management
+- **Customizable Pipelines** — Define stages, colors, and workflows per organization
+- **Case Handoff Workflow** — Seamless intake-to-case-manager transitions
+- **Activity Logging** — Complete audit trail of all case actions
+- **Queue System** — Salesforce-style claim/release for workload distribution
+
+### Form Builder
+- **Dynamic Forms** — Create multi-page application forms with drag-and-drop
+- **Secure Public Links** — Token-based form access for applicants
+- **Auto-Mapping** — Form submissions auto-populate case fields on approval
+- **File Uploads** — Secure document collection with virus scanning
+
+### Matching & Coordination
+- **IP-Surrogate Matching** — Propose, review, accept/reject workflow
+- **Shared Calendar** — Coordinated scheduling across match parties
+- **Notes & Files** — Centralized documentation per match
+
+### Automation
+- **Workflow Engine** — Event-driven automation (8 triggers, 6 action types)
+- **Email Campaigns** — Bulk sends with recipient filtering and tracking
+- **Email Templates** — Customizable templates with variable substitution
+
+### AI Assistant (Optional)
+- **BYOK Model** — Bring your own API key (OpenAI, etc.)
+- **Case Summarization** — AI-generated case summaries
+- **Email Drafting** — Context-aware email composition
+- **Dashboard Insights** — Smart analytics recommendations
+
+### Integrations
+- **Google OAuth SSO** — Secure authentication
+- **Google Calendar** — Two-way appointment sync
+- **Zoom** — Meeting creation and invites
+- **Meta Lead Ads** — Auto-import leads with CAPI feedback
+- **Gmail** — Send emails through connected accounts
+
+### Enterprise Features
+- **Multi-Tenancy** — Complete organization isolation
+- **RBAC** — Role-based permissions (intake, case manager, manager, developer)
+- **MFA** — TOTP and Duo Security support
+- **Audit Trail** — Tamper-evident hash-chain logging
+- **Version Control** — Rollback support for configurations
+
+---
+
+## 🛠 Tech Stack
 
 | Layer | Technology |
 |-------|------------|
-| **Frontend** | Next.js 16.1, React 19, TypeScript 5.9, Tailwind CSS 4.1, Base UI, shadcn/ui-inspired components |
+| **Frontend** | Next.js 16, React 19, TypeScript, Tailwind CSS 4, shadcn/ui components |
 | **Backend** | FastAPI, Pydantic v2, SQLAlchemy 2.0 |
-| **Database** | PostgreSQL 16 (via Docker) |
+| **Database** | PostgreSQL 16 |
+| **Search** | PostgreSQL Full-Text Search (tsvector + GIN) |
 | **Migrations** | Alembic |
+| **Testing** | pytest (backend), Vitest + React Testing Library (frontend) |
 
-## AI (Optional / BYOK)
+---
 
-AI is an **optional** capability designed to be safe, auditable, and tenant-configurable.
-
-- Default: **off** (the app works without AI).
-- If enabled: organizations can use **their own AI provider keys** (BYOK) so costs and provider choices stay under their control.
-- Recommended: store the org’s AI key **server-side in the database (encrypted at rest)** so a manager enables AI once and authorized employees can use AI features without handling keys.
-- Early AI surfaces (recommended): analytics/insights, summarization, and drafting (with human review).
-- Early AI safety stance (recommended): AI can **recommend** qualification/flags with reasons + confidence, but a human confirms any final status changes.
-
-## Project Structure
+## 📁 Project Structure
 
 ```
 ├── apps/
-│   ├── api/                    # FastAPI backend (v0.12.00)
+│   ├── api/                    # FastAPI backend
 │   │   ├── app/
-│   │   │   ├── core/           # Config, security, dependencies, case_access
-│   │   │   ├── db/             # Models (36: +PipelineStage), enums, session
-│   │   │   ├── routers/        # API endpoints (23 modules)
-│   │   │   │   ├── auth, cases, tasks, notes, notifications
-│   │   │   │   ├── intended_parents, email_templates, pipelines, queues
-│   │   │   │   ├── ai, analytics, audit, admin_versions, metadata
-│   │   │   │   ├── integrations, webhooks, ops, jobs
-│   │   │   │   ├── appointments, booking  # Scheduling
-│   │   │   │   └── dev, internal, websocket
-│   │   │   ├── schemas/        # Pydantic DTOs
-│   │   │   ├── services/       # Business logic (35 services)
-│   │   │   │   ├── auth, user, org, case, task, note, queue
-│   │   │   │   ├── ai_*, email, pipeline, version
-│   │   │   │   ├── meta_*, import, audit, analytics
-│   │   │   │   ├── notification, oauth, gmail, pii_anonymizer
-│   │   │   │   └── appointment_service, appointment_email_service, calendar_service
-│   │   │   ├── utils/          # Helpers (normalization, pagination)
-│   │   │   ├── cli.py          # CLI commands
-│   │   │   └── main.py         # FastAPI app entry
-│   │   ├── alembic/            # Database migrations (37: +pipeline_stages, +cutover)
-│   │   ├── tests/              # pytest test suite (40+ tests)
-│   │   └── requirements.txt
+│   │   │   ├── core/           # Config, security, permissions
+│   │   │   ├── db/             # SQLAlchemy models, enums
+│   │   │   ├── routers/        # API endpoints (25+ modules)
+│   │   │   ├── schemas/        # Pydantic request/response DTOs
+│   │   │   ├── services/       # Business logic (40+ services)
+│   │   │   └── utils/          # Helpers (normalization, pagination)
+│   │   ├── alembic/            # Database migrations
+│   │   └── tests/              # pytest test suite
 │   │
 │   └── web/                    # Next.js frontend
+│       ├── app/
 │       │   ├── (app)/          # Authenticated routes
-│       │   │   ├── dashboard, cases, tasks, leads
-│       │   │   ├── intended-parents, reports, settings
-│       │   │   │   ├── audit/   # Audit log viewer (managers)
-│       │   │   │   ├── queues/  # Queue management (managers)
-│       │   │   │   └── appointments/  # Availability config
-│       │   │   ├── appointments/  # Pending/upcoming appointments
-│       │   │   ├── ai-assistant, notifications, automation
-│       │   │   └── analytics, ops-console
+│       │   ├── apply/          # Public application forms
 │       │   ├── book/           # Public booking pages
-│       │   ├── login/          # Public login page
-│       │   └── layout.tsx
-│       ├── components/         # Shared UI (inline-edit-field, etc.)
-│       ├── lib/                # API client, hooks, utils
-│       │   └── hooks/          # React Query hooks (+use-queues.ts)
-│       └── tests/              # Vitest test suite (74 tests)
+│       │   └── login/          # Authentication
+│       ├── components/         # Shared UI components
+│       └── lib/                # API client, hooks, utilities
 │
 ├── docs/                       # Documentation
-│   ├── agents.md               # Project spec & guidelines
-│   └── DESIGN.md               # Architecture decisions
-├── docker-compose.yml          # PostgreSQL database
-└── README.md
+│   ├── DESIGN.md               # Architecture documentation
+│   ├── automation.md           # Automation system guide
+│   └── oauth-setup-guide.md    # Integration setup
+│
+├── CHANGELOG.md                # Version history
+└── docker-compose.yml          # PostgreSQL for development
 ```
 
+---
 
-## Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
 
-- Node.js >= 20 (LTS)
-- pnpm
-- Python >= 3.11
-- Docker & Docker Compose
+- **Node.js** ≥ 20 (LTS)
+- **pnpm** (package manager)
+- **Python** ≥ 3.11
+- **Docker** & Docker Compose
 
-### 1. Start the Database
+### 1. Start Database
 
 ```bash
 docker compose up -d
 ```
 
-This starts PostgreSQL on `localhost:5432` with:
-- Database: `crm`
-- User: `postgres`
-- Password: `postgres`
+PostgreSQL runs on `localhost:5432` (database: `crm`, user: `postgres`, password: `postgres`)
 
-### 2. Setup Backend (API)
+### 2. Setup Backend
 
 ```bash
 cd apps/api
 
-# Create and activate virtual environment
+# Create virtual environment
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Create .env file
-cp .env.example .env  # Then edit with your settings
-
-# Bootstrap (create first org + manager invite)
-python -m app.cli create-org --name "Acme Surrogacy" --slug "acme" --admin-email "admin@acme.com"
+# Configure environment
+cp .env.example .env
+# Edit .env with your settings
 
 # Run migrations
 alembic upgrade head
 
-# Start the server
-uvicorn app.main:app --reload
+# Bootstrap first organization
+python -m app.cli create-org --name "Your Agency" --slug "agency" --admin-email "admin@agency.com"
+
+# Start server
+uvicorn app.main:app --reload --port 8000
 ```
 
-API runs at `http://localhost:8000`
+API: `http://localhost:8000` | Docs: `http://localhost:8000/docs`
 
-### 3. Setup Frontend (Web)
+### 3. Setup Frontend
 
 ```bash
 cd apps/web
@@ -133,46 +153,57 @@ cd apps/web
 # Install dependencies
 pnpm install
 
+# Configure environment
+echo "NEXT_PUBLIC_API_BASE_URL=http://localhost:8000" > .env.local
+
 # Start dev server
 pnpm dev
 ```
 
-Frontend runs at `http://localhost:3000`
+Frontend: `http://localhost:3000`
 
-## Environment Variables
+---
+
+## ⚙️ Environment Variables
 
 ### Backend (`apps/api/.env`)
 
 ```env
+# Database
 DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/crm
-# Auth (cookie-based session)
-JWT_SECRET=change-this-in-production-minimum-32-characters
-JWT_SECRET_PREVIOUS=
+
+# Authentication
+JWT_SECRET=your-secret-key-minimum-32-characters
 JWT_EXPIRES_HOURS=4
+
+# Google OAuth
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:8000/auth/google/callback
-# Encryption (required for OAuth tokens + versioned config snapshots)
-FERNET_KEY=generate-with-python-cryptography-fernet
-VERSION_ENCRYPTION_KEY=generate-with-python-cryptography-fernet
-META_ENCRYPTION_KEY=optional-fallback-if-VERSION_ENCRYPTION_KEY-empty
-ALLOWED_EMAIL_DOMAINS=
+
+# Encryption (required for OAuth tokens, versioned configs)
+FERNET_KEY=generate-with-Fernet.generate_key()
+VERSION_ENCRYPTION_KEY=generate-with-Fernet.generate_key()
+
+# Frontend
 CORS_ORIGINS=http://localhost:3000
 FRONTEND_URL=http://localhost:3000
-DEV_SECRET=local-dev-secret-change-me
-# Integrations (per-user OAuth)
+
+# Email (Resend)
+RESEND_API_KEY=re_your_api_key
+
+# Integrations (optional)
 ZOOM_CLIENT_ID=
 ZOOM_CLIENT_SECRET=
-ZOOM_REDIRECT_URI=http://localhost:8000/integrations/zoom/callback
 GMAIL_REDIRECT_URI=http://localhost:8000/integrations/gmail/callback
-# Email Provider (Resend)
-RESEND_API_KEY=re_your_api_key_here  # Get from https://resend.com/api-keys
-# Redis (optional, for distributed rate limiting across workers)
-REDIS_URL=redis://localhost:6379/0
-# Optional AI (example; exact wiring may evolve):
-# AI_ENABLED=false
-# AI_PROVIDER=openai
-# OPENAI_API_KEY=...
+
+# Meta Lead Ads (optional)
+META_VERIFY_TOKEN=
+META_AD_ACCOUNT_ID=
+META_SYSTEM_TOKEN=
+
+# Development
+DEV_SECRET=local-dev-secret
 ```
 
 ### Frontend (`apps/web/.env.local`)
@@ -181,190 +212,95 @@ REDIS_URL=redis://localhost:6379/0
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 ```
 
-## API Endpoints
+---
 
-### Authentication
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check with database connectivity test |
-| `/auth/google/login` | GET | Initiate Google OAuth flow |
-| `/auth/google/callback` | GET | Handle OAuth callback, create session |
-| `/auth/me` | GET | Get current user profile + org + role |
-| `/auth/logout` | POST | Clear session cookie (requires CSRF header) |
+## 📊 Data Models
 
-### Cases
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/cases` | GET | List cases (paginated, filters: status, source, assigned_to, q) |
-| `/cases` | POST | Create case (auto-generates case_number) |
-| `/cases/handoff-queue` | GET | List pending handoff cases (case_manager+ only) |
-| `/cases/{id}` | GET | Get case by ID |
-| `/cases/{id}` | PATCH | Update case fields |
-| `/cases/{id}` | DELETE | Hard delete (requires archived first, manager+) |
-| `/cases/{id}/status` | PATCH | Change status (records history) |
-| `/cases/{id}/assign` | PATCH | Assign to user (manager+ only) |
-| `/cases/{id}/archive` | POST | Soft delete (manager+ only) |
-| `/cases/{id}/restore` | POST | Restore archived case (manager+ only) |
-| `/cases/{id}/history` | GET | Get status change history (legacy) |
-| `/cases/{id}/activity` | GET | Get comprehensive activity log (paginated) |
-| `/cases/{id}/notes` | GET, POST | List/create notes |
-| `/cases/{id}/accept` | POST | Accept handoff (case_manager+ only) |
-| `/cases/{id}/deny` | POST | Deny handoff with reason (case_manager+ only) |
-| `/cases/assignees` | GET | Get org members for assignment dropdown |
-| `/cases/bulk-assign` | POST | Bulk assign cases (case_manager+ only) |
+### Core Entities (55+ tables)
 
-### Email Templates
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/email-templates` | GET | List templates |
-| `/email-templates` | POST | Create template (manager+ only) |
-| `/email-templates/{id}` | GET, PATCH, DELETE | Template CRUD |
-| `/email-templates/{id}/versions` | GET | List version history |
-| `/cases/{id}/send-email` | POST | Send email to case using template |
+| Category | Models |
+|----------|--------|
+| **Auth** | Organization, User, Membership, AuthIdentity, OrgInvite, RolePermission |
+| **Cases** | Case, CaseStatusHistory, CaseActivityLog, MetaLead, CaseImport |
+| **Relationships** | IntendedParent, Match, MatchEvent |
+| **Tasks** | Task, EntityNote, Attachment |
+| **Forms** | Form, FormSubmission, FormSubmissionToken, FormFieldMapping |
+| **Automation** | AutomationWorkflow, WorkflowExecution, EmailTemplate, EmailLog |
+| **Campaigns** | Campaign, CampaignRun, CampaignRecipient, EmailSuppression |
+| **Scheduling** | Appointment, AppointmentType, AvailabilityRule, BookingLink |
+| **AI** | AISettings, AIConversation, AIMessage, AIEntitySummary |
+| **Operations** | Job, Notification, IntegrationHealth, SystemAlert, AuditLog |
+| **Config** | Pipeline, PipelineStage, EntityVersion, UserIntegration |
 
-### CSV Import
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/cases/import/preview` | POST | Upload CSV and preview data with validation |
-| `/cases/import/execute` | POST | Execute CSV import |
-| `/cases/import` | GET | List import history |
-| `/cases/import/{id}` | GET | Get import details with errors |
+---
 
-### Meta Leads Admin
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/admin/meta-pages` | GET | List configured Meta pages |
-| `/admin/meta-pages` | POST | Add page token (encrypted) |
-| `/admin/meta-pages/{page_id}` | PUT | Update page configuration |
-| `/admin/meta-pages/{page_id}` | DELETE | Remove page |
+## 🔐 Security
 
-### Tasks
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/tasks` | GET | List tasks (filters: assigned_to, case_id, is_completed) |
-| `/tasks` | POST | Create task |
-| `/tasks/{id}` | GET, PATCH, DELETE | Task CRUD |
-| `/tasks/{id}/complete` | POST | Mark complete |
-| `/tasks/{id}/uncomplete` | POST | Mark incomplete |
+- **Authentication**: Cookie-based JWT sessions with Google OAuth
+- **Authorization**: Role-based access control (RBAC) with granular permissions
+- **CSRF Protection**: Required header on all mutations
+- **Multi-Factor**: TOTP and Duo Security integration
+- **Encryption**: Fernet encryption for OAuth tokens and sensitive configs
+- **Audit**: Hash-chain logging with tamper detection
+- **Data Isolation**: All queries scoped by organization_id
 
-### Notes
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/notes/{id}` | DELETE | Delete note (author or manager+) |
+### Roles
 
-### Development (dev only)
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/dev/seed` | POST | Create test org + users (requires X-Dev-Secret) |
-| `/dev/login-as/{user_id}` | POST | Bypass OAuth for testing |
+| Role | Description |
+|------|-------------|
+| `intake_specialist` | Lead intake and initial processing |
+| `case_manager` | Full case management access |
+| `manager` | Administrative access, analytics, team management |
+| `developer` | Platform administration, all permissions |
 
-### Intended Parents
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/intended-parents` | GET | List IPs (paginated, filters: status, state, budget, q) |
-| `/intended-parents` | POST | Create intended parent |
-| `/intended-parents/stats` | GET | Get IP counts by status |
-| `/intended-parents/{id}` | GET | Get IP by ID |
-| `/intended-parents/{id}` | PATCH | Update IP fields |
-| `/intended-parents/{id}/status` | PATCH | Change status (records history) |
-| `/intended-parents/{id}/archive` | POST | Archive IP |
-| `/intended-parents/{id}/restore` | POST | Restore archived IP (manager+ only) |
-| `/intended-parents/{id}` | DELETE | Hard delete (requires archived first, manager+) |
-| `/intended-parents/{id}/history` | GET | Get status change history |
-| `/intended-parents/{id}/notes` | GET, POST, DELETE | List/create/delete notes |
+---
 
-### Notifications
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/me/notifications` | GET | List notifications (filters: unread_only, limit, offset) |
-| `/me/notifications/count` | GET | Get unread count (for polling) |
-| `/me/notifications/{id}/read` | PATCH | Mark notification as read |
-| `/me/notifications/read-all` | POST | Mark all notifications as read |
-| `/me/settings/notifications` | GET | Get notification preferences |
-| `/me/settings/notifications` | PATCH | Update notification preferences |
+## 📚 Documentation
 
-## Current Status
+- **[DESIGN.md](./docs/DESIGN.md)** — Architecture decisions and patterns
+- **[CHANGELOG.md](./CHANGELOG.md)** — Version history and release notes
+- **[automation.md](./docs/automation.md)** — Workflow automation guide
+- **[oauth-setup-guide.md](./docs/oauth-setup-guide.md)** — Integration configuration
 
-**Version 0.15.00** — Automation System & Campaigns Module
+---
 
-### Core Platform
-- [x] Project scaffolding + PostgreSQL + migrations
-- [x] Google OAuth SSO + JWT sessions + role-based auth
-- [x] Cases module (CRUD, notes, tasks, status history, handoff workflow)
-- [x] Intended Parents module (CRUD, status workflow, archive/restore)
-- [x] Frontend UI (Base UI components, responsive design, dark mode)
-- [x] Workflow automation + email foundation
-- [x] In-App Notifications + Theme System
-- [x] Meta Lead Ads Integration + CAPI
+## 🧪 Testing
 
-### Enterprise Features (v0.12.00+)
-- [x] **Global Audit Trail** — Hash chain, tamper-evident logging
-- [x] **CSV Import** — Email-based duplicate detection
-- [x] **Org-Configurable Pipelines** — Custom stage labels, colors, order
-- [x] **In-App Version Control** — Encrypted snapshots, rollback support
-- [x] **Queue/Ownership System** — Salesforce-style claim/release workflow
-- [x] **Zoom Integration** — OAuth, meeting creation, email invites
-- [x] **AI Assistant v1** — BYOK, summarize-case, draft-email, analyze-dashboard
-- [x] **Analytics Dashboard** — Pie charts, funnel visualization, US map
+### Backend
+```bash
+cd apps/api
+pytest
+```
 
-### Recent Changes (v0.14.00)
-- **Matches Module**: IP-Surrogate matching with propose/accept/reject workflow
-- **Match Detail Page**: 3-column layout (35% Surrogate | 35% IP | 30% Notes/Files/Tasks)
-- **Match Tasks Calendar**: Month/week/day views with color-coded tasks per person
-- **Comprehensive Tests**: 33 new frontend tests for Matches functionality
+### Frontend
+```bash
+cd apps/web
+pnpm test        # Unit tests
+pnpm test:integration  # Integration tests
+```
 
-### v0.13.00 Changes
-- **Appointment Scheduling**: Public booking, timezone support, and meeting types
-- **Tasks Calendar**: FullCalendar integration with drag-and-drop rescheduling
-- **Invitation System**: Email-based team invites with expiration and revocation
-- **File Attachments**: Virus scanning and secure S3 storage for case files
-- **PDF Reports**: Native PDF export for analytics dashboards
+---
 
-### Data Models (50+ tables)
-`Organization`, `User`, `Membership`, `AuthIdentity`, `OrgInvite`, `Case`, `CaseStatusHistory`, `CaseActivityLog`, `Task`, `MetaLead`, `MetaPageMapping`, `Job`, `EmailTemplate`, `EmailLog`, `IntendedParent`, `IntendedParentStatusHistory`, `EntityNote`, `Notification`, `UserNotificationSettings`, `IntegrationHealth`, `IntegrationErrorRollup`, `SystemAlert`, `RequestMetricsRollup`, `AISettings`, `AIConversation`, `AIMessage`, `AIActionApproval`, `AIEntitySummary`, `AIUsageLog`, `UserIntegration`, `AuditLog`, `CaseImport`, `Pipeline`, `PipelineStage`, `EntityVersion`, `RolePermission`, `Appointment`, `AppointmentType`, `AvailabilityRule`, `AvailabilityOverride`, `BookingLink`, `AppointmentEmailLog`, `ZoomMeeting`, `Match`, `MatchEvent`, `AutomationWorkflow`, `WorkflowExecution`, `Campaign`, `CampaignRun`, `CampaignRecipient`, `EmailSuppression`
+## 🚢 Deployment
 
+### Health Endpoints
+- `/health/live` — Liveness probe
+- `/health/ready` — Readiness probe (checks DB)
 
-## Documentation
+### Recommended Stack
+- **Frontend**: Vercel
+- **Backend**: Cloud Run, Railway, or Render
+- **Database**: Cloud SQL or Supabase
+- **Storage**: S3-compatible for file uploads
 
-See [agents.md](./docs/agents.md) for detailed project specifications, architecture decisions, and contribution guidelines.
+---
 
-## Open-source & Customization Strategy
-
-The long-term goal is to keep a **general, open-source-ready core** while supporting organization-level customization via configuration (not forks):
-
-- Shared core entities and APIs (org-scoped, role-scoped)
-- Per-organization settings for pipelines/statuses, templates, rubrics, and (optional) AI policies/keys
-
-## Current Tabs & Modules
-
-Features exposed as **modules** (enabled per org) and **tabs** (shown per role).
-
-### Implemented Tabs
-- **Dashboard** (analytics, quick stats, recent activity)
-- **Leads** (pipeline management with customizable stages)
-- **Cases** (case workflow, notes, attachments)
-- **Intended Parents** (profiles management)
-- **Tasks** (task list + unified calendar with Google Calendar integration)
-- **Matches** (IP-Surrogate pairing, 3-column detail view, shared tasks calendar)
-- **Appointments** (scheduling with public booking links, availability config)
-- **Reports** (analytics dashboards)
-- **Notifications** (in-app alerts)
-- **AI Assistant** (context-aware chatbot, schedule parsing)
-- **Settings** (general, team, queues, audit log, compliance, integrations, alerts)
-
-### Implemented Modules
-- **Automation** (workflow rules, email templates)
-- **Integrations** (Gmail, Google Calendar, Zoom, Meta Lead Ads)
-- **File Attachments** (S3/local storage, virus scanning)
-- **Invitation System** (team onboarding)
-- **Audit Logging** (compliance tracking)
-- **Version Control** (entity versioning)
-
-### Future/Roadmap
-- Import/Export and Dedupe enhancements
-- SMS/Telephony integrations
-- Advanced SLA automation
-
-## License
+## 📝 License
 
 Private — All rights reserved.
+
+---
+
+## 🤝 Contributing
+
+This is a private project. For questions or access, contact the maintainers.

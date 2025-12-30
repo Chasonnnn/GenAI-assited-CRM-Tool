@@ -2,6 +2,59 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2025-12-29]
+
+### Added
+- **Form Builder Backend** — Complete backend flow for dynamic form creation
+  - New database models: `Form`, `FormSubmission`, `FormSubmissionToken`, `FormFieldMapping`
+  - JSON schema-based form structure with pages and fields
+  - Supported field types: text, email, phone, date, number, select, multiselect, radio, checkbox, file, address
+  - Field mapping to automatically update Case data upon approval
+  - Token-based secure public form submissions linked to cases
+  - File upload with size/count/MIME validation, EXIF stripping, virus scan integration
+  - Review workflow: Pending Review → Approved/Rejected
+  - Audit logging for form submission events
+  - New files: `routers/forms.py`, `routers/forms_public.py`, `schemas/forms.py`, `services/form_service.py`
+  - Migration: `a9f1c2d3e4b5_add_form_builder_tables.py`
+  - 170 new tests in `test_forms.py`
+
+- **Global Search Command** (⌘K / Ctrl+K)
+  - New `SearchCommand` component with keyboard shortcut
+  - Searches across cases, intended parents, notes
+  - Real-time results as you type
+  - Navigation to search results on selection
+  
+- **GCP Cloud Monitoring Integration**
+  - Health probes for Kubernetes readiness/liveness
+  - Monitoring configuration for GCP deployment
+
+- **OAuth Setup Guide** — Comprehensive documentation for OAuth integrations
+  - Google Calendar, Zoom, Meta Lead Ads setup instructions
+  - Environment variable configuration
+  - Troubleshooting steps
+
+### Changed
+- **Team Settings Enhancement**
+  - Added Developer role visibility in team member list
+  - Improved UI layout for role badges
+  
+- **Dashboard Simplification**
+  - Streamlined dashboard layout (126 lines reduced)
+  
+### Fixed
+- **Rich Text Editor Scrolling** — Fixed scroll behavior in editor component
+  - Added proper overflow handling
+  - 62 lines of improvements
+  
+- **Recipient Preview Card** — Fixed overflow issues in campaign preview
+  - Better text truncation and layout handling
+
+- **Search Vector Columns** — Added missing GIN indexes to models
+  - Case, IntendedParent, EntityNote, Attachment now have proper search_vector columns
+  - Fixed search page import path
+
+---
+
 ## [2025-12-27] (Evening)
 
 ### Added
