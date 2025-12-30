@@ -14,7 +14,8 @@
  */
 
 import { useState, useEffect, useMemo } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -43,9 +44,12 @@ import {
     usePublicBookingPage,
     useAvailableSlots,
     useCreateBooking,
+    useBookingPreviewPage,
+    useBookingPreviewSlots,
 } from "@/lib/hooks/use-appointments"
 import type { AppointmentType, TimeSlot, BookingCreate } from "@/lib/api/appointments"
 import { format, addDays, startOfDay, parseISO, isSameDay } from "date-fns"
+import { toast } from "sonner"
 
 // Timezone options
 const TIMEZONE_OPTIONS = [
@@ -645,7 +649,14 @@ function ConfirmationView({
 // Main Export
 // =============================================================================
 
-export function PublicBookingPage({ publicSlug }: { publicSlug: string }) {
+export function PublicBookingPage({
+    publicSlug,
+    preview = false,
+}: {
+    publicSlug: string
+    preview?: boolean
+}) {
+    const isPreview = preview === true
     // State
     const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null)
     const [selectedDate, setSelectedDate] = useState<Date | null>(null)
@@ -668,7 +679,11 @@ export function PublicBookingPage({ publicSlug }: { publicSlug: string }) {
     }, [])
 
     // Queries
-    const { data: pageData, isLoading: isLoadingPage, error: pageError } = usePublicBookingPage(publicSlug)
+    const publicPageQuery = usePublicBookingPage(publicSlug, !isPreview)
+    const previewPageQuery = useBookingPreviewPage(isPreview)
+    const pageData = isPreview ? previewPageQuery.data : publicPageQuery.data
+    const isLoadingPage = isPreview ? previewPageQuery.isLoading : publicPageQuery.isLoading
+    const pageError = isPreview ? previewPageQuery.error : publicPageQuery.error
 
     useEffect(() => {
         if (pageData?.org_timezone && timezone === "America/Los_Angeles") {
@@ -682,13 +697,25 @@ export function PublicBookingPage({ publicSlug }: { publicSlug: string }) {
         return { start, end }
     }, [])
 
-    const { data: slotsData, isLoading: isLoadingSlots } = useAvailableSlots(
+    const publicSlotsQuery = useAvailableSlots(
         publicSlug,
         selectedTypeId || "",
         dateRange.start,
         dateRange.end,
-        timezone
+        timezone,
+        !isPreview
     )
+    const previewSlotsQuery = useBookingPreviewSlots(
+        selectedTypeId || "",
+        dateRange.start,
+        dateRange.end,
+        timezone,
+        isPreview
+    )
+    const slotsData = isPreview ? previewSlotsQuery.data : publicSlotsQuery.data
+    const isLoadingSlots = isPreview
+        ? previewSlotsQuery.isLoading
+        : publicSlotsQuery.isLoading
 
     const createBookingMutation = useCreateBooking()
 
@@ -723,6 +750,13 @@ export function PublicBookingPage({ publicSlug }: { publicSlug: string }) {
             idempotency_key: `${formData.client_email}-${selectedSlot.start}-${selectedTypeId}`,
         }
 
+        if (isPreview) {
+            toast.info("Preview mode", {
+                description: "Bookings are disabled while previewing.",
+            })
+            return
+        }
+
         createBookingMutation.mutate(
             { publicSlug, data },
             { onSuccess: () => setIsConfirmed(true) }
@@ -740,14 +774,16 @@ export function PublicBookingPage({ publicSlug }: { publicSlug: string }) {
 
     // Error state
     if (pageError || !pageData) {
+        const title = isPreview ? "Preview Unavailable" : "Booking Page Not Found"
+        const message = isPreview
+            ? "Sign in and create at least one appointment type to preview this page."
+            : "This booking link may be invalid or no longer active."
         return (
             <div className="min-h-screen flex items-center justify-center bg-background">
                 <Card className="max-w-md">
                     <CardContent className="pt-6 text-center">
-                        <h2 className="text-xl font-semibold mb-2">Booking Page Not Found</h2>
-                        <p className="text-muted-foreground">
-                            This booking link may be invalid or no longer active.
-                        </p>
+                        <h2 className="text-xl font-semibold mb-2">{title}</h2>
+                        <p className="text-muted-foreground">{message}</p>
                     </CardContent>
                 </Card>
             </div>
@@ -803,6 +839,12 @@ export function PublicBookingPage({ publicSlug }: { publicSlug: string }) {
                                 </SelectContent>
                             </Select>
                         </div>
+                        {isPreview && (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Badge variant="secondary">Preview</Badge>
+                                <span>Bookings are disabled in preview mode.</span>
+                            </div>
+                        )}
 
                         {/* Booking Form */}
                         {showForm && selectedType && selectedSlot ? (
@@ -812,7 +854,7 @@ export function PublicBookingPage({ publicSlug }: { publicSlug: string }) {
                                 timezone={timezone}
                                 onSubmit={handleSubmit}
                                 onBack={() => setShowForm(false)}
-                                isSubmitting={createBookingMutation.isPending}
+                                isSubmitting={isPreview ? false : createBookingMutation.isPending}
                             />
                         ) : (
                             <>

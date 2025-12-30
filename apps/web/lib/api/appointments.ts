@@ -377,6 +377,31 @@ export function createBooking(
     });
 }
 
+// =============================================================================
+// Authenticated Booking Preview
+// =============================================================================
+
+export function getBookingPreviewPage(): Promise<PublicBookingPage> {
+    return api.get<PublicBookingPage>('/appointments/booking-preview');
+}
+
+export function getBookingPreviewSlots(
+    appointmentTypeId: string,
+    dateStart: string,
+    dateEnd?: string,
+    clientTimezone?: string
+): Promise<AvailableSlotsResponse> {
+    const params = new URLSearchParams({
+        appointment_type_id: appointmentTypeId,
+        date_start: dateStart,
+    });
+    if (dateEnd) params.append('date_end', dateEnd);
+    if (clientTimezone) params.append('client_timezone', clientTimezone);
+    return api.get<AvailableSlotsResponse>(
+        `/appointments/booking-preview/slots?${params}`
+    );
+}
+
 export function getAppointmentForReschedule(
     token: string
 ): Promise<PublicAppointmentView> {

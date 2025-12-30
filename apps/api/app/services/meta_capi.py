@@ -33,6 +33,7 @@ HTTPX_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 META_STATUS_INTAKE = "Intake"
 META_STATUS_QUALIFIED = "Qualified/Converted"
 META_STATUS_DISQUALIFIED = "Not qualified/Lost"
+META_STATUS_LOST = "Lost"
 
 # Case status mapping (slug -> Meta status bucket)
 META_INTAKE_STATUSES = {
@@ -54,6 +55,7 @@ META_CONVERTED_STATUSES = {
     "delivered",
 }
 META_DISQUALIFIED_STATUSES = {"disqualified"}
+META_LOST_STATUSES = {"lost"}
 
 
 def hash_for_capi(value: str) -> str:
@@ -171,6 +173,8 @@ def map_case_status_to_meta_status(case_status: str) -> str | None:
     """Map internal case status slug to Meta Ads CRM status label."""
     if not case_status:
         return None
+    if case_status in META_LOST_STATUSES:
+        return META_STATUS_LOST
     if case_status in META_DISQUALIFIED_STATUSES:
         return META_STATUS_DISQUALIFIED
     if case_status in META_CONVERTED_STATUSES:

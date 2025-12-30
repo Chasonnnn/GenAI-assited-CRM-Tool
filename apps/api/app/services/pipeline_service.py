@@ -35,6 +35,7 @@ DEFAULT_COLORS = {
     "approved": "#22C55E",  # Green
     "pending_handoff": "#F97316",  # Orange
     "disqualified": "#EF4444",  # Red
+    "lost": "#EF4444",  # Red
     # Stage B: Post-Approval (darker shades)
     "pending_match": "#0EA5E9",  # Sky
     "matched": "#6366F1",  # Indigo
@@ -62,6 +63,7 @@ STAGE_TYPE_MAP = {
     "meds_started": "post_approval",
     "exam_passed": "post_approval",
     "embryo_transferred": "post_approval",
+    "lost": "terminal",
     "disqualified": "terminal",
     "delivered": "terminal",
 }
@@ -81,6 +83,7 @@ DEFAULT_STAGE_ORDER = [
     "meds_started",
     "exam_passed",
     "embryo_transferred",
+    "lost",
     "disqualified",
     "delivered",
 ]
@@ -181,7 +184,9 @@ def get_or_create_default_pipeline(
         )
         db.commit()
         db.refresh(pipeline)
+        return pipeline
 
+    sync_missing_stages(db, pipeline, user_id)
     return pipeline
 
 

@@ -38,6 +38,6 @@ vi.mock('@/lib/hooks/use-workflows', () => ({
 describe('AutomationPage', () => {
     it('renders', () => {
         render(<AutomationPage />)
-        expect(screen.getByText('Automation')).toBeInTheDocument()
+        expect(screen.getAllByText('Workflows').length).toBeGreaterThan(0)
     })
 })

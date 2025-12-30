@@ -37,7 +37,7 @@ class CaseStatus(str, Enum):
 
     Stage A (Intake Pipeline):
         new_unread → contacted → qualified → applied → followup_scheduled
-        → application_submitted → under_review → approved → pending_handoff/disqualified
+        → application_submitted → under_review → approved → pending_handoff → lost/disqualified
 
     Stage B (Post-Approval, Case Manager only):
         pending_match → matched → meds_started → exam_passed → embryo_transferred → delivered
@@ -53,6 +53,7 @@ class CaseStatus(str, Enum):
     UNDER_REVIEW = "under_review"
     APPROVED = "approved"
     PENDING_HANDOFF = "pending_handoff"  # Awaiting case manager review
+    LOST = "lost"
     DISQUALIFIED = "disqualified"
 
     # Stage B: Post-Approval (Case Manager only)
@@ -80,6 +81,7 @@ class CaseStatus(str, Enum):
             cls.UNDER_REVIEW.value,
             cls.APPROVED.value,
             cls.PENDING_HANDOFF.value,
+            cls.LOST.value,
             cls.DISQUALIFIED.value,
         ]
 

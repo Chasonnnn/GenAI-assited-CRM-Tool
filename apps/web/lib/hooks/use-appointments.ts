@@ -276,11 +276,11 @@ export const bookingKeys = {
         ] as const,
 };
 
-export function usePublicBookingPage(publicSlug: string) {
+export function usePublicBookingPage(publicSlug: string, enabled = true) {
     return useQuery({
         queryKey: bookingKeys.page(publicSlug),
         queryFn: () => appointmentsApi.getPublicBookingPage(publicSlug),
-        enabled: !!publicSlug,
+        enabled: enabled && !!publicSlug,
     });
 }
 
@@ -289,7 +289,8 @@ export function useAvailableSlots(
     appointmentTypeId: string,
     dateStart: string,
     dateEnd?: string,
-    clientTimezone?: string
+    clientTimezone?: string,
+    enabled = true
 ) {
     return useQuery({
         queryKey: bookingKeys.slots(
@@ -307,7 +308,7 @@ export function useAvailableSlots(
                 dateEnd,
                 clientTimezone
             ),
-        enabled: !!publicSlug && !!appointmentTypeId && !!dateStart,
+        enabled: enabled && !!publicSlug && !!appointmentTypeId && !!dateStart,
     });
 }
 
@@ -320,6 +321,55 @@ export function useCreateBooking() {
             publicSlug: string;
             data: appointmentsApi.BookingCreate;
         }) => appointmentsApi.createBooking(publicSlug, data),
+    });
+}
+
+export const bookingPreviewKeys = {
+    all: ['booking-preview'] as const,
+    page: () => [...bookingPreviewKeys.all, 'page'] as const,
+    slots: (
+        typeId: string,
+        dateStart: string,
+        dateEnd?: string,
+        clientTimezone?: string
+    ) =>
+        [
+            ...bookingPreviewKeys.all,
+            'slots',
+            { typeId, dateStart, dateEnd, clientTimezone },
+        ] as const,
+};
+
+export function useBookingPreviewPage(enabled = true) {
+    return useQuery({
+        queryKey: bookingPreviewKeys.page(),
+        queryFn: appointmentsApi.getBookingPreviewPage,
+        enabled,
+    });
+}
+
+export function useBookingPreviewSlots(
+    appointmentTypeId: string,
+    dateStart: string,
+    dateEnd?: string,
+    clientTimezone?: string,
+    enabled = true
+) {
+    return useQuery({
+        queryKey: bookingPreviewKeys.slots(
+            appointmentTypeId,
+            dateStart,
+            dateEnd,
+            clientTimezone
+        ),
+        queryFn: () =>
+            appointmentsApi.getBookingPreviewSlots(
+                appointmentTypeId,
+                dateStart,
+                dateEnd,
+                clientTimezone
+            ),
+        enabled: enabled && !!appointmentTypeId && !!dateStart,
     });
 }
 

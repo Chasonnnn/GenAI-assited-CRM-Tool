@@ -187,6 +187,107 @@ Once you've reviewed everything, please let us know so we can proceed with the n
 Best regards,
 The {{org_name}} Team""",
     },
+    {
+        "system_key": "initial_outreach",
+        "category": "outreach",
+        "name": "Initial Outreach",
+        "subject": "Thanks for reaching out to {{org_name}}",
+        "body": """Hi {{full_name}},
+
+Thank you for your interest in {{org_name}}. We're excited to learn more about your goals and answer any questions you may have.
+
+Our team will reach out shortly to schedule a brief call. If you prefer, reply with a few times that work for you and we'll do our best to accommodate.
+
+Warm regards,
+The {{org_name}} Team""",
+    },
+    {
+        "system_key": "followup_checkin",
+        "category": "followup",
+        "name": "Follow-up Check-In",
+        "subject": "Checking in from {{org_name}}",
+        "body": """Hi {{full_name}},
+
+Just checking in to see if you have any questions about the surrogacy process or your next steps.
+
+If you're still interested, we'd love to schedule a quick call to learn more about your goals.
+
+Best,
+The {{org_name}} Team""",
+    },
+    {
+        "system_key": "consult_booking_invite",
+        "category": "appointment",
+        "name": "Consultation Booking Invite",
+        "subject": "Schedule Your Consultation",
+        "body": """Hi {{full_name}},
+
+You're ready for the next step! Please schedule a consultation with our team so we can walk through the program details and answer your questions.
+
+If you need a new booking link, just reply and we will send it right away.
+
+Looking forward to speaking with you,
+The {{org_name}} Team""",
+    },
+    {
+        "system_key": "application_reminder",
+        "category": "application",
+        "name": "Application Reminder",
+        "subject": "Reminder: Your application is waiting",
+        "body": """Hi {{full_name}},
+
+This is a friendly reminder that your application is still pending. If you need help completing it, we're here to support you.
+
+Reply to this email and we'll send a fresh link or answer any questions.
+
+Thank you,
+The {{org_name}} Team""",
+    },
+    {
+        "system_key": "post_consult_summary",
+        "category": "appointment",
+        "name": "Post-Consult Summary",
+        "subject": "Thank you for meeting with {{org_name}}",
+        "body": """Hi {{full_name}},
+
+Thank you for meeting with us today. It was great to learn more about your goals.
+
+We'll send a follow-up with next steps shortly. In the meantime, reply to this email if any new questions come up.
+
+Best,
+The {{org_name}} Team""",
+    },
+    {
+        "system_key": "not_eligible_update",
+        "category": "status",
+        "name": "Not Eligible Update",
+        "subject": "Update on Your Application",
+        "body": """Hi {{full_name}},
+
+Thank you for taking the time to connect with {{org_name}}. After reviewing your information, we are unable to move forward at this time.
+
+We truly appreciate your interest and wish you the very best.
+
+Sincerely,
+The {{org_name}} Team""",
+    },
+    {
+        "system_key": "missing_information_request",
+        "category": "request",
+        "name": "Missing Information Request",
+        "subject": "Additional Information Needed - {{case_number}}",
+        "body": """Hi {{full_name}},
+
+We're reviewing your case ({{case_number}}) and need a few additional details to proceed:
+
+- [Item 1]
+- [Item 2]
+
+Reply to this email with the information above, and we'll keep things moving.
+
+Thank you,
+The {{org_name}} Team""",
+    },
 ]
 
 
@@ -295,6 +396,152 @@ SYSTEM_WORKFLOWS = [
         "recurrence_mode": "recurring",
         "recurrence_interval_hours": 168,  # Weekly
     },
+    {
+        "system_key": "new_lead_outreach_task",
+        "name": "New Lead Outreach Task",
+        "description": "Creates an outreach task and notifies the owner when a new case is created",
+        "icon": "task",
+        "trigger_type": "case_created",
+        "trigger_config": {},
+        "conditions": [],
+        "condition_logic": "AND",
+        "actions": [
+            {
+                "action_type": "create_task",
+                "title": "Initial outreach",
+                "description": "Contact the lead and log the outcome.",
+                "due_days": 1,
+                "assignee": "owner",
+            },
+            {
+                "action_type": "send_notification",
+                "title": "New lead assigned",
+                "body": "A new case was created and assigned to you.",
+                "recipients": "owner",
+            },
+        ],
+        "is_enabled": False,
+        "requires_review": True,
+        "recurrence_mode": "one_time",
+    },
+    {
+        "system_key": "application_submitted_review",
+        "name": "Application Submitted Review",
+        "description": "Notifies the owner and creates a review task when an application is submitted",
+        "icon": "file-text",
+        "trigger_type": "status_changed",
+        "trigger_config": {"to_stage_slug": "application_submitted"},
+        "conditions": [],
+        "condition_logic": "AND",
+        "actions": [
+            {
+                "action_type": "create_task",
+                "title": "Review application",
+                "description": "Review the submitted application and update case status.",
+                "due_days": 1,
+                "assignee": "owner",
+            },
+            {
+                "action_type": "send_notification",
+                "title": "Application submitted",
+                "body": "A new application was submitted and needs review.",
+                "recipients": "owner",
+            },
+        ],
+        "is_enabled": False,
+        "requires_review": True,
+        "recurrence_mode": "one_time",
+    },
+    {
+        "system_key": "approved_booking_invite",
+        "name": "Approved Booking Invite",
+        "description": "Sends a booking invite when a case is approved",
+        "icon": "calendar",
+        "trigger_type": "status_changed",
+        "trigger_config": {"to_stage_slug": "approved"},
+        "conditions": [],
+        "condition_logic": "AND",
+        "actions": [
+            {"action_type": "send_email", "template_key": "consult_booking_invite"},
+            {
+                "action_type": "send_notification",
+                "title": "Booking invite sent",
+                "body": "An approved case received the consultation invite.",
+                "recipients": "owner",
+            },
+        ],
+        "is_enabled": False,
+        "requires_review": True,
+        "recurrence_mode": "one_time",
+    },
+    {
+        "system_key": "appointment_scheduled_notice",
+        "name": "Appointment Scheduled Notice",
+        "description": "Notifies the owner when an appointment is scheduled",
+        "icon": "calendar",
+        "trigger_type": "appointment_scheduled",
+        "trigger_config": {},
+        "conditions": [],
+        "condition_logic": "AND",
+        "actions": [
+            {
+                "action_type": "send_notification",
+                "title": "Appointment booked",
+                "body": "A new appointment was scheduled.",
+                "recipients": "owner",
+            },
+            {"action_type": "send_email", "template_key": "appointment_confirmed"},
+        ],
+        "is_enabled": False,
+        "requires_review": True,
+        "recurrence_mode": "one_time",
+    },
+    {
+        "system_key": "task_overdue_escalation",
+        "name": "Task Overdue Escalation",
+        "description": "Notifies managers when tasks become overdue",
+        "icon": "alert",
+        "trigger_type": "task_overdue",
+        "trigger_config": {},
+        "conditions": [],
+        "condition_logic": "AND",
+        "actions": [
+            {
+                "action_type": "send_notification",
+                "title": "Task overdue",
+                "body": "A task is overdue and needs attention.",
+                "recipients": "all_managers",
+            }
+        ],
+        "is_enabled": False,
+        "requires_review": True,
+        "recurrence_mode": "one_time",
+    },
+    {
+        "system_key": "lead_marked_lost",
+        "name": "Lead Marked Lost",
+        "description": "Notifies the owner when a case is marked lost",
+        "icon": "x-circle",
+        "trigger_type": "status_changed",
+        "trigger_config": {"to_stage_slug": "lost"},
+        "conditions": [],
+        "condition_logic": "AND",
+        "actions": [
+            {
+                "action_type": "send_notification",
+                "title": "Lead marked lost",
+                "body": "The case has been marked as lost.",
+                "recipients": "owner",
+            },
+            {
+                "action_type": "add_note",
+                "content": "Lead marked lost after multiple outreach attempts.",
+            },
+        ],
+        "is_enabled": False,
+        "requires_review": True,
+        "recurrence_mode": "one_time",
+    },
 ]
 
 
@@ -358,6 +605,13 @@ def seed_system_workflows(
     """
     created_count = 0
 
+    from app.services import pipeline_service
+
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
+    pipeline_service.sync_missing_stages(db, pipeline, user_id)
+    stages = pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
+    stage_map = {s.slug: str(s.id) for s in stages}
+
     # First, get the template IDs for this org
     template_keys = [t["system_key"] for t in SYSTEM_TEMPLATES]
     templates = (
@@ -384,6 +638,15 @@ def seed_system_workflows(
         if existing:
             continue
 
+        trigger_config = workflow_data.get("trigger_config", {}).copy()
+        if workflow_data.get("trigger_type") == "status_changed":
+            to_slug = trigger_config.pop("to_stage_slug", None)
+            from_slug = trigger_config.pop("from_stage_slug", None)
+            if to_slug and to_slug in stage_map:
+                trigger_config["to_stage_id"] = stage_map[to_slug]
+            if from_slug and from_slug in stage_map:
+                trigger_config["from_stage_id"] = stage_map[from_slug]
+
         # Resolve template_key to template_id in actions
         actions = []
         for action in workflow_data.get("actions", []):
@@ -401,7 +664,7 @@ def seed_system_workflows(
             description=workflow_data.get("description"),
             icon=workflow_data.get("icon", "workflow"),
             trigger_type=workflow_data["trigger_type"],
-            trigger_config=workflow_data.get("trigger_config", {}),
+            trigger_config=trigger_config,
             conditions=workflow_data.get("conditions", []),
             condition_logic=workflow_data.get("condition_logic", "AND"),
             actions=actions,
