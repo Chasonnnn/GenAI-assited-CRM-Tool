@@ -140,15 +140,15 @@ class User(Base):
         String(255),
         nullable=True,  # Encrypted TOTP secret
     )
-    totp_enabled_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
+    totp_enabled_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     duo_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    duo_enrolled_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
+    duo_enrolled_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     mfa_recovery_codes: Mapped[list | None] = mapped_column(
         JSONB,
         nullable=True,  # Hashed recovery codes
     )
     mfa_required_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(),
+        TIMESTAMP(timezone=True),
         nullable=True,  # When MFA enforcement started for this user
     )
 
