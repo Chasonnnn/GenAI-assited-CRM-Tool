@@ -528,6 +528,35 @@ async def create_stage(
         raise HTTPException(400, str(e))
 
 
+@router.put("/{pipeline_id}/stages/reorder", response_model=list[StageRead])
+async def reorder_stages(
+    pipeline_id: UUID,
+    data: StageReorder,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+    _: str = Depends(require_csrf_header),
+):
+    """
+    Reorder stages by providing a list of stage IDs in desired order.
+
+    Order values are normalized to 1, 2, 3...
+    Requires: Manager+ role
+    """
+    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
+    if not pipeline:
+        raise HTTPException(404, "Pipeline not found")
+
+    try:
+        return pipeline_service.reorder_stages(
+            db=db,
+            pipeline_id=pipeline_id,
+            ordered_stage_ids=data.ordered_stage_ids,
+            user_id=session.user_id,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.put("/{pipeline_id}/stages/{stage_id}", response_model=StageRead)
 async def update_stage(
     pipeline_id: UUID,
@@ -626,31 +655,3 @@ async def delete_stage(
     except ValueError as e:
         raise HTTPException(400, str(e))
 
-
-@router.put("/{pipeline_id}/stages/reorder", response_model=list[StageRead])
-async def reorder_stages(
-    pipeline_id: UUID,
-    data: StageReorder,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
-    _: str = Depends(require_csrf_header),
-):
-    """
-    Reorder stages by providing a list of stage IDs in desired order.
-
-    Order values are normalized to 1, 2, 3...
-    Requires: Manager+ role
-    """
-    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
-    if not pipeline:
-        raise HTTPException(404, "Pipeline not found")
-
-    try:
-        return pipeline_service.reorder_stages(
-            db=db,
-            pipeline_id=pipeline_id,
-            ordered_stage_ids=data.ordered_stage_ids,
-            user_id=session.user_id,
-        )
-    except ValueError as e:
-        raise HTTPException(400, str(e))

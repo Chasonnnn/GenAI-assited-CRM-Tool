@@ -279,11 +279,6 @@ def create_appointment_type(
     reminder_hours_before: int = 24,
 ) -> AppointmentType:
     """Create a new appointment type for a user."""
-    # Check Gmail connection requirement
-    gmail_connected = _check_gmail_connected(db, user_id)
-    if not gmail_connected:
-        raise ValueError("Gmail must be connected to create appointment types")
-
     slug = generate_slug(name)
     # Ensure unique slug for user
     base_slug = slug

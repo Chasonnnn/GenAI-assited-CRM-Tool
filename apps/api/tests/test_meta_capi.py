@@ -15,6 +15,7 @@ from app.services import meta_capi
         ("pending_match", meta_capi.META_STATUS_QUALIFIED),
         ("delivered", meta_capi.META_STATUS_QUALIFIED),
         ("disqualified", meta_capi.META_STATUS_DISQUALIFIED),
+        ("lost", meta_capi.META_STATUS_LOST),
     ],
 )
 def test_map_case_status_to_meta_status(status, expected):

@@ -326,18 +326,18 @@ function MembersTab() {
             <Table>
                 <TableHeader>
                     <TableRow>
-                        <TableHead className="w-12">
+                        <TableHead className="w-12 text-center">
                             <Checkbox
                                 checked={allSelected}
                                 onCheckedChange={toggleSelectAll}
                                 aria-label="Select all"
                             />
                         </TableHead>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Role</TableHead>
-                        <TableHead>Last Login</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
+                        <TableHead className="text-center">Name</TableHead>
+                        <TableHead className="text-center">Email</TableHead>
+                        <TableHead className="text-center">Role</TableHead>
+                        <TableHead className="text-center">Last Login</TableHead>
+                        <TableHead className="text-center">Actions</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -347,7 +347,7 @@ function MembersTab() {
 
                         return (
                             <TableRow key={member.id} className={isSelected ? "bg-blue-50" : ""}>
-                                <TableCell>
+                                <TableCell className="text-center">
                                     <Checkbox
                                         checked={isSelected}
                                         onCheckedChange={() => toggleSelect(member.id)}
@@ -355,25 +355,25 @@ function MembersTab() {
                                         aria-label={`Select ${member.email}`}
                                     />
                                 </TableCell>
-                                <TableCell className="font-medium">
+                                <TableCell className="font-medium text-center">
                                     {member.display_name || "—"}
                                     {member.user_id === user?.user_id && (
                                         <Badge variant="outline" className="ml-2 text-xs">You</Badge>
                                     )}
                                 </TableCell>
-                                <TableCell>{member.email}</TableCell>
-                                <TableCell>
+                                <TableCell className="text-center">{member.email}</TableCell>
+                                <TableCell className="text-center">
                                     <Badge className={ROLE_COLORS[member.role] || "bg-gray-100"}>
                                         {ROLE_LABELS[member.role] || member.role}
                                     </Badge>
                                 </TableCell>
-                                <TableCell className="text-muted-foreground">
+                                <TableCell className="text-muted-foreground text-center">
                                     {member.last_login_at
                                         ? formatDistanceToNow(new Date(member.last_login_at), { addSuffix: true })
                                         : "Never"}
                                 </TableCell>
-                                <TableCell className="text-right">
-                                    <div className="flex items-center justify-end gap-2">
+                                <TableCell className="text-center">
+                                    <div className="flex items-center justify-center gap-2">
                                         <Link href={`/settings/team/members/${member.id}`}>
                                             <Button variant="ghost" size="sm">
                                                 <Settings2 className="size-4 mr-1" />
@@ -455,46 +455,48 @@ function InvitationsTab() {
         <Table>
             <TableHeader>
                 <TableRow>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Expires</TableHead>
-                    <TableHead>Resends</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead className="text-center">Email</TableHead>
+                    <TableHead className="text-center">Role</TableHead>
+                    <TableHead className="text-center">Expires</TableHead>
+                    <TableHead className="text-center">Resends</TableHead>
+                    <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
             </TableHeader>
             <TableBody>
                 {pendingInvites.map((invite) => (
                     <TableRow key={invite.id}>
-                        <TableCell className="font-medium">{invite.email}</TableCell>
-                        <TableCell>
+                        <TableCell className="font-medium text-center">{invite.email}</TableCell>
+                        <TableCell className="text-center">
                             <Badge className={ROLE_COLORS[invite.role] || "bg-gray-100"}>
                                 {ROLE_LABELS[invite.role] || invite.role}
                             </Badge>
                         </TableCell>
-                        <TableCell className="text-muted-foreground">
+                        <TableCell className="text-muted-foreground text-center">
                             {invite.expires_at
                                 ? formatDistanceToNow(new Date(invite.expires_at), { addSuffix: true })
                                 : "Never"}
                         </TableCell>
-                        <TableCell>{invite.resend_count}/3</TableCell>
-                        <TableCell className="text-right space-x-2">
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleResend(invite.id)}
-                                disabled={!invite.can_resend || resendInvite.isPending}
-                            >
-                                <RotateCcw className="size-4" />
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleRevoke(invite.id)}
-                                disabled={revokeInvite.isPending}
-                                className="text-destructive hover:text-destructive"
-                            >
-                                <X className="size-4" />
-                            </Button>
+                        <TableCell className="text-center">{invite.resend_count}/3</TableCell>
+                        <TableCell className="text-center">
+                            <div className="flex items-center justify-center gap-2">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleResend(invite.id)}
+                                    disabled={!invite.can_resend || resendInvite.isPending}
+                                >
+                                    <RotateCcw className="size-4" />
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRevoke(invite.id)}
+                                    disabled={revokeInvite.isPending}
+                                    className="text-destructive hover:text-destructive"
+                                >
+                                    <X className="size-4" />
+                                </Button>
+                            </div>
                         </TableCell>
                     </TableRow>
                 ))}

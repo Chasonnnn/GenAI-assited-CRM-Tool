@@ -157,16 +157,7 @@ function BookingLinkCard() {
 
     const openPreview = () => {
         const baseUrl =
-            link?.full_url ||
-            (typeof window !== "undefined" && link?.public_slug
-                ? `${window.location.origin}/book/${link.public_slug}`
-                : "")
-
-        if (!baseUrl) {
-            toast.error("Booking link is not available yet")
-            return
-        }
-
+            typeof window !== "undefined" ? `${window.location.origin}/book/preview` : "/book/preview"
         window.open(baseUrl, "_blank")
     }
 
