@@ -100,6 +100,12 @@ export default function EmailTemplatesPage() {
         return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } })
     }, [])
 
+    const normalizeTemplateHtml = React.useCallback((html: string) => {
+        return html
+            .replace(/<p>\s*<\/p>/gi, "<p>&nbsp;</p>")
+            .replace(/<p>\s*<br\s*\/?>\s*<\/p>/gi, "<p>&nbsp;</p>")
+    }, [])
+
     // Load signature data on mount
     React.useEffect(() => {
         if (signatureData) {
@@ -176,11 +182,17 @@ export default function EmailTemplatesPage() {
         // If content doesn't contain HTML tags, convert line breaks to paragraphs
         const hasHtmlTags = /<[a-z][\s\S]*>/i.test(html)
         if (!hasHtmlTags) {
-            // Split by double newlines for paragraphs, single newlines for line breaks
-            html = html
-                .split(/\n\n+/)
-                .map(para => `<p style="margin: 0 0 1em 0;">${para.replace(/\n/g, '<br>')}</p>`)
-                .join('')
+            const lines = html.split(/\n/)
+            html = lines
+                .map((line) => {
+                    if (!line.trim()) {
+                        return `<p style="margin: 0 0 1em 0;">&nbsp;</p>`
+                    }
+                    return `<p style="margin: 0 0 1em 0;">${line}</p>`
+                })
+                .join("")
+        } else {
+            html = normalizeTemplateHtml(html)
         }
 
         // Append signature if set
@@ -626,7 +638,7 @@ export default function EmailTemplatesPage() {
                         {/* Email body section */}
                         <div className="p-4">
                             <div
-                                className="prose prose-sm max-w-none"
+                                className="prose prose-sm max-w-none [&_p]:whitespace-pre-wrap"
                                 dangerouslySetInnerHTML={{ __html: previewHtml }}
                             />
                         </div>

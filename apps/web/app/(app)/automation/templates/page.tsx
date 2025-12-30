@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -29,6 +30,7 @@ import {
     SparklesIcon,
     LoaderIcon,
     PlayIcon,
+    PlusIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 import { useEmailTemplates } from "@/lib/hooks/use-email-templates"
@@ -97,6 +99,18 @@ const DEFAULT_CATEGORIES = Object.entries(DEFAULT_CATEGORY_LABELS).map(([value, 
     label,
 }))
 
+// Trigger type labels for display
+const TRIGGER_LABELS: Record<string, string> = {
+    case_created: "Case Created",
+    status_changed: "Status Changed",
+    case_assigned: "Case Assigned",
+    case_updated: "Field Updated",
+    task_due: "Task Due",
+    task_overdue: "Task Overdue",
+    scheduled: "Scheduled",
+    inactivity: "Inactivity",
+}
+
 // Icon map
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
     template: LayoutTemplateIcon,
@@ -128,6 +142,7 @@ async function useTemplateApi(templateId: string, data: UseTemplateFormData) {
 }
 
 export default function TemplatesPage() {
+    const router = useRouter()
     const queryClient = useQueryClient()
     const [categoryFilter, setCategoryFilter] = useState("all")
     const [selectedTemplate, setSelectedTemplate] = useState<WorkflowTemplateListItem | null>(null)
@@ -225,22 +240,28 @@ export default function TemplatesPage() {
                 <div>
                     <h1 className="text-3xl font-bold">Workflow Templates</h1>
                     <p className="text-sm text-muted-foreground">
-                        Start with a pre-built template to create workflows faster
+                        Start with a pre-built template or create a custom workflow
                     </p>
                 </div>
-                <Select value={categoryFilter} onValueChange={(v) => v && setCategoryFilter(v)}>
-                    <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="All Categories" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Categories</SelectItem>
-                        {categoryOptions.map((category) => (
-                            <SelectItem key={category.value} value={category.value}>
-                                {category.label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                <div className="flex items-center gap-3">
+                    <Select value={categoryFilter} onValueChange={(v) => v && setCategoryFilter(v)}>
+                        <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="All Categories" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Categories</SelectItem>
+                            {categoryOptions.map((category) => (
+                                <SelectItem key={category.value} value={category.value}>
+                                    {category.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Button onClick={() => router.push("/automation?create=true")}>
+                        <PlusIcon className="mr-2 size-4" />
+                        Create Custom Workflow
+                    </Button>
+                </div>
             </div>
 
             {isLoading ? (
@@ -490,7 +511,7 @@ function TemplateCard({
                     {template.description || "No description"}
                 </CardDescription>
                 <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Trigger: {template.trigger_type.replace(/_/g, " ")}</span>
+                    <span>Trigger: {TRIGGER_LABELS[template.trigger_type] || template.trigger_type}</span>
                     <span>{template.usage_count} uses</span>
                 </div>
             </CardContent>

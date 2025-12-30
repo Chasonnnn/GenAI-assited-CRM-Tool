@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useParams } from "next/navigation"
+import { useParams, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -306,11 +306,28 @@ function FileUploadZone({
 }
 
 // Privacy Notice
-function PrivacyNotice() {
+function PrivacyNotice({ text }: { text?: string | null }) {
+    const notice =
+        text && text.trim().length > 0
+            ? text
+            : "Your information is encrypted and secure"
+    const trimmed = notice.trim()
+    const isUrl = /^https?:\/\//i.test(trimmed) || /^mailto:/i.test(trimmed)
     return (
         <div className="flex items-center gap-2 text-xs text-stone-500 mt-6">
             <LockIcon className="size-4" />
-            <span>Your information is encrypted and secure</span>
+            {isUrl ? (
+                <a
+                    href={trimmed}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline decoration-dotted underline-offset-2 hover:text-teal-600"
+                >
+                    View privacy policy
+                </a>
+            ) : (
+                <span className="whitespace-pre-line">{notice}</span>
+            )}
         </div>
     )
 }
@@ -318,7 +335,11 @@ function PrivacyNotice() {
 // Main Form Component
 export default function PublicApplicationForm() {
     const params = useParams()
-    const token = params.token as string
+    const searchParams = useSearchParams()
+    const tokenParam = params.token
+    const token = (Array.isArray(tokenParam) ? tokenParam[0] : tokenParam) ?? ""
+    const previewKey = searchParams.get("formId") || "draft"
+    const isPreview = token === "preview"
 
     const [currentStep, setCurrentStep] = React.useState(1)
     const [formConfig, setFormConfig] = React.useState<FormPublicRead | null>(null)
@@ -330,23 +351,58 @@ export default function PublicApplicationForm() {
     const [formError, setFormError] = React.useState<string | null>(null)
     const [datePickerOpen, setDatePickerOpen] = React.useState<Record<string, boolean>>({})
     const [agreed, setAgreed] = React.useState(false)
+    const [logoError, setLogoError] = React.useState(false)
 
     // Validate token on mount
     React.useEffect(() => {
-        const validateToken = async () => {
+        const loadForm = async () => {
+            if (!token) {
+                setFormError("This form link is invalid or has expired.")
+                setIsLoading(false)
+                return
+            }
+
+            if (isPreview) {
+                try {
+                    const stored = window.localStorage.getItem(`form-preview:${previewKey}`)
+                    if (!stored) {
+                        throw new Error("Missing preview payload")
+                    }
+                    const parsed = JSON.parse(stored) as FormPublicRead
+                    if (!parsed?.form_schema?.pages) {
+                        throw new Error("Invalid preview payload")
+                    }
+                    setFormConfig(parsed)
+                    setLogoError(false)
+                    setIsLoading(false)
+                } catch {
+                    setFormError("Preview data is unavailable. Return to the builder and click Preview again.")
+                    setIsLoading(false)
+                }
+                return
+            }
+
             try {
                 const form = await getPublicForm(token)
                 setFormConfig(form)
+                setLogoError(false)
                 setIsLoading(false)
             } catch {
                 setFormError("This form link is invalid or has expired.")
                 setIsLoading(false)
             }
         }
-        validateToken()
-    }, [token])
+        loadForm()
+    }, [token, isPreview, previewKey])
 
     const pages = formConfig?.form_schema.pages || []
+    const publicTitle =
+        formConfig?.form_schema.public_title?.trim() ||
+        formConfig?.name ||
+        "Surrogate Application"
+    const logoUrl = formConfig?.form_schema.logo_url?.trim() || ""
+    const privacyNotice = formConfig?.form_schema.privacy_notice
+    const showLogo = Boolean(logoUrl) && !logoError
     const steps: Step[] = [
         ...pages.map((page, index) => ({
             id: index + 1,
@@ -404,6 +460,10 @@ export default function PublicApplicationForm() {
     }
 
     const handleSubmit = async () => {
+        if (isPreview) {
+            toast.info("Preview mode only. Submissions are disabled.")
+            return
+        }
         if (!agreed) {
             toast.error("Please confirm the agreement before submitting.")
             return
@@ -655,15 +715,33 @@ export default function PublicApplicationForm() {
             <header className="py-8 md:py-12">
                 <div className="max-w-2xl mx-auto px-4 text-center">
                     {/* Logo placeholder */}
-                    <div className="w-16 h-16 bg-gradient-to-br from-teal-400 to-teal-600 rounded-2xl mx-auto mb-6 flex items-center justify-center">
-                        <span className="text-white text-2xl font-bold">S</span>
-                    </div>
+                    {showLogo ? (
+                        <div className="mx-auto mb-6 flex size-20 items-center justify-center">
+                            <img
+                                src={logoUrl}
+                                alt={`${publicTitle} logo`}
+                                className="size-20 rounded-2xl object-contain shadow-sm"
+                                onError={() => setLogoError(true)}
+                            />
+                        </div>
+                    ) : (
+                        <div className="w-16 h-16 bg-gradient-to-br from-teal-400 to-teal-600 rounded-2xl mx-auto mb-6 flex items-center justify-center">
+                            <span className="text-white text-2xl font-bold">
+                                {publicTitle.charAt(0).toUpperCase()}
+                            </span>
+                        </div>
+                    )}
                     <h1 className="text-2xl md:text-3xl font-semibold text-stone-900 mb-2">
-                        {formConfig?.name || "Surrogate Application"}
+                        {publicTitle}
                     </h1>
                     <p className="text-stone-500">
                         {formConfig?.description || "Thank you for your interest in our program"}
                     </p>
+                    {isPreview && (
+                        <div className="mt-4 flex justify-center">
+                            <Badge variant="secondary">Preview Mode</Badge>
+                        </div>
+                    )}
                 </div>
             </header>
 
@@ -748,7 +826,7 @@ export default function PublicApplicationForm() {
                                 </label>
                             </div>
 
-                            <PrivacyNotice />
+                            <PrivacyNotice text={privacyNotice} />
                         </CardContent>
                     </Card>
                 ) : currentPage ? (
@@ -782,7 +860,7 @@ export default function PublicApplicationForm() {
                                 </div>
                             )}
 
-                            <PrivacyNotice />
+                            <PrivacyNotice text={privacyNotice} />
                         </CardContent>
                     </Card>
                 ) : (

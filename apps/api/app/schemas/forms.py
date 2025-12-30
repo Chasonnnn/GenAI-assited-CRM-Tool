@@ -53,6 +53,9 @@ class FormPage(BaseModel):
 
 class FormSchema(BaseModel):
     pages: list[FormPage]
+    public_title: str | None = Field(None, max_length=200)
+    logo_url: str | None = Field(None, max_length=1000)
+    privacy_notice: str | None = None
 
 
 class FormCreate(BaseModel):
@@ -119,6 +122,15 @@ class FormPublicRead(BaseModel):
     max_file_size_bytes: int
     max_file_count: int
     allowed_mime_types: list[str] | None
+
+
+class FormLogoRead(BaseModel):
+    id: UUID
+    logo_url: str
+    filename: str
+    content_type: str
+    file_size: int
+    created_at: datetime
 
 
 class FormSubmissionCreate(BaseModel):

@@ -25,8 +25,6 @@ import {
     DialogDescription,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
-    DialogClose,
 } from "@/components/ui/dialog"
 import {
     Select,
@@ -52,8 +50,11 @@ import {
     LoaderIcon,
     MailIcon,
     ExternalLinkIcon,
+    EyeIcon,
 } from "lucide-react"
+import { toast } from "sonner"
 import { useAuth } from "@/lib/auth-context"
+import { ApiError } from "@/lib/api"
 import {
     useBookingLink,
     useRegenerateBookingLink,
@@ -154,6 +155,21 @@ function BookingLinkCard() {
         }
     }
 
+    const openPreview = () => {
+        const baseUrl =
+            link?.full_url ||
+            (typeof window !== "undefined" && link?.public_slug
+                ? `${window.location.origin}/book/${link.public_slug}`
+                : "")
+
+        if (!baseUrl) {
+            toast.error("Booking link is not available yet")
+            return
+        }
+
+        window.open(baseUrl, "_blank")
+    }
+
     if (isLoading) {
         return (
             <Card>
@@ -186,6 +202,10 @@ function BookingLinkCard() {
                         {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
                     </Button>
                 </div>
+                <Button variant="outline" size="sm" onClick={openPreview}>
+                    <EyeIcon className="size-4 mr-2" />
+                    Preview Booking Page
+                </Button>
                 <Button
                     variant="ghost"
                     size="sm"
@@ -426,20 +446,37 @@ function AppointmentTypesCard() {
         setDialogOpen(true)
     }
 
-    const handleSubmit = () => {
-        if (editingType) {
-            updateMutation.mutate(
-                { typeId: editingType.id, data: formData },
-                { onSuccess: () => setDialogOpen(false) }
-            )
-        } else {
-            createMutation.mutate(formData, { onSuccess: () => setDialogOpen(false) })
+    const getErrorMessage = (error: unknown, fallback: string) => {
+        if (error instanceof ApiError && error.message) return error.message
+        return fallback
+    }
+
+    const handleSubmit = async () => {
+        if (!formData.name.trim()) {
+            toast.error("Appointment type name is required")
+            return
+        }
+
+        try {
+            if (editingType) {
+                await updateMutation.mutateAsync({ typeId: editingType.id, data: formData })
+                toast.success("Appointment type updated")
+            } else {
+                await createMutation.mutateAsync(formData)
+                toast.success("Appointment type created")
+            }
+            setDialogOpen(false)
+        } catch (error) {
+            toast.error(getErrorMessage(error, "Failed to save appointment type"))
         }
     }
 
     const handleDelete = (typeId: string) => {
         if (confirm("Are you sure you want to deactivate this appointment type?")) {
-            deleteMutation.mutate(typeId)
+            deleteMutation.mutate(typeId, {
+                onSuccess: () => toast.success("Appointment type deactivated"),
+                onError: (error) => toast.error(getErrorMessage(error, "Failed to deactivate appointment type")),
+            })
         }
     }
 

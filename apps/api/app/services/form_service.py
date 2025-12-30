@@ -1,6 +1,7 @@
 """Form service for application builder, submissions, and approvals."""
 
 import json
+import os
 import secrets
 import uuid
 from datetime import datetime, timedelta, date
@@ -16,6 +17,7 @@ from app.db.models import (
     Case,
     Form,
     FormFieldMapping,
+    FormLogo,
     FormSubmission,
     FormSubmissionFile,
     FormSubmissionToken,
@@ -33,6 +35,9 @@ from app.services.attachment_service import (
 
 DEFAULT_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 DEFAULT_MAX_FILE_COUNT = 10
+FORM_LOGO_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024
+FORM_LOGO_ALLOWED_MIME_TYPES = {"image/png", "image/jpeg", "image/jpg"}
+FORM_LOGO_ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg"}
 
 
 def list_forms(db: Session, org_id: uuid.UUID) -> list[Form]:
@@ -117,6 +122,78 @@ def update_form(
     db.commit()
     db.refresh(form)
     return form
+
+
+def upload_form_logo(
+    db: Session,
+    org_id: uuid.UUID,
+    user_id: uuid.UUID,
+    file: UploadFile,
+) -> FormLogo:
+    if not file.filename:
+        raise ValueError("Logo filename is required")
+
+    content_type = file.content_type or "application/octet-stream"
+    file.file.seek(0, 2)
+    file_size = file.file.tell()
+    file.file.seek(0)
+
+    if file_size > FORM_LOGO_MAX_FILE_SIZE_BYTES:
+        max_mb = FORM_LOGO_MAX_FILE_SIZE_BYTES / (1024 * 1024)
+        raise ValueError(f"Logo exceeds {max_mb:.0f} MB limit")
+
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if ext not in FORM_LOGO_ALLOWED_EXTENSIONS:
+        raise ValueError("Logo file type not allowed")
+    if content_type not in FORM_LOGO_ALLOWED_MIME_TYPES:
+        raise ValueError("Logo content type not allowed")
+
+    logo_id = uuid.uuid4()
+    storage_key = f"{org_id}/form-logos/{logo_id}.{ext}"
+    processed_file = strip_exif_data(file.file, content_type)
+    store_file(storage_key, processed_file)
+
+    logo = FormLogo(
+        id=logo_id,
+        organization_id=org_id,
+        storage_key=storage_key,
+        filename=file.filename,
+        content_type=content_type,
+        file_size=file_size,
+        created_by_user_id=user_id,
+    )
+    db.add(logo)
+    db.commit()
+    db.refresh(logo)
+    return logo
+
+
+def get_form_logo(db: Session, org_id: uuid.UUID, logo_id: uuid.UUID) -> FormLogo | None:
+    return (
+        db.query(FormLogo)
+        .filter(FormLogo.organization_id == org_id, FormLogo.id == logo_id)
+        .first()
+    )
+
+
+def get_form_logo_by_id(db: Session, logo_id: uuid.UUID) -> FormLogo | None:
+    return db.query(FormLogo).filter(FormLogo.id == logo_id).first()
+
+
+def get_form_logo_public_url(logo: FormLogo) -> str:
+    return f"/forms/public/logos/{logo.id}"
+
+
+def get_form_logo_download_url(logo: FormLogo) -> str | None:
+    backend = getattr(settings, "STORAGE_BACKEND", "local")
+    if backend == "s3":
+        return generate_signed_url(logo.storage_key)
+    return None
+
+
+def get_form_logo_local_path(logo: FormLogo) -> str:
+    base_path = getattr(settings, "LOCAL_STORAGE_PATH", "/tmp/crm-attachments")
+    return os.path.join(base_path, logo.storage_key)
 
 
 def publish_form(db: Session, form: Form, user_id: uuid.UUID) -> Form:
