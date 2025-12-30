@@ -3,6 +3,8 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { ApiError } from '@/lib/api'
 import {
     listUserIntegrations,
     getZoomConnectUrl,
@@ -77,8 +79,20 @@ export function useConnectZoom() {
     return useMutation({
         mutationFn: async () => {
             const { auth_url } = await getZoomConnectUrl()
+            if (!auth_url) {
+                throw new Error('Zoom authorization URL is missing.')
+            }
             // Redirect user to Zoom OAuth
-            window.location.href = auth_url
+            window.location.assign(auth_url)
+        },
+        onError: (error) => {
+            const message =
+                error instanceof ApiError
+                    ? error.message || 'Failed to connect Zoom.'
+                    : error instanceof Error
+                        ? error.message
+                        : 'Failed to connect Zoom.'
+            toast.error(message)
         },
     })
 }
@@ -90,8 +104,20 @@ export function useConnectGmail() {
     return useMutation({
         mutationFn: async () => {
             const { auth_url } = await getGmailConnectUrl()
+            if (!auth_url) {
+                throw new Error('Gmail authorization URL is missing.')
+            }
             // Redirect user to Gmail OAuth
-            window.location.href = auth_url
+            window.location.assign(auth_url)
+        },
+        onError: (error) => {
+            const message =
+                error instanceof ApiError
+                    ? error.message || 'Failed to connect Gmail.'
+                    : error instanceof Error
+                        ? error.message
+                        : 'Failed to connect Gmail.'
+            toast.error(message)
         },
     })
 }
