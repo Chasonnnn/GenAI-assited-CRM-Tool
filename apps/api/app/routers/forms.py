@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, File, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.case_access import check_case_access
@@ -30,6 +30,7 @@ from app.schemas.forms import (
     FormSchema,
     FormSubmissionFileRead,
     FormSubmissionFileDownloadResponse,
+    FormLogoRead,
 )
 from app.services import form_service
 
@@ -189,6 +190,39 @@ def update_form(
         allowed_mime_types=body.allowed_mime_types,
     )
     return _form_read(form)
+
+
+@router.post(
+    "/logos",
+    response_model=FormLogoRead,
+    dependencies=[
+        Depends(require_permission(POLICIES["forms"].default)),
+        Depends(require_csrf_header),
+    ],
+)
+def upload_form_logo(
+    file: UploadFile = File(...),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    try:
+        logo = form_service.upload_form_logo(
+            db=db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+            file=file,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return FormLogoRead(
+        id=logo.id,
+        logo_url=form_service.get_form_logo_public_url(logo),
+        filename=logo.filename,
+        content_type=logo.content_type,
+        file_size=logo.file_size,
+        created_at=logo.created_at,
+    )
 
 
 @router.post(

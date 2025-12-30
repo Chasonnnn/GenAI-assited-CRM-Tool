@@ -3113,6 +3113,35 @@ class Form(Base):
     organization: Mapped["Organization"] = relationship()
 
 
+class FormLogo(Base):
+    """Stored logo asset for forms."""
+
+    __tablename__ = "form_logos"
+    __table_args__ = (Index("idx_form_logos_org", "organization_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    storage_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(), server_default=text("now()"), nullable=False
+    )
+
+    organization: Mapped["Organization"] = relationship()
+    created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
+
+
 class FormFieldMapping(Base):
     """Map form field keys to case fields."""
 

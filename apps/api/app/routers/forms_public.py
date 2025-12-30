@@ -1,8 +1,11 @@
 """Public form endpoints for applicants."""
 
 import json
+import os
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -22,6 +25,27 @@ def _schema_or_none(schema_json: dict | None) -> FormSchema | None:
         return FormSchema.model_validate(schema_json)
     except Exception:
         return None
+
+
+@router.get("/logos/{logo_id}")
+def get_form_logo(logo_id: UUID, db: Session = Depends(get_db)):
+    logo = form_service.get_form_logo_by_id(db, logo_id)
+    if not logo:
+        raise HTTPException(status_code=404, detail="Logo not found")
+
+    signed_url = form_service.get_form_logo_download_url(logo)
+    if signed_url:
+        return RedirectResponse(signed_url, status_code=307)
+
+    file_path = form_service.get_form_logo_local_path(logo)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Logo not found")
+
+    return FileResponse(
+        file_path,
+        media_type=logo.content_type,
+        filename=logo.filename,
+    )
 
 
 @router.get("/{token}", response_model=FormPublicRead)

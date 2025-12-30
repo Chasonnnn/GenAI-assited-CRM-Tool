@@ -51,6 +51,9 @@ export interface FormPage {
 
 export interface FormSchema {
     pages: FormPage[]
+    public_title?: string | null
+    logo_url?: string | null
+    privacy_notice?: string | null
 }
 
 export interface FormSummary {
@@ -142,6 +145,15 @@ export interface FormPublicRead {
     allowed_mime_types?: string[] | null
 }
 
+export interface FormLogoRead {
+    id: string
+    logo_url: string
+    filename: string
+    content_type: string
+    file_size: number
+    created_at: string
+}
+
 export interface SubmissionDownloadResponse {
     download_url: string
     filename: string
@@ -217,4 +229,10 @@ export function getSubmissionFileDownloadUrl(submissionId: string, fileId: strin
     return api.get<SubmissionDownloadResponse>(
         `/forms/submissions/${submissionId}/files/${fileId}/download`
     )
+}
+
+export function uploadFormLogo(file: File): Promise<FormLogoRead> {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.upload<FormLogoRead>('/forms/logos', formData)
 }

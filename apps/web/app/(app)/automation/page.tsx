@@ -87,6 +87,21 @@ const triggerLabels: Record<string, string> = {
     inactivity: "Inactivity",
 }
 
+// Labels for condition fields
+const conditionFieldLabels: Record<string, string> = {
+    status: "Stage",
+    stage_id: "Stage",
+    source: "Source",
+    is_priority: "Is Priority",
+    is_archived: "Is Archived",
+    owner_id: "Assigned User",
+    queue_id: "Queue",
+    state: "State",
+    full_name: "Full Name",
+    email: "Email",
+    phone: "Phone",
+}
+
 function formatRelativeTime(dateString: string | null): string {
     if (!dateString) return "Never"
     const date = parseDateInput(dateString)
@@ -107,11 +122,12 @@ export default function AutomationPage() {
     const searchParams = useSearchParams()
     const validTabs = ["workflows", "email-templates", "campaigns"]
     const tabParam = searchParams.get("tab")
+    const createParam = searchParams.get("create")
     const initialTab = tabParam && validTabs.includes(tabParam) ? tabParam : "workflows"
     const [activeTab, setActiveTab] = useState(initialTab)
 
-    // Workflow state
-    const [showCreateModal, setShowCreateModal] = useState(false)
+    // Workflow state - initialize create modal from query param
+    const [showCreateModal, setShowCreateModal] = useState(createParam === "true")
     const [showHistoryPanel, setShowHistoryPanel] = useState(false)
     const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null)
     const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null)
@@ -390,19 +406,13 @@ export default function AutomationPage() {
             {/* Page Header */}
             <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <div className="flex h-16 items-center justify-between px-6">
-                    <h1 className="text-2xl font-semibold">Automation</h1>
+                    <h1 className="text-2xl font-semibold">Workflows</h1>
                     <div className="flex gap-3">
                         {activeTab === "workflows" && (
-                            <>
-                                <Button variant="outline" onClick={() => router.push("/automation/executions")}>
-                                    <ActivityIcon className="mr-2 size-4" />
-                                    Execution History
-                                </Button>
-                                <Button onClick={handleCreate}>
-                                    <PlusIcon className="mr-2 size-4" />
-                                    Create Workflow
-                                </Button>
-                            </>
+                            <Button variant="outline" onClick={() => router.push("/automation/executions")}>
+                                <ActivityIcon className="mr-2 size-4" />
+                                Execution History
+                            </Button>
                         )}
                         {activeTab === "email-templates" && (
                             <Button onClick={() => handleOpenTemplateModal()}>
@@ -677,7 +687,7 @@ export default function AutomationPage() {
                                                             </SelectTrigger>
                                                             <SelectContent>
                                                                 {options?.condition_fields.map((f) => (
-                                                                    <SelectItem key={f} value={f}>{f}</SelectItem>
+                                                                    <SelectItem key={f} value={f}>{conditionFieldLabels[f] || f}</SelectItem>
                                                                 ))}
                                                             </SelectContent>
                                                         </Select>

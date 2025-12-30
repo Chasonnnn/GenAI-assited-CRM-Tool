@@ -15,6 +15,7 @@ import {
     getCaseSubmission,
     approveSubmission,
     rejectSubmission,
+    uploadFormLogo,
     type FormCreatePayload,
     type FormUpdatePayload,
     type FormFieldMappingItem,
@@ -154,5 +155,11 @@ export function useRejectFormSubmission() {
                 queryKey: formKeys.caseSubmission(submission.form_id, submission.case_id),
             })
         },
+    })
+}
+
+export function useUploadFormLogo() {
+    return useMutation({
+        mutationFn: (file: File) => uploadFormLogo(file),
     })
 }

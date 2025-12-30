@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import type { ChangeEvent } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -36,6 +37,7 @@ import {
     PlusIcon,
     XIcon,
     Loader2Icon,
+    Trash2Icon,
 } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -45,6 +47,7 @@ import {
     usePublishForm,
     useSetFormMappings,
     useUpdateForm,
+    useUploadFormLogo,
 } from "@/lib/hooks/use-forms"
 import type { FormSchema, FormFieldOption, FormRead } from "@/lib/api/forms"
 
@@ -111,7 +114,17 @@ function toFieldOptions(options?: string[]): FormFieldOption[] | undefined {
     }))
 }
 
-function buildFormSchema(pages: FormPage[]): FormSchema {
+type SchemaMetadata = {
+    publicTitle: string
+    logoUrl: string
+    privacyNotice: string
+}
+
+function buildFormSchema(pages: FormPage[], metadata: SchemaMetadata): FormSchema {
+    const publicTitle = metadata.publicTitle.trim()
+    const logoUrl = metadata.logoUrl.trim()
+    const privacyNotice = metadata.privacyNotice.trim()
+
     return {
         pages: pages.map((page) => ({
             title: page.name || null,
@@ -124,6 +137,9 @@ function buildFormSchema(pages: FormPage[]): FormSchema {
                 help_text: field.helperText || null,
             })),
         })),
+        public_title: publicTitle || null,
+        logo_url: logoUrl || null,
+        privacy_notice: privacyNotice || null,
     }
 }
 
@@ -147,6 +163,14 @@ function schemaToPages(schema: FormSchema, mappings: Map<string, string>): FormP
     }
 
     return pages
+}
+
+function schemaToMetadata(schema?: FormSchema | null): SchemaMetadata {
+    return {
+        publicTitle: schema?.public_title ?? "",
+        logoUrl: schema?.logo_url ?? "",
+        privacyNotice: schema?.privacy_notice ?? "",
+    }
 }
 
 function buildMappings(pages: FormPage[]): { field_key: string; case_field: string }[] {
@@ -175,12 +199,18 @@ export default function FormBuilderPage() {
     const updateFormMutation = useUpdateForm()
     const publishFormMutation = usePublishForm()
     const setMappingsMutation = useSetFormMappings()
+    const uploadLogoMutation = useUploadFormLogo()
+
+    const logoInputRef = useRef<HTMLInputElement>(null)
 
     const [hasHydrated, setHasHydrated] = useState(false)
 
     // Form state
     const [formName, setFormName] = useState(isNewForm ? "" : "Surrogate Application Form")
     const [formDescription, setFormDescription] = useState("")
+    const [publicTitle, setPublicTitle] = useState("")
+    const [logoUrl, setLogoUrl] = useState("")
+    const [privacyNotice, setPrivacyNotice] = useState("")
     const [isPublished, setIsPublished] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [isPublishing, setIsPublishing] = useState(false)
@@ -190,9 +220,13 @@ export default function FormBuilderPage() {
     const [activePage, setActivePage] = useState(1)
     const [selectedField, setSelectedField] = useState<string | null>(null)
     const [draggedField, setDraggedField] = useState<{ type: string; label: string } | null>(null)
+    const [draggedFieldId, setDraggedFieldId] = useState<string | null>(null)
+    const [dropIndicatorId, setDropIndicatorId] = useState<string | "end" | null>(null)
 
     // Dialog state
     const [showPublishDialog, setShowPublishDialog] = useState(false)
+    const [showDeletePageDialog, setShowDeletePageDialog] = useState(false)
+    const [pageToDelete, setPageToDelete] = useState<number | null>(null)
 
     useEffect(() => {
         setHasHydrated(false)
@@ -208,6 +242,10 @@ export default function FormBuilderPage() {
 
         setFormName(formData.name)
         setFormDescription(formData.description || "")
+        const metadata = schemaToMetadata(schema || undefined)
+        setPublicTitle(metadata.publicTitle)
+        setLogoUrl(metadata.logoUrl)
+        setPrivacyNotice(metadata.privacyNotice)
         setIsPublished(formData.status === "published")
         setPages(schema ? schemaToPages(schema, mappingMap) : [{ id: 1, name: "Page 1", fields: [] }])
         setActivePage(1)
@@ -241,22 +279,42 @@ export default function FormBuilderPage() {
     // Drag and drop handlers
     const handleDragStart = (type: string, label: string) => {
         setDraggedField({ type, label })
+        setDraggedFieldId(null)
+    }
+
+    const handleFieldDragStart = (fieldId: string) => {
+        setDraggedFieldId(fieldId)
+        setDraggedField(null)
     }
 
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault()
     }
 
-    const handleDrop = (e: React.DragEvent) => {
+    const handleCanvasDragOver = (e: React.DragEvent) => {
         e.preventDefault()
-        if (!draggedField) return
+        if (!draggedField && !draggedFieldId) return
+        if (currentPage.fields.length > 0) {
+            setDropIndicatorId("end")
+        }
+    }
+
+    const handleFieldDragOver = (e: React.DragEvent, fieldId: string) => {
+        e.preventDefault()
+        e.stopPropagation()
+        if (!draggedField && !draggedFieldId) return
+        setDropIndicatorId(fieldId)
+    }
+
+    const buildNewField = (): FormField | null => {
+        if (!draggedField) return null
 
         const fieldId =
             typeof crypto !== "undefined" && "randomUUID" in crypto
                 ? crypto.randomUUID()
                 : `field-${Date.now()}`
 
-        const newField: FormField = {
+        return {
             id: fieldId,
             type: draggedField.type,
             label: draggedField.label,
@@ -267,12 +325,86 @@ export default function FormBuilderPage() {
                 ? ["Option 1", "Option 2", "Option 3"]
                 : undefined,
         }
+    }
+
+    const moveFieldToIndex = (fields: FormField[], fieldId: string, targetIndex: number) => {
+        const fromIndex = fields.findIndex((field) => field.id === fieldId)
+        if (fromIndex === -1) return fields
+        if (fromIndex === targetIndex) return fields
+
+        const nextFields = [...fields]
+        const [moved] = nextFields.splice(fromIndex, 1)
+        const adjustedIndex = fromIndex < targetIndex ? targetIndex - 1 : targetIndex
+        const clampedIndex = Math.max(0, Math.min(adjustedIndex, nextFields.length))
+        nextFields.splice(clampedIndex, 0, moved)
+        return nextFields
+    }
+
+    const insertFieldAtIndex = (fields: FormField[], field: FormField, targetIndex: number) => {
+        const nextFields = [...fields]
+        const clampedIndex = Math.max(0, Math.min(targetIndex, nextFields.length))
+        nextFields.splice(clampedIndex, 0, field)
+        return nextFields
+    }
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault()
+        const newField = buildNewField()
+        const nextSelectedField = newField?.id || draggedFieldId
 
         setPages((prev) =>
-            prev.map((page) => (page.id === activePage ? { ...page, fields: [...page.fields, newField] } : page)),
+            prev.map((page) => {
+                if (page.id !== activePage) return page
+                if (draggedFieldId) {
+                    return { ...page, fields: moveFieldToIndex(page.fields, draggedFieldId, page.fields.length) }
+                }
+                if (newField) {
+                    return { ...page, fields: [...page.fields, newField] }
+                }
+                return page
+            }),
         )
         setDraggedField(null)
-        setSelectedField(newField.id)
+        setDraggedFieldId(null)
+        setDropIndicatorId(null)
+        if (nextSelectedField) {
+            setSelectedField(nextSelectedField)
+        }
+    }
+
+    const handleDropOnField = (e: React.DragEvent, targetFieldId: string) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const newField = buildNewField()
+        let nextSelectedField = newField?.id || draggedFieldId
+
+        setPages((prev) =>
+            prev.map((page) => {
+                if (page.id !== activePage) return page
+                const targetIndex = page.fields.findIndex((field) => field.id === targetFieldId)
+                if (targetIndex === -1) return page
+                if (draggedFieldId) {
+                    if (draggedFieldId === targetFieldId) return page
+                    return { ...page, fields: moveFieldToIndex(page.fields, draggedFieldId, targetIndex) }
+                }
+                if (newField) {
+                    return { ...page, fields: insertFieldAtIndex(page.fields, newField, targetIndex) }
+                }
+                return page
+            }),
+        )
+        setDraggedField(null)
+        setDraggedFieldId(null)
+        setDropIndicatorId(null)
+        if (nextSelectedField) {
+            setSelectedField(nextSelectedField)
+        }
+    }
+
+    const handleDragEnd = () => {
+        setDraggedField(null)
+        setDraggedFieldId(null)
+        setDropIndicatorId(null)
     }
 
     // Field handlers
@@ -311,11 +443,45 @@ export default function FormBuilderPage() {
         setActivePage(newPage.id)
     }
 
+    const requestDeletePage = (pageId: number) => {
+        setPageToDelete(pageId)
+        setShowDeletePageDialog(true)
+    }
+
+    const confirmDeletePage = () => {
+        if (pageToDelete === null) {
+            setShowDeletePageDialog(false)
+            return
+        }
+
+        setPages((prev) => {
+            const nextPages = prev.filter((page) => page.id !== pageToDelete)
+            if (nextPages.length === 0) {
+                const fallbackPage: FormPage = { id: 1, name: "Page 1", fields: [] }
+                setActivePage(fallbackPage.id)
+                setSelectedField(null)
+                return [fallbackPage]
+            }
+            if (pageToDelete === activePage) {
+                setActivePage(nextPages[0].id)
+                setSelectedField(null)
+            }
+            return nextPages
+        })
+
+        setShowDeletePageDialog(false)
+        setPageToDelete(null)
+    }
+
     const persistForm = async (): Promise<FormRead> => {
         const payload = {
             name: formName.trim(),
             description: formDescription.trim() || null,
-            form_schema: buildFormSchema(pages),
+            form_schema: buildFormSchema(pages, {
+                publicTitle,
+                logoUrl,
+                privacyNotice,
+            }),
         }
 
         let savedForm: FormRead
@@ -355,6 +521,24 @@ export default function FormBuilderPage() {
         }
     }
 
+    const handleLogoUploadClick = () => {
+        logoInputRef.current?.click()
+    }
+
+    const handleLogoFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0]
+        event.target.value = ""
+        if (!file) return
+
+        try {
+            const uploaded = await uploadLogoMutation.mutateAsync(file)
+            setLogoUrl(uploaded.logo_url)
+            toast.success("Logo uploaded")
+        } catch {
+            toast.error("Failed to upload logo")
+        }
+    }
+
     // Publish handler
     const handlePublish = () => {
         if (!formName.trim()) {
@@ -366,6 +550,39 @@ export default function FormBuilderPage() {
             return
         }
         setShowPublishDialog(true)
+    }
+
+    const handlePreview = () => {
+        if (pages.every((page) => page.fields.length === 0)) {
+            toast.error("Add at least one field before previewing")
+            return
+        }
+
+        const previewKey = formId || "draft"
+        const previewPayload = {
+            form_id: previewKey,
+            name: formName.trim() || "Untitled Form",
+            description: formDescription.trim() || null,
+            form_schema: buildFormSchema(pages, {
+                publicTitle,
+                logoUrl,
+                privacyNotice,
+            }),
+            max_file_size_bytes: formData?.max_file_size_bytes ?? 10 * 1024 * 1024,
+            max_file_count: formData?.max_file_count ?? 10,
+            allowed_mime_types: formData?.allowed_mime_types ?? null,
+            generated_at: new Date().toISOString(),
+        }
+
+        try {
+            window.localStorage.setItem(
+                `form-preview:${previewKey}`,
+                JSON.stringify(previewPayload),
+            )
+            window.open(`/apply/preview?formId=${encodeURIComponent(previewKey)}`, "_blank")
+        } catch {
+            toast.error("Failed to open preview")
+        }
     }
 
     const confirmPublish = async () => {
@@ -391,6 +608,8 @@ export default function FormBuilderPage() {
         return [...fieldTypes.basic, ...fieldTypes.advanced].find((f) => f.id === type)?.icon || TypeIcon
     }
 
+    const isDragging = Boolean(draggedField || draggedFieldId)
+
     return (
         <div className="flex h-screen flex-col bg-stone-100 dark:bg-stone-950">
             {/* Top Bar */}
@@ -411,7 +630,7 @@ export default function FormBuilderPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <Button variant="outline" size="sm" disabled>
+                    <Button variant="outline" size="sm" onClick={handlePreview}>
                         <EyeIcon className="mr-2 size-4" />
                         Preview
                     </Button>
@@ -449,6 +668,16 @@ export default function FormBuilderPage() {
                     <PlusIcon className="mr-1 size-4" />
                     Add Page
                 </Button>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-600 hover:text-red-700"
+                    onClick={() => requestDeletePage(activePage)}
+                    disabled={pages.length === 1}
+                >
+                    <Trash2Icon className="mr-1 size-4" />
+                    Delete Page
+                </Button>
             </div>
 
             <div className="flex flex-1 overflow-hidden">
@@ -468,6 +697,7 @@ export default function FormBuilderPage() {
                                             key={field.id}
                                             draggable
                                             onDragStart={() => handleDragStart(field.id, field.label)}
+                                            onDragEnd={handleDragEnd}
                                             className="flex w-full cursor-grab items-center gap-3 rounded-lg border border-stone-200 bg-white p-3 text-left text-sm font-medium transition-all hover:border-teal-500 hover:bg-teal-50 active:cursor-grabbing dark:border-stone-700 dark:bg-stone-800 dark:hover:border-teal-500 dark:hover:bg-teal-950"
                                         >
                                             <IconComponent className="size-5 text-stone-600 dark:text-stone-400" />
@@ -492,6 +722,7 @@ export default function FormBuilderPage() {
                                             key={field.id}
                                             draggable
                                             onDragStart={() => handleDragStart(field.id, field.label)}
+                                            onDragEnd={handleDragEnd}
                                             className="flex w-full cursor-grab items-center gap-3 rounded-lg border border-stone-200 bg-white p-3 text-left text-sm font-medium transition-all hover:border-teal-500 hover:bg-teal-50 active:cursor-grabbing dark:border-stone-700 dark:bg-stone-800 dark:hover:border-teal-500 dark:hover:bg-teal-950"
                                         >
                                             <IconComponent className="size-5 text-stone-600 dark:text-stone-400" />
@@ -514,13 +745,17 @@ export default function FormBuilderPage() {
                 {/* Center Canvas */}
                 <div className="flex-1 overflow-y-auto p-8">
                     <div
-                        onDragOver={handleDragOver}
+                        onDragOver={handleCanvasDragOver}
                         onDrop={handleDrop}
-                        className={`mx-auto max-w-3xl space-y-4 ${currentPage.fields.length === 0 ? "flex min-h-[500px] items-center justify-center" : ""
+                        className={`mx-auto min-h-[500px] max-w-3xl space-y-4 ${currentPage.fields.length === 0 ? "flex items-center justify-center" : ""
                             }`}
                     >
                         {currentPage.fields.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-stone-300 p-12 text-center dark:border-stone-700">
+                            <div
+                                onDragOver={handleDragOver}
+                                onDrop={handleDrop}
+                                className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-stone-300 p-12 text-center dark:border-stone-700"
+                            >
                                 <div className="mb-4 flex size-20 items-center justify-center rounded-full bg-teal-100 dark:bg-teal-950">
                                     <TypeIcon className="size-10 text-teal-600 dark:text-teal-400" />
                                 </div>
@@ -530,49 +765,64 @@ export default function FormBuilderPage() {
                                 </p>
                             </div>
                         ) : (
-                            currentPage.fields.map((field) => {
-                                const IconComponent = getFieldIcon(field.type)
-                                return (
-                                    <Card
-                                        key={field.id}
-                                        className={`cursor-pointer transition-all hover:shadow-md ${selectedField === field.id ? "ring-2 ring-teal-500" : ""
-                                            }`}
-                                        onClick={() => setSelectedField(field.id)}
-                                    >
-                                        <CardContent className="flex items-start gap-4 p-6">
-                                            <GripVerticalIcon className="mt-1 size-5 cursor-grab text-stone-400" />
-                                            <IconComponent className="mt-1 size-5 text-teal-600 dark:text-teal-400" />
-                                            <div className="flex-1">
-                                                <div className="flex items-start justify-between">
-                                                    <div className="flex-1">
-                                                        <Input
-                                                            value={field.label}
-                                                            onChange={(e) => handleUpdateField(field.id, { label: e.target.value })}
-                                                            className="mb-1 h-auto border-none bg-transparent p-0 text-base font-medium focus-visible:ring-0"
-                                                            onClick={(e) => e.stopPropagation()}
-                                                        />
-                                                        {field.helperText && (
-                                                            <p className="text-sm text-stone-500 dark:text-stone-400">{field.helperText}</p>
-                                                        )}
-                                                    </div>
-                                                    {field.required && <span className="ml-2 text-red-500">*</span>}
-                                                </div>
-                                            </div>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="shrink-0"
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    handleDeleteField(field.id)
-                                                }}
+                            <>
+                                {currentPage.fields.map((field) => {
+                                    const IconComponent = getFieldIcon(field.type)
+                                    return (
+                                        <div key={field.id} className="space-y-2">
+                                            {isDragging && dropIndicatorId === field.id && (
+                                                <div className="h-0.5 rounded-full bg-teal-500" />
+                                            )}
+                                            <Card
+                                                draggable
+                                                onDragStart={() => handleFieldDragStart(field.id)}
+                                                onDragOver={(e) => handleFieldDragOver(e, field.id)}
+                                                onDrop={(e) => handleDropOnField(e, field.id)}
+                                                onDragEnd={handleDragEnd}
+                                                className={`cursor-pointer transition-all hover:shadow-md ${selectedField === field.id ? "ring-2 ring-teal-500" : ""
+                                                    }`}
+                                                onClick={() => setSelectedField(field.id)}
                                             >
-                                                <XIcon className="size-4" />
-                                            </Button>
-                                        </CardContent>
-                                    </Card>
-                                )
-                            })
+                                                <CardContent className="flex items-start gap-4 p-6">
+                                                    <GripVerticalIcon className="mt-1 size-5 cursor-grab text-stone-400" />
+                                                    <IconComponent className="mt-1 size-5 text-teal-600 dark:text-teal-400" />
+                                                    <div className="flex-1">
+                                                        <div className="flex items-start justify-between">
+                                                            <div className="flex-1">
+                                                                <Input
+                                                                    draggable={false}
+                                                                    value={field.label}
+                                                                    onChange={(e) => handleUpdateField(field.id, { label: e.target.value })}
+                                                                    className="mb-1 h-auto border-none bg-transparent p-0 text-base font-medium focus-visible:ring-0"
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                />
+                                                                {field.helperText && (
+                                                                    <p className="text-sm text-stone-500 dark:text-stone-400">{field.helperText}</p>
+                                                                )}
+                                                            </div>
+                                                            {field.required && <span className="ml-2 text-red-500">*</span>}
+                                                        </div>
+                                                    </div>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="shrink-0"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            handleDeleteField(field.id)
+                                                        }}
+                                                    >
+                                                        <XIcon className="size-4" />
+                                                    </Button>
+                                                </CardContent>
+                                            </Card>
+                                        </div>
+                                    )
+                                })}
+                                {isDragging && dropIndicatorId === "end" && (
+                                    <div className="h-0.5 rounded-full bg-teal-500" />
+                                )}
+                            </>
                         )}
                     </div>
                 </div>
@@ -710,6 +960,80 @@ export default function FormBuilderPage() {
                                         placeholder="Describe the purpose of this form"
                                     />
                                 </div>
+
+                                {/* Public Title */}
+                                <div className="mt-4 space-y-2">
+                                    <Label htmlFor="public-title">Public Title</Label>
+                                    <Input
+                                        id="public-title"
+                                        value={publicTitle}
+                                        onChange={(e) => setPublicTitle(e.target.value)}
+                                        placeholder="Business or program title shown to applicants"
+                                    />
+                                </div>
+
+                                {/* Logo URL */}
+                                <div className="mt-4 space-y-2">
+                                    <Label htmlFor="logo-url">Logo URL</Label>
+                                    <Input
+                                        id="logo-url"
+                                        value={logoUrl}
+                                        onChange={(e) => setLogoUrl(e.target.value)}
+                                        placeholder="https://example.com/logo.png"
+                                    />
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            ref={logoInputRef}
+                                            type="file"
+                                            accept="image/png,image/jpeg"
+                                            className="hidden"
+                                            onChange={handleLogoFileChange}
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={handleLogoUploadClick}
+                                            disabled={uploadLogoMutation.isPending}
+                                        >
+                                            {uploadLogoMutation.isPending && (
+                                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                            )}
+                                            Upload Logo
+                                        </Button>
+                                        {logoUrl && (
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setLogoUrl("")}
+                                            >
+                                                Remove
+                                            </Button>
+                                        )}
+                                    </div>
+                                    {logoUrl && (
+                                        <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+                                            <img
+                                                src={logoUrl}
+                                                alt="Form logo preview"
+                                                className="h-14 w-auto rounded-md object-contain"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Privacy Notice */}
+                                <div className="mt-4 space-y-2">
+                                    <Label htmlFor="privacy-notice">Privacy Notice</Label>
+                                    <Textarea
+                                        id="privacy-notice"
+                                        value={privacyNotice}
+                                        onChange={(e) => setPrivacyNotice(e.target.value)}
+                                        rows={4}
+                                        placeholder="Describe how applicant data is protected or paste a privacy policy URL"
+                                    />
+                                </div>
                             </div>
 
                             <div className="rounded-lg border border-stone-200 bg-stone-50 p-4 dark:border-stone-800 dark:bg-stone-900">
@@ -741,6 +1065,34 @@ export default function FormBuilderPage() {
                         >
                             {isPublishing && <Loader2Icon className="mr-2 size-4 animate-spin" />}
                             Publish
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog
+                open={showDeletePageDialog}
+                onOpenChange={(open) => {
+                    setShowDeletePageDialog(open)
+                    if (!open) {
+                        setPageToDelete(null)
+                    }
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Page</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This removes the page and all fields on it. This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmDeletePage}
+                            className="bg-red-600 hover:bg-red-700"
+                        >
+                            Delete Page
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
