@@ -113,8 +113,8 @@ function NotificationsSettingsCard() {
 
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label htmlFor="case_status_changed">Case status changes</Label>
-              <p className="text-sm text-muted-foreground">Get notified when case status changes</p>
+              <Label htmlFor="case_status_changed">Case stage changes</Label>
+              <p className="text-sm text-muted-foreground">Get notified when case stage changes</p>
             </div>
             <Switch
               id="case_status_changed"

@@ -83,7 +83,7 @@ export default function IntegrationsPage() {
                 {/* Personal Integrations */}
                 <div>
                     <h2 className="mb-4 text-lg font-semibold">Personal Integrations</h2>
-                    <p className="mb-4 text-sm text-muted-foreground">Connect your personal accounts to enable features like Zoom meetings and email sending.</p>
+                    <p className="mb-4 text-sm text-muted-foreground">Connect your personal accounts to enable features like Zoom appointments and email sending.</p>
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {/* Zoom */}
                         <Card>
@@ -94,7 +94,7 @@ export default function IntegrationsPage() {
                                     </div>
                                     <div>
                                         <CardTitle className="text-base">Zoom</CardTitle>
-                                        <CardDescription className="text-xs">Video meetings</CardDescription>
+                                        <CardDescription className="text-xs">Video appointments</CardDescription>
                                     </div>
                                 </div>
                             </CardHeader>

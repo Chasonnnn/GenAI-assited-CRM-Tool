@@ -292,7 +292,7 @@ export default function PipelinesSettingsPage() {
             <div>
                 <h1 className="text-2xl font-bold">Pipeline Settings</h1>
                 <p className="text-sm text-muted-foreground">
-                    Configure case status stages and their display order
+                    Configure case stages and their display order
                 </p>
             </div>
 

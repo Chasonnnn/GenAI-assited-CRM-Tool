@@ -174,7 +174,7 @@ export default function EmailTemplatesPage() {
             .replace(/\{\{org_name\}\}/g, signatureCompany || "ABC Surrogacy")
             .replace(/\{\{appointment_date\}\}/g, "January 15, 2025")
             .replace(/\{\{appointment_time\}\}/g, "2:00 PM PST")
-            .replace(/\{\{appointment_location\}\}/g, "Virtual Meeting")
+            .replace(/\{\{appointment_location\}\}/g, "Virtual Appointment")
 
         // If content doesn't contain HTML tags, convert line breaks to paragraphs
         const hasHtmlTags = /<[a-z][\s\S]*>/i.test(html)
