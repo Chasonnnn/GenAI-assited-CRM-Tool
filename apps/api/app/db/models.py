@@ -503,6 +503,8 @@ class Case(Base):
             "search_vector",
             postgresql_using="gin",
         ),
+        # PII hash index for phone lookups
+        Index("idx_cases_org_phone_hash", "organization_id", "phone_hash"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -1130,6 +1132,8 @@ class IntendedParent(Base):
             "search_vector",
             postgresql_using="gin",
         ),
+        # PII hash index for phone lookups
+        Index("idx_ip_org_phone_hash", "organization_id", "phone_hash"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
