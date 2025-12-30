@@ -1,9 +1,7 @@
 "use client"
 
-import type React from "react"
-
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -163,8 +161,10 @@ function buildMappings(pages: FormPage[]): { field_key: string; case_field: stri
 }
 
 // Page component
-export default function FormBuilderPage({ params }: { params: { id: string } }) {
-    const { id } = params
+export default function FormBuilderPage() {
+    const params = useParams<{ id: string }>()
+    const idParam = params?.id
+    const id = Array.isArray(idParam) ? idParam[0] : idParam ?? "new"
     const router = useRouter()
     const isNewForm = id === "new"
     const formId = isNewForm ? null : id
