@@ -16,7 +16,7 @@ vi.mock('next/navigation', () => ({
     useParams: () => ({ id: 'match1' }),
     useRouter: () => ({ push: mockPush, replace: mockReplace }),
     useSearchParams: () => ({
-        get: (key: string) => null,
+        get: (_key: string) => null,
         toString: () => '',
         keys: () => [] as string[],
     }),

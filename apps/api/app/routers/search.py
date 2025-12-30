@@ -59,7 +59,7 @@ def global_search(
         user_id=session.user_id,
         role=session.role.value,
     )
-    return search_service.global_search(
+    results = search_service.global_search(
         db=db,
         org_id=session.org_id,
         query=q,
@@ -70,3 +70,33 @@ def global_search(
         limit=limit,
         offset=offset,
     )
+
+    q_type = None
+    if q:
+        if "@" in q:
+            q_type = "email"
+        else:
+            digit_count = sum(1 for ch in q if ch.isdigit())
+            q_type = "phone" if digit_count >= 7 else "text"
+
+    from app.services import audit_service
+
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="global_search",
+        target_id=None,
+        request=request,
+        details={
+            "query_length": len(q),
+            "q_type": q_type,
+            "types": entity_types,
+            "limit": limit,
+            "offset": offset,
+            "result_count": results["total"],
+        },
+    )
+    db.commit()
+
+    return results

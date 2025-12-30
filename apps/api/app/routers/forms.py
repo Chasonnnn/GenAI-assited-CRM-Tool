@@ -32,7 +32,7 @@ from app.schemas.forms import (
     FormSubmissionFileDownloadResponse,
     FormLogoRead,
 )
-from app.services import form_service
+from app.services import form_service, audit_service
 
 router = APIRouter(prefix="/forms", tags=["forms"])
 
@@ -72,9 +72,7 @@ def _form_read(form: Form) -> FormRead:
     )
 
 
-def _submission_read(
-    submission: FormSubmission, files: list
-) -> FormSubmissionRead:
+def _submission_read(submission: FormSubmission, files: list) -> FormSubmissionRead:
     return FormSubmissionRead(
         id=submission.id,
         form_id=submission.form_id,
@@ -358,6 +356,7 @@ def create_submission_token(
 def get_case_submission(
     form_id: UUID,
     case_id: UUID,
+    request: Request,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
@@ -368,10 +367,22 @@ def get_case_submission(
     if not case or case.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Case not found")
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
-    submission = form_service.get_submission_by_case(db, session.org_id, form.id, case.id)
+    submission = form_service.get_submission_by_case(
+        db, session.org_id, form.id, case.id
+    )
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
     files = form_service.list_submission_files(db, session.org_id, submission.id)
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="form_submission",
+        target_id=submission.id,
+        request=request,
+        details={"form_id": str(form_id), "case_id": str(case_id)},
+    )
+    db.commit()
     return _submission_read(submission, files)
 
 
@@ -382,6 +393,7 @@ def get_case_submission(
 )
 def list_submissions(
     form_id: UUID,
+    request: Request,
     status_filter: str | None = Query(None),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
@@ -394,10 +406,22 @@ def list_submissions(
     )
     output = []
     for submission in submissions:
-        files = form_service.list_submission_files(
-            db, session.org_id, submission.id
-        )
+        files = form_service.list_submission_files(db, session.org_id, submission.id)
         output.append(_submission_read(submission, files))
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="form_submission_list",
+        target_id=None,
+        request=request,
+        details={
+            "form_id": str(form_id),
+            "status": status_filter,
+            "count": len(output),
+        },
+    )
+    db.commit()
     return output
 
 
@@ -503,6 +527,15 @@ def download_submission_file(
         submission=submission,
         file_record=file_record,
         user_id=session.user_id,
+    )
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="form_submission_file",
+        target_id=file_record.id,
+        request=request,
+        details={"submission_id": str(submission_id)},
     )
     db.commit()
 

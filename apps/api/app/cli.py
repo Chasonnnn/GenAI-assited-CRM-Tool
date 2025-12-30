@@ -143,7 +143,7 @@ def update_meta_page_token(
             --page-name "Acme Agency" \\
             --expires-days 60
     """
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
     from app.db.models import MetaPageMapping
     from app.core.encryption import encrypt_token, is_encryption_configured
 
@@ -166,7 +166,7 @@ def update_meta_page_token(
 
         # Encrypt token
         encrypted = encrypt_token(access_token)
-        expires_at = datetime.utcnow() + timedelta(days=expires_days)
+        expires_at = datetime.now(timezone.utc) + timedelta(days=expires_days)
 
         # Check for existing mapping
         existing = (

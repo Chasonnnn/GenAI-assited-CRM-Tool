@@ -14,21 +14,27 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [showOtherOptions, setShowOtherOptions] = useState(false)
 
-  const handleDuoSSOLogin = async () => {
+  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
+
+  const handleGoogleLogin = () => {
     setIsLoading(true)
-    // Simulate Duo SSO process
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setIsLoading(false)
-    console.log("[v0] Duo SSO login initiated")
+    try {
+      window.location.assign(`${apiBase}/auth/google/login`)
+    } catch {
+      // Ignore navigation errors in non-browser runtimes.
+    }
   }
 
-  const handleUsernameLogin = async (e: React.FormEvent) => {
+  const handleUsernameLogin = (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    // Simulate username + Duo push authentication
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setIsLoading(false)
-    console.log("[v0] Username + Duo push initiated for:", username)
+    const hint = username.trim()
+    const hintParam = hint ? `?login_hint=${encodeURIComponent(hint)}` : ""
+    try {
+      window.location.assign(`${apiBase}/auth/google/login${hintParam}`)
+    } catch {
+      // Ignore navigation errors in non-browser runtimes.
+    }
   }
 
   return (
@@ -70,18 +76,20 @@ export default function LoginPage() {
             <div className="text-xs font-semibold text-gray-500 tracking-widest">SURROGACY CRM</div>
             <CardTitle className="text-3xl font-bold text-gray-900">Welcome Back</CardTitle>
           </div>
-          <CardDescription className="text-gray-500">Sign in with Single Sign-On</CardDescription>
+          <CardDescription className="text-gray-500">
+            Sign in with Google SSO, then complete Duo verification
+          </CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-5">
           <Button
-            onClick={handleDuoSSOLogin}
+            onClick={handleGoogleLogin}
             className="w-full font-semibold py-6 text-base rounded-full transition-all duration-300"
             style={{ backgroundColor: "#1e1b4b", color: "white" }}
             disabled={isLoading}
           >
             <ShieldCheck className="w-5 h-5 mr-2" />
-            {isLoading ? "Signing In..." : "Sign in with Duo SSO"}
+            {isLoading ? "Signing In..." : "Sign in with Google"}
           </Button>
 
           <div className="relative py-2">
@@ -109,16 +117,15 @@ export default function LoginPage() {
                 <form onSubmit={handleUsernameLogin} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="username" className="text-sm font-medium text-gray-700">
-                      Username
+                      Email (optional)
                     </Label>
                     <Input
                       id="username"
-                      type="text"
-                      placeholder="Enter your username"
+                      type="email"
+                      placeholder="Enter your email (optional)"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
                       className="border-gray-200 bg-white placeholder:text-gray-400 text-gray-900 py-3 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all duration-200"
-                      required
                     />
                   </div>
 
@@ -128,12 +135,12 @@ export default function LoginPage() {
                     className="w-full border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold py-5 transition-all duration-300 rounded-lg"
                     disabled={isLoading}
                   >
-                    {isLoading ? "Authenticating..." : "Continue with Duo"}
+                    {isLoading ? "Authenticating..." : "Continue with Google"}
                   </Button>
                 </form>
 
                 <p className="text-xs text-center text-gray-400">
-                  You will receive a Duo push notification to complete authentication
+                  You will be redirected to Google, then prompted for Duo verification
                 </p>
               </div>
             )}

@@ -1,3 +1,4 @@
+import type { PropsWithChildren } from "react"
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import DashboardPage from '../app/(app)/dashboard/page'
@@ -13,10 +14,10 @@ vi.mock('@/lib/auth-context', () => ({
 }))
 
 vi.mock('recharts', () => ({
-    Area: ({ children }: any) => <div>{children}</div>,
-    AreaChart: ({ children }: any) => <div>{children}</div>,
-    Bar: ({ children }: any) => <div>{children}</div>,
-    BarChart: ({ children }: any) => <div>{children}</div>,
+    Area: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    AreaChart: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    Bar: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    BarChart: ({ children }: PropsWithChildren) => <div>{children}</div>,
     CartesianGrid: () => <div />,
     XAxis: () => <div />,
     YAxis: () => <div />,
@@ -24,8 +25,8 @@ vi.mock('recharts', () => ({
 }))
 
 vi.mock('@/components/ui/chart', () => ({
-    ChartContainer: ({ children }: any) => <div>{children}</div>,
-    ChartTooltip: ({ children }: any) => <div>{children}</div>,
+    ChartContainer: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    ChartTooltip: ({ children }: PropsWithChildren) => <div>{children}</div>,
     ChartTooltipContent: () => <div />,
 }))
 
@@ -100,6 +101,6 @@ describe('DashboardPage', () => {
 
         // Check chart sections exist
         expect(screen.getByText('Cases Trend')).toBeInTheDocument()
-        expect(screen.getByText('Cases by Status')).toBeInTheDocument()
+        expect(screen.getByText('Cases by Stage')).toBeInTheDocument()
     })
 })

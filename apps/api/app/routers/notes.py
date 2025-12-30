@@ -57,6 +57,15 @@ def list_notes(
         details={"notes_count": len(notes)},
         request=request,
     )
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="case",
+        target_id=case_id,
+        request=request,
+        details={"view": "notes", "notes_count": len(notes)},
+    )
     db.commit()
 
     return [note_service.to_note_read(n) for n in notes]

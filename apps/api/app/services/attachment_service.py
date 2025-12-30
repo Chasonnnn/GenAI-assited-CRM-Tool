@@ -3,7 +3,7 @@
 import hashlib
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import BinaryIO
 
 import boto3
@@ -393,7 +393,7 @@ def soft_delete_attachment(
     if not attachment:
         return False
 
-    attachment.deleted_at = datetime.utcnow()
+    attachment.deleted_at = datetime.now(timezone.utc)
     attachment.deleted_by_user_id = user_id
 
     # Audit log
@@ -436,7 +436,7 @@ def mark_attachment_scanned(
         return
 
     attachment.scan_status = scan_result
-    attachment.scanned_at = datetime.utcnow()
+    attachment.scanned_at = datetime.now(timezone.utc)
 
     if scan_result == "clean":
         attachment.quarantined = False

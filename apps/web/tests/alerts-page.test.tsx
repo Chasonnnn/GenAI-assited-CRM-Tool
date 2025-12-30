@@ -6,7 +6,7 @@ const mockUseAlerts = vi.fn()
 const mockResolve = vi.fn()
 
 vi.mock('@/lib/hooks/use-ops', () => ({
-    useAlerts: (params: any) => mockUseAlerts(params),
+    useAlerts: (params: unknown) => mockUseAlerts(params),
     useAlertsSummary: () => ({ data: { critical: 1, error: 0, warn: 0 } }),
     useResolveAlert: () => ({ mutate: mockResolve, isPending: false }),
     useAcknowledgeAlert: () => ({ mutate: vi.fn(), isPending: false }),

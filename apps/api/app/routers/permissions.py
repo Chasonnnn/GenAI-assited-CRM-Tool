@@ -8,7 +8,7 @@ Endpoints for:
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -256,6 +256,7 @@ def get_member(
 def update_member(
     member_id: UUID,
     data: MemberUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     session: UserSession = Depends(require_permission(POLICIES["team"].default)),
 ):
@@ -290,6 +291,7 @@ def update_member(
     )
 
     # Update role
+    old_role = membership.role
     if data.role:
         if not Role.has_value(data.role):
             raise HTTPException(400, f"Invalid role: {data.role}")
@@ -340,6 +342,18 @@ def update_member(
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e))
 
+    if membership.role != old_role:
+        from app.services import audit_service
+
+        audit_service.log_user_role_changed(
+            db=db,
+            org_id=session.org_id,
+            actor_user_id=session.user_id,
+            target_user_id=user.id,
+            old_role=old_role,
+            new_role=membership.role,
+            request=request,
+        )
     db.commit()
 
     # Return updated detail
@@ -349,6 +363,7 @@ def update_member(
 @router.delete("/members/{member_id}", dependencies=[Depends(require_csrf_header)])
 def remove_member(
     member_id: UUID,
+    request: Request,
     db: Session = Depends(get_db),
     session: UserSession = Depends(require_permission(POLICIES["team"].default)),
 ):
@@ -379,6 +394,16 @@ def remove_member(
 
     # Delete membership
     db.delete(membership)
+    from app.services import audit_service
+
+    audit_service.log_user_deactivated(
+        db=db,
+        org_id=session.org_id,
+        actor_user_id=session.user_id,
+        target_user_id=user.id,
+        reason="removed_from_org",
+        request=request,
+    )
     db.commit()
 
     return {"removed": True, "user_id": str(user.id)}

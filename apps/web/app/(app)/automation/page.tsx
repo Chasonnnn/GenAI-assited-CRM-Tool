@@ -9,7 +9,6 @@ import { Switch } from "@/components/ui/switch"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
@@ -25,7 +24,6 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import {
     PlusIcon,
     MoreVerticalIcon,
-    MailIcon,
     UserIcon,
     CalendarIcon,
     CheckCircle2Icon,
@@ -55,12 +53,7 @@ import {
     useTestWorkflow,
 } from "@/lib/hooks/use-workflows"
 import type { WorkflowListItem, Condition, ActionConfig, WorkflowCreate, WorkflowTestResponse } from "@/lib/api/workflows"
-import {
-    useEmailTemplates,
-    useCreateEmailTemplate,
-    useUpdateEmailTemplate,
-    useDeleteEmailTemplate,
-} from "@/lib/hooks/use-email-templates"
+import { useCreateEmailTemplate, useUpdateEmailTemplate, useDeleteEmailTemplate } from "@/lib/hooks/use-email-templates"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
 import { parseDateInput } from "@/lib/utils/date"
 
@@ -124,7 +117,7 @@ export default function AutomationPage() {
     const tabParam = searchParams.get("tab")
     const createParam = searchParams.get("create")
     const initialTab = tabParam && validTabs.includes(tabParam) ? tabParam : "workflows"
-    const [activeTab, setActiveTab] = useState(initialTab)
+    const [activeTab] = useState(initialTab)
 
     // Workflow state - initialize create modal from query param
     const [showCreateModal, setShowCreateModal] = useState(createParam === "true")
@@ -171,7 +164,6 @@ export default function AutomationPage() {
     const testWorkflowMutation = useTestWorkflow()
 
     // Email template hooks
-    const { data: emailTemplates, isLoading: templatesLoading } = useEmailTemplates()
     const createTemplate = useCreateEmailTemplate()
     const updateTemplate = useUpdateEmailTemplate()
     const deleteTemplate = useDeleteEmailTemplate()

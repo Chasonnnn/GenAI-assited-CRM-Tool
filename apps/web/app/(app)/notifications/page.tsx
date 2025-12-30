@@ -33,12 +33,6 @@ const TYPE_GROUPS: Record<string, string[]> = {
     appointment: ["appointment_requested", "appointment_confirmed", "appointment_cancelled", "appointment_reminder"],
 }
 
-const typeIcons: Record<string, typeof FileTextIcon> = {
-    case: FileTextIcon,
-    task: CheckSquareIcon,
-    appointment: CalendarIcon,
-}
-
 function getNotificationIcon(type: string) {
     if (type.startsWith("case")) return FileTextIcon
     if (type.startsWith("task")) return CheckSquareIcon

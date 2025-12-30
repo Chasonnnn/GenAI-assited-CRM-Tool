@@ -247,21 +247,3 @@ def should_send_capi_event(from_status: str, to_status: str) -> bool:
     if not to_meta:
         return False
     return from_meta != to_meta
-
-
-async def send_qualified_event(
-    meta_lead_id: str,
-    case_status: str,
-    email: str | None = None,
-    phone: str | None = None,
-    access_token: str | None = None,
-) -> tuple[bool, str | None]:
-    """Backward-compatible wrapper for qualified/converted status."""
-    return await send_status_event(
-        meta_lead_id=meta_lead_id,
-        case_status=case_status,
-        meta_status=META_STATUS_QUALIFIED,
-        email=email,
-        phone=phone,
-        access_token=access_token,
-    )

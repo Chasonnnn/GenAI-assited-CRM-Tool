@@ -36,10 +36,12 @@ def create_org(db: Session, name: str, slug: str) -> Organization:
     db.refresh(org)
 
     # Seed default role permissions for new org
-    from app.services import permission_service
+    from app.services import permission_service, compliance_service
 
     permission_service.seed_role_defaults(db, org.id)
     db.commit()
+
+    compliance_service.seed_default_retention_policies(db, org.id)
 
     return org
 
@@ -178,32 +180,6 @@ def rollback_org_settings(
         user_id=user_id,
         comment=f"Rolled back from v{target_version}",
     )
-
-    db.commit()
-    db.refresh(org)
-    return org
-
-
-# Legacy function for backward compatibility
-def update_org(
-    db: Session,
-    org_id: UUID,
-    name: str | None = None,
-) -> Organization | None:
-    """
-    Update organization details (legacy - no version control).
-
-    Note: Slug is not updateable to preserve URL stability.
-
-    Returns:
-        Updated org or None if not found
-    """
-    org = db.query(Organization).filter(Organization.id == org_id).first()
-    if not org:
-        return None
-
-    if name is not None:
-        org.name = name
 
     db.commit()
     db.refresh(org)

@@ -7,10 +7,14 @@ import uuid
 import pytest
 from httpx import AsyncClient
 
+from app.core.encryption import hash_email
 from app.db.models import Case, IntendedParent, Match
+from app.utils.normalization import normalize_email
 
 
 def _create_case(db, org_id, user_id, stage):
+    email = f"case-{uuid.uuid4().hex[:8]}@example.com"
+    normalized_email = normalize_email(email)
     case = Case(
         id=uuid.uuid4(),
         organization_id=org_id,
@@ -21,7 +25,8 @@ def _create_case(db, org_id, user_id, stage):
         owner_id=user_id,
         created_by_user_id=user_id,
         full_name="Test Case",
-        email=f"case-{uuid.uuid4().hex[:8]}@example.com",
+        email=normalized_email,
+        email_hash=hash_email(normalized_email),
     )
     db.add(case)
     db.flush()
@@ -29,11 +34,14 @@ def _create_case(db, org_id, user_id, stage):
 
 
 def _create_intended_parent(db, org_id):
+    email = f"ip-{uuid.uuid4().hex[:8]}@example.com"
+    normalized_email = normalize_email(email)
     ip = IntendedParent(
         id=uuid.uuid4(),
         organization_id=org_id,
         full_name="Test IP",
-        email=f"ip-{uuid.uuid4().hex[:8]}@example.com",
+        email=normalized_email,
+        email_hash=hash_email(normalized_email),
     )
     db.add(ip)
     db.flush()

@@ -62,11 +62,11 @@ const TIMEZONE_OPTIONS = [
     { value: "America/Anchorage", label: "Alaska (AK)" },
 ]
 
-// Meeting mode display
+// Appointment format display
 const MEETING_MODES = {
     zoom: { icon: VideoIcon, label: "Zoom Video Call" },
     phone: { icon: PhoneIcon, label: "Phone Call" },
-    in_person: { icon: MapPinIcon, label: "In-Person Meeting" },
+    in_person: { icon: MapPinIcon, label: "In-Person Appointment" },
 }
 
 function formatDateKey(date: Date, timezone: string) {
@@ -529,7 +529,7 @@ function generateICSFile(
         `DTSTART:${formatICSDate(start)}`,
         `DTEND:${formatICSDate(end)}`,
         `SUMMARY:${appointmentType.name} with ${staffName}`,
-        `DESCRIPTION:Meeting type: ${meetingModeLabel}\\nDuration: ${appointmentType.duration_minutes} minutes\\n\\nThis appointment is pending approval. You will receive a confirmation email once approved.`,
+        `DESCRIPTION:Appointment format: ${meetingModeLabel}\\nDuration: ${appointmentType.duration_minutes} minutes\\n\\nThis appointment is pending approval. You will receive a confirmation email once approved.`,
         'STATUS:TENTATIVE',
         `UID:${Date.now()}@crm-platform`,
         'END:VEVENT',
@@ -633,7 +633,7 @@ function ConfirmationView({
                     </li>
                     <li className="flex gap-2">
                         <span className="font-medium text-blue-600 dark:text-blue-400">3.</span>
-                        <span>Meeting details will be included in the confirmation</span>
+                        <span>Appointment details will be included in the confirmation</span>
                     </li>
                 </ol>
             </div>

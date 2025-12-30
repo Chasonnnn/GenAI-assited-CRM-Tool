@@ -11,7 +11,7 @@
  */
 
 import { useState, useMemo, useCallback, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -257,14 +257,13 @@ function AppointmentDetailDialog({
     const ips = ipsData?.items || []
 
     // Reset selected values when dialog opens with new appointment
-    const appointmentId = appointment?.id
     useEffect(() => {
         if (appointment && open) {
             setSelectedCaseId(appointment.case_id)
             setSelectedIpId(appointment.intended_parent_id)
             setShowLinkSection(false)
         }
-    }, [appointmentId, open])
+    }, [appointment, open])
 
     if (!appointment) return null
 
@@ -377,7 +376,7 @@ function AppointmentDetailDialog({
                     </div>
 
                     <div>
-                        <p className="text-sm text-muted-foreground">Meeting Type</p>
+                        <p className="text-sm text-muted-foreground">Appointment Format</p>
                         <p className="font-medium flex items-center gap-2 capitalize">
                             <ModeIcon className="size-4" />
                             {appointment.meeting_mode.replace("_", " ")}

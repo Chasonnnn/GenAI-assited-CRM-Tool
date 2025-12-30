@@ -1,14 +1,16 @@
 """Intended Parent service - business logic for IP CRUD and status management."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from app.core.encryption import hash_email, hash_phone
 from app.db.enums import IntendedParentStatus
 from app.db.models import IntendedParent, IntendedParentStatusHistory
+from app.utils.normalization import normalize_email, normalize_phone
 
 
 # =============================================================================
@@ -64,13 +66,18 @@ def list_intended_parents(
     # Search filter (name, email, phone)
     if q:
         search_term = f"%{q}%"
-        query = query.filter(
-            or_(
-                IntendedParent.full_name.ilike(search_term),
-                IntendedParent.email.ilike(search_term),
-                IntendedParent.phone.ilike(search_term),
-            )
-        )
+        filters = [IntendedParent.full_name.ilike(search_term)]
+        if "@" in q:
+            try:
+                filters.append(IntendedParent.email_hash == hash_email(q))
+            except Exception:
+                pass
+        try:
+            normalized_phone = normalize_phone(q)
+            filters.append(IntendedParent.phone_hash == hash_phone(normalized_phone))
+        except Exception:
+            pass
+        query = query.filter(or_(*filters))
 
     # Owner filter
     if owner_id:
@@ -97,8 +104,6 @@ def list_intended_parents(
     order_func = asc if sort_order == "asc" else desc
     sortable_columns = {
         "full_name": IntendedParent.full_name,
-        "email": IntendedParent.email,
-        "phone": IntendedParent.phone,
         "state": IntendedParent.state,
         "budget": IntendedParent.budget,
         "status": IntendedParent.status,
@@ -144,11 +149,15 @@ def create_intended_parent(
     owner_id: UUID | None = None,
 ) -> IntendedParent:
     """Create a new intended parent and record initial status."""
+    normalized_email = normalize_email(email)
+    normalized_phone = normalize_phone(phone) if phone else None
     ip = IntendedParent(
         organization_id=org_id,
         full_name=full_name,
-        email=email.lower().strip(),
-        phone=phone,
+        email=normalized_email,
+        email_hash=hash_email(normalized_email),
+        phone=normalized_phone,
+        phone_hash=hash_phone(normalized_phone) if normalized_phone else None,
         state=state,
         budget=budget,
         notes_internal=notes_internal,
@@ -190,9 +199,13 @@ def update_intended_parent(
     if full_name is not None:
         ip.full_name = full_name
     if email is not None:
-        ip.email = email.lower().strip()
+        normalized_email = normalize_email(email)
+        ip.email = normalized_email
+        ip.email_hash = hash_email(normalized_email)
     if phone is not None:
-        ip.phone = phone
+        normalized_phone = normalize_phone(phone) if phone else None
+        ip.phone = normalized_phone
+        ip.phone_hash = hash_phone(normalized_phone) if normalized_phone else None
     if state is not None:
         ip.state = state
     if budget is not None:
@@ -204,8 +217,8 @@ def update_intended_parent(
     if owner_id is not None:
         ip.owner_id = owner_id
 
-    ip.last_activity = datetime.utcnow()
-    ip.updated_at = datetime.utcnow()
+    ip.last_activity = datetime.now(timezone.utc)
+    ip.updated_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(ip)
@@ -227,8 +240,8 @@ def update_ip_status(
     """Change status and record in history."""
     old_status = ip.status
     ip.status = new_status
-    ip.last_activity = datetime.utcnow()
-    ip.updated_at = datetime.utcnow()
+    ip.last_activity = datetime.now(timezone.utc)
+    ip.updated_at = datetime.now(timezone.utc)
 
     history = IntendedParentStatusHistory(
         intended_parent_id=ip.id,
@@ -268,9 +281,9 @@ def archive_intended_parent(
     """Soft delete (archive) an intended parent. Sets status to 'archived'."""
     old_status = ip.status
     ip.is_archived = True
-    ip.archived_at = datetime.utcnow()
+    ip.archived_at = datetime.now(timezone.utc)
     ip.status = IntendedParentStatus.ARCHIVED.value  # Actually change the status
-    ip.last_activity = datetime.utcnow()
+    ip.last_activity = datetime.now(timezone.utc)
 
     # Record in history
     history = IntendedParentStatusHistory(
@@ -314,7 +327,7 @@ def restore_intended_parent(
     ip.is_archived = False
     ip.archived_at = None
     ip.status = previous_status
-    ip.last_activity = datetime.utcnow()
+    ip.last_activity = datetime.now(timezone.utc)
 
     history_entry = IntendedParentStatusHistory(
         intended_parent_id=ip.id,
@@ -371,7 +384,7 @@ def get_ip_by_email(db: Session, email: str, org_id: UUID) -> IntendedParent | N
         db.query(IntendedParent)
         .filter(
             IntendedParent.organization_id == org_id,
-            IntendedParent.email == email.lower().strip(),
+            IntendedParent.email_hash == hash_email(email),
             IntendedParent.is_archived.is_(False),
         )
         .first()

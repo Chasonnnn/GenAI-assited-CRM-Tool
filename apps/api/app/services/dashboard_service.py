@@ -2,12 +2,18 @@
 
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
+import asyncio
+import logging
+import threading
 
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
+from app.core.websocket import manager
 from app.db.enums import OwnerType
 from app.db.models import Case, Task, ZoomMeeting
+
+logger = logging.getLogger(__name__)
 
 
 def get_upcoming_items(
@@ -127,3 +133,52 @@ def get_upcoming_items(
         )
 
     return task_items, meeting_items
+
+
+# =============================================================================
+# Realtime dashboard updates
+# =============================================================================
+
+
+def push_dashboard_stats(db: Session, org_id: UUID) -> None:
+    """Compute and push dashboard stats to connected org clients."""
+    from app.services import case_service
+
+    try:
+        stats = case_service.get_case_stats(db, org_id)
+    except Exception:
+        logger.exception("Failed to build dashboard stats for websocket push")
+        return
+
+    _schedule_ws_send(_send_dashboard_stats(org_id, stats))
+
+
+def _schedule_ws_send(coro: asyncio.Future) -> None:
+    """Schedule websocket sends without blocking the request cycle."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        loop.create_task(coro)
+        return
+
+    def _runner() -> None:
+        try:
+            asyncio.run(coro)
+        except Exception:
+            logger.exception("Failed to push websocket dashboard stats")
+
+    threading.Thread(target=_runner, daemon=True).start()
+
+
+async def _send_dashboard_stats(org_id: UUID, stats: dict) -> None:
+    """Send dashboard stats updates to websocket clients."""
+    await manager.send_to_org(
+        org_id,
+        {
+            "type": "stats_update",
+            "data": stats,
+        },
+    )

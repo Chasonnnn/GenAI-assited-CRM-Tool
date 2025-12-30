@@ -7,10 +7,11 @@ from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.encryption import hash_email, hash_phone
 from app.db.enums import CaseSource, OwnerType, Role
 from app.db.models import Case, CaseStatusHistory, User
 from app.schemas.case import CaseCreate, CaseUpdate
-from app.utils.normalization import normalize_email, normalize_name
+from app.utils.normalization import normalize_email, normalize_name, normalize_phone
 
 
 def generate_case_number(db: Session, org_id: UUID) -> str:
@@ -85,6 +86,8 @@ def create_case(
     if not default_stage:
         raise ValueError("Default pipeline has no active stages")
 
+    normalized_email = normalize_email(data.email)
+    normalized_phone = data.phone
     case = None
     for attempt in range(3):
         case = Case(
@@ -97,8 +100,10 @@ def create_case(
             status_label=default_stage.label,
             source=data.source.value,
             full_name=normalize_name(data.full_name),
-            email=normalize_email(data.email),
-            phone=data.phone,  # Already normalized by schema
+            email=normalized_email,
+            email_hash=hash_email(normalized_email),
+            phone=normalized_phone,  # Already normalized by schema
+            phone_hash=hash_phone(normalized_phone) if normalized_phone else None,
             state=data.state,  # Already normalized by schema
             date_of_birth=data.date_of_birth,
             race=data.race,
@@ -192,8 +197,18 @@ def update_case(
             continue
         if field == "full_name" and value:
             value = normalize_name(value)
-        elif field == "email" and value:
+        elif field == "email":
+            if not value:
+                continue
             value = normalize_email(value)
+            email_hash = hash_email(value)
+        elif field == "phone":
+            if value:
+                try:
+                    value = normalize_phone(value)
+                except ValueError:
+                    pass
+            phone_hash = hash_phone(value) if value else None
 
         # Check if value actually changed
         current_value = getattr(case, field, None)
@@ -213,6 +228,10 @@ def update_case(
                     changes[field] = value
 
             setattr(case, field, value)
+            if field == "email":
+                case.email_hash = email_hash
+            elif field == "phone":
+                case.phone_hash = phone_hash
 
     if commit:
         db.commit()
@@ -714,7 +733,7 @@ def restore_case(
         db.query(Case)
         .filter(
             Case.organization_id == case.organization_id,
-            Case.email == case.email,
+            Case.email_hash == case.email_hash,
             Case.is_archived.is_(False),
             Case.id != case.id,
         )
@@ -810,7 +829,7 @@ def list_cases(
         created_from: Filter by creation date from (ISO format YYYY-MM-DD)
         created_to: Filter by creation date to (ISO format YYYY-MM-DD)
         exclude_stage_types: Stage types to exclude (e.g. ['post_approval'] for users without permission)
-        sort_by: Column to sort by (case_number, full_name, email, state, race, source, created_at)
+        sort_by: Column to sort by (case_number, full_name, state, race, source, created_at)
         sort_order: Sort direction ('asc' or 'desc')
 
     Returns:
@@ -901,27 +920,31 @@ def list_cases(
     # Search (name, email, phone)
     if q:
         search = f"%{q}%"
-        query = query.filter(
-            or_(
-                Case.full_name.ilike(search),
-                Case.email.ilike(search),
-                Case.phone.ilike(search),
-                Case.case_number.ilike(search),
-            )
-        )
+        filters = [
+            Case.full_name.ilike(search),
+            Case.case_number.ilike(search),
+        ]
+        if "@" in q:
+            try:
+                filters.append(Case.email_hash == hash_email(q))
+            except Exception:
+                pass
+        try:
+            normalized_phone = normalize_phone(q)
+            filters.append(Case.phone_hash == hash_phone(normalized_phone))
+        except Exception:
+            pass
+        query = query.filter(or_(*filters))
 
     # Dynamic sorting
     order_func = asc if sort_order == "asc" else desc
     sortable_columns = {
         "case_number": Case.case_number,
         "full_name": Case.full_name,
-        "email": Case.email,
-        "phone": Case.phone,
         "state": Case.state,
         "race": Case.race,
         "source": Case.source,
         "created_at": Case.created_at,
-        "date_of_birth": Case.date_of_birth,  # For age sorting
     }
 
     if sort_by and sort_by in sortable_columns:

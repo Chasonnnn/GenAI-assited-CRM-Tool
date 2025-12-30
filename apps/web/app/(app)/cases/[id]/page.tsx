@@ -166,11 +166,15 @@ function formatActivityDetails(type: string, details: Record<string, unknown>): 
             return details.reason ? withAiPrefix(String(details.reason)) : aiOnly()
         case 'note_added': {
             const content = details.content ? stripHtml(String(details.content)) : ''
-            return content ? withAiPrefix(content.slice(0, 100) + (content.length > 100 ? '...' : '')) : aiOnly()
+            return content
+                ? withAiPrefix(content.slice(0, 100) + (content.length > 100 ? '...' : ''))
+                : withAiPrefix('Note added')
         }
         case 'note_deleted': {
             const preview = details.preview ? stripHtml(String(details.preview)) : ''
-            return preview ? withAiPrefix(preview.slice(0, 100) + (preview.length > 100 ? '...' : '')) : aiOnly()
+            return preview
+                ? withAiPrefix(preview.slice(0, 100) + (preview.length > 100 ? '...' : ''))
+                : withAiPrefix('Note deleted')
         }
         case 'task_created':
             return details.title ? withAiPrefix(`Task: ${String(details.title)}`) : aiOnly()
@@ -893,17 +897,23 @@ export default function CaseDetailPage() {
                                     </CardHeader>
                                     <CardContent className="space-y-4">
                                         <div className="grid grid-cols-2 gap-2">
-                                            {(['follow_up', 'status_update', 'meeting_request', 'document_request', 'introduction'] as EmailType[]).map((emailType) => (
-                                                <Button
-                                                    key={emailType}
-                                                    variant={selectedEmailType === emailType ? 'default' : 'outline'}
-                                                    size="sm"
-                                                    onClick={() => setSelectedEmailType(emailType)}
-                                                    className="capitalize text-xs"
-                                                >
-                                                    {emailType.replace(/_/g, ' ')}
-                                                </Button>
-                                            ))}
+                                            {(['follow_up', 'status_update', 'meeting_request', 'document_request', 'introduction'] as EmailType[]).map((emailType) => {
+                                                const label =
+                                                    emailType === 'meeting_request'
+                                                        ? 'appointment request'
+                                                        : emailType.replace(/_/g, ' ')
+                                                return (
+                                                    <Button
+                                                        key={emailType}
+                                                        variant={selectedEmailType === emailType ? 'default' : 'outline'}
+                                                        size="sm"
+                                                        onClick={() => setSelectedEmailType(emailType)}
+                                                        className="capitalize text-xs"
+                                                    >
+                                                        {label}
+                                                    </Button>
+                                                )
+                                            })}
                                         </div>
 
                                         <Button
@@ -1146,7 +1156,7 @@ export default function CaseDetailPage() {
             <Dialog open={zoomDialogOpen} onOpenChange={setZoomDialogOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>📹 Schedule Zoom Meeting</DialogTitle>
+                        <DialogTitle>📹 Schedule Zoom Appointment</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                         <div>
@@ -1155,7 +1165,7 @@ export default function CaseDetailPage() {
                                 id="zoom-topic"
                                 value={zoomTopic}
                                 onChange={(e) => setZoomTopic(e.target.value)}
-                                placeholder="Meeting topic"
+                                placeholder="Appointment topic"
                                 className="mt-2"
                                 disabled={!!lastMeetingResult}
                             />
@@ -1186,7 +1196,7 @@ export default function CaseDetailPage() {
                             </select>
                         </div>
                         <div className="text-xs text-muted-foreground">
-                            A meeting task is created automatically.
+                            An appointment task is created automatically.
                         </div>
                     </div>
                     <DialogFooter>
@@ -1220,7 +1230,7 @@ export default function CaseDetailPage() {
                                             })
                                             setZoomDialogOpen(false)
                                             setLastMeetingResult(null)
-                                        } catch (err) {
+                                        } catch {
                                             // Error handled by react-query
                                         }
                                     }}
@@ -1250,13 +1260,13 @@ export default function CaseDetailPage() {
                                             start_time: formatMeetingTimeForInvite(zoomStartAt),
                                         })
                                         navigator.clipboard.writeText(result.join_url)
-                                    } catch (err) {
+                                    } catch {
                                         // Error handled by react-query
                                     }
                                 }}
                                 disabled={!zoomTopic || !zoomStartAt || createZoomMeetingMutation.isPending}
                             >
-                                {createZoomMeetingMutation.isPending ? 'Creating...' : 'Create Meeting'}
+                                {createZoomMeetingMutation.isPending ? 'Creating...' : 'Create Appointment'}
                             </Button>
                         )}
                     </DialogFooter>

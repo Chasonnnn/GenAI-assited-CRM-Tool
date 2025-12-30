@@ -8,7 +8,7 @@ import os
 import re
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
@@ -363,7 +363,7 @@ def create_export_job(
     if start_date >= end_date:
         raise ValueError("start_date must be before end_date")
 
-    one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+    one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
     recent_exports = (
         db.query(ExportJob)
         .filter(
@@ -503,7 +503,7 @@ def process_export_job(db: Session, export_job_id: UUID) -> ExportJob:
         redacted = job.redact_mode == REDACT_MODE_REDACTED
         metadata = {
             "export_id": str(job.id),
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "redacted": redacted,
             "date_redaction": "year_month" if redacted else "none",
             "chain_verifiable": False
@@ -550,7 +550,7 @@ def process_export_job(db: Session, export_job_id: UUID) -> ExportJob:
 
         job.record_count = len(rows)
         job.status = EXPORT_STATUS_COMPLETED
-        job.completed_at = datetime.utcnow()
+        job.completed_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(job)
         return job
@@ -572,6 +572,39 @@ def list_retention_policies(db: Session, org_id: UUID) -> list[DataRetentionPoli
         .order_by(DataRetentionPolicy.entity_type)
         .all()
     )
+
+
+def seed_default_retention_policies(
+    db: Session,
+    org_id: UUID,
+) -> list[DataRetentionPolicy]:
+    """Create default retention policies for a new organization."""
+    default_entities = [
+        "cases",
+        "matches",
+        "tasks",
+        "entity_notes",
+        "case_activity",
+    ]
+    existing = {policy.entity_type for policy in list_retention_policies(db, org_id)}
+    created: list[DataRetentionPolicy] = []
+    for entity_type in default_entities:
+        if entity_type in existing:
+            continue
+        policy = DataRetentionPolicy(
+            organization_id=org_id,
+            entity_type=entity_type,
+            retention_days=settings.DEFAULT_RETENTION_DAYS,
+            is_active=True,
+            created_by_user_id=None,
+        )
+        db.add(policy)
+        created.append(policy)
+    if created:
+        db.commit()
+        for policy in created:
+            db.refresh(policy)
+    return created
 
 
 def upsert_retention_policy(
@@ -676,7 +709,7 @@ def release_legal_hold(
     )
     if not hold:
         return None
-    hold.released_at = datetime.utcnow()
+    hold.released_at = datetime.now(timezone.utc)
     hold.released_by_user_id = user_id
     db.commit()
     db.refresh(hold)
@@ -815,7 +848,7 @@ def preview_purge(db: Session, org_id: UUID) -> list[PurgeResult]:
     for policy in policies:
         if not policy.is_active or policy.retention_days == 0:
             continue
-        cutoff = datetime.utcnow() - timedelta(days=policy.retention_days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=policy.retention_days)
         query = _build_retention_query(
             db, org_id, policy.entity_type, cutoff, case_hold_ids, entity_hold_ids
         )
@@ -832,7 +865,7 @@ def execute_purge(db: Session, org_id: UUID, user_id: UUID | None) -> list[Purge
     for policy in policies:
         if not policy.is_active or policy.retention_days == 0:
             continue
-        cutoff = datetime.utcnow() - timedelta(days=policy.retention_days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=policy.retention_days)
         query = _build_retention_query(
             db, org_id, policy.entity_type, cutoff, case_hold_ids, entity_hold_ids
         )

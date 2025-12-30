@@ -1,7 +1,7 @@
 """SQLAlchemy ORM models for authentication, tenant management, and cases."""
 
 import uuid
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from decimal import Decimal
 
 from sqlalchemy import (
@@ -36,6 +36,7 @@ from app.db.enums import (
     MeetingMode,
     AppointmentStatus,
 )
+from app.db.types import EncryptedDate, EncryptedString, EncryptedText
 
 
 # =============================================================================
@@ -147,7 +148,8 @@ class User(Base):
         nullable=True,  # Hashed recovery codes
     )
     mfa_required_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(), nullable=True  # When MFA enforcement started for this user
+        TIMESTAMP(),
+        nullable=True,  # When MFA enforcement started for this user
     )
 
     # Relationships
@@ -465,9 +467,9 @@ class Case(Base):
         UniqueConstraint("organization_id", "case_number", name="uq_case_number"),
         # Email unique per org for active cases only
         Index(
-            "uq_case_email_active",
+            "uq_case_email_hash_active",
             "organization_id",
-            "email",
+            "email_hash",
             unique=True,
             postgresql_where=text("is_archived = FALSE"),
         ),
@@ -475,7 +477,9 @@ class Case(Base):
         Index("idx_cases_stage", "stage_id"),  # Single-column for FK lookups
         Index("idx_cases_org_stage", "organization_id", "stage_id"),
         Index("idx_cases_org_owner", "organization_id", "owner_type", "owner_id"),
+        Index("idx_cases_org_status_label", "organization_id", "status_label"),
         Index("idx_cases_org_created", "organization_id", "created_at"),
+        Index("idx_cases_org_updated", "organization_id", "updated_at"),
         Index(
             "idx_cases_org_active",
             "organization_id",
@@ -547,12 +551,14 @@ class Case(Base):
 
     # Contact (normalized: E.164 phone, 2-letter state)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    email: Mapped[str] = mapped_column(CITEXT, nullable=False)
-    phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    email: Mapped[str] = mapped_column(EncryptedString, nullable=False)
+    email_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    phone: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    phone_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     state: Mapped[str | None] = mapped_column(String(2), nullable=True)
 
     # Demographics
-    date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
+    date_of_birth: Mapped[date | None] = mapped_column(EncryptedDate, nullable=True)
     race: Mapped[str | None] = mapped_column(String(100), nullable=True)
     height_ft: Mapped[Decimal | None] = mapped_column(Numeric(3, 1), nullable=True)
     weight_lb: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -732,6 +738,9 @@ class Task(Base):
             "owner_id",
             "is_completed",
         ),
+        Index("idx_tasks_org_status", "organization_id", "is_completed"),
+        Index("idx_tasks_org_created", "organization_id", "created_at"),
+        Index("idx_tasks_org_updated", "organization_id", "updated_at"),
         Index(
             "idx_tasks_due",
             "organization_id",
@@ -1105,12 +1114,13 @@ class IntendedParent(Base):
     __table_args__ = (
         Index("idx_ip_org_status", "organization_id", "status"),
         Index("idx_ip_org_created", "organization_id", "created_at"),
+        Index("idx_ip_org_updated", "organization_id", "updated_at"),
         Index("idx_ip_org_owner", "organization_id", "owner_type", "owner_id"),
         # Partial unique index: unique email per org for non-archived records
         Index(
-            "uq_ip_email_active",
+            "uq_ip_email_hash_active",
             "organization_id",
-            "email",
+            "email_hash",
             unique=True,
             postgresql_where=text("is_archived = false"),
         ),
@@ -1133,8 +1143,10 @@ class IntendedParent(Base):
 
     # Contact info
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    email: Mapped[str] = mapped_column(CITEXT, nullable=False)
-    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    email: Mapped[str] = mapped_column(EncryptedString, nullable=False)
+    email_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    phone: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    phone_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Location (state only)
     state: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -1143,7 +1155,7 @@ class IntendedParent(Base):
     budget: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
 
     # Internal notes (not the polymorphic notes, just a quick text field)
-    notes_internal: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes_internal: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
 
     # Status & workflow
     status: Mapped[str] = mapped_column(
@@ -1172,7 +1184,9 @@ class IntendedParent(Base):
         server_default=text("now()"), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), onupdate=datetime.utcnow, nullable=False
+        server_default=text("now()"),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
     )
 
     # Full-text search vector (managed by trigger)
@@ -1607,6 +1621,48 @@ class RequestMetricsRollup(Base):
             name="uq_request_metrics_rollup",
         ),
     )
+
+
+# =============================================================================
+# Analytics Snapshots (Cached aggregates)
+# =============================================================================
+
+
+class AnalyticsSnapshot(Base):
+    """
+    Cached analytics payloads for dashboard and reports.
+
+    snapshot_key is a deterministic hash of the request params.
+    """
+
+    __tablename__ = "analytics_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "snapshot_key", name="uq_analytics_snapshot_key"
+        ),
+        Index("idx_analytics_snapshot_org_type", "organization_id", "snapshot_type"),
+        Index("idx_analytics_snapshot_expires", "expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    snapshot_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    snapshot_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict | list] = mapped_column(JSONB, nullable=False)
+    range_start: Mapped[datetime | None] = mapped_column(nullable=True)
+    range_end: Mapped[datetime | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"), nullable=False
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+    organization: Mapped["Organization"] = relationship()
 
 
 # =============================================================================
@@ -2820,6 +2876,9 @@ class Match(Base):
         Index("ix_matches_case_id", "case_id"),
         Index("ix_matches_ip_id", "intended_parent_id"),
         Index("ix_matches_status", "status"),
+        Index("idx_matches_org_status", "organization_id", "status"),
+        Index("idx_matches_org_created", "organization_id", "created_at"),
+        Index("idx_matches_org_updated", "organization_id", "updated_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -3107,7 +3166,10 @@ class Form(Base):
         TIMESTAMP(), server_default=text("now()"), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(), server_default=text("now()"), onupdate=text("now()"), nullable=False
+        TIMESTAMP(),
+        server_default=text("now()"),
+        onupdate=text("now()"),
+        nullable=False,
     )
 
     organization: Mapped["Organization"] = relationship()
@@ -3550,6 +3612,9 @@ class Appointment(Base):
     __table_args__ = (
         Index("idx_appointments_user_date", "user_id", "scheduled_start"),
         Index("idx_appointments_org_status", "organization_id", "status"),
+        Index("idx_appointments_org_user", "organization_id", "user_id"),
+        Index("idx_appointments_org_created", "organization_id", "created_at"),
+        Index("idx_appointments_org_updated", "organization_id", "updated_at"),
         Index("idx_appointments_type", "appointment_type_id"),
         Index("idx_appointments_case", "case_id"),
         Index("idx_appointments_ip", "intended_parent_id"),

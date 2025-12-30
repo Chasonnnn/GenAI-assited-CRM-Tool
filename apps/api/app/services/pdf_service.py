@@ -5,7 +5,7 @@ Generates PDF reports for analytics data using reportlab with native charts.
 """
 
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 
 from reportlab.lib import colors
@@ -233,7 +233,7 @@ def create_analytics_pdf(
     elements.append(Paragraph(f"{org_name} Analytics Report", title_style))
 
     # Date info
-    generated_at = datetime.utcnow().strftime("%B %d, %Y at %H:%M UTC")
+    generated_at = datetime.now(timezone.utc).strftime("%B %d, %Y at %H:%M UTC")
     period_text = f"Period: {date_range}" if date_range else "Period: All Time"
     elements.append(
         Paragraph(f"{period_text} | Generated: {generated_at}", subheading_style)

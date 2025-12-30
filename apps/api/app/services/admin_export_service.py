@@ -5,8 +5,10 @@ from __future__ import annotations
 import csv
 import io
 import json
+import os
+import tempfile
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Iterable, Iterator, Sequence
 from uuid import UUID
 
@@ -38,11 +40,92 @@ from app.services import ai_usage_service, analytics_service
 
 CSV_DANGEROUS_PREFIXES = ("=", "+", "-", "@")
 
+EXPORT_TYPE_FILENAMES = {
+    "cases_csv": "cases_export",
+    "org_config_zip": "org_config_export",
+    "analytics_zip": "analytics_export",
+}
+
 
 def _csv_safe(value: str) -> str:
     if value and value.startswith(CSV_DANGEROUS_PREFIXES):
         return f"'{value}"
     return value
+
+
+def _ensure_admin_export_dir(org_id: UUID) -> str:
+    base_dir = os.path.abspath(settings.EXPORT_LOCAL_DIR)
+    export_dir = os.path.join(base_dir, str(org_id), "admin_exports")
+    os.makedirs(export_dir, exist_ok=True)
+    return export_dir
+
+
+def _build_admin_export_key(org_id: UUID, filename: str) -> str:
+    prefix = settings.EXPORT_S3_PREFIX.strip("/")
+    return f"{prefix}/{org_id}/admin/{filename}"
+
+
+def _upload_to_s3(file_path: str, key: str) -> None:
+    try:
+        import boto3  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("boto3 is required for S3 export storage") from exc
+    if not settings.EXPORT_S3_BUCKET:
+        raise RuntimeError("EXPORT_S3_BUCKET must be set for S3 export storage")
+
+    client = boto3.client("s3", region_name=settings.EXPORT_S3_REGION or None)
+    client.upload_file(file_path, settings.EXPORT_S3_BUCKET, key)
+
+
+def store_export_bytes(org_id: UUID, filename: str, payload: bytes) -> str:
+    """Store export payload and return file path/key."""
+    if settings.EXPORT_STORAGE_BACKEND == "s3":
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = os.path.join(temp_dir, filename)
+            with open(file_path, "wb") as f:
+                f.write(payload)
+            key = _build_admin_export_key(org_id, filename)
+            _upload_to_s3(file_path, key)
+            return key
+
+    export_dir = _ensure_admin_export_dir(org_id)
+    file_path = os.path.join(export_dir, filename)
+    with open(file_path, "wb") as f:
+        f.write(payload)
+    return os.path.relpath(file_path, os.path.abspath(settings.EXPORT_LOCAL_DIR))
+
+
+def store_cases_csv(db: Session, org_id: UUID, filename: str) -> str:
+    """Store streamed cases CSV and return file path/key."""
+    if settings.EXPORT_STORAGE_BACKEND == "s3":
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = os.path.join(temp_dir, filename)
+            with open(file_path, "w", newline="", encoding="utf-8") as f:
+                for row in stream_cases_csv(db, org_id):
+                    f.write(row)
+            key = _build_admin_export_key(org_id, filename)
+            _upload_to_s3(file_path, key)
+            return key
+
+    export_dir = _ensure_admin_export_dir(org_id)
+    file_path = os.path.join(export_dir, filename)
+    with open(file_path, "w", newline="", encoding="utf-8") as f:
+        for row in stream_cases_csv(db, org_id):
+            f.write(row)
+    return os.path.relpath(file_path, os.path.abspath(settings.EXPORT_LOCAL_DIR))
+
+
+def resolve_admin_export_path(file_path: str) -> str:
+    """Resolve local admin export path from stored relative path."""
+    return os.path.join(os.path.abspath(settings.EXPORT_LOCAL_DIR), file_path)
+
+
+def build_export_filename(export_type: str) -> str:
+    """Build a timestamped filename for admin exports."""
+    prefix = EXPORT_TYPE_FILENAMES.get(export_type, "admin_export")
+    extension = "csv" if export_type == "cases_csv" else "zip"
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    return f"{prefix}_{timestamp}.{extension}"
 
 
 def _serialize_csv_value(value: Any) -> str:
@@ -589,7 +672,7 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
 
     manifest = {
         "organization_id": str(org_id),
-        "exported_at": datetime.utcnow().isoformat(),
+        "exported_at": datetime.now(timezone.utc).isoformat(),
         "version": settings.VERSION,
     }
 
@@ -627,13 +710,15 @@ def build_analytics_zip(
     ad_id: str | None,
     meta_spend: dict[str, Any],
 ) -> bytes:
-    summary = analytics_service.get_analytics_summary(db, org_id, start, end)
-    cases_by_status = analytics_service.get_cases_by_status(db, org_id)
-    cases_by_assignee = analytics_service.get_cases_by_assignee(db, org_id)
-    cases_trend = analytics_service.get_cases_trend(
+    summary = analytics_service.get_cached_analytics_summary(db, org_id, start, end)
+    cases_by_status = analytics_service.get_cached_cases_by_status(db, org_id)
+    cases_by_assignee = analytics_service.get_cached_cases_by_assignee(db, org_id)
+    cases_trend = analytics_service.get_cached_cases_trend(
         db, org_id, start=start, end=end, group_by="day"
     )
-    meta_performance = analytics_service.get_meta_performance(db, org_id, start, end)
+    meta_performance = analytics_service.get_cached_meta_performance(
+        db, org_id, start, end
+    )
     campaigns = analytics_service.get_campaigns(db, org_id)
     funnel = analytics_service.get_funnel_with_filter(
         db,

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import csv
 import json
 import os
@@ -6,9 +6,11 @@ import os
 import pytest
 
 from app.core.config import settings
+from app.core.encryption import hash_email
 from app.db.enums import AuditEventType, TaskType
 from app.db.models import AuditLog, Task
 from app.services import compliance_service
+from app.utils.normalization import normalize_email
 
 
 def _create_audit_log(db, org_id, user_id, **overrides):
@@ -22,7 +24,7 @@ def _create_audit_log(db, org_id, user_id, **overrides):
         ip_address=overrides.get("ip_address"),
         prev_hash="0" * 64,
         entry_hash="1" * 64,
-        created_at=overrides.get("created_at") or datetime.utcnow(),
+        created_at=overrides.get("created_at") or datetime.now(timezone.utc),
     )
     db.add(log)
     db.commit()
@@ -58,11 +60,12 @@ def test_export_job_redacts_phi(db, test_org, test_user, export_settings):
             "note": "Call me at 415-555-1234",
         },
         ip_address="10.20.30.40",
-        created_at=datetime.utcnow() - timedelta(seconds=5),  # Earlier to ensure first
+        created_at=datetime.now(timezone.utc)
+        - timedelta(seconds=5),  # Earlier to ensure first
     )
 
-    start_date = datetime.utcnow() - timedelta(days=1)
-    end_date = datetime.utcnow() + timedelta(days=1)
+    start_date = datetime.now(timezone.utc) - timedelta(days=1)
+    end_date = datetime.now(timezone.utc) + timedelta(days=1)
 
     job = compliance_service.create_export_job(
         db=db,
@@ -101,11 +104,12 @@ def test_export_job_full_mode_keeps_values(db, test_org, test_user, export_setti
         test_user.id,
         target_type="case",
         details={"email": "full@example.com"},
-        created_at=datetime.utcnow() - timedelta(seconds=5),  # Earlier to ensure first
+        created_at=datetime.now(timezone.utc)
+        - timedelta(seconds=5),  # Earlier to ensure first
     )
 
-    start_date = datetime.utcnow() - timedelta(days=1)
-    end_date = datetime.utcnow() + timedelta(days=1)
+    start_date = datetime.now(timezone.utc) - timedelta(days=1)
+    end_date = datetime.now(timezone.utc) + timedelta(days=1)
 
     job = compliance_service.create_export_job(
         db=db,
@@ -149,7 +153,7 @@ def test_legal_hold_blocks_purge_preview(db, test_org, test_user):
         title="Old Task",
         task_type=TaskType.OTHER.value,
         is_completed=True,
-        completed_at=datetime.utcnow() - timedelta(days=10),
+        completed_at=datetime.now(timezone.utc) - timedelta(days=10),
     )
     db.add(old_task)
     db.commit()
@@ -239,31 +243,35 @@ def test_specific_entity_legal_hold_blocks_related(db, test_org, test_user):
     db.flush()
 
     # Create two old archived cases
+    case1_email = normalize_email("case1@test.com")
     case1 = Case(
         organization_id=test_org.id,
         case_number="TEST-001",
         stage_id=stage.id,
         status_label=stage.label,
         full_name="Case One",
-        email="case1@test.com",
+        email=case1_email,
+        email_hash=hash_email(case1_email),
         source="manual",
         created_by_user_id=test_user.id,
         owner_type="user",
         owner_id=test_user.id,
-        archived_at=datetime.utcnow() - timedelta(days=30),
+        archived_at=datetime.now(timezone.utc) - timedelta(days=30),
     )
+    case2_email = normalize_email("case2@test.com")
     case2 = Case(
         organization_id=test_org.id,
         case_number="TEST-002",
         stage_id=stage.id,
         status_label=stage.label,
         full_name="Case Two",
-        email="case2@test.com",
+        email=case2_email,
+        email_hash=hash_email(case2_email),
         source="manual",
         created_by_user_id=test_user.id,
         owner_type="user",
         owner_id=test_user.id,
-        archived_at=datetime.utcnow() - timedelta(days=30),
+        archived_at=datetime.now(timezone.utc) - timedelta(days=30),
     )
     db.add_all([case1, case2])
     db.commit()
@@ -290,8 +298,8 @@ def test_specific_entity_legal_hold_blocks_related(db, test_org, test_user):
 def test_rate_limit_exceeded(db, test_org, test_user, export_settings):
     """Export rate limit returns error when exceeded."""
     settings.EXPORT_RATE_LIMIT_PER_HOUR = 1
-    start_date = datetime.utcnow() - timedelta(days=1)
-    end_date = datetime.utcnow() + timedelta(days=1)
+    start_date = datetime.now(timezone.utc) - timedelta(days=1)
+    end_date = datetime.now(timezone.utc) + timedelta(days=1)
 
     # First export should succeed
     job1 = compliance_service.create_export_job(

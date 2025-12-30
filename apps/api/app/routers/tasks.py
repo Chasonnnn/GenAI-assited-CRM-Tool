@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.deps import (
@@ -24,7 +24,7 @@ from app.schemas.task import (
     TaskRead,
     TaskUpdate,
 )
-from app.services import task_service, ip_service
+from app.services import dashboard_service, task_service, ip_service
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 
 router = APIRouter(
@@ -47,6 +47,7 @@ def _check_task_case_access(task, session: "UserSession", db: Session) -> None:
 
 @router.get("", response_model=TaskListResponse)
 def list_tasks(
+    request: Request,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
@@ -102,6 +103,42 @@ def list_tasks(
     )
 
     pages = (total + per_page - 1) // per_page if per_page > 0 else 0
+
+    q_type = None
+    if q:
+        if "@" in q:
+            q_type = "email"
+        else:
+            digit_count = sum(1 for ch in q if ch.isdigit())
+            q_type = "phone" if digit_count >= 7 else "text"
+
+    from app.services import audit_service
+
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="task_list",
+        target_id=None,
+        request=request,
+        details={
+            "count": len(tasks),
+            "page": page,
+            "per_page": per_page,
+            "owner_id": str(owner_id) if owner_id else None,
+            "case_id": str(case_id) if case_id else None,
+            "intended_parent_id": str(intended_parent_id)
+            if intended_parent_id
+            else None,
+            "is_completed": is_completed,
+            "task_type": task_type.value if task_type else None,
+            "due_before": due_before,
+            "due_after": due_after,
+            "my_tasks": my_tasks,
+            "q_type": q_type,
+        },
+    )
+    db.commit()
 
     context = task_service.get_task_context(db, tasks)
     return TaskListResponse(
@@ -159,6 +196,7 @@ def create_task(
         user_id=session.user_id,
         data=data,
     )
+    dashboard_service.push_dashboard_stats(db, session.org_id)
     context = task_service.get_task_context(db, [task])
     return task_service.to_task_read(task, context)
 
@@ -166,6 +204,7 @@ def create_task(
 @router.get("/{task_id}", response_model=TaskRead)
 def get_task(
     task_id: UUID,
+    request: Request,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
@@ -176,6 +215,25 @@ def get_task(
 
     # Access control: check case access if task is linked to a case
     _check_task_case_access(task, session, db)
+
+    from app.services import audit_service
+
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="task",
+        target_id=task.id,
+        request=request,
+        details={
+            "view": "task_detail",
+            "case_id": str(task.case_id) if task.case_id else None,
+            "intended_parent_id": str(task.intended_parent_id)
+            if task.intended_parent_id
+            else None,
+        },
+    )
+    db.commit()
 
     context = task_service.get_task_context(db, [task])
     return task_service.to_task_read(task, context)
@@ -256,6 +314,7 @@ def complete_task(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     task = task_service.complete_task(db, task, session.user_id)
+    dashboard_service.push_dashboard_stats(db, session.org_id)
     context = task_service.get_task_context(db, [task])
     return task_service.to_task_read(task, context)
 
@@ -286,6 +345,7 @@ def uncomplete_task(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     task = task_service.uncomplete_task(db, task)
+    dashboard_service.push_dashboard_stats(db, session.org_id)
     context = task_service.get_task_context(db, [task])
     return task_service.to_task_read(task, context)
 
@@ -356,6 +416,7 @@ def bulk_complete_tasks(
 
     # Commit all changes once at the end for efficiency
     db.commit()
+    dashboard_service.push_dashboard_stats(db, session.org_id)
 
     return BulkCompleteResponse(
         completed=results["completed"], failed=results["failed"]
@@ -392,4 +453,5 @@ def delete_task(
         )
 
     task_service.delete_task(db, task)
+    dashboard_service.push_dashboard_stats(db, session.org_id)
     return None

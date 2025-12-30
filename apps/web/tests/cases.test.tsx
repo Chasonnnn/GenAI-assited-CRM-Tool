@@ -46,7 +46,7 @@ vi.mock('@/lib/hooks/use-cases', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-queues', () => ({
-    useQueues: (...args: any[]) => mockUseQueues(...args),
+    useQueues: (...args: unknown[]) => mockUseQueues(...args),
 }))
 
 // Mock Auth

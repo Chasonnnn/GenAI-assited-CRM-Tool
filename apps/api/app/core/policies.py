@@ -44,6 +44,7 @@ POLICIES: dict[str, ResourcePolicy] = {
             "delete": P.TASKS_DELETE,
         },
     ),
+    "appointments": ResourcePolicy(default=P.APPOINTMENTS_MANAGE, actions={}),
     "reports": ResourcePolicy(default=P.REPORTS_VIEW, actions={}),
     "pipelines": ResourcePolicy(default=P.PIPELINES_MANAGE, actions={}),
     "queues": ResourcePolicy(default=P.QUEUES_MANAGE, actions={}),

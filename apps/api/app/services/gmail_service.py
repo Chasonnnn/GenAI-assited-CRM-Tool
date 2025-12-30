@@ -95,8 +95,8 @@ async def send_email(
                 "thread_id": data.get("threadId"),
             }
     except httpx.HTTPStatusError as e:
-        logger.error(f"Gmail API error: {e.response.text}")
+        logger.error("Gmail API error: status=%s", e.response.status_code)
         return {"success": False, "error": f"Gmail API error: {e.response.status_code}"}
     except Exception as e:
-        logger.exception(f"Gmail send error: {e}")
+        logger.exception("Gmail send error")
         return {"success": False, "error": str(e)}

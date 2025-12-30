@@ -33,6 +33,7 @@ from app.schemas.case import (
 )
 from app.services import (
     case_service,
+    dashboard_service,
     import_service,
     membership_service,
     queue_service,
@@ -173,6 +174,7 @@ def get_assignees(
 
 @router.get("", response_model=CaseListResponse)
 def list_cases(
+    request: Request,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
@@ -199,7 +201,7 @@ def list_cases(
     List cases with filters and pagination.
 
     - Default excludes archived cases
-    - Search (q) searches name, email, phone, case_number
+    - Search (q) searches name, case_number, and exact email/phone matches
     - Intake specialists only see their owned cases
     - queue_id: Filter by cases in a specific queue
     - owner_type: Filter by owner type ('user' or 'queue')
@@ -242,6 +244,40 @@ def list_cases(
     )
 
     pages = (total + per_page - 1) // per_page if per_page > 0 else 0
+
+    from app.services import audit_service
+
+    q_type = None
+    if q:
+        if "@" in q:
+            q_type = "email"
+        else:
+            digit_count = sum(1 for ch in q if ch.isdigit())
+            q_type = "phone" if digit_count >= 7 else "text"
+
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="case_list",
+        target_id=None,
+        request=request,
+        details={
+            "count": len(cases),
+            "page": page,
+            "per_page": per_page,
+            "include_archived": include_archived,
+            "stage_id": str(stage_id) if stage_id else None,
+            "owner_id": str(owner_id) if owner_id else None,
+            "owner_type": owner_type,
+            "queue_id": str(queue_id) if queue_id else None,
+            "source": source.value if source else None,
+            "q_type": q_type,
+            "created_from": created_from,
+            "created_to": created_to,
+        },
+    )
+    db.commit()
 
     return CaseListResponse(
         items=[_case_to_list_item(c, db) for c in cases],
@@ -332,6 +368,25 @@ async def preview_import(
         filename=file.filename,
         total_rows=preview.total_rows,
     )
+
+    from app.services import audit_service
+
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="cases_import_preview",
+        target_id=None,
+        request=request,
+        details={
+            "filename": file.filename,
+            "total_rows": preview.total_rows,
+            "duplicate_emails_db": preview.duplicate_emails_db,
+            "duplicate_emails_csv": preview.duplicate_emails_csv,
+            "validation_errors": preview.validation_errors,
+        },
+    )
+    db.commit()
 
     return ImportPreviewResponse(
         total_rows=preview.total_rows,
@@ -550,12 +605,16 @@ def create_case(
         )
     except Exception as e:
         # Handle unique constraint violations
-        if "uq_case_email_active" in str(e).lower() or "duplicate" in str(e).lower():
+        if (
+            "uq_case_email_hash_active" in str(e).lower()
+            or "duplicate" in str(e).lower()
+        ):
             raise HTTPException(
                 status_code=409, detail="A case with this email already exists"
             )
         raise
 
+    dashboard_service.push_dashboard_stats(db, session.org_id)
     return _case_to_read(case, db)
 
 
@@ -584,6 +643,15 @@ def get_case(
         target_type="case",
         target_id=case.id,
         request=request,
+    )
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="case",
+        target_id=case.id,
+        request=request,
+        details={"view": "case_detail"},
     )
     db.commit()
 
@@ -641,7 +709,7 @@ async def send_case_email(
         oauth_service,
         activity_service,
     )
-    from datetime import datetime
+    from datetime import datetime, timezone
     import os
 
     # Get case
@@ -734,7 +802,7 @@ async def send_case_email(
 
         if result.get("success"):
             email_log.status = EmailStatus.SENT.value
-            email_log.sent_at = datetime.utcnow()
+            email_log.sent_at = datetime.now(timezone.utc)
             email_log.external_id = result.get("message_id")
             db.commit()
 
@@ -886,6 +954,8 @@ def change_status(
         )
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
+
+    dashboard_service.push_dashboard_stats(db, session.org_id)
     return _case_to_read(case, db)
 
 
@@ -1006,6 +1076,7 @@ def archive_case(
         raise HTTPException(status_code=404, detail="Case not found")
 
     case = case_service.archive_case(db, case, session.user_id)
+    dashboard_service.push_dashboard_stats(db, session.org_id)
     return _case_to_read(case, db)
 
 
@@ -1036,6 +1107,7 @@ def restore_case(
     if error:
         raise HTTPException(status_code=409, detail=error)
 
+    dashboard_service.push_dashboard_stats(db, session.org_id)
     return _case_to_read(case, db)
 
 
@@ -1064,7 +1136,9 @@ def delete_case(
             status_code=400, detail="Case must be archived before permanent deletion"
         )
 
-    case_service.hard_delete_case(db, case)
+    deleted = case_service.hard_delete_case(db, case)
+    if deleted:
+        dashboard_service.push_dashboard_stats(db, session.org_id)
     return None
 
 

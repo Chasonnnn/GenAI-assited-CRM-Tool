@@ -47,6 +47,16 @@ sentry-sdk[fastapi]==1.40.0
 google-cloud-logging==3.10.0
 google-cloud-error-reporting==1.9.1
 
+# Observability (OpenTelemetry)
+opentelemetry-api==1.27.0
+opentelemetry-sdk==1.27.0
+opentelemetry-exporter-otlp==1.27.0
+opentelemetry-instrumentation==0.48b0
+opentelemetry-instrumentation-fastapi==0.48b0
+opentelemetry-instrumentation-httpx==0.48b0
+opentelemetry-instrumentation-requests==0.48b0
+opentelemetry-instrumentation-sqlalchemy==0.48b0
+
 # Timezone support (for containers without system tzdata)
 tzdata==2024.1
 
@@ -57,7 +67,7 @@ redis==5.0.0
 boto3==1.34.0
 
 # Image processing (EXIF stripping)
-pillow==10.0.0
+pillow>=10.2.0
 reportlab==4.4.0
 
 # MFA/TOTP support

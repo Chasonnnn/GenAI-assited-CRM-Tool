@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import { expect, afterEach, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import * as matchers from '@testing-library/jest-dom/matchers'
@@ -23,11 +24,11 @@ vi.mock('@tanstack/react-query', () => ({
         removeQueries: vi.fn(),
     })),
     QueryClient: vi.fn(() => ({})),
-    QueryClientProvider: ({ children }: { children: any }) => children,
+    QueryClientProvider: ({ children }: { children: ReactNode }) => children,
 }))
 
 vi.mock('@/lib/context/ai-context', () => ({
-    AIContextProvider: ({ children }: { children: any }) => children,
+    AIContextProvider: ({ children }: { children: ReactNode }) => children,
     useAIContext: () => ({
         entityType: null,
         entityId: null,

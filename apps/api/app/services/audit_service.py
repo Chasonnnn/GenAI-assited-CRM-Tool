@@ -10,7 +10,8 @@ Security guidelines:
 """
 
 import hashlib
-from uuid import UUID
+from datetime import datetime, timezone
+from uuid import UUID, uuid4
 from typing import Any
 
 from fastapi import Request
@@ -114,44 +115,72 @@ def log_event(
     # Get previous hash for chain
     prev_hash = version_service.get_last_audit_hash(db, org_id)
 
+    entry_id = uuid4()
+    created_at = datetime.now(timezone.utc)
+    ip_address = get_client_ip(request)
+    user_agent = get_user_agent(request)
+
+    # Compute entry hash using canonical JSON and ALL immutable fields
+    details_json = canonical_json(details)
+    entry_hash = version_service.compute_audit_hash(
+        prev_hash=prev_hash,
+        entry_id=str(entry_id),
+        org_id=str(org_id),
+        event_type=event_type.value,
+        created_at=str(created_at),
+        details_json=details_json,
+        actor_user_id=str(actor_user_id) if actor_user_id else "",
+        target_type=target_type or "",
+        target_id=str(target_id) if target_id else "",
+        ip_address=ip_address or "",
+        user_agent=user_agent or "",
+        request_id=str(request_id) if request_id else "",
+        before_version_id=str(before_version_id) if before_version_id else "",
+        after_version_id=str(after_version_id) if after_version_id else "",
+    )
+
     entry = AuditLog(
+        id=entry_id,
         organization_id=org_id,
         actor_user_id=actor_user_id,
         event_type=event_type.value,
         target_type=target_type,
         target_id=target_id,
         details=details,
-        ip_address=get_client_ip(request),
-        user_agent=get_user_agent(request),
+        ip_address=ip_address,
+        user_agent=user_agent,
         request_id=request_id,
         prev_hash=prev_hash,
+        entry_hash=entry_hash,
         before_version_id=before_version_id,
         after_version_id=after_version_id,
+        created_at=created_at,
     )
     db.add(entry)
-    db.flush()  # Get ID and created_at
-
-    # Compute entry hash using canonical JSON and ALL immutable fields
-    details_json = canonical_json(details)
-    entry_hash = version_service.compute_audit_hash(
-        prev_hash=prev_hash,
-        entry_id=str(entry.id),
-        org_id=str(org_id),
-        event_type=event_type.value,
-        created_at=str(entry.created_at),
-        details_json=details_json,
-        actor_user_id=str(actor_user_id) if actor_user_id else "",
-        target_type=target_type or "",
-        target_id=str(target_id) if target_id else "",
-        ip_address=entry.ip_address or "",
-        user_agent=entry.user_agent or "",
-        request_id=str(request_id) if request_id else "",
-        before_version_id=str(before_version_id) if before_version_id else "",
-        after_version_id=str(after_version_id) if after_version_id else "",
-    )
-    entry.entry_hash = entry_hash
 
     return entry
+
+
+def log_phi_access(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID | None,
+    target_type: str,
+    target_id: UUID | None,
+    request: Request | None = None,
+    details: dict[str, Any] | None = None,
+) -> AuditLog:
+    """Log explicit PHI access for HIPAA auditing."""
+    return log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.PHI_VIEWED,
+        actor_user_id=user_id,
+        target_type=target_type,
+        target_id=target_id,
+        details=details,
+        request=request,
+    )
 
 
 def _get_actor_names(db: Session, actor_ids: set[UUID]) -> dict[UUID, str | None]:
@@ -201,7 +230,7 @@ def get_ai_activity(
     limit: int,
 ) -> tuple[dict[str, int], list[AuditLog], dict[UUID, str | None]]:
     """Get recent AI activity counts and logs."""
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
     ai_event_types = [
         AuditEventType.AI_ACTION_APPROVED.value,
@@ -210,7 +239,7 @@ def get_ai_activity(
         AuditEventType.AI_ACTION_DENIED.value,
     ]
 
-    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     counts = {}
     for event_type in ai_event_types:
         counts[event_type] = (
@@ -820,6 +849,28 @@ def log_user_role_changed(
         target_type="user",
         target_id=target_user_id,
         details={"old_role": old_role, "new_role": new_role},
+        request=request,
+    )
+
+
+def log_user_deactivated(
+    db: Session,
+    org_id: UUID,
+    actor_user_id: UUID,
+    target_user_id: UUID,
+    reason: str | None = None,
+    request: Request | None = None,
+) -> AuditLog:
+    """Log user deactivation or removal."""
+    details = {"reason": reason} if reason else None
+    return log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.USER_DEACTIVATED,
+        actor_user_id=actor_user_id,
+        target_type="user",
+        target_id=target_user_id,
+        details=details,
         request=request,
     )
 

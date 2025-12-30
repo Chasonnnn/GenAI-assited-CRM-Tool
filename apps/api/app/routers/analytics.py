@@ -120,7 +120,9 @@ def get_analytics_summary(
     from app.services import analytics_service
 
     start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_analytics_summary(db, session.org_id, start, end)
+    data = analytics_service.get_cached_analytics_summary(
+        db, session.org_id, start, end
+    )
     return AnalyticsSummary(**data)
 
 
@@ -132,7 +134,7 @@ def get_cases_by_status(
     """Get case counts grouped by status."""
     from app.services import analytics_service
 
-    data = analytics_service.get_cases_by_status(db, session.org_id)
+    data = analytics_service.get_cached_cases_by_status(db, session.org_id)
     return [StatusCount(**item) for item in data]
 
 
@@ -144,7 +146,7 @@ def get_cases_by_assignee(
     """Get case counts grouped by owner (user-owned cases only)."""
     from app.services import analytics_service
 
-    data = analytics_service.get_cases_by_assignee(db, session.org_id)
+    data = analytics_service.get_cached_cases_by_assignee(db, session.org_id)
     return [AssigneeCount(**item) for item in data]
 
 
@@ -160,7 +162,7 @@ def get_cases_trend(
     from app.services import analytics_service
 
     start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_cases_trend(
+    data = analytics_service.get_cached_cases_trend(
         db, session.org_id, start=start, end=end, group_by=period
     )
     return [TrendPoint(**item) for item in data]
@@ -182,7 +184,7 @@ def get_meta_performance(
     from app.services import analytics_service
 
     start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_meta_performance(db, session.org_id, start, end)
+    data = analytics_service.get_cached_meta_performance(db, session.org_id, start, end)
     return MetaPerformance(**data)
 
 
@@ -218,7 +220,9 @@ async def get_meta_spend(
     )
     breakdown_list = [item for item in breakdown_list if item]
 
-    data = await analytics_service.get_meta_spend_summary(
+    data = await analytics_service.get_cached_meta_spend_summary(
+        db=db,
+        organization_id=session.org_id,
         start=start,
         end=end,
         time_increment=time_increment,
@@ -255,7 +259,7 @@ def get_cases_by_state(
     from app.services import analytics_service
 
     start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_cases_by_state(
+    data = analytics_service.get_cached_cases_by_state(
         db,
         session.org_id,
         start.date() if start else None,
@@ -276,7 +280,7 @@ def get_cases_by_source(
     from app.services import analytics_service
 
     start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_cases_by_source(
+    data = analytics_service.get_cached_cases_by_source(
         db, session.org_id, start.date() if start else None, end.date() if end else None
     )
     return {"data": data}
@@ -293,7 +297,7 @@ def get_conversion_funnel(
     from app.services import analytics_service
 
     start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_conversion_funnel(
+    data = analytics_service.get_cached_conversion_funnel(
         db, session.org_id, start.date() if start else None, end.date() if end else None
     )
     return {"data": data}
@@ -310,7 +314,7 @@ def get_kpis(
     from app.services import analytics_service
 
     start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_summary_kpis(
+    data = analytics_service.get_cached_summary_kpis(
         db, session.org_id, start.date() if start else None, end.date() if end else None
     )
     return data
@@ -324,7 +328,7 @@ def get_campaigns(
     """Get campaigns for filter dropdown."""
     from app.services import analytics_service
 
-    data = analytics_service.get_campaigns(db, session.org_id)
+    data = analytics_service.get_cached_campaigns(db, session.org_id)
     return {"data": data}
 
 
@@ -340,7 +344,7 @@ def get_funnel_compare(
     from app.services import analytics_service
 
     start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_funnel_with_filter(
+    data = analytics_service.get_cached_funnel_with_filter(
         db,
         session.org_id,
         start.date() if start else None,
@@ -362,7 +366,7 @@ def get_cases_by_state_compare(
     from app.services import analytics_service
 
     start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_cases_by_state_with_filter(
+    data = analytics_service.get_cached_cases_by_state_with_filter(
         db,
         session.org_id,
         start.date() if start else None,
