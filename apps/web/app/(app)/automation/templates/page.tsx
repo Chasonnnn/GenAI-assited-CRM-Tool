@@ -246,7 +246,13 @@ export default function TemplatesPage() {
                 <div className="flex items-center gap-3">
                     <Select value={categoryFilter} onValueChange={(v) => v && setCategoryFilter(v)}>
                         <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="All Categories" />
+                            <SelectValue placeholder="All Categories">
+                                {(value: string | null) => {
+                                    if (!value || value === "all") return "All Categories"
+                                    const category = categoryOptions.find(c => c.value === value)
+                                    return category?.label ?? value
+                                }}
+                            </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All Categories</SelectItem>
@@ -410,7 +416,13 @@ export default function TemplatesPage() {
                                                         }
                                                     >
                                                         <SelectTrigger>
-                                                            <SelectValue placeholder="Choose an email template" />
+                                                            <SelectValue placeholder="Choose an email template">
+                                                                {(value: string | null) => {
+                                                                    if (!value) return "Choose an email template"
+                                                                    const template = emailTemplates.find((t: EmailTemplateListItem) => t.id === value)
+                                                                    return template?.name ?? value
+                                                                }}
+                                                            </SelectValue>
                                                         </SelectTrigger>
                                                         <SelectContent>
                                                             {emailTemplates.map(
