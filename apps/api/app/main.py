@@ -52,6 +52,7 @@ from app.routers import (
     ops,
     permissions,
     pipelines,
+    profile,
     queues,
     search,
     settings as settings_router,
@@ -292,6 +293,9 @@ app.include_router(templates.router)
 # Application Forms
 app.include_router(forms.router)
 app.include_router(forms_public.router)
+
+# Profile Card (case_manager+ only)
+app.include_router(profile.router)
 
 app.include_router(admin_meta.router)  # Already has prefix in router definition
 

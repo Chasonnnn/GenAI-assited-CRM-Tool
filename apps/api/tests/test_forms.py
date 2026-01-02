@@ -173,3 +173,94 @@ async def test_form_submission_single_per_case(
         json={"case_id": str(case.id), "expires_in_days": 7},
     )
     assert second_token_res.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_update_submission_answers_syncs_case_fields(
+    authed_client, db, test_org, test_user, default_stage
+):
+    case = _create_case(db, test_org.id, test_user.id, default_stage)
+
+    schema = {
+        "pages": [
+            {
+                "title": "Basics",
+                "fields": [
+                    {
+                        "key": "full_name",
+                        "label": "Full Name",
+                        "type": "text",
+                        "required": True,
+                    },
+                    {
+                        "key": "date_of_birth",
+                        "label": "Date of Birth",
+                        "type": "date",
+                        "required": False,
+                    },
+                ],
+            }
+        ]
+    }
+
+    create_res = await authed_client.post(
+        "/forms",
+        json={
+            "name": "Application Form",
+            "description": "Test form",
+            "form_schema": schema,
+        },
+    )
+    assert create_res.status_code == 200
+    form_id = create_res.json()["id"]
+
+    publish_res = await authed_client.post(f"/forms/{form_id}/publish")
+    assert publish_res.status_code == 200
+
+    mapping_res = await authed_client.put(
+        f"/forms/{form_id}/mappings",
+        json={
+            "mappings": [
+                {"field_key": "full_name", "case_field": "full_name"},
+                {"field_key": "date_of_birth", "case_field": "date_of_birth"},
+            ]
+        },
+    )
+    assert mapping_res.status_code == 200
+
+    token_res = await authed_client.post(
+        f"/forms/{form_id}/tokens",
+        json={"case_id": str(case.id), "expires_in_days": 7},
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["token"]
+
+    submission_res = await authed_client.post(
+        f"/forms/public/{token}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": "Jane Doe",
+                    "date_of_birth": "1990-01-01",
+                }
+            )
+        },
+    )
+    assert submission_res.status_code == 200
+    submission_id = submission_res.json()["id"]
+
+    update_res = await authed_client.patch(
+        f"/forms/submissions/{submission_id}/answers",
+        json={
+            "updates": [
+                {"field_key": "full_name", "value": "Jane Smith"},
+                {"field_key": "date_of_birth", "value": "1991-02-03"},
+            ]
+        },
+    )
+    assert update_res.status_code == 200
+    assert "full_name" in update_res.json()["case_updates"]
+
+    db.refresh(case)
+    assert case.full_name == "Jane Smith"
+    assert str(case.date_of_birth) == "1991-02-03"

@@ -47,6 +47,7 @@ import { useSetAIContext } from "@/lib/context/ai-context"
 import { EmailComposeDialog } from "@/components/email/EmailComposeDialog"
 import { ProposeMatchDialog } from "@/components/matches/ProposeMatchDialog"
 import { CaseApplicationTab } from "@/components/cases/CaseApplicationTab"
+import { CaseProfileCard } from "@/components/cases/CaseProfileCard"
 import { useForms } from "@/lib/hooks/use-forms"
 import type { EmailType, SummarizeCaseResponse, DraftEmailResponse } from "@/lib/api/ai"
 import type { TaskListItem } from "@/lib/types/task"
@@ -188,6 +189,9 @@ export default function CaseDetailPage() {
     const id = params.id as string
     const router = useRouter()
     const { user } = useAuth()
+    const canViewProfile = user
+        ? ["case_manager", "admin", "developer"].includes(user.role)
+        : false
     const { data: defaultPipeline } = useDefaultPipeline()
     const stageOptions = React.useMemo(() => defaultPipeline?.stages || [], [defaultPipeline])
     const stageById = React.useMemo(
@@ -481,6 +485,7 @@ export default function CaseDetailPage() {
                         <TabsTrigger value="tasks">Tasks {tasksData && tasksData.items.length > 0 && `(${tasksData.items.length})`}</TabsTrigger>
                         <TabsTrigger value="history">History</TabsTrigger>
                         <TabsTrigger value="application">Application</TabsTrigger>
+                        {canViewProfile && <TabsTrigger value="profile">Profile</TabsTrigger>}
                         <TabsTrigger value="ai" className="gap-1">
                             <SparklesIcon className="h-3 w-3" />
                             AI
@@ -803,6 +808,13 @@ export default function CaseDetailPage() {
                             formId={defaultFormId}
                         />
                     </TabsContent>
+
+                    {/* PROFILE TAB */}
+                    {canViewProfile && (
+                        <TabsContent value="profile" className="space-y-4">
+                            <CaseProfileCard caseId={id} />
+                        </TabsContent>
+                    )}
 
                     {/* AI TAB */}
                     <TabsContent value="ai" className="space-y-4">

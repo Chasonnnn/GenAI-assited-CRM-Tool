@@ -236,3 +236,65 @@ export function uploadFormLogo(file: File): Promise<FormLogoRead> {
     formData.append('file', file)
     return api.upload<FormLogoRead>('/forms/logos', formData)
 }
+
+// Submission answer update types
+export interface SubmissionAnswerUpdate {
+    field_key: string
+    value: unknown
+}
+
+export interface SubmissionAnswersUpdateResponse {
+    submission: FormSubmissionRead
+    case_updates: string[]
+}
+
+export function updateSubmissionAnswers(
+    submissionId: string,
+    updates: SubmissionAnswerUpdate[]
+): Promise<SubmissionAnswersUpdateResponse> {
+    return api.patch<SubmissionAnswersUpdateResponse>(
+        `/forms/submissions/${submissionId}/answers`,
+        { updates }
+    )
+}
+
+export async function exportSubmissionPdf(submissionId: string): Promise<void> {
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
+    const url = `${baseUrl}/forms/submissions/${submissionId}/export`
+
+    const response = await fetch(url, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+    })
+
+    if (!response.ok) {
+        throw new Error(`Export failed (${response.status})`)
+    }
+
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.includes('application/pdf')) {
+        const errorText = await response.text()
+        throw new Error(errorText || 'Export failed (unexpected response)')
+    }
+
+    const buffer = await response.arrayBuffer()
+    const headerBytes = new Uint8Array(buffer.slice(0, 4))
+    const headerText = String.fromCharCode(...headerBytes)
+    if (headerText !== '%PDF') {
+        const errorText = new TextDecoder().decode(buffer)
+        throw new Error(errorText || 'Export failed (invalid PDF)')
+    }
+
+    const blob = new Blob([buffer], { type: 'application/pdf' })
+    const objectUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = objectUrl
+    link.download = `application_${submissionId}.pdf`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(objectUrl)
+}

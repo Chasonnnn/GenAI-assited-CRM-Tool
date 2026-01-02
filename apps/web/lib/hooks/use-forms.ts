@@ -163,3 +163,25 @@ export function useUploadFormLogo() {
         mutationFn: (file: File) => uploadFormLogo(file),
     })
 }
+
+export function useUpdateSubmissionAnswers() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: async ({
+            submissionId,
+            updates,
+        }: {
+            submissionId: string
+            updates: { field_key: string; value: unknown }[]
+        }) => {
+            const { updateSubmissionAnswers } = await import('@/lib/api/forms')
+            return updateSubmissionAnswers(submissionId, updates)
+        },
+        onSuccess: (result: { submission: { form_id: string; case_id: string }; case_updates: string[] }) => {
+            queryClient.invalidateQueries({
+                queryKey: formKeys.caseSubmission(result.submission.form_id, result.submission.case_id),
+            })
+        },
+    })
+}

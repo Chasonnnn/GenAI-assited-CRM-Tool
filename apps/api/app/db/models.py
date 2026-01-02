@@ -3379,6 +3379,126 @@ class FormSubmissionFile(Base):
     submission: Mapped["FormSubmission"] = relationship()
 
 
+class CaseProfileOverride(Base):
+    """
+    Override values for profile card (independent of submission/case fields).
+
+    Used by case_manager+ to customize profile view without modifying
+    the original submission or case fields.
+    """
+
+    __tablename__ = "case_profile_overrides"
+    __table_args__ = (
+        UniqueConstraint("case_id", "field_key", name="uq_case_profile_override_field"),
+        Index("idx_profile_overrides_case", "case_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    case_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    field_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    value: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"), nullable=False
+    )
+
+    # Relationships
+    case: Mapped["Case"] = relationship()
+    organization: Mapped["Organization"] = relationship()
+    updated_by: Mapped["User | None"] = relationship()
+
+
+class CaseProfileState(Base):
+    """
+    Tracks the base submission used for a case profile card.
+
+    Allows Sync + Save to pin the profile base to a new submission.
+    """
+
+    __tablename__ = "case_profile_states"
+    __table_args__ = (
+        UniqueConstraint("case_id", name="uq_case_profile_state_case"),
+        Index("idx_profile_state_case", "case_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    case_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    base_submission_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("form_submissions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"), nullable=False
+    )
+
+    case: Mapped["Case"] = relationship()
+    organization: Mapped["Organization"] = relationship()
+    updated_by: Mapped["User | None"] = relationship()
+
+
+class CaseProfileHiddenField(Base):
+    """
+    Tracks hidden fields in case profile card.
+
+    Hidden fields show as masked values ('*' or '-') in profile exports.
+    case_manager+ can toggle visibility.
+    """
+
+    __tablename__ = "case_profile_hidden_fields"
+    __table_args__ = (
+        UniqueConstraint("case_id", "field_key", name="uq_case_profile_hidden_field"),
+        Index("idx_profile_hidden_case", "case_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    case_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    field_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    hidden_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    hidden_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"), nullable=False
+    )
+
+    # Relationships
+    case: Mapped["Case"] = relationship()
+    organization: Mapped["Organization"] = relationship()
+    hidden_by: Mapped["User | None"] = relationship()
+
+
 # =============================================================================
 # Appointments & Scheduling Models
 # =============================================================================

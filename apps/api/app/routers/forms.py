@@ -3,6 +3,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, File, UploadFile
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.case_access import check_case_access
@@ -13,7 +14,7 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
-from app.db.models import Case, Form, FormSubmission
+from app.db.models import Case, Form, FormSubmission, Organization
 from app.schemas.auth import UserSession
 from app.schemas.forms import (
     FormCreate,
@@ -31,6 +32,8 @@ from app.schemas.forms import (
     FormSubmissionFileRead,
     FormSubmissionFileDownloadResponse,
     FormLogoRead,
+    FormSubmissionAnswersUpdate,
+    FormSubmissionAnswersUpdateResponse,
 )
 from app.services import form_service, audit_service
 
@@ -493,6 +496,44 @@ def reject_submission(
     return _submission_read(submission, files)
 
 
+@router.patch(
+    "/submissions/{submission_id}/answers",
+    response_model=FormSubmissionAnswersUpdateResponse,
+    dependencies=[
+        Depends(require_permission(POLICIES["cases"].actions["edit"])),
+        Depends(require_csrf_header),
+    ],
+)
+def update_submission_answers(
+    submission_id: UUID,
+    body: FormSubmissionAnswersUpdate,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """Update submission answers and sync mapped case fields."""
+    submission = form_service.get_submission(db, session.org_id, submission_id)
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    case = db.query(Case).filter(Case.id == submission.case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+    try:
+        _, case_updates = form_service.update_submission_answers(
+            db=db,
+            submission=submission,
+            updates=[u.model_dump() for u in body.updates],
+            user_id=session.user_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    files = form_service.list_submission_files(db, session.org_id, submission.id)
+    return FormSubmissionAnswersUpdateResponse(
+        submission=_submission_read(submission, files),
+        case_updates=case_updates,
+    )
+
+
 @router.get(
     "/submissions/{submission_id}/files/{file_id}/download",
     response_model=FormSubmissionFileDownloadResponse,
@@ -548,4 +589,47 @@ def download_submission_file(
     return FormSubmissionFileDownloadResponse(
         download_url=url,
         filename=file_record.filename,
+    )
+
+
+@router.get(
+    "/submissions/{submission_id}/export",
+    dependencies=[Depends(require_permission(POLICIES["cases"].default))],
+)
+def export_submission_pdf(
+    submission_id: UUID,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """Export a submission as PDF."""
+    submission = form_service.get_submission(db, session.org_id, submission_id)
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    case = db.query(Case).filter(Case.id == submission.case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+
+    org = db.query(Organization).filter(Organization.id == session.org_id).first()
+    org_name = org.name if org else ""
+    case_name = case.full_name or f"Case #{case.case_number or case.id}"
+
+    from app.services import pdf_export_service
+
+    try:
+        pdf_bytes = pdf_export_service.export_submission_pdf(
+            db=db,
+            submission_id=submission.id,
+            org_id=session.org_id,
+            case_name=case_name,
+            org_name=org_name,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    filename = f"application_{case.case_number or case.id}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

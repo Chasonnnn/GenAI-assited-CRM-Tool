@@ -138,6 +138,9 @@ class CaseActivityType(str, Enum):
     MATCH_ACCEPTED = "match_accepted"  # Match accepted
     MATCH_REJECTED = "match_rejected"  # Match rejected
     MATCH_CANCELLED = "match_cancelled"  # Match cancelled/withdrawn
+    APPLICATION_EDITED = "application_edited"
+    PROFILE_EDITED = "profile_edited"
+    PROFILE_HIDDEN = "profile_hidden"
 
 
 class MatchStatus(str, Enum):
@@ -207,6 +210,9 @@ class NotificationType(str, Enum):
     APPOINTMENT_CONFIRMED = "appointment_confirmed"  # Appointment confirmed
     APPOINTMENT_CANCELLED = "appointment_cancelled"  # Appointment cancelled
     APPOINTMENT_REMINDER = "appointment_reminder"  # Reminder before appointment
+
+    # Form notifications
+    FORM_SUBMISSION_RECEIVED = "form_submission_received"  # Application submitted
 
 
 # Note: is_priority is a boolean field on Case model, not an enum
