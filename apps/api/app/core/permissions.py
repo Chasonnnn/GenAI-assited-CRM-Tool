@@ -390,6 +390,7 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "view_dashboard",
         "view_cases",
         "edit_cases",
+        "view_post_approval_cases",  # Allow following cases at all stages
         "change_case_status",
         "view_case_notes",
         "edit_case_notes",

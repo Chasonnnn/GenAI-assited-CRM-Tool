@@ -154,9 +154,11 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
         mfa_required=mfa_required,
     )
 
-    if session.mfa_required and not session.mfa_verified:
-        if not _is_mfa_bypass_allowed(request):
-            raise HTTPException(status_code=403, detail="MFA verification required")
+    # Skip MFA check in dev bypass mode
+    if not settings.DEV_BYPASS_AUTH:
+        if session.mfa_required and not session.mfa_verified:
+            if not _is_mfa_bypass_allowed(request):
+                raise HTTPException(status_code=403, detail="MFA verification required")
 
     request.state.user_session = session
     return session
