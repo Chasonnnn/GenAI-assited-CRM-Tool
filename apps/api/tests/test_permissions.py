@@ -235,23 +235,23 @@ def test_precedence_user_grant_overrides_role_deny(
     db, org_a, intake_user, developer_user
 ):
     """User grant should override role deny (or missing)."""
-    # Intake specialist has no view_post_approval_cases by default
+    # Intake specialist has no archive_cases by default
     # Verify it's denied first
     result = permission_service.check_permission(
         db,
         org_a.id,
         intake_user.id,
         Role.INTAKE_SPECIALIST.value,
-        "view_post_approval_cases",
+        "archive_cases",
     )
-    assert result is False, "Intake should not have post-approval access by default"
+    assert result is False, "Intake should not have archive_cases access by default"
 
     # Add user grant override
     override = UserPermissionOverride(
         id=uuid.uuid4(),
         organization_id=org_a.id,
         user_id=intake_user.id,
-        permission="view_post_approval_cases",
+        permission="archive_cases",
         override_type="grant",
     )
     db.add(override)
@@ -263,7 +263,7 @@ def test_precedence_user_grant_overrides_role_deny(
         org_a.id,
         intake_user.id,
         Role.INTAKE_SPECIALIST.value,
-        "view_post_approval_cases",
+        "archive_cases",
     )
     assert result is True, "User grant should override role denial"
 
