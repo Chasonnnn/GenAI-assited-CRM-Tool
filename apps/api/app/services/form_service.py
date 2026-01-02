@@ -12,7 +12,7 @@ from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.enums import AuditEventType, FormStatus, FormSubmissionStatus
+from app.db.enums import AuditEventType, FormStatus, FormSubmissionStatus, CaseActivityType
 from app.db.models import (
     Case,
     Form,
@@ -24,7 +24,7 @@ from app.db.models import (
 )
 from app.schemas.case import CaseUpdate
 from app.schemas.forms import FormSchema, FormField
-from app.services import audit_service, case_service
+from app.services import audit_service, case_service, notification_service
 from app.services.attachment_service import (
     calculate_checksum,
     _get_local_storage_path,
@@ -364,6 +364,15 @@ def create_submission(
         },
     )
 
+    # Notify case owner about submission
+    case = db.query(Case).filter(Case.id == token.case_id).first()
+    if case:
+        notification_service.notify_form_submission_received(
+            db=db,
+            case=case,
+            submission_id=submission.id,
+        )
+
     db.commit()
     db.refresh(submission)
     return submission
@@ -495,7 +504,7 @@ def approve_submission(
             case=case,
             data=case_update,
             user_id=reviewer_id,
-            org_id=submission.organization_id,
+            organization_id=submission.organization_id,
             commit=False,
         )
 
@@ -554,6 +563,103 @@ def reject_submission(
     db.commit()
     db.refresh(submission)
     return submission
+
+
+def update_submission_answers(
+    db: Session,
+    submission: FormSubmission,
+    updates: list[dict[str, Any]],
+    user_id: uuid.UUID,
+) -> tuple[dict[str, Any], list[str]]:
+    """
+    Update submission answers and sync mapped case fields.
+
+    Returns:
+        Tuple of (old_values dict, list of case fields updated)
+    """
+    if not submission.schema_snapshot:
+        raise ValueError("Submission has no schema snapshot")
+
+    schema = _parse_schema(submission.schema_snapshot)
+    fields = _flatten_fields(schema)
+    mappings = list_field_mappings(db, submission.form_id)
+    mapping_by_key = {m.field_key: m.case_field for m in mappings}
+
+    old_values: dict[str, Any] = {}
+    new_values: dict[str, Any] = {}
+    case_updates: dict[str, Any] = {}
+    updated_case_fields: list[str] = []
+
+    for update in updates:
+        field_key = update.get("field_key")
+        value = update.get("value")
+
+        if not field_key:
+            continue
+
+        # Validate field exists in schema
+        if field_key not in fields:
+            raise ValueError(f"Unknown field key: {field_key}")
+
+        # Validate the value
+        field = fields[field_key]
+        if value is not None and value != "":
+            _validate_field_value(field, value)
+
+        # Track old value
+        old_values[field_key] = submission.answers_json.get(field_key)
+        new_values[field_key] = value
+
+        # Update answers
+        submission.answers_json[field_key] = value
+
+        # Check if field has a mapping
+        if field_key in mapping_by_key:
+            case_field = mapping_by_key[field_key]
+            if case_field in CASE_FIELD_TYPES:
+                try:
+                    coerced = _coerce_case_value(case_field, value) if value else None
+                    case_updates[case_field] = coerced
+                    updated_case_fields.append(case_field)
+                except ValueError:
+                    pass  # Skip invalid values for case update
+
+    # Flag answers_json as modified
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(submission, "answers_json")
+
+    # Update case fields if any
+    if case_updates:
+        case = db.query(Case).filter(Case.id == submission.case_id).first()
+        if case:
+            case_update = CaseUpdate(**case_updates)
+            case_service.update_case(
+                db=db,
+                case=case,
+                data=case_update,
+                user_id=user_id,
+                org_id=submission.organization_id,
+                commit=False,
+            )
+
+    # Log to activity
+    from app.services import activity_service
+    if submission.case_id:
+        activity_service.log_activity(
+            db=db,
+            case_id=submission.case_id,
+            organization_id=submission.organization_id,
+            activity_type=CaseActivityType.APPLICATION_EDITED,
+            actor_user_id=user_id,
+            details={
+                "changes": {k: {"old": old_values.get(k), "new": v} for k, v in new_values.items()},
+                "case_updates": updated_case_fields,
+            },
+        )
+
+    db.commit()
+    db.refresh(submission)
+    return old_values, updated_case_fields
 
 
 def _generate_token(db: Session) -> str:

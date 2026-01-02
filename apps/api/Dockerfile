@@ -40,6 +40,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
+
+# Install Playwright browser binaries (required for PDF export)
+RUN python -m playwright install --with-deps chromium && \
+    chmod -R 755 /opt/playwright
 
 # Create non-root user
 RUN useradd --create-home --shell /bin/bash appuser

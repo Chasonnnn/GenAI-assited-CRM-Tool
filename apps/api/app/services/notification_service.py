@@ -723,3 +723,36 @@ def notify_appointment_cancelled(
         entity_id=appointment_id,
         dedupe_key=dedupe_key,
     )
+
+
+# =============================================================================
+# Form Notification Triggers
+# =============================================================================
+
+
+def notify_form_submission_received(
+    db: Session,
+    case: Case,
+    submission_id: UUID,
+) -> None:
+    """Notify case owner when application form is submitted."""
+    # Only notify if case is owned by a user
+    if case.owner_type != OwnerType.USER.value or not case.owner_id:
+        return
+
+    # Respect user settings (using case_status_changed as proxy for now)
+    if not should_notify(db, case.owner_id, case.organization_id, "case_status_changed"):
+        return
+
+    dedupe_key = f"form_submission:{submission_id}:{case.owner_id}"
+    create_notification(
+        db=db,
+        org_id=case.organization_id,
+        user_id=case.owner_id,
+        type=NotificationType.FORM_SUBMISSION_RECEIVED,
+        title=f"Application submitted for Case #{case.case_number}",
+        body=f"{case.full_name} submitted their application",
+        entity_type="case",
+        entity_id=case.id,
+        dedupe_key=dedupe_key,
+    )

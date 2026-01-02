@@ -181,3 +181,20 @@ class FormFieldMappingItem(BaseModel):
 
 class FormFieldMappingsUpdate(BaseModel):
     mappings: list[FormFieldMappingItem]
+
+
+class FormSubmissionAnswerUpdate(BaseModel):
+    """Single field update in a submission."""
+    field_key: str = Field(..., min_length=1, max_length=100)
+    value: Any
+
+
+class FormSubmissionAnswersUpdate(BaseModel):
+    """Batch update for submission answers."""
+    updates: list[FormSubmissionAnswerUpdate]
+
+
+class FormSubmissionAnswersUpdateResponse(BaseModel):
+    """Response for submission answer updates."""
+    submission: FormSubmissionRead
+    case_updates: list[str]  # List of case fields that were updated
