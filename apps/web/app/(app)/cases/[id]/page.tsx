@@ -341,7 +341,7 @@ export default function CaseDetailPage() {
     }
 
     const stage = stageById.get(caseData.stage_id)
-    const statusLabel = caseData.status_label || stage?.label || 'Unknown'
+    const statusLabel = stage?.label || 'Unknown'
     const statusColor = stage?.color || '#6B7280'
 
     return (

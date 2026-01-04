@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { UploadIcon, XIcon, CheckIcon, XCircleIcon, FileIcon, Loader2Icon } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { getErrorMessage } from "@/lib/errors"
 import { usePreviewImport, useExecuteImport, type ImportPreview } from "@/lib/hooks/use-import"
 
 // Column mapping for detected fields (matches backend)
@@ -42,19 +43,6 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         setIsDragging(false)
     }, [])
 
-    const resolveErrorDetail = (error: unknown, fallback: string) => {
-        if (
-            typeof error === "object" &&
-            error !== null &&
-            "response" in error &&
-            typeof (error as { response?: { data?: { detail?: string } } }).response?.data?.detail === "string"
-        ) {
-            return (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || fallback
-        }
-        if (error instanceof Error && error.message) return error.message
-        return fallback
-    }
-
     const handleFileSelect = useCallback(async (selectedFile: File) => {
         // Validate file type
         if (!selectedFile.name.endsWith(".csv")) {
@@ -70,7 +58,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
             const previewData = await previewMutation.mutateAsync(selectedFile)
             setPreview(previewData)
         } catch (err: unknown) {
-            setError(resolveErrorDetail(err, "Failed to preview CSV"))
+            setError(getErrorMessage(err, "Failed to preview CSV"))
             setFile(null)
         }
     }, [previewMutation])
@@ -108,7 +96,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
             setPreview(null)
             onImportComplete?.()
         } catch (err: unknown) {
-            setError(resolveErrorDetail(err, "Import failed"))
+            setError(getErrorMessage(err, "Import failed"))
         }
     }
 

@@ -48,6 +48,7 @@ import {
 } from "@/lib/hooks/use-queues"
 import { useMembers } from "@/lib/hooks/use-permissions"
 import { useAuth } from "@/lib/auth-context"
+import { getErrorMessage } from "@/lib/errors"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
@@ -113,11 +114,6 @@ export default function QueuesSettingsPage() {
         })
     }
 
-    const resolveErrorMessage = (error: unknown, fallback: string) => {
-        if (error instanceof Error && error.message) return error.message
-        return fallback
-    }
-
     const openEditDialog = (queue: Queue) => {
         setEditingQueue(queue)
         setFormData({ name: queue.name, description: queue.description || "" })
@@ -137,7 +133,7 @@ export default function QueuesSettingsPage() {
             setSelectedUserId("")
             toast.success("Member added to queue")
         } catch (error: unknown) {
-            toast.error(resolveErrorMessage(error, "Failed to add member"))
+            toast.error(getErrorMessage(error, "Failed to add member"))
         }
     }
 
@@ -147,7 +143,7 @@ export default function QueuesSettingsPage() {
             await removeMemberMutation.mutateAsync({ queueId: managingQueue.id, userId })
             toast.success("Member removed from queue")
         } catch (error: unknown) {
-            toast.error(resolveErrorMessage(error, "Failed to remove member"))
+            toast.error(getErrorMessage(error, "Failed to remove member"))
         }
     }
 

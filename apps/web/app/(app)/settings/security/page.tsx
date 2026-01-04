@@ -34,12 +34,11 @@ import {
     ShieldAlertIcon,
     SmartphoneIcon,
     KeyIcon,
-    CopyIcon,
-    CheckIcon,
     LoaderIcon,
     AlertTriangleIcon,
     RefreshCwIcon,
 } from "lucide-react"
+import { QRCodeDisplay, RecoveryCodesDialog } from "@/components/security/mfa"
 import {
     useMFAStatus,
     useSetupTOTP,
@@ -47,91 +46,6 @@ import {
     useRegenerateRecoveryCodes,
     useDisableMFA,
 } from "@/lib/hooks/use-mfa"
-
-// =============================================================================
-// QR Code Component (using external library via script or simple display)
-// =============================================================================
-
-function QRCodeDisplay({ data }: { data: string }) {
-    // Use a simple QR code image service for display
-    // In production, you'd use a library like qrcode.react
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data)}`
-
-    return (
-        <div className="flex justify-center p-4 bg-white rounded-lg">
-            <img
-                src={qrUrl}
-                alt="TOTP QR Code"
-                width={200}
-                height={200}
-                className="rounded"
-            />
-        </div>
-    )
-}
-
-// =============================================================================
-// Recovery Codes Display
-// =============================================================================
-
-function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: () => void }) {
-    const [copied, setCopied] = useState(false)
-
-    const handleCopy = () => {
-        navigator.clipboard.writeText(codes.join("\n"))
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
-    }
-
-    return (
-        <Dialog open={true} onOpenChange={onClose}>
-            <DialogContent className="max-w-md">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                        <KeyIcon className="size-5" />
-                        Recovery Codes
-                    </DialogTitle>
-                    <DialogDescription>
-                        Save these codes in a secure location. Each code can only be used once.
-                    </DialogDescription>
-                </DialogHeader>
-
-                <Alert variant="destructive" className="my-4">
-                    <AlertTriangleIcon className="size-4" />
-                    <AlertTitle>Important</AlertTitle>
-                    <AlertDescription>
-                        These codes will not be shown again. Save them now!
-                    </AlertDescription>
-                </Alert>
-
-                <div className="grid grid-cols-2 gap-2 p-4 bg-muted rounded-lg font-mono text-sm">
-                    {codes.map((code, i) => (
-                        <div key={i} className="p-2 bg-background rounded text-center">
-                            {code}
-                        </div>
-                    ))}
-                </div>
-
-                <DialogFooter className="gap-2">
-                    <Button variant="outline" onClick={handleCopy}>
-                        {copied ? (
-                            <>
-                                <CheckIcon className="size-4 mr-2" />
-                                Copied!
-                            </>
-                        ) : (
-                            <>
-                                <CopyIcon className="size-4 mr-2" />
-                                Copy All
-                            </>
-                        )}
-                    </Button>
-                    <Button onClick={onClose}>I've Saved These Codes</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    )
-}
 
 // =============================================================================
 // Main Component
@@ -422,8 +336,12 @@ export default function SecuritySettingsPage() {
 
             {/* Recovery Codes Display */}
             {showRecoveryCodes && (
-                <RecoveryCodesDisplay
+                <RecoveryCodesDialog
                     codes={showRecoveryCodes}
+                    alertDescription="These codes will not be shown again. Save them now!"
+                    alertIcon={<AlertTriangleIcon className="size-4" />}
+                    copiedLabel="Copied!"
+                    confirmLabel="I've Saved These Codes"
                     onClose={() => setShowRecoveryCodes(null)}
                 />
             )}

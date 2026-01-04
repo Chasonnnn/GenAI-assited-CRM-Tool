@@ -503,7 +503,7 @@ export default function CasesPage() {
                                 <TableBody>
                                     {data.items.map((caseItem) => {
                                         const stage = stageById.get(caseItem.stage_id)
-                                        const statusLabel = caseItem.status_label || stage?.label || "Unknown"
+                                        const statusLabel = stage?.label || "Unknown"
                                         const statusColor = stage?.color || "#6B7280"
                                         // Apply gold styling for entire row on priority cases
                                         const rowClass = caseItem.is_priority ? "text-amber-600" : ""

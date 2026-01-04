@@ -54,7 +54,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { useAuth } from "@/lib/auth-context"
-import { ApiError } from "@/lib/api"
+import { getErrorMessage } from "@/lib/errors"
 import {
     useBookingLink,
     useRegenerateBookingLink,
@@ -436,11 +436,6 @@ function AppointmentTypesCard() {
             reminder_hours_before: type.reminder_hours_before,
         })
         setDialogOpen(true)
-    }
-
-    const getErrorMessage = (error: unknown, fallback: string) => {
-        if (error instanceof ApiError && error.message) return error.message
-        return fallback
     }
 
     const handleSubmit = async () => {
