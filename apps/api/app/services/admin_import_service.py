@@ -404,6 +404,7 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             task_assigned=settings_data.get("task_assigned", True),
             task_reminders=settings_data.get("task_reminders", True),
             appointments=settings_data.get("appointments", True),
+            contact_reminder=settings_data.get("contact_reminder", True),
             updated_at=_parse_datetime(settings_data.get("updated_at"))
             or datetime.now(timezone.utc),
         )

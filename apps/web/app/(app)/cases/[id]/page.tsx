@@ -33,6 +33,7 @@ import {
     MailIcon,
     BrainIcon,
     HeartHandshakeIcon,
+    PhoneIcon,
 } from "lucide-react"
 import { InlineEditField } from "@/components/inline-edit-field"
 import { FileUploadZone } from "@/components/FileUploadZone"
@@ -48,6 +49,7 @@ import { EmailComposeDialog } from "@/components/email/EmailComposeDialog"
 import { ProposeMatchDialog } from "@/components/matches/ProposeMatchDialog"
 import { CaseApplicationTab } from "@/components/cases/CaseApplicationTab"
 import { CaseProfileCard } from "@/components/cases/CaseProfileCard"
+import { LogContactAttemptDialog } from "@/components/cases/LogContactAttemptDialog"
 import { useForms } from "@/lib/hooks/use-forms"
 import type { EmailType, SummarizeCaseResponse, DraftEmailResponse } from "@/lib/api/ai"
 import type { TaskListItem } from "@/lib/types/task"
@@ -131,6 +133,7 @@ function formatActivityType(type: string): string {
         note_added: 'Note Added',
         note_deleted: 'Note Deleted',
         task_created: 'Task Created',
+        contact_attempt: 'Contact Attempt',
     }
     return labels[type] || type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 }
@@ -179,6 +182,14 @@ function formatActivityDetails(type: string, details: Record<string, unknown>): 
         }
         case 'task_created':
             return details.title ? withAiPrefix(`Task: ${String(details.title)}`) : aiOnly()
+        case 'contact_attempt': {
+            const methods = Array.isArray(details.contact_methods)
+                ? (details.contact_methods as string[]).join(', ')
+                : ''
+            const outcome = String(details.outcome || '').replace(/_/g, ' ')
+            const backdated = details.is_backdated ? ' (backdated)' : ''
+            return withAiPrefix(`${methods}: ${outcome}${backdated}`)
+        }
         default:
             return aiOnly()
     }
@@ -217,6 +228,7 @@ export default function CaseDetailPage() {
     const [selectedEmailType, setSelectedEmailType] = React.useState<EmailType | null>(null)
     const [emailDialogOpen, setEmailDialogOpen] = React.useState(false)
     const [proposeMatchOpen, setProposeMatchOpen] = React.useState(false)
+    const [contactAttemptDialogOpen, setContactAttemptDialogOpen] = React.useState(false)
 
     const timezoneName = React.useMemo(() => {
         try {
@@ -397,6 +409,37 @@ export default function CaseDetailPage() {
                         <MailIcon className="size-4" />
                         Send Email
                     </Button>
+
+                    {/* Log Contact Attempt Button - only for intake stage (before contacted) cases owned by user */}
+                    {(() => {
+                        const currentStage = stageById.get(caseData.stage_id)
+                        const contactedStage = stageOptions.find(stage => stage.slug === 'contacted')
+                        const isIntakeStage = currentStage?.stage_type === 'intake'
+                        const isBeforeContacted = !!(
+                            currentStage &&
+                            contactedStage &&
+                            currentStage.order < contactedStage.order
+                        )
+                        const isAssignee = !!(user?.user_id && caseData.owner_id === user.user_id)
+                        const canLogContact = (
+                            caseData.owner_type === 'user' &&
+                            (isAssignee || canManageQueue) &&
+                            isIntakeStage &&
+                            isBeforeContacted &&
+                            !caseData.is_archived
+                        )
+                        return canLogContact ? (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setContactAttemptDialogOpen(true)}
+                                className="gap-2"
+                            >
+                                <PhoneIcon className="size-4" />
+                                Log Contact
+                            </Button>
+                        ) : null
+                    })()}
 
                     {/* Claim/Release buttons (case_manager+ only) */}
                     {canManageQueue && isInQueue && (
@@ -1304,6 +1347,14 @@ export default function CaseDetailPage() {
             <ProposeMatchDialog
                 open={proposeMatchOpen}
                 onOpenChange={setProposeMatchOpen}
+                caseId={caseData.id}
+                caseName={caseData.full_name}
+            />
+
+            {/* Log Contact Attempt Dialog */}
+            <LogContactAttemptDialog
+                open={contactAttemptDialogOpen}
+                onOpenChange={setContactAttemptDialogOpen}
                 caseId={caseData.id}
                 caseName={caseData.full_name}
             />

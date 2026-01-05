@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.encryption import hash_email, hash_phone
-from app.db.enums import CaseSource, OwnerType, Role
+from app.db.enums import CaseSource, CaseStatus, ContactStatus, OwnerType, Role
 from app.db.models import Case, CaseStatusHistory, User
 from app.schemas.case import CaseCreate, CaseUpdate
 from app.utils.normalization import normalize_email, normalize_name, normalize_phone
@@ -96,6 +96,9 @@ def create_case(
             created_by_user_id=user_id,
             owner_type=owner_type,
             owner_id=owner_id,
+            assigned_at=datetime.now(timezone.utc)
+            if owner_type == OwnerType.USER.value
+            else None,
             stage_id=default_stage.id,
             status_label=default_stage.label,
             source=data.source.value,
@@ -320,6 +323,16 @@ def change_status(
 
     case.stage_id = new_stage.id
     case.status_label = new_stage.label
+
+    # Update contact status if reached or leaving intake stage
+    if case.contact_status == ContactStatus.UNREACHED.value:
+        if (
+            new_stage.slug == CaseStatus.CONTACTED.value
+            or new_stage.is_intake_stage is False
+        ):
+            case.contact_status = ContactStatus.REACHED.value
+            if not case.contacted_at:
+                case.contacted_at = datetime.now(timezone.utc)
 
     # Record history
     history = CaseStatusHistory(
@@ -607,6 +620,8 @@ def assign_case(
     if owner_type == OwnerType.USER:
         case.owner_type = OwnerType.USER.value
         case.owner_id = owner_id
+        # Set assigned_at when assigning to a user
+        case.assigned_at = datetime.now(timezone.utc)
     elif owner_type == OwnerType.QUEUE:
         case = queue_service.assign_to_queue(
             db=db,
@@ -615,6 +630,8 @@ def assign_case(
             queue_id=owner_id,
             assigner_user_id=user_id,
         )
+        # Clear assigned_at when moving to queue
+        case.assigned_at = None
     else:
         raise ValueError("Invalid owner_type")
     db.commit()

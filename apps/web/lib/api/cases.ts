@@ -335,3 +335,58 @@ export function getCaseActivity(
     searchParams.set('per_page', String(perPage));
     return api.get<CaseActivityResponse>(`/cases/${caseId}/activity?${searchParams.toString()}`);
 }
+
+// =============================================================================
+// Contact Attempts Tracking
+// =============================================================================
+
+export type ContactMethod = 'phone' | 'email' | 'sms';
+export type ContactOutcome = 'reached' | 'no_answer' | 'voicemail' | 'wrong_number' | 'email_bounced';
+
+export interface ContactAttemptCreatePayload {
+    contact_methods: ContactMethod[];
+    outcome: ContactOutcome;
+    notes?: string | null;
+    attempted_at?: string | null; // ISO datetime, defaults to now
+}
+
+export interface ContactAttemptResponse {
+    id: string;
+    case_id: string;
+    attempted_by_user_id: string | null;
+    attempted_by_name: string | null;
+    contact_methods: string[];
+    outcome: string;
+    notes: string | null;
+    attempted_at: string;
+    created_at: string;
+    is_backdated: boolean;
+    case_owner_id_at_attempt: string;
+}
+
+export interface ContactAttemptsSummary {
+    total_attempts: number;
+    current_assignment_attempts: number;
+    distinct_days_current_assignment: number;
+    successful_attempts: number;
+    last_attempt_at: string | null;
+    days_since_last_attempt: number | null;
+    attempts: ContactAttemptResponse[];
+}
+
+/**
+ * Log a contact attempt for a case.
+ */
+export function createContactAttempt(
+    caseId: string,
+    data: ContactAttemptCreatePayload
+): Promise<ContactAttemptResponse> {
+    return api.post<ContactAttemptResponse>(`/cases/${caseId}/contact-attempts`, data);
+}
+
+/**
+ * Get contact attempts summary for a case.
+ */
+export function getContactAttempts(caseId: string): Promise<ContactAttemptsSummary> {
+    return api.get<ContactAttemptsSummary>(`/cases/${caseId}/contact-attempts`);
+}

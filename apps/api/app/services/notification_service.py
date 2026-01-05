@@ -56,6 +56,7 @@ def get_user_settings(
             "task_assigned": settings.task_assigned,
             "task_reminders": settings.task_reminders,
             "appointments": settings.appointments,
+            "contact_reminder": settings.contact_reminder,
         }
 
     # Defaults (all ON)
@@ -66,6 +67,7 @@ def get_user_settings(
         "task_assigned": True,
         "task_reminders": True,
         "appointments": True,
+        "contact_reminder": True,
     }
 
 
@@ -111,6 +113,7 @@ def update_user_settings(
         "task_assigned": settings.task_assigned,
         "task_reminders": settings.task_reminders,
         "appointments": settings.appointments,
+        "contact_reminder": settings.contact_reminder,
     }
 
 

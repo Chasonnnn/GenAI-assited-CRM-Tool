@@ -340,6 +340,7 @@ def create_submission(
         status=FormSubmissionStatus.PENDING_REVIEW.value,
         answers_json=answers,
         schema_snapshot=form.published_schema_json,
+        submitted_at=datetime.now(timezone.utc),
     )
     db.add(submission)
     db.flush()
@@ -504,7 +505,7 @@ def approve_submission(
             case=case,
             data=case_update,
             user_id=reviewer_id,
-            organization_id=submission.organization_id,
+            org_id=submission.organization_id,
             commit=False,
         )
 
