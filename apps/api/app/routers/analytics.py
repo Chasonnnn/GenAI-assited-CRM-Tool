@@ -105,6 +105,54 @@ class MetaSpendSummary(BaseModel):
 
 
 # =============================================================================
+# Performance by User Schemas
+# =============================================================================
+
+
+class UserPerformanceData(BaseModel):
+    """Performance metrics for a single user."""
+
+    user_id: str
+    user_name: str
+    total_cases: int
+    archived_count: int
+    contacted: int
+    qualified: int
+    pending_match: int
+    matched: int
+    applied: int
+    lost: int
+    conversion_rate: float
+    avg_days_to_match: Optional[float]
+    avg_days_to_apply: Optional[float]
+
+
+class UnassignedPerformanceData(BaseModel):
+    """Performance metrics for unassigned cases."""
+
+    total_cases: int
+    archived_count: int
+    contacted: int
+    qualified: int
+    pending_match: int
+    matched: int
+    applied: int
+    lost: int
+
+
+class PerformanceByUserResponse(BaseModel):
+    """Response for /analytics/performance/by-user endpoint."""
+
+    from_date: str
+    to_date: str
+    mode: Literal["cohort", "activity"]
+    as_of: str
+    pipeline_id: Optional[str]
+    data: list[UserPerformanceData]
+    unassigned: UnassignedPerformanceData
+
+
+# =============================================================================
 # Endpoints
 # =============================================================================
 
@@ -374,6 +422,64 @@ def get_cases_by_state_compare(
         ad_id,
     )
     return {"data": data}
+
+
+# =============================================================================
+# Performance by User
+# =============================================================================
+
+
+@router.get("/performance/by-user", response_model=PerformanceByUserResponse)
+def get_performance_by_user(
+    from_date: Optional[str] = Query(None, description="Start date (ISO format)"),
+    to_date: Optional[str] = Query(None, description="End date (ISO format)"),
+    mode: Literal["cohort", "activity"] = Query(
+        "cohort",
+        description="cohort: cases created in range; activity: status changes in range",
+    ),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> PerformanceByUserResponse:
+    """
+    Get individual user performance metrics.
+
+    **Modes:**
+    - `cohort`: Analyze cases created within the date range, grouped by current owner.
+      Shows how each user's assigned cases have progressed through stages.
+    - `activity`: Analyze status transitions within the date range.
+      Shows activity during a specific period regardless of when cases were created.
+
+    **Metrics:**
+    - `total_cases`: Number of cases (cohort: created in range; activity: with transitions in range)
+    - `archived_count`: Cases that are archived
+    - `contacted/qualified/pending_match/matched/applied`: Cases that reached each stage (via history)
+    - `lost`: Cases that reached lost stage AND never reached applied
+    - `conversion_rate`: (applied / total_cases) * 100
+    - `avg_days_to_match`: Average days from creation to first match transition
+    - `avg_days_to_apply`: Average days from creation to first applied transition
+
+    **Credit Model:**
+    All metrics are attributed to the current case owner. Cases without an owner
+    are grouped in the `unassigned` bucket.
+    """
+    start, end = analytics_service.parse_date_range(from_date, to_date)
+    data = analytics_service.get_cached_performance_by_user(
+        db=db,
+        organization_id=session.org_id,
+        start_date=start,
+        end_date=end,
+        mode=mode,
+    )
+
+    return PerformanceByUserResponse(
+        from_date=data["from_date"],
+        to_date=data["to_date"],
+        mode=data["mode"],
+        as_of=data["as_of"],
+        pipeline_id=data.get("pipeline_id"),
+        data=[UserPerformanceData(**user) for user in data["data"]],
+        unassigned=UnassignedPerformanceData(**data["unassigned"]),
+    )
 
 
 # =============================================================================

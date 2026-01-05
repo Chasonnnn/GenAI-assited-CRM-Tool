@@ -35,6 +35,14 @@ vi.mock('@/components/charts/us-map-chart', () => ({
     USMapChart: () => <div data-testid="us-map-chart" />,
 }))
 
+vi.mock('@/components/reports/TeamPerformanceTable', () => ({
+    TeamPerformanceTable: () => <div data-testid="team-performance-table" />,
+}))
+
+vi.mock('@/components/reports/TeamPerformanceChart', () => ({
+    TeamPerformanceChart: () => <div data-testid="team-performance-chart" />,
+}))
+
 vi.mock('@/components/ui/date-range-picker', () => ({
     DateRangePicker: () => <div data-testid="date-range-picker" />,
 }))
@@ -49,6 +57,7 @@ vi.mock('@/lib/hooks/use-analytics', () => ({
     useFunnelCompare: () => ({ data: null, isLoading: false }),
     useCasesByStateCompare: () => ({ data: null, isLoading: false }),
     useCampaigns: () => ({ data: [], isLoading: false }),
+    usePerformanceByUser: () => ({ data: { data: [], unassigned: { total_cases: 0 } }, isLoading: false }),
 }))
 
 describe('ReportsPage', () => {

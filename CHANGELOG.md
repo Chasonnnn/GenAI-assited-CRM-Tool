@@ -25,8 +25,27 @@ All notable changes to this project will be documented in this file.
   - Admin settings UI for signature branding
   - Migration: `0afc5c98c589_signature_enhancement_org_branding_and_.py`
 
+- **Team Performance Report** — Per-user conversion funnel analytics
+  - `/analytics/performance-by-user` endpoint with assignment/conversion metrics
+  - Tracks assigned, applied, matched, and lost cases per owner
+  - Conversion rate calculation with date range filtering
+  - Activity mode for alternative metrics view
+  - New frontend components: PerformanceByUserChart, TeamPerformanceCard
+  - 9 new tests in `test_analytics.py`
+
+- **AI Assistant Analytics Tools** — Dynamic function calling for analytics queries
+  - AI can query team performance data on demand
+  - Natural language questions about conversion rates and team performance
+  - Context injection for global mode analytics
+
+- **Workflow Approval Notification Preference** — Dedicated notification settings
+  - `workflow_approvals` toggle in user notification settings
+  - `WORKFLOW_APPROVAL_REQUESTED` notification type
+  - Migration: `c5f4e3d2b1a0_add_workflow_approval_notification_pref.py`
+
 ### Changed
 - Dashboard, analytics, and calendar components now exclude workflow approval tasks from regular counts
+- Removed jspdf dependency from frontend
 
 ---
 
