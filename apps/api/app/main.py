@@ -217,6 +217,20 @@ app.add_middleware(
     expose_headers=["X-Request-ID", "Content-Disposition"],
 )
 
+
+# Security headers middleware
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    # Prevent MIME type sniffing
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    # Protect against clickjacking
+    response.headers["X-Frame-Options"] = "DENY"
+    # Mitigate Spectre vulnerabilities
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+    return response
+
 # ============================================================================
 # Routers
 # ============================================================================
