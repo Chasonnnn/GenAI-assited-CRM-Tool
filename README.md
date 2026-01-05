@@ -1,6 +1,6 @@
 # Surrogacy CRM Platform
 
-**Version:** 0.16.00 | **Last Updated:** December 29, 2025
+**Version:** 0.16.0 | **Last Updated:** December 29, 2025
 
 A modern, multi-tenant CRM platform purpose-built for surrogacy agencies. Manage cases from lead intake through delivery with customizable pipelines, intended parent matching, AI-powered assistance, and comprehensive automation.
 

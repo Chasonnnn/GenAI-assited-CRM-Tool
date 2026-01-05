@@ -341,17 +341,17 @@ fetch(url, { credentials: "include", headers: { "X-Requested-With": "XMLHttpRequ
 
 ## 10) Version Numbering
 
-Format: **a.bc.de**
+Format: **MAJOR.MINOR.PATCH** (SemVer)
 
-| Part | Range | Meaning |
-|------|-------|---------|
-| a | 0-9 | Major (0 = pre-release) |
-| bc | 00-99 | Feature additions |
-| de | 00-99 | Patches/fixes |
+| Part | Meaning |
+|------|---------|
+| MAJOR | Breaking changes |
+| MINOR | New features |
+| PATCH | Fixes and maintenance |
 
 Examples:
-- `0.06.00` → Pre-release, 6 features
-- `1.02.05` → Production v1, 2 features, 5 patches
+- `0.16.0` → Pre-release, feature update
+- `1.2.5` → Stable release with patch fixes
 
 Current: See `apps/api/app/core/config.py` → `Settings.VERSION`
 
