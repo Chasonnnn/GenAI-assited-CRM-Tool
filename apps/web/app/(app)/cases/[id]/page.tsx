@@ -48,6 +48,7 @@ import { useSetAIContext } from "@/lib/context/ai-context"
 import { EmailComposeDialog } from "@/components/email/EmailComposeDialog"
 import { ProposeMatchDialog } from "@/components/matches/ProposeMatchDialog"
 import { CaseApplicationTab } from "@/components/cases/CaseApplicationTab"
+import { CaseInterviewTab } from "@/components/cases/interviews/CaseInterviewTab"
 import { CaseProfileCard } from "@/components/cases/CaseProfileCard"
 import { LogContactAttemptDialog } from "@/components/cases/LogContactAttemptDialog"
 import { useForms } from "@/lib/hooks/use-forms"
@@ -528,6 +529,7 @@ export default function CaseDetailPage() {
                         <TabsTrigger value="tasks">Tasks {tasksData && tasksData.items.length > 0 && `(${tasksData.items.length})`}</TabsTrigger>
                         <TabsTrigger value="history">History</TabsTrigger>
                         <TabsTrigger value="application">Application</TabsTrigger>
+                        <TabsTrigger value="interviews">Interviews</TabsTrigger>
                         {canViewProfile && <TabsTrigger value="profile">Profile</TabsTrigger>}
                         <TabsTrigger value="ai" className="gap-1">
                             <SparklesIcon className="h-3 w-3" />
@@ -850,6 +852,11 @@ export default function CaseDetailPage() {
                             caseId={id}
                             formId={defaultFormId}
                         />
+                    </TabsContent>
+
+                    {/* INTERVIEWS TAB */}
+                    <TabsContent value="interviews" className="space-y-4">
+                        <CaseInterviewTab caseId={id} />
                     </TabsContent>
 
                     {/* PROFILE TAB */}

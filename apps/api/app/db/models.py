@@ -4338,3 +4338,288 @@ class CampaignTrackingEvent(Base):
     recipient: Mapped["CampaignRecipient"] = relationship(
         back_populates="tracking_events"
     )
+
+
+# =============================================================================
+# Interview Models
+# =============================================================================
+
+
+class CaseInterview(Base):
+    """
+    Interview record for a case.
+
+    Supports multiple interviews per case with versioned transcripts.
+    Transcripts > 100KB are offloaded to S3 (HTML only, text kept inline for search).
+    """
+
+    __tablename__ = "case_interviews"
+    __table_args__ = (
+        Index("ix_case_interviews_case_id", "case_id"),
+        Index("ix_case_interviews_org_conducted", "organization_id", "conducted_at"),
+        Index(
+            "ix_case_interviews_search_vector",
+            "search_vector",
+            postgresql_using="gin",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    case_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cases.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id"),
+        nullable=False,
+    )
+
+    # Metadata
+    interview_type: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # 'phone', 'video', 'in_person'
+    conducted_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False
+    )
+    conducted_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Current transcript (denormalized for quick reads)
+    transcript_html: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )  # NULL if offloaded to S3
+    transcript_text: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )  # Always stored for search/diff
+    transcript_storage_key: Mapped[str | None] = mapped_column(
+        String(500), nullable=True
+    )  # S3 key if offloaded
+    transcript_version: Mapped[int] = mapped_column(
+        Integer, server_default=text("1"), nullable=False
+    )
+    transcript_hash: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )  # SHA256 for no-change guard
+    transcript_size_bytes: Mapped[int] = mapped_column(
+        Integer, server_default=text("0"), nullable=False
+    )
+
+    # Status
+    status: Mapped[str] = mapped_column(
+        String(20), server_default=text("'completed'"), nullable=False
+    )  # 'draft', 'completed'
+
+    # Retention
+    retention_policy_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("data_retention_policies.id"),
+        nullable=True,
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"), nullable=False
+    )
+
+    # Full-text search vector (managed by trigger)
+    search_vector = mapped_column(TSVECTOR, nullable=True)
+
+    # Relationships
+    case: Mapped["Case"] = relationship()
+    organization: Mapped["Organization"] = relationship()
+    conducted_by: Mapped["User"] = relationship()
+    versions: Mapped[list["InterviewTranscriptVersion"]] = relationship(
+        back_populates="interview", cascade="all, delete-orphan"
+    )
+    notes: Mapped[list["InterviewNote"]] = relationship(
+        back_populates="interview", cascade="all, delete-orphan"
+    )
+    interview_attachments: Mapped[list["InterviewAttachment"]] = relationship(
+        back_populates="interview", cascade="all, delete-orphan"
+    )
+    retention_policy: Mapped["DataRetentionPolicy | None"] = relationship()
+
+
+class InterviewTranscriptVersion(Base):
+    """
+    Version history for interview transcripts.
+
+    Created automatically when transcript changes (with no-change guard via hash).
+    Supports restore to any previous version.
+    """
+
+    __tablename__ = "interview_transcript_versions"
+    __table_args__ = (
+        UniqueConstraint("interview_id", "version", name="uq_interview_version"),
+        Index("ix_interview_versions_interview", "interview_id", "version"),
+        Index("ix_interview_versions_org", "organization_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    interview_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("case_interviews.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Content
+    content_html: Mapped[str | None] = mapped_column(Text, nullable=True)
+    content_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    content_storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Metadata
+    author_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    source: Mapped[str] = mapped_column(
+        String(30), nullable=False
+    )  # 'manual', 'ai_transcription', 'restore'
+
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"), nullable=False
+    )
+
+    # Relationships
+    interview: Mapped["CaseInterview"] = relationship(back_populates="versions")
+    organization: Mapped["Organization"] = relationship()
+    author: Mapped["User"] = relationship()
+
+
+class InterviewNote(Base):
+    """
+    Shared notes on interviews, optionally anchored to transcript selections.
+
+    Anchors are tied to a specific transcript version and recalculated when
+    the transcript changes. Status indicates if anchor is still valid.
+    """
+
+    __tablename__ = "interview_notes"
+    __table_args__ = (
+        Index("ix_interview_notes_interview", "interview_id"),
+        Index("ix_interview_notes_org", "organization_id"),
+        CheckConstraint(
+            "anchor_end IS NULL OR anchor_end >= anchor_start",
+            name="ck_interview_notes_anchor_range",
+        ),
+        CheckConstraint(
+            "(anchor_start IS NULL AND anchor_end IS NULL AND anchor_text IS NULL) OR "
+            "(anchor_start IS NOT NULL AND anchor_end IS NOT NULL AND anchor_text IS NOT NULL)",
+            name="ck_interview_notes_anchor_complete",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    interview_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("case_interviews.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False
+    )
+
+    # Content (sanitized HTML)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Anchor to specific version (prevents drift)
+    transcript_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    anchor_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    anchor_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    anchor_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    # Recalculated anchor for current version
+    current_anchor_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    current_anchor_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    anchor_status: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
+    )  # 'valid', 'approximate', 'lost'
+
+    # Metadata
+    author_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"), nullable=False
+    )
+
+    # Relationships
+    interview: Mapped["CaseInterview"] = relationship(back_populates="notes")
+    organization: Mapped["Organization"] = relationship()
+    author: Mapped["User"] = relationship()
+
+
+class InterviewAttachment(Base):
+    """
+    Links attachments to interviews.
+
+    Reuses the existing Attachment model. Supports AI transcription
+    for audio/video files.
+    """
+
+    __tablename__ = "interview_attachments"
+    __table_args__ = (
+        UniqueConstraint("interview_id", "attachment_id", name="uq_interview_attachment"),
+        Index("ix_interview_attachments_interview", "interview_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    interview_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("case_interviews.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    attachment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("attachments.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False
+    )
+
+    # AI transcription (for audio/video only)
+    transcription_status: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
+    )  # 'pending', 'processing', 'completed', 'failed'
+    transcription_job_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    transcription_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    transcription_completed_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"), nullable=False
+    )
+
+    # Relationships
+    interview: Mapped["CaseInterview"] = relationship(back_populates="interview_attachments")
+    attachment: Mapped["Attachment"] = relationship()
+    organization: Mapped["Organization"] = relationship()

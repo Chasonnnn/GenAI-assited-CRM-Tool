@@ -28,13 +28,21 @@ import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 // Map notification types to UI groups
 const TYPE_GROUPS: Record<string, string[]> = {
     all: [],
-    case: ["case_assigned", "case_status_changed", "case_handoff_ready", "case_handoff_accepted", "case_handoff_denied"],
+    case: [
+        "case_assigned",
+        "case_status_changed",
+        "case_handoff_ready",
+        "case_handoff_accepted",
+        "case_handoff_denied",
+        "interview_transcription_completed",
+    ],
     task: ["task_assigned", "task_due_soon", "task_overdue"],
     appointment: ["appointment_requested", "appointment_confirmed", "appointment_cancelled", "appointment_reminder"],
 }
 
 function getNotificationIcon(type: string) {
     if (type.startsWith("case")) return FileTextIcon
+    if (type.startsWith("interview")) return FileTextIcon
     if (type.startsWith("task")) return CheckSquareIcon
     if (type.startsWith("appointment")) return CalendarIcon
     return BellIcon

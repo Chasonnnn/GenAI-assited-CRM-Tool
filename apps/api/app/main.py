@@ -42,6 +42,7 @@ from app.routers import (
     integrations,
     internal,
     intended_parents,
+    interviews,
     invites,
     jobs,
     matches,
@@ -243,6 +244,9 @@ app.include_router(cases.router, prefix="/cases", tags=["cases"])
 app.include_router(
     notes.router, tags=["notes"]
 )  # Mixed paths: /cases/{id}/notes and /notes/{id}
+app.include_router(
+    interviews.router, tags=["interviews"]
+)  # Mixed paths: /cases/{id}/interviews and /interviews/{id}
 app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 
 app.include_router(cases_import.router)  # Already has /cases/import prefix
