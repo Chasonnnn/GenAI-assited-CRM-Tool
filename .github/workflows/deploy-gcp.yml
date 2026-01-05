@@ -1,0 +1,82 @@
+name: Deploy API (GCP Cloud Run)
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy-api:
+    runs-on: ubuntu-latest
+    env:
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ secrets.GCP_REGION }}
+      GCP_ARTIFACT_REPOSITORY: ${{ secrets.GCP_ARTIFACT_REPOSITORY }}
+      GCP_CLOUD_RUN_SERVICE: ${{ secrets.GCP_CLOUD_RUN_SERVICE }}
+      GCP_CLOUD_RUN_JOB: ${{ secrets.GCP_CLOUD_RUN_JOB }}
+      GCP_DATABASE_URL_SECRET: ${{ secrets.GCP_DATABASE_URL_SECRET }}
+      IMAGE_NAME: crm-api
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP (OIDC)
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: access_token
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Build and push image
+        run: |
+          IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPOSITORY}/${IMAGE_NAME}:${GITHUB_REF_NAME}"
+          echo "IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+          docker build -t "$IMAGE" apps/api
+          docker push "$IMAGE"
+
+      - name: Run database migrations (Cloud Run Job)
+        run: |
+          SECRET_REF="projects/${GCP_PROJECT_ID}/secrets/${GCP_DATABASE_URL_SECRET}:latest"
+          if gcloud run jobs describe "${GCP_CLOUD_RUN_JOB}" --region "${GCP_REGION}" >/dev/null 2>&1; then
+            gcloud run jobs update "${GCP_CLOUD_RUN_JOB}" \
+              --image "${IMAGE}" \
+              --region "${GCP_REGION}" \
+              --set-secrets "DATABASE_URL=${SECRET_REF}" \
+              --set-env-vars "ENV=production" \
+              --command "alembic" \
+              --args "upgrade,head" \
+              --quiet
+          else
+            gcloud run jobs create "${GCP_CLOUD_RUN_JOB}" \
+              --image "${IMAGE}" \
+              --region "${GCP_REGION}" \
+              --tasks 1 \
+              --parallelism 1 \
+              --max-retries 1 \
+              --set-secrets "DATABASE_URL=${SECRET_REF}" \
+              --set-env-vars "ENV=production" \
+              --command "alembic" \
+              --args "upgrade,head" \
+              --quiet
+          fi
+          gcloud run jobs execute "${GCP_CLOUD_RUN_JOB}" --region "${GCP_REGION}" --wait
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy "${GCP_CLOUD_RUN_SERVICE}" \
+            --image "${IMAGE}" \
+            --region "${GCP_REGION}" \
+            --platform managed \
+            --quiet

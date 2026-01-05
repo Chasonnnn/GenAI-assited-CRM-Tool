@@ -1,0 +1,13 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "package-name": "surrogacy-crm-platform",
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        "apps/api/app/core/config.py",
+        "README.md"
+      ]
+    }
+  }
+}
