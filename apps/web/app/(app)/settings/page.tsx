@@ -153,6 +153,19 @@ function NotificationsSettingsCard() {
 
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
+              <Label htmlFor="workflow_approvals">Workflow approvals</Label>
+              <p className="text-sm text-muted-foreground">Get notified when a workflow needs your decision</p>
+            </div>
+            <Switch
+              id="workflow_approvals"
+              checked={settings?.workflow_approvals ?? true}
+              onCheckedChange={(checked) => handleToggle("workflow_approvals", checked)}
+              disabled={updateMutation.isPending}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
               <Label htmlFor="task_reminders">Task due date reminders</Label>
               <p className="text-sm text-muted-foreground">Get notified when tasks are due soon or overdue</p>
             </div>

@@ -2,6 +2,77 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026-01-05]
+
+### Added
+- **Workflow Approval System** — Human-in-the-loop approvals for workflow actions
+  - Approval tasks with 48 business hours timeout (respects US federal holidays)
+  - Business hours calculator with timezone support (8am-6pm Mon-Fri)
+  - Action preview with sanitized display (no PII exposure)
+  - Owner change invalidates pending approvals
+  - Approval expiry sweep job for timed-out tasks
+  - ApprovalStatusBadge and ApprovalTaskActions frontend components
+  - Migration: `h1b2c3d4e5f6_add_workflow_approval_columns.py`
+  - 23 new tests in `test_workflow_approvals.py`
+
+- **Email Signature Enhancement** — Organization branding and templates
+  - 5 email-safe templates (classic, modern, minimal, professional, creative)
+  - Organization-level branding (logo, primary color, company info)
+  - User-editable social media links (LinkedIn, Twitter, Instagram)
+  - Logo upload with processing (max 200x80px, <50KB)
+  - Backend-rendered signature preview
+  - Copy-to-clipboard functionality
+  - Admin settings UI for signature branding
+  - Migration: `0afc5c98c589_signature_enhancement_org_branding_and_.py`
+
+### Changed
+- Dashboard, analytics, and calendar components now exclude workflow approval tasks from regular counts
+
+---
+
+## [2026-01-04]
+
+### Added
+- **Interview Tab** — Interview transcription and AI analysis workflow
+  - Interview recording and transcription support
+  - AI-powered interview summaries
+  - Performance optimizations for interview loading
+
+---
+
+## [2026-01-03]
+
+### Added
+- **Contact Attempts Tracking** — Log and track contact attempts with automated reminders
+  - Contact attempt logging with method, outcome, and notes
+  - Automated contact reminder check job
+  - Case reminder index for efficient queries
+
+### Security
+- **Security Headers Middleware** — Added X-Content-Type-Options, X-Frame-Options, COOP, CORP headers
+
+### Changed
+- Replaced `manager` role with `admin` throughout the codebase
+
+---
+
+## [2025-12-31]
+
+### Added
+- **Profile Card Enhancement** — Inline editing, sync, hidden fields, and PDF export
+  - Editable profile fields with inline save
+  - Profile visibility toggle (hidden fields)
+  - PDF export functionality
+
+- **Intake Specialist View Access** — Intake specialists can now view post-approval cases (read-only)
+
+### Fixed
+- Added `idx_cases_reminder_check` index to Case model
+- Added `useCreateContactAttempt` mock to case-detail tests
+- Override d3-color to >=3.1.0 to fix ReDoS vulnerability
+
+---
+
 ## [2025-12-29]
 
 ### Added

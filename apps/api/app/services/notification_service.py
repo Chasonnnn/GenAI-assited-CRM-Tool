@@ -54,6 +54,7 @@ def get_user_settings(
             "case_status_changed": settings.case_status_changed,
             "case_handoff": settings.case_handoff,
             "task_assigned": settings.task_assigned,
+            "workflow_approvals": settings.workflow_approvals,
             "task_reminders": settings.task_reminders,
             "appointments": settings.appointments,
             "contact_reminder": settings.contact_reminder,
@@ -65,6 +66,7 @@ def get_user_settings(
         "case_status_changed": True,
         "case_handoff": True,
         "task_assigned": True,
+        "workflow_approvals": True,
         "task_reminders": True,
         "appointments": True,
         "contact_reminder": True,
@@ -111,6 +113,7 @@ def update_user_settings(
         "case_status_changed": settings.case_status_changed,
         "case_handoff": settings.case_handoff,
         "task_assigned": settings.task_assigned,
+        "workflow_approvals": settings.workflow_approvals,
         "task_reminders": settings.task_reminders,
         "appointments": settings.appointments,
         "contact_reminder": settings.contact_reminder,
@@ -537,6 +540,40 @@ def notify_task_assigned(
         org_id=org_id,
         user_id=assignee_id,
         type=NotificationType.TASK_ASSIGNED,
+        title=title,
+        body=body,
+        entity_type="task",
+        entity_id=task_id,
+        dedupe_key=dedupe_key,
+    )
+
+
+def notify_workflow_approval_requested(
+    db: Session,
+    task_id: UUID,
+    task_title: str,
+    org_id: UUID,
+    assignee_id: UUID,
+    case_number: Optional[str] = None,
+) -> None:
+    """Notify user when a workflow approval is requested."""
+    if not assignee_id:
+        return
+
+    if not should_notify(db, assignee_id, org_id, "workflow_approvals"):
+        return
+
+    title = f"Approval needed: {task_title[:50]}"
+    body = "A workflow action requires your approval"
+    if case_number:
+        body += f" for case #{case_number}"
+
+    dedupe_key = f"workflow_approval:{task_id}:{assignee_id}"
+    create_notification(
+        db=db,
+        org_id=org_id,
+        user_id=assignee_id,
+        type=NotificationType.WORKFLOW_APPROVAL_REQUESTED,
         title=title,
         body=body,
         entity_type="task",

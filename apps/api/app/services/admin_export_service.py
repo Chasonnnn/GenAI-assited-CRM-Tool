@@ -537,6 +537,7 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "case_status_changed": settings_row.case_status_changed,
             "case_handoff": settings_row.case_handoff,
             "task_assigned": settings_row.task_assigned,
+            "workflow_approvals": settings_row.workflow_approvals,
             "task_reminders": settings_row.task_reminders,
             "appointments": settings_row.appointments,
             "contact_reminder": settings_row.contact_reminder,

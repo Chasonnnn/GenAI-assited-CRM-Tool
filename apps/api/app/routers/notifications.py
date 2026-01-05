@@ -58,6 +58,7 @@ class NotificationSettingsRead(BaseModel):
     case_status_changed: bool
     case_handoff: bool
     task_assigned: bool
+    workflow_approvals: bool
     task_reminders: bool
     appointments: bool
     contact_reminder: bool
@@ -70,6 +71,7 @@ class NotificationSettingsUpdate(BaseModel):
     case_status_changed: bool | None = None
     case_handoff: bool | None = None
     task_assigned: bool | None = None
+    workflow_approvals: bool | None = None
     task_reminders: bool | None = None
     appointments: bool | None = None
     contact_reminder: bool | None = None

@@ -207,6 +207,7 @@ class NotificationType(str, Enum):
     TASK_ASSIGNED = "task_assigned"
     TASK_DUE_SOON = "task_due_soon"  # Due within 24h
     TASK_OVERDUE = "task_overdue"  # Past due date
+    WORKFLOW_APPROVAL_REQUESTED = "workflow_approval_requested"
 
     # Appointment notifications
     APPOINTMENT_REQUESTED = "appointment_requested"  # New appointment request

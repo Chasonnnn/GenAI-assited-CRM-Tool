@@ -36,14 +36,14 @@ const TYPE_GROUPS: Record<string, string[]> = {
         "case_handoff_denied",
         "interview_transcription_completed",
     ],
-    task: ["task_assigned", "task_due_soon", "task_overdue"],
+    task: ["task_assigned", "task_due_soon", "task_overdue", "workflow_approval_requested"],
     appointment: ["appointment_requested", "appointment_confirmed", "appointment_cancelled", "appointment_reminder"],
 }
 
 function getNotificationIcon(type: string) {
     if (type.startsWith("case")) return FileTextIcon
     if (type.startsWith("interview")) return FileTextIcon
-    if (type.startsWith("task")) return CheckSquareIcon
+    if (type.startsWith("task") || type.startsWith("workflow_approval")) return CheckSquareIcon
     if (type.startsWith("appointment")) return CalendarIcon
     return BellIcon
 }
