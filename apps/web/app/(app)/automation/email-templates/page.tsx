@@ -8,8 +8,6 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Switch } from "@/components/ui/switch"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
     Dialog,
@@ -40,9 +38,29 @@ import {
     useUpdateEmailTemplate,
     useDeleteEmailTemplate,
 } from "@/lib/hooks/use-email-templates"
-import { useSignature, useUpdateSignature } from "@/lib/hooks/use-signature"
+import { useSignature, useUpdateSignature, useSignaturePreview } from "@/lib/hooks/use-signature"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
+
+// Signature Preview Component - fetches and renders backend HTML
+function SignaturePreviewComponent() {
+    const { data: preview, isLoading } = useSignaturePreview()
+
+    if (isLoading) {
+        return <div className="animate-pulse bg-muted h-24 rounded" />
+    }
+
+    if (!preview?.html) {
+        return <p className="text-muted-foreground italic">No signature configured. Add your social links and save to preview.</p>
+    }
+
+    return (
+        <div
+            className="prose prose-sm max-w-none"
+            dangerouslySetInnerHTML={{ __html: preview.html }}
+        />
+    )
+}
 
 // Available template variables
 const TEMPLATE_VARIABLES = [
@@ -68,17 +86,10 @@ export default function EmailTemplatesPage() {
     const [showPreview, setShowPreview] = useState(false)
     const [previewHtml, setPreviewHtml] = useState("")
 
-    // Signature state
-    const [signatureName, setSignatureName] = useState("")
-    const [signatureTitle, setSignatureTitle] = useState("")
-    const [signaturePhone, setSignaturePhone] = useState("")
-    const [signatureCompany, setSignatureCompany] = useState("")
-    const [signatureEmail, setSignatureEmail] = useState("")
-    const [signatureAddress, setSignatureAddress] = useState("")
-    const [signatureWebsite, setSignatureWebsite] = useState("")
-    const [signatureLogoUrl, setSignatureLogoUrl] = useState("")
-    const [signatureCustomHtml, setSignatureCustomHtml] = useState("")
-    const [useCustomSignature, setUseCustomSignature] = useState(false)
+    // Signature state (social links only)
+    const [signatureLinkedin, setSignatureLinkedin] = useState("")
+    const [signatureTwitter, setSignatureTwitter] = useState("")
+    const [signatureInstagram, setSignatureInstagram] = useState("")
 
     // API hooks
     const { data: templates, isLoading } = useEmailTemplates(false)
@@ -86,7 +97,7 @@ export default function EmailTemplatesPage() {
     const updateTemplate = useUpdateEmailTemplate()
     const deleteTemplate = useDeleteEmailTemplate()
 
-    // Signature hooks
+    // Signature hooks - use new hooks from updated use-signature.ts
     const { data: signatureData } = useSignature()
     const updateSignatureMutation = useUpdateSignature()
 
@@ -106,16 +117,9 @@ export default function EmailTemplatesPage() {
     // Load signature data on mount
     React.useEffect(() => {
         if (signatureData) {
-            setSignatureName(signatureData.signature_name || "")
-            setSignatureTitle(signatureData.signature_title || "")
-            setSignaturePhone(signatureData.signature_phone || "")
-            setSignatureCompany(signatureData.signature_company || "")
-            setSignatureEmail(signatureData.signature_email || "")
-            setSignatureAddress(signatureData.signature_address || "")
-            setSignatureWebsite(signatureData.signature_website || "")
-            setSignatureLogoUrl(signatureData.signature_logo_url || "")
-            setSignatureCustomHtml(signatureData.signature_html || "")
-            setUseCustomSignature(!!signatureData.signature_html)
+            setSignatureLinkedin(signatureData.signature_linkedin || "")
+            setSignatureTwitter(signatureData.signature_twitter || "")
+            setSignatureInstagram(signatureData.signature_instagram || "")
         }
     }, [signatureData])
 
@@ -171,7 +175,7 @@ export default function EmailTemplatesPage() {
             .replace(/\{\{case_number\}\}/g, "CASE-2024-001")
             .replace(/\{\{status_label\}\}/g, "Qualified")
             .replace(/\{\{owner_name\}\}/g, "Sara Manager")
-            .replace(/\{\{org_name\}\}/g, signatureCompany || "ABC Surrogacy")
+            .replace(/\{\{org_name\}\}/g, signatureData?.org_signature_company_name || "ABC Surrogacy")
             .replace(/\{\{appointment_date\}\}/g, "January 15, 2025")
             .replace(/\{\{appointment_time\}\}/g, "2:00 PM PST")
             .replace(/\{\{appointment_location\}\}/g, "Virtual Appointment")
@@ -192,11 +196,8 @@ export default function EmailTemplatesPage() {
             html = normalizeTemplateHtml(html)
         }
 
-        // Append signature if set
-        const signature = buildSignatureHtml()
-        if (signature) {
-            html += `<div style="margin-top: 24px;">${signature}</div>`
-        }
+        // Note: Signature is now rendered by backend, not appended here in preview
+        // Template preview just shows the template body without signature
 
         setPreviewHtml(sanitizeHtml(html))
         setShowPreview(true)
@@ -206,69 +207,44 @@ export default function EmailTemplatesPage() {
         setTemplateBody(templateBody + `{{${varName}}}`)
     }
 
-    const buildSignatureHtml = (): string => {
-        if (useCustomSignature && signatureCustomHtml.trim()) {
-            return signatureCustomHtml
-        }
-
-        if (!signatureName && !signatureTitle && !signaturePhone && !signatureCompany && !signatureEmail && !signatureAddress && !signatureWebsite) {
-            return ""
-        }
-
-        // Organization default logo - replace with your actual logo URL
-        const DEFAULT_ORG_LOGO = "/logo.png" // Will use org logo from public folder
-
-        let html = '<div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0; font-family: system-ui, -apple-system, sans-serif;">'
-
-        // Always show org logo
-        html += `<img src="${DEFAULT_ORG_LOGO}" alt="Logo" style="max-height: 50px; margin-bottom: 12px;" />`
-
-        if (signatureName) {
-            html += `<p style="margin: 0 0 4px 0; font-weight: 600; color: #1a1a1a;">${signatureName}</p>`
-        }
-        if (signatureTitle) {
-            html += `<p style="margin: 0 0 4px 0; color: #666;">${signatureTitle}</p>`
-        }
-        if (signatureCompany) {
-            html += `<p style="margin: 0 0 8px 0; color: #666;">${signatureCompany}</p>`
-        }
-
-        // Contact info section
-        const contactItems: string[] = []
-        if (signaturePhone) contactItems.push(signaturePhone)
-        if (signatureEmail) contactItems.push(`<a href="mailto:${signatureEmail}" style="color: #0066cc; text-decoration: none;">${signatureEmail}</a>`)
-
-        if (contactItems.length > 0) {
-            html += `<p style="margin: 0 0 4px 0; color: #666;">${contactItems.join(' | ')}</p>`
-        }
-
-        if (signatureAddress) {
-            html += `<p style="margin: 0 0 4px 0; color: #666;">${signatureAddress}</p>`
-        }
-        if (signatureWebsite) {
-            html += `<p style="margin: 0; color: #666;"><a href="${signatureWebsite}" style="color: #0066cc; text-decoration: none;">${signatureWebsite}</a></p>`
-        }
-
-        html += '</div>'
-        return html
-    }
-
     const handleSaveSignature = () => {
         updateSignatureMutation.mutate({
-            signature_name: signatureName || null,
-            signature_title: signatureTitle || null,
-            signature_company: signatureCompany || null,
-            signature_phone: signaturePhone || null,
-            signature_email: signatureEmail || null,
-            signature_address: signatureAddress || null,
-            signature_website: signatureWebsite || null,
-            signature_logo_url: signatureLogoUrl || null,
-            signature_html: useCustomSignature ? signatureCustomHtml || null : buildSignatureHtml() || null,
+            signature_linkedin: signatureLinkedin || null,
+            signature_twitter: signatureTwitter || null,
+            signature_instagram: signatureInstagram || null,
         })
     }
 
-    const signaturePreviewHtml = sanitizeHtml(buildSignatureHtml())
-    const signaturePreviewFallback = '<p class="text-muted-foreground italic">No signature configured</p>'
+    const handleCopySignatureHtml = async () => {
+        // Fetch fresh preview from backend
+        try {
+            const response = await fetch('/api/auth/me/signature/preview', {
+                credentials: 'include',
+            })
+            if (response.ok) {
+                const data = await response.json()
+                const html = data.html || ""
+
+                try {
+                    await navigator.clipboard.writeText(html)
+                    // Would normally show a toast here
+                    alert("Signature HTML copied to clipboard!")
+                } catch {
+                    // Fallback for older browsers
+                    const textarea = document.createElement("textarea")
+                    textarea.value = html
+                    document.body.appendChild(textarea)
+                    textarea.select()
+                    document.execCommand("copy")
+                    document.body.removeChild(textarea)
+                    alert("Signature HTML copied to clipboard!")
+                }
+            }
+        } catch (error) {
+            console.error("Failed to copy signature:", error)
+        }
+    }
+
 
     return (
         <div className="flex min-h-screen flex-col">
@@ -368,122 +344,111 @@ export default function EmailTemplatesPage() {
                             {/* Editor */}
                             <Card>
                                 <CardHeader>
-                                    <CardTitle>Email Signature</CardTitle>
+                                    <CardTitle>My Social Links</CardTitle>
                                     <CardDescription>
-                                        Configure your personal email signature that will be appended to outgoing emails.
+                                        Add your social media links to your email signature. Branding and template are managed by your organization admin.
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <Label htmlFor="custom-html">Use custom HTML</Label>
-                                        <Switch
-                                            id="custom-html"
-                                            checked={useCustomSignature}
-                                            onCheckedChange={setUseCustomSignature}
+                                    {/* Organization Branding (read-only) */}
+                                    {(signatureData?.org_signature_company_name ||
+                                        signatureData?.org_signature_address ||
+                                        signatureData?.org_signature_phone ||
+                                        signatureData?.org_signature_website ||
+                                        signatureData?.org_signature_logo_url) && (
+                                        <div className="p-3 bg-muted rounded-lg mb-4">
+                                            <p className="text-sm text-muted-foreground mb-1">Organization</p>
+                                            <div className="flex items-center gap-2">
+                                                {signatureData.org_signature_logo_url && (
+                                                    <img
+                                                        src={signatureData.org_signature_logo_url}
+                                                        alt="Logo"
+                                                        className="h-8 w-auto"
+                                                    />
+                                                )}
+                                                <span className="font-medium">
+                                                    {signatureData.org_signature_company_name || "Organization"}
+                                                </span>
+                                                {signatureData.org_signature_template && (
+                                                    <Badge variant="secondary" className="ml-auto">
+                                                        {signatureData.org_signature_template} template
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                            {(signatureData?.org_signature_address ||
+                                                signatureData?.org_signature_phone ||
+                                                signatureData?.org_signature_website) && (
+                                                <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                                                    {signatureData?.org_signature_address && (
+                                                        <p>{signatureData.org_signature_address}</p>
+                                                    )}
+                                                    {signatureData?.org_signature_phone && (
+                                                        <p>{signatureData.org_signature_phone}</p>
+                                                    )}
+                                                    {signatureData?.org_signature_website && (
+                                                        <a
+                                                            className="underline"
+                                                            href={signatureData.org_signature_website}
+                                                            rel="noreferrer"
+                                                            target="_blank"
+                                                        >
+                                                            {signatureData.org_signature_website}
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Social Links (editable) */}
+                                    <div className="space-y-2">
+                                        <Label htmlFor="sig-linkedin">LinkedIn URL</Label>
+                                        <Input
+                                            id="sig-linkedin"
+                                            placeholder="https://linkedin.com/in/yourprofile"
+                                            value={signatureLinkedin}
+                                            onChange={(e) => setSignatureLinkedin(e.target.value)}
                                         />
                                     </div>
 
-                                    {useCustomSignature ? (
-                                        <div className="space-y-2">
-                                            <Label>Custom HTML</Label>
-                                            <Textarea
-                                                placeholder="<div>Your custom signature HTML...</div>"
-                                                value={signatureCustomHtml}
-                                                onChange={(e) => setSignatureCustomHtml(e.target.value)}
-                                                rows={8}
-                                                className="font-mono text-sm"
-                                            />
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <div className="space-y-2">
-                                                <Label htmlFor="sig-name">
-                                                    <UserIcon className="inline mr-2 size-4" />
-                                                    Full Name
-                                                </Label>
-                                                <Input
-                                                    id="sig-name"
-                                                    placeholder="John Smith"
-                                                    value={signatureName}
-                                                    onChange={(e) => setSignatureName(e.target.value)}
-                                                />
-                                            </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="sig-twitter">Twitter/X URL</Label>
+                                        <Input
+                                            id="sig-twitter"
+                                            placeholder="https://twitter.com/yourhandle"
+                                            value={signatureTwitter}
+                                            onChange={(e) => setSignatureTwitter(e.target.value)}
+                                        />
+                                    </div>
 
-                                            <div className="space-y-2">
-                                                <Label htmlFor="sig-title">Title / Role</Label>
-                                                <Input
-                                                    id="sig-title"
-                                                    placeholder="Case Manager"
-                                                    value={signatureTitle}
-                                                    onChange={(e) => setSignatureTitle(e.target.value)}
-                                                />
-                                            </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="sig-instagram">Instagram URL</Label>
+                                        <Input
+                                            id="sig-instagram"
+                                            placeholder="https://instagram.com/yourhandle"
+                                            value={signatureInstagram}
+                                            onChange={(e) => setSignatureInstagram(e.target.value)}
+                                        />
+                                    </div>
 
-                                            <div className="space-y-2">
-                                                <Label htmlFor="sig-company">
-                                                    <BuildingIcon className="inline mr-2 size-4" />
-                                                    Company
-                                                </Label>
-                                                <Input
-                                                    id="sig-company"
-                                                    placeholder="ABC Surrogacy Agency"
-                                                    value={signatureCompany}
-                                                    onChange={(e) => setSignatureCompany(e.target.value)}
-                                                />
-                                            </div>
-
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="sig-phone">
-                                                        <PhoneIcon className="inline mr-2 size-4" />
-                                                        Phone
-                                                    </Label>
-                                                    <Input
-                                                        id="sig-phone"
-                                                        placeholder="(555) 123-4567"
-                                                        value={signaturePhone}
-                                                        onChange={(e) => setSignaturePhone(e.target.value)}
-                                                    />
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="sig-email">
-                                                        <MailIcon className="inline mr-2 size-4" />
-                                                        Email
-                                                    </Label>
-                                                    <Input
-                                                        id="sig-email"
-                                                        placeholder="john@company.com"
-                                                        value={signatureEmail}
-                                                        onChange={(e) => setSignatureEmail(e.target.value)}
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <Label htmlFor="sig-address">Address</Label>
-                                                <Input
-                                                    id="sig-address"
-                                                    placeholder="123 Main St, City, State 12345"
-                                                    value={signatureAddress}
-                                                    onChange={(e) => setSignatureAddress(e.target.value)}
-                                                />
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <Label htmlFor="sig-website">Website</Label>
-                                                <Input
-                                                    id="sig-website"
-                                                    placeholder="https://www.company.com"
-                                                    value={signatureWebsite}
-                                                    onChange={(e) => setSignatureWebsite(e.target.value)}
-                                                />
-                                            </div>
-                                        </>
-                                    )}
-
-                                    <Button onClick={handleSaveSignature} className="w-full">
-                                        Save Signature
-                                    </Button>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            onClick={handleSaveSignature}
+                                            className="flex-1"
+                                            disabled={updateSignatureMutation.isPending}
+                                        >
+                                            {updateSignatureMutation.isPending ? (
+                                                <LoaderIcon className="mr-2 size-4 animate-spin" />
+                                            ) : null}
+                                            Save Social Links
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            onClick={handleCopySignatureHtml}
+                                        >
+                                            Copy HTML
+                                        </Button>
+                                    </div>
                                 </CardContent>
                             </Card>
 
@@ -492,7 +457,7 @@ export default function EmailTemplatesPage() {
                                 <CardHeader>
                                     <CardTitle>Preview</CardTitle>
                                     <CardDescription>
-                                        How your signature will appear in emails
+                                        How your signature will appear in emails (rendered from backend)
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent>
@@ -500,10 +465,7 @@ export default function EmailTemplatesPage() {
                                         <p className="text-muted-foreground text-sm mb-4">
                                             [Email body content...]
                                         </p>
-                                        <div
-                                            className="prose prose-sm max-w-none"
-                                            dangerouslySetInnerHTML={{ __html: signaturePreviewHtml || signaturePreviewFallback }}
-                                        />
+                                        <SignaturePreviewComponent />
                                     </div>
                                 </CardContent>
                             </Card>
@@ -616,7 +578,7 @@ export default function EmailTemplatesPage() {
                             <div className="flex items-center gap-2 text-sm">
                                 <span className="font-medium text-muted-foreground w-16">From:</span>
                                 <span className="text-foreground">
-                                    {signatureName || "Your Name"} &lt;{signatureEmail || "you@company.com"}&gt;
+                                    {signatureData?.org_signature_company_name || "Your Company"} &lt;you@company.com&gt;
                                 </span>
                             </div>
                             <div className="flex items-center gap-2 text-sm">
@@ -628,7 +590,7 @@ export default function EmailTemplatesPage() {
                                 <span className="font-medium text-foreground">
                                     {templateSubject
                                         .replace(/\{\{full_name\}\}/g, "John Smith")
-                                        .replace(/\{\{org_name\}\}/g, signatureCompany || "ABC Surrogacy")}
+                                        .replace(/\{\{org_name\}\}/g, signatureData?.org_signature_company_name || "ABC Surrogacy")}
                                 </span>
                             </div>
                         </div>

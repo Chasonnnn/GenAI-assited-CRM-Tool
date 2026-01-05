@@ -469,15 +469,9 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "is_active": user.is_active,
             "created_at": user.created_at,
             "updated_at": user.updated_at,
-            "signature_name": user.signature_name,
-            "signature_title": user.signature_title,
-            "signature_company": user.signature_company,
-            "signature_phone": user.signature_phone,
-            "signature_email": user.signature_email,
-            "signature_address": user.signature_address,
-            "signature_website": user.signature_website,
-            "signature_logo_url": user.signature_logo_url,
-            "signature_html": user.signature_html,
+            "signature_linkedin": user.signature_linkedin,
+            "signature_twitter": user.signature_twitter,
+            "signature_instagram": user.signature_instagram,
         }
         for user, _membership in members
     ]
