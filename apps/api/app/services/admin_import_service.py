@@ -208,15 +208,9 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             user.display_name = user_data.get("display_name", user.display_name)
             user.avatar_url = user_data.get("avatar_url")
             user.is_active = user_data.get("is_active", user.is_active)
-            user.signature_name = user_data.get("signature_name")
-            user.signature_title = user_data.get("signature_title")
-            user.signature_company = user_data.get("signature_company")
-            user.signature_phone = user_data.get("signature_phone")
-            user.signature_email = user_data.get("signature_email")
-            user.signature_address = user_data.get("signature_address")
-            user.signature_website = user_data.get("signature_website")
-            user.signature_logo_url = user_data.get("signature_logo_url")
-            user.signature_html = user_data.get("signature_html")
+            user.signature_linkedin = user_data.get("signature_linkedin")
+            user.signature_twitter = user_data.get("signature_twitter")
+            user.signature_instagram = user_data.get("signature_instagram")
         else:
             user = User(
                 id=user_id,
@@ -224,15 +218,9 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
                 display_name=user_data.get("display_name"),
                 avatar_url=user_data.get("avatar_url"),
                 is_active=user_data.get("is_active", True),
-                signature_name=user_data.get("signature_name"),
-                signature_title=user_data.get("signature_title"),
-                signature_company=user_data.get("signature_company"),
-                signature_phone=user_data.get("signature_phone"),
-                signature_email=user_data.get("signature_email"),
-                signature_address=user_data.get("signature_address"),
-                signature_website=user_data.get("signature_website"),
-                signature_logo_url=user_data.get("signature_logo_url"),
-                signature_html=user_data.get("signature_html"),
+                signature_linkedin=user_data.get("signature_linkedin"),
+                signature_twitter=user_data.get("signature_twitter"),
+                signature_instagram=user_data.get("signature_instagram"),
                 created_at=_parse_datetime(user_data.get("created_at"))
                 or datetime.now(timezone.utc),
                 updated_at=_parse_datetime(user_data.get("updated_at"))

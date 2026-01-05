@@ -267,96 +267,153 @@ def update_me(
 
 
 # =============================================================================
-# Email Signature
+# Email Signature (User Social Links Only)
 # =============================================================================
 
+import re
+from urllib.parse import urlparse
+from pydantic import field_validator
+from app.services import signature_template_service
 
-class SignatureResponse(BaseModel):
-    """Email signature data."""
-
-    signature_name: str | None = None
-    signature_title: str | None = None
-    signature_company: str | None = None
-    signature_phone: str | None = None
-    signature_email: str | None = None
-    signature_address: str | None = None
-    signature_website: str | None = None
-    signature_logo_url: str | None = None
-    signature_html: str | None = None
+# URL validation pattern
+HTTPS_URL_PATTERN = re.compile(r"^https://")
 
 
-class SignatureUpdate(BaseModel):
-    """Update email signature."""
+class UserSignatureResponse(BaseModel):
+    """User signature social links and org branding preview."""
 
-    signature_name: str | None = None
-    signature_title: str | None = None
-    signature_company: str | None = None
-    signature_phone: str | None = None
-    signature_email: str | None = None
-    signature_address: str | None = None
-    signature_website: str | None = None
-    signature_logo_url: str | None = None
-    signature_html: str | None = None
+    # User-editable social links
+    signature_linkedin: str | None = None
+    signature_twitter: str | None = None
+    signature_instagram: str | None = None
+
+    # Org branding (read-only for users)
+    org_signature_template: str | None = None
+    org_signature_logo_url: str | None = None
+    org_signature_primary_color: str | None = None
+    org_signature_company_name: str | None = None
+    org_signature_address: str | None = None
+    org_signature_phone: str | None = None
+    org_signature_website: str | None = None
 
 
-@router.get("/me/signature", response_model=SignatureResponse)
+class UserSignatureUpdate(BaseModel):
+    """Update user social links only - org branding fields are ignored."""
+
+    signature_linkedin: str | None = None
+    signature_twitter: str | None = None
+    signature_instagram: str | None = None
+
+    @field_validator("signature_linkedin", "signature_twitter", "signature_instagram")
+    @classmethod
+    def validate_social_url(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        if v.strip() != v:
+            raise ValueError("Social links must be a valid https:// URL")
+        if any(char.isspace() for char in v):
+            raise ValueError("Social links must be a valid https:// URL")
+        if any(char in v for char in ['"', "'", "<", ">"]):
+            raise ValueError("Social links must be a valid https:// URL")
+        if not HTTPS_URL_PATTERN.match(v):
+            raise ValueError("Social links must start with https://")
+        parsed = urlparse(v)
+        if parsed.scheme != "https" or not parsed.netloc:
+            raise ValueError("Social links must be a valid https:// URL")
+        return v
+
+
+class SignaturePreviewResponse(BaseModel):
+    """Rendered signature HTML preview."""
+
+    html: str
+
+
+@router.get("/me/signature", response_model=UserSignatureResponse)
 def get_my_signature(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
-) -> SignatureResponse:
-    """Get current user's email signature."""
+) -> UserSignatureResponse:
+    """Get current user's signature social links and org branding."""
     user = user_service.get_user_by_id(db, session.user_id)
+    org = org_service.get_org_by_id(db, session.org_id)
 
-    return SignatureResponse(
-        signature_name=user.signature_name,
-        signature_title=user.signature_title,
-        signature_company=user.signature_company,
-        signature_phone=user.signature_phone,
-        signature_email=user.signature_email,
-        signature_address=user.signature_address,
-        signature_website=user.signature_website,
-        signature_logo_url=user.signature_logo_url,
-        signature_html=user.signature_html,
+    return UserSignatureResponse(
+        # User social links
+        signature_linkedin=user.signature_linkedin,
+        signature_twitter=user.signature_twitter,
+        signature_instagram=user.signature_instagram,
+        # Org branding (read-only)
+        org_signature_template=org.signature_template if org else None,
+        org_signature_logo_url=org.signature_logo_url if org else None,
+        org_signature_primary_color=org.signature_primary_color if org else None,
+        org_signature_company_name=org.signature_company_name if org else None,
+        org_signature_address=org.signature_address if org else None,
+        org_signature_phone=org.signature_phone if org else None,
+        org_signature_website=org.signature_website if org else None,
     )
 
 
-@router.put(
+@router.patch(
     "/me/signature",
-    response_model=SignatureResponse,
+    response_model=UserSignatureResponse,
     dependencies=[Depends(require_csrf_header)],
 )
 def update_my_signature(
-    body: SignatureUpdate,
+    body: UserSignatureUpdate,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
-) -> SignatureResponse:
-    """Update current user's email signature."""
+) -> UserSignatureResponse:
+    """
+    Update user's signature social links.
+
+    Only social links can be updated - org branding is controlled by admins.
+    """
     user = user_service.get_user_by_id(db, session.user_id)
-    user = user_service.update_user_signature(
-        db=db,
-        user=user,
-        signature_name=body.signature_name,
-        signature_title=body.signature_title,
-        signature_company=body.signature_company,
-        signature_phone=body.signature_phone,
-        signature_email=body.signature_email,
-        signature_address=body.signature_address,
-        signature_website=body.signature_website,
-        signature_logo_url=body.signature_logo_url,
-        signature_html=body.signature_html,
+    org = org_service.get_org_by_id(db, session.org_id)
+
+    # Update social links only
+    if body.signature_linkedin is not None:
+        user.signature_linkedin = body.signature_linkedin if body.signature_linkedin else None
+    if body.signature_twitter is not None:
+        user.signature_twitter = body.signature_twitter if body.signature_twitter else None
+    if body.signature_instagram is not None:
+        user.signature_instagram = body.signature_instagram if body.signature_instagram else None
+
+    db.commit()
+
+    return UserSignatureResponse(
+        signature_linkedin=user.signature_linkedin,
+        signature_twitter=user.signature_twitter,
+        signature_instagram=user.signature_instagram,
+        org_signature_template=org.signature_template if org else None,
+        org_signature_logo_url=org.signature_logo_url if org else None,
+        org_signature_primary_color=org.signature_primary_color if org else None,
+        org_signature_company_name=org.signature_company_name if org else None,
+        org_signature_address=org.signature_address if org else None,
+        org_signature_phone=org.signature_phone if org else None,
+        org_signature_website=org.signature_website if org else None,
     )
 
-    return SignatureResponse(
-        signature_name=user.signature_name,
-        signature_title=user.signature_title,
-        signature_company=user.signature_company,
-        signature_phone=user.signature_phone,
-        signature_email=user.signature_email,
-        signature_address=user.signature_address,
-        signature_website=user.signature_website,
-        signature_logo_url=user.signature_logo_url,
-        signature_html=user.signature_html,
+
+@router.get("/me/signature/preview", response_model=SignaturePreviewResponse)
+def get_my_signature_preview(
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> SignaturePreviewResponse:
+    """
+    Get rendered HTML preview of user's email signature.
+
+    Uses org branding + user profile + user social links.
+    This is the same HTML that would be appended to outgoing emails.
+    """
+    html = signature_template_service.render_signature_html(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
     )
+
+    return SignaturePreviewResponse(html=html)
 
 
 @router.post("/logout", dependencies=[Depends(require_csrf_header)])

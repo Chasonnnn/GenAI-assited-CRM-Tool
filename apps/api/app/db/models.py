@@ -9,6 +9,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Date,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -79,6 +80,19 @@ class Organization(Base):
         default=1, server_default=text("1"), nullable=False
     )
 
+    # Email signature branding (org-level, admin-controlled)
+    signature_template: Mapped[str | None] = mapped_column(
+        String(50), nullable=True  # 'classic', 'modern', 'minimal', 'professional', 'creative'
+    )
+    signature_logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    signature_primary_color: Mapped[str | None] = mapped_column(
+        String(7), nullable=True  # Hex color e.g. '#0066cc'
+    )
+    signature_company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    signature_address: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    signature_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    signature_website: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     # Relationships
     memberships: Mapped[list["Membership"]] = relationship(
         back_populates="organization", cascade="all, delete-orphan"
@@ -121,16 +135,10 @@ class User(Base):
         server_default=text("now()"), nullable=False
     )
 
-    # Email signature (per-user)
-    signature_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    signature_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    signature_company: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    signature_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    signature_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    signature_address: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    signature_website: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    signature_logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    signature_html: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Email signature social links (user-editable)
+    signature_linkedin: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    signature_twitter: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    signature_instagram: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # MFA fields
     mfa_enabled: Mapped[bool] = mapped_column(
@@ -909,12 +917,59 @@ class Task(Base):
         server_default=text("now()"), onupdate=text("now()"), nullable=False
     )
 
+    # ==========================================================================
+    # Workflow Approval Fields (for task_type='workflow_approval')
+    # ==========================================================================
+
+    # Workflow execution reference
+    workflow_execution_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workflow_executions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # Action context
+    workflow_action_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    workflow_action_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    workflow_action_preview: Mapped[str | None] = mapped_column(Text, nullable=True)
+    workflow_action_payload: Mapped[dict | None] = mapped_column(
+        JSONB, nullable=True, comment="Internal only - never exposed via API"
+    )
+
+    # Audit context
+    workflow_triggered_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # Resolution
+    workflow_denial_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Status for workflow approvals (richer than is_completed boolean)
+    status: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, comment="For workflow approvals: pending, completed, denied, expired"
+    )
+
+    # Due datetime with time precision (for approval deadlines)
+    due_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # Relationships
     case: Mapped["Case | None"] = relationship()
     created_by: Mapped["User"] = relationship(foreign_keys=[created_by_user_id])
     completed_by: Mapped["User | None"] = relationship(
         foreign_keys=[completed_by_user_id]
     )
+    workflow_triggered_by: Mapped["User | None"] = relationship(
+        foreign_keys=[workflow_triggered_by_user_id]
+    )
+
+    @property
+    def is_workflow_approval(self) -> bool:
+        """Check if this is a workflow approval task."""
+        return self.task_type == "workflow_approval"
 
 
 class MetaLead(Base):
@@ -2790,8 +2845,21 @@ class WorkflowExecution(Base):
         server_default=text("now()"), nullable=False
     )
 
+    # ==========================================================================
+    # Workflow Approval Pause State
+    # ==========================================================================
+
+    # When paused for approval, track which action and task
+    paused_at_action_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    paused_task_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tasks.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     # Relationships
     workflow: Mapped["AutomationWorkflow"] = relationship(back_populates="executions")
+    paused_task: Mapped["Task | None"] = relationship(foreign_keys=[paused_task_id])
 
 
 class UserWorkflowPreference(Base):
@@ -2828,6 +2896,52 @@ class UserWorkflowPreference(Base):
     workflow: Mapped["AutomationWorkflow"] = relationship(
         back_populates="user_preferences"
     )
+
+
+class WorkflowResumeJob(Base):
+    """
+    Idempotency table for workflow resume jobs.
+
+    Prevents duplicate resume processing when the same approval
+    is resolved multiple times (e.g., race conditions, retries).
+    """
+
+    __tablename__ = "workflow_resume_jobs"
+    __table_args__ = (
+        Index(
+            "idx_resume_jobs_pending",
+            "status",
+            "created_at",
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    execution_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workflow_executions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tasks.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=text("'pending'")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"), nullable=False
+    )
+    processed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Relationships
+    execution: Mapped["WorkflowExecution"] = relationship()
+    task: Mapped["Task"] = relationship()
 
 
 # =============================================================================

@@ -101,26 +101,14 @@ def update_user_profile(
 def update_user_signature(
     db: Session,
     user: User,
-    signature_name: str | None = None,
-    signature_title: str | None = None,
-    signature_company: str | None = None,
-    signature_phone: str | None = None,
-    signature_email: str | None = None,
-    signature_address: str | None = None,
-    signature_website: str | None = None,
-    signature_logo_url: str | None = None,
-    signature_html: str | None = None,
+    signature_linkedin: str | None = None,
+    signature_twitter: str | None = None,
+    signature_instagram: str | None = None,
 ) -> User:
-    """Update a user's email signature fields."""
-    user.signature_name = signature_name
-    user.signature_title = signature_title
-    user.signature_company = signature_company
-    user.signature_phone = signature_phone
-    user.signature_email = signature_email
-    user.signature_address = signature_address
-    user.signature_website = signature_website
-    user.signature_logo_url = signature_logo_url
-    user.signature_html = signature_html
+    """Update a user's email signature social links."""
+    user.signature_linkedin = signature_linkedin
+    user.signature_twitter = signature_twitter
+    user.signature_instagram = signature_instagram
 
     db.commit()
     db.refresh(user)

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -10,11 +10,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { CameraIcon, MonitorIcon, SmartphoneIcon, LoaderIcon, CheckIcon, BellRingIcon } from "lucide-react"
+import { CameraIcon, MonitorIcon, SmartphoneIcon, LoaderIcon, CheckIcon, BellRingIcon, UploadIcon, TrashIcon, PaletteIcon } from "lucide-react"
 import { useNotificationSettings, useUpdateNotificationSettings } from "@/lib/hooks/use-notifications"
 import { useBrowserNotifications } from "@/lib/hooks/use-browser-notifications"
 import { useAuth } from "@/lib/auth-context"
 import { getOrgSettings, updateProfile, updateOrgSettings } from "@/lib/api/settings"
+import { useOrgSignature, useUpdateOrgSignature, useUploadOrgLogo, useDeleteOrgLogo } from "@/lib/hooks/use-signature"
 
 // Browser Notifications Card - handles permission request
 function BrowserNotificationsCard() {
@@ -178,6 +179,237 @@ function NotificationsSettingsCard() {
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+
+// Email Signature Branding Section - Admin only
+function SignatureBrandingSection() {
+  const { data: orgSig, isLoading } = useOrgSignature()
+  const updateOrgSig = useUpdateOrgSignature()
+  const uploadLogo = useUploadOrgLogo()
+  const deleteLogo = useDeleteOrgLogo()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const [template, setTemplate] = useState("")
+  const [primaryColor, setPrimaryColor] = useState("#2563eb")
+  const [companyName, setCompanyName] = useState("")
+  const [address, setAddress] = useState("")
+  const [phone, setPhone] = useState("")
+  const [website, setWebsite] = useState("")
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    if (orgSig) {
+      setTemplate(orgSig.signature_template || "classic")
+      setPrimaryColor(orgSig.signature_primary_color || "#2563eb")
+      setCompanyName(orgSig.signature_company_name || "")
+      setAddress(orgSig.signature_address || "")
+      setPhone(orgSig.signature_phone || "")
+      setWebsite(orgSig.signature_website || "")
+    }
+  }, [orgSig])
+
+  const handleSave = async () => {
+    await updateOrgSig.mutateAsync({
+      signature_template: template,
+      signature_primary_color: primaryColor,
+      signature_company_name: companyName || null,
+      signature_address: address || null,
+      signature_phone: phone || null,
+      signature_website: website || null,
+    })
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      uploadLogo.mutate(file)
+    }
+  }
+
+  const handleDeleteLogo = () => {
+    if (confirm("Delete organization logo?")) {
+      deleteLogo.mutate()
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="animate-pulse flex gap-4">
+          <div className="h-24 w-full bg-muted rounded" />
+        </div>
+      </div>
+    )
+  }
+
+  const templates = orgSig?.available_templates || [
+    { id: "classic", name: "Classic", description: "Traditional professional layout" },
+    { id: "modern", name: "Modern", description: "Clean contemporary design" },
+    { id: "minimal", name: "Minimal", description: "Simple and focused" },
+    { id: "professional", name: "Professional", description: "Formal business style" },
+    { id: "creative", name: "Creative", description: "Bold and distinctive" },
+  ]
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="font-medium">Email Signature Branding</h3>
+        <p className="text-sm text-muted-foreground">
+          Organization-wide email signature settings (Admin only)
+        </p>
+      </div>
+
+      {/* Template Selection */}
+      <div className="space-y-3">
+        <Label>Signature Template</Label>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {templates.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTemplate(t.id)}
+              className={`p-3 rounded-lg border text-left transition-colors ${template === t.id
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:border-muted-foreground"
+                }`}
+            >
+              <div className="font-medium text-sm">{t.name}</div>
+              <div className="text-xs text-muted-foreground">{t.description}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Logo Upload */}
+      <div className="space-y-3">
+        <Label>Organization Logo</Label>
+        <div className="flex items-center gap-4">
+          {orgSig?.signature_logo_url ? (
+            <div className="relative group">
+              <img
+                src={orgSig.signature_logo_url}
+                alt="Organization Logo"
+                className="h-16 w-auto border rounded"
+              />
+              <button
+                type="button"
+                onClick={handleDeleteLogo}
+                disabled={deleteLogo.isPending}
+                className="absolute -top-2 -right-2 p-1 bg-destructive text-destructive-foreground rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <TrashIcon className="size-3" />
+              </button>
+            </div>
+          ) : (
+            <div className="h-16 w-32 border-2 border-dashed rounded flex items-center justify-center text-muted-foreground">
+              No logo
+            </div>
+          )}
+          <div>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleLogoUpload}
+              accept="image/png,image/jpeg,image/gif"
+              className="hidden"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadLogo.isPending}
+            >
+              {uploadLogo.isPending ? (
+                <LoaderIcon className="mr-2 size-4 animate-spin" />
+              ) : (
+                <UploadIcon className="mr-2 size-4" />
+              )}
+              Upload Logo
+            </Button>
+            <p className="text-xs text-muted-foreground mt-1">
+              Max 200x80px, PNG/JPG/GIF
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Primary Color */}
+      <div className="space-y-2">
+        <Label>Primary Color</Label>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <input
+              type="color"
+              value={primaryColor}
+              onChange={(e) => setPrimaryColor(e.target.value)}
+              className="w-10 h-10 rounded cursor-pointer border"
+            />
+          </div>
+          <Input
+            value={primaryColor}
+            onChange={(e) => setPrimaryColor(e.target.value)}
+            className="w-28 font-mono text-sm"
+            placeholder="#2563eb"
+          />
+          <PaletteIcon className="size-4 text-muted-foreground" />
+        </div>
+      </div>
+
+      {/* Company Info */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="sigCompanyName">Company Name</Label>
+          <Input
+            id="sigCompanyName"
+            value={companyName}
+            onChange={(e) => setCompanyName(e.target.value)}
+            placeholder="Your Company"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="sigWebsite">Website</Label>
+          <Input
+            id="sigWebsite"
+            value={website}
+            onChange={(e) => setWebsite(e.target.value)}
+            placeholder="https://www.example.com"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="sigPhone">Phone</Label>
+          <Input
+            id="sigPhone"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="(555) 123-4567"
+          />
+        </div>
+        <div className="space-y-2 md:col-span-2">
+          <Label htmlFor="sigAddress">Address</Label>
+          <Textarea
+            id="sigAddress"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder="123 Main St, City, State 12345"
+            rows={2}
+          />
+        </div>
+      </div>
+
+      <Button onClick={handleSave} disabled={updateOrgSig.isPending}>
+        {updateOrgSig.isPending ? (
+          <><LoaderIcon className="mr-2 size-4 animate-spin" /> Saving...</>
+        ) : saved ? (
+          <><CheckIcon className="mr-2 size-4" /> Saved!</>
+        ) : (
+          "Save Signature Branding"
+        )}
+      </Button>
+    </div>
   )
 }
 
@@ -422,6 +654,9 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="border-t border-border" />
+
+                {/* Email Signature Branding */}
+                <SignatureBrandingSection />
 
                 {/* Access */}
                 <div className="space-y-6">
