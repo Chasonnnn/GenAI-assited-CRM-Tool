@@ -313,7 +313,7 @@ def restore_intended_parent(
     db: Session = Depends(get_db),
     session=Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
 ):
-    """Restore an archived intended parent (manager only)."""
+    """Restore an archived intended parent (admin only)."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
@@ -341,7 +341,7 @@ def delete_intended_parent(
     db: Session = Depends(get_db),
     session=Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
 ):
-    """Hard delete an archived intended parent (manager only)."""
+    """Hard delete an archived intended parent (admin only)."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
@@ -487,7 +487,7 @@ def delete_note(
         require_permission(POLICIES["intended_parents"].actions["edit"])
     ),
 ):
-    """Delete a note (author or manager only)."""
+    """Delete a note (author or admin only)."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
@@ -496,7 +496,7 @@ def delete_note(
     if not note or note.entity_id != ip_id:
         raise HTTPException(status_code=404, detail="Note not found")
 
-    # Check permission: author or manager+
+    # Check permission: author or admin+
     if note.author_id != session.user_id and session.role not in (
         Role.ADMIN,
         Role.DEVELOPER,

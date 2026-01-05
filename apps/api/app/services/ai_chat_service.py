@@ -435,7 +435,7 @@ async def chat_async(
     provider = ai_settings_service.get_ai_provider_for_org(db, organization_id)
     if not provider:
         return {
-            "content": "AI is not configured for this organization. Please ask a manager to enable AI in settings.",
+            "content": "AI is not configured for this organization. Please ask an admin to enable AI in settings.",
             "proposed_actions": [],
             "tokens_used": {"prompt": 0, "completion": 0, "total": 0},
         }

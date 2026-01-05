@@ -34,7 +34,7 @@ router = APIRouter(
 
 class InviteCreate(BaseModel):
     email: EmailStr
-    role: str  # member, manager
+    role: str  # member, admin
 
 
 class InviteRead(BaseModel):
@@ -100,7 +100,7 @@ async def list_invites(
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
 ):
-    """List all invitations for the organization (Manager+ only)."""
+    """List all invitations for the organization (Admin+ only)."""
     invites = invite_service.list_invites(db, session.org_id)
     pending_count = invite_service.count_pending_invites(db, session.org_id)
 
@@ -117,9 +117,9 @@ async def create_invite(
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
 ):
-    """Create a new invitation (Manager+ only)."""
+    """Create a new invitation (Admin+ only)."""
     # Validate role
-    if body.role not in ("member", "manager"):
+    if body.role not in ("member", "admin"):
         raise HTTPException(status_code=400, detail="Invalid role")
 
     # Check if inviter has Gmail connected (required to send invite email)

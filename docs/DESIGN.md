@@ -64,7 +64,7 @@ apps/api/app/
 {
     "sub": "user_uuid",
     "org": "org_uuid",
-    "role": "manager",
+    "role": "admin",
     "ver": 1,  # Token version for revocation
     "exp": timestamp
 }
@@ -83,15 +83,15 @@ All mutations require: `X-Requested-With: XMLHttpRequest` header
 |------|-------------|
 | `intake_specialist` | Handles initial lead intake |
 | `case_manager` | Manages cases through workflow |
-| `manager` | Full access, can assign/archive |
+| `admin` | Full access, can assign/archive |
 | `developer` | Platform admin, elevated access |
 
 ### Permission Sets
 ```python
-ROLES_CAN_ASSIGN = {MANAGER, DEVELOPER}
-ROLES_CAN_ARCHIVE = {MANAGER, DEVELOPER}
-ROLES_CAN_HARD_DELETE = {MANAGER, DEVELOPER}
-ROLES_CAN_MANAGE = {MANAGER, DEVELOPER}
+ROLES_CAN_ASSIGN = {ADMIN, DEVELOPER}
+ROLES_CAN_ARCHIVE = {ADMIN, DEVELOPER}
+ROLES_CAN_HARD_DELETE = {ADMIN, DEVELOPER}
+ROLES_CAN_MANAGE = {ADMIN, DEVELOPER}
 ```
 
 ---
@@ -214,7 +214,7 @@ Cases use **soft delete** instead of hard delete:
 
 ### Hard Delete
 - Only allowed if `is_archived = True`
-- Requires `manager+` role
+- Requires `admin+` role
 - Permanently removes all data
 
 ### Email Uniqueness
@@ -253,7 +253,7 @@ changed_at      TIMESTAMP DEFAULT now()
 - Attached to a specific case
 - Author tracking for permission checks
 - Body: 2-4000 characters
-- Delete: author or manager+
+- Delete: author or admin+
 
 ### Tasks (`tasks`)
 - Optionally linked to a case
@@ -265,9 +265,9 @@ changed_at      TIMESTAMP DEFAULT now()
 | Action | Who Can |
 |--------|---------|
 | Create | Any authenticated user |
-| Update | Creator, assignee, or manager+ |
-| Complete | Creator, assignee, or manager+ |
-| Delete | Creator or manager+ (not assignee) |
+| Update | Creator, assignee, or admin+ |
+| Complete | Creator, assignee, or admin+ |
+| Delete | Creator or admin+ (not assignee) |
 
 ---
 
@@ -502,7 +502,7 @@ class Queue(Base):
 |-----------|-------------|---------------|
 | Claim | Transfer from queue to user | case_manager+ |
 | Release | Transfer from user to queue | case_manager+ |
-| Assign | Manager assigns to any queue | manager+ |
+| Assign | Admin assigns to any queue | admin+ |
 
 ### Atomic Claim
 - Uses `with_for_update()` for row-level locking
@@ -512,7 +512,7 @@ class Queue(Base):
 ### Access Control (case_access.py)
 - **Manager/Developer**: Full access
 - **Queue-owned cases**: case_manager+ can access
-- **User-owned cases**: Owner, managers, or other case_managers can access
+- **User-owned cases**: Owner, admins, or other case_managers can access
 - **Intake Specialists**: Can only access cases they own
 - **Backward compat**: Falls back to status-based logic if `owner_type` is NULL
 

@@ -325,7 +325,7 @@ def assign_to_queue(
     assigner_user_id: UUID,
 ) -> Case:
     """
-    Assign a case to a queue (manager action).
+    Assign a case to a queue (admin action).
     Works whether case is currently user-owned or queue-owned.
     """
     # Verify queue exists

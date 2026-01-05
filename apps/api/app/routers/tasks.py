@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import (
     get_current_session,
     get_db,
-    is_owner_or_assignee_or_manager,
+    is_owner_or_assignee_or_admin,
     is_owner_or_can_manage,
     require_csrf_header,
     require_permission,
@@ -253,7 +253,7 @@ def update_task(
     """
     Update task.
 
-    Requires: creator, owner, or manager+
+    Requires: creator, owner, or admin+
     """
     task = task_service.get_task(db, task_id, session.org_id)
     if not task:
@@ -262,8 +262,8 @@ def update_task(
     # Access control: check case access if task is linked to a case
     _check_task_case_access(task, session, db)
 
-    # Permission: creator, owner, or manager+
-    if not is_owner_or_assignee_or_manager(
+    # Permission: creator, owner, or admin+
+    if not is_owner_or_assignee_or_admin(
         session, task.created_by_user_id, task.owner_type, task.owner_id
     ):
         raise HTTPException(
@@ -299,7 +299,7 @@ def complete_task(
     """
     Mark task as completed.
 
-    Requires: creator, owner, or manager+
+    Requires: creator, owner, or admin+
     """
     task = task_service.get_task(db, task_id, session.org_id)
     if not task:
@@ -308,7 +308,7 @@ def complete_task(
     # Access control: check case access if task is linked to a case
     _check_task_case_access(task, session, db)
 
-    if not is_owner_or_assignee_or_manager(
+    if not is_owner_or_assignee_or_admin(
         session, task.created_by_user_id, task.owner_type, task.owner_id
     ):
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -339,7 +339,7 @@ def uncomplete_task(
     # Access control: check case access if task is linked to a case
     _check_task_case_access(task, session, db)
 
-    if not is_owner_or_assignee_or_manager(
+    if not is_owner_or_assignee_or_admin(
         session, task.created_by_user_id, task.owner_type, task.owner_id
     ):
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -368,7 +368,7 @@ def bulk_complete_tasks(
     Processes each task individually, checking permissions for each.
     Returns count of successfully completed tasks and list of failures.
 
-    Requires: creator, owner, or manager+ for each task
+    Requires: creator, owner, or admin+ for each task
     """
     results = {"completed": 0, "failed": []}
 
@@ -388,8 +388,8 @@ def bulk_complete_tasks(
                 results["failed"].append({"task_id": str(task_id), "reason": e.detail})
                 continue
 
-            # Permission: creator, owner, or manager+
-            if not is_owner_or_assignee_or_manager(
+            # Permission: creator, owner, or admin+
+            if not is_owner_or_assignee_or_admin(
                 session, task.created_by_user_id, task.owner_type, task.owner_id
             ):
                 results["failed"].append(
@@ -436,7 +436,7 @@ def delete_task(
     """
     Delete task.
 
-    Requires: creator or manager+ (assignee cannot delete)
+    Requires: creator or admin+ (assignee cannot delete)
     Access: Respects role-based case access
     """
     task = task_service.get_task(db, task_id, session.org_id)
@@ -446,7 +446,7 @@ def delete_task(
     # Access control: check case access if task is linked to a case
     _check_task_case_access(task, session, db)
 
-    # Permission: creator or manager+ only (not assignee)
+    # Permission: creator or admin+ only (not assignee)
     if not is_owner_or_can_manage(session, task.created_by_user_id):
         raise HTTPException(
             status_code=403, detail="Not authorized to delete this task"

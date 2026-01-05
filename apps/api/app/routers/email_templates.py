@@ -54,7 +54,7 @@ def create_template(
     db: Session = Depends(get_db),
     session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
 ):
-    """Create a new email template (manager only)."""
+    """Create a new email template (admin only)."""
     # Check for duplicate name
     existing = email_service.get_template_by_name(db, data.name, session.org_id)
     if existing:
@@ -98,7 +98,7 @@ def update_template(
     db: Session = Depends(get_db),
     session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
 ):
-    """Update an email template (manager only). Creates version snapshot."""
+    """Update an email template (admin only). Creates version snapshot."""
     from app.services import version_service
 
     template = email_service.get_template(db, template_id, session.org_id)
@@ -144,7 +144,7 @@ def delete_template(
     db: Session = Depends(get_db),
     session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
 ):
-    """Soft delete (deactivate) an email template (manager only)."""
+    """Soft delete (deactivate) an email template (admin only)."""
     template = email_service.get_template(db, template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")

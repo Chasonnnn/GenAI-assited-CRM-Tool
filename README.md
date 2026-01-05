@@ -45,7 +45,7 @@ A modern, multi-tenant CRM platform purpose-built for surrogacy agencies. Manage
 
 ### Enterprise Features
 - **Multi-Tenancy** — Complete organization isolation
-- **RBAC** — Role-based permissions (intake, case manager, manager, developer)
+- **RBAC** — Role-based permissions (intake, case manager, admin, developer)
 - **MFA** — TOTP and Duo Security support
 - **Audit Trail** — Tamper-evident hash-chain logging
 - **Version Control** — Rollback support for configurations
@@ -250,7 +250,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 |------|-------------|
 | `intake_specialist` | Lead intake and initial processing |
 | `case_manager` | Full case management access |
-| `manager` | Administrative access, analytics, team management |
+| `admin` | Administrative access, analytics, team management |
 | `developer` | Platform administration, all permissions |
 
 ---

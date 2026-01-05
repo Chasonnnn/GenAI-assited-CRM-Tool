@@ -198,7 +198,7 @@ Respond with ONLY a valid JSON object (no markdown, no explanation) in this exac
 2. Only use actions from the available list
 3. For send_email action, use a real template_id from the list
 4. For assign_case actions, use owner_type ("user" or "queue") and a real owner_id from the list
-5. For send_notification actions, use recipients ("owner", "creator", "all_managers") or a list of user_ids
+5. For send_notification actions, use recipients ("owner", "creator", "all_admins") or a list of user_ids
 6. For update_status actions, use a real stage_id from the list
 6. Keep the workflow simple and focused on the user's request
 7. Add conditions only when the user specifies filtering criteria
@@ -570,13 +570,13 @@ def validate_workflow(
             if isinstance(assignee, str) and assignee not in (
                 "owner",
                 "creator",
-                "manager",
+                "admin",
             ):
                 try:
                     UUID(str(assignee))
                 except (TypeError, ValueError):
                     errors.append(
-                        f"Action {i + 1}: assignee must be owner, creator, manager, or a user_id"
+                        f"Action {i + 1}: assignee must be owner, creator, admin, or a user_id"
                     )
 
         # Validate send_notification recipients
@@ -587,7 +587,7 @@ def validate_workflow(
                 action["recipients"] = [action["user_id"]]
             recipients = action.get("recipients")
             if isinstance(recipients, str):
-                if recipients not in ("owner", "creator", "all_managers"):
+                if recipients not in ("owner", "creator", "all_admins"):
                     errors.append(
                         f"Action {i + 1}: invalid recipients value: {recipients}"
                     )

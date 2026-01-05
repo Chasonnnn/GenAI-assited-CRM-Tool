@@ -74,10 +74,10 @@ export default function QueuesSettingsPage() {
     const addMemberMutation = useAddQueueMember()
     const removeMemberMutation = useRemoveQueueMember()
 
-    // Check if user is a manager
+    // Check if user is an admin
     const isManager = user?.role && ['admin', 'developer'].includes(user.role)
 
-    // Redirect if not manager
+    // Redirect if not admin
     React.useEffect(() => {
         if (user && !isManager) {
             router.push('/settings')

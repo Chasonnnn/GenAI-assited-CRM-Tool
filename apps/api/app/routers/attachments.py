@@ -376,7 +376,7 @@ async def delete_attachment(
     ),
     _: str = Depends(require_csrf_header),
 ):
-    """Soft-delete an attachment (uploader or Manager+ only)."""
+    """Soft-delete an attachment (uploader or Admin+ only)."""
     attachment = attachment_service.get_attachment(
         db=db,
         org_id=session.org_id,
@@ -386,13 +386,13 @@ async def delete_attachment(
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
 
-    # Access control: uploader or Manager+
-    is_manager = session.role in (Role.ADMIN, Role.DEVELOPER)
+    # Access control: uploader or Admin+
+    is_admin = session.role in (Role.ADMIN, Role.DEVELOPER)
     is_uploader = attachment.uploaded_by_user_id == session.user_id
 
-    if not is_manager and not is_uploader:
+    if not is_admin and not is_uploader:
         raise HTTPException(
-            status_code=403, detail="Only uploader or manager can delete"
+            status_code=403, detail="Only uploader or admin can delete"
         )
 
     if attachment.case_id:

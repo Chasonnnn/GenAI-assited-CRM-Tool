@@ -18,7 +18,7 @@ def seed_test_data(db: Session) -> dict:
     db.flush()
 
     users_data = [
-        ("manager@test.com", "Test Manager", Role.ADMIN),
+        ("admin@test.com", "Test Admin", Role.ADMIN),
         ("intake@test.com", "Test Intake", Role.INTAKE_SPECIALIST),
         ("specialist@test.com", "Test Case Manager", Role.CASE_MANAGER),
     ]

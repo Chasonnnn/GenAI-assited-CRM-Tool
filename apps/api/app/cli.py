@@ -19,7 +19,7 @@ def cli():
 @click.option("--admin-email", required=True, help="Admin email address")
 def create_org(name: str, slug: str, admin_email: str):
     """
-    Create organization and initial manager invite.
+    Create organization and initial admin invite.
 
     This is the bootstrap command for setting up a new tenant.
     The admin will need to log in with Google using the specified email.
@@ -74,7 +74,7 @@ def create_org(name: str, slug: str, admin_email: str):
         click.echo(f"✓ Created organization: {name}")
         click.echo(f"  ID: {org.id}")
         click.echo(f"  Slug: {slug}")
-        click.echo(f"✓ Created invite for {admin_email} with role: manager")
+        click.echo(f"✓ Created invite for {admin_email} with role: admin")
         click.echo("→ Admin should log in with Google using that email")
 
     except Exception as e:

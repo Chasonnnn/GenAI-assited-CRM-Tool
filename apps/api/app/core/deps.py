@@ -64,7 +64,7 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
 
     # DEV BYPASS: Return mock user for testing
     if settings.DEV_BYPASS_AUTH:
-        mock_user = db.query(User).filter(User.email == "manager@test.com").first()
+        mock_user = db.query(User).filter(User.email == "admin@test.com").first()
         if mock_user:
             return mock_user
         # Fallback: get any active user
@@ -347,19 +347,19 @@ def can_invite(session) -> bool:
 
 
 def is_owner_or_can_manage(session, created_by_user_id: UUID) -> bool:
-    """Check if user is the creator OR has manager+ permissions."""
+    """Check if user is the creator OR has admin+ permissions."""
     from app.db.enums import ROLES_CAN_ARCHIVE  # Manager+ can do anything
 
     return session.user_id == created_by_user_id or session.role in ROLES_CAN_ARCHIVE
 
 
-def is_owner_or_assignee_or_manager(
+def is_owner_or_assignee_or_admin(
     session,
     created_by_user_id: UUID | None,
     owner_type: str | None,
     owner_id: UUID | None,
 ) -> bool:
-    """Check if user is creator, owner (user), or manager+. For tasks."""
+    """Check if user is creator, owner (user), or admin+. For tasks."""
     from app.db.enums import ROLES_CAN_ARCHIVE, OwnerType
 
     is_owner = owner_type == OwnerType.USER.value and owner_id == session.user_id

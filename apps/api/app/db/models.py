@@ -452,7 +452,7 @@ class Case(Base):
     Primary entity for surrogate applicants/cases.
 
     Includes soft-delete (is_archived) for data safety.
-    Hard delete requires is_archived=true and manager+ role.
+    Hard delete requires is_archived=true and admin+ role.
 
     Ownership model (Salesforce-style):
     - owner_type: "user" or "queue"
@@ -1352,7 +1352,7 @@ class EntityNote(Base):
     Polymorphic notes for any entity (case, intended_parent, etc.).
 
     Uses entity_type + entity_id pattern instead of separate FK columns.
-    Author or manager+ can delete.
+    Author or admin+ can delete.
     """
 
     __tablename__ = "entity_notes"

@@ -132,7 +132,7 @@ def delete_note(
     """
     Delete a note.
 
-    Requires: author or manager+
+    Requires: author or admin+
     Access: Respects role-based case access (intake can't delete on handed-off cases)
     """
     note = note_service.get_note(db, note_id, session.org_id)
@@ -147,7 +147,7 @@ def delete_note(
                 case, session.role, session.user_id, db=db, org_id=session.org_id
             )
 
-    # Permission: author or manager+
+    # Permission: author or admin+
     if not is_owner_or_can_manage(session, note.author_id):
         raise HTTPException(
             status_code=403, detail="Not authorized to delete this note"

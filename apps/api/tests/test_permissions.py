@@ -79,12 +79,12 @@ def developer_user(db, org_a):
 
 
 @pytest.fixture
-def manager_user(db, org_a):
-    """Create a manager user."""
+def admin_user(db, org_a):
+    """Create an admin user."""
     user = User(
         id=uuid.uuid4(),
-        email=f"manager-{uuid.uuid4().hex[:8]}@test.com",
-        display_name="Manager User",
+        email=f"admin-{uuid.uuid4().hex[:8]}@test.com",
+        display_name="Admin User",
         token_version=1,
         is_active=True,
     )
@@ -193,7 +193,7 @@ def test_developer_bypass_ignores_explicit_revoke(db, org_a, developer_user):
 
 
 def test_precedence_user_revoke_overrides_role_grant(
-    db, org_a, manager_user, developer_user
+    db, org_a, admin_user, developer_user
 ):
     """User revoke should override role grant."""
     # Set role default to grant
@@ -209,7 +209,7 @@ def test_precedence_user_revoke_overrides_role_grant(
 
     # Verify role grants permission
     result = permission_service.check_permission(
-        db, org_a.id, manager_user.id, Role.ADMIN.value, "view_post_approval_cases"
+        db, org_a.id, admin_user.id, Role.ADMIN.value, "view_post_approval_cases"
     )
     assert result is True, "Role grant should work"
 
@@ -217,7 +217,7 @@ def test_precedence_user_revoke_overrides_role_grant(
     override = UserPermissionOverride(
         id=uuid.uuid4(),
         organization_id=org_a.id,
-        user_id=manager_user.id,
+        user_id=admin_user.id,
         permission="view_post_approval_cases",
         override_type="revoke",
     )
@@ -226,7 +226,7 @@ def test_precedence_user_revoke_overrides_role_grant(
 
     # Verify revoke overrides role grant
     result = permission_service.check_permission(
-        db, org_a.id, manager_user.id, Role.ADMIN.value, "view_post_approval_cases"
+        db, org_a.id, admin_user.id, Role.ADMIN.value, "view_post_approval_cases"
     )
     assert result is False, "User revoke should override role grant"
 
@@ -273,12 +273,12 @@ def test_precedence_user_grant_overrides_role_deny(
 # =============================================================================
 
 
-def test_missing_permission_returns_false(db, org_a, manager_user):
+def test_missing_permission_returns_false(db, org_a, admin_user):
     """Missing/undefined permission should return False."""
     result = permission_service.check_permission(
         db,
         org_a.id,
-        manager_user.id,
+        admin_user.id,
         Role.ADMIN.value,
         "completely_undefined_permission",
     )
@@ -324,14 +324,14 @@ def test_developer_only_permission_cannot_be_granted_to_non_developer(
 # =============================================================================
 
 
-def test_self_modification_guard(db, org_a, manager_user):
+def test_self_modification_guard(db, org_a, admin_user):
     """set_user_override should reject when actor == target."""
     with pytest.raises(ValueError, match="[Cc]annot modify.*own"):
         permission_service.set_user_override(
             db=db,
             org_id=org_a.id,
-            target_user_id=manager_user.id,
-            actor_user_id=manager_user.id,  # same as target
+            target_user_id=admin_user.id,
+            actor_user_id=admin_user.id,  # same as target
             permission="view_post_approval_cases",
             override_type="grant",
         )
@@ -343,29 +343,29 @@ def test_self_modification_guard(db, org_a, manager_user):
 
 
 def test_org_scoping_overrides_isolated(
-    db, org_a, org_b, manager_user, user_in_org_b, developer_user
+    db, org_a, org_b, admin_user, user_in_org_b, developer_user
 ):
     """Overrides in org A should not affect users in org B."""
-    # Use a permission that Manager does NOT have by default
-    # Manager already has view_post_approval_cases in ROLE_DEFAULTS
+    # Use a permission that Admin does NOT have by default
+    # Admin already has view_post_approval_cases in ROLE_DEFAULTS
     # So we test with a permission not in their defaults
 
     # Create a grant override for a custom permission in org A
     override = UserPermissionOverride(
         id=uuid.uuid4(),
         organization_id=org_a.id,
-        user_id=manager_user.id,
+        user_id=admin_user.id,
         permission="some_custom_permission_xyz",  # Not in ROLE_DEFAULTS
         override_type="grant",
     )
     db.add(override)
     db.flush()
 
-    # Manager in org A should have the custom permission
+    # Admin in org A should have the custom permission
     result_a = permission_service.check_permission(
-        db, org_a.id, manager_user.id, Role.ADMIN.value, "some_custom_permission_xyz"
+        db, org_a.id, admin_user.id, Role.ADMIN.value, "some_custom_permission_xyz"
     )
-    assert result_a is True, "Manager in org A should have permission from override"
+    assert result_a is True, "Admin in org A should have permission from override"
 
     # User in org B should NOT have the custom permission
     # (they don't have the override, and it's not in ROLE_DEFAULTS)
@@ -378,7 +378,7 @@ def test_org_scoping_overrides_isolated(
 
 
 def test_org_scoping_role_defaults_isolated(
-    db, org_a, org_b, manager_user, user_in_org_b
+    db, org_a, org_b, admin_user, user_in_org_b
 ):
     """Role defaults in org A should not affect org B."""
     # Create a role default in org A
@@ -392,16 +392,16 @@ def test_org_scoping_role_defaults_isolated(
     db.add(role_perm_a)
     db.flush()
 
-    # Manager in org A should have permission
+    # Admin in org A should have permission
     result_a = permission_service.check_permission(
-        db, org_a.id, manager_user.id, Role.ADMIN.value, "some_custom_permission"
+        db, org_a.id, admin_user.id, Role.ADMIN.value, "some_custom_permission"
     )
-    assert result_a is True, "Org A manager should have permission from role default"
+    assert result_a is True, "Org A admin should have permission from role default"
 
-    # Manager in org B should NOT have this permission (no role default there)
+    # Admin in org B should NOT have this permission (no role default there)
     result_b = permission_service.check_permission(
         db, org_b.id, user_in_org_b.id, Role.ADMIN.value, "some_custom_permission"
     )
     assert result_b is False, (
-        "Org B manager should NOT have permission (no role default)"
+        "Org B admin should NOT have permission (no role default)"
     )

@@ -192,7 +192,7 @@ export function useReleaseCase() {
 }
 
 /**
- * Assign a case to a queue (manager action).
+ * Assign a case to a queue (admin action).
  */
 export function useAssignToQueue() {
     const queryClient = useQueryClient();
@@ -270,4 +270,3 @@ export function useRemoveQueueMember() {
         },
     });
 }
-

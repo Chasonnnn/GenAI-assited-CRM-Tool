@@ -43,7 +43,7 @@ describe('QueuesSettingsPage', () => {
         mockDeleteQueue.mockReset()
     })
 
-    it('redirects non-manager users', async () => {
+    it('redirects non-admin users', async () => {
         mockUseAuth.mockReturnValue({ user: { role: 'intake_specialist' } })
         mockUseQueues.mockReturnValue({ data: [], isLoading: false, error: null })
 
@@ -54,7 +54,7 @@ describe('QueuesSettingsPage', () => {
         })
     })
 
-    it('renders queues for manager users', () => {
+    it('renders queues for admin users', () => {
         mockUseAuth.mockReturnValue({ user: { role: 'admin' } })
         mockUseQueues.mockReturnValue({
             data: [
@@ -76,4 +76,3 @@ describe('QueuesSettingsPage', () => {
         expect(screen.getByText('Queue A')).toBeInTheDocument()
     })
 })
-
