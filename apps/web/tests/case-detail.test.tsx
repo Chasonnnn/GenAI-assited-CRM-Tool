@@ -57,6 +57,8 @@ vi.mock('@/lib/hooks/use-cases', () => ({
     useRestoreCase: () => ({ mutateAsync: mockRestore }),
     useUpdateCase: () => ({ mutateAsync: mockUpdateCase }),
     useSendCaseEmail: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useCreateContactAttempt: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useContactAttempts: () => ({ data: null, isLoading: false }),
 }))
 
 vi.mock('@/lib/hooks/use-notes', () => ({
