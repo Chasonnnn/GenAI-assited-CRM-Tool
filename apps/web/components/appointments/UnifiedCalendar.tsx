@@ -992,6 +992,7 @@ export function UnifiedCalendar({ taskFilter }: { taskFilter?: { my_tasks?: bool
         per_page: 100,
         due_after: dateRange.date_start,
         due_before: dateRange.date_end,
+        exclude_approvals: true,
     }
     const { data: tasksData, isLoading: tasksLoading } = useTasks(taskParams)
     const tasks = tasksData?.items || []

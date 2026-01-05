@@ -111,6 +111,8 @@ describe('MatchTasksCalendar', () => {
             case_id: 'case1',
             is_completed: false,
             per_page: 100,
+            exclude_approvals: true,
+            intended_parent_id: undefined,
         })
     })
 

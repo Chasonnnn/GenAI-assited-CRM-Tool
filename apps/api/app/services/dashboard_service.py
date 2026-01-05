@@ -10,7 +10,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.core.websocket import manager
-from app.db.enums import OwnerType
+from app.db.enums import OwnerType, TaskType
 from app.db.models import Case, Task, ZoomMeeting
 
 logger = logging.getLogger(__name__)
@@ -31,6 +31,7 @@ def get_upcoming_items(
     task_filters = [
         Task.organization_id == org_id,
         Task.is_completed.is_(False),
+        Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
         and_(Task.owner_type == OwnerType.USER.value, Task.owner_id == user_id),
     ]
 

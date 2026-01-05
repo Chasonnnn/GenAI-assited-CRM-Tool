@@ -179,11 +179,14 @@ export default function MatchDetailPage() {
 
     // Fetch tasks from Case and IP
     const { data: caseTasks } = useTasks(
-        { case_id: match?.case_id || undefined },
+        { case_id: match?.case_id || undefined, exclude_approvals: true },
         { enabled: !!match?.case_id }
     )
     const { data: ipTasks } = useTasks(
-        { intended_parent_id: match?.intended_parent_id || undefined },
+        {
+            intended_parent_id: match?.intended_parent_id || undefined,
+            exclude_approvals: true,
+        },
         { enabled: !!match?.intended_parent_id }
     )
 

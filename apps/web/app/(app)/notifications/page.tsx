@@ -76,6 +76,7 @@ export default function NotificationsPage() {
         my_tasks: true,
         per_page: 100,
         due_before: yesterdayStr,
+        exclude_approvals: true,
     })
 
     const notifications = notificationsData?.items ?? []
