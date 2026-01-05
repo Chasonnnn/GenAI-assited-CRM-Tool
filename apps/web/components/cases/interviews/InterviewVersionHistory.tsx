@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
@@ -262,10 +262,10 @@ function VersionItem({
                 </div>
 
                 <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreVerticalIcon className="h-4 w-4" />
-                        </Button>
+                    <DropdownMenuTrigger
+                        className={buttonVariants({ variant: "ghost", size: "icon", className: "h-8 w-8" })}
+                    >
+                        <MoreVerticalIcon className="h-4 w-4" />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                         {previousVersion && (

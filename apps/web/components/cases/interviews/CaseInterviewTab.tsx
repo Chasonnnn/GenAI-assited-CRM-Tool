@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -429,8 +429,8 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
                             onVersionHistory={() => setVersionHistoryOpen(true)}
                             onAddNote={handleAddNote}
                             onDeleteNote={handleDeleteNote}
-                            canEdit={canEdit}
-                            canDelete={canDelete}
+                            canEdit={!!canEdit}
+                            canDelete={!!canDelete}
                             canDeleteAnyNote={!!canDeleteAnyNote}
                             isAddingNote={createNoteMutation.isPending}
                             currentUserId={user?.user_id}
@@ -482,8 +482,8 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
                                             setDeleteDialogOpen(true)
                                         }}
                                         onVersionHistory={() => setVersionHistoryOpen(true)}
-                                        canEdit={canEdit}
-                                        canDelete={canDelete}
+                                        canEdit={!!canEdit}
+                                        canDelete={!!canDelete}
                                     />
                                     <div className="mt-4">
                                         {selectedInterview.transcript_html ? (
@@ -507,16 +507,16 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
                                     />
                                 </TabsContent>
                                 <TabsContent value="files" className="p-4">
-                                <AttachmentsSection
-                                    attachments={attachments || []}
-                                    canUpload={!!canEdit}
-                                    onUploadFiles={handleUploadFiles}
-                                    uploadError={uploadError}
-                                    uploadInputRef={uploadInputRef}
-                                    isUploading={uploadAttachmentMutation.isPending}
-                                    onRequestTranscription={handleRequestTranscription}
-                                    transcribingAttachmentId={transcribingAttachmentId}
-                                />
+                                    <AttachmentsSection
+                                        attachments={attachments || []}
+                                        canUpload={!!canEdit}
+                                        onUploadFiles={handleUploadFiles}
+                                        uploadError={uploadError}
+                                        uploadInputRef={uploadInputRef}
+                                        isUploading={uploadAttachmentMutation.isPending}
+                                        onRequestTranscription={handleRequestTranscription}
+                                        transcribingAttachmentId={transcribingAttachmentId}
+                                    />
                                 </TabsContent>
                             </Tabs>
                         )}
@@ -849,11 +849,11 @@ function InterviewHeader({ interview, onEdit, onDelete, onVersionHistory, canEdi
                 </div>
             </div>
             <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreVerticalIcon className="h-4 w-4" />
-                    </Button>
-                </DropdownMenuTrigger>
+            <DropdownMenuTrigger
+                className={buttonVariants({ variant: "ghost", size: "icon", className: "h-8 w-8" })}
+            >
+                <MoreVerticalIcon className="h-4 w-4" />
+            </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                     {canEdit && (
                         <DropdownMenuItem onClick={onEdit}>
@@ -904,7 +904,6 @@ function NotesSection({
                     onSubmit={onAddNote}
                     submitLabel="Add"
                     isSubmitting={isAddingNote}
-                    compact
                 />
             </div>
 

@@ -207,26 +207,6 @@ def list_interviews_with_counts(
     case_id: UUID,
 ) -> list[dict]:
     """List interviews with aggregated note/attachment counts (optimized for list views)."""
-    notes_count_subq = (
-        select(
-            InterviewNote.interview_id.label("interview_id"),
-            func.count(InterviewNote.id).label("notes_count"),
-        )
-        .where(InterviewNote.organization_id == org_id)
-        .group_by(InterviewNote.interview_id)
-        .subquery()
-    )
-
-    attachments_count_subq = (
-        select(
-            InterviewAttachment.interview_id.label("interview_id"),
-            func.count(InterviewAttachment.id).label("attachments_count"),
-        )
-        .where(InterviewAttachment.organization_id == org_id)
-        .group_by(InterviewAttachment.interview_id)
-        .subquery()
-    )
-
     rows = db.execute(
         select(
             CaseInterview.id,
@@ -240,26 +220,48 @@ def list_interviews_with_counts(
             CaseInterview.created_at,
             User.display_name.label("conducted_by_name"),
             User.email.label("conducted_by_email"),
-            func.coalesce(notes_count_subq.c.notes_count, 0).label("notes_count"),
-            func.coalesce(attachments_count_subq.c.attachments_count, 0).label(
-                "attachments_count"
-            ),
         )
         .select_from(CaseInterview)
         .outerjoin(User, User.id == CaseInterview.conducted_by_user_id)
-        .outerjoin(
-            notes_count_subq, notes_count_subq.c.interview_id == CaseInterview.id
-        )
-        .outerjoin(
-            attachments_count_subq,
-            attachments_count_subq.c.interview_id == CaseInterview.id,
-        )
         .where(
             CaseInterview.case_id == case_id,
             CaseInterview.organization_id == org_id,
         )
         .order_by(CaseInterview.conducted_at.desc())
     ).all()
+
+    if not rows:
+        return []
+
+    interview_ids = [row.id for row in rows]
+
+    notes_counts = dict(
+        db.execute(
+            select(
+                InterviewNote.interview_id,
+                func.count(InterviewNote.id).label("notes_count"),
+            )
+            .where(
+                InterviewNote.organization_id == org_id,
+                InterviewNote.interview_id.in_(interview_ids),
+            )
+            .group_by(InterviewNote.interview_id)
+        ).all()
+    )
+
+    attachments_counts = dict(
+        db.execute(
+            select(
+                InterviewAttachment.interview_id,
+                func.count(InterviewAttachment.id).label("attachments_count"),
+            )
+            .where(
+                InterviewAttachment.organization_id == org_id,
+                InterviewAttachment.interview_id.in_(interview_ids),
+            )
+            .group_by(InterviewAttachment.interview_id)
+        ).all()
+    )
 
     items: list[dict] = []
     for row in rows:
@@ -276,8 +278,8 @@ def list_interviews_with_counts(
                 "status": row.status,
                 "has_transcript": has_transcript,
                 "transcript_version": row.transcript_version,
-                "notes_count": int(row.notes_count or 0),
-                "attachments_count": int(row.attachments_count or 0),
+                "notes_count": int(notes_counts.get(row.id, 0)),
+                "attachments_count": int(attachments_counts.get(row.id, 0)),
                 "created_at": row.created_at,
             }
         )
