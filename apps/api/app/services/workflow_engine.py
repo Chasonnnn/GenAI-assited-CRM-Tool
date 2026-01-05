@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.models import (
@@ -14,6 +15,8 @@ from app.db.models import (
     WorkflowExecution,
     Case,
     Task,
+    User,
+    Organization,
     EntityNote,
     Match,
     Appointment,
@@ -28,9 +31,18 @@ from app.db.enums import (
     JobType,
     EntityType,
     OwnerType,
+    TaskType,
+    TaskStatus,
 )
 from app.services import workflow_service, job_service, notification_service
+from app.services.workflow_action_preview import build_action_preview, render_action_payload
 from app.schemas.workflow import ALLOWED_UPDATE_FIELDS
+from app.core.constants import (
+    SYSTEM_USER_ID,
+    SYSTEM_USER_DISPLAY_NAME,
+    WORKFLOW_APPROVAL_TIMEOUT_HOURS,
+)
+from app.utils.business_hours import calculate_approval_due_date
 
 
 logger = logging.getLogger(__name__)
@@ -243,10 +255,151 @@ class WorkflowEngine:
             db.commit()
             return execution
 
-        # Execute actions
+        # =====================================================================
+        # FAIL FAST: Workflows require user-owned cases at trigger time
+        # (after conditions match to avoid false failures)
+        # =====================================================================
+        has_approval_actions = any(
+            action.get("requires_approval") for action in workflow.actions
+        )
+        case = self._get_related_case(db, entity_type, entity)
+        case_owner = None
+
+        if case:
+            # Validate case has a user owner (not queue/null)
+            if case.owner_type != OwnerType.USER.value or not case.owner_id:
+                execution = WorkflowExecution(
+                    organization_id=workflow.organization_id,
+                    workflow_id=workflow.id,
+                    event_id=event_id,
+                    depth=depth,
+                    event_source=source.value,
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    trigger_event=event_data,
+                    dedupe_key=dedupe_key,
+                    matched_conditions=True,
+                    actions_executed=[],
+                    status=WorkflowExecutionStatus.FAILED.value,
+                    error_message="Workflow requires case owner to be a user",
+                    duration_ms=int((time.time() - start_time) * 1000),
+                )
+                db.add(execution)
+                db.commit()
+                return execution
+
+            # Verify owner exists
+            case_owner = db.query(User).filter(User.id == case.owner_id).first()
+            if not case_owner:
+                execution = WorkflowExecution(
+                    organization_id=workflow.organization_id,
+                    workflow_id=workflow.id,
+                    event_id=event_id,
+                    depth=depth,
+                    event_source=source.value,
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    trigger_event=event_data,
+                    dedupe_key=dedupe_key,
+                    matched_conditions=True,
+                    actions_executed=[],
+                    status=WorkflowExecutionStatus.FAILED.value,
+                    error_message="Workflow requires case owner but owner not found",
+                    duration_ms=int((time.time() - start_time) * 1000),
+                )
+                db.add(execution)
+                db.commit()
+                return execution
+        elif has_approval_actions:
+            execution = WorkflowExecution(
+                organization_id=workflow.organization_id,
+                workflow_id=workflow.id,
+                event_id=event_id,
+                depth=depth,
+                event_source=source.value,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                trigger_event=event_data,
+                dedupe_key=dedupe_key,
+                matched_conditions=True,
+                actions_executed=[],
+                status=WorkflowExecutionStatus.FAILED.value,
+                error_message="Workflow requires approval but entity has no related case",
+                duration_ms=int((time.time() - start_time) * 1000),
+            )
+            db.add(execution)
+            db.commit()
+            return execution
+
+        # Create execution record first (needed for approval task FK)
+        execution = WorkflowExecution(
+            organization_id=workflow.organization_id,
+            workflow_id=workflow.id,
+            event_id=event_id,
+            depth=depth,
+            event_source=source.value,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            trigger_event=event_data,
+            dedupe_key=dedupe_key,
+            matched_conditions=True,
+            actions_executed=[],
+            status=WorkflowExecutionStatus.SUCCESS.value,  # Will update if needed
+        )
+        db.add(execution)
+        db.flush()  # Get execution.id
+
+        # Execute actions with approval pause support
         action_results = []
         all_success = True
-        for action in workflow.actions:
+
+        for idx, action in enumerate(workflow.actions):
+            # Check if this action requires approval
+            if action.get("requires_approval"):
+                # Get the case for approval task
+                # Create approval task and pause execution
+                task = self._create_approval_task(
+                    db=db,
+                    workflow=workflow,
+                    execution=execution,
+                    action=action,
+                    action_index=idx,
+                    entity=entity,
+                    case=case,
+                    owner=case_owner,
+                    triggered_by_user_id=event_data.get("triggered_by_user_id"),
+                )
+
+                if task:
+                    # Pause execution
+                    execution.status = WorkflowExecutionStatus.PAUSED.value
+                    execution.paused_at_action_index = idx
+                    execution.paused_task_id = task.id
+                    execution.actions_executed = action_results
+                    execution.duration_ms = int((time.time() - start_time) * 1000)
+                    db.commit()
+
+                    logger.info(
+                        f"Workflow {workflow.id} paused at action {idx} for approval, task {task.id}"
+                    )
+                    return execution
+
+                # Approval task could not be created
+                action_results.append(
+                    {
+                        "success": False,
+                        "error": "Failed to create approval task",
+                        "skipped": True,
+                    }
+                )
+                execution.actions_executed = action_results
+                execution.status = WorkflowExecutionStatus.FAILED.value
+                execution.error_message = "Failed to create approval task"
+                execution.duration_ms = int((time.time() - start_time) * 1000)
+                db.commit()
+                return execution
+
+            # Execute non-approval action normally
             result = self._execute_action(
                 db=db,
                 action=action,
@@ -262,33 +415,313 @@ class WorkflowEngine:
         # Update workflow stats
         workflow.run_count += 1
         workflow.last_run_at = datetime.now(timezone.utc)
-        workflow.last_error = None if all_success else action_results[-1].get("error")
-
-        # Create execution record
-        execution = WorkflowExecution(
-            organization_id=workflow.organization_id,
-            workflow_id=workflow.id,
-            event_id=event_id,
-            depth=depth,
-            event_source=source.value,
-            entity_type=entity_type,
-            entity_id=entity_id,
-            trigger_event=event_data,
-            dedupe_key=dedupe_key,
-            matched_conditions=True,
-            actions_executed=action_results,
-            status=(
-                WorkflowExecutionStatus.SUCCESS.value
-                if all_success
-                else WorkflowExecutionStatus.PARTIAL.value
-            ),
-            error_message=None if all_success else action_results[-1].get("error"),
-            duration_ms=int((time.time() - start_time) * 1000),
+        workflow.last_error = None if all_success else (
+            action_results[-1].get("error") if action_results else None
         )
-        db.add(execution)
+
+        # Update execution record
+        execution.actions_executed = action_results
+        execution.status = (
+            WorkflowExecutionStatus.SUCCESS.value
+            if all_success
+            else WorkflowExecutionStatus.PARTIAL.value
+        )
+        execution.error_message = None if all_success else (
+            action_results[-1].get("error") if action_results else None
+        )
+        execution.duration_ms = int((time.time() - start_time) * 1000)
         db.commit()
 
         return execution
+
+    def _get_related_case(
+        self,
+        db: Session,
+        entity_type: str,
+        entity: Any,
+    ) -> Case | None:
+        """Get the case related to an entity."""
+        if entity_type == "case":
+            return entity
+        if hasattr(entity, "case_id") and entity.case_id:
+            return db.query(Case).filter(Case.id == entity.case_id).first()
+        return None
+
+    def _create_approval_task(
+        self,
+        db: Session,
+        workflow: AutomationWorkflow,
+        execution: WorkflowExecution,
+        action: dict,
+        action_index: int,
+        entity: Any,
+        case: Case,
+        owner: User,
+        triggered_by_user_id: UUID | None,
+    ) -> Task | None:
+        """
+        Create an approval task for a workflow action.
+
+        Returns the task if created or already exists (idempotency).
+        """
+        # Get organization for timezone fallback
+        org = db.query(Organization).filter(
+            Organization.id == case.organization_id
+        ).first()
+
+        # Build sanitized preview (no PII)
+        preview = build_action_preview(db, action, entity)
+
+        # Build payload snapshot (internal only, never exposed via API)
+        payload = render_action_payload(action, entity)
+
+        # Calculate due date (48 business hours)
+        now = datetime.now(timezone.utc)
+        due_at = calculate_approval_due_date(
+            start_utc=now,
+            owner=owner,
+            org=org,
+            timeout_hours=WORKFLOW_APPROVAL_TIMEOUT_HOURS,
+        )
+
+        task = Task(
+            organization_id=execution.organization_id,
+            case_id=case.id,
+            task_type=TaskType.WORKFLOW_APPROVAL.value,
+            title=f"Approve: {preview}",
+            description=f"Workflow '{workflow.name}' requires your approval to proceed.",
+            owner_type=OwnerType.USER.value,
+            owner_id=owner.id,
+            status=TaskStatus.PENDING.value,
+            due_at=due_at,
+            created_by_user_id=SYSTEM_USER_ID,
+            # Workflow-specific fields
+            workflow_execution_id=execution.id,
+            workflow_action_index=action_index,
+            workflow_action_type=action.get("action_type"),
+            workflow_action_preview=preview,
+            workflow_action_payload=payload,
+            workflow_triggered_by_user_id=triggered_by_user_id,
+        )
+
+        try:
+            db.add(task)
+            db.flush()
+            logger.info(f"Created approval task {task.id} for execution {execution.id}")
+
+            # Send notification to owner (respects user settings)
+            notification_service.notify_task_assigned(
+                db=db,
+                task_id=task.id,
+                task_title=task.title,
+                org_id=case.organization_id,
+                assignee_id=owner.id,
+                actor_name=SYSTEM_USER_DISPLAY_NAME,
+                case_number=case.case_number,
+            )
+
+            return task
+
+        except IntegrityError:
+            # Idempotency: task already exists for this execution+action
+            db.rollback()
+            existing = db.query(Task).filter(
+                Task.workflow_execution_id == execution.id,
+                Task.workflow_action_index == action_index,
+            ).first()
+            logger.info(
+                f"Approval task already exists: {existing.id if existing else 'unknown'}"
+            )
+            return existing
+
+    def continue_execution(
+        self,
+        db: Session,
+        execution_id: UUID,
+        task: Task,
+        decision: str,
+    ) -> None:
+        """
+        Continue workflow execution after approval decision.
+
+        Called by the resume job processor after task is resolved.
+        """
+        from sqlalchemy.orm import with_for_update
+
+        # Lock execution row
+        execution = (
+            db.query(WorkflowExecution)
+            .filter(WorkflowExecution.id == execution_id)
+            .with_for_update()
+            .first()
+        )
+
+        if not execution:
+            logger.error(f"Execution {execution_id} not found for resume")
+            return
+
+        if execution.status != WorkflowExecutionStatus.PAUSED.value:
+            logger.warning(
+                f"Execution {execution_id} not paused (status={execution.status}), skipping resume"
+            )
+            return
+
+        workflow = db.query(AutomationWorkflow).filter(
+            AutomationWorkflow.id == execution.workflow_id
+        ).first()
+
+        if not workflow:
+            logger.error(f"Workflow {execution.workflow_id} not found for resume")
+            return
+
+        # Get entity
+        entity = self._get_entity(db, execution.entity_type, execution.entity_id)
+        if not entity:
+            logger.error(f"Entity {execution.entity_type}:{execution.entity_id} not found")
+            execution.status = WorkflowExecutionStatus.FAILED.value
+            execution.error_message = "Entity not found during resume"
+            execution.paused_at_action_index = None
+            execution.paused_task_id = None
+            db.commit()
+            return
+
+        # Clear paused state
+        action_index = execution.paused_at_action_index
+        execution.paused_at_action_index = None
+        execution.paused_task_id = None
+
+        action_results = list(execution.actions_executed or [])
+
+        if task.status == TaskStatus.COMPLETED.value:
+            # APPROVED: Execute the action using snapshot
+            action = task.workflow_action_payload
+            if not action:
+                logger.error(f"No action payload found for task {task.id}")
+                action_results.append({
+                    "success": False,
+                    "action_type": task.workflow_action_type,
+                    "error": "No action payload",
+                })
+                execution.actions_executed = action_results
+                execution.status = WorkflowExecutionStatus.FAILED.value
+                db.commit()
+                return
+
+            # Execute the approved action
+            result = self._execute_action(
+                db=db,
+                action=action,
+                entity=entity,
+                entity_type=execution.entity_type,
+                event_id=execution.event_id,
+                depth=execution.depth,
+            )
+            action_results.append(result)
+
+            # Continue with remaining actions
+            remaining_actions = workflow.actions[action_index + 1:]
+            for idx, next_action in enumerate(remaining_actions):
+                actual_idx = action_index + 1 + idx
+
+                if next_action.get("requires_approval"):
+                    # Need another approval - pause again
+                    case = self._get_related_case(db, execution.entity_type, entity)
+                    owner = db.query(User).filter(User.id == case.owner_id).first() if case else None
+
+                    if not case or not owner:
+                        action_results.append(
+                            {
+                                "success": False,
+                                "action_type": next_action.get("action_type"),
+                                "error": "Case or owner not found for approval",
+                            }
+                        )
+                        execution.actions_executed = action_results
+                        execution.status = WorkflowExecutionStatus.FAILED.value
+                        execution.error_message = "Workflow requires case owner to be a user"
+                        db.commit()
+                        return
+
+                    new_task = self._create_approval_task(
+                        db=db,
+                        workflow=workflow,
+                        execution=execution,
+                        action=next_action,
+                        action_index=actual_idx,
+                        entity=entity,
+                        case=case,
+                        owner=owner,
+                        triggered_by_user_id=task.workflow_triggered_by_user_id,
+                    )
+
+                    if new_task:
+                        execution.status = WorkflowExecutionStatus.PAUSED.value
+                        execution.paused_at_action_index = actual_idx
+                        execution.paused_task_id = new_task.id
+                        execution.actions_executed = action_results
+                        db.commit()
+                        logger.info(
+                            f"Workflow {workflow.id} paused again at action {actual_idx}"
+                        )
+                        return
+
+                # Execute non-approval action
+                result = self._execute_action(
+                    db=db,
+                    action=next_action,
+                    entity=entity,
+                    entity_type=execution.entity_type,
+                    event_id=execution.event_id,
+                    depth=execution.depth,
+                )
+                action_results.append(result)
+
+            # All done - determine final status
+            all_success = all(r.get("success") for r in action_results)
+            execution.status = (
+                WorkflowExecutionStatus.SUCCESS.value
+                if all_success
+                else WorkflowExecutionStatus.PARTIAL.value
+            )
+            execution.actions_executed = action_results
+            db.commit()
+
+            # Update workflow stats
+            workflow.run_count += 1
+            workflow.last_run_at = datetime.now(timezone.utc)
+            db.commit()
+
+        elif task.status == TaskStatus.DENIED.value:
+            # DENIED: Mark execution as canceled
+            action_results.append({
+                "success": False,
+                "action_type": task.workflow_action_type,
+                "skipped": True,
+                "reason": "denied",
+            })
+            execution.status = WorkflowExecutionStatus.CANCELED.value
+            execution.error_message = f"Approval denied: {task.workflow_denial_reason or 'No reason given'}"
+            execution.actions_executed = action_results
+            db.commit()
+
+        elif task.status == TaskStatus.EXPIRED.value:
+            # EXPIRED: Mark execution as expired
+            action_results.append({
+                "success": False,
+                "action_type": task.workflow_action_type,
+                "skipped": True,
+                "reason": "expired",
+            })
+            execution.status = WorkflowExecutionStatus.EXPIRED.value
+            execution.error_message = "Approval timed out"
+            execution.actions_executed = action_results
+            db.commit()
+
+        else:
+            logger.warning(f"Unexpected task status for resume: {task.status}")
+            execution.status = WorkflowExecutionStatus.FAILED.value
+            execution.error_message = f"Unexpected task status: {task.status}"
+            db.commit()
 
     def _get_dedupe_key(
         self,

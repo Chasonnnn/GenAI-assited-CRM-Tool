@@ -23,6 +23,7 @@ from app.schemas.task import (
     TaskListResponse,
     TaskRead,
     TaskUpdate,
+    WorkflowApprovalResolve,
 )
 from app.services import dashboard_service, task_service, ip_service
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
@@ -58,9 +59,13 @@ def list_tasks(
     intended_parent_id: UUID | None = None,
     is_completed: bool | None = None,
     task_type: TaskType | None = None,
+    status: str | None = Query(
+        None, description="Filter by task status (comma-separated)"
+    ),
     due_before: str | None = Query(None, description="Due date before (YYYY-MM-DD)"),
     due_after: str | None = Query(None, description="Due date after (YYYY-MM-DD)"),
     my_tasks: bool = False,
+    exclude_approvals: bool = False,
 ):
     """
     List tasks.
@@ -97,9 +102,11 @@ def list_tasks(
         intended_parent_id=intended_parent_id,
         is_completed=is_completed,
         task_type=task_type,
+        status=status,
         due_before=due_before,
         due_after=due_after,
         my_tasks_user_id=session.user_id if my_tasks else None,
+        exclude_approvals=exclude_approvals,
     )
 
     pages = (total + per_page - 1) // per_page if per_page > 0 else 0
@@ -132,9 +139,11 @@ def list_tasks(
             else None,
             "is_completed": is_completed,
             "task_type": task_type.value if task_type else None,
+            "status": status,
             "due_before": due_before,
             "due_after": due_after,
             "my_tasks": my_tasks,
+            "exclude_approvals": exclude_approvals,
             "q_type": q_type,
         },
     )
@@ -313,6 +322,12 @@ def complete_task(
     ):
         raise HTTPException(status_code=403, detail="Not authorized")
 
+    if task.task_type == TaskType.WORKFLOW_APPROVAL.value:
+        raise HTTPException(
+            status_code=400,
+            detail="Workflow approvals must be resolved via /tasks/{id}/resolve",
+        )
+
     task = task_service.complete_task(db, task, session.user_id)
     dashboard_service.push_dashboard_stats(db, session.org_id)
     context = task_service.get_task_context(db, [task])
@@ -343,6 +358,12 @@ def uncomplete_task(
         session, task.created_by_user_id, task.owner_type, task.owner_id
     ):
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    if task.task_type == TaskType.WORKFLOW_APPROVAL.value:
+        raise HTTPException(
+            status_code=400,
+            detail="Workflow approvals must be resolved via /tasks/{id}/resolve",
+        )
 
     task = task_service.uncomplete_task(db, task)
     dashboard_service.push_dashboard_stats(db, session.org_id)
@@ -394,6 +415,15 @@ def bulk_complete_tasks(
             ):
                 results["failed"].append(
                     {"task_id": str(task_id), "reason": "Not authorized"}
+                )
+                continue
+
+            if task.task_type == TaskType.WORKFLOW_APPROVAL.value:
+                results["failed"].append(
+                    {
+                        "task_id": str(task_id),
+                        "reason": "Workflow approvals must be resolved via /tasks/{id}/resolve",
+                    }
                 )
                 continue
 
@@ -455,3 +485,50 @@ def delete_task(
     task_service.delete_task(db, task)
     dashboard_service.push_dashboard_stats(db, session.org_id)
     return None
+
+
+@router.post(
+    "/{task_id}/resolve",
+    response_model=TaskRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def resolve_workflow_approval(
+    task_id: UUID,
+    data: WorkflowApprovalResolve,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """
+    Approve or deny a workflow approval task.
+
+    Only the case owner (the user to whom the task is assigned) can resolve.
+    This endpoint is only valid for tasks with task_type='workflow_approval'.
+
+    - **decision**: "approve" or "deny"
+    - **reason**: Optional denial reason (only used when denying)
+
+    On approval, the workflow continues and executes the pending action.
+    On denial, the workflow is canceled.
+    """
+    try:
+        task = task_service.resolve_workflow_approval(
+            db=db,
+            task_id=task_id,
+            org_id=session.org_id,
+            decision=data.decision,
+            user_id=session.user_id,
+            reason=data.reason,
+        )
+    except task_service.WorkflowApprovalError as e:
+        # Map specific errors to HTTP status codes
+        if "not found" in str(e).lower():
+            raise HTTPException(status_code=404, detail=str(e))
+        elif "forbidden" in str(e).lower() or "only the case owner" in str(e).lower():
+            raise HTTPException(status_code=403, detail=str(e))
+        elif "already resolved" in str(e).lower() or "not waiting" in str(e).lower():
+            raise HTTPException(status_code=400, detail=str(e))
+        else:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    context = task_service.get_task_context(db, [task])
+    return task_service.to_task_read(task, context)

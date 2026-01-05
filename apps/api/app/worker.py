@@ -244,6 +244,12 @@ async def process_job(db, job) -> None:
     elif job.job_type == JobType.INTERVIEW_TRANSCRIPTION.value:
         await process_interview_transcription(db, job)
 
+    elif job.job_type == JobType.WORKFLOW_APPROVAL_EXPIRY.value:
+        await process_workflow_approval_expiry(db, job)
+
+    elif job.job_type == JobType.WORKFLOW_RESUME.value:
+        await process_workflow_resume(db, job)
+
     else:
         raise Exception(f"Unknown job type: {job.job_type}")
 
@@ -1017,6 +1023,181 @@ async def process_campaign_send(db, job) -> None:
             type(e).__name__,
         )
         raise
+
+
+async def process_workflow_approval_expiry(db, job) -> None:
+    """
+    Sweep for expired workflow approval tasks and mark them as expired.
+
+    This job should be scheduled to run every 5 minutes.
+    """
+    from app.services import task_service
+    from app.db.models import Task
+    from app.db.enums import TaskType, TaskStatus
+
+    logger.info(
+        "Starting workflow approval expiry sweep for org %s", job.organization_id
+    )
+
+    now = datetime.now(timezone.utc)
+
+    # Find overdue approval tasks
+    overdue_tasks = (
+        db.query(Task)
+        .filter(
+            Task.organization_id == job.organization_id,
+            Task.task_type == TaskType.WORKFLOW_APPROVAL.value,
+            Task.status.in_([TaskStatus.PENDING.value, TaskStatus.IN_PROGRESS.value]),
+            Task.due_at < now,
+        )
+        .with_for_update(skip_locked=True)
+        .all()
+    )
+
+    expired_count = 0
+    for task in overdue_tasks:
+        try:
+            task_service.expire_approval_task(db, task)
+            expired_count += 1
+            logger.info(f"Expired workflow approval task {task.id}")
+        except Exception as e:
+            logger.error(f"Failed to expire task {task.id}: {e}")
+
+    logger.info(f"Workflow approval expiry sweep complete: {expired_count} expired")
+
+
+async def process_workflow_resume(db, job) -> None:
+    """
+    Resume a paused workflow after approval resolution.
+
+    Payload:
+        - execution_id: UUID of the workflow execution
+        - task_id: UUID of the resolved approval task
+    """
+    from app.db.models import WorkflowExecution, Task, AutomationWorkflow, WorkflowResumeJob
+    from app.db.enums import WorkflowExecutionStatus, TaskStatus
+    from app.services.workflow_engine import WorkflowEngine
+
+    payload = job.payload or {}
+    execution_id = payload.get("execution_id")
+    task_id = payload.get("task_id")
+    idempotency_key = payload.get("idempotency_key")
+
+    if not execution_id or not task_id:
+        raise Exception("Missing execution_id or task_id in workflow resume job")
+
+    # Check idempotency
+    if idempotency_key:
+        existing = (
+            db.query(WorkflowResumeJob)
+            .filter(WorkflowResumeJob.idempotency_key == idempotency_key)
+            .first()
+        )
+        if existing and existing.processed_at is not None:
+            logger.info(f"Workflow resume job already processed: {idempotency_key}")
+            return
+
+    # Get task and execution
+    task = db.query(Task).filter(Task.id == UUID(task_id)).first()
+    if not task:
+        raise Exception(f"Task {task_id} not found")
+
+    execution = (
+        db.query(WorkflowExecution)
+        .filter(WorkflowExecution.id == UUID(execution_id))
+        .first()
+    )
+    if not execution:
+        raise Exception(f"Execution {execution_id} not found")
+
+    # Check execution is paused on this task
+    if execution.status != WorkflowExecutionStatus.PAUSED.value:
+        logger.info(f"Execution {execution_id} not paused, skipping resume")
+        return
+
+    if str(execution.paused_task_id) != str(task_id):
+        logger.warning(
+            f"Execution {execution_id} not waiting on task {task_id}, "
+            f"waiting on {execution.paused_task_id}"
+        )
+        return
+
+    # Get workflow
+    workflow = (
+        db.query(AutomationWorkflow)
+        .filter(AutomationWorkflow.id == execution.workflow_id)
+        .first()
+    )
+    if not workflow:
+        raise Exception(f"Workflow {execution.workflow_id} not found")
+
+    # Handle based on task status
+    if task.status == TaskStatus.COMPLETED.value:
+        # APPROVED: Execute the action and continue workflow
+        logger.info(f"Resuming approved workflow execution {execution_id}")
+
+        # Get entity for action execution
+        from app.services.workflow_engine import WorkflowEngine
+
+        engine = WorkflowEngine()
+        engine.continue_execution(
+            db=db,
+            execution_id=execution.id,
+            task=task,
+            decision="approve",
+        )
+
+    elif task.status == TaskStatus.DENIED.value:
+        # DENIED: Cancel workflow
+        logger.info(f"Workflow execution {execution_id} denied")
+        execution.paused_at_action_index = None
+        execution.paused_task_id = None
+        execution.status = WorkflowExecutionStatus.CANCELED.value
+        execution.error_message = task.workflow_denial_reason or "Approval denied by case owner"
+
+        # Record the skipped action
+        action_results = list(execution.actions_executed or [])
+        action_results.append({
+            "success": False,
+            "action_type": task.workflow_action_type,
+            "skipped": True,
+            "reason": "denied",
+        })
+        execution.actions_executed = action_results
+
+    elif task.status == TaskStatus.EXPIRED.value:
+        # EXPIRED: Mark workflow expired
+        logger.info(f"Workflow execution {execution_id} expired")
+        execution.paused_at_action_index = None
+        execution.paused_task_id = None
+        execution.status = WorkflowExecutionStatus.EXPIRED.value
+        execution.error_message = "Approval timed out"
+
+        action_results = list(execution.actions_executed or [])
+        action_results.append({
+            "success": False,
+            "action_type": task.workflow_action_type,
+            "skipped": True,
+            "reason": "expired",
+        })
+        execution.actions_executed = action_results
+
+    else:
+        logger.warning(f"Unexpected task status for resume: {task.status}")
+        return
+
+    # Mark idempotency record as processed
+    if idempotency_key:
+        resume_job = (
+            db.query(WorkflowResumeJob)
+            .filter(WorkflowResumeJob.idempotency_key == idempotency_key)
+            .first()
+        )
+        if resume_job:
+            resume_job.processed_at = datetime.now(timezone.utc)
+
+    db.commit()
+    logger.info(f"Workflow resume complete for execution {execution_id}")
 
 
 def main() -> None:

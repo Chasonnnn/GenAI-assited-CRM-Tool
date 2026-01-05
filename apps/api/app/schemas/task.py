@@ -1,11 +1,12 @@
 """Pydantic schemas for tasks."""
 
 from datetime import date, datetime, time
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
-from app.db.enums import TaskType
+from app.db.enums import TaskType, TaskStatus
 
 
 class TaskCreate(BaseModel):
@@ -62,8 +63,25 @@ class TaskRead(BaseModel):
     completed_at: datetime | None
     completed_by_name: str | None = None
 
+    # Workflow approval fields (null for non-approval tasks)
+    # NOTE: workflow_action_payload is NEVER exposed via API (internal only)
+    status: str | None = None
+    workflow_execution_id: UUID | None = None
+    workflow_action_type: str | None = None
+    workflow_action_preview: str | None = None
+    workflow_denial_reason: str | None = None
+    workflow_triggered_by_user_id: UUID | None = None
+    workflow_triggered_by_name: str | None = None
+    due_at: datetime | None = None
+
     created_at: datetime
     updated_at: datetime
+
+    @computed_field
+    @property
+    def is_workflow_approval(self) -> bool:
+        """Check if this is a workflow approval task."""
+        return self.task_type == TaskType.WORKFLOW_APPROVAL
 
     model_config = {"from_attributes": True}
 
@@ -84,6 +102,18 @@ class TaskListItem(BaseModel):
     duration_minutes: int | None = None
     is_completed: bool
     created_at: datetime
+
+    # Workflow approval fields for list views
+    status: str | None = None
+    workflow_action_type: str | None = None
+    workflow_action_preview: str | None = None
+    due_at: datetime | None = None
+
+    @computed_field
+    @property
+    def is_workflow_approval(self) -> bool:
+        """Check if this is a workflow approval task."""
+        return self.task_type == TaskType.WORKFLOW_APPROVAL
 
     model_config = {"from_attributes": True}
 
@@ -109,3 +139,10 @@ class BulkCompleteResponse(BaseModel):
 
     completed: int
     failed: list[dict]  # [{"task_id": str, "reason": str}]
+
+
+class WorkflowApprovalResolve(BaseModel):
+    """Request to approve or deny a workflow approval task."""
+
+    decision: Literal["approve", "deny"]
+    reason: str | None = Field(None, max_length=1000, description="Optional denial reason")

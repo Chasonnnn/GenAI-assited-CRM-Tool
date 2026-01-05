@@ -4,7 +4,16 @@
  */
 
 // Task type enum matching backend EXACTLY
-export type TaskType = 'meeting' | 'follow_up' | 'contact' | 'review' | 'other';
+export type TaskType =
+    | 'meeting'
+    | 'follow_up'
+    | 'contact'
+    | 'review'
+    | 'medication'
+    | 'exam'
+    | 'appointment'
+    | 'workflow_approval'
+    | 'other';
 
 // Re-export types from API client
 export type {
@@ -22,5 +31,9 @@ export const TASK_TYPE_CONFIG: Record<TaskType, { label: string; icon: string }>
     follow_up: { label: 'Follow Up', icon: '📞' },
     contact: { label: 'Contact', icon: '👤' },
     review: { label: 'Review', icon: '📋' },
+    medication: { label: 'Medication', icon: '💊' },
+    exam: { label: 'Exam', icon: '🧪' },
+    appointment: { label: 'Appointment', icon: '📆' },
+    workflow_approval: { label: 'Approval', icon: '✅' },
     other: { label: 'Other', icon: '📌' },
 };

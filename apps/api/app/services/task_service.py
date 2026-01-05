@@ -1,15 +1,19 @@
 """Task service - business logic for task management."""
 
+import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.db.enums import TaskType, OwnerType
-from app.db.models import Task, User, Queue, Case
+from app.db.enums import TaskType, TaskStatus, OwnerType
+from app.db.models import Task, User, Queue, Case, WorkflowExecution, WorkflowResumeJob
 from app.schemas.task import TaskCreate, TaskUpdate, TaskRead, TaskListItem
 from app.services import membership_service, queue_service
+
+
+logger = logging.getLogger(__name__)
 
 
 def create_task(
@@ -253,6 +257,8 @@ def get_task_context(
             user_ids.add(task.created_by_user_id)
         if task.completed_by_user_id:
             user_ids.add(task.completed_by_user_id)
+        if task.workflow_triggered_by_user_id:
+            user_ids.add(task.workflow_triggered_by_user_id)
         if task.case_id:
             case_ids.add(task.case_id)
 
@@ -288,6 +294,7 @@ def to_task_read(task: Task, context: dict[str, dict[UUID, str | None]]) -> Task
 
     created_by_name = context["user_names"].get(task.created_by_user_id)
     completed_by_name = context["user_names"].get(task.completed_by_user_id)
+    triggered_by_name = context["user_names"].get(task.workflow_triggered_by_user_id)
     case_number = context["case_numbers"].get(task.case_id)
 
     return TaskRead(
@@ -308,6 +315,14 @@ def to_task_read(task: Task, context: dict[str, dict[UUID, str | None]]) -> Task
         is_completed=task.is_completed,
         completed_at=task.completed_at,
         completed_by_name=completed_by_name,
+        status=task.status,
+        workflow_execution_id=task.workflow_execution_id,
+        workflow_action_type=task.workflow_action_type,
+        workflow_action_preview=task.workflow_action_preview,
+        workflow_denial_reason=task.workflow_denial_reason,
+        workflow_triggered_by_user_id=task.workflow_triggered_by_user_id,
+        workflow_triggered_by_name=triggered_by_name,
+        due_at=task.due_at,
         created_at=task.created_at,
         updated_at=task.updated_at,
     )
@@ -339,6 +354,9 @@ def to_task_list_item(
         due_time=task.due_time,
         duration_minutes=task.duration_minutes,
         is_completed=task.is_completed,
+        status=task.status,
+        workflow_action_type=task.workflow_action_type,
+        due_at=task.due_at,
         created_at=task.created_at,
     )
 
@@ -356,9 +374,11 @@ def list_tasks(
     intended_parent_id: UUID | None = None,
     is_completed: bool | None = None,
     task_type: TaskType | None = None,
+    status: str | None = None,
     due_before: str | None = None,
     due_after: str | None = None,
     my_tasks_user_id: UUID | None = None,
+    exclude_approvals: bool = False,
 ):
     """
     List tasks with filters and pagination.
@@ -415,6 +435,10 @@ def list_tasks(
             )
         )
 
+    # Optionally exclude workflow approvals from standard task views
+    if exclude_approvals:
+        query = query.filter(Task.task_type != TaskType.WORKFLOW_APPROVAL.value)
+
     # My tasks (creator or owner)
     if my_tasks_user_id:
         query = query.filter(
@@ -448,6 +472,13 @@ def list_tasks(
     if task_type:
         query = query.filter(Task.task_type == task_type.value)
 
+    # Status filter (primarily for workflow approvals)
+    status_values: list[str] = []
+    if status:
+        status_values = [s.strip() for s in status.split(",") if s.strip()]
+        if status_values:
+            query = query.filter(Task.status.in_(status_values))
+
     # Due date filters
     if due_before:
         try:
@@ -463,12 +494,18 @@ def list_tasks(
         except ValueError:
             pass  # Invalid date format, skip filter
 
-    # Order: incomplete first by due date, then by created
-    query = query.order_by(
-        Task.is_completed.asc(),
-        Task.due_date.asc().nullslast(),
-        Task.created_at.desc(),
-    )
+    # Order approvals by due_at; standard tasks by completion/due date
+    if task_type == TaskType.WORKFLOW_APPROVAL or status_values:
+        query = query.order_by(
+            Task.due_at.asc().nullslast(),
+            Task.created_at.desc(),
+        )
+    else:
+        query = query.order_by(
+            Task.is_completed.asc(),
+            Task.due_date.asc().nullslast(),
+            Task.created_at.desc(),
+        )
 
     # Count
     total = query.count()
@@ -487,6 +524,7 @@ def count_pending_tasks(db: Session, org_id: UUID) -> int:
         .filter(
             Task.organization_id == org_id,
             Task.is_completed.is_(False),
+            Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
         )
         .count()
     )
@@ -499,6 +537,7 @@ def count_overdue_tasks(db: Session, org_id: UUID, today) -> int:
         .filter(
             Task.organization_id == org_id,
             Task.is_completed.is_(False),
+            Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
             Task.due_date < today,
         )
         .count()
@@ -515,6 +554,7 @@ def list_open_tasks_for_case(
     query = db.query(Task).filter(
         Task.case_id == case_id,
         Task.is_completed.is_(False),
+        Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
     )
     if org_id:
         query = query.filter(Task.organization_id == org_id)
@@ -533,6 +573,7 @@ def list_user_tasks_due_on(
             Task.organization_id == org_id,
             Task.due_date == due_date,
             Task.is_completed.is_(False),
+            Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
             Task.owner_type == OwnerType.USER.value,
         )
         .all()
@@ -551,7 +592,346 @@ def list_user_tasks_overdue(
             Task.organization_id == org_id,
             Task.due_date < today,
             Task.is_completed.is_(False),
+            Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
             Task.owner_type == OwnerType.USER.value,
         )
         .all()
     )
+
+
+# =============================================================================
+# Workflow Approval Functions
+# =============================================================================
+
+
+class WorkflowApprovalError(Exception):
+    """Error during workflow approval resolution."""
+
+    def __init__(self, message: str, status_code: int = 400):
+        self.message = message
+        self.status_code = status_code
+        super().__init__(message)
+
+
+def resolve_workflow_approval(
+    db: Session,
+    task_id: UUID,
+    org_id: UUID,
+    decision: str,
+    user_id: UUID,
+    reason: str | None = None,
+) -> Task:
+    """
+    Approve or deny a workflow approval task.
+
+    CASE OWNER ONLY - no permission override, no fallback.
+
+    Args:
+        db: Database session
+        task_id: ID of the approval task
+        org_id: Organization context for scoping
+        decision: "approve" or "deny"
+        user_id: ID of the user making the decision
+        reason: Optional denial reason
+
+    Returns:
+        The updated task
+
+    Raises:
+        WorkflowApprovalError: If resolution fails
+    """
+    # Lock task row for update
+    task = (
+        db.query(Task)
+        .filter(
+            Task.id == task_id,
+            Task.organization_id == org_id,
+            Task.task_type == TaskType.WORKFLOW_APPROVAL.value,
+        )
+        .with_for_update()
+        .first()
+    )
+
+    if not task:
+        raise WorkflowApprovalError("Approval task not found", 404)
+
+    # Check if already resolved
+    if task.status not in [TaskStatus.PENDING.value, TaskStatus.IN_PROGRESS.value]:
+        raise WorkflowApprovalError(f"Task already resolved: {task.status}", 400)
+
+    # Lock execution row to prevent double-resume
+    execution = (
+        db.query(WorkflowExecution)
+        .filter(WorkflowExecution.id == task.workflow_execution_id)
+        .with_for_update()
+        .first()
+    )
+
+    if not execution:
+        raise WorkflowApprovalError("Workflow execution not found", 404)
+
+    if execution.paused_task_id != task.id:
+        raise WorkflowApprovalError("Execution not waiting on this task", 400)
+
+    # CASE OWNER ONLY - strictly enforced, no exceptions
+    if user_id != task.owner_id:
+        raise WorkflowApprovalError(
+            "Only the case owner can approve or deny this request",
+            403,
+        )
+
+    # Update task based on decision
+    now = datetime.now(timezone.utc)
+    if decision == "approve":
+        task.status = TaskStatus.COMPLETED.value
+        task.is_completed = True
+        task.completed_at = now
+        task.completed_by_user_id = user_id
+    else:  # deny
+        task.status = TaskStatus.DENIED.value
+        task.workflow_denial_reason = reason or "Denied by case owner"
+
+    task.updated_at = now
+    db.flush()
+
+    # Queue resume job with idempotency key
+    idempotency_key = f"{execution.id}:{task.workflow_action_index}"
+    _queue_workflow_resume_job(
+        db,
+        execution_id=execution.id,
+        task_id=task.id,
+        org_id=task.organization_id,
+        idempotency_key=idempotency_key,
+    )
+
+    db.commit()
+
+    # Log activity with latency metrics
+    _log_approval_activity(db, task, decision, user_id, now)
+
+    logger.info(
+        f"Workflow approval {task.id} resolved: {decision} by user {user_id}"
+    )
+
+    return task
+
+
+def _queue_workflow_resume_job(
+    db: Session,
+    execution_id: UUID,
+    task_id: UUID,
+    org_id: UUID,
+    idempotency_key: str,
+) -> WorkflowResumeJob | None:
+    """Queue a workflow resume job with idempotency."""
+    from sqlalchemy.exc import IntegrityError
+    from app.db.models import Job
+    from app.db.enums import JobType, JobStatus
+
+    resume_job = WorkflowResumeJob(
+        idempotency_key=idempotency_key,
+        execution_id=execution_id,
+        task_id=task_id,
+        status="pending",
+    )
+
+    try:
+        with db.begin_nested():
+            db.add(resume_job)
+            db.flush()
+    except IntegrityError:
+        # Job already exists (idempotency)
+        logger.info(f"Resume job already exists for key {idempotency_key}")
+        return None
+
+    job = Job(
+        organization_id=org_id,
+        job_type=JobType.WORKFLOW_RESUME.value,
+        payload={
+            "execution_id": str(execution_id),
+            "task_id": str(task_id),
+            "idempotency_key": idempotency_key,
+        },
+        run_at=datetime.now(timezone.utc),
+        status=JobStatus.PENDING.value,
+        idempotency_key=idempotency_key,
+    )
+    try:
+        with db.begin_nested():
+            db.add(job)
+            db.flush()
+    except IntegrityError:
+        logger.info(f"Resume job already scheduled for key {idempotency_key}")
+
+    logger.info(f"Queued resume job for execution {execution_id}")
+    return resume_job
+
+
+def _log_approval_activity(
+    db: Session,
+    task: Task,
+    decision: str,
+    user_id: UUID,
+    resolved_at: datetime,
+) -> None:
+    """Log approval activity with latency metrics."""
+    from app.services import activity_service
+    from app.db.enums import CaseActivityType
+
+    latency_hours = (resolved_at - task.created_at).total_seconds() / 3600
+
+    activity_service.log_activity(
+        db=db,
+        case_id=task.case_id,
+        organization_id=task.organization_id,
+        activity_type=CaseActivityType.WORKFLOW_APPROVAL_RESOLVED,
+        actor_user_id=user_id,
+        details={
+            "task_id": str(task.id),
+            "workflow_execution_id": str(task.workflow_execution_id),
+            "action_type": task.workflow_action_type,
+            "decision": decision,
+            "triggered_by_user_id": str(task.workflow_triggered_by_user_id) if task.workflow_triggered_by_user_id else None,
+            "approval_latency_hours": round(latency_hours, 2),
+        },
+    )
+
+
+def get_pending_approval_tasks(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID | None = None,
+) -> list[Task]:
+    """Get pending workflow approval tasks, optionally filtered by assignee."""
+    query = db.query(Task).filter(
+        Task.organization_id == org_id,
+        Task.task_type == TaskType.WORKFLOW_APPROVAL.value,
+        Task.status.in_([TaskStatus.PENDING.value, TaskStatus.IN_PROGRESS.value]),
+    )
+
+    if user_id:
+        query = query.filter(
+            Task.owner_type == OwnerType.USER.value,
+            Task.owner_id == user_id,
+        )
+
+    return query.order_by(Task.due_at.asc()).all()
+
+
+def get_expired_approval_tasks(db: Session) -> list[Task]:
+    """Get approval tasks that have passed their due_at deadline."""
+    now = datetime.now(timezone.utc)
+
+    return (
+        db.query(Task)
+        .filter(
+            Task.task_type == TaskType.WORKFLOW_APPROVAL.value,
+            Task.status.in_([TaskStatus.PENDING.value, TaskStatus.IN_PROGRESS.value]),
+            Task.due_at < now,
+        )
+        .with_for_update(skip_locked=True)
+        .all()
+    )
+
+
+def expire_approval_task(
+    db: Session,
+    task: Task,
+) -> None:
+    """Mark an approval task as expired and queue resume job."""
+    now = datetime.now(timezone.utc)
+
+    if task.status not in [TaskStatus.PENDING.value, TaskStatus.IN_PROGRESS.value]:
+        logger.info(
+            "Skip expiring task %s with status %s", task.id, task.status
+        )
+        return
+
+    # Mark as expired
+    task.status = TaskStatus.EXPIRED.value
+    task.workflow_denial_reason = "Approval timed out"
+    task.updated_at = now
+
+    # Queue resume job
+    if task.workflow_execution_id and task.workflow_action_index is not None:
+        idempotency_key = f"{task.workflow_execution_id}:{task.workflow_action_index}"
+        _queue_workflow_resume_job(
+            db,
+            execution_id=task.workflow_execution_id,
+            task_id=task.id,
+            org_id=task.organization_id,
+            idempotency_key=idempotency_key,
+        )
+
+    db.commit()
+
+    # Notify owner that approval expired
+    from app.services import notification_service
+    from app.db.enums import NotificationType
+
+    notification_service.create_notification(
+        db=db,
+        org_id=task.organization_id,
+        user_id=task.owner_id,
+        type=NotificationType.TASK_OVERDUE,
+        title="Workflow Approval Expired",
+        body=f"Approval task timed out: {task.title}",
+        entity_type="task",
+        entity_id=task.id,
+    )
+
+    logger.info(f"Expired approval task {task.id}")
+
+
+def invalidate_pending_approvals_for_case(
+    db: Session,
+    case_id: UUID,
+    reason: str,
+    actor_user_id: UUID,
+) -> int:
+    """
+    Invalidate all pending approval tasks for a case.
+
+    Called when case owner changes while approvals are pending.
+    Returns count of invalidated tasks.
+    """
+    from app.db.enums import WorkflowExecutionStatus
+
+    pending_tasks = (
+        db.query(Task)
+        .filter(
+            Task.case_id == case_id,
+            Task.task_type == TaskType.WORKFLOW_APPROVAL.value,
+            Task.status.in_([TaskStatus.PENDING.value, TaskStatus.IN_PROGRESS.value]),
+        )
+        .all()
+    )
+
+    count = 0
+    for task in pending_tasks:
+        # Mark task as denied
+        task.status = TaskStatus.DENIED.value
+        task.workflow_denial_reason = reason
+        task.updated_at = datetime.now(timezone.utc)
+
+        # Cancel workflow execution
+        if task.workflow_execution_id:
+            execution = db.query(WorkflowExecution).filter(
+                WorkflowExecution.id == task.workflow_execution_id
+            ).first()
+
+            if execution and execution.status == WorkflowExecutionStatus.PAUSED.value:
+                execution.status = WorkflowExecutionStatus.CANCELED.value
+                execution.error_message = reason
+                execution.paused_at_action_index = None
+                execution.paused_task_id = None
+
+        count += 1
+
+    if count > 0:
+        db.commit()
+        logger.info(
+            f"Invalidated {count} pending approval(s) for case {case_id}: {reason}"
+        )
+
+    return count

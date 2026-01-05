@@ -352,6 +352,14 @@ class WorkflowStats(BaseModel):
     success_rate_24h: float
     by_trigger_type: dict[str, int]
 
+    # Approval metrics
+    pending_approvals: int = 0
+    approvals_resolved_24h: int = 0
+    approval_rate_24h: float = 0.0  # approved / total resolved
+    denial_rate_24h: float = 0.0
+    expiry_rate_24h: float = 0.0
+    avg_approval_latency_hours: float | None = None
+
 
 class WorkflowOptions(BaseModel):
     """Available options for workflow builder UI."""

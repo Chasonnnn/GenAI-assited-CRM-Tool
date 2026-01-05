@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.db.models import Case, Task, Match, Attachment, EntityNote, Appointment
-from app.db.enums import WorkflowTriggerType, WorkflowEventSource
+from app.db.enums import WorkflowTriggerType, WorkflowEventSource, TaskType
 from app.services.workflow_engine import engine
 
 
@@ -331,6 +331,7 @@ def trigger_task_due_sweep(db: Session, org_id: UUID) -> None:
                 Case.organization_id == org_id,
                 Task.due_date.isnot(None),
                 Task.is_completed.is_(False),
+                Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
             )
             .all()
         )
@@ -369,6 +370,7 @@ def trigger_task_overdue_sweep(db: Session, org_id: UUID) -> None:
             Task.due_date.isnot(None),
             Task.due_date < today,
             Task.is_completed.is_(False),
+            Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
         )
         .all()
     )

@@ -832,6 +832,24 @@ export default function AutomationPage() {
                                                         rows={2}
                                                     />
                                                 )}
+                                                {/* Requires Approval Toggle */}
+                                                {action.action_type && (
+                                                    <div className="flex items-center justify-between pt-2 border-t mt-2">
+                                                        <div className="flex flex-col">
+                                                            <Label htmlFor={`approval-${index}`} className="text-sm font-medium">
+                                                                Requires Approval
+                                                            </Label>
+                                                            <span className="text-xs text-muted-foreground">
+                                                                Case owner must approve before this action runs
+                                                            </span>
+                                                        </div>
+                                                        <Switch
+                                                            id={`approval-${index}`}
+                                                            checked={!!action.requires_approval}
+                                                            onCheckedChange={(checked) => updateAction(index, { requires_approval: checked })}
+                                                        />
+                                                    </div>
+                                                )}
                                             </CardContent>
                                         </Card>
                                     ))

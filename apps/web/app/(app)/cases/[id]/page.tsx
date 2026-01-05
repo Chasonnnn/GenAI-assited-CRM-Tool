@@ -243,7 +243,7 @@ export default function CaseDetailPage() {
     const { data: caseData, isLoading, error } = useCase(id)
     const { data: activityData } = useCaseActivity(id)
     const { data: notes } = useNotes(id)
-    const { data: tasksData } = useTasks({ case_id: id })
+    const { data: tasksData } = useTasks({ case_id: id, exclude_approvals: true })
 
     // Mutations
     const changeStatusMutation = useChangeStatus()
