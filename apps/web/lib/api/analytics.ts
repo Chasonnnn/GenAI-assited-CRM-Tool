@@ -274,6 +274,58 @@ export async function getActivityFeed(params: ActivityFeedParams = {}): Promise<
     return api.get<ActivityFeedResponse>(`/analytics/activity-feed${query ? `?${query}` : ''}`);
 }
 
+// Performance by User types
+export interface UserPerformanceData {
+    user_id: string;
+    user_name: string;
+    total_cases: number;
+    archived_count: number;
+    contacted: number;
+    qualified: number;
+    pending_match: number;
+    matched: number;
+    applied: number;
+    lost: number;
+    conversion_rate: number;
+    avg_days_to_match: number | null;
+    avg_days_to_apply: number | null;
+}
+
+export interface UnassignedPerformanceData {
+    total_cases: number;
+    archived_count: number;
+    contacted: number;
+    qualified: number;
+    pending_match: number;
+    matched: number;
+    applied: number;
+    lost: number;
+}
+
+export interface PerformanceByUserResponse {
+    from_date: string;
+    to_date: string;
+    mode: 'cohort' | 'activity';
+    as_of: string;
+    pipeline_id: string | null;
+    data: UserPerformanceData[];
+    unassigned: UnassignedPerformanceData;
+}
+
+export interface PerformanceByUserParams extends DateRangeParams {
+    mode?: 'cohort' | 'activity';
+}
+
+export async function getPerformanceByUser(params: PerformanceByUserParams = {}): Promise<PerformanceByUserResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.from_date) searchParams.set('from_date', params.from_date);
+    if (params.to_date) searchParams.set('to_date', params.to_date);
+    if (params.mode) searchParams.set('mode', params.mode);
+
+    const query = searchParams.toString();
+    return api.get<PerformanceByUserResponse>(`/analytics/performance/by-user${query ? `?${query}` : ''}`);
+}
+
 /**
  * Export analytics as PDF.
  * Uses a hidden iframe to download with cookies.

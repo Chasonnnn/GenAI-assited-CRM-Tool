@@ -8,10 +8,10 @@ import hashlib
 import json
 import uuid
 from datetime import datetime, timedelta, date, timezone
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
-from sqlalchemy import func, text
-from sqlalchemy.orm import Session
+from sqlalchemy import func, text, exists, and_, select, case, literal, or_
+from sqlalchemy.orm import Session, aliased
 
 from app.core.config import settings
 from app.db.models import (
@@ -20,6 +20,8 @@ from app.db.models import (
     CaseStatusHistory,
     PipelineStage,
     MetaLead,
+    User,
+    Membership,
 )
 from app.db.enums import OwnerType
 
@@ -1814,3 +1816,532 @@ def get_pdf_export_data(
         "meta_performance": meta_performance,
         "org_name": org_name,
     }
+
+
+# =============================================================================
+# Individual Performance Analytics
+# =============================================================================
+
+# Stage slugs for performance metrics
+PERFORMANCE_STAGE_SLUGS = [
+    "contacted",
+    "qualified",
+    "pending_match",
+    "matched",
+    "applied",
+    "lost",
+]
+
+
+def get_performance_stage_ids(
+    db: Session,
+    pipeline_id: uuid.UUID,
+) -> dict[str, uuid.UUID | None]:
+    """
+    Resolve performance stage slugs to IDs for a pipeline.
+
+    Returns a dict mapping slug -> stage_id (None if stage not found).
+    This is centralized to avoid slug drift issues.
+    """
+    from app.services import pipeline_service
+
+    stage_ids: dict[str, uuid.UUID | None] = {}
+    for slug in PERFORMANCE_STAGE_SLUGS:
+        stage = pipeline_service.get_stage_by_slug(db, pipeline_id, slug)
+        stage_ids[slug] = stage.id if stage else None
+
+    return stage_ids
+
+
+def get_performance_by_user(
+    db: Session,
+    organization_id: uuid.UUID,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    mode: Literal["cohort", "activity"] = "cohort",
+) -> dict[str, Any]:
+    """
+    Get individual performance metrics by user.
+
+    Args:
+        db: Database session
+        organization_id: Organization to query
+        start_date: Start of date range (defaults to 30 days ago)
+        end_date: End of date range (defaults to today)
+        mode: 'cohort' (cases created in range) or 'activity' (status changes in range)
+
+    Returns:
+        Dict with user performance data, unassigned bucket, and metadata
+    """
+    from app.services import pipeline_service
+
+    # Default date range
+    if not end_date:
+        end_date = date.today()
+    if not start_date:
+        start_date = end_date - timedelta(days=30)
+
+    # Convert to datetime for comparisons
+    start_dt = datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
+    end_dt = datetime.combine(end_date, datetime.max.time(), tzinfo=timezone.utc)
+
+    # Get pipeline and stage IDs
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
+    stage_ids = get_performance_stage_ids(db, pipeline.id)
+
+    now = datetime.now(timezone.utc)
+
+    if mode == "cohort":
+        user_data, unassigned = _get_cohort_performance(
+            db, organization_id, start_dt, end_dt, stage_ids
+        )
+    else:
+        user_data, unassigned = _get_activity_performance(
+            db, organization_id, start_dt, end_dt, stage_ids
+        )
+
+    # Calculate time metrics (avg days to match/apply) for cohort mode
+    if mode == "cohort":
+        _add_time_metrics(db, organization_id, start_dt, end_dt, stage_ids, user_data)
+
+    return {
+        "from_date": start_date.isoformat(),
+        "to_date": end_date.isoformat(),
+        "mode": mode,
+        "as_of": now.isoformat(),
+        "pipeline_id": str(pipeline.id),
+        "data": user_data,
+        "unassigned": unassigned,
+    }
+
+
+def _get_cohort_performance(
+    db: Session,
+    organization_id: uuid.UUID,
+    start_dt: datetime,
+    end_dt: datetime,
+    stage_ids: dict[str, uuid.UUID | None],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """
+    Cohort mode: Cases created within date range, grouped by current owner.
+
+    Stage counts are "ever reached" (any history entry to that stage).
+    """
+    # Get all active org users via Membership
+    users_query = (
+        db.query(User.id, User.display_name)
+        .join(Membership, Membership.user_id == User.id)
+        .filter(
+            Membership.organization_id == organization_id,
+            User.is_active.is_(True),
+        )
+        .all()
+    )
+
+    def _stage_condition(stage_id: uuid.UUID | None):
+        return literal(False) if stage_id is None else CaseStatusHistory.to_stage_id == stage_id
+
+    def _count_distinct(condition):
+        return func.count(func.distinct(case((condition, Case.id))))
+
+    applied_sid = stage_ids.get("applied")
+    lost_sid = stage_ids.get("lost")
+    if lost_sid:
+        if applied_sid:
+            CSH_applied = aliased(CaseStatusHistory)
+            lost_condition = and_(
+                CaseStatusHistory.to_stage_id == lost_sid,
+                ~exists(
+                    select(CSH_applied.id).where(
+                        CSH_applied.case_id == Case.id,
+                        CSH_applied.to_stage_id == applied_sid,
+                    )
+                ),
+            )
+        else:
+            lost_condition = CaseStatusHistory.to_stage_id == lost_sid
+    else:
+        lost_condition = literal(False)
+
+    base_filters = [
+        Case.organization_id == organization_id,
+        Case.owner_type == OwnerType.USER.value,
+        Case.owner_id.isnot(None),
+        Case.created_at >= start_dt,
+        Case.created_at <= end_dt,
+    ]
+
+    metrics_rows = (
+        db.query(
+            Case.owner_id.label("user_id"),
+            func.count(func.distinct(Case.id)).label("total_cases"),
+            _count_distinct(Case.is_archived.is_(True)).label("archived_count"),
+            _count_distinct(_stage_condition(stage_ids.get("contacted"))).label(
+                "contacted"
+            ),
+            _count_distinct(_stage_condition(stage_ids.get("qualified"))).label(
+                "qualified"
+            ),
+            _count_distinct(_stage_condition(stage_ids.get("pending_match"))).label(
+                "pending_match"
+            ),
+            _count_distinct(_stage_condition(stage_ids.get("matched"))).label("matched"),
+            _count_distinct(_stage_condition(stage_ids.get("applied"))).label("applied"),
+            _count_distinct(lost_condition).label("lost"),
+        )
+        .select_from(Case)
+        .outerjoin(CaseStatusHistory, CaseStatusHistory.case_id == Case.id)
+        .filter(*base_filters)
+        .group_by(Case.owner_id)
+        .all()
+    )
+
+    metrics_by_user = {row.user_id: row for row in metrics_rows}
+
+    user_data = []
+    for user_id, user_name in users_query:
+        metrics = metrics_by_user.get(user_id)
+        total = metrics.total_cases if metrics else 0
+        conversion_rate = (
+            round((metrics.applied / total * 100), 1) if metrics and total > 0 else 0.0
+        )
+
+        user_data.append(
+            {
+                "user_id": str(user_id),
+                "user_name": user_name or "Unknown",
+                "total_cases": total,
+                "archived_count": metrics.archived_count if metrics else 0,
+                "contacted": metrics.contacted if metrics else 0,
+                "qualified": metrics.qualified if metrics else 0,
+                "pending_match": metrics.pending_match if metrics else 0,
+                "matched": metrics.matched if metrics else 0,
+                "applied": metrics.applied if metrics else 0,
+                "lost": metrics.lost if metrics else 0,
+                "conversion_rate": conversion_rate,
+                "avg_days_to_match": None,
+                "avg_days_to_apply": None,
+            }
+        )
+
+    # Sort by total_cases descending
+    user_data.sort(key=lambda x: x["total_cases"], reverse=True)
+
+    # Unassigned bucket (queue-owned or no owner)
+    unassigned_filters = [
+        Case.organization_id == organization_id,
+        Case.created_at >= start_dt,
+        Case.created_at <= end_dt,
+        or_(Case.owner_type != OwnerType.USER.value, Case.owner_id.is_(None)),
+    ]
+
+    unassigned_row = (
+        db.query(
+            func.count(func.distinct(Case.id)).label("total_cases"),
+            _count_distinct(Case.is_archived.is_(True)).label("archived_count"),
+            _count_distinct(_stage_condition(stage_ids.get("contacted"))).label(
+                "contacted"
+            ),
+            _count_distinct(_stage_condition(stage_ids.get("qualified"))).label(
+                "qualified"
+            ),
+            _count_distinct(_stage_condition(stage_ids.get("pending_match"))).label(
+                "pending_match"
+            ),
+            _count_distinct(_stage_condition(stage_ids.get("matched"))).label("matched"),
+            _count_distinct(_stage_condition(stage_ids.get("applied"))).label("applied"),
+            _count_distinct(lost_condition).label("lost"),
+        )
+        .select_from(Case)
+        .outerjoin(CaseStatusHistory, CaseStatusHistory.case_id == Case.id)
+        .filter(*unassigned_filters)
+        .first()
+    )
+
+    unassigned = {
+        "total_cases": unassigned_row.total_cases if unassigned_row else 0,
+        "archived_count": unassigned_row.archived_count if unassigned_row else 0,
+        "contacted": unassigned_row.contacted if unassigned_row else 0,
+        "qualified": unassigned_row.qualified if unassigned_row else 0,
+        "pending_match": unassigned_row.pending_match if unassigned_row else 0,
+        "matched": unassigned_row.matched if unassigned_row else 0,
+        "applied": unassigned_row.applied if unassigned_row else 0,
+        "lost": unassigned_row.lost if unassigned_row else 0,
+    }
+
+    return user_data, unassigned
+
+
+def _get_activity_performance(
+    db: Session,
+    organization_id: uuid.UUID,
+    start_dt: datetime,
+    end_dt: datetime,
+    stage_ids: dict[str, uuid.UUID | None],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """
+    Activity mode: Cases with status transitions within date range.
+
+    total_cases = distinct cases with ANY transition in range.
+    Stage counts = transitions to that stage within range.
+    """
+    # Get all active org users via Membership
+    users_query = (
+        db.query(User.id, User.display_name)
+        .join(Membership, Membership.user_id == User.id)
+        .filter(
+            Membership.organization_id == organization_id,
+            User.is_active.is_(True),
+        )
+        .all()
+    )
+
+    def _stage_condition(stage_id: uuid.UUID | None):
+        return literal(False) if stage_id is None else CaseStatusHistory.to_stage_id == stage_id
+
+    def _count_distinct(condition):
+        return func.count(func.distinct(case((condition, Case.id))))
+
+    applied_sid = stage_ids.get("applied")
+    lost_sid = stage_ids.get("lost")
+    if lost_sid:
+        if applied_sid:
+            CSH_applied = aliased(CaseStatusHistory)
+            lost_condition = and_(
+                CaseStatusHistory.to_stage_id == lost_sid,
+                ~exists(
+                    select(CSH_applied.id).where(
+                        CSH_applied.case_id == Case.id,
+                        CSH_applied.to_stage_id == applied_sid,
+                    )
+                ),
+            )
+        else:
+            lost_condition = CaseStatusHistory.to_stage_id == lost_sid
+    else:
+        lost_condition = literal(False)
+
+    base_filters = [
+        Case.organization_id == organization_id,
+        Case.owner_type == OwnerType.USER.value,
+        Case.owner_id.isnot(None),
+        CaseStatusHistory.changed_at >= start_dt,
+        CaseStatusHistory.changed_at <= end_dt,
+    ]
+
+    metrics_rows = (
+        db.query(
+            Case.owner_id.label("user_id"),
+            func.count(func.distinct(Case.id)).label("total_cases"),
+            _count_distinct(Case.is_archived.is_(True)).label("archived_count"),
+            _count_distinct(_stage_condition(stage_ids.get("contacted"))).label(
+                "contacted"
+            ),
+            _count_distinct(_stage_condition(stage_ids.get("qualified"))).label(
+                "qualified"
+            ),
+            _count_distinct(_stage_condition(stage_ids.get("pending_match"))).label(
+                "pending_match"
+            ),
+            _count_distinct(_stage_condition(stage_ids.get("matched"))).label("matched"),
+            _count_distinct(_stage_condition(stage_ids.get("applied"))).label("applied"),
+            _count_distinct(lost_condition).label("lost"),
+        )
+        .select_from(Case)
+        .join(CaseStatusHistory, CaseStatusHistory.case_id == Case.id)
+        .filter(*base_filters)
+        .group_by(Case.owner_id)
+        .all()
+    )
+
+    metrics_by_user = {row.user_id: row for row in metrics_rows}
+
+    user_data = []
+    for user_id, user_name in users_query:
+        metrics = metrics_by_user.get(user_id)
+        total = metrics.total_cases if metrics else 0
+        conversion_rate = (
+            round((metrics.applied / total * 100), 1) if metrics and total > 0 else 0.0
+        )
+
+        user_data.append(
+            {
+                "user_id": str(user_id),
+                "user_name": user_name or "Unknown",
+                "total_cases": total,
+                "archived_count": metrics.archived_count if metrics else 0,
+                "contacted": metrics.contacted if metrics else 0,
+                "qualified": metrics.qualified if metrics else 0,
+                "pending_match": metrics.pending_match if metrics else 0,
+                "matched": metrics.matched if metrics else 0,
+                "applied": metrics.applied if metrics else 0,
+                "lost": metrics.lost if metrics else 0,
+                "conversion_rate": conversion_rate,
+                "avg_days_to_match": None,
+                "avg_days_to_apply": None,
+            }
+        )
+
+    # Sort by total_cases descending
+    user_data.sort(key=lambda x: x["total_cases"], reverse=True)
+
+    # Unassigned bucket
+    unassigned_filters = [
+        Case.organization_id == organization_id,
+        or_(Case.owner_type != OwnerType.USER.value, Case.owner_id.is_(None)),
+        CaseStatusHistory.changed_at >= start_dt,
+        CaseStatusHistory.changed_at <= end_dt,
+    ]
+
+    unassigned_row = (
+        db.query(
+            func.count(func.distinct(Case.id)).label("total_cases"),
+            _count_distinct(Case.is_archived.is_(True)).label("archived_count"),
+            _count_distinct(_stage_condition(stage_ids.get("contacted"))).label(
+                "contacted"
+            ),
+            _count_distinct(_stage_condition(stage_ids.get("qualified"))).label(
+                "qualified"
+            ),
+            _count_distinct(_stage_condition(stage_ids.get("pending_match"))).label(
+                "pending_match"
+            ),
+            _count_distinct(_stage_condition(stage_ids.get("matched"))).label("matched"),
+            _count_distinct(_stage_condition(stage_ids.get("applied"))).label("applied"),
+            _count_distinct(lost_condition).label("lost"),
+        )
+        .select_from(Case)
+        .join(CaseStatusHistory, CaseStatusHistory.case_id == Case.id)
+        .filter(*unassigned_filters)
+        .first()
+    )
+
+    unassigned = {
+        "total_cases": unassigned_row.total_cases if unassigned_row else 0,
+        "archived_count": unassigned_row.archived_count if unassigned_row else 0,
+        "contacted": unassigned_row.contacted if unassigned_row else 0,
+        "qualified": unassigned_row.qualified if unassigned_row else 0,
+        "pending_match": unassigned_row.pending_match if unassigned_row else 0,
+        "matched": unassigned_row.matched if unassigned_row else 0,
+        "applied": unassigned_row.applied if unassigned_row else 0,
+        "lost": unassigned_row.lost if unassigned_row else 0,
+    }
+
+    return user_data, unassigned
+
+
+def _add_time_metrics(
+    db: Session,
+    organization_id: uuid.UUID,
+    start_dt: datetime,
+    end_dt: datetime,
+    stage_ids: dict[str, uuid.UUID | None],
+    user_data: list[dict[str, Any]],
+) -> None:
+    """
+    Add avg_days_to_match and avg_days_to_apply to user data.
+
+    Uses first-reach (MIN changed_at) for each stage.
+    """
+    matched_sid = stage_ids.get("matched")
+    applied_sid = stage_ids.get("applied")
+
+    def _avg_days_by_user(stage_id: uuid.UUID | None) -> dict[str, float]:
+        if not stage_id:
+            return {}
+
+        first_stage = (
+            db.query(
+                CaseStatusHistory.case_id.label("case_id"),
+                func.min(CaseStatusHistory.changed_at).label("first_changed_at"),
+            )
+            .filter(
+                CaseStatusHistory.organization_id == organization_id,
+                CaseStatusHistory.to_stage_id == stage_id,
+            )
+            .group_by(CaseStatusHistory.case_id)
+            .subquery()
+        )
+
+        rows = (
+            db.query(
+                Case.owner_id.label("user_id"),
+                func.avg(
+                    func.extract(
+                        "epoch", first_stage.c.first_changed_at - Case.created_at
+                    )
+                    / 86400
+                ).label("avg_days"),
+            )
+            .join(first_stage, first_stage.c.case_id == Case.id)
+            .filter(
+                Case.organization_id == organization_id,
+                Case.owner_type == OwnerType.USER.value,
+                Case.owner_id.isnot(None),
+                Case.created_at >= start_dt,
+                Case.created_at <= end_dt,
+            )
+            .group_by(Case.owner_id)
+            .all()
+        )
+
+        return {
+            str(row.user_id): round(float(row.avg_days), 1)
+            for row in rows
+            if row.avg_days is not None
+        }
+
+    match_avgs = _avg_days_by_user(matched_sid)
+    apply_avgs = _avg_days_by_user(applied_sid)
+
+    for user in user_data:
+        user_id = user["user_id"]
+        user["avg_days_to_match"] = match_avgs.get(user_id)
+        user["avg_days_to_apply"] = apply_avgs.get(user_id)
+
+
+def get_cached_performance_by_user(
+    db: Session,
+    organization_id: uuid.UUID,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    mode: Literal["cohort", "activity"] = "cohort",
+) -> dict[str, Any]:
+    """Cached version of get_performance_by_user."""
+    from app.services import pipeline_service
+
+    # Get pipeline ID for cache key
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
+
+    params = {
+        "start_date": start_date.isoformat() if start_date else None,
+        "end_date": end_date.isoformat() if end_date else None,
+        "mode": mode,
+        "pipeline_id": str(pipeline.id),
+        "pipeline_version": pipeline.current_version,
+    }
+    range_start = (
+        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
+        if start_date
+        else None
+    )
+    range_end = (
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
+        if end_date
+        else None
+    )
+    return _get_or_compute_snapshot(
+        db,
+        organization_id,
+        "performance_by_user",
+        params,
+        lambda: get_performance_by_user(
+            db,
+            organization_id,
+            start_date=start_date,
+            end_date=end_date,
+            mode=mode,
+        ),
+        range_start=range_start,
+        range_end=range_end,
+    )

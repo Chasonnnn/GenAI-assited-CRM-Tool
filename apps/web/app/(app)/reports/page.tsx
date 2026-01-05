@@ -12,9 +12,11 @@ import {
     ChartLegend,
     ChartLegendContent,
 } from "@/components/ui/chart"
-import { useAnalyticsSummary, useCasesByStatus, useCasesByAssignee, useCasesTrend, useMetaPerformance, useFunnelCompare, useCasesByStateCompare, useCampaigns, useMetaSpend } from "@/lib/hooks/use-analytics"
+import { useAnalyticsSummary, useCasesByStatus, useCasesByAssignee, useCasesTrend, useMetaPerformance, useFunnelCompare, useCasesByStateCompare, useCampaigns, useMetaSpend, usePerformanceByUser } from "@/lib/hooks/use-analytics"
 import { FunnelChart } from "@/components/charts/funnel-chart"
 import { USMapChart } from "@/components/charts/us-map-chart"
+import { TeamPerformanceTable } from "@/components/reports/TeamPerformanceTable"
+import { TeamPerformanceChart } from "@/components/reports/TeamPerformanceChart"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { useAuth } from "@/lib/auth-context"
 import { useSetAIContext } from "@/lib/context/ai-context"
@@ -94,6 +96,7 @@ export default function ReportsPage() {
     })
     const [selectedCampaign, setSelectedCampaign] = useState<string>('')
     const [isExporting, setIsExporting] = useState(false)
+    const [performanceMode, setPerformanceMode] = useState<'cohort' | 'activity'>('cohort')
 
     // Clear AI context for reports pages (use global mode)
     useSetAIContext(null)
@@ -151,6 +154,13 @@ export default function ReportsPage() {
         from_date: fromDate,
         to_date: toDate,
         ad_id: selectedCampaign || undefined
+    })
+
+    // Performance by user
+    const { data: performanceData, isLoading: performanceLoading, isError: performanceError } = usePerformanceByUser({
+        from_date: fromDate,
+        to_date: toDate,
+        mode: performanceMode,
     })
 
     // Transform data for charts
@@ -756,6 +766,45 @@ export default function ReportsPage() {
                         isLoading={byStateLoading}
                         isError={byStateError}
                         title="Cases by State"
+                    />
+                </div>
+
+                {/* Individual Performance Section */}
+                <div className="mt-6 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-xl font-semibold">Individual Performance</h2>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">Mode:</span>
+                            <Select value={performanceMode} onValueChange={(v) => v && setPerformanceMode(v as 'cohort' | 'activity')}>
+                                <SelectTrigger className="w-40">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="cohort">Created Cohort</SelectItem>
+                                    <SelectItem value="activity">Activity Window</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                        {performanceMode === 'cohort'
+                            ? 'Showing metrics for cases created within the selected date range, grouped by current owner.'
+                            : 'Showing metrics for cases with status transitions within the selected date range.'}
+                    </p>
+                    <div className="grid gap-6 lg:grid-cols-2">
+                        <TeamPerformanceChart
+                            data={performanceData?.data}
+                            isLoading={performanceLoading}
+                            isError={performanceError}
+                        />
+                        <div className="hidden lg:block" />
+                    </div>
+                    <TeamPerformanceTable
+                        data={performanceData?.data}
+                        unassigned={performanceData?.unassigned}
+                        isLoading={performanceLoading}
+                        isError={performanceError}
+                        asOf={performanceData?.as_of}
                     />
                 </div>
             </div>

@@ -8,7 +8,7 @@ import json
 import logging
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone, date
 from typing import Any
 
 import nh3
@@ -71,12 +71,19 @@ You are in GLOBAL mode - no specific case is selected. You can:
 - Help draft messages that the user can copy/paste
 - Suggest next steps based on information the user provides
 - Help parse emails or notes the user pastes to extract relevant information
+- Answer questions about team performance and conversion metrics (if data is provided below)
 
 If the user pastes an email or describes a situation, you can help:
 1. Identify if it relates to an existing case (ask for the person's name or case number)
 2. Suggest what tasks should be created
 3. Draft responses
 4. Recommend next steps
+
+When answering performance questions:
+- Identify top performers (high conversion rates) and those who may need support (low conversion rates)
+- Consider both volume (total cases) and efficiency (conversion rate)
+- Applied count represents successful outcomes; Lost represents unsuccessful outcomes
+- Conversion rate = (applied / total_cases) * 100
 
 ## Guidelines
 - Be concise and professional
@@ -119,6 +126,91 @@ Example action:
 - Don't provide legal or medical advice
 - Keep responses focused on the current task context
 """
+
+
+def _build_performance_context(
+    db: Session,
+    organization_id: uuid.UUID,
+) -> str:
+    """Build performance data context for global mode."""
+    from app.services import analytics_service
+
+    try:
+        # Get performance data (last 90 days by default)
+        end_date = date.today()
+        start_date = end_date - timedelta(days=90)
+
+        data = analytics_service.get_cached_performance_by_user(
+            db=db,
+            organization_id=organization_id,
+            start_date=start_date,
+            end_date=end_date,
+            mode="cohort",
+        )
+
+        if not data or not data.get("data"):
+            return "\n## Team Performance\nNo performance data available."
+
+        lines = [
+            "\n## Team Performance (Last 90 Days)",
+            f"Mode: Cohort (cases created in the period)",
+            "",
+            "| Team Member | Cases | Contacted | Qualified | Matched | Applied | Lost | Conv. Rate |",
+            "|-------------|-------|-----------|-----------|---------|---------|------|------------|",
+        ]
+
+        for user in data["data"]:
+            if user["total_cases"] > 0:
+                lines.append(
+                    f"| {user['user_name']} | {user['total_cases']} | {user['contacted']} | "
+                    f"{user['qualified']} | {user['matched']} | {user['applied']} | "
+                    f"{user['lost']} | {user['conversion_rate']}% |"
+                )
+
+        # Add unassigned if any
+        unassigned = data.get("unassigned", {})
+        if unassigned.get("total_cases", 0) > 0:
+            lines.append(
+                f"| Unassigned | {unassigned['total_cases']} | {unassigned['contacted']} | "
+                f"{unassigned['qualified']} | {unassigned['matched']} | {unassigned['applied']} | "
+                f"{unassigned['lost']} | - |"
+            )
+
+        # Add summary
+        total_cases = sum(u["total_cases"] for u in data["data"])
+        total_applied = sum(u["applied"] for u in data["data"])
+        avg_conversion = round(total_applied / total_cases * 100, 1) if total_cases > 0 else 0
+
+        lines.append("")
+        lines.append(f"**Summary**: {total_cases} total cases, {total_applied} applied, {avg_conversion}% team avg conversion rate")
+
+        return "\n".join(lines)
+    except Exception as e:
+        logger.warning(f"Failed to build performance context: {e}")
+        return "\n## Team Performance\nUnable to load performance data."
+
+
+def _should_fetch_performance(message: str) -> bool:
+    """Return True when the user asks about team performance metrics."""
+    if not message:
+        return False
+    text = message.lower()
+    keywords = (
+        "performance",
+        "conversion",
+        "conversion rate",
+        "convert",
+        "applied",
+        "matched",
+        "lost",
+        "assigned",
+        "cases",
+        "team",
+        "top performer",
+        "needs support",
+        "underperform",
+    )
+    return any(term in text for term in keywords)
 
 
 def _build_dynamic_context(
@@ -494,9 +586,13 @@ async def chat_async(
         system_prompt = TASK_SYSTEM_PROMPT
         dynamic_context = _build_task_context(task, related_case, user_integrations)
     elif entity_type == "global":
-        # Global mode - use simplified prompt
+        # Global mode - use simplified prompt with performance data
         system_prompt = GLOBAL_SYSTEM_PROMPT
-        dynamic_context = f"User's connected integrations: {', '.join(user_integrations) if user_integrations else 'none'}"
+        integrations_ctx = f"User's connected integrations: {', '.join(user_integrations) if user_integrations else 'none'}"
+        performance_ctx = ""
+        if _should_fetch_performance(message):
+            performance_ctx = _build_performance_context(db, organization_id)
+        dynamic_context = integrations_ctx + ("\n" + performance_ctx if performance_ctx else "")
     else:
         dynamic_context = "No context available for this entity type."
 

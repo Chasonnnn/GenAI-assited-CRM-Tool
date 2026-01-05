@@ -4,7 +4,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import * as analyticsApi from '../api/analytics';
-import type { DateRangeParams, TrendParams } from '../api/analytics';
+import type { DateRangeParams, TrendParams, PerformanceByUserParams } from '../api/analytics';
 
 // Query keys
 export const analyticsKeys = {
@@ -182,5 +182,17 @@ export function useActivityFeed(params: ActivityFeedParams = {}) {
         queryKey: [...analyticsKeys.all, 'activity-feed', params] as const,
         queryFn: () => analyticsApi.getActivityFeed(params),
         staleTime: 30 * 1000, // 30 seconds - activity feeds need fresher data
+    });
+}
+
+/**
+ * Fetch individual performance by user.
+ * Supports cohort mode (cases created in range) and activity mode (status changes in range).
+ */
+export function usePerformanceByUser(params: PerformanceByUserParams = {}) {
+    return useQuery({
+        queryKey: [...analyticsKeys.all, 'performance-by-user', params] as const,
+        queryFn: () => analyticsApi.getPerformanceByUser(params),
+        staleTime: 60 * 1000,
     });
 }

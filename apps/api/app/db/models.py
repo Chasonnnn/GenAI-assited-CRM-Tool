@@ -867,6 +867,22 @@ class Task(Base):
             postgresql_where=text("is_completed = FALSE"),
         ),
         Index("idx_tasks_intended_parent", "intended_parent_id"),
+        Index(
+            "idx_task_wf_approval_unique",
+            "workflow_execution_id",
+            "workflow_action_index",
+            unique=True,
+            postgresql_where=text("task_type = 'workflow_approval'"),
+        ),
+        Index(
+            "idx_tasks_pending_approvals",
+            "organization_id",
+            "status",
+            "due_at",
+            postgresql_where=text(
+                "task_type = 'workflow_approval' AND status IN ('pending', 'in_progress')"
+            ),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -2804,6 +2820,12 @@ class WorkflowExecution(Base):
         Index("idx_exec_workflow", "workflow_id", "executed_at"),
         Index("idx_exec_event", "event_id"),
         Index("idx_exec_entity", "entity_type", "entity_id"),
+        Index(
+            "idx_exec_paused",
+            "organization_id",
+            "status",
+            postgresql_where=text("status = 'paused'"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
