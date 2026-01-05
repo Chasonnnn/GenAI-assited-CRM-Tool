@@ -505,6 +505,14 @@ class Case(Base):
         ),
         # PII hash index for phone lookups
         Index("idx_cases_org_phone_hash", "organization_id", "phone_hash"),
+        # Contact reminder check index for efficient daily job queries
+        Index(
+            "idx_cases_reminder_check",
+            "organization_id",
+            "owner_type",
+            "contact_status",
+            "stage_id",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
