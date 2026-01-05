@@ -415,6 +415,7 @@ export function MatchTasksCalendar({ caseId, ipId, onAddTask }: MatchTasksCalend
         case_id: caseId,
         is_completed: false,
         per_page: 100,
+        exclude_approvals: true,
     })
 
     // Fetch tasks for IP (now supported via intended_parent_id filter)
@@ -423,6 +424,7 @@ export function MatchTasksCalendar({ caseId, ipId, onAddTask }: MatchTasksCalend
             intended_parent_id: ipId || undefined,
             is_completed: false,
             per_page: 100,
+            exclude_approvals: true,
         },
         { enabled: !!ipId }
     )

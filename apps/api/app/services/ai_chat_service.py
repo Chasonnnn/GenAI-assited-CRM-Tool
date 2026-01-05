@@ -25,6 +25,7 @@ from app.db.models import (
     Task,
     UserIntegration,
 )
+from app.db.enums import TaskType
 from app.services.ai_provider import ChatMessage, ChatResponse
 from app.services import ai_settings_service
 from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_text
@@ -328,7 +329,14 @@ def get_case_context(
     )
 
     # Get tasks (Task uses case_id, not entity_type/entity_id)
-    tasks = db.query(Task).filter(Task.case_id == case_id).all()
+    tasks = (
+        db.query(Task)
+        .filter(
+            Task.case_id == case_id,
+            Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
+        )
+        .all()
+    )
 
     return case, notes, tasks
 

@@ -37,7 +37,7 @@ function getFirstName(displayName: string | undefined): string {
 export default function DashboardPage() {
   const { user } = useAuth()
   const { data: stats, isLoading: statsLoading, isError: statsError } = useCaseStats()
-  const { data: tasksData, isLoading: tasksLoading, isError: tasksError } = useTasks({ my_tasks: true, is_completed: false, per_page: 5 })
+  const { data: tasksData, isLoading: tasksLoading, isError: tasksError } = useTasks({ my_tasks: true, is_completed: false, per_page: 5, exclude_approvals: true })
   const [trendPeriod, setTrendPeriod] = useState<'day' | 'week' | 'month'>('day')
   const { data: trendData, isLoading: trendLoading, isError: trendError } = useCasesTrend({ period: trendPeriod })
   const { data: statusData, isLoading: statusLoading, isError: statusError } = useCasesByStatus()

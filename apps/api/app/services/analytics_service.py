@@ -1701,6 +1701,7 @@ def get_pdf_export_data(
 ) -> dict[str, Any]:
     """Build analytics data used for PDF export."""
     from app.db.models import Task
+    from app.db.enums import TaskType
     from app.services import pipeline_service, org_service
 
     date_filter = Case.is_archived.is_(False)
@@ -1761,6 +1762,7 @@ def get_pdf_export_data(
         .filter(
             Task.organization_id == organization_id,
             Task.is_completed.is_(False),
+            Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
         )
         .scalar()
         or 0
@@ -1771,6 +1773,7 @@ def get_pdf_export_data(
         .filter(
             Task.organization_id == organization_id,
             Task.is_completed.is_(False),
+            Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
             Task.due_date < datetime.now(timezone.utc).date(),
         )
         .scalar()
