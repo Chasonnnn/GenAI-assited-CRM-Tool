@@ -298,3 +298,44 @@ export function useCaseActivity(caseId: string, page: number = 1, perPage: numbe
         enabled: !!caseId,
     });
 }
+
+// =============================================================================
+// Contact Attempts Tracking Hooks
+// =============================================================================
+
+export const contactAttemptKeys = {
+    all: (caseId: string) => [...caseKeys.detail(caseId), 'contact-attempts'] as const,
+};
+
+/**
+ * Fetch contact attempts summary for a case.
+ */
+export function useContactAttempts(caseId: string) {
+    return useQuery({
+        queryKey: contactAttemptKeys.all(caseId),
+        queryFn: () => casesApi.getContactAttempts(caseId),
+        enabled: !!caseId,
+    });
+}
+
+/**
+ * Log a new contact attempt for a case.
+ */
+export function useCreateContactAttempt() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ caseId, data }: { caseId: string; data: casesApi.ContactAttemptCreatePayload }) =>
+            casesApi.createContactAttempt(caseId, data),
+        onSuccess: (_, { caseId }) => {
+            // Invalidate contact attempts summary
+            queryClient.invalidateQueries({ queryKey: contactAttemptKeys.all(caseId) });
+            // Invalidate case detail (contact_status may have changed)
+            queryClient.invalidateQueries({ queryKey: caseKeys.detail(caseId) });
+            // Invalidate activity log (new activity entry)
+            queryClient.invalidateQueries({ queryKey: [...caseKeys.detail(caseId), 'activity'] });
+            // Invalidate case lists (status may have changed)
+            queryClient.invalidateQueries({ queryKey: caseKeys.lists() });
+        },
+    });
+}

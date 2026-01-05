@@ -260,3 +260,71 @@ class CaseActivityResponse(BaseModel):
     total: int
     page: int
     pages: int
+"""Contact attempts tracking schemas - append to case.py"""
+
+from datetime import datetime
+from uuid import UUID
+from pydantic import BaseModel, Field, field_validator
+
+
+# =============================================================================
+# Contact Attempts Tracking
+# =============================================================================
+
+
+class ContactAttemptCreate(BaseModel):
+    """Request schema for logging a contact attempt."""
+
+    contact_methods: list[str] = Field(..., min_length=1, max_length=3)
+    outcome: str
+    notes: str | None = Field(None, max_length=5000)
+    attempted_at: datetime | None = None  # Optional: defaults to now() if not provided
+
+    @field_validator("contact_methods")
+    @classmethod
+    def validate_methods(cls, v: list[str]) -> list[str]:
+        """Validate contact methods are valid."""
+        valid_methods = {"phone", "email", "sms"}
+        for method in v:
+            if method not in valid_methods:
+                raise ValueError(f"Invalid contact method: {method}")
+        return v
+
+    @field_validator("outcome")
+    @classmethod
+    def validate_outcome(cls, v: str) -> str:
+        """Validate outcome is valid."""
+        valid_outcomes = {"reached", "no_answer", "voicemail", "wrong_number", "email_bounced"}
+        if v not in valid_outcomes:
+            raise ValueError(f"Invalid outcome: {v}")
+        return v
+
+
+class ContactAttemptResponse(BaseModel):
+    """Response schema for a contact attempt."""
+
+    id: UUID
+    case_id: UUID
+    attempted_by_user_id: UUID | None
+    attempted_by_name: str | None
+    contact_methods: list[str]
+    outcome: str
+    notes: str | None
+    attempted_at: datetime
+    created_at: datetime
+    is_backdated: bool
+    case_owner_id_at_attempt: UUID
+
+    model_config = {"from_attributes": True}
+
+
+class ContactAttemptsSummary(BaseModel):
+    """Summary of contact attempts for a case."""
+
+    total_attempts: int  # All attempts in history
+    current_assignment_attempts: int  # Attempts since latest owner assignment
+    distinct_days_current_assignment: int  # Distinct calendar days (org timezone)
+    successful_attempts: int
+    last_attempt_at: datetime | None
+    days_since_last_attempt: int | None
+    attempts: list[ContactAttemptResponse]  # All attempts, ordered by attempted_at DESC

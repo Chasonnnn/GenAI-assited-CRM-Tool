@@ -60,6 +60,7 @@ class NotificationSettingsRead(BaseModel):
     task_assigned: bool
     task_reminders: bool
     appointments: bool
+    contact_reminder: bool
 
 
 class NotificationSettingsUpdate(BaseModel):
@@ -71,6 +72,7 @@ class NotificationSettingsUpdate(BaseModel):
     task_assigned: bool | None = None
     task_reminders: bool | None = None
     appointments: bool | None = None
+    contact_reminder: bool | None = None
 
 
 # =============================================================================

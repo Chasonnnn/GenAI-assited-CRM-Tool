@@ -165,6 +165,7 @@ def get_or_create_default_pipeline(
                     color=stage["color"],
                     order=stage["order"],
                     stage_type=stage["stage_type"],
+                    is_intake_stage=stage["stage_type"] == "intake",
                     is_active=True,
                 )
                 for stage in stage_defs
@@ -248,6 +249,7 @@ def sync_missing_stages(
                 color=stage_def["color"],
                 order=max_order + i + 1,  # Append after existing
                 stage_type=stage_def["stage_type"],
+                is_intake_stage=stage_def["stage_type"] == "intake",
                 is_active=True,
             )
         )
@@ -327,6 +329,9 @@ def create_pipeline(
                 color=stage["color"],
                 order=stage.get("order", i + 1),
                 stage_type=stage.get("stage_type", "intake"),
+                is_intake_stage=stage.get(
+                    "is_intake_stage", stage.get("stage_type", "intake") == "intake"
+                ),
                 is_active=stage.get("is_active", True),
             )
             for i, stage in enumerate(stage_defs)
@@ -583,6 +588,7 @@ def create_stage(
         color=color,
         stage_type=stage_type,
         order=order,
+        is_intake_stage=stage_type == "intake",
         is_active=True,
     )
     db.add(stage)

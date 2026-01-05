@@ -140,6 +140,7 @@ def default_stage(db, test_org):
         stage_type="intake",
         order=1,
         is_active=True,
+        is_intake_stage=True,
     )
     db.add(stage)
     db.flush()

@@ -21,7 +21,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import CITEXT, JSONB, TSVECTOR, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, CITEXT, JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -591,6 +591,17 @@ class Case(Base):
         String(20), nullable=True
     )  # email, phone, note
 
+    # Contact attempts tracking
+    assigned_at: Mapped[datetime | None] = mapped_column(
+        nullable=True
+    )  # When assigned to current owner
+    contact_status: Mapped[str] = mapped_column(
+        String(20), server_default=text("'unreached'"), nullable=False
+    )
+    contacted_at: Mapped[datetime | None] = mapped_column(
+        nullable=True
+    )  # When first successful contact
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"), nullable=False
@@ -631,6 +642,11 @@ class Case(Base):
     # Notes use EntityNote with entity_type='case' - no direct relationship
     status_history: Mapped[list["CaseStatusHistory"]] = relationship(
         back_populates="case", cascade="all, delete-orphan"
+    )
+    contact_attempts: Mapped[list["CaseContactAttempt"]] = relationship(
+        back_populates="case",
+        cascade="all, delete-orphan",
+        order_by="desc(CaseContactAttempt.attempted_at)",
     )
 
 
@@ -719,6 +735,91 @@ class CaseActivityLog(Base):
 
 # NOTE: CaseNote model removed (migrated to EntityNote with entity_type='case')
 # See migration 0013_migrate_casenotes.py
+
+
+class CaseContactAttempt(Base):
+    """
+    Track individual contact attempts for cases.
+
+    Supports:
+    - Multi-method attempts per entry
+    - Back-dated entries with audit trail
+    - Assignment tracking for reminder logic
+    """
+
+    __tablename__ = "case_contact_attempts"
+    __table_args__ = (
+        Index("idx_contact_attempts_case", "case_id", "attempted_at"),
+        Index(
+            "idx_contact_attempts_org_pending",
+            "organization_id",
+            "outcome",
+            "attempted_at",
+            postgresql_where=text("outcome != 'reached'"),
+        ),
+        Index(
+            "idx_contact_attempts_case_owner",
+            "case_id",
+            "case_owner_id_at_attempt",
+            "attempted_at",
+        ),
+        CheckConstraint(
+            "array_length(contact_methods, 1) > 0", name="ck_contact_methods_not_empty"
+        ),
+        CheckConstraint(
+            "contact_methods <@ ARRAY['phone', 'email', 'sms']::VARCHAR[]",
+            name="ck_contact_methods_valid",
+        ),
+        CheckConstraint(
+            "attempted_at <= (now() + interval '5 minutes')",
+            name="ck_attempted_at_not_future",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    case_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    attempted_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    # Multi-method support: store as array
+    contact_methods: Mapped[list[str]] = mapped_column(
+        ARRAY(String), nullable=False, server_default=text("'{}'")
+    )
+
+    outcome: Mapped[str] = mapped_column(String(30), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Audit trail: distinguish when logged vs when it actually happened
+    attempted_at: Mapped[datetime] = mapped_column(
+        nullable=False
+    )  # When the attempt actually occurred
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"), nullable=False
+    )  # When it was logged
+
+    # Denormalized for performance: which assignment does this attempt belong to?
+    case_owner_id_at_attempt: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False
+    )  # cases.owner_id at time of attempt
+
+    # Relationships
+    case: Mapped["Case"] = relationship(back_populates="contact_attempts")
+    attempted_by: Mapped["User | None"] = relationship()
+
+    @property
+    def is_backdated(self) -> bool:
+        """Check if this attempt was logged after it occurred."""
+        return self.attempted_at < self.created_at
 
 
 class Task(Base):
@@ -1389,6 +1490,9 @@ class UserNotificationSettings(Base):
     appointments: Mapped[bool] = mapped_column(
         default=True, server_default=text("true")
     )  # New/confirmed/cancelled
+    contact_reminder: Mapped[bool] = mapped_column(
+        default=True, server_default=text("true")
+    )  # Contact attempt reminders
 
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"), onupdate=text("now()"), nullable=False
@@ -2400,6 +2504,11 @@ class PipelineStage(Base):
         Boolean, server_default=text("TRUE"), nullable=False
     )
     deleted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
+
+    # Contact attempts UI gating
+    is_intake_stage: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("FALSE"), nullable=False
+    )
 
     # Future: transition rules
     allowed_next_slugs: Mapped[list | None] = mapped_column(JSONB, nullable=True)

@@ -1291,3 +1291,89 @@ def deny_handoff(
         raise HTTPException(status_code=409, detail=error)
 
     return _case_to_read(case, db)
+"""Contact attempts endpoints - append to cases.py"""
+
+from app.schemas.case import ContactAttemptCreate, ContactAttemptResponse, ContactAttemptsSummary
+from app.services import contact_attempt_service
+
+
+# =============================================================================
+# Contact Attempts Tracking
+# =============================================================================
+
+
+@router.post(
+    "/{case_id}/contact-attempts",
+    response_model=ContactAttemptResponse,
+    status_code=201,
+    dependencies=[Depends(require_csrf_header)],
+)
+def create_contact_attempt(
+    case_id: UUID,
+    data: ContactAttemptCreate,
+    session: UserSession = Depends(
+        require_permission(POLICIES["cases"].actions["edit"])
+    ),
+    db: Session = Depends(get_db),
+):
+    """
+    Log a contact attempt for a case.
+
+    Supports:
+    - Multiple contact methods per attempt
+    - Back-dating (cannot be future or before assignment)
+    - Automatic contact_status update if outcome='reached'
+    """
+    case = case_service.get_case(db, session.org_id, case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+
+    try:
+        attempt = contact_attempt_service.create_contact_attempt(
+            session=db,
+            case_id=case_id,
+            data=data,
+            user=session,
+        )
+        db.commit()
+        return attempt
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get(
+    "/{case_id}/contact-attempts",
+    response_model=ContactAttemptsSummary,
+)
+def get_contact_attempts(
+    case_id: UUID,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """
+    Get contact attempts summary for a case.
+
+    Returns:
+    - All attempts
+    - Attempt counts (total, current assignment, distinct days)
+    - Success/failure counts
+    - Days since last attempt
+    """
+    # Access control
+    case = case_service.get_case(db, session.org_id, case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+
+    try:
+        summary = contact_attempt_service.get_case_contact_attempts_summary(
+            session=db,
+            case_id=case_id,
+            user=session,
+        )
+        return summary
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

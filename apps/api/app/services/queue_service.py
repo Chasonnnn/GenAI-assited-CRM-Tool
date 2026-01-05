@@ -1,5 +1,6 @@
 """Queue management service with claim/release and audit logging."""
 
+from datetime import datetime, timezone
 from uuid import UUID
 from sqlalchemy import select, and_
 from sqlalchemy.orm import Session
@@ -246,6 +247,7 @@ def claim_case(
     # Transfer ownership to user
     case.owner_type = OwnerType.USER.value
     case.owner_id = claimer_user_id
+    case.assigned_at = datetime.now(timezone.utc)
 
     # Log activity
     activity_service.log_activity(
@@ -297,6 +299,7 @@ def release_case(
     # Transfer ownership to queue
     case.owner_type = OwnerType.QUEUE.value
     case.owner_id = queue_id
+    case.assigned_at = None
 
     # Log activity
     activity_service.log_activity(
@@ -345,6 +348,7 @@ def assign_to_queue(
     # Assign to queue
     case.owner_type = OwnerType.QUEUE.value
     case.owner_id = queue_id
+    case.assigned_at = None
 
     # Log activity
     activity_service.log_activity(

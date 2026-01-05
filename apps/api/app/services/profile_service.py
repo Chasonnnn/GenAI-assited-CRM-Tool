@@ -249,6 +249,7 @@ def save_profile_overrides(
         else:
             db.add(
                 CaseProfileState(
+                    id=uuid.uuid4(),
                     case_id=case_id,
                     organization_id=org_id,
                     base_submission_id=new_base_submission_id,
@@ -307,6 +308,7 @@ def set_field_hidden(
     if hidden and not existing:
         # Add hidden field
         hidden_field = CaseProfileHiddenField(
+            id=uuid.uuid4(),
             case_id=case_id,
             organization_id=org_id,
             field_key=field_key,

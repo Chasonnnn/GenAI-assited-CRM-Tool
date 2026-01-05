@@ -141,6 +141,7 @@ class CaseActivityType(str, Enum):
     APPLICATION_EDITED = "application_edited"
     PROFILE_EDITED = "profile_edited"
     PROFILE_HIDDEN = "profile_hidden"
+    CONTACT_ATTEMPT = "contact_attempt"  # Contact attempt logged
 
 
 class MatchStatus(str, Enum):
@@ -214,6 +215,9 @@ class NotificationType(str, Enum):
     # Form notifications
     FORM_SUBMISSION_RECEIVED = "form_submission_received"  # Application submitted
 
+    # Contact attempt reminders
+    CONTACT_REMINDER = "contact_reminder"  # Reminder to follow up on case
+
 
 # Note: is_priority is a boolean field on Case model, not an enum
 # Default: False (normal), True (priority - shown with gold styling in UI)
@@ -249,6 +253,7 @@ class JobType(str, Enum):
     DATA_PURGE = "data_purge"
     CAMPAIGN_SEND = "campaign_send"  # Bulk email campaign execution
     AI_CHAT = "ai_chat"
+    CONTACT_REMINDER_CHECK = "contact_reminder_check"  # Daily contact follow-up check
 
 
 class JobStatus(str, Enum):
@@ -653,3 +658,33 @@ class AppointmentEmailType(str, Enum):
 
 # Default appointment status
 DEFAULT_APPOINTMENT_STATUS = AppointmentStatus.PENDING
+
+
+# =============================================================================
+# Contact Attempts Tracking
+# =============================================================================
+
+
+class ContactMethod(str, Enum):
+    """Contact methods - can select multiple per attempt."""
+
+    PHONE = "phone"
+    EMAIL = "email"
+    SMS = "sms"
+
+
+class ContactOutcome(str, Enum):
+    """Outcome of a contact attempt."""
+
+    REACHED = "reached"
+    NO_ANSWER = "no_answer"
+    VOICEMAIL = "voicemail"
+    WRONG_NUMBER = "wrong_number"
+    EMAIL_BOUNCED = "email_bounced"
+
+
+class ContactStatus(str, Enum):
+    """Case-level contact status for reminder logic."""
+
+    UNREACHED = "unreached"
+    REACHED = "reached"
