@@ -218,6 +218,9 @@ class NotificationType(str, Enum):
     # Contact attempt reminders
     CONTACT_REMINDER = "contact_reminder"  # Reminder to follow up on case
 
+    # Interview notifications
+    INTERVIEW_TRANSCRIPTION_COMPLETED = "interview_transcription_completed"
+
 
 # Note: is_priority is a boolean field on Case model, not an enum
 # Default: False (normal), True (priority - shown with gold styling in UI)
@@ -254,6 +257,7 @@ class JobType(str, Enum):
     CAMPAIGN_SEND = "campaign_send"  # Bulk email campaign execution
     AI_CHAT = "ai_chat"
     CONTACT_REMINDER_CHECK = "contact_reminder_check"  # Daily contact follow-up check
+    INTERVIEW_TRANSCRIPTION = "interview_transcription"
 
 
 class JobStatus(str, Enum):

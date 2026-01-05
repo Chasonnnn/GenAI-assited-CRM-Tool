@@ -80,7 +80,11 @@ def calculate_checksum(file: BinaryIO) -> str:
 
 
 def validate_file(
-    filename: str, content_type: str, file_size: int
+    filename: str,
+    content_type: str,
+    file_size: int,
+    allowed_extensions: set[str] | None = None,
+    allowed_mime_types: set[str] | None = None,
 ) -> tuple[bool, str | None]:
     """
     Validate file against allowlists and size limits.
@@ -89,11 +93,14 @@ def validate_file(
     """
     # Check extension
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    if ext not in ALLOWED_EXTENSIONS:
+    allowed_exts = allowed_extensions or ALLOWED_EXTENSIONS
+    allowed_mimes = allowed_mime_types or ALLOWED_MIME_TYPES
+
+    if ext not in allowed_exts:
         return False, f"File extension '.{ext}' not allowed"
 
     # Check MIME type
-    if content_type not in ALLOWED_MIME_TYPES:
+    if content_type not in allowed_mimes:
         return False, f"Content type '{content_type}' not allowed"
 
     # Check size
@@ -210,6 +217,8 @@ def upload_attachment(
     file_size: int,
     case_id: uuid.UUID | None = None,
     intended_parent_id: uuid.UUID | None = None,
+    allowed_extensions: set[str] | None = None,
+    allowed_mime_types: set[str] | None = None,
 ) -> Attachment:
     """
     Upload and store an attachment.
@@ -218,7 +227,13 @@ def upload_attachment(
     Either case_id or intended_parent_id should be provided.
     """
     # Validate
-    is_valid, error = validate_file(filename, content_type, file_size)
+    is_valid, error = validate_file(
+        filename,
+        content_type,
+        file_size,
+        allowed_extensions=allowed_extensions,
+        allowed_mime_types=allowed_mime_types,
+    )
     if not is_valid:
         raise ValueError(error)
 

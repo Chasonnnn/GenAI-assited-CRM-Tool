@@ -39,6 +39,13 @@ def decrypt_api_key(encrypted_key: str) -> str:
     return fernet.decrypt(encrypted_key.encode()).decode()
 
 
+def get_decrypted_key(ai_settings: AISettings) -> str | None:
+    """Return decrypted API key if configured."""
+    if not ai_settings.api_key_encrypted:
+        return None
+    return decrypt_api_key(ai_settings.api_key_encrypted)
+
+
 def _ai_settings_payload(ai_settings: AISettings) -> dict:
     """
     Extract versionable payload from AI settings.
