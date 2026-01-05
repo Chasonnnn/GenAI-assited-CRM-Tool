@@ -190,7 +190,7 @@ export default function AIAssistantPage() {
                     <AlertCircleIcon className="h-5 w-5 text-yellow-500" />
                     <div className="flex-1">
                         <p className="text-sm font-medium">AI Assistant is not enabled</p>
-                        <p className="text-xs text-muted-foreground">Contact your manager to enable AI features and configure an API key.</p>
+                        <p className="text-xs text-muted-foreground">Contact your admin to enable AI features and configure an API key.</p>
                     </div>
                 </div>
             )}

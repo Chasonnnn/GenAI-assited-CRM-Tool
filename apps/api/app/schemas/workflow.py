@@ -165,7 +165,7 @@ class CreateTaskActionConfig(BaseModel):
     title: str = Field(max_length=200)
     description: str | None = None
     due_days: int = Field(ge=0, le=365, default=1)
-    assignee: Literal["owner", "creator", "manager"] | UUID = "owner"
+    assignee: Literal["owner", "creator", "admin"] | UUID = "owner"
 
 
 class AssignCaseActionConfig(BaseModel):
@@ -182,7 +182,7 @@ class SendNotificationActionConfig(BaseModel):
     action_type: Literal["send_notification"] = "send_notification"
     title: str = Field(max_length=100)
     body: str | None = None
-    recipients: Literal["owner", "creator", "all_managers"] | list[UUID] = "owner"
+    recipients: Literal["owner", "creator", "all_admins"] | list[UUID] = "owner"
 
 
 class UpdateFieldActionConfig(BaseModel):

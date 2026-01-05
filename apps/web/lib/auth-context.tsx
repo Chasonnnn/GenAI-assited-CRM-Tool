@@ -25,8 +25,8 @@ interface User {
 // Mock user for testing when auth is bypassed
 const MOCK_USER: User = {
     user_id: '4176661a-0bab-4e28-b44f-1591960b88bf',
-    email: 'manager@test.com',
-    display_name: 'Test Manager',
+    email: 'admin@test.com',
+    display_name: 'Test Admin',
     avatar_url: undefined,
     org_id: 'd1f370ab-1680-46b3-a37d-7cff639e4a47',
     org_name: 'Test Organization',

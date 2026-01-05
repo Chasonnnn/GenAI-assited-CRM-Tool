@@ -312,7 +312,7 @@ def seed_global_templates(db: Session) -> int:
                 {
                     "action_type": "send_notification",
                     "title": "Case status updated",
-                    "recipients": "all_managers",
+                    "recipients": "all_admins",
                 }
             ],
         },

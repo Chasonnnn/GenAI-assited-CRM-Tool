@@ -320,12 +320,12 @@ org_id = membership.organization_id
 ### Centralized Dependencies
 ```python
 # ✅ Use these
-user = Depends(require_roles(["manager", "case_manager"]))
+user = Depends(require_roles(["admin", "case_manager"]))
 user = Depends(require_membership())
 csrf = Depends(require_csrf_header)
 
 # ❌ Avoid scattered checks
-if request.user.role == "manager":  # Don't do this
+if request.user.role == "admin":  # Don't do this
 ```
 
 ### Cookie Sessions + CSRF

@@ -51,7 +51,7 @@ def list_workflows(
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
 ):
-    """List all workflows for the organization (manager+ only)."""
+    """List all workflows for the organization (admin+ only)."""
     workflows = workflow_service.list_workflows(
         db=db,
         org_id=session.org_id,

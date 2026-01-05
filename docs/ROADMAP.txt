@@ -39,7 +39,7 @@ Backend
 ✓ Centralized authorization helpers (role checks; membership checks) in `core/deps.py`
 ✓ Centralized query scoping helper: `get_org_scope` dependency
 ✓ Seed/bootstrap path:
-  ✓ CLI: `python -m app.cli create-org` for first org + manager invite
+  ✓ CLI: `python -m app.cli create-org` for first org + admin invite
   ✓ Dev-only endpoints (`/dev/seed`, `/dev/login-as`) guarded by ENV + X-Dev-Secret header
 ✓ Service layer: `auth_service.py`, `user_service.py`, `org_service.py`, `google_oauth.py`
 ✓ Schemas: `auth.py`, `user.py`, `org.py`, `invite.py`
@@ -54,7 +54,7 @@ Deliverable
 
 Week 3 — Cases v1 (renamed from Leads) ✓ COMPLETE
 Backend
-✓ 4 roles: intake_specialist, case_manager, manager, developer
+✓ 4 roles: intake_specialist, case_manager, admin, developer
 ✓ cases table:
   ✓ organization_id, source, meta_lead_id, contact fields, status, assigned_to, created_by, timestamps
   ✓ Sequential case_number per org (00001-99999)
@@ -69,7 +69,7 @@ Backend
 ✓ Endpoints:
   ✓ /cases (list with pagination max 100, search, filters)
   ✓ /cases CRUD + status change + assign
-  ✓ /cases/:id/archive, /cases/:id/restore (manager+ only)
+  ✓ /cases/:id/archive, /cases/:id/restore (admin+ only)
   ✓ /cases/:id/history (status timeline)
   ✓ /cases/:id/notes (list/create)
   ✓ /notes/:id (delete)
@@ -464,7 +464,7 @@ Security Fixes (code review)
 ✓ Analytics qualified_statuses includes all post-qualified stages
 ✓ Trend endpoint excludes archived cases
 Permissions
-✓ All ops/analytics endpoints require manager or developer role
+✓ All ops/analytics endpoints require admin or developer role
 ✓ CSRF protection on all state-changing POST endpoints
 Deliverable
 ✓ Enterprise-grade integration health tracking and alerting system
@@ -583,12 +583,12 @@ Deliverable
 Week 12 — AI assistant v1 (safe + useful, BYOK)/Hardening + deployment + open-source readiness ✓ COMPLETE
 Backend ✓
 ✓ Org AI settings + key storage:
-  ✓ store provider key encrypted at rest; write-only; masked display; manager-only updates
+  ✓ store provider key encrypted at rest; write-only; masked display; admin-only updates
   ✓ org policy toggles (enabled, allowed features)
 ✓ Endpoints (org + role scoped):
   ✓ `/ai/summarize-case` - comprehensive case summary with next steps
   ✓ `/ai/draft-email` - 5 types (follow_up, status_update, meeting_request, document_request, introduction)
-  ✓ `/ai/analyze-dashboard` - AI-powered insights for managers
+  ✓ `/ai/analyze-dashboard` - AI-powered insights for admins
 ✓ AI audit logging (prompt template version, model, redaction, latency/cost metadata)
 Frontend ✓
 ✓ "AI" tab on case detail page:
@@ -756,4 +756,3 @@ Bug Fixes & Polish (Week 12) — v0.11.1 ✓
   - Transitive external dependencies handled automatically
 ✓ Version: Settings page now shows v0.11.1
 ✓ Tests: 26/26 passing
-

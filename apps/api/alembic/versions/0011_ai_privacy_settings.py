@@ -5,7 +5,7 @@ Revises: 0010_ai_assistant
 Create Date: 2025-12-16
 
 Adds:
-- consent_accepted_at: When manager accepted AI data processing consent
+- consent_accepted_at: When admin accepted AI data processing consent
 - consent_accepted_by: Who accepted the consent
 - anonymize_pii: Whether to strip PII before sending to AI provider
 """

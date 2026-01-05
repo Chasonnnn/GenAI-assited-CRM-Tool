@@ -370,7 +370,7 @@ def chat(
     if settings and ai_settings_service.is_consent_required(settings):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="AI consent not accepted. A manager must accept the data processing consent before using AI.",
+            detail="AI consent not accepted. An admin must accept the data processing consent before using AI.",
         )
 
     # Determine entity type and ID - support global mode
@@ -412,7 +412,7 @@ def chat(
             task.created_by_user_id != session.user_id
             and task.assigned_to_user_id != session.user_id
         ):
-            # Allow managers to access any task in their org
+            # Allow admins to access any task in their org
             is_manager = session.role in (Role.ADMIN, Role.CASE_MANAGER, Role.DEVELOPER)
             if not is_manager:
                 raise HTTPException(
@@ -462,7 +462,7 @@ def chat_async(
     if settings and ai_settings_service.is_consent_required(settings):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="AI consent not accepted. A manager must accept the data processing consent before using AI.",
+            detail="AI consent not accepted. An admin must accept the data processing consent before using AI.",
         )
 
     entity_type = body.entity_type or "global"
@@ -784,7 +784,7 @@ def approve_action(
     if not conversation or conversation.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    # Verify user owns this conversation or has manager role
+    # Verify user owns this conversation or has admin role
     is_manager = session.role in (Role.ADMIN, Role.CASE_MANAGER, Role.DEVELOPER)
     if conversation.user_id != session.user_id and not is_manager:
         raise HTTPException(
@@ -958,7 +958,7 @@ def reject_action(
     if not conversation or conversation.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    # Verify user owns this conversation or has manager role
+    # Verify user owns this conversation or has admin role
     is_manager = session.role in (Role.ADMIN, Role.CASE_MANAGER, Role.DEVELOPER)
     if conversation.user_id != session.user_id and not is_manager:
         raise HTTPException(
@@ -1848,7 +1848,7 @@ async def parse_schedule(
     if settings and ai_settings_service.is_consent_required(settings):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="AI consent not accepted. A manager must accept the data processing consent before using AI.",
+            detail="AI consent not accepted. An admin must accept the data processing consent before using AI.",
         )
 
     # Verify entity exists and belongs to org

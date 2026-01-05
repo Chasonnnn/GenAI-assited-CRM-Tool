@@ -596,7 +596,7 @@ class WorkflowEngine:
             owner_type = OwnerType.USER.value
             owner_id = entity.created_by_user_id
         elif isinstance(assignee, str) and assignee.startswith(
-            ("manager", "owner", "creator")
+            ("admin", "owner", "creator")
         ):
             owner_type = entity.owner_type
             owner_id = entity.owner_id
@@ -700,7 +700,7 @@ class WorkflowEngine:
             user_ids = [entity.owner_id]
         elif recipients == "creator":
             user_ids = [entity.created_by_user_id] if entity.created_by_user_id else []
-        elif recipients == "all_managers":
+        elif recipients == "all_admins":
             from app.db.models import Membership
             from app.db.enums import Role
 

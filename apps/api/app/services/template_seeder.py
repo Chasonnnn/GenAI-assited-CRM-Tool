@@ -499,7 +499,7 @@ SYSTEM_WORKFLOWS = [
     {
         "system_key": "task_overdue_escalation",
         "name": "Task Overdue Escalation",
-        "description": "Notifies managers when tasks become overdue",
+        "description": "Notifies admins when tasks become overdue",
         "icon": "alert",
         "trigger_type": "task_overdue",
         "trigger_config": {},
@@ -510,7 +510,7 @@ SYSTEM_WORKFLOWS = [
                 "action_type": "send_notification",
                 "title": "Task overdue",
                 "body": "A task is overdue and needs attention.",
-                "recipients": "all_managers",
+                "recipients": "all_admins",
             }
         ],
         "is_enabled": False,
@@ -598,7 +598,7 @@ def seed_system_workflows(
 
     Idempotent: skips workflows where system_key already exists for this org.
 
-    Note: Workflows are created disabled by default and require manager review.
+    Note: Workflows are created disabled by default and require admin review.
 
     Returns:
         Number of workflows created.

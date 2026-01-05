@@ -265,7 +265,7 @@ app.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 # Internal endpoints (scheduled/cron jobs - protected by INTERNAL_SECRET)
 app.include_router(internal.router)
 
-# Analytics endpoints (manager dashboards)
+# Analytics endpoints (admin dashboards)
 app.include_router(analytics.router)
 
 # Ops endpoints (integration health, alerts)

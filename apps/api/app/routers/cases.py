@@ -888,7 +888,7 @@ def update_case(
     """
     Update case fields.
 
-    Requires: creator or manager+ (blocked after handoff for intake)
+    Requires: creator or admin+ (blocked after handoff for intake)
     """
     case = case_service.get_case(db, session.org_id, case_id)
     if not case:

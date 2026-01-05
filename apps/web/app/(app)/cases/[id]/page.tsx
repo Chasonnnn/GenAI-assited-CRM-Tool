@@ -484,7 +484,7 @@ export default function CaseDetailPage() {
                         </Button>
                     )}
 
-                    {/* Propose Match Button - only for manager+ on active cases */}
+                    {/* Propose Match Button - only for case_manager+ on active cases */}
                     {user?.role && ['case_manager', 'admin', 'developer'].includes(user.role) && !caseData.is_archived && (
                         <Button
                             variant="outline"
@@ -868,7 +868,7 @@ export default function CaseDetailPage() {
                                         <BrainIcon className="h-12 w-12 text-muted-foreground mb-4" />
                                         <h3 className="text-lg font-medium">AI Assistant Not Enabled</h3>
                                         <p className="text-sm text-muted-foreground mt-2 max-w-md">
-                                            Contact your manager to enable AI features and configure an API key in Settings.
+                                            Contact your admin to enable AI features and configure an API key in Settings.
                                         </p>
                                     </div>
                                 </CardContent>

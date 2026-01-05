@@ -1,5 +1,5 @@
 """
-Analytics endpoints for manager dashboards.
+Analytics endpoints for admin dashboards.
 
 Provides case statistics, trends, and Meta performance metrics.
 """
@@ -414,7 +414,7 @@ def get_activity_feed(
     Get org-wide activity feed.
 
     Returns recent activities across all cases in the organization.
-    Useful for managers to see what's happening across the team.
+    Useful for admins to see what's happening across the team.
     """
     items, has_more = analytics_service.get_activity_feed(
         db=db,
