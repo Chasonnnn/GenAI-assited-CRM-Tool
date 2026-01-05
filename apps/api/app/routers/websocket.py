@@ -10,6 +10,7 @@ Provides a WebSocket endpoint that:
 from uuid import UUID
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 
+from app.core.config import settings
 from app.core.websocket import manager
 from app.core.security import decode_session_token
 from app.core.deps import COOKIE_NAME
@@ -71,6 +72,25 @@ async def websocket_notifications(
                     org_id = UUID(payload["org_id"])
             except Exception:
                 pass
+
+    if not user_id and settings.DEV_BYPASS_AUTH:
+        # Align WebSocket auth with HTTP dev bypass to avoid 403 spam in local dev.
+        from app.db.session import SessionLocal
+        from app.db.models import Membership, User
+
+        with SessionLocal() as db:
+            dev_user = db.query(User).filter(User.email == "admin@test.com").first()
+            if not dev_user:
+                dev_user = db.query(User).filter(User.is_active.is_(True)).first()
+            if dev_user:
+                user_id = dev_user.id
+                membership = (
+                    db.query(Membership)
+                    .filter(Membership.user_id == dev_user.id)
+                    .first()
+                )
+                if membership:
+                    org_id = membership.organization_id
 
     if not user_id:
         await websocket.close(code=4001, reason="Authentication required")
