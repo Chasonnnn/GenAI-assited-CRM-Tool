@@ -26,6 +26,7 @@ export interface NotificationSettings {
     case_status_changed: boolean
     case_handoff: boolean
     task_assigned: boolean
+    workflow_approvals: boolean
     task_reminders: boolean
     appointments: boolean
 }

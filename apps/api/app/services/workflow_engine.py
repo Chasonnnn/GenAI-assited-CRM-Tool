@@ -510,13 +510,12 @@ class WorkflowEngine:
             logger.info(f"Created approval task {task.id} for execution {execution.id}")
 
             # Send notification to owner (respects user settings)
-            notification_service.notify_task_assigned(
+            notification_service.notify_workflow_approval_requested(
                 db=db,
                 task_id=task.id,
                 task_title=task.title,
                 org_id=case.organization_id,
                 assignee_id=owner.id,
-                actor_name=SYSTEM_USER_DISPLAY_NAME,
                 case_number=case.case_number,
             )
 

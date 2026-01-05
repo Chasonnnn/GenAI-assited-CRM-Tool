@@ -1547,6 +1547,9 @@ class UserNotificationSettings(Base):
     task_assigned: Mapped[bool] = mapped_column(
         default=True, server_default=text("true")
     )
+    workflow_approvals: Mapped[bool] = mapped_column(
+        default=True, server_default=text("true")
+    )
     task_reminders: Mapped[bool] = mapped_column(
         default=True, server_default=text("true")
     )  # Due soon/overdue

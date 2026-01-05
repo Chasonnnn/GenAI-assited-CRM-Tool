@@ -45,6 +45,7 @@ vi.mock('@/lib/hooks/use-notifications', () => ({
             case_status_changed: true,
             case_handoff: true,
             task_assigned: true,
+            workflow_approvals: true,
         },
         isLoading: false,
     }),

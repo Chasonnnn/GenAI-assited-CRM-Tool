@@ -390,6 +390,7 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             case_status_changed=settings_data.get("case_status_changed", True),
             case_handoff=settings_data.get("case_handoff", True),
             task_assigned=settings_data.get("task_assigned", True),
+            workflow_approvals=settings_data.get("workflow_approvals", True),
             task_reminders=settings_data.get("task_reminders", True),
             appointments=settings_data.get("appointments", True),
             contact_reminder=settings_data.get("contact_reminder", True),
