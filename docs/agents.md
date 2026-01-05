@@ -259,6 +259,9 @@ cd apps/web && pnpm test --run tests/cases.test.tsx
 
 ## 7) Git Workflow
 
+### Commit Prefix Rule
+- All commits must start with a conventional prefix: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, or `chore:`.
+
 ### Commit Message Format
 ```
 feat: Add bulk task completion endpoint
