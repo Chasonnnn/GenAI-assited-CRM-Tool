@@ -20,9 +20,11 @@ export const taskKeys = {
  * Fetch paginated tasks list.
  */
 export function useTasks(params: TaskListParams = {}, options?: { enabled?: boolean }) {
+    // Default to hiding workflow approvals unless explicitly opted in.
+    const effectiveParams: TaskListParams = { exclude_approvals: true, ...params };
     return useQuery({
-        queryKey: taskKeys.list(params),
-        queryFn: () => tasksApi.getTasks(params),
+        queryKey: taskKeys.list(effectiveParams),
+        queryFn: () => tasksApi.getTasks(effectiveParams),
         enabled: options?.enabled ?? true,
     });
 }
@@ -129,6 +131,31 @@ export function useBulkCompleteTasks() {
             // Invalidate all task list queries (covers both case_id and intended_parent_id)
             queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
             // Also invalidate dashboard stats since pending_tasks count changes
+            queryClient.invalidateQueries({ queryKey: caseKeys.stats() });
+        },
+    });
+}
+
+/**
+ * Resolve a workflow approval task (approve or deny).
+ */
+export function useResolveWorkflowApproval() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({
+            taskId,
+            decision,
+            reason,
+        }: {
+            taskId: string;
+            decision: 'approve' | 'deny';
+            reason?: string;
+        }) => tasksApi.resolveWorkflowApproval(taskId, decision, reason),
+        onSuccess: (updatedTask) => {
+            queryClient.setQueryData(taskKeys.detail(updatedTask.id), updatedTask);
+            queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
+            // Also invalidate dashboard stats
             queryClient.invalidateQueries({ queryKey: caseKeys.stats() });
         },
     });

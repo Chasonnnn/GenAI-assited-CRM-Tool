@@ -88,7 +88,7 @@ export interface WorkflowExecution {
     trigger_event: Record<string, unknown>
     matched_conditions: boolean
     actions_executed: ActionResult[]
-    status: "success" | "partial" | "failed" | "skipped"
+    status: "success" | "partial" | "failed" | "skipped" | "paused" | "canceled" | "expired"
     error_message: string | null
     duration_ms: number | null
     executed_at: string

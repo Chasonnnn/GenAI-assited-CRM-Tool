@@ -59,6 +59,7 @@ opentelemetry-instrumentation-sqlalchemy==0.48b0
 
 # Timezone support (for containers without system tzdata)
 tzdata==2024.1
+holidays>=0.40
 
 # Rate limiting (distributed storage for multi-worker setups)
 redis==5.0.0

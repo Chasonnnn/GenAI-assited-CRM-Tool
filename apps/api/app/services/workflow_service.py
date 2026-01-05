@@ -232,6 +232,9 @@ def duplicate_workflow(
 
 def get_workflow_stats(db: Session, org_id: UUID) -> WorkflowStats:
     """Get workflow statistics for dashboard."""
+    from app.db.models import Task
+    from app.db.enums import TaskType, TaskStatus
+
     now = datetime.now(timezone.utc)
     day_ago = now - timedelta(hours=24)
 
@@ -292,12 +295,88 @@ def get_workflow_stats(db: Session, org_id: UUID) -> WorkflowStats:
     for trigger_type, count in trigger_counts:
         by_trigger[trigger_type] = count
 
+    # ==========================================================================
+    # Approval Metrics
+    # ==========================================================================
+
+    # Pending approvals count
+    pending_approvals = (
+        db.query(func.count(Task.id))
+        .filter(
+            Task.organization_id == org_id,
+            Task.task_type == TaskType.WORKFLOW_APPROVAL.value,
+            Task.status.in_([TaskStatus.PENDING.value, TaskStatus.IN_PROGRESS.value]),
+        )
+        .scalar()
+        or 0
+    )
+
+    # Resolved approvals in last 24h (completed, denied, expired)
+    resolved_statuses = [
+        TaskStatus.COMPLETED.value,
+        TaskStatus.DENIED.value,
+        TaskStatus.EXPIRED.value,
+    ]
+
+    # Get counts by status for resolved approvals in 24h
+    resolved_counts = (
+        db.query(Task.status, func.count(Task.id))
+        .filter(
+            Task.organization_id == org_id,
+            Task.task_type == TaskType.WORKFLOW_APPROVAL.value,
+            Task.status.in_(resolved_statuses),
+            Task.updated_at >= day_ago,
+        )
+        .group_by(Task.status)
+        .all()
+    )
+
+    resolved_by_status = {status: count for status, count in resolved_counts}
+    approved_24h = resolved_by_status.get(TaskStatus.COMPLETED.value, 0)
+    denied_24h = resolved_by_status.get(TaskStatus.DENIED.value, 0)
+    expired_24h = resolved_by_status.get(TaskStatus.EXPIRED.value, 0)
+    total_resolved_24h = approved_24h + denied_24h + expired_24h
+
+    # Calculate rates
+    if total_resolved_24h > 0:
+        approval_rate = round(approved_24h / total_resolved_24h * 100, 1)
+        denial_rate = round(denied_24h / total_resolved_24h * 100, 1)
+        expiry_rate = round(expired_24h / total_resolved_24h * 100, 1)
+    else:
+        approval_rate = 0.0
+        denial_rate = 0.0
+        expiry_rate = 0.0
+
+    # Average approval latency (for approved tasks only, in hours)
+    avg_latency = (
+        db.query(
+            func.avg(
+                func.extract("epoch", Task.completed_at - Task.created_at) / 3600
+            )
+        )
+        .filter(
+            Task.organization_id == org_id,
+            Task.task_type == TaskType.WORKFLOW_APPROVAL.value,
+            Task.status == TaskStatus.COMPLETED.value,
+            Task.completed_at.isnot(None),
+            Task.updated_at >= day_ago,
+        )
+        .scalar()
+    )
+
     return WorkflowStats(
         total_workflows=total,
         enabled_workflows=enabled,
         total_executions_24h=executions_24h,
         success_rate_24h=success_rate,
         by_trigger_type=by_trigger,
+        # Approval metrics
+        pending_approvals=pending_approvals,
+        approvals_resolved_24h=total_resolved_24h,
+        approval_rate_24h=approval_rate,
+        denial_rate_24h=denial_rate,
+        expiry_rate_24h=expiry_rate,
+        avg_approval_latency_hours=round(avg_latency, 2) if avg_latency else None,
     )
 
 
@@ -858,3 +937,8 @@ def _validate_action_config(db: Session, org_id: UUID, action: dict) -> None:
 
     else:
         raise ValueError(f"Unknown action type: {action_type}")
+
+    # Validate requires_approval field (optional, defaults to False)
+    requires_approval = action.get("requires_approval", False)
+    if requires_approval is not None and not isinstance(requires_approval, bool):
+        raise ValueError("requires_approval must be a boolean")

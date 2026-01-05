@@ -197,6 +197,48 @@ def workflow_sweep(
     )
 
 
+class WorkflowApprovalExpiryResponse(BaseModel):
+    orgs_processed: int
+    jobs_created: int
+
+
+@router.post(
+    "/workflow-approval-expiry", response_model=WorkflowApprovalExpiryResponse
+)
+def workflow_approval_expiry(x_internal_secret: str = Header(...)):
+    """
+    Schedule workflow approval expiry sweeps for all organizations.
+
+    Called by external cron (every 5 minutes recommended).
+    """
+    verify_internal_secret(x_internal_secret)
+
+    from app.services import job_service
+
+    orgs_processed = 0
+    jobs_created = 0
+
+    with SessionLocal() as db:
+        orgs = org_service.list_orgs(db)
+
+        for org in orgs:
+            job_service.schedule_job(
+                db=db,
+                job_type=JobType.WORKFLOW_APPROVAL_EXPIRY,
+                org_id=org.id,
+                payload={"org_id": str(org.id)},
+            )
+            orgs_processed += 1
+            jobs_created += 1
+
+        db.commit()
+
+    return WorkflowApprovalExpiryResponse(
+        orgs_processed=orgs_processed,
+        jobs_created=jobs_created,
+    )
+
+
 class DataPurgeScheduleResponse(BaseModel):
     orgs_processed: int
     jobs_created: int

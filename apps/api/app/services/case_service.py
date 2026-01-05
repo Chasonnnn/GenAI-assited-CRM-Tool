@@ -8,7 +8,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.encryption import hash_email, hash_phone
-from app.db.enums import CaseSource, CaseStatus, ContactStatus, OwnerType, Role
+from app.db.enums import (
+    CaseActivityType,
+    CaseSource,
+    CaseStatus,
+    ContactStatus,
+    OwnerType,
+    Role,
+)
 from app.db.models import Case, CaseStatusHistory, User
 from app.schemas.case import CaseCreate, CaseUpdate
 from app.utils.normalization import normalize_email, normalize_name, normalize_phone
@@ -670,6 +677,32 @@ def assign_case(
             actor_user_id=user_id,
             from_user_id=old_owner_id,
         )
+
+    # Invalidate pending workflow approvals if owner changed
+    if old_owner_id and old_owner_id != case.owner_id:
+        from app.services import task_service
+
+        invalidated_count = task_service.invalidate_pending_approvals_for_case(
+            db=db,
+            case_id=case.id,
+            reason="Case owner changed",
+            actor_user_id=user_id,
+        )
+        if invalidated_count > 0:
+            activity_service.log_activity(
+                db=db,
+                case_id=case.id,
+                organization_id=case.organization_id,
+                actor_user_id=user_id,
+                activity_type=CaseActivityType.WORKFLOW_APPROVAL_INVALIDATED,
+                details={
+                    "reason": "owner_changed",
+                    "old_owner_id": str(old_owner_id),
+                    "new_owner_id": str(case.owner_id) if case.owner_id else None,
+                    "invalidated_count": invalidated_count,
+                },
+            )
+
     db.commit()
 
     # Trigger case_assigned workflow
@@ -1109,12 +1142,14 @@ def get_case_stats(db: Session, org_id: UUID) -> dict:
 
     # Pending tasks count (for dashboard)
     from app.db.models import Task
+    from app.db.enums import TaskType
 
     pending_tasks = (
         db.query(func.count(Task.id))
         .filter(
             Task.organization_id == org_id,
             Task.is_completed.is_(False),
+            Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
         )
         .scalar()
         or 0

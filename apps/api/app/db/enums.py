@@ -142,6 +142,8 @@ class CaseActivityType(str, Enum):
     PROFILE_EDITED = "profile_edited"
     PROFILE_HIDDEN = "profile_hidden"
     CONTACT_ATTEMPT = "contact_attempt"  # Contact attempt logged
+    WORKFLOW_APPROVAL_RESOLVED = "workflow_approval_resolved"  # Workflow approval approved/denied/expired
+    WORKFLOW_APPROVAL_INVALIDATED = "workflow_approval_invalidated"  # Approval invalidated (owner change)
 
 
 class MatchStatus(str, Enum):
@@ -236,7 +238,23 @@ class TaskType(str, Enum):
     MEDICATION = "medication"  # For medication schedules
     EXAM = "exam"  # For medical exams
     APPOINTMENT = "appointment"  # For appointments
+    WORKFLOW_APPROVAL = "workflow_approval"  # Workflow action requiring approval
     OTHER = "other"
+
+
+class TaskStatus(str, Enum):
+    """
+    Task status for workflow approvals and other tracked statuses.
+
+    Standard tasks use is_completed boolean.
+    Workflow approval tasks use this status enum for richer state tracking.
+    """
+
+    PENDING = "pending"  # Awaiting action
+    IN_PROGRESS = "in_progress"  # Work started
+    COMPLETED = "completed"  # Successfully completed
+    DENIED = "denied"  # Explicitly denied (workflow approvals)
+    EXPIRED = "expired"  # Timed out (workflow approvals)
 
 
 class JobType(str, Enum):
@@ -258,6 +276,8 @@ class JobType(str, Enum):
     AI_CHAT = "ai_chat"
     CONTACT_REMINDER_CHECK = "contact_reminder_check"  # Daily contact follow-up check
     INTERVIEW_TRANSCRIPTION = "interview_transcription"
+    WORKFLOW_APPROVAL_EXPIRY = "workflow_approval_expiry"  # Sweep for expired approvals
+    WORKFLOW_RESUME = "workflow_resume"  # Resume workflow after approval resolution
 
 
 class JobStatus(str, Enum):
@@ -447,6 +467,9 @@ class WorkflowExecutionStatus(str, Enum):
     PARTIAL = "partial"  # some actions succeeded
     FAILED = "failed"
     SKIPPED = "skipped"  # conditions not met
+    PAUSED = "paused"  # waiting for human approval
+    CANCELED = "canceled"  # user denied approval or owner changed
+    EXPIRED = "expired"  # approval timed out
 
 
 class WorkflowEventSource(str, Enum):

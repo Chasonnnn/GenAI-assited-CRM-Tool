@@ -5,7 +5,23 @@
 import api from './index';
 
 // Task type enum - matches backend apps/api/app/db/enums.py
-export type TaskType = 'meeting' | 'follow_up' | 'contact' | 'review' | 'other';
+export type TaskType =
+    | 'meeting'
+    | 'follow_up'
+    | 'contact'
+    | 'review'
+    | 'medication'
+    | 'exam'
+    | 'appointment'
+    | 'workflow_approval'
+    | 'other';
+
+export type TaskStatus =
+    | 'pending'
+    | 'in_progress'
+    | 'completed'
+    | 'denied'
+    | 'expired';
 
 // Task list item for table display
 export interface TaskListItem {
@@ -24,6 +40,11 @@ export interface TaskListItem {
     due_time: string | null;
     duration_minutes: number | null;
     is_completed: boolean;
+    status?: TaskStatus | null;
+    // Workflow approval fields
+    workflow_action_type?: string | null;
+    workflow_action_preview?: string | null;
+    due_at?: string | null;
     completed_at: string | null;
     completed_by_name: string | null;
     created_at: string;
@@ -33,6 +54,12 @@ export interface TaskListItem {
 export interface TaskRead extends TaskListItem {
     completed_by_user_id: string | null;
     updated_at: string;
+    workflow_execution_id?: string | null;
+    workflow_action_preview?: string | null;
+    workflow_denial_reason?: string | null;
+    workflow_triggered_by_user_id?: string | null;
+    workflow_triggered_by_name?: string | null;
+    is_workflow_approval?: boolean;
 }
 
 // Paginated task list response
@@ -54,9 +81,11 @@ export interface TaskListParams {
     intended_parent_id?: string;
     is_completed?: boolean;
     task_type?: TaskType;
+    status?: TaskStatus | TaskStatus[];
     due_before?: string;
     due_after?: string;
     my_tasks?: boolean;
+    exclude_approvals?: boolean;
 }
 
 // Create task payload
@@ -90,9 +119,14 @@ export function getTasks(params: TaskListParams = {}): Promise<TaskListResponse>
     if (params.intended_parent_id) searchParams.set('intended_parent_id', params.intended_parent_id);
     if (params.is_completed !== undefined) searchParams.set('is_completed', String(params.is_completed));
     if (params.task_type) searchParams.set('task_type', params.task_type);
+    if (params.status) {
+        const statusValue = Array.isArray(params.status) ? params.status.join(',') : params.status;
+        searchParams.set('status', statusValue);
+    }
     if (params.due_before) searchParams.set('due_before', params.due_before);
     if (params.due_after) searchParams.set('due_after', params.due_after);
     if (params.my_tasks) searchParams.set('my_tasks', 'true');
+    if (params.exclude_approvals) searchParams.set('exclude_approvals', 'true');
 
     const query = searchParams.toString();
     return api.get<TaskListResponse>(`/tasks${query ? `?${query}` : ''}`);
@@ -151,4 +185,18 @@ export interface BulkCompleteResponse {
  */
 export function bulkCompleteTasks(taskIds: string[]): Promise<BulkCompleteResponse> {
     return api.post<BulkCompleteResponse>('/tasks/bulk-complete', { task_ids: taskIds });
+}
+
+/**
+ * Resolve a workflow approval task.
+ */
+export function resolveWorkflowApproval(
+    taskId: string,
+    decision: 'approve' | 'deny',
+    reason?: string
+): Promise<TaskRead> {
+    return api.post<TaskRead>(`/tasks/${taskId}/resolve`, {
+        decision,
+        reason,
+    });
 }
