@@ -17,7 +17,7 @@ from app.services.ai_settings_service import (
     get_decrypted_key,
     is_consent_required,
 )
-from app.services.ai_usage_service import record_ai_usage
+from app.services.ai_usage_service import log_usage
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +96,17 @@ def _parse_json_response(content: str) -> dict:
         raise AIInterviewError("Failed to parse AI response")
 
 
+def _strip_html(content: str) -> str:
+    """Convert HTML content into readable text for AI prompts."""
+    import re
+    import html as html_module
+
+    text = re.sub(r"<(script|style)[^>]*>.*?</\1>", "", content, flags=re.DOTALL | re.I)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return html_module.unescape(text)
+
+
 async def summarize_interview(
     db: Session,
     interview: CaseInterview,
@@ -132,9 +143,14 @@ async def summarize_interview(
 
     # Get notes
     notes = db.scalars(
-        select(InterviewNote).where(InterviewNote.interview_id == interview.id)
+        select(InterviewNote).where(
+            InterviewNote.interview_id == interview.id,
+            InterviewNote.organization_id == org_id,
+        )
     ).all()
-    notes_text = "\n".join([n.content for n in notes]) if notes else "No notes"
+    notes_text = (
+        "\n".join([_strip_html(n.content) for n in notes]) if notes else "No notes"
+    )
 
     # Build prompt
     prompt = INTERVIEW_SUMMARY_PROMPT.format(
@@ -166,18 +182,14 @@ async def summarize_interview(
         result = _parse_json_response(response.content)
 
         # Record usage
-        record_ai_usage(
+        log_usage(
             db=db,
-            org_id=org_id,
+            organization_id=org_id,
             user_id=user_id,
-            feature="interview_summary",
             model=response.model,
             prompt_tokens=response.prompt_tokens,
             completion_tokens=response.completion_tokens,
-            estimated_cost_usd=float(response.estimated_cost_usd),
-            metadata={
-                "interview_id": str(interview.id),
-            },
+            estimated_cost_usd=response.estimated_cost_usd,
         )
 
         return {
@@ -241,9 +253,14 @@ async def summarize_all_interviews(
     for interview in interviews:
         transcript = interview.transcript_text or "No transcript"
         notes = db.scalars(
-            select(InterviewNote).where(InterviewNote.interview_id == interview.id)
+            select(InterviewNote).where(
+                InterviewNote.interview_id == interview.id,
+                InterviewNote.organization_id == org_id,
+            )
         ).all()
-        notes_text = "\n".join([n.content for n in notes]) if notes else "No notes"
+        notes_text = (
+            "\n".join([_strip_html(n.content) for n in notes]) if notes else "No notes"
+        )
 
         interviews_content.append(
             f"""--- Interview {len(interviews_content) + 1} ---
@@ -293,19 +310,14 @@ Notes:
         result = _parse_json_response(response.content)
 
         # Record usage
-        record_ai_usage(
+        log_usage(
             db=db,
-            org_id=org_id,
+            organization_id=org_id,
             user_id=user_id,
-            feature="all_interviews_summary",
             model=response.model,
             prompt_tokens=response.prompt_tokens,
             completion_tokens=response.completion_tokens,
-            estimated_cost_usd=float(response.estimated_cost_usd),
-            metadata={
-                "case_id": str(case_id),
-                "interview_count": len(interviews),
-            },
+            estimated_cost_usd=response.estimated_cost_usd,
         )
 
         return {

@@ -123,7 +123,7 @@ describe('CaseInterviewTab', () => {
     it('requests transcription for audio attachments', async () => {
         render(<CaseInterviewTab caseId="c1" />)
 
-        fireEvent.click(screen.getByText('Phone'))
+        fireEvent.click(screen.getAllByText('Phone')[0])
 
         const transcribeButtons = screen.getAllByRole('button', { name: /transcribe/i })
         fireEvent.click(transcribeButtons[0])

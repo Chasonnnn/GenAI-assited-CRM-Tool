@@ -677,7 +677,7 @@ def get_transcription_status(
     response_model=InterviewSummaryResponse,
     dependencies=[Depends(require_csrf_header)],
 )
-def summarize_interview(
+async def summarize_interview(
     interview_id: UUID,
     session: UserSession = Depends(require_permission(P.AI_USE)),
     db: Session = Depends(get_db),
@@ -685,16 +685,12 @@ def summarize_interview(
     """Generate AI summary of a single interview."""
     interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
 
-    import asyncio
-
     try:
-        return asyncio.get_event_loop().run_until_complete(
-            ai_interview_service.summarize_interview(
-                db=db,
-                interview=interview,
-                org_id=session.org_id,
-                user_id=session.user_id,
-            )
+        return await ai_interview_service.summarize_interview(
+            db=db,
+            interview=interview,
+            org_id=session.org_id,
+            user_id=session.user_id,
         )
     except ai_interview_service.AIInterviewError as e:
         detail = str(e)
@@ -707,7 +703,7 @@ def summarize_interview(
     response_model=AllInterviewsSummaryResponse,
     dependencies=[Depends(require_csrf_header)],
 )
-def summarize_all_interviews(
+async def summarize_all_interviews(
     case_id: UUID,
     session: UserSession = Depends(require_permission(P.AI_USE)),
     db: Session = Depends(get_db),
@@ -721,16 +717,12 @@ def summarize_all_interviews(
         case, session.role, session.user_id, db=db, org_id=session.org_id
     )
 
-    import asyncio
-
     try:
-        return asyncio.get_event_loop().run_until_complete(
-            ai_interview_service.summarize_all_interviews(
-                db=db,
-                case_id=case_id,
-                org_id=session.org_id,
-                user_id=session.user_id,
-            )
+        return await ai_interview_service.summarize_all_interviews(
+            db=db,
+            case_id=case_id,
+            org_id=session.org_id,
+            user_id=session.user_id,
         )
     except ai_interview_service.AIInterviewError as e:
         detail = str(e)
