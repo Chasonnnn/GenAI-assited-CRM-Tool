@@ -292,7 +292,9 @@ def get_analytics_summary(
             },
         )
         row = result.fetchone()
-        avg_time_to_qualified_hours = round(row[0], 1) if row and row[0] else None
+        avg_time_to_qualified_hours = (
+            float(round(row[0], 1)) if row and row[0] else None
+        )
 
     return {
         "total_cases": total_cases,
@@ -1121,7 +1123,7 @@ def get_meta_performance(
             },
         )
         row = result.fetchone()
-        avg_hours = round(row[0], 1) if row and row[0] else None
+        avg_hours = float(round(row[0], 1)) if row and row[0] else None
 
     return {
         "leads_received": leads_received,
