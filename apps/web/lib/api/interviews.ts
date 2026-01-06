@@ -30,6 +30,25 @@ export interface InterviewListItem {
     created_at: string;
 }
 
+// TipTap JSON document type
+export interface TipTapDoc {
+    type: 'doc';
+    content?: TipTapNode[];
+}
+
+export interface TipTapNode {
+    type: string;
+    attrs?: Record<string, unknown>;
+    content?: TipTapNode[];
+    text?: string;
+    marks?: TipTapMark[];
+}
+
+export interface TipTapMark {
+    type: string;
+    attrs?: Record<string, unknown>;
+}
+
 // Full interview
 export interface InterviewRead {
     id: string;
@@ -39,7 +58,8 @@ export interface InterviewRead {
     conducted_by_user_id: string;
     conducted_by_name: string;
     duration_minutes: number | null;
-    transcript_html: string | null;
+    transcript_json: TipTapDoc | null;  // TipTap JSON (canonical)
+    transcript_html: string | null;      // Sanitized HTML for display
     transcript_version: number;
     transcript_size_bytes: number;
     is_transcript_offloaded: boolean;
@@ -57,7 +77,8 @@ export interface InterviewCreatePayload {
     interview_type: InterviewType;
     conducted_at: string;
     duration_minutes?: number | null;
-    transcript_html?: string | null;
+    transcript_json?: TipTapDoc | null;   // TipTap JSON (preferred)
+    transcript_html?: string | null;       // Legacy HTML
     status?: InterviewStatus;
 }
 
@@ -65,7 +86,8 @@ export interface InterviewUpdatePayload {
     interview_type?: InterviewType;
     conducted_at?: string;
     duration_minutes?: number | null;
-    transcript_html?: string | null;
+    transcript_json?: TipTapDoc | null;   // TipTap JSON (preferred)
+    transcript_html?: string | null;       // Legacy HTML
     status?: InterviewStatus;
     expected_version?: number;
 }
@@ -103,12 +125,13 @@ export interface InterviewNoteRead {
     id: string;
     content: string;
     transcript_version: number;
-    anchor_start: number | null;
-    anchor_end: number | null;
-    anchor_text: string | null;
-    current_anchor_start: number | null;
-    current_anchor_end: number | null;
-    anchor_status: AnchorStatus | null;
+    comment_id: string | null;          // TipTap comment mark ID (stable anchor)
+    anchor_start: number | null;         // Legacy: text offset start
+    anchor_end: number | null;           // Legacy: text offset end
+    anchor_text: string | null;          // Original anchor text
+    current_anchor_start: number | null; // Recalculated position
+    current_anchor_end: number | null;   // Recalculated position
+    anchor_status: AnchorStatus | null;  // 'valid', 'approximate', 'lost'
     author_user_id: string;
     author_name: string;
     is_own: boolean;
@@ -119,9 +142,10 @@ export interface InterviewNoteRead {
 export interface InterviewNoteCreatePayload {
     content: string;
     transcript_version?: number;
-    anchor_start?: number;
-    anchor_end?: number;
-    anchor_text?: string;
+    comment_id?: string;                 // TipTap comment mark ID (preferred)
+    anchor_start?: number;               // Legacy: text offset
+    anchor_end?: number;                 // Legacy: text offset
+    anchor_text?: string;                // Original anchor text
 }
 
 export interface InterviewNoteUpdatePayload {

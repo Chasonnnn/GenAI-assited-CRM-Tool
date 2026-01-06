@@ -4611,9 +4611,12 @@ class CaseInterview(Base):
     duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Current transcript (denormalized for quick reads)
+    transcript_json: Mapped[dict | None] = mapped_column(
+        JSONB, nullable=True
+    )  # TipTap JSON (canonical format)
     transcript_html: Mapped[str | None] = mapped_column(
         Text, nullable=True
-    )  # NULL if offloaded to S3
+    )  # Sanitized HTML for display (NULL if offloaded to S3)
     transcript_text: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )  # Always stored for search/diff
@@ -4765,6 +4768,13 @@ class InterviewNote(Base):
 
     # Anchor to specific version (prevents drift)
     transcript_version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # TipTap comment mark ID (preferred - stable anchor)
+    comment_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )  # UUID format
+
+    # Legacy: text offset anchoring (for backward compatibility)
     anchor_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
     anchor_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
     anchor_text: Mapped[str | None] = mapped_column(String(500), nullable=True)

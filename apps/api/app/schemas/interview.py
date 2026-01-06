@@ -1,7 +1,7 @@
 """Pydantic schemas for case interviews."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 import nh3
@@ -46,7 +46,8 @@ class InterviewCreate(BaseModel):
     interview_type: Literal["phone", "video", "in_person"]
     conducted_at: datetime
     duration_minutes: int | None = Field(None, ge=1, le=480)
-    transcript_html: str | None = Field(None, max_length=2_000_000)  # 2MB limit
+    transcript_json: dict[str, Any] | None = None  # TipTap JSON (preferred)
+    transcript_html: str | None = Field(None, max_length=2_000_000)  # 2MB limit (legacy)
     status: Literal["draft", "completed"] = "completed"
 
     @field_validator("transcript_html")
@@ -63,7 +64,8 @@ class InterviewUpdate(BaseModel):
     interview_type: Literal["phone", "video", "in_person"] | None = None
     conducted_at: datetime | None = None
     duration_minutes: int | None = Field(None, ge=1, le=480)
-    transcript_html: str | None = Field(None, max_length=2_000_000)
+    transcript_json: dict[str, Any] | None = None  # TipTap JSON (preferred)
+    transcript_html: str | None = Field(None, max_length=2_000_000)  # Legacy
     status: Literal["draft", "completed"] | None = None
     expected_version: int | None = None  # Optimistic concurrency control
 
@@ -85,22 +87,32 @@ class InterviewNoteCreate(BaseModel):
 
     content: str = Field(..., min_length=1, max_length=50_000)
     transcript_version: int | None = Field(None, ge=1)  # Defaults to current
+
+    # TipTap comment mark ID (preferred - stable anchor)
+    comment_id: str | None = Field(None, max_length=36)
+
+    # Legacy: text offset anchoring (for backward compatibility)
     anchor_start: int | None = Field(None, ge=0)
     anchor_end: int | None = Field(None, ge=0)
     anchor_text: str | None = Field(None, max_length=500)
 
     @model_validator(mode="after")
     def validate_anchor(self) -> "InterviewNoteCreate":
-        """Anchor fields must be all-or-nothing."""
+        """Validate anchor fields: comment_id OR offset anchoring (all-or-nothing)."""
         has_start = self.anchor_start is not None
         has_end = self.anchor_end is not None
         has_text = self.anchor_text is not None
+        has_comment = self.comment_id is not None
 
-        if has_start or has_end or has_text:
+        # If using legacy offset anchoring (start/end), all offset fields required
+        if has_start or has_end:
             if not (has_start and has_end and has_text):
-                raise ValueError("Anchor requires start, end, and text together")
+                raise ValueError("Offset anchor requires start, end, and text together")
             if self.anchor_end < self.anchor_start:
                 raise ValueError("anchor_end must be >= anchor_start")
+
+        # comment_id with anchor_text (no offsets) is valid - text is for display fallback
+        # anchor_text alone without comment_id or offsets is also valid (informational only)
         return self
 
     @field_validator("content")
@@ -168,7 +180,8 @@ class InterviewRead(BaseModel):
     duration_minutes: int | None
 
     # Transcript
-    transcript_html: str | None
+    transcript_json: dict[str, Any] | None  # TipTap JSON (canonical)
+    transcript_html: str | None  # Sanitized HTML for display
     transcript_version: int
     transcript_size_bytes: int
     is_transcript_offloaded: bool  # True if content in S3
@@ -243,7 +256,10 @@ class InterviewNoteRead(BaseModel):
     content: str
     transcript_version: int
 
-    # Original anchor
+    # TipTap comment mark ID (stable anchor)
+    comment_id: str | None
+
+    # Original anchor (legacy: text offsets)
     anchor_start: int | None
     anchor_end: int | None
     anchor_text: str | None

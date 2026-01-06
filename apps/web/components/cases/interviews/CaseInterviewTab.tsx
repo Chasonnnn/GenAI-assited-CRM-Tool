@@ -6,7 +6,6 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -64,8 +63,11 @@ import type {
     InterviewAttachmentRead,
     InterviewType,
     InterviewStatus,
+    TipTapDoc,
 } from "@/lib/api/interviews"
 import { useAuth } from "@/lib/auth-context"
+import { TranscriptEditor, isTranscriptEmpty } from "./TranscriptEditor"
+import { TranscriptViewer } from "./TranscriptViewer"
 
 interface CaseInterviewTabProps {
     caseId: string
@@ -142,7 +144,7 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
     const [formType, setFormType] = React.useState<InterviewType>("phone")
     const [formDate, setFormDate] = React.useState("")
     const [formDuration, setFormDuration] = React.useState<string>("")
-    const [formTranscript, setFormTranscript] = React.useState("")
+    const [formTranscript, setFormTranscript] = React.useState<TipTapDoc | null>(null)
     const [formStatus, setFormStatus] = React.useState<InterviewStatus>("completed")
 
     // Fetch data
@@ -176,13 +178,13 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
                 setFormType(editingInterview.interview_type as InterviewType)
                 setFormDate(toLocalDateTimeInput(editingInterview.conducted_at))
                 setFormDuration(editingInterview.duration_minutes?.toString() || "")
-                setFormTranscript(editingInterview.transcript_html || "")
+                setFormTranscript(editingInterview.transcript_json || null)
                 setFormStatus(editingInterview.status as InterviewStatus)
             } else {
                 setFormType("phone")
                 setFormDate(toLocalDateTimeInput(new Date().toISOString()))
                 setFormDuration("")
-                setFormTranscript("")
+                setFormTranscript(null)
                 setFormStatus("completed")
             }
         }
@@ -206,7 +208,7 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
                 interview_type: formType,
                 conducted_at: new Date(formDate).toISOString(),
                 duration_minutes: formDuration ? parseInt(formDuration) : null,
-                transcript_html: formTranscript || null,
+                transcript_json: isTranscriptEmpty(formTranscript) ? null : formTranscript,
                 status: formStatus,
             }
 
@@ -260,6 +262,38 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
             toast.success("Note added")
         } catch {
             toast.error("Failed to add note")
+        }
+    }
+
+    const handleAddAnchoredNote = async (selection: { text: string; commentId: string }) => {
+        if (!selectedId || !selectedInterview) return
+
+        // Create the note with the comment ID and anchor text
+        try {
+            await createNoteMutation.mutateAsync({
+                interviewId: selectedId,
+                data: {
+                    content: `<p>Note about: "${selection.text}"</p>`,
+                    comment_id: selection.commentId,
+                    anchor_text: selection.text,
+                },
+            })
+            toast.success("Anchored note created! Edit the note to add your comments.")
+        } catch {
+            toast.error("Failed to create anchored note")
+        }
+    }
+
+    const handleNoteClick = (noteId: string) => {
+        // Scroll the note into view in the sidebar
+        const noteElement = document.querySelector(`[data-note-id="${noteId}"]`)
+        if (noteElement) {
+            noteElement.scrollIntoView({ behavior: "smooth", block: "center" })
+            // Add a brief highlight effect
+            noteElement.classList.add("ring-2", "ring-primary")
+            setTimeout(() => {
+                noteElement.classList.remove("ring-2", "ring-primary")
+            }, 2000)
         }
     }
 
@@ -428,7 +462,9 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
                             }}
                             onVersionHistory={() => setVersionHistoryOpen(true)}
                             onAddNote={handleAddNote}
+                            onAddAnchoredNote={handleAddAnchoredNote}
                             onDeleteNote={handleDeleteNote}
+                            onNoteClick={handleNoteClick}
                             canEdit={!!canEdit}
                             canDelete={!!canDelete}
                             canDeleteAnyNote={!!canDeleteAnyNote}
@@ -486,10 +522,13 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
                                         canDelete={!!canDelete}
                                     />
                                     <div className="mt-4">
-                                        {selectedInterview.transcript_html ? (
-                                            <div
-                                                className="prose prose-sm max-w-none dark:prose-invert"
-                                                dangerouslySetInnerHTML={{ __html: selectedInterview.transcript_html }}
+                                        {selectedInterview.transcript_html || selectedInterview.transcript_json ? (
+                                            <TranscriptViewer
+                                                transcriptHtml={selectedInterview.transcript_html}
+                                                transcriptJson={selectedInterview.transcript_json}
+                                                notes={notes || []}
+                                                onAddNote={handleAddAnchoredNote}
+                                                onNoteClick={handleNoteClick}
                                             />
                                         ) : (
                                             <p className="text-muted-foreground text-sm">No transcript recorded</p>
@@ -676,7 +715,9 @@ interface InterviewDetailViewProps {
     onDelete: () => void
     onVersionHistory: () => void
     onAddNote: (html: string) => void
+    onAddAnchoredNote: (selection: { text: string; commentId: string }) => void
     onDeleteNote: (noteId: string) => void
+    onNoteClick: (noteId: string) => void
     canEdit: boolean
     canDelete: boolean
     canDeleteAnyNote: boolean
@@ -701,7 +742,9 @@ function InterviewDetailView({
     onDelete,
     onVersionHistory,
     onAddNote,
+    onAddAnchoredNote,
     onDeleteNote,
+    onNoteClick,
     canEdit,
     canDelete,
     canDeleteAnyNote,
@@ -737,10 +780,13 @@ function InterviewDetailView({
                 {/* Transcript */}
                 <div className="overflow-auto p-4 border-r space-y-6">
                     <div>
-                        {interview.transcript_html ? (
-                            <div
-                                className="prose prose-sm max-w-none dark:prose-invert"
-                                dangerouslySetInnerHTML={{ __html: interview.transcript_html }}
+                        {interview.transcript_html || interview.transcript_json ? (
+                            <TranscriptViewer
+                                transcriptHtml={interview.transcript_html}
+                                transcriptJson={interview.transcript_json}
+                                notes={notes}
+                                onAddNote={onAddAnchoredNote}
+                                onNoteClick={onNoteClick}
                             />
                         ) : (
                             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
@@ -912,7 +958,8 @@ function NotesSection({
                     {notes.map((note) => (
                         <div
                             key={note.id}
-                            className="group rounded-lg border border-border bg-card p-3 transition-colors hover:bg-accent/30"
+                            data-note-id={note.id}
+                            className="group rounded-lg border border-border bg-card p-3 transition-all hover:bg-accent/30"
                         >
                             <div className="flex items-start gap-2">
                                 <Avatar className="h-7 w-7 flex-shrink-0">
@@ -943,8 +990,15 @@ function NotesSection({
                                         className="mt-1 text-sm prose prose-sm max-w-none dark:prose-invert"
                                         dangerouslySetInnerHTML={{ __html: note.content }}
                                     />
-                                    {note.anchor_status && (
-                                        <div className="mt-2">
+                                    {/* Show anchor indicator for notes with comment_id or anchor_status */}
+                                    {(note.comment_id || note.anchor_status) && (
+                                        <div className="mt-2 flex items-center gap-2">
+                                            {note.comment_id && !note.anchor_status && (
+                                                <Badge variant="outline" className="text-xs text-teal-600 border-teal-500/20 bg-teal-50 dark:bg-teal-950/30">
+                                                    <MessageSquareIcon className="h-3 w-3 mr-1" />
+                                                    Anchored
+                                                </Badge>
+                                            )}
                                             {note.anchor_status === "valid" && (
                                                 <Badge variant="outline" className="text-xs text-green-600 border-green-500/20">
                                                     Anchored
@@ -1109,8 +1163,8 @@ interface InterviewEditorDialogProps {
     setFormDate: (date: string) => void
     formDuration: string
     setFormDuration: (duration: string) => void
-    formTranscript: string
-    setFormTranscript: (transcript: string) => void
+    formTranscript: TipTapDoc | null
+    setFormTranscript: (transcript: TipTapDoc | null) => void
     formStatus: InterviewStatus
     setFormStatus: (status: InterviewStatus) => void
     onSubmit: () => void
@@ -1190,13 +1244,15 @@ function InterviewEditorDialog({
                     </div>
                     <div className="space-y-2">
                         <Label>Transcript</Label>
-                        <Textarea
-                            placeholder="Paste or type the interview transcript..."
-                            className="min-h-[200px]"
-                            value={formTranscript}
-                            onChange={(e) => setFormTranscript(e.target.value)}
+                        <TranscriptEditor
+                            content={formTranscript}
+                            onChange={setFormTranscript}
+                            placeholder="Start typing or paste content from Word, Google Docs..."
+                            minHeight="200px"
+                            maxHeight="400px"
                         />
                         <p className="text-xs text-muted-foreground">
+                            Paste formatted text from Word or Google Docs to preserve formatting.
                             You can also upload audio/video files for AI transcription after creating the interview.
                         </p>
                     </div>
