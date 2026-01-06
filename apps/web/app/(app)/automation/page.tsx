@@ -578,9 +578,9 @@ export default function AutomationPage() {
                     </DialogHeader>
 
                     {/* Step Progress */}
-                    <div className="flex items-center gap-2">
-                        {[1, 2, 3, 4].map((step) => (
-                            <div key={step} className="flex flex-1 items-center">
+                    <div className="flex items-center justify-between w-full">
+                        {[1, 2, 3, 4].map((step, index) => (
+                            <div key={step} className="flex items-center" style={{ flex: index < 3 ? 1 : 'none' }}>
                                 <div
                                     className={`flex size-8 items-center justify-center rounded-full text-sm font-medium ${step === wizardStep
                                         ? "bg-teal-500 text-white"
@@ -612,7 +612,7 @@ export default function AutomationPage() {
                                 <div>
                                     <Label>Trigger Type *</Label>
                                     <Select value={triggerType} onValueChange={(v) => v && setTriggerType(v)}>
-                                        <SelectTrigger className="mt-1.5">
+                                        <SelectTrigger className="mt-1.5 w-full">
                                             <SelectValue placeholder="Select trigger">
                                                 {(value: string | null) => {
                                                     if (!value) return "Select trigger"
@@ -621,7 +621,7 @@ export default function AutomationPage() {
                                                 }}
                                             </SelectValue>
                                         </SelectTrigger>
-                                        <SelectContent>
+                                        <SelectContent className="min-w-[300px]">
                                             {options?.trigger_types.map((t) => (
                                                 <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                                             ))}

@@ -37,11 +37,11 @@ import {
 } from "lucide-react"
 import { InlineEditField } from "@/components/inline-edit-field"
 import { FileUploadZone } from "@/components/FileUploadZone"
-import { useCase, useCaseActivity, useChangeStatus, useArchiveCase, useRestoreCase, useUpdateCase } from "@/lib/hooks/use-cases"
+import { useCase, useCaseActivity, useChangeStatus, useArchiveCase, useRestoreCase, useUpdateCase, useAssignCase, useAssignees } from "@/lib/hooks/use-cases"
 import { useQueues, useClaimCase, useReleaseCase } from "@/lib/hooks/use-queues"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useNotes, useCreateNote, useDeleteNote } from "@/lib/hooks/use-notes"
-import { useTasks, useCompleteTask, useUncompleteTask } from "@/lib/hooks/use-tasks"
+import { useTasks, useCompleteTask, useUncompleteTask, useCreateTask, useUpdateTask } from "@/lib/hooks/use-tasks"
 import { useZoomStatus, useCreateZoomMeeting, useSendZoomInvite } from "@/lib/hooks/use-user-integrations"
 import { useSummarizeCase, useDraftEmail, useAISettings } from "@/lib/hooks/use-ai"
 import { useSetAIContext } from "@/lib/context/ai-context"
@@ -49,6 +49,8 @@ import { EmailComposeDialog } from "@/components/email/EmailComposeDialog"
 import { ProposeMatchDialog } from "@/components/matches/ProposeMatchDialog"
 import { CaseApplicationTab } from "@/components/cases/CaseApplicationTab"
 import { CaseInterviewTab } from "@/components/cases/interviews/CaseInterviewTab"
+import { CaseTasksCalendar } from "@/components/cases/CaseTasksCalendar"
+import { AddCaseTaskDialog, type CaseTaskFormData } from "@/components/cases/AddCaseTaskDialog"
 import { CaseProfileCard } from "@/components/cases/CaseProfileCard"
 import { LogContactAttemptDialog } from "@/components/cases/LogContactAttemptDialog"
 import { useForms } from "@/lib/hooks/use-forms"
@@ -57,6 +59,7 @@ import type { TaskListItem } from "@/lib/types/task"
 import { useAuth } from "@/lib/auth-context"
 import { cn } from "@/lib/utils"
 import { parseDateInput } from "@/lib/utils/date"
+import { addDays, addWeeks, addMonths, format, parseISO } from "date-fns"
 
 // Format date for display
 function formatDateTime(dateString: string): string {
@@ -112,6 +115,33 @@ function formatMeetingTimeForInvite(date: Date): string {
     })
 }
 
+type TaskRecurrence = "none" | "daily" | "weekly" | "monthly"
+const MAX_TASK_OCCURRENCES = 52
+
+function buildRecurringDates(
+    start: Date,
+    end: Date,
+    recurrence: TaskRecurrence
+): Date[] {
+    if (recurrence === "none") return [start]
+
+    const dates: Date[] = []
+    let cursor = start
+
+    while (cursor <= end && dates.length < MAX_TASK_OCCURRENCES) {
+        dates.push(cursor)
+        if (recurrence === "daily") {
+            cursor = addDays(cursor, 1)
+        } else if (recurrence === "weekly") {
+            cursor = addWeeks(cursor, 1)
+        } else {
+            cursor = addMonths(cursor, 1)
+        }
+    }
+
+    return dates
+}
+
 // Get initials from name
 function getInitials(name: string | null): string {
     if (!name) return "?"
@@ -133,6 +163,8 @@ function formatActivityType(type: string): string {
         handoff_denied: 'Handoff Denied',
         note_added: 'Note Added',
         note_deleted: 'Note Deleted',
+        attachment_added: 'Attachment Uploaded',
+        attachment_deleted: 'Attachment Deleted',
         task_created: 'Task Created',
         contact_attempt: 'Contact Attempt',
     }
@@ -170,16 +202,26 @@ function formatActivityDetails(type: string, details: Record<string, unknown>): 
         case 'handoff_denied':
             return details.reason ? withAiPrefix(String(details.reason)) : aiOnly()
         case 'note_added': {
-            const content = details.content ? stripHtml(String(details.content)) : ''
-            return content
-                ? withAiPrefix(content.slice(0, 100) + (content.length > 100 ? '...' : ''))
+            // Use preview field (sanitized snapshot at creation time)
+            const preview = details.preview ? String(details.preview) : ''
+            return preview
+                ? withAiPrefix(preview)
                 : withAiPrefix('Note added')
         }
         case 'note_deleted': {
-            const preview = details.preview ? stripHtml(String(details.preview)) : ''
+            // Use preview field (sanitized snapshot, preserved after deletion)
+            const preview = details.preview ? String(details.preview) : ''
             return preview
-                ? withAiPrefix(preview.slice(0, 100) + (preview.length > 100 ? '...' : ''))
+                ? withAiPrefix(`${preview} (deleted)`)
                 : withAiPrefix('Note deleted')
+        }
+        case 'attachment_added': {
+            const filename = details.filename ? String(details.filename) : 'file'
+            return withAiPrefix(`Uploaded: ${filename}`)
+        }
+        case 'attachment_deleted': {
+            const filename = details.filename ? String(details.filename) : 'file'
+            return withAiPrefix(`Deleted: ${filename}`)
         }
         case 'task_created':
             return details.title ? withAiPrefix(`Task: ${String(details.title)}`) : aiOnly()
@@ -230,6 +272,8 @@ export default function CaseDetailPage() {
     const [emailDialogOpen, setEmailDialogOpen] = React.useState(false)
     const [proposeMatchOpen, setProposeMatchOpen] = React.useState(false)
     const [contactAttemptDialogOpen, setContactAttemptDialogOpen] = React.useState(false)
+    const [addTaskDialogOpen, setAddTaskDialogOpen] = React.useState(false)
+    const [editingTask, setEditingTask] = React.useState<TaskListItem | null>(null)
 
     const timezoneName = React.useMemo(() => {
         try {
@@ -243,7 +287,7 @@ export default function CaseDetailPage() {
     const { data: caseData, isLoading, error } = useCase(id)
     const { data: activityData } = useCaseActivity(id)
     const { data: notes } = useNotes(id)
-    const { data: tasksData } = useTasks({ case_id: id, exclude_approvals: true })
+    const { data: tasksData, isLoading: tasksLoading } = useTasks({ case_id: id, exclude_approvals: true })
 
     // Mutations
     const changeStatusMutation = useChangeStatus()
@@ -253,6 +297,8 @@ export default function CaseDetailPage() {
     const deleteNoteMutation = useDeleteNote()
     const completeTaskMutation = useCompleteTask()
     const uncompleteTaskMutation = useUncompleteTask()
+    const createTaskMutation = useCreateTask()
+    const updateTaskMutation = useUpdateTask()
     const updateCaseMutation = useUpdateCase()
     const claimCaseMutation = useClaimCase()
     const releaseCaseMutation = useReleaseCase()
@@ -260,6 +306,8 @@ export default function CaseDetailPage() {
     const sendZoomInviteMutation = useSendZoomInvite()
     const summarizeCaseMutation = useSummarizeCase()
     const draftEmailMutation = useDraftEmail()
+    const assignCaseMutation = useAssignCase()
+    const { data: assignees } = useAssignees()
 
     // Check if user has Zoom connected
     const { data: zoomStatus } = useZoomStatus()
@@ -318,6 +366,60 @@ export default function CaseDetailPage() {
         } else {
             await completeTaskMutation.mutateAsync(taskId)
         }
+    }
+
+    const handleAddTask = async (data: CaseTaskFormData) => {
+        const dueTime = data.due_time ? `${data.due_time}:00` : undefined
+
+        if (data.recurrence === "none") {
+            await createTaskMutation.mutateAsync({
+                title: data.title,
+                description: data.description,
+                task_type: data.task_type,
+                due_date: data.due_date,
+                due_time: dueTime,
+                case_id: id,
+            })
+            return
+        }
+
+        if (!data.due_date || !data.repeat_until) {
+            return
+        }
+
+        const start = parseISO(data.due_date)
+        const end = parseISO(data.repeat_until)
+        const dates = buildRecurringDates(start, end, data.recurrence)
+
+        if (dates.length >= MAX_TASK_OCCURRENCES && end > dates[dates.length - 1]) {
+            return
+        }
+
+        for (const date of dates) {
+            await createTaskMutation.mutateAsync({
+                title: data.title,
+                description: data.description,
+                task_type: data.task_type,
+                due_date: format(date, "yyyy-MM-dd"),
+                due_time: dueTime,
+                case_id: id,
+            })
+        }
+    }
+
+    const handleTaskClick = (taskId: string) => {
+        const task = tasksData?.items.find((item) => item.id === taskId) || null
+        if (task) {
+            setEditingTask(task)
+        }
+    }
+
+    const handleSaveTask = async (taskId: string, data: Partial<TaskListItem>) => {
+        const payload: Record<string, unknown> = {}
+        for (const [key, value] of Object.entries(data)) {
+            payload[key] = value === null ? undefined : value
+        }
+        await updateTaskMutation.mutateAsync({ taskId, data: payload })
     }
 
     const handleClaimCase = async () => {
@@ -485,21 +587,77 @@ export default function CaseDetailPage() {
                         </Button>
                     )}
 
-                    {/* Propose Match Button - only for case_manager+ on active cases */}
-                    {user?.role && ['case_manager', 'admin', 'developer'].includes(user.role) && !caseData.is_archived && (
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setProposeMatchOpen(true)}
-                        >
-                            <HeartHandshakeIcon className="size-4 mr-2" />
-                            Propose Match
-                        </Button>
-                    )}
+                    {/* Propose Match Button - only for case_manager+ at Pending Match stage */}
+                    {(() => {
+                        const currentStage = stageById.get(caseData.stage_id)
+                        const isPendingMatchStage = currentStage?.slug === 'pending_match'
+                        const isManagerRole = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
+                        const canProposeMatch = isManagerRole && isPendingMatchStage && !caseData.is_archived
 
-                    <Button variant="outline" size="sm">
-                        Assign
-                    </Button>
+                        return canProposeMatch ? (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setProposeMatchOpen(true)}
+                            >
+                                <HeartHandshakeIcon className="size-4 mr-2" />
+                                Propose Match
+                            </Button>
+                        ) : null
+                    })()}
+
+                    {/* Assign Dropdown - case_manager+ only */}
+                    {user?.role && ['case_manager', 'admin', 'developer'].includes(user.role) && !caseData.is_archived && (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger className={cn(buttonVariants({ variant: "outline", size: "sm" }))} disabled={assignCaseMutation.isPending}>
+                                {assignCaseMutation.isPending ? (
+                                    <LoaderIcon className="size-4 mr-2 animate-spin" />
+                                ) : null}
+                                Assign
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                {/* Unassign option - only when currently assigned to a user */}
+                                {caseData.owner_type === 'user' && caseData.owner_id && (() => {
+                                    const defaultQueue = queues?.find(q => q.name === 'Unassigned')
+                                    if (!defaultQueue) return null
+                                    return (
+                                        <>
+                                            <DropdownMenuItem
+                                                onClick={() => releaseCaseMutation.mutate({
+                                                    caseId: caseData.id,
+                                                    queueId: defaultQueue.id,
+                                                })}
+                                                disabled={releaseCaseMutation.isPending}
+                                            >
+                                                <XIcon className="size-4 mr-2" />
+                                                Unassign
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                        </>
+                                    )
+                                })()}
+                                {assignees?.map((assignee) => (
+                                    <DropdownMenuItem
+                                        key={assignee.id}
+                                        onClick={() => assignCaseMutation.mutate({
+                                            caseId: caseData.id,
+                                            owner_type: 'user',
+                                            owner_id: assignee.id,
+                                        })}
+                                        disabled={caseData.owner_id === assignee.id}
+                                    >
+                                        {assignee.name}
+                                        {caseData.owner_id === assignee.id && (
+                                            <CheckIcon className="size-4 ml-auto" />
+                                        )}
+                                    </DropdownMenuItem>
+                                ))}
+                                {(!assignees || assignees.length === 0) && (
+                                    <DropdownMenuItem disabled>No users available</DropdownMenuItem>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    )}
                     <DropdownMenu>
                         <DropdownMenuTrigger className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}>
                             <span className="inline-flex items-center justify-center">
@@ -765,46 +923,13 @@ export default function CaseDetailPage() {
 
                     {/* TASKS TAB */}
                     <TabsContent value="tasks" className="space-y-4">
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between">
-                                <CardTitle>Tasks for Case #{caseData.case_number}</CardTitle>
-                                <Button size="sm">
-                                    <PlusIcon className="h-4 w-4 mr-2" />
-                                    Add Task
-                                </Button>
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                                {tasksData && tasksData.items.length > 0 ? (
-                                    tasksData.items.map((task) => (
-                                        <div key={task.id} className="flex items-start gap-3">
-                                            <Checkbox
-                                                id={`task-${task.id}`}
-                                                className="mt-1"
-                                                checked={task.is_completed}
-                                                onCheckedChange={() => handleTaskToggle(task.id, task.is_completed)}
-                                            />
-                                            <div className="flex-1 space-y-1">
-                                                <label
-                                                    htmlFor={`task-${task.id}`}
-                                                    className={`text-sm font-medium leading-none ${task.is_completed ? 'line-through text-muted-foreground' : ''}`}
-                                                >
-                                                    {task.title}
-                                                </label>
-                                                {task.due_date && (
-                                                    <div className="flex items-center gap-2">
-                                                        <Badge variant="secondary" className="text-xs">
-                                                            {formatTaskDueLabel(task)}
-                                                        </Badge>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))
-                                ) : (
-                                    <p className="text-sm text-muted-foreground text-center py-4">No tasks for this case.</p>
-                                )}
-                            </CardContent>
-                        </Card>
+                        <CaseTasksCalendar
+                            caseId={id}
+                            tasks={tasksData?.items || []}
+                            isLoading={tasksLoading}
+                            onTaskToggle={handleTaskToggle}
+                            onAddTask={() => setAddTaskDialogOpen(true)}
+                        />
                     </TabsContent>
 
                     {/* HISTORY TAB */}
@@ -845,6 +970,14 @@ export default function CaseDetailPage() {
                             </CardContent>
                         </Card>
                     </TabsContent>
+
+                    <AddCaseTaskDialog
+                        open={addTaskDialogOpen}
+                        onOpenChange={setAddTaskDialogOpen}
+                        onSubmit={handleAddTask}
+                        isPending={createTaskMutation.isPending}
+                        caseName={caseData?.full_name || "this case"}
+                    />
 
                     {/* APPLICATION TAB */}
                     <TabsContent value="application" className="space-y-4">
