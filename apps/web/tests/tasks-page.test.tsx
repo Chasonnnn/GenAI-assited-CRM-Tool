@@ -34,6 +34,8 @@ const mockUseTasks = vi.fn()
 const mockCompleteTask = vi.fn()
 const mockUncompleteTask = vi.fn()
 const mockUpdateTask = vi.fn()
+const mockCreateTask = vi.fn()
+const mockDeleteTask = vi.fn()
 const mockResolveApproval = vi.fn()
 
 vi.mock('@/lib/hooks/use-tasks', () => ({
@@ -41,6 +43,8 @@ vi.mock('@/lib/hooks/use-tasks', () => ({
     useCompleteTask: () => ({ mutateAsync: mockCompleteTask }),
     useUncompleteTask: () => ({ mutateAsync: mockUncompleteTask }),
     useUpdateTask: () => ({ mutateAsync: mockUpdateTask }),
+    useCreateTask: () => ({ mutateAsync: mockCreateTask, isPending: false }),
+    useDeleteTask: () => ({ mutateAsync: mockDeleteTask, isPending: false }),
     useResolveWorkflowApproval: () => ({ mutateAsync: mockResolveApproval, isPending: false }),
 }))
 

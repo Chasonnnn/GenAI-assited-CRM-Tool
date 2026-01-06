@@ -41,7 +41,7 @@ import { useCase, useCaseActivity, useChangeStatus, useArchiveCase, useRestoreCa
 import { useQueues, useClaimCase, useReleaseCase } from "@/lib/hooks/use-queues"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useNotes, useCreateNote, useDeleteNote } from "@/lib/hooks/use-notes"
-import { useTasks, useCompleteTask, useUncompleteTask, useCreateTask, useUpdateTask } from "@/lib/hooks/use-tasks"
+import { useTasks, useCompleteTask, useUncompleteTask, useCreateTask, useUpdateTask, useDeleteTask } from "@/lib/hooks/use-tasks"
 import { useZoomStatus, useCreateZoomMeeting, useSendZoomInvite } from "@/lib/hooks/use-user-integrations"
 import { useSummarizeCase, useDraftEmail, useAISettings } from "@/lib/hooks/use-ai"
 import { useSetAIContext } from "@/lib/context/ai-context"
@@ -51,6 +51,7 @@ import { CaseApplicationTab } from "@/components/cases/CaseApplicationTab"
 import { CaseInterviewTab } from "@/components/cases/interviews/CaseInterviewTab"
 import { CaseTasksCalendar } from "@/components/cases/CaseTasksCalendar"
 import { AddCaseTaskDialog, type CaseTaskFormData } from "@/components/cases/AddCaseTaskDialog"
+import { TaskEditModal } from "@/components/tasks/TaskEditModal"
 import { CaseProfileCard } from "@/components/cases/CaseProfileCard"
 import { LogContactAttemptDialog } from "@/components/cases/LogContactAttemptDialog"
 import { useForms } from "@/lib/hooks/use-forms"
@@ -59,7 +60,8 @@ import type { TaskListItem } from "@/lib/types/task"
 import { useAuth } from "@/lib/auth-context"
 import { cn } from "@/lib/utils"
 import { parseDateInput } from "@/lib/utils/date"
-import { addDays, addWeeks, addMonths, format, parseISO } from "date-fns"
+import { format, parseISO } from "date-fns"
+import { buildRecurringDates, MAX_TASK_OCCURRENCES } from "@/lib/utils/task-recurrence"
 
 // Format date for display
 function formatDateTime(dateString: string): string {
@@ -115,32 +117,6 @@ function formatMeetingTimeForInvite(date: Date): string {
     })
 }
 
-type TaskRecurrence = "none" | "daily" | "weekly" | "monthly"
-const MAX_TASK_OCCURRENCES = 52
-
-function buildRecurringDates(
-    start: Date,
-    end: Date,
-    recurrence: TaskRecurrence
-): Date[] {
-    if (recurrence === "none") return [start]
-
-    const dates: Date[] = []
-    let cursor = start
-
-    while (cursor <= end && dates.length < MAX_TASK_OCCURRENCES) {
-        dates.push(cursor)
-        if (recurrence === "daily") {
-            cursor = addDays(cursor, 1)
-        } else if (recurrence === "weekly") {
-            cursor = addWeeks(cursor, 1)
-        } else {
-            cursor = addMonths(cursor, 1)
-        }
-    }
-
-    return dates
-}
 
 // Get initials from name
 function getInitials(name: string | null): string {
@@ -166,6 +142,7 @@ function formatActivityType(type: string): string {
         attachment_added: 'Attachment Uploaded',
         attachment_deleted: 'Attachment Deleted',
         task_created: 'Task Created',
+        task_deleted: 'Task Deleted',
         contact_attempt: 'Contact Attempt',
     }
     return labels[type] || type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
@@ -225,6 +202,8 @@ function formatActivityDetails(type: string, details: Record<string, unknown>): 
         }
         case 'task_created':
             return details.title ? withAiPrefix(`Task: ${String(details.title)}`) : aiOnly()
+        case 'task_deleted':
+            return details.title ? withAiPrefix(`Deleted: ${String(details.title)}`) : withAiPrefix('Task deleted')
         case 'contact_attempt': {
             const methods = Array.isArray(details.contact_methods)
                 ? (details.contact_methods as string[]).join(', ')
@@ -299,6 +278,7 @@ export default function CaseDetailPage() {
     const uncompleteTaskMutation = useUncompleteTask()
     const createTaskMutation = useCreateTask()
     const updateTaskMutation = useUpdateTask()
+    const deleteTaskMutation = useDeleteTask()
     const updateCaseMutation = useUpdateCase()
     const claimCaseMutation = useClaimCase()
     const releaseCaseMutation = useReleaseCase()
@@ -407,11 +387,8 @@ export default function CaseDetailPage() {
         }
     }
 
-    const handleTaskClick = (taskId: string) => {
-        const task = tasksData?.items.find((item) => item.id === taskId) || null
-        if (task) {
-            setEditingTask(task)
-        }
+    const handleTaskClick = (task: TaskListItem) => {
+        setEditingTask(task)
     }
 
     const handleSaveTask = async (taskId: string, data: Partial<TaskListItem>) => {
@@ -420,6 +397,11 @@ export default function CaseDetailPage() {
             payload[key] = value === null ? undefined : value
         }
         await updateTaskMutation.mutateAsync({ taskId, data: payload })
+    }
+
+    const handleDeleteTask = async (taskId: string) => {
+        await deleteTaskMutation.mutateAsync(taskId)
+        setEditingTask(null)
     }
 
     const handleClaimCase = async () => {
@@ -929,6 +911,7 @@ export default function CaseDetailPage() {
                             isLoading={tasksLoading}
                             onTaskToggle={handleTaskToggle}
                             onAddTask={() => setAddTaskDialogOpen(true)}
+                            onTaskClick={handleTaskClick}
                         />
                     </TabsContent>
 
@@ -977,6 +960,23 @@ export default function CaseDetailPage() {
                         onSubmit={handleAddTask}
                         isPending={createTaskMutation.isPending}
                         caseName={caseData?.full_name || "this case"}
+                    />
+                    <TaskEditModal
+                        task={editingTask ? {
+                            id: editingTask.id,
+                            title: editingTask.title,
+                            description: editingTask.description ?? null,
+                            task_type: editingTask.task_type,
+                            due_date: editingTask.due_date,
+                            due_time: editingTask.due_time ?? null,
+                            is_completed: editingTask.is_completed,
+                            case_id: editingTask.case_id,
+                        } : null}
+                        open={!!editingTask}
+                        onClose={() => setEditingTask(null)}
+                        onSave={(taskId, data) => handleSaveTask(taskId, data as Partial<TaskListItem>)}
+                        onDelete={handleDeleteTask}
+                        isDeleting={deleteTaskMutation.isPending}
                     />
 
                     {/* APPLICATION TAB */}

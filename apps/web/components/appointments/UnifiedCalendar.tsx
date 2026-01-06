@@ -64,6 +64,7 @@ import {
     parseISO,
     isToday,
 } from "date-fns"
+import { cn } from "@/lib/utils"
 
 // Status colors for appointments
 const STATUS_COLORS = {
@@ -98,22 +99,39 @@ type ViewType = "month" | "week" | "day"
 function TaskItem({
     task,
     compact = false,
+    onClick,
 }: {
     task: TaskListItem
     compact?: boolean
+    onClick?: (task: TaskListItem) => void
 }) {
     const time = task.due_time ? format(parseISO(`2000-01-01T${task.due_time}`), "h:mm a") : ""
+    const clickable = typeof onClick === "function"
 
     if (compact) {
         return (
-            <div className={`w-full text-left px-2 py-1 rounded text-xs truncate ${TASK_COLOR} text-white`}>
+            <div
+                onClick={() => onClick?.(task)}
+                className={cn(
+                    "w-full text-left px-2 py-1 rounded text-xs truncate",
+                    TASK_COLOR,
+                    "text-white",
+                    clickable && "cursor-pointer hover:opacity-90"
+                )}
+            >
                 {time && `${time} - `}📋 {task.title}
             </div>
         )
     }
 
     return (
-        <div className={`w-full text-left p-2 rounded-lg border-l-4 border-purple-500 bg-muted/50`}>
+        <div
+            onClick={() => onClick?.(task)}
+            className={cn(
+                "w-full text-left p-2 rounded-lg border-l-4 border-purple-500 bg-muted/50",
+                clickable && "cursor-pointer hover:bg-muted"
+            )}
+        >
             <p className="font-medium text-sm truncate flex items-center gap-1">
                 <CheckSquareIcon className="size-3" />
                 {task.title}
@@ -534,6 +552,7 @@ function MonthView({
     tasks,
     googleEvents = [],
     onEventClick,
+    onTaskClick,
     onDragStart,
     onDrop,
     dragOverDate,
@@ -545,6 +564,7 @@ function MonthView({
     tasks: TaskListItem[]
     googleEvents?: GoogleCalendarEvent[]
     onEventClick: (appt: AppointmentListItem) => void
+    onTaskClick?: (task: TaskListItem) => void
     onDragStart?: (e: React.DragEvent, appointment: AppointmentListItem) => void
     onDrop?: (e: React.DragEvent, date: Date) => void
     dragOverDate?: string | null
@@ -674,7 +694,7 @@ function MonthView({
                                 ))}
                                 {/* Tasks */}
                                 {shownTasks.map((task) => (
-                                    <TaskItem key={task.id} task={task} compact />
+                                    <TaskItem key={task.id} task={task} compact onClick={onTaskClick} />
                                 ))}
                                 {/* Google Calendar Events */}
                                 {shownGoogleEvents.map((event) => (
@@ -708,12 +728,14 @@ function WeekView({
     tasks,
     googleEvents = [],
     onEventClick,
+    onTaskClick,
 }: {
     currentDate: Date
     appointments: AppointmentListItem[]
     tasks: TaskListItem[]
     googleEvents?: GoogleCalendarEvent[]
     onEventClick: (appt: AppointmentListItem) => void
+    onTaskClick?: (task: TaskListItem) => void
 }) {
     const days = useMemo(() => {
         const weekStart = startOfWeek(currentDate)
@@ -793,7 +815,7 @@ function WeekView({
                                 />
                             ))}
                             {dayTasks.map((task) => (
-                                <TaskItem key={task.id} task={task} />
+                                <TaskItem key={task.id} task={task} onClick={onTaskClick} />
                             ))}
                             {dayGoogleEvents.map((event) => (
                                 <GoogleEventItem
@@ -822,12 +844,14 @@ function DayView({
     tasks,
     googleEvents = [],
     onEventClick,
+    onTaskClick,
 }: {
     currentDate: Date
     appointments: AppointmentListItem[]
     tasks: TaskListItem[]
     googleEvents?: GoogleCalendarEvent[]
     onEventClick: (appt: AppointmentListItem) => void
+    onTaskClick?: (task: TaskListItem) => void
 }) {
     const dateStr = format(currentDate, "yyyy-MM-dd")
 
@@ -885,7 +909,7 @@ function DayView({
                     <p className="text-xs text-muted-foreground mb-1">Tasks</p>
                     <div className="space-y-1">
                         {allDayTasks.map((task) => (
-                            <TaskItem key={task.id} task={task} compact />
+                            <TaskItem key={task.id} task={task} compact onClick={onTaskClick} />
                         ))}
                     </div>
                 </div>
@@ -920,7 +944,7 @@ function DayView({
                                     />
                                 ))}
                                 {hourTasks.map((task) => (
-                                    <TaskItem key={task.id} task={task} compact />
+                                    <TaskItem key={task.id} task={task} compact onClick={onTaskClick} />
                                 ))}
                                 {hourGoogleEvents.map((event) => (
                                     <GoogleEventItem
@@ -941,7 +965,17 @@ function DayView({
 // Main Export
 // =============================================================================
 
-export function UnifiedCalendar({ taskFilter }: { taskFilter?: { my_tasks?: boolean } } = {}) {
+export function UnifiedCalendar({
+    taskFilter,
+    includeAppointments = true,
+    includeGoogleEvents = true,
+    onTaskClick,
+}: {
+    taskFilter?: { my_tasks?: boolean; case_id?: string }
+    includeAppointments?: boolean
+    includeGoogleEvents?: boolean
+    onTaskClick?: (task: TaskListItem) => void
+} = {}) {
     const [currentDate, setCurrentDate] = useState(new Date())
     const [viewType, setViewType] = useState<ViewType>("month")
     const [selectedAppointment, setSelectedAppointment] = useState<AppointmentListItem | null>(null)
@@ -964,12 +998,16 @@ export function UnifiedCalendar({ taskFilter }: { taskFilter?: { my_tasks?: bool
         }
     }, [currentDate])
 
-    const { data, isLoading: appointmentsLoading } = useAppointments({
-        ...dateRange,
-        per_page: 100,
-    })
+    const { data, isLoading: appointmentsLoadingRaw } = useAppointments(
+        {
+            ...dateRange,
+            per_page: 100,
+        },
+        { enabled: includeAppointments }
+    )
 
-    const appointments = data?.items || []
+    const appointments = includeAppointments ? data?.items || [] : []
+    const appointmentsLoading = includeAppointments ? appointmentsLoadingRaw : false
 
     const userTimezone = useMemo(
         () => Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles",
@@ -980,14 +1018,16 @@ export function UnifiedCalendar({ taskFilter }: { taskFilter?: { my_tasks?: bool
     const { data: googleEventsData } = useGoogleCalendarEvents(
         dateRange.date_start,
         dateRange.date_end,
-        userTimezone
+        userTimezone,
+        { enabled: includeGoogleEvents }
     )
-    const googleEvents = googleEventsData?.events || []
-    const calendarConnected = googleEventsData?.connected ?? true
-    const calendarError = googleEventsData?.error ?? null
+    const googleEvents = includeGoogleEvents ? googleEventsData?.events || [] : []
+    const calendarConnected = includeGoogleEvents ? googleEventsData?.connected ?? true : true
+    const calendarError = includeGoogleEvents ? googleEventsData?.error ?? null : null
 
     const taskParams = {
         my_tasks: taskFilter?.my_tasks ? true : undefined,
+        case_id: taskFilter?.case_id,
         is_completed: false,
         per_page: 100,
         due_after: dateRange.date_start,
@@ -1011,6 +1051,7 @@ export function UnifiedCalendar({ taskFilter }: { taskFilter?: { my_tasks?: bool
     }
 
     const handleEventClick = (appt: AppointmentListItem) => {
+        if (!includeAppointments) return
         setSelectedAppointment(appt)
         setDialogOpen(true)
     }
@@ -1111,7 +1152,7 @@ export function UnifiedCalendar({ taskFilter }: { taskFilter?: { my_tasks?: bool
                     </div>
                 ) : (
                     <>
-                        {!calendarConnected && (
+                        {includeGoogleEvents && !calendarConnected && (
                             <Alert className="mb-4 border-amber-500/60 bg-amber-50 text-amber-900">
                                 <MailIcon className="size-4" />
                                 <AlertTitle>Google Calendar not connected</AlertTitle>
@@ -1136,11 +1177,12 @@ export function UnifiedCalendar({ taskFilter }: { taskFilter?: { my_tasks?: bool
                                 tasks={tasks}
                                 googleEvents={googleEvents}
                                 onEventClick={handleEventClick}
-                                onDragStart={handleDragStart}
-                                onDrop={handleDrop}
+                                onTaskClick={onTaskClick}
+                                onDragStart={includeAppointments ? handleDragStart : undefined}
+                                onDrop={includeAppointments ? handleDrop : undefined}
                                 dragOverDate={dragOverDate}
-                                onDragOver={handleDragOver}
-                                onDragLeave={handleDragLeave}
+                                onDragOver={includeAppointments ? handleDragOver : undefined}
+                                onDragLeave={includeAppointments ? handleDragLeave : undefined}
                             />
                         )}
                         {viewType === "week" && (
@@ -1150,6 +1192,7 @@ export function UnifiedCalendar({ taskFilter }: { taskFilter?: { my_tasks?: bool
                                 tasks={tasks}
                                 googleEvents={googleEvents}
                                 onEventClick={handleEventClick}
+                                onTaskClick={onTaskClick}
                             />
                         )}
                         {viewType === "day" && (
@@ -1159,6 +1202,7 @@ export function UnifiedCalendar({ taskFilter }: { taskFilter?: { my_tasks?: bool
                                 tasks={tasks}
                                 googleEvents={googleEvents}
                                 onEventClick={handleEventClick}
+                                onTaskClick={onTaskClick}
                             />
                         )}
                     </>
@@ -1167,31 +1211,37 @@ export function UnifiedCalendar({ taskFilter }: { taskFilter?: { my_tasks?: bool
                 {/* Legend */}
                 <div className="flex flex-wrap items-center gap-4 mt-4 pt-4 border-t border-border">
                     <span className="text-sm text-muted-foreground">Status:</span>
-                    {Object.entries(STATUS_COLORS).map(([status, color]) => (
+                    {includeAppointments && Object.entries(STATUS_COLORS).map(([status, color]) => (
                         <div key={status} className="flex items-center gap-1.5">
                             <div className={`size-3 rounded-full ${color}`} />
                             <span className="text-xs capitalize">{status.replace("_", " ")}</span>
                         </div>
                     ))}
-                    <div className="flex items-center gap-1.5">
-                        <div className={`size-3 rounded-full ${GOOGLE_EVENT_COLOR}`} />
-                        <span className="text-xs">🌐 Google Calendar</span>
-                    </div>
+                    {includeGoogleEvents && (
+                        <div className="flex items-center gap-1.5">
+                            <div className={`size-3 rounded-full ${GOOGLE_EVENT_COLOR}`} />
+                            <span className="text-xs">🌐 Google Calendar</span>
+                        </div>
+                    )}
                     <div className="flex items-center gap-1.5">
                         <div className={`size-3 rounded-full ${TASK_COLOR}`} />
                         <span className="text-xs">Tasks</span>
                     </div>
-                    <span className="text-xs text-muted-foreground ml-auto">
-                        💡 Drag pending/confirmed appointments to reschedule
-                    </span>
+                    {includeAppointments && (
+                        <span className="text-xs text-muted-foreground ml-auto">
+                            💡 Drag pending/confirmed appointments to reschedule
+                        </span>
+                    )}
                 </div>
             </CardContent>
 
-            <AppointmentDetailDialog
-                appointment={selectedAppointment}
-                open={dialogOpen}
-                onOpenChange={setDialogOpen}
-            />
+            {includeAppointments && (
+                <AppointmentDetailDialog
+                    appointment={selectedAppointment}
+                    open={dialogOpen}
+                    onOpenChange={setDialogOpen}
+                />
+            )}
         </Card>
     )
 }

@@ -18,13 +18,16 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { PlusIcon, LoaderIcon, ListIcon, CalendarIcon, ShieldCheckIcon, ClockIcon } from "lucide-react"
 import { UnifiedCalendar } from "@/components/appointments"
 import { TaskEditModal } from "@/components/tasks/TaskEditModal"
+import { AddTaskDialog, type TaskFormData } from "@/components/tasks/AddTaskDialog"
 import { ApprovalTaskActions } from "@/components/tasks/ApprovalTaskActions"
 import { ApprovalStatusBadge } from "@/components/tasks/ApprovalStatusBadge"
-import { useTasks, useCompleteTask, useUncompleteTask, useUpdateTask } from "@/lib/hooks/use-tasks"
+import { useTasks, useCompleteTask, useUncompleteTask, useUpdateTask, useCreateTask, useDeleteTask } from "@/lib/hooks/use-tasks"
 import { useAuth } from "@/lib/auth-context"
 import { useAIContext } from "@/lib/context/ai-context"
 import type { TaskListItem } from "@/lib/types/task"
 import { parseDateInput, startOfLocalDay } from "@/lib/utils/date"
+import { buildRecurringDates, MAX_TASK_OCCURRENCES } from "@/lib/utils/task-recurrence"
+import { format, parseISO } from "date-fns"
 
 // Get initials from name
 function getInitials(name: string | null): string {
@@ -138,14 +141,12 @@ export default function TasksPage() {
         localStorage.setItem("tasks-view", newView)
     }
 
-    // Edit modal state
+    // Create/edit modal state
+    const [addTaskDialogOpen, setAddTaskDialogOpen] = useState(false)
     const [editingTask, setEditingTask] = useState<TaskListItem | null>(null)
 
-    const handleTaskClick = (taskId: string) => {
-        const task = incompleteTasks?.items.find((t: TaskListItem) => t.id === taskId)
-        if (task) {
-            setEditingTask(task)
-        }
+    const handleTaskClick = (task: TaskListItem) => {
+        setEditingTask(task)
     }
 
     const handleSaveTask = async (taskId: string, data: Partial<TaskListItem>) => {
@@ -154,6 +155,11 @@ export default function TasksPage() {
             payload[key] = value === null ? undefined : value
         }
         await updateTask.mutateAsync({ taskId, data: payload })
+    }
+
+    const handleDeleteTask = async (taskId: string) => {
+        await deleteTask.mutateAsync(taskId)
+        setEditingTask(null)
     }
 
     // Fetch incomplete tasks
@@ -187,6 +193,8 @@ export default function TasksPage() {
     const completeTask = useCompleteTask()
     const uncompleteTask = useUncompleteTask()
     const updateTask = useUpdateTask()
+    const createTask = useCreateTask()
+    const deleteTask = useDeleteTask()
 
     // Set AI context when editing a task, clear when not
     const { setContext: setAIContext, clearContext: clearAIContext } = useAIContext()
@@ -209,6 +217,43 @@ export default function TasksPage() {
             await uncompleteTask.mutateAsync(taskId)
         } else {
             await completeTask.mutateAsync(taskId)
+        }
+    }
+
+    const handleAddTask = async (data: TaskFormData) => {
+        const dueTime = data.due_time ? `${data.due_time}:00` : undefined
+
+        if (data.recurrence === "none") {
+            await createTask.mutateAsync({
+                title: data.title,
+                description: data.description,
+                task_type: data.task_type,
+                due_date: data.due_date,
+                due_time: dueTime,
+            })
+            return
+        }
+
+        if (!data.due_date || !data.repeat_until) {
+            return
+        }
+
+        const start = parseISO(data.due_date)
+        const end = parseISO(data.repeat_until)
+        const dates = buildRecurringDates(start, end, data.recurrence)
+
+        if (dates.length >= MAX_TASK_OCCURRENCES && end > dates[dates.length - 1]) {
+            return
+        }
+
+        for (const date of dates) {
+            await createTask.mutateAsync({
+                title: data.title,
+                description: data.description,
+                task_type: data.task_type,
+                due_date: format(date, "yyyy-MM-dd"),
+                due_time: dueTime,
+            })
         }
     }
 
@@ -237,11 +282,11 @@ export default function TasksPage() {
                 className={`flex items-start gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-accent/50 ${task.is_completed ? 'opacity-60' : ''}`}
                 role="button"
                 tabIndex={0}
-                onClick={() => handleTaskClick(task.id)}
+                onClick={() => handleTaskClick(task)}
                 onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault()
-                        handleTaskClick(task.id)
+                        handleTaskClick(task)
                     }
                 }}
             >
@@ -317,7 +362,7 @@ export default function TasksPage() {
             <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <div className="flex h-16 items-center justify-between px-6">
                     <h1 className="text-2xl font-semibold">Tasks</h1>
-                    <Button disabled>
+                    <Button onClick={() => setAddTaskDialogOpen(true)}>
                         <PlusIcon className="mr-2 size-4" />
                         Add Task
                     </Button>
@@ -387,7 +432,10 @@ export default function TasksPage() {
 
                 {/* Calendar View */}
                 {!isLoading && !hasError && view === "calendar" && (
-                    <UnifiedCalendar taskFilter={{ my_tasks: filter === "my_tasks" }} />
+                    <UnifiedCalendar
+                        taskFilter={{ my_tasks: filter === "my_tasks" }}
+                        onTaskClick={handleTaskClick}
+                    />
                 )}
 
                 {/* Pending Approvals Section */}
@@ -541,6 +589,14 @@ export default function TasksPage() {
                     open={!!editingTask}
                     onClose={() => setEditingTask(null)}
                     onSave={(taskId, data) => handleSaveTask(taskId, data as Partial<TaskListItem>)}
+                    onDelete={handleDeleteTask}
+                    isDeleting={deleteTask.isPending}
+                />
+                <AddTaskDialog
+                    open={addTaskDialogOpen}
+                    onOpenChange={setAddTaskDialogOpen}
+                    onSubmit={handleAddTask}
+                    isPending={createTask.isPending}
                 />
             </div>
         </div>

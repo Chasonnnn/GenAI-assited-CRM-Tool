@@ -131,8 +131,11 @@ class CaseActivityType(str, Enum):
     HANDOFF_DENIED = "handoff_denied"
     NOTE_ADDED = "note_added"
     NOTE_DELETED = "note_deleted"
+    ATTACHMENT_ADDED = "attachment_added"
+    ATTACHMENT_DELETED = "attachment_deleted"
     EMAIL_SENT = "email_sent"  # Email sent to case contact
     TASK_CREATED = "task_created"  # Task created for case
+    TASK_DELETED = "task_deleted"  # Task deleted for case
     MATCH_PROPOSED = "match_proposed"  # New match proposed
     MATCH_REVIEWING = "match_reviewing"  # Match entered review
     MATCH_ACCEPTED = "match_accepted"  # Match accepted
@@ -641,6 +644,9 @@ class AuditEventType(str, Enum):
     FORM_SUBMISSION_APPROVED = "form_submission_approved"
     FORM_SUBMISSION_REJECTED = "form_submission_rejected"
     FORM_SUBMISSION_FILE_DOWNLOADED = "form_submission_file_downloaded"
+
+    # Tasks
+    TASK_DELETED = "task_deleted"
 
 
 # =============================================================================

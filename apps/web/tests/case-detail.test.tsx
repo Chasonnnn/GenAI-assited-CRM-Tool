@@ -44,10 +44,15 @@ const mockChangeStatus = vi.fn()
 const mockArchive = vi.fn()
 const mockRestore = vi.fn()
 const mockUpdateCase = vi.fn()
+const mockAssignCase = vi.fn()
+const mockUseAssignees = vi.fn()
 const mockCreateNote = vi.fn()
 const mockDeleteNote = vi.fn()
 const mockCompleteTask = vi.fn()
 const mockUncompleteTask = vi.fn()
+const mockUpdateTask = vi.fn()
+const mockCreateTask = vi.fn()
+const mockDeleteTask = vi.fn()
 
 vi.mock('@/lib/hooks/use-cases', () => ({
     useCase: (id: string) => mockUseCase(id),
@@ -56,6 +61,8 @@ vi.mock('@/lib/hooks/use-cases', () => ({
     useArchiveCase: () => ({ mutateAsync: mockArchive }),
     useRestoreCase: () => ({ mutateAsync: mockRestore }),
     useUpdateCase: () => ({ mutateAsync: mockUpdateCase }),
+    useAssignCase: () => ({ mutateAsync: mockAssignCase }),
+    useAssignees: () => mockUseAssignees(),
     useSendCaseEmail: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useCreateContactAttempt: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useContactAttempts: () => ({ data: null, isLoading: false }),
@@ -71,6 +78,9 @@ vi.mock('@/lib/hooks/use-tasks', () => ({
     useTasks: (params: unknown) => mockUseTasks(params),
     useCompleteTask: () => ({ mutateAsync: mockCompleteTask }),
     useUncompleteTask: () => ({ mutateAsync: mockUncompleteTask }),
+    useUpdateTask: () => ({ mutateAsync: mockUpdateTask }),
+    useCreateTask: () => ({ mutateAsync: mockCreateTask, isPending: false }),
+    useDeleteTask: () => ({ mutateAsync: mockDeleteTask, isPending: false }),
 }))
 
 vi.mock('@/lib/hooks/use-ai', () => ({
@@ -107,6 +117,7 @@ vi.mock('@/lib/hooks/use-matches', () => ({
 
 describe('CaseDetailPage', () => {
     beforeEach(() => {
+        mockUseAssignees.mockReturnValue({ data: [] })
         mockUseCase.mockReturnValue({
             data: {
                 id: 'c1',

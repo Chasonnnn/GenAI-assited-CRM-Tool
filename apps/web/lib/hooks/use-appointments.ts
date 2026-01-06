@@ -166,7 +166,8 @@ export function useRegenerateBookingLink() {
 // Appointments
 // =============================================================================
 
-export function useAppointments(params: {
+export function useAppointments(
+    params: {
     page?: number;
     per_page?: number;
     status?: string;
@@ -174,10 +175,13 @@ export function useAppointments(params: {
     date_end?: string;
     case_id?: string;
     intended_parent_id?: string;
-}) {
+    },
+    options?: { enabled?: boolean },
+) {
     return useQuery({
         queryKey: appointmentKeys.list(params),
         queryFn: () => appointmentsApi.getAppointments(params),
+        enabled: options?.enabled ?? true,
     });
 }
 
@@ -382,11 +386,16 @@ export const calendarKeys = {
         ['google-calendar', 'events', { dateStart, dateEnd, timezone }] as const,
 };
 
-export function useGoogleCalendarEvents(dateStart: string, dateEnd: string, timezone?: string) {
+export function useGoogleCalendarEvents(
+    dateStart: string,
+    dateEnd: string,
+    timezone?: string,
+    options?: { enabled?: boolean },
+) {
     return useQuery({
         queryKey: calendarKeys.googleEvents(dateStart, dateEnd, timezone),
         queryFn: () => appointmentsApi.getGoogleCalendarEvents(dateStart, dateEnd, timezone),
-        enabled: !!dateStart && !!dateEnd,
+        enabled: (options?.enabled ?? true) && !!dateStart && !!dateEnd,
         // Cache for 5 minutes to reduce API calls
         staleTime: 5 * 60 * 1000,
     });
