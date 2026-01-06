@@ -326,7 +326,12 @@ function AvailabilityRulesCard() {
                                             onValueChange={(v) => v && updateTime(day.value, "start_time", v)}
                                         >
                                             <SelectTrigger className="w-28">
-                                                <SelectValue />
+                                                <SelectValue>
+                                                    {(value: string | null) => {
+                                                        const opt = TIME_OPTIONS.find(t => t.value === value)
+                                                        return opt?.label ?? value
+                                                    }}
+                                                </SelectValue>
                                             </SelectTrigger>
                                             <SelectContent>
                                                 {TIME_OPTIONS.map((opt) => (
@@ -342,7 +347,12 @@ function AvailabilityRulesCard() {
                                             onValueChange={(v) => v && updateTime(day.value, "end_time", v)}
                                         >
                                             <SelectTrigger className="w-28">
-                                                <SelectValue />
+                                                <SelectValue>
+                                                    {(value: string | null) => {
+                                                        const opt = TIME_OPTIONS.find(t => t.value === value)
+                                                        return opt?.label ?? value
+                                                    }}
+                                                </SelectValue>
                                             </SelectTrigger>
                                             <SelectContent>
                                                 {TIME_OPTIONS.map((opt) => (
@@ -366,7 +376,18 @@ function AvailabilityRulesCard() {
                         <Label>Timezone:</Label>
                         <Select value={timezone} onValueChange={(v) => { if (v) { setTimezone(v); setHasChanges(true) } }}>
                             <SelectTrigger className="w-48">
-                                <SelectValue />
+                                <SelectValue>
+                                    {(value: string | null) => {
+                                        const labels: Record<string, string> = {
+                                            "America/Los_Angeles": "Pacific Time",
+                                            "America/New_York": "Eastern Time",
+                                            "America/Chicago": "Central Time",
+                                            "America/Denver": "Mountain Time",
+                                            "UTC": "UTC",
+                                        }
+                                        return labels[value ?? ""] ?? value
+                                    }}
+                                </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="America/Los_Angeles">Pacific Time</SelectItem>
@@ -532,7 +553,11 @@ function AppointmentTypesCard() {
                                         }
                                     >
                                         <SelectTrigger>
-                                            <SelectValue />
+                                            <SelectValue>
+                                                {(value: string | null) => {
+                                                    return value ? `${value} min` : "Select duration"
+                                                }}
+                                            </SelectValue>
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="15">15 min</SelectItem>
@@ -552,7 +577,12 @@ function AppointmentTypesCard() {
                                         }
                                     >
                                         <SelectTrigger>
-                                            <SelectValue />
+                                            <SelectValue>
+                                                {(value: string | null) => {
+                                                    if (value === "0") return "No buffer"
+                                                    return value ? `${value} min` : "Select buffer"
+                                                }}
+                                            </SelectValue>
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="0">No buffer</SelectItem>
@@ -572,7 +602,16 @@ function AppointmentTypesCard() {
                                     }
                                 >
                                     <SelectTrigger>
-                                        <SelectValue />
+                                        <SelectValue>
+                                            {(value: string | null) => {
+                                                const labels: Record<string, string> = {
+                                                    zoom: "Zoom",
+                                                    phone: "Phone",
+                                                    in_person: "In-Person",
+                                                }
+                                                return labels[value ?? ""] ?? "Select format"
+                                            }}
+                                        </SelectValue>
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="zoom">

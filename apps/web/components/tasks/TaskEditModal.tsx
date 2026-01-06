@@ -42,17 +42,29 @@ interface TaskEditModalProps {
     open: boolean
     onClose: () => void
     onSave: (taskId: string, data: Partial<Task>) => Promise<void>
+    onDelete?: (taskId: string) => Promise<void>
+    isDeleting?: boolean
 }
 
 const TASK_TYPES = [
-    { value: "call", label: "Call" },
-    { value: "email", label: "Email" },
-    { value: "meeting", label: "Appointment" },
+    { value: "meeting", label: "Meeting" },
     { value: "follow_up", label: "Follow Up" },
+    { value: "contact", label: "Contact" },
+    { value: "review", label: "Review" },
+    { value: "medication", label: "Medication" },
+    { value: "exam", label: "Exam" },
+    { value: "appointment", label: "Appointment" },
     { value: "other", label: "Other" },
 ]
 
-export function TaskEditModal({ task, open, onClose, onSave }: TaskEditModalProps) {
+export function TaskEditModal({
+    task,
+    open,
+    onClose,
+    onSave,
+    onDelete,
+    isDeleting = false,
+}: TaskEditModalProps) {
     const [title, setTitle] = useState("")
     const [description, setDescription] = useState("")
     const [taskType, setTaskType] = useState("other")
@@ -99,6 +111,14 @@ export function TaskEditModal({ task, open, onClose, onSave }: TaskEditModalProp
         }
     }
 
+    const handleDelete = async () => {
+        if (!task || !onDelete) return
+        const confirmed = window.confirm("Delete this task? This cannot be undone.")
+        if (!confirmed) return
+        await onDelete(task.id)
+        onClose()
+    }
+
     return (
         <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
             <DialogContent className="sm:max-w-[500px]">
@@ -140,7 +160,12 @@ export function TaskEditModal({ task, open, onClose, onSave }: TaskEditModalProp
                             <Label htmlFor="task-type">Type</Label>
                             <Select value={taskType} onValueChange={(v) => v && setTaskType(v)}>
                                 <SelectTrigger>
-                                    <SelectValue />
+                                    <SelectValue>
+                                        {(value: string | null) => {
+                                            const type = TASK_TYPES.find(t => t.value === value)
+                                            return type?.label ?? "Select type"
+                                        }}
+                                    </SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
                                     {TASK_TYPES.map((type) => (
@@ -193,10 +218,21 @@ export function TaskEditModal({ task, open, onClose, onSave }: TaskEditModalProp
                     </div>
 
                     <DialogFooter>
-                        <Button type="button" variant="outline" onClick={onClose}>
+                        {onDelete && (
+                            <Button
+                                type="button"
+                                variant="destructive"
+                                onClick={handleDelete}
+                                disabled={isSaving || isDeleting}
+                            >
+                                {isDeleting && <Loader2 className="mr-2 size-4 animate-spin" />}
+                                Delete Task
+                            </Button>
+                        )}
+                        <Button type="button" variant="outline" onClick={onClose} disabled={isSaving || isDeleting}>
                             Cancel
                         </Button>
-                        <Button type="submit" disabled={isSaving || !title.trim()}>
+                        <Button type="submit" disabled={isSaving || isDeleting || !title.trim()}>
                             {isSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
                             Save Changes
                         </Button>

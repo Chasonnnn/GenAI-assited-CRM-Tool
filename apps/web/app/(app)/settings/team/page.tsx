@@ -263,7 +263,16 @@ function MembersTab() {
                                         <Label htmlFor="bulk-role">New Role</Label>
                                         <Select value={bulkRole} onValueChange={(v) => v && setBulkRole(v)}>
                                             <SelectTrigger>
-                                                <SelectValue />
+                                                <SelectValue>
+                                                    {(value: string | null) => {
+                                                        const labels: Record<string, string> = {
+                                                            intake_specialist: "Intake Specialist",
+                                                            case_manager: "Case Manager",
+                                                            admin: "Admin",
+                                                        }
+                                                        return labels[value ?? ""] ?? "Select role"
+                                                    }}
+                                                </SelectValue>
                                             </SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="intake_specialist">Intake Specialist</SelectItem>
