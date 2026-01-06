@@ -231,6 +231,21 @@ export function getSubmissionFileDownloadUrl(submissionId: string, fileId: strin
     )
 }
 
+export function uploadSubmissionFile(submissionId: string, file: File): Promise<FormSubmissionFileRead> {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.upload<FormSubmissionFileRead>(
+        `/forms/submissions/${submissionId}/files`,
+        formData
+    )
+}
+
+export function deleteSubmissionFile(submissionId: string, fileId: string): Promise<{ deleted: boolean }> {
+    return api.delete<{ deleted: boolean }>(
+        `/forms/submissions/${submissionId}/files/${fileId}`
+    )
+}
+
 export function uploadFormLogo(file: File): Promise<FormLogoRead> {
     const formData = new FormData()
     formData.append('file', file)

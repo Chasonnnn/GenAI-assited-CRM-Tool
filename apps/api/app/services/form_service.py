@@ -448,6 +448,119 @@ def get_submission_file(
     )
 
 
+def add_submission_file(
+    db: Session,
+    org_id: uuid.UUID,
+    submission: FormSubmission,
+    file: UploadFile,
+    user_id: uuid.UUID,
+) -> FormSubmissionFile:
+    """Add a file to an existing submission (staff edit mode)."""
+    form = db.query(Form).filter(Form.id == submission.form_id).first()
+    if not form:
+        raise ValueError("Form not found")
+
+    # Validate the file
+    _validate_file(form, file)
+
+    # Check max file count
+    existing_count = (
+        db.query(FormSubmissionFile)
+        .filter(
+            FormSubmissionFile.submission_id == submission.id,
+            FormSubmissionFile.deleted_at.is_(None),
+        )
+        .count()
+    )
+    max_count = form.max_file_count or DEFAULT_MAX_FILE_COUNT
+    if existing_count >= max_count:
+        raise ValueError(f"Maximum {max_count} files allowed")
+
+    # Store the file
+    scan_enabled = getattr(settings, "ATTACHMENT_SCAN_ENABLED", False)
+    file.file.seek(0, 2)
+    file_size = file.file.tell()
+    file.file.seek(0)
+
+    checksum = calculate_checksum(file.file)
+    processed_file = strip_exif_data(file.file, file.content_type or "")
+    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename else ""
+    suffix = f".{ext}" if ext else ""
+    storage_key = (
+        f"{submission.organization_id}/form-submissions/"
+        f"{submission.id}/{uuid.uuid4()}{suffix}"
+    )
+
+    store_file(storage_key, processed_file)
+
+    record = FormSubmissionFile(
+        organization_id=submission.organization_id,
+        submission_id=submission.id,
+        filename=file.filename or "upload",
+        storage_key=storage_key,
+        content_type=file.content_type or "application/octet-stream",
+        file_size=file_size,
+        checksum_sha256=checksum,
+        scan_status="pending" if scan_enabled else "clean",
+        quarantined=scan_enabled,
+    )
+    db.add(record)
+
+    # Log audit event
+    audit_service.log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.ATTACHMENT_UPLOADED,
+        actor_user_id=user_id,
+        target_type="form_submission_file",
+        target_id=record.id,
+        details={
+            "submission_id": str(submission.id),
+            "case_id": str(submission.case_id),
+            "filename": record.filename,
+        },
+    )
+
+    db.flush()
+    return record
+
+
+def soft_delete_submission_file(
+    db: Session,
+    org_id: uuid.UUID,
+    submission: FormSubmission,
+    file_record: FormSubmissionFile,
+    user_id: uuid.UUID,
+) -> bool:
+    """Soft-delete a submission file (staff edit mode)."""
+    if file_record.deleted_at is not None:
+        return False
+
+    # Capture filename for audit before deletion
+    filename = file_record.filename
+
+    file_record.deleted_at = datetime.now(timezone.utc)
+    file_record.deleted_by_user_id = user_id
+
+    # Log audit event AFTER successful deletion
+    audit_service.log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.ATTACHMENT_DELETED,
+        actor_user_id=user_id,
+        target_type="form_submission_file",
+        target_id=file_record.id,
+        details={
+            "submission_id": str(submission.id),
+            "case_id": str(submission.case_id),
+            "filename": filename,
+        },
+    )
+
+    db.flush()
+    return True
+
+
 def get_submission_file_download_url(
     db: Session,
     org_id: uuid.UUID,
