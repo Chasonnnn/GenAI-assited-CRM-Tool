@@ -458,6 +458,7 @@ def bulk_complete_tasks(
 )
 def delete_task(
     task_id: UUID,
+    request: Request,
     session: UserSession = Depends(
         require_permission(POLICIES["tasks"].actions["delete"])
     ),
@@ -480,6 +481,37 @@ def delete_task(
     if not is_owner_or_can_manage(session, task.created_by_user_id):
         raise HTTPException(
             status_code=403, detail="Not authorized to delete this task"
+        )
+
+    if task.case_id:
+        from app.services import activity_service
+
+        activity_service.log_task_deleted(
+            db=db,
+            case_id=task.case_id,
+            organization_id=session.org_id,
+            actor_user_id=session.user_id,
+            task_id=task.id,
+            title=task.title,
+        )
+    else:
+        from app.db.enums import AuditEventType
+        from app.services import audit_service
+
+        audit_service.log_event(
+            db=db,
+            org_id=session.org_id,
+            event_type=AuditEventType.TASK_DELETED,
+            actor_user_id=session.user_id,
+            target_type="task",
+            target_id=task.id,
+            details={
+                "task_type": task.task_type,
+                "intended_parent_id": str(task.intended_parent_id) if task.intended_parent_id else None,
+                "owner_id": str(task.owner_id),
+                "owner_type": task.owner_type,
+            },
+            request=request,
         )
 
     task_service.delete_task(db, task)

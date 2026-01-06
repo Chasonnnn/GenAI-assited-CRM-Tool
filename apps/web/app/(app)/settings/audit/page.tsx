@@ -14,7 +14,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { LoaderIcon, ChevronLeft, ChevronRight, FileText, User, Shield, Settings, Download, Upload, Sparkles, AlertTriangle, CheckIcon, XIcon } from "lucide-react"
+import { LoaderIcon, ChevronLeft, ChevronRight, FileText, User, Shield, Settings, Download, Upload, Sparkles, AlertTriangle, CheckIcon, XIcon, Trash2 } from "lucide-react"
 import { useAIAuditActivity, useAuditExports, useAuditLogs, useCreateAuditExport, useEventTypes } from "@/lib/hooks/use-audit"
 import { useAuth } from "@/lib/auth-context"
 
@@ -30,6 +30,8 @@ const EVENT_CONFIG: Record<string, { icon: React.ElementType; label: string; col
     user_logout: { icon: User, label: "User Logout", color: "bg-gray-500" },
     // Security events
     permission_changed: { icon: Shield, label: "Permission Change", color: "bg-red-500" },
+    // Task events
+    task_deleted: { icon: Trash2, label: "Task Deleted", color: "bg-rose-500" },
     // AI events
     ai_action_approved: { icon: Sparkles, label: "AI Action Approved", color: "bg-emerald-500" },
     ai_action_rejected: { icon: Sparkles, label: "AI Action Rejected", color: "bg-slate-500" },
