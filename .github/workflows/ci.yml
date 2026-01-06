@@ -239,4 +239,4 @@ jobs:
           target: 'http://localhost:8000/health'
           allow_issue_writing: false
           cmd_options: '-c zap-baseline.conf'
-          artifact_name: 'zap-scan'
+          artifact_name: 'zapscan'
