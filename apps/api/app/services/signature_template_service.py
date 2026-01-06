@@ -92,7 +92,11 @@ def render_signature_html(
 
 
 def _get_base_data(org: Organization, user: User) -> dict:
-    """Extract and escape signature data from org and user."""
+    """Extract and escape signature data from org and user.
+
+    Signature override fields (signature_name, etc.) take precedence if set,
+    otherwise falls back to profile values (display_name, etc.).
+    """
     primary_color = validate_hex_color(org.signature_primary_color) or "#0066cc"
 
     # Parse org social links from JSONB
@@ -103,6 +107,12 @@ def _get_base_data(org: Organization, user: User) -> dict:
             url = validate_url(link.get("url"))
             if platform and url:
                 org_social_links.append({"platform": platform, "url": url})
+
+    # Use signature overrides with fallback to profile values
+    effective_name = getattr(user, "signature_name", None) or user.display_name
+    effective_title = getattr(user, "signature_title", None) or getattr(user, "title", None)
+    effective_phone = getattr(user, "signature_phone", None) or getattr(user, "phone", None)
+    effective_photo = getattr(user, "signature_photo_url", None) or user.avatar_url
 
     return {
         # Org branding (all HTML-escaped)
@@ -115,12 +125,13 @@ def _get_base_data(org: Organization, user: User) -> dict:
         "org_social_links": org_social_links,
         "disclaimer": escape_text(org.signature_disclaimer),
 
-        # User profile (HTML-escaped)
-        "name": escape_text(user.display_name),
-        "email": escape_text(user.email),
-        "user_phone": escape_text(getattr(user, "phone", None)),
-        "user_title": escape_text(getattr(user, "title", None)),
-        "phone": escape_text(getattr(user, "phone", None)),
+        # User info with signature override fallback (HTML-escaped)
+        "name": escape_text(effective_name),
+        "email": escape_text(user.email),  # Email is not overridable
+        "user_phone": escape_text(effective_phone),
+        "user_title": escape_text(effective_title),
+        "phone": escape_text(effective_phone),  # Alias for templates that use "phone"
+        "photo_url": effective_photo,  # Not escaped - it's a URL
 
         # User social links (validated)
         "linkedin": validate_url(user.signature_linkedin),
@@ -130,7 +141,10 @@ def _get_base_data(org: Organization, user: User) -> dict:
 
 
 def _get_sample_data(org: Organization) -> dict:
-    """Get sample data for org-level preview (not using admin's personal info)."""
+    """Get sample data for org-level preview (not using admin's personal info).
+
+    Keys match _get_base_data() to prevent preview drift.
+    """
     primary_color = validate_hex_color(org.signature_primary_color) or "#0066cc"
 
     # Parse org social links from JSONB
@@ -153,12 +167,13 @@ def _get_sample_data(org: Organization) -> dict:
         "org_social_links": org_social_links,
         "disclaimer": escape_text(org.signature_disclaimer),
 
-        # Sample user profile (not real admin data)
+        # Sample user profile (not real admin data) - same keys as _get_base_data()
         "name": "Jane Doe",
         "email": "jane.doe@example.com",
         "user_phone": "(555) 123-4567",
         "user_title": "Case Manager",
-        "phone": "(555) 123-4567",
+        "phone": "(555) 123-4567",  # Alias for templates
+        "photo_url": None,  # Sample has no photo
 
         # Sample user social links
         "linkedin": "https://linkedin.com/in/sample",

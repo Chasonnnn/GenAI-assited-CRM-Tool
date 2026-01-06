@@ -152,6 +152,12 @@ class User(Base):
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     title: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
+    # Signature override fields (NULL = use profile value)
+    signature_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    signature_title: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    signature_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    signature_photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     # MFA fields
     mfa_enabled: Mapped[bool] = mapped_column(
         Boolean, server_default=text("false"), nullable=False

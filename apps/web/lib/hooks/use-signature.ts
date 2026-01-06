@@ -7,6 +7,8 @@ import {
     getUserSignature,
     updateUserSignature,
     getSignaturePreview,
+    uploadSignaturePhoto,
+    deleteSignaturePhoto,
     getOrgSignature,
     updateOrgSignature,
     uploadOrgLogo,
@@ -54,6 +56,28 @@ export function useSignaturePreview() {
     return useQuery({
         queryKey: signatureKeys.preview(),
         queryFn: getSignaturePreview,
+    })
+}
+
+export function useUploadSignaturePhoto() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (file: File) => uploadSignaturePhoto(file),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: signatureKeys.user() })
+            queryClient.invalidateQueries({ queryKey: signatureKeys.preview() })
+        },
+    })
+}
+
+export function useDeleteSignaturePhoto() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: () => deleteSignaturePhoto(),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: signatureKeys.user() })
+            queryClient.invalidateQueries({ queryKey: signatureKeys.preview() })
+        },
     })
 }
 

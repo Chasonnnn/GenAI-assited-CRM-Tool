@@ -1,13 +1,14 @@
 "use client"
 
 import * as React from "react"
-import { useState } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
     Dialog,
@@ -24,11 +25,13 @@ import {
     EditIcon,
     TrashIcon,
     EyeIcon,
-    UserIcon,
-    PhoneIcon,
-    BuildingIcon,
+    CameraIcon,
     LoaderIcon,
     CodeIcon,
+    XIcon,
+    LinkedinIcon,
+    InstagramIcon,
+    ImageIcon,
 } from "lucide-react"
 import DOMPurify from "dompurify"
 import {
@@ -38,21 +41,240 @@ import {
     useUpdateEmailTemplate,
     useDeleteEmailTemplate,
 } from "@/lib/hooks/use-email-templates"
-import { useUserSignature, useUpdateUserSignature, useSignaturePreview } from "@/lib/hooks/use-signature"
+import {
+    useUserSignature,
+    useUpdateUserSignature,
+    useSignaturePreview,
+    useUploadSignaturePhoto,
+    useDeleteSignaturePhoto,
+} from "@/lib/hooks/use-signature"
 import { getSignaturePreview } from "@/lib/api/signature"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
 
-// Signature Preview Component - fetches and renders backend HTML
+// =============================================================================
+// Signature Override Field Component
+// =============================================================================
+
+interface SignatureOverrideFieldProps {
+    id: string
+    label: string
+    value: string
+    profileDefault: string | null
+    onChange: (value: string) => void
+    onClear: () => void
+    placeholder?: string
+    type?: string
+}
+
+function SignatureOverrideField({
+    id,
+    label,
+    value,
+    profileDefault,
+    onChange,
+    onClear,
+    placeholder,
+    type = "text",
+}: SignatureOverrideFieldProps) {
+    const hasOverride = value !== ""
+    const displayPlaceholder = profileDefault
+        ? `Defaults to: ${profileDefault}`
+        : placeholder || `Enter ${label.toLowerCase()}`
+
+    return (
+        <div className="space-y-2">
+            <div className="flex items-center justify-between">
+                <Label htmlFor={id} className="text-sm font-medium">
+                    {label}
+                </Label>
+                {hasOverride && (
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                        onClick={onClear}
+                    >
+                        <XIcon className="mr-1 size-3" />
+                        Clear
+                    </Button>
+                )}
+            </div>
+            <Input
+                id={id}
+                type={type}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder={displayPlaceholder}
+                className={hasOverride ? "border-primary/50" : ""}
+            />
+            {!hasOverride && profileDefault && (
+                <p className="text-xs text-muted-foreground">
+                    Using profile: <span className="font-medium">{profileDefault}</span>
+                </p>
+            )}
+            {hasOverride && (
+                <p className="text-xs text-primary">
+                    Custom signature value
+                </p>
+            )}
+        </div>
+    )
+}
+
+// =============================================================================
+// Signature Photo Upload Component
+// =============================================================================
+
+interface SignaturePhotoFieldProps {
+    signaturePhotoUrl: string | null
+    profilePhotoUrl: string | null
+    profileName: string
+    onUpload: (file: File) => void
+    onDelete: () => void
+    isUploading: boolean
+    isDeleting: boolean
+}
+
+function SignaturePhotoField({
+    signaturePhotoUrl,
+    profilePhotoUrl,
+    profileName,
+    onUpload,
+    onDelete,
+    isUploading,
+    isDeleting,
+}: SignaturePhotoFieldProps) {
+    const fileInputRef = useRef<HTMLInputElement>(null)
+    const hasSignaturePhoto = !!signaturePhotoUrl
+    const displayPhoto = signaturePhotoUrl || profilePhotoUrl
+
+    const initials = profileName
+        ?.split(" ")
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2) || "??"
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        const allowedTypes = ["image/png", "image/jpeg", "image/webp"]
+        if (!allowedTypes.includes(file.type)) {
+            alert("Please select a PNG, JPEG, or WebP image")
+            return
+        }
+
+        if (file.size > 2 * 1024 * 1024) {
+            alert("Image must be less than 2MB")
+            return
+        }
+
+        onUpload(file)
+        e.target.value = ""
+    }
+
+    return (
+        <div className="space-y-3">
+            <Label className="text-sm font-medium">Signature Photo</Label>
+            <div className="flex items-center gap-4">
+                <div className="relative group">
+                    <Avatar className="size-20 border-2 border-border">
+                        <AvatarImage src={displayPhoto || undefined} />
+                        <AvatarFallback className="text-lg bg-muted">
+                            {initials}
+                        </AvatarFallback>
+                    </Avatar>
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileChange}
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                    />
+                    <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploading}
+                        className="absolute bottom-0 right-0 flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-md"
+                    >
+                        {isUploading ? (
+                            <LoaderIcon className="size-3.5 animate-spin" />
+                        ) : (
+                            <CameraIcon className="size-3.5" />
+                        )}
+                    </button>
+                </div>
+                <div className="flex-1 space-y-1">
+                    {hasSignaturePhoto ? (
+                        <>
+                            <p className="text-sm font-medium text-primary">
+                                Custom signature photo
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                                Different from your profile avatar
+                            </p>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={onDelete}
+                                disabled={isDeleting}
+                            >
+                                {isDeleting ? (
+                                    <LoaderIcon className="mr-1 size-3 animate-spin" />
+                                ) : (
+                                    <TrashIcon className="mr-1 size-3" />
+                                )}
+                                Remove & use profile photo
+                            </Button>
+                        </>
+                    ) : (
+                        <>
+                            <p className="text-sm text-muted-foreground">
+                                {profilePhotoUrl ? "Using profile photo" : "No photo set"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                                Click camera to upload a signature-specific photo
+                            </p>
+                        </>
+                    )}
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// =============================================================================
+// Signature Preview Component
+// =============================================================================
+
 function SignaturePreviewComponent() {
-    const { data: preview, isLoading } = useSignaturePreview()
+    const { data: preview, isLoading, refetch } = useSignaturePreview()
 
     if (isLoading) {
-        return <div className="animate-pulse bg-muted h-24 rounded" />
+        return (
+            <div className="flex items-center justify-center py-8">
+                <LoaderIcon className="size-5 animate-spin text-muted-foreground" />
+            </div>
+        )
     }
 
     if (!preview?.html) {
-        return <p className="text-muted-foreground italic">No signature configured. Add your social links and save to preview.</p>
+        return (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+                <ImageIcon className="size-10 text-muted-foreground/40 mb-2" />
+                <p className="text-sm text-muted-foreground">
+                    No signature configured yet
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                    Add your details and save to see preview
+                </p>
+            </div>
+        )
     }
 
     return (
@@ -63,7 +285,10 @@ function SignaturePreviewComponent() {
     )
 }
 
+// =============================================================================
 // Available template variables
+// =============================================================================
+
 const TEMPLATE_VARIABLES = [
     { name: "full_name", description: "Contact full name" },
     { name: "email", description: "Contact email" },
@@ -77,6 +302,10 @@ const TEMPLATE_VARIABLES = [
     { name: "appointment_location", description: "Appointment location" },
 ]
 
+// =============================================================================
+// Main Page Component
+// =============================================================================
+
 export default function EmailTemplatesPage() {
     const [activeTab, setActiveTab] = useState("templates")
     const [isModalOpen, setIsModalOpen] = useState(false)
@@ -87,10 +316,18 @@ export default function EmailTemplatesPage() {
     const [showPreview, setShowPreview] = useState(false)
     const [previewHtml, setPreviewHtml] = useState("")
 
-    // Signature state (social links only)
+    // Signature override state
+    const [signatureName, setSignatureName] = useState("")
+    const [signatureTitle, setSignatureTitle] = useState("")
+    const [signaturePhone, setSignaturePhone] = useState("")
+
+    // Social links state
     const [signatureLinkedin, setSignatureLinkedin] = useState("")
     const [signatureTwitter, setSignatureTwitter] = useState("")
     const [signatureInstagram, setSignatureInstagram] = useState("")
+
+    // Track if form has unsaved changes
+    const [hasChanges, setHasChanges] = useState(false)
 
     // API hooks
     const { data: templates, isLoading } = useEmailTemplates(false)
@@ -98,38 +335,57 @@ export default function EmailTemplatesPage() {
     const updateTemplate = useUpdateEmailTemplate()
     const deleteTemplate = useDeleteEmailTemplate()
 
-    // Signature hooks - use new hooks from updated use-signature.ts
-    const { data: signatureData } = useUserSignature()
+    // Signature hooks
+    const { data: signatureData, refetch: refetchSignature } = useUserSignature()
     const updateSignatureMutation = useUpdateUserSignature()
+    const uploadPhotoMutation = useUploadSignaturePhoto()
+    const deletePhotoMutation = useDeleteSignaturePhoto()
 
     // Get full template details when editing
     const { data: fullTemplate } = useEmailTemplate(editingTemplate?.id || null)
 
-    const sanitizeHtml = React.useCallback((html: string) => {
+    const sanitizeHtml = useCallback((html: string) => {
         return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } })
     }, [])
 
-    const normalizeTemplateHtml = React.useCallback((html: string) => {
+    const normalizeTemplateHtml = useCallback((html: string) => {
         return html
             .replace(/<p>\s*<\/p>/gi, "<p>&nbsp;</p>")
             .replace(/<p>\s*<br\s*\/?>\s*<\/p>/gi, "<p>&nbsp;</p>")
     }, [])
 
     // Load signature data on mount
-    React.useEffect(() => {
+    useEffect(() => {
         if (signatureData) {
+            setSignatureName(signatureData.signature_name || "")
+            setSignatureTitle(signatureData.signature_title || "")
+            setSignaturePhone(signatureData.signature_phone || "")
             setSignatureLinkedin(signatureData.signature_linkedin || "")
             setSignatureTwitter(signatureData.signature_twitter || "")
             setSignatureInstagram(signatureData.signature_instagram || "")
+            setHasChanges(false)
         }
     }, [signatureData])
+
+    // Track changes
+    useEffect(() => {
+        if (!signatureData) return
+        const changed =
+            signatureName !== (signatureData.signature_name || "") ||
+            signatureTitle !== (signatureData.signature_title || "") ||
+            signaturePhone !== (signatureData.signature_phone || "") ||
+            signatureLinkedin !== (signatureData.signature_linkedin || "") ||
+            signatureTwitter !== (signatureData.signature_twitter || "") ||
+            signatureInstagram !== (signatureData.signature_instagram || "")
+        setHasChanges(changed)
+    }, [signatureName, signatureTitle, signaturePhone, signatureLinkedin, signatureTwitter, signatureInstagram, signatureData])
 
     const handleOpenModal = (template?: EmailTemplateListItem) => {
         if (template) {
             setEditingTemplate(template)
             setTemplateName(template.name)
             setTemplateSubject(template.subject)
-            setTemplateBody("") // Will be populated from fullTemplate
+            setTemplateBody("")
         } else {
             setEditingTemplate(null)
             setTemplateName("")
@@ -139,7 +395,7 @@ export default function EmailTemplatesPage() {
         setIsModalOpen(true)
     }
 
-    React.useEffect(() => {
+    useEffect(() => {
         if (fullTemplate && editingTemplate && !templateBody && fullTemplate.body) {
             setTemplateBody(fullTemplate.body)
         }
@@ -168,7 +424,6 @@ export default function EmailTemplatesPage() {
     }
 
     const handlePreview = () => {
-        // Simple preview - replace variables with sample values
         let html = templateBody
             .replace(/\{\{full_name\}\}/g, "John Smith")
             .replace(/\{\{email\}\}/g, "john@example.com")
@@ -181,7 +436,6 @@ export default function EmailTemplatesPage() {
             .replace(/\{\{appointment_time\}\}/g, "2:00 PM PST")
             .replace(/\{\{appointment_location\}\}/g, "Virtual Appointment")
 
-        // If content doesn't contain HTML tags, convert line breaks to paragraphs
         const hasHtmlTags = /<[a-z][\s\S]*>/i.test(html)
         if (!hasHtmlTags) {
             const lines = html.split(/\n/)
@@ -197,9 +451,6 @@ export default function EmailTemplatesPage() {
             html = normalizeTemplateHtml(html)
         }
 
-        // Note: Signature is now rendered by backend, not appended here in preview
-        // Template preview just shows the template body without signature
-
         setPreviewHtml(sanitizeHtml(html))
         setShowPreview(true)
     }
@@ -208,26 +459,49 @@ export default function EmailTemplatesPage() {
         setTemplateBody(templateBody + `{{${varName}}}`)
     }
 
+    // Save all signature settings
     const handleSaveSignature = () => {
-        updateSignatureMutation.mutate({
-            signature_linkedin: signatureLinkedin || null,
-            signature_twitter: signatureTwitter || null,
-            signature_instagram: signatureInstagram || null,
+        updateSignatureMutation.mutate(
+            {
+                signature_name: signatureName || null,
+                signature_title: signatureTitle || null,
+                signature_phone: signaturePhone || null,
+                signature_linkedin: signatureLinkedin || null,
+                signature_twitter: signatureTwitter || null,
+                signature_instagram: signatureInstagram || null,
+            },
+            {
+                onSuccess: () => {
+                    setHasChanges(false)
+                    refetchSignature()
+                },
+            }
+        )
+    }
+
+    const handleUploadPhoto = (file: File) => {
+        uploadPhotoMutation.mutate(file, {
+            onSuccess: () => refetchSignature(),
         })
     }
 
+    const handleDeletePhoto = () => {
+        if (confirm("Remove your signature photo? Your profile avatar will be used instead.")) {
+            deletePhotoMutation.mutate(undefined, {
+                onSuccess: () => refetchSignature(),
+            })
+        }
+    }
+
     const handleCopySignatureHtml = async () => {
-        // Fetch fresh preview from backend
         try {
             const data = await getSignaturePreview()
             const html = data.html || ""
 
             try {
                 await navigator.clipboard.writeText(html)
-                // Would normally show a toast here
                 alert("Signature HTML copied to clipboard!")
             } catch {
-                // Fallback for older browsers
                 const textarea = document.createElement("textarea")
                 textarea.value = html
                 document.body.appendChild(textarea)
@@ -240,7 +514,6 @@ export default function EmailTemplatesPage() {
             console.error("Failed to copy signature:", error)
         }
     }
-
 
     return (
         <div className="flex min-h-screen flex-col">
@@ -337,44 +610,195 @@ export default function EmailTemplatesPage() {
                     {/* Signature Tab */}
                     <TabsContent value="signature">
                         <div className="grid gap-6 lg:grid-cols-2">
-                            {/* Editor */}
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>My Social Links</CardTitle>
-                                    <CardDescription>
-                                        Add your social media links to your email signature. Branding and template are managed by your organization admin.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    {/* Organization Branding (read-only) */}
-                                    {(signatureData?.org_signature_company_name ||
-                                        signatureData?.org_signature_address ||
-                                        signatureData?.org_signature_phone ||
-                                        signatureData?.org_signature_website ||
-                                        signatureData?.org_signature_logo_url) && (
-                                        <div className="p-3 bg-muted rounded-lg mb-4">
-                                            <p className="text-sm text-muted-foreground mb-1">Organization</p>
-                                            <div className="flex items-center gap-2">
+                            {/* Editor Column */}
+                            <div className="space-y-6">
+                                {/* Main Signature Card */}
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>My Signature</CardTitle>
+                                        <CardDescription>
+                                            Customize your email signature. Leave fields empty to use your profile defaults.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-4">
+                                        {/* Signature Photo */}
+                                        <SignaturePhotoField
+                                            signaturePhotoUrl={signatureData?.signature_photo_url || null}
+                                            profilePhotoUrl={signatureData?.profile_photo_url || null}
+                                            profileName={signatureData?.profile_name || ""}
+                                            onUpload={handleUploadPhoto}
+                                            onDelete={handleDeletePhoto}
+                                            isUploading={uploadPhotoMutation.isPending}
+                                            isDeleting={deletePhotoMutation.isPending}
+                                        />
+
+                                        <div className="border-t pt-4" />
+
+                                        {/* Override Fields */}
+                                        <div className="space-y-3">
+                                            <SignatureOverrideField
+                                                id="sig-name"
+                                                label="Name"
+                                                value={signatureName}
+                                                profileDefault={signatureData?.profile_name || null}
+                                                onChange={setSignatureName}
+                                                onClear={() => setSignatureName("")}
+                                            />
+
+                                            <SignatureOverrideField
+                                                id="sig-title"
+                                                label="Title"
+                                                value={signatureTitle}
+                                                profileDefault={signatureData?.profile_title || null}
+                                                onChange={setSignatureTitle}
+                                                onClear={() => setSignatureTitle("")}
+                                                placeholder="e.g., Case Manager"
+                                            />
+
+                                            <SignatureOverrideField
+                                                id="sig-phone"
+                                                label="Phone"
+                                                value={signaturePhone}
+                                                profileDefault={signatureData?.profile_phone || null}
+                                                onChange={setSignaturePhone}
+                                                onClear={() => setSignaturePhone("")}
+                                                type="tel"
+                                                placeholder="e.g., (555) 123-4567"
+                                            />
+                                        </div>
+
+                                        <div className="border-t pt-4" />
+
+                                        {/* Social Links */}
+                                        <div className="space-y-3">
+                                            <h4 className="text-sm font-medium flex items-center gap-2">
+                                                Social Links
+                                                <span className="text-xs font-normal text-muted-foreground">
+                                                    (optional)
+                                                </span>
+                                            </h4>
+
+                                            <div className="space-y-2">
+                                                <div className="space-y-1">
+                                                    <Label htmlFor="sig-linkedin" className="text-xs flex items-center gap-1.5">
+                                                        <LinkedinIcon className="size-3.5 text-muted-foreground" />
+                                                        LinkedIn
+                                                    </Label>
+                                                    <Input
+                                                        id="sig-linkedin"
+                                                        placeholder="https://linkedin.com/in/yourprofile"
+                                                        value={signatureLinkedin}
+                                                        onChange={(e) => setSignatureLinkedin(e.target.value)}
+                                                        className="h-9"
+                                                    />
+                                                </div>
+
+                                                <div className="space-y-1">
+                                                    <Label htmlFor="sig-twitter" className="text-xs flex items-center gap-1.5">
+                                                        <svg className="size-3.5 text-muted-foreground" viewBox="0 0 24 24" fill="currentColor">
+                                                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                                                        </svg>
+                                                        X (Twitter)
+                                                    </Label>
+                                                    <Input
+                                                        id="sig-twitter"
+                                                        placeholder="https://x.com/yourhandle"
+                                                        value={signatureTwitter}
+                                                        onChange={(e) => setSignatureTwitter(e.target.value)}
+                                                        className="h-9"
+                                                    />
+                                                </div>
+
+                                                <div className="space-y-1">
+                                                    <Label htmlFor="sig-instagram" className="text-xs flex items-center gap-1.5">
+                                                        <InstagramIcon className="size-3.5 text-muted-foreground" />
+                                                        Instagram
+                                                    </Label>
+                                                    <Input
+                                                        id="sig-instagram"
+                                                        placeholder="https://instagram.com/yourhandle"
+                                                        value={signatureInstagram}
+                                                        onChange={(e) => setSignatureInstagram(e.target.value)}
+                                                        className="h-9"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Save Button */}
+                                        <div className="flex items-center gap-3 pt-1">
+                                            <Button
+                                                onClick={handleSaveSignature}
+                                                disabled={updateSignatureMutation.isPending || !hasChanges}
+                                                className="flex-1"
+                                            >
+                                                {updateSignatureMutation.isPending ? (
+                                                    <>
+                                                        <LoaderIcon className="mr-2 size-4 animate-spin" />
+                                                        Saving...
+                                                    </>
+                                                ) : (
+                                                    "Save Signature"
+                                                )}
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                onClick={handleCopySignatureHtml}
+                                            >
+                                                <CodeIcon className="mr-2 size-4" />
+                                                Copy HTML
+                                            </Button>
+                                        </div>
+                                        {hasChanges && (
+                                            <p className="text-xs text-amber-600">
+                                                You have unsaved changes
+                                            </p>
+                                        )}
+                                    </CardContent>
+                                </Card>
+
+                                {/* Organization Branding (read-only) */}
+                                {(signatureData?.org_signature_company_name ||
+                                    signatureData?.org_signature_address ||
+                                    signatureData?.org_signature_phone ||
+                                    signatureData?.org_signature_website ||
+                                    signatureData?.org_signature_logo_url) && (
+                                    <Card className="border-dashed">
+                                        <CardHeader className="pb-3">
+                                            <div className="flex items-center justify-between">
+                                                <CardTitle className="text-base">Organization Branding</CardTitle>
+                                                <Badge variant="secondary" className="text-xs">
+                                                    Read-only
+                                                </Badge>
+                                            </div>
+                                            <CardDescription>
+                                                Managed by your organization admin in Settings
+                                            </CardDescription>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <div className="flex items-center gap-3">
                                                 {signatureData.org_signature_logo_url && (
                                                     <img
                                                         src={signatureData.org_signature_logo_url}
                                                         alt="Logo"
-                                                        className="h-8 w-auto"
+                                                        className="h-10 w-auto border rounded"
                                                     />
                                                 )}
-                                                <span className="font-medium">
-                                                    {signatureData.org_signature_company_name || "Organization"}
-                                                </span>
-                                                {signatureData.org_signature_template && (
-                                                    <Badge variant="secondary" className="ml-auto">
-                                                        {signatureData.org_signature_template} template
-                                                    </Badge>
-                                                )}
+                                                <div>
+                                                    <p className="font-medium">
+                                                        {signatureData.org_signature_company_name || "Organization"}
+                                                    </p>
+                                                    {signatureData.org_signature_template && (
+                                                        <p className="text-sm text-muted-foreground">
+                                                            {signatureData.org_signature_template} template
+                                                        </p>
+                                                    )}
+                                                </div>
                                             </div>
                                             {(signatureData?.org_signature_address ||
                                                 signatureData?.org_signature_phone ||
                                                 signatureData?.org_signature_website) && (
-                                                <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                                                <div className="mt-3 pt-3 border-t space-y-1 text-sm text-muted-foreground">
                                                     {signatureData?.org_signature_address && (
                                                         <p>{signatureData.org_signature_address}</p>
                                                     )}
@@ -383,7 +807,7 @@ export default function EmailTemplatesPage() {
                                                     )}
                                                     {signatureData?.org_signature_website && (
                                                         <a
-                                                            className="underline"
+                                                            className="underline hover:text-foreground transition-colors"
                                                             href={signatureData.org_signature_website}
                                                             rel="noreferrer"
                                                             target="_blank"
@@ -393,73 +817,23 @@ export default function EmailTemplatesPage() {
                                                     )}
                                                 </div>
                                             )}
-                                        </div>
-                                    )}
+                                        </CardContent>
+                                    </Card>
+                                )}
+                            </div>
 
-                                    {/* Social Links (editable) */}
-                                    <div className="space-y-2">
-                                        <Label htmlFor="sig-linkedin">LinkedIn URL</Label>
-                                        <Input
-                                            id="sig-linkedin"
-                                            placeholder="https://linkedin.com/in/yourprofile"
-                                            value={signatureLinkedin}
-                                            onChange={(e) => setSignatureLinkedin(e.target.value)}
-                                        />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <Label htmlFor="sig-twitter">Twitter/X URL</Label>
-                                        <Input
-                                            id="sig-twitter"
-                                            placeholder="https://twitter.com/yourhandle"
-                                            value={signatureTwitter}
-                                            onChange={(e) => setSignatureTwitter(e.target.value)}
-                                        />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <Label htmlFor="sig-instagram">Instagram URL</Label>
-                                        <Input
-                                            id="sig-instagram"
-                                            placeholder="https://instagram.com/yourhandle"
-                                            value={signatureInstagram}
-                                            onChange={(e) => setSignatureInstagram(e.target.value)}
-                                        />
-                                    </div>
-
-                                    <div className="flex gap-2">
-                                        <Button
-                                            onClick={handleSaveSignature}
-                                            className="flex-1"
-                                            disabled={updateSignatureMutation.isPending}
-                                        >
-                                            {updateSignatureMutation.isPending ? (
-                                                <LoaderIcon className="mr-2 size-4 animate-spin" />
-                                            ) : null}
-                                            Save Social Links
-                                        </Button>
-                                        <Button
-                                            variant="outline"
-                                            onClick={handleCopySignatureHtml}
-                                        >
-                                            Copy HTML
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            {/* Preview */}
-                            <Card>
+                            {/* Preview Column */}
+                            <Card className="lg:sticky lg:top-6 h-fit">
                                 <CardHeader>
                                     <CardTitle>Preview</CardTitle>
                                     <CardDescription>
-                                        How your signature will appear in emails (rendered from backend)
+                                        How your signature will appear in emails
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent>
                                     <div className="border rounded-lg p-4 bg-white min-h-[200px]">
-                                        <p className="text-muted-foreground text-sm mb-4">
-                                            [Email body content...]
+                                        <p className="text-muted-foreground text-sm mb-4 border-b pb-4">
+                                            [Your email content here...]
                                         </p>
                                         <SignaturePreviewComponent />
                                     </div>
