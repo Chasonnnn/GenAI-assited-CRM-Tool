@@ -399,14 +399,14 @@ export function CaseProfileCard({ caseId }: CaseProfileCardProps) {
                 {pages.map((page, pageIndex) => (
                     <Collapsible
                         key={pageIndex}
-                        open={sectionOpen[pageIndex]}
+                        open={sectionOpen[pageIndex] ?? true}
                         onOpenChange={(open) =>
                             setSectionOpen((prev) => ({ ...prev, [pageIndex]: open }))
                         }
                     >
                         <CollapsibleTrigger className="flex w-full items-center justify-between py-2 text-sm font-medium hover:text-primary transition-colors">
                             <span>{page.title || `Section ${pageIndex + 1}`}</span>
-                            {sectionOpen[pageIndex] ? (
+                            {(sectionOpen[pageIndex] ?? true) ? (
                                 <ChevronUpIcon className="h-4 w-4" />
                             ) : (
                                 <ChevronDownIcon className="h-4 w-4" />
