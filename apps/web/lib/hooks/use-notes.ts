@@ -4,6 +4,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as notesApi from '../api/notes';
+import { caseKeys } from './use-cases';
 
 // Query keys
 export const noteKeys = {
@@ -34,6 +35,11 @@ export function useCreateNote() {
             notesApi.createNote(caseId, body),
         onSuccess: (newNote) => {
             queryClient.invalidateQueries({ queryKey: noteKeys.forCase(newNote.case_id) });
+            // Invalidate history/activity cache to show note_added immediately
+            queryClient.invalidateQueries({
+                queryKey: [...caseKeys.detail(newNote.case_id), 'activity'],
+                exact: false,
+            });
         },
     });
 }
@@ -49,6 +55,11 @@ export function useDeleteNote() {
             notesApi.deleteNote(noteId),
         onSuccess: (_, { caseId }) => {
             queryClient.invalidateQueries({ queryKey: noteKeys.forCase(caseId) });
+            // Invalidate history/activity cache to show note_deleted immediately
+            queryClient.invalidateQueries({
+                queryKey: [...caseKeys.detail(caseId), 'activity'],
+                exact: false,
+            });
         },
     });
 }
