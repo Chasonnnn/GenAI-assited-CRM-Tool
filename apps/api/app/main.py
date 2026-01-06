@@ -4,7 +4,7 @@ import logging
 import os
 from time import perf_counter
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -230,6 +230,10 @@ async def security_headers_middleware(request: Request, call_next):
     # Mitigate Spectre vulnerabilities
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
     response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+    # Avoid caching API responses unless explicitly set by a handler.
+    if "Cache-Control" not in response.headers:
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
     return response
 
 # ============================================================================
@@ -369,6 +373,32 @@ if settings.ENV == "dev":
 # ============================================================================
 
 logger = logging.getLogger(__name__)
+
+@app.get("/")
+@limiter.exempt
+def root():
+    """Basic availability endpoint (scanner-friendly)."""
+    return JSONResponse(
+        content={"status": "ok"},
+        headers={"Cache-Control": "public, max-age=3600", "Pragma": "public"},
+    )
+
+
+@app.get("/sitemap.xml")
+@limiter.exempt
+def sitemap():
+    """Minimal sitemap to keep scanners happy."""
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        "  <url><loc>/</loc></url>\n"
+        "</urlset>\n"
+    )
+    return Response(
+        content=xml,
+        media_type="application/xml",
+        headers={"Cache-Control": "public, max-age=3600", "Pragma": "public"},
+    )
 
 
 def _check_db_connection() -> None:

@@ -215,7 +215,8 @@ jobs:
 
       - name: Seed dev user for ZAP auth bypass
         run: |
-          psql "$DATABASE_URL" <<'SQL'
+          PSQL_URL="${DATABASE_URL/postgresql+psycopg/postgresql}"
+          psql "$PSQL_URL" <<'SQL'
           INSERT INTO organizations (id, name, slug, created_at, updated_at)
           VALUES ('00000000-0000-0000-0000-000000000001', 'Test Organization', 'test-org', now(), now())
           ON CONFLICT (id) DO NOTHING;
@@ -237,3 +238,4 @@ jobs:
         with:
           target: 'http://localhost:8000/health'
           allow_issue_writing: false
+          cmd_options: '-c zap-baseline.conf'
