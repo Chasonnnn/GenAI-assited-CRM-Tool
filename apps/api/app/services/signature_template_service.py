@@ -94,20 +94,34 @@ def render_signature_html(
 def _get_base_data(org: Organization, user: User) -> dict:
     """Extract and escape signature data from org and user."""
     primary_color = validate_hex_color(org.signature_primary_color) or "#0066cc"
-    
+
+    # Parse org social links from JSONB
+    org_social_links = []
+    if org.signature_social_links:
+        for link in org.signature_social_links:
+            platform = escape_text(link.get("platform", ""))
+            url = validate_url(link.get("url"))
+            if platform and url:
+                org_social_links.append({"platform": platform, "url": url})
+
     return {
         # Org branding (all HTML-escaped)
         "logo_url": escape_text(org.signature_logo_url),
         "primary_color": primary_color,
         "company_name": escape_text(org.signature_company_name or org.name),
         "address": escape_text(org.signature_address),
-        "phone": escape_text(org.signature_phone),
+        "org_phone": escape_text(org.signature_phone),
         "website": validate_url(org.signature_website),
-        
+        "org_social_links": org_social_links,
+        "disclaimer": escape_text(org.signature_disclaimer),
+
         # User profile (HTML-escaped)
         "name": escape_text(user.display_name),
         "email": escape_text(user.email),
-        
+        "user_phone": escape_text(getattr(user, "phone", None)),
+        "user_title": escape_text(getattr(user, "title", None)),
+        "phone": escape_text(getattr(user, "phone", None)),
+
         # User social links (validated)
         "linkedin": validate_url(user.signature_linkedin),
         "twitter": validate_url(user.signature_twitter),
@@ -115,20 +129,75 @@ def _get_base_data(org: Organization, user: User) -> dict:
     }
 
 
+def _get_sample_data(org: Organization) -> dict:
+    """Get sample data for org-level preview (not using admin's personal info)."""
+    primary_color = validate_hex_color(org.signature_primary_color) or "#0066cc"
+
+    # Parse org social links from JSONB
+    org_social_links = []
+    if org.signature_social_links:
+        for link in org.signature_social_links:
+            platform = escape_text(link.get("platform", ""))
+            url = validate_url(link.get("url"))
+            if platform and url:
+                org_social_links.append({"platform": platform, "url": url})
+
+    return {
+        # Org branding (all HTML-escaped)
+        "logo_url": escape_text(org.signature_logo_url),
+        "primary_color": primary_color,
+        "company_name": escape_text(org.signature_company_name or org.name),
+        "address": escape_text(org.signature_address),
+        "org_phone": escape_text(org.signature_phone),
+        "website": validate_url(org.signature_website),
+        "org_social_links": org_social_links,
+        "disclaimer": escape_text(org.signature_disclaimer),
+
+        # Sample user profile (not real admin data)
+        "name": "Jane Doe",
+        "email": "jane.doe@example.com",
+        "user_phone": "(555) 123-4567",
+        "user_title": "Case Manager",
+        "phone": "(555) 123-4567",
+
+        # Sample user social links
+        "linkedin": "https://linkedin.com/in/sample",
+        "twitter": None,
+        "instagram": None,
+    }
+
+
 def _render_social_links(data: dict, style: str = "") -> str:
-    """Render text-only social links."""
+    """Render text-only social links (user + org)."""
     links = []
-    if data["linkedin"]:
+    # User social links
+    if data.get("linkedin"):
         links.append(f'<a href="{data["linkedin"]}" style="color: {data["primary_color"]}; text-decoration: none;">LinkedIn</a>')
-    if data["twitter"]:
+    if data.get("twitter"):
         links.append(f'<a href="{data["twitter"]}" style="color: {data["primary_color"]}; text-decoration: none;">Twitter</a>')
-    if data["instagram"]:
+    if data.get("instagram"):
         links.append(f'<a href="{data["instagram"]}" style="color: {data["primary_color"]}; text-decoration: none;">Instagram</a>')
-    
+
+    # Org social links
+    for link in data.get("org_social_links", []):
+        links.append(f'<a href="{link["url"]}" style="color: {data["primary_color"]}; text-decoration: none;">{link["platform"]}</a>')
+
     if not links:
         return ""
-    
+
     return f'<p style="margin: 8px 0 0 0; font-size: 12px; {style}">' + " | ".join(links) + "</p>"
+
+
+def _render_disclaimer(data: dict) -> str:
+    """Render optional compliance disclaimer footer."""
+    if not data.get("disclaimer"):
+        return ""
+
+    return f'''
+    <p style="margin: 16px 0 0 0; font-size: 10px; color: #999999; border-top: 1px solid #e0e0e0; padding-top: 12px;">
+        {data["disclaimer"]}
+    </p>
+    '''
 
 
 def _render_classic(org: Organization, user: User) -> str:
@@ -136,51 +205,61 @@ def _render_classic(org: Organization, user: User) -> str:
     Classic template: Traditional horizontal divider, stacked info, subtle colors.
     """
     data = _get_base_data(org, user)
-    
+
     html_parts = [
         '<table cellpadding="0" cellspacing="0" border="0" style="font-family: Arial, sans-serif; font-size: 14px; color: #333333;">',
         "<tr><td>",
         '<div style="border-top: 2px solid #e0e0e0; padding-top: 16px; margin-top: 16px;">',
     ]
-    
+
     # Logo
     if data["logo_url"]:
         html_parts.append(f'<img src="{data["logo_url"]}" alt="{data["company_name"]}" style="max-height: 50px; max-width: 200px; margin-bottom: 12px; display: block;" />')
-    
-    # Name
-    html_parts.append(f'<p style="margin: 0 0 4px 0; font-weight: 600; color: #1a1a1a;">{data["name"]}</p>')
-    
+
+    # Name and Title
+    name_line = data["name"]
+    if data.get("user_title"):
+        name_line += f' | {data["user_title"]}'
+    html_parts.append(f'<p style="margin: 0 0 4px 0; font-weight: 600; color: #1a1a1a;">{name_line}</p>')
+
     # Company
     if data["company_name"]:
         html_parts.append(f'<p style="margin: 0 0 8px 0; color: #666666;">{data["company_name"]}</p>')
-    
-    # Contact info
+
+    # Contact info (user phone + email)
     contact_parts = []
-    if data["phone"]:
-        contact_parts.append(data["phone"])
+    if data.get("user_phone"):
+        contact_parts.append(data["user_phone"])
     if data["email"]:
         contact_parts.append(f'<a href="mailto:{data["email"]}" style="color: {data["primary_color"]}; text-decoration: none;">{data["email"]}</a>')
-    
+
     if contact_parts:
         html_parts.append(f'<p style="margin: 0 0 4px 0; color: #666666;">{" | ".join(contact_parts)}</p>')
-    
+
+    # Org phone (if different from user)
+    if data.get("org_phone"):
+        html_parts.append(f'<p style="margin: 0 0 4px 0; color: #666666; font-size: 12px;">Office: {data["org_phone"]}</p>')
+
     # Address
     if data["address"]:
         html_parts.append(f'<p style="margin: 0 0 4px 0; color: #666666; font-size: 12px;">{data["address"]}</p>')
-    
+
     # Website
     if data["website"]:
         html_parts.append(f'<p style="margin: 0; color: #666666; font-size: 12px;"><a href="{data["website"]}" style="color: {data["primary_color"]}; text-decoration: none;">{data["website"]}</a></p>')
-    
+
     # Social links
     html_parts.append(_render_social_links(data))
-    
+
+    # Disclaimer
+    html_parts.append(_render_disclaimer(data))
+
     html_parts.extend([
         "</div>",
         "</td></tr>",
         "</table>",
     ])
-    
+
     return "".join(html_parts)
 
 
@@ -405,3 +484,91 @@ def get_available_templates() -> list[dict]:
             "description": "Vibrant style with gradient accent",
         },
     ]
+
+
+def render_signature_preview(
+    db: Session,
+    org_id: uuid.UUID,
+) -> str:
+    """
+    Render signature preview with sample user data.
+
+    This is for org-level preview (admins configuring templates)
+    and uses placeholder user data instead of the admin's personal info.
+
+    Args:
+        db: Database session
+        org_id: Organization ID
+
+    Returns:
+        HTML string with inline styles, table layout (email-safe)
+    """
+    org = org_service.get_org_by_id(db, org_id)
+
+    if not org:
+        return ""
+
+    template = org.signature_template or DEFAULT_TEMPLATE
+    data = _get_sample_data(org)
+
+    # Use a variant that works with raw data dict
+    return _render_from_data(data, template)
+
+
+def _render_from_data(data: dict, template: str) -> str:
+    """Render signature from pre-built data dict (for preview)."""
+    html_parts = [
+        '<table cellpadding="0" cellspacing="0" border="0" style="font-family: Arial, sans-serif; font-size: 14px; color: #333333;">',
+        "<tr><td>",
+        '<div style="border-top: 2px solid #e0e0e0; padding-top: 16px; margin-top: 16px;">',
+    ]
+
+    # Logo
+    if data.get("logo_url"):
+        html_parts.append(f'<img src="{data["logo_url"]}" alt="{data.get("company_name", "")}" style="max-height: 50px; max-width: 200px; margin-bottom: 12px; display: block;" />')
+
+    # Name and Title
+    name_line = data.get("name", "")
+    if data.get("user_title"):
+        name_line += f' | {data["user_title"]}'
+    html_parts.append(f'<p style="margin: 0 0 4px 0; font-weight: 600; color: #1a1a1a;">{name_line}</p>')
+
+    # Company
+    if data.get("company_name"):
+        html_parts.append(f'<p style="margin: 0 0 8px 0; color: #666666;">{data["company_name"]}</p>')
+
+    # Contact info (user phone + email)
+    contact_parts = []
+    if data.get("user_phone"):
+        contact_parts.append(data["user_phone"])
+    if data.get("email"):
+        contact_parts.append(f'<a href="mailto:{data["email"]}" style="color: {data["primary_color"]}; text-decoration: none;">{data["email"]}</a>')
+
+    if contact_parts:
+        html_parts.append(f'<p style="margin: 0 0 4px 0; color: #666666;">{" | ".join(contact_parts)}</p>')
+
+    # Org phone
+    if data.get("org_phone"):
+        html_parts.append(f'<p style="margin: 0 0 4px 0; color: #666666; font-size: 12px;">Office: {data["org_phone"]}</p>')
+
+    # Address
+    if data.get("address"):
+        html_parts.append(f'<p style="margin: 0 0 4px 0; color: #666666; font-size: 12px;">{data["address"]}</p>')
+
+    # Website
+    if data.get("website"):
+        html_parts.append(f'<p style="margin: 0; color: #666666; font-size: 12px;"><a href="{data["website"]}" style="color: {data["primary_color"]}; text-decoration: none;">{data["website"]}</a></p>')
+
+    # Social links
+    html_parts.append(_render_social_links(data))
+
+    # Disclaimer
+    html_parts.append(_render_disclaimer(data))
+
+    html_parts.extend([
+        "</div>",
+        "</td></tr>",
+        "</table>",
+    ])
+
+    return "".join(html_parts)

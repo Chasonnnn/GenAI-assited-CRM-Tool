@@ -39,7 +39,6 @@ from app.services.workflow_action_preview import build_action_preview, render_ac
 from app.schemas.workflow import ALLOWED_UPDATE_FIELDS
 from app.core.constants import (
     SYSTEM_USER_ID,
-    SYSTEM_USER_DISPLAY_NAME,
     WORKFLOW_APPROVAL_TIMEOUT_HOURS,
 )
 from app.utils.business_hours import calculate_approval_due_date
@@ -545,7 +544,6 @@ class WorkflowEngine:
 
         Called by the resume job processor after task is resolved.
         """
-        from sqlalchemy.orm import with_for_update
 
         # Lock execution row
         execution = (

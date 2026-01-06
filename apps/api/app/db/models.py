@@ -92,6 +92,14 @@ class Organization(Base):
     signature_address: Mapped[str | None] = mapped_column(String(500), nullable=True)
     signature_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     signature_website: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    signature_social_links: Mapped[list | None] = mapped_column(
+        JSONB, nullable=True, server_default=text("'[]'::jsonb"),
+        comment="Array of {platform, url} objects for org social links"
+    )
+    signature_disclaimer: Mapped[str | None] = mapped_column(
+        Text, nullable=True,
+        comment="Optional compliance footer for email signatures"
+    )
 
     # Relationships
     memberships: Mapped[list["Membership"]] = relationship(
@@ -139,6 +147,10 @@ class User(Base):
     signature_linkedin: Mapped[str | None] = mapped_column(String(255), nullable=True)
     signature_twitter: Mapped[str | None] = mapped_column(String(255), nullable=True)
     signature_instagram: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Profile fields (for email signature)
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    title: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # MFA fields
     mfa_enabled: Mapped[bool] = mapped_column(
@@ -313,6 +325,69 @@ class AuthIdentity(Base):
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="auth_identities")
+
+
+class UserSession(Base):
+    """
+    Tracks active user sessions for revocation support.
+
+    JWTs are stateless, so we store a hash of each token to enable:
+    - Session listing (show all devices)
+    - Session revocation (logout specific device)
+    - Token validation (check if session still valid)
+
+    Note: is_current is derived at query time by comparing token hashes,
+    not stored as a column (would get stale).
+    """
+
+    __tablename__ = "user_sessions"
+    __table_args__ = (
+        Index("idx_user_sessions_user_id", "user_id"),
+        Index("idx_user_sessions_org_id", "organization_id"),
+        Index("idx_user_sessions_token_hash", "session_token_hash"),
+        Index(
+            "idx_user_sessions_expires",
+            "expires_at",
+            postgresql_where=text("expires_at > now()"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    session_token_hash: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False,
+        comment="SHA256 hash of JWT token for revocation lookup"
+    )
+    device_info: Mapped[str | None] = mapped_column(
+        String(500), nullable=True,
+        comment="Parsed device name from user agent"
+    )
+    ip_address: Mapped[str | None] = mapped_column(
+        String(45), nullable=True,
+        comment="IPv4 or IPv6 address"
+    )
+    user_agent: Mapped[str | None] = mapped_column(
+        String(500), nullable=True,
+        comment="Raw user agent string"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"), nullable=False
+    )
+    last_active_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(nullable=False)
+
+    # Relationships
+    user: Mapped["User"] = relationship()
+    organization: Mapped["Organization"] = relationship()
 
 
 class OrgInvite(Base):

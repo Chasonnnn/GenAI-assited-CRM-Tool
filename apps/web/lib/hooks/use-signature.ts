@@ -11,6 +11,7 @@ import {
     updateOrgSignature,
     uploadOrgLogo,
     deleteOrgLogo,
+    getOrgSignaturePreview,
     UserSignatureUpdate,
     OrgSignatureUpdate,
 } from '@/lib/api/signature'
@@ -24,6 +25,7 @@ export const signatureKeys = {
     user: () => [...signatureKeys.all, 'user'] as const,
     preview: () => [...signatureKeys.all, 'preview'] as const,
     org: () => [...signatureKeys.all, 'org'] as const,
+    orgPreview: () => [...signatureKeys.all, 'org-preview'] as const,
 }
 
 // =============================================================================
@@ -95,13 +97,15 @@ export function useDeleteOrgLogo() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: signatureKeys.org() })
             queryClient.invalidateQueries({ queryKey: signatureKeys.preview() })
+            queryClient.invalidateQueries({ queryKey: signatureKeys.orgPreview() })
         },
     })
 }
 
-// =============================================================================
-// Legacy exports for backward compatibility (deprecated)
-// =============================================================================
-
-export const useSignature = useUserSignature
-export const useUpdateSignature = useUpdateUserSignature
+export function useOrgSignaturePreview() {
+    return useQuery({
+        queryKey: signatureKeys.orgPreview(),
+        queryFn: getOrgSignaturePreview,
+        enabled: false, // Only fetch when manually triggered
+    })
+}

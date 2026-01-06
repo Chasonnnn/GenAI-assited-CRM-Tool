@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.websocket import manager
 from app.core.security import decode_session_token
 from app.core.deps import COOKIE_NAME
+from app.services import session_service
 
 router = APIRouter(prefix="/ws", tags=["WebSocket"])
 
@@ -38,6 +39,7 @@ async def websocket_notifications(
     # Try to authenticate
     user_id = None
     org_id = None
+    token_hash = None
 
     def _mfa_verified(payload: dict) -> bool:
         if payload.get("mfa_required", True) and not payload.get("mfa_verified", False):
@@ -54,6 +56,7 @@ async def websocket_notifications(
             user_id = UUID(payload["sub"])
             if "org_id" in payload:
                 org_id = UUID(payload["org_id"])
+            token_hash = session_service.hash_token(token)
         except Exception:
             await websocket.close(code=4001, reason="Invalid token")
             return
@@ -70,6 +73,7 @@ async def websocket_notifications(
                 user_id = UUID(payload["sub"])
                 if "org_id" in payload:
                     org_id = UUID(payload["org_id"])
+                token_hash = session_service.hash_token(cookie)
             except Exception:
                 pass
 
@@ -96,8 +100,18 @@ async def websocket_notifications(
         await websocket.close(code=4001, reason="Authentication required")
         return
 
+    # Enforce session revocation for WebSocket connections (non-dev)
+    if not settings.DEV_BYPASS_AUTH:
+        if not token_hash:
+            await websocket.close(code=4001, reason="Authentication required")
+            return
+        with SessionLocal() as db:
+            if not session_service.get_session_by_token_hash(db, token_hash):
+                await websocket.close(code=4001, reason="Session revoked")
+                return
+
     # Register connection with org tracking
-    await manager.connect(websocket, user_id, org_id)
+    await manager.connect(websocket, user_id, org_id, token_hash=token_hash)
 
     try:
         # Keep connection alive, handle incoming messages (heartbeat/pings)

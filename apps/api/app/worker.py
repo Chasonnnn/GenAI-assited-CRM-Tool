@@ -12,7 +12,7 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
 # Add the app directory to the path
@@ -46,6 +46,9 @@ EMAIL_FROM = os.getenv("EMAIL_FROM", "noreply@example.com")
 # Worker configuration
 POLL_INTERVAL_SECONDS = int(os.getenv("WORKER_POLL_INTERVAL", "10"))
 BATCH_SIZE = int(os.getenv("WORKER_BATCH_SIZE", "10"))
+SESSION_CLEANUP_INTERVAL_SECONDS = int(
+    os.getenv("SESSION_CLEANUP_INTERVAL_SECONDS", "3600")
+)
 
 
 def _mask_email(email: str | None) -> str:
@@ -613,9 +616,25 @@ async def worker_loop() -> None:
     if not RESEND_API_KEY:
         logger.warning("RESEND_API_KEY not set - emails will be logged but not sent")
 
+    last_session_cleanup = datetime.min.replace(tzinfo=timezone.utc)
+
     while True:
         with SessionLocal() as db:
             try:
+                now = datetime.now(timezone.utc)
+                if now - last_session_cleanup >= timedelta(
+                    seconds=SESSION_CLEANUP_INTERVAL_SECONDS
+                ):
+                    try:
+                        from app.services import session_service
+
+                        deleted = session_service.cleanup_all_expired_sessions(db)
+                        if deleted:
+                            logger.info("Cleaned up %d expired sessions", deleted)
+                    except Exception as exc:
+                        logger.warning("Session cleanup failed: %s", exc)
+                    last_session_cleanup = now
+
                 jobs = job_service.get_pending_jobs(db, limit=BATCH_SIZE)
 
                 if jobs:

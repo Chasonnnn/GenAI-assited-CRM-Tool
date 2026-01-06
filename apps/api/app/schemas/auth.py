@@ -33,6 +33,7 @@ class UserSession(BaseModel):
     display_name: str
     mfa_verified: bool = False
     mfa_required: bool = True
+    token_hash: str | None = None  # For deriving is_current in session list
 
 
 class MeResponse(BaseModel):
@@ -42,6 +43,8 @@ class MeResponse(BaseModel):
     email: str
     display_name: str
     avatar_url: str | None
+    phone: str | None = None
+    title: str | None = None
     org_id: UUID
     org_name: str
     org_slug: str
@@ -51,3 +54,15 @@ class MeResponse(BaseModel):
     mfa_enabled: bool = False
     mfa_required: bool = True
     mfa_verified: bool = False
+
+
+class SessionResponse(BaseModel):
+    """Response schema for session listing."""
+
+    id: str
+    device_info: str | None
+    ip_address: str | None
+    created_at: str
+    last_active_at: str
+    expires_at: str
+    is_current: bool

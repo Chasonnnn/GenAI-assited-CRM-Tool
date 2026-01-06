@@ -11,6 +11,7 @@ from app.core.security import create_session_token
 from app.db.enums import AuthProvider, Role
 from app.db.models import AuthIdentity, Membership, OrgInvite, User
 from app.services.google_oauth import GoogleUserInfo
+from app.services import session_service
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +175,16 @@ def resolve_user_and_create_session(
             mfa_verified=mfa_verified,
             mfa_required=mfa_required,
         )
+
+        # Create session record in database (enables revocation)
+        session_service.create_session(
+            db=db,
+            user_id=user.id,
+            org_id=membership.organization_id,
+            token=token,
+            request=request,
+        )
+
         try:
             from app.services import audit_service
 
@@ -223,6 +234,16 @@ def resolve_user_and_create_session(
         mfa_verified=False,
         mfa_required=True,
     )
+
+    # Create session record in database (enables revocation)
+    session_service.create_session(
+        db=db,
+        user_id=user.id,
+        org_id=membership.organization_id,
+        token=token,
+        request=request,
+    )
+
     try:
         from app.services import audit_service
 

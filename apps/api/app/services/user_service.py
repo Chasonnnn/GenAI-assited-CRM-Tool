@@ -75,6 +75,8 @@ def update_user_profile(
     user_id: UUID,
     display_name: str | None = None,
     avatar_url: str | None = None,
+    phone: str | None = None,
+    title: str | None = None,
 ) -> User | None:
     """
     Update user profile fields.
@@ -92,6 +94,10 @@ def update_user_profile(
         user.display_name = display_name
     if avatar_url is not None:
         user.avatar_url = avatar_url
+    if phone is not None:
+        user.phone = phone if phone else None
+    if title is not None:
+        user.title = title if title else None
 
     db.commit()
     db.refresh(user)
