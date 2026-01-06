@@ -122,7 +122,18 @@ export default function AlertsPage() {
                             <CardTitle>Alerts</CardTitle>
                             <Select value={statusFilter} onValueChange={(v) => v && setStatusFilter(v)}>
                                 <SelectTrigger className="w-40">
-                                    <SelectValue />
+                                    <SelectValue>
+                                        {(value: string | null) => {
+                                            const labels: Record<string, string> = {
+                                                open: "Open",
+                                                acknowledged: "Acknowledged",
+                                                resolved: "Resolved",
+                                                snoozed: "Snoozed",
+                                                all: "All",
+                                            }
+                                            return labels[value ?? "open"] ?? "Select status"
+                                        }}
+                                    </SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="open">Open</SelectItem>

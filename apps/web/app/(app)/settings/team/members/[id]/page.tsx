@@ -105,7 +105,13 @@ function AddOverrideDialog({
                         <Label>Permission</Label>
                         <Select value={permission} onValueChange={handlePermissionChange}>
                             <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Select permission..." />
+                                <SelectValue placeholder="Select permission...">
+                                    {(value: string | null) => {
+                                        if (!value) return "Select permission..."
+                                        const permission = allPermissions?.find(p => p.key === value)
+                                        return permission?.label ?? value.replace(/_/g, " ")
+                                    }}
+                                </SelectValue>
                             </SelectTrigger>
                             <SelectContent
                                 side="bottom"
@@ -129,7 +135,9 @@ function AddOverrideDialog({
                         <Label>Override Type</Label>
                         <Select value={type} onValueChange={handleTypeChange}>
                             <SelectTrigger>
-                                <SelectValue />
+                                <SelectValue>
+                                    {(value: string | null) => value === "revoke" ? "Revoke (remove permission)" : "Grant (add permission)"}
+                                </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="grant">
@@ -335,7 +343,17 @@ export default function MemberDetailPage() {
                             disabled={isCurrentUser}
                         >
                             <SelectTrigger className={pendingRole ? "border-yellow-400 bg-yellow-50" : ""}>
-                                <SelectValue />
+                                <SelectValue>
+                                    {(value: string | null) => {
+                                        const labels: Record<string, string> = {
+                                            intake_specialist: "Intake Specialist",
+                                            case_manager: "Case Manager",
+                                            admin: "Admin",
+                                            developer: "Developer",
+                                        }
+                                        return labels[value ?? ""] ?? "Select role"
+                                    }}
+                                </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="intake_specialist">Intake Specialist</SelectItem>

@@ -211,7 +211,12 @@ export default function ComplianceSettingsPage() {
                                 <Label>Hold Scope</Label>
                                 <Select value={holdType} onValueChange={(v) => setHoldType(v || "org")}>
                                     <SelectTrigger>
-                                        <SelectValue />
+                                        <SelectValue>
+                                            {(value: string | null) => {
+                                                const type = LEGAL_HOLD_TYPES.find(t => t.value === value)
+                                                return type?.label ?? "Select scope"
+                                            }}
+                                        </SelectValue>
                                     </SelectTrigger>
                                     <SelectContent>
                                         {LEGAL_HOLD_TYPES.map((option) => (

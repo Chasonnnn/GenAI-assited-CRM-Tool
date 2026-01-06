@@ -187,7 +187,9 @@ export default function AuditLogPage() {
                                 <span className="text-sm text-muted-foreground">Format</span>
                                 <Select value={exportFormat} onValueChange={(value) => setExportFormat(value as "csv" | "json")}>
                                     <SelectTrigger className="w-[160px]">
-                                        <SelectValue />
+                                        <SelectValue>
+                                            {(value: string | null) => value?.toUpperCase() ?? "CSV"}
+                                        </SelectValue>
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="csv">CSV</SelectItem>
@@ -203,7 +205,11 @@ export default function AuditLogPage() {
                                     disabled={!isDeveloper}
                                 >
                                     <SelectTrigger className="w-[180px]">
-                                        <SelectValue />
+                                        <SelectValue>
+                                            {(value: string | null) => {
+                                                return value === "full" ? "Full (Developer)" : "Redacted (default)"
+                                            }}
+                                        </SelectValue>
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="redacted">Redacted (default)</SelectItem>
@@ -309,7 +315,12 @@ export default function AuditLogPage() {
                                     onValueChange={(value) => setEventTypeFilter(value ?? "all")}
                                 >
                                     <SelectTrigger className="w-[200px]">
-                                        <SelectValue placeholder="Filter by event type" />
+                                        <SelectValue placeholder="Filter by event type">
+                                            {(value: string | null) => {
+                                                if (!value || value === "all") return "All Events"
+                                                return getEventConfig(value).label
+                                            }}
+                                        </SelectValue>
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="all">All Events</SelectItem>
@@ -336,7 +347,12 @@ export default function AuditLogPage() {
                                         onValueChange={(v) => setAiActivityHours(Number(v) as 24 | 168 | 720)}
                                     >
                                         <SelectTrigger className="w-[100px] h-8 text-xs">
-                                            <SelectValue />
+                                            <SelectValue>
+                                                {(value: string | null) => {
+                                                    const labels: Record<string, string> = { "24": "24 hours", "168": "7 days", "720": "30 days" }
+                                                    return labels[value ?? "24"] ?? "24 hours"
+                                                }}
+                                            </SelectValue>
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="24">24 hours</SelectItem>
