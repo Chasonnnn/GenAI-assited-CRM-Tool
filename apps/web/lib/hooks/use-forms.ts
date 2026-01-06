@@ -185,3 +185,55 @@ export function useUpdateSubmissionAnswers() {
         },
     })
 }
+
+export function useUploadSubmissionFile() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: async ({
+            submissionId,
+            file,
+            formId,
+            caseId,
+        }: {
+            submissionId: string
+            file: File
+            formId: string
+            caseId: string
+        }) => {
+            const { uploadSubmissionFile } = await import('@/lib/api/forms')
+            return { result: await uploadSubmissionFile(submissionId, file), formId, caseId }
+        },
+        onSuccess: ({ formId, caseId }) => {
+            queryClient.invalidateQueries({
+                queryKey: formKeys.caseSubmission(formId, caseId),
+            })
+        },
+    })
+}
+
+export function useDeleteSubmissionFile() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: async ({
+            submissionId,
+            fileId,
+            formId,
+            caseId,
+        }: {
+            submissionId: string
+            fileId: string
+            formId: string
+            caseId: string
+        }) => {
+            const { deleteSubmissionFile } = await import('@/lib/api/forms')
+            return { result: await deleteSubmissionFile(submissionId, fileId), formId, caseId }
+        },
+        onSuccess: ({ formId, caseId }) => {
+            queryClient.invalidateQueries({
+                queryKey: formKeys.caseSubmission(formId, caseId),
+            })
+        },
+    })
+}

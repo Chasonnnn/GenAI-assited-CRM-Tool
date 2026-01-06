@@ -592,6 +592,92 @@ def download_submission_file(
     )
 
 
+@router.post(
+    "/submissions/{submission_id}/files",
+    response_model=FormSubmissionFileRead,
+    dependencies=[
+        Depends(require_permission(POLICIES["cases"].actions["edit"])),
+        Depends(require_csrf_header),
+    ],
+)
+async def upload_submission_file(
+    submission_id: UUID,
+    file: UploadFile = File(...),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """Upload a file to an existing submission (edit mode)."""
+    submission = form_service.get_submission(db, session.org_id, submission_id)
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    case = db.query(Case).filter(Case.id == submission.case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+
+    try:
+        file_record = form_service.add_submission_file(
+            db=db,
+            org_id=session.org_id,
+            submission=submission,
+            file=file,
+            user_id=session.user_id,
+        )
+        db.commit()
+        return FormSubmissionFileRead(
+            id=file_record.id,
+            filename=file_record.filename,
+            content_type=file_record.content_type,
+            file_size=file_record.file_size,
+            quarantined=file_record.quarantined,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete(
+    "/submissions/{submission_id}/files/{file_id}",
+    dependencies=[
+        Depends(require_permission(POLICIES["cases"].actions["edit"])),
+        Depends(require_csrf_header),
+    ],
+)
+def delete_submission_file(
+    submission_id: UUID,
+    file_id: UUID,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """Soft-delete a file from a submission (edit mode)."""
+    submission = form_service.get_submission(db, session.org_id, submission_id)
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    case = db.query(Case).filter(Case.id == submission.case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+
+    file_record = form_service.get_submission_file(
+        db, session.org_id, submission_id, file_id
+    )
+    if not file_record:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    success = form_service.soft_delete_submission_file(
+        db=db,
+        org_id=session.org_id,
+        submission=submission,
+        file_record=file_record,
+        user_id=session.user_id,
+    )
+
+    if not success:
+        raise HTTPException(status_code=404, detail="File already deleted")
+
+    db.commit()
+    return {"deleted": True}
+
+
 @router.get(
     "/submissions/{submission_id}/export",
     dependencies=[Depends(require_permission(POLICIES["cases"].default))],

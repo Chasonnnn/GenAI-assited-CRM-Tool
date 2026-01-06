@@ -33,6 +33,9 @@ import {
     PencilIcon,
     SaveIcon,
     EditIcon,
+    PlusIcon,
+    Trash2Icon,
+    UploadIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -41,6 +44,8 @@ import {
     useCreateFormToken,
     useRejectFormSubmission,
     useUpdateSubmissionAnswers,
+    useUploadSubmissionFile,
+    useDeleteSubmissionFile,
 } from "@/lib/hooks/use-forms"
 import { exportSubmissionPdf, getSubmissionFileDownloadUrl, type FormSchema } from "@/lib/api/forms"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
@@ -91,6 +96,10 @@ export function CaseApplicationTab({
     const approveMutation = useApproveFormSubmission()
     const rejectMutation = useRejectFormSubmission()
     const updateAnswersMutation = useUpdateSubmissionAnswers()
+    const uploadFileMutation = useUploadSubmissionFile()
+    const deleteFileMutation = useDeleteSubmissionFile()
+    const fileInputRef = React.useRef<HTMLInputElement>(null)
+    const [deletingFileId, setDeletingFileId] = React.useState<string | null>(null)
     const [isEditMode, setIsEditMode] = React.useState(false)
     const [isExporting, setIsExporting] = React.useState(false)
 
@@ -250,6 +259,46 @@ export function CaseApplicationTab({
             toast.error("Failed to export application")
         } finally {
             setIsExporting(false)
+        }
+    }
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file || !submission) return
+
+        try {
+            await uploadFileMutation.mutateAsync({
+                submissionId: submission.id,
+                file,
+                formId: submission.form_id,
+                caseId: submission.case_id,
+            })
+            toast.success(`Uploaded: ${file.name}`)
+        } catch {
+            toast.error("Failed to upload file")
+        } finally {
+            if (fileInputRef.current) {
+                fileInputRef.current.value = ""
+            }
+        }
+    }
+
+    const handleDeleteFile = async (fileId: string, filename: string) => {
+        if (!submission) return
+
+        setDeletingFileId(fileId)
+        try {
+            await deleteFileMutation.mutateAsync({
+                submissionId: submission.id,
+                fileId,
+                formId: submission.form_id,
+                caseId: submission.case_id,
+            })
+            toast.success(`Deleted: ${filename}`)
+        } catch {
+            toast.error("Failed to delete file")
+        } finally {
+            setDeletingFileId(null)
         }
     }
 
@@ -661,54 +710,124 @@ export function CaseApplicationTab({
                 <Card>
                     <Collapsible open={filesOpen} onOpenChange={setFilesOpen}>
                         <CardHeader className="pb-3">
-                            <CollapsibleTrigger className="flex items-center justify-between w-full hover:opacity-70 transition-opacity">
-                                <CardTitle>Uploaded Files ({submission.files.length})</CardTitle>
-                                {filesOpen ? (
-                                    <ChevronUpIcon className="h-4 w-4 text-muted-foreground" />
-                                ) : (
-                                    <ChevronDownIcon className="h-4 w-4 text-muted-foreground" />
+                            <div className="flex items-center justify-between w-full">
+                                <CollapsibleTrigger className="flex items-center gap-2 hover:opacity-70 transition-opacity">
+                                    <CardTitle>Uploaded Files ({submission.files.length})</CardTitle>
+                                    {filesOpen ? (
+                                        <ChevronUpIcon className="h-4 w-4 text-muted-foreground" />
+                                    ) : (
+                                        <ChevronDownIcon className="h-4 w-4 text-muted-foreground" />
+                                    )}
+                                </CollapsibleTrigger>
+
+                                {isEditMode && (
+                                    <>
+                                        <input
+                                            ref={fileInputRef}
+                                            type="file"
+                                            className="hidden"
+                                            onChange={handleFileUpload}
+                                            accept="*/*"
+                                        />
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-8 gap-1.5 text-xs border-dashed border-primary/50 text-primary hover:bg-primary/5 hover:border-primary"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            disabled={uploadFileMutation.isPending}
+                                        >
+                                            {uploadFileMutation.isPending ? (
+                                                <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                                            ) : (
+                                                <PlusIcon className="h-3.5 w-3.5" />
+                                            )}
+                                            Upload File
+                                        </Button>
+                                    </>
                                 )}
-                            </CollapsibleTrigger>
+                            </div>
                         </CardHeader>
                         <CollapsibleContent>
                             <CardContent className="space-y-3">
                                 {submission.files.length === 0 ? (
-                                    <p className="text-sm text-muted-foreground">No files uploaded</p>
-                                ) : (
-                                    submission.files.map((file) => (
-                                        <div
-                                            key={file.id}
-                                            className={`flex items-center justify-between p-3 rounded-lg border ${file.quarantined
-                                                ? "border-amber-500/50 bg-amber-500/10"
-                                                : "bg-card hover:bg-accent/50 transition-colors"
-                                                }`}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                {file.quarantined ? (
-                                                    <AlertTriangleIcon className="h-8 w-8 text-amber-500" />
-                                                ) : (
-                                                    <FileTextIcon className="h-8 w-8 text-muted-foreground" />
-                                                )}
-                                                <div>
-                                                    <p className="text-sm font-medium">{file.filename}</p>
-                                                    <p
-                                                        className={`text-xs ${file.quarantined ? "text-amber-600" : "text-muted-foreground"}`}
-                                                    >
-                                                        {file.quarantined ? "Virus scan pending..." : formatFileSize(file.file_size)}
-                                                    </p>
-                                                </div>
-                                            </div>
+                                    <div className="py-6 text-center">
+                                        <UploadIcon className="h-8 w-8 mx-auto mb-2 text-muted-foreground/40" />
+                                        <p className="text-sm text-muted-foreground">No files uploaded</p>
+                                        {isEditMode && (
                                             <Button
                                                 variant="ghost"
-                                                size="icon"
-                                                className="h-8 w-8"
-                                                disabled={file.quarantined}
-                                                onClick={() => handleDownloadFile(file.id)}
+                                                size="sm"
+                                                className="mt-2 text-primary hover:text-primary/80"
+                                                onClick={() => fileInputRef.current?.click()}
                                             >
-                                                <DownloadIcon className="h-4 w-4" />
+                                                <PlusIcon className="h-4 w-4 mr-1" />
+                                                Add a file
                                             </Button>
-                                        </div>
-                                    ))
+                                        )}
+                                    </div>
+                                ) : (
+                                    submission.files.map((file) => {
+                                        const isDeleting = deletingFileId === file.id
+                                        return (
+                                            <div
+                                                key={file.id}
+                                                className={cn(
+                                                    "flex items-center justify-between p-3 rounded-lg border transition-all",
+                                                    file.quarantined
+                                                        ? "border-amber-500/50 bg-amber-500/10"
+                                                        : "bg-card hover:bg-accent/50",
+                                                    isDeleting && "opacity-50"
+                                                )}
+                                            >
+                                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                                    {file.quarantined ? (
+                                                        <AlertTriangleIcon className="h-8 w-8 text-amber-500 shrink-0" />
+                                                    ) : (
+                                                        <FileTextIcon className="h-8 w-8 text-muted-foreground shrink-0" />
+                                                    )}
+                                                    <div className="min-w-0">
+                                                        <p className="text-sm font-medium truncate">{file.filename}</p>
+                                                        <p
+                                                            className={cn(
+                                                                "text-xs",
+                                                                file.quarantined ? "text-amber-600" : "text-muted-foreground"
+                                                            )}
+                                                        >
+                                                            {file.quarantined ? "Virus scan pending..." : formatFileSize(file.file_size)}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center gap-1 shrink-0">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8"
+                                                        disabled={file.quarantined}
+                                                        onClick={() => handleDownloadFile(file.id)}
+                                                    >
+                                                        <DownloadIcon className="h-4 w-4" />
+                                                    </Button>
+
+                                                    {isEditMode && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                                            onClick={() => handleDeleteFile(file.id, file.filename)}
+                                                            disabled={isDeleting}
+                                                        >
+                                                            {isDeleting ? (
+                                                                <Loader2Icon className="h-4 w-4 animate-spin" />
+                                                            ) : (
+                                                                <Trash2Icon className="h-4 w-4" />
+                                                            )}
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )
+                                    })
                                 )}
                             </CardContent>
                         </CollapsibleContent>
