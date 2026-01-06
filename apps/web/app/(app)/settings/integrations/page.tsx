@@ -1,9 +1,14 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
     CheckCircleIcon,
     AlertTriangleIcon,
@@ -19,9 +24,14 @@ import {
     MailIcon,
     LinkIcon,
     UnlinkIcon,
+    SparklesIcon,
+    CheckIcon,
+    EyeIcon,
+    EyeOffIcon,
 } from "lucide-react"
 import { useIntegrationHealth } from "@/lib/hooks/use-ops"
 import { useUserIntegrations, useConnectZoom, useConnectGmail, useDisconnectIntegration } from "@/lib/hooks/use-user-integrations"
+import { useAISettings, useUpdateAISettings, useTestAPIKey } from "@/lib/hooks/use-ai"
 import { formatDistanceToNow } from "date-fns"
 
 const statusConfig = {
@@ -52,6 +62,232 @@ const integrationTypeConfig: Record<string, { icon: typeof FacebookIcon; label: 
         label: "Background Worker",
         description: "Processes jobs, emails, and scheduled tasks"
     },
+}
+
+// AI provider options
+const AI_PROVIDERS = [
+    { value: "openai", label: "OpenAI", models: ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"] },
+    { value: "gemini", label: "Google Gemini", models: ["gemini-3-flash-preview", "gemini-2.0-flash-exp", "gemini-1.5-pro"] },
+]
+
+function AIConfigurationSection() {
+    const { data: aiSettings, isLoading } = useAISettings()
+    const updateSettings = useUpdateAISettings()
+    const testKey = useTestAPIKey()
+
+    const [isEnabled, setIsEnabled] = useState(false)
+    const [provider, setProvider] = useState<"openai" | "gemini">("openai")
+    const [apiKey, setApiKey] = useState("")
+    const [model, setModel] = useState("")
+    const [keyTested, setKeyTested] = useState<boolean | null>(null)
+    const [saved, setSaved] = useState(false)
+
+    // Sync state with fetched settings
+    useEffect(() => {
+        if (aiSettings) {
+            setIsEnabled(aiSettings.is_enabled)
+            setProvider((aiSettings.provider as "openai" | "gemini") || "openai")
+            setModel(aiSettings.model || "")
+        }
+    }, [aiSettings])
+
+    const selectedProviderModels = AI_PROVIDERS.find(p => p.value === provider)?.models || []
+
+    const handleTestKey = async () => {
+        if (!apiKey.trim()) return
+        setKeyTested(null)
+        try {
+            const result = await testKey.mutateAsync({ provider, api_key: apiKey })
+            setKeyTested(result.valid)
+        } catch {
+            setKeyTested(false)
+        }
+    }
+
+    const handleSave = async () => {
+        const update: { is_enabled?: boolean; provider?: "openai" | "gemini"; api_key?: string; model?: string } = {
+            is_enabled: isEnabled,
+            provider,
+        }
+        if (apiKey.trim()) {
+            update.api_key = apiKey
+        }
+        if (model) {
+            update.model = model
+        }
+        await updateSettings.mutateAsync(update)
+        setApiKey("") // Clear after save
+        setKeyTested(null)
+        setSaved(true)
+        setTimeout(() => setSaved(false), 2000)
+    }
+
+    if (isLoading) {
+        return (
+            <div className="border-t pt-6">
+                <h2 className="mb-4 text-lg font-semibold">AI Configuration</h2>
+                <div className="flex items-center justify-center py-8">
+                    <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                </div>
+            </div>
+        )
+    }
+
+    return (
+        <div className="border-t pt-6">
+            <h2 className="mb-4 text-lg font-semibold">AI Configuration</h2>
+            <p className="mb-4 text-sm text-muted-foreground">
+                Configure AI assistant settings for your organization. Provide your own API key (BYOK).
+            </p>
+
+            <Card>
+                <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="flex size-10 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-900">
+                                <SparklesIcon className="size-5 text-purple-600 dark:text-purple-400" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-base">AI Assistant</CardTitle>
+                                <CardDescription className="text-xs">
+                                    Enable AI-powered features
+                                </CardDescription>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Label htmlFor="ai-enabled" className="text-sm">
+                                {isEnabled ? "Enabled" : "Disabled"}
+                            </Label>
+                            <Switch
+                                id="ai-enabled"
+                                checked={isEnabled}
+                                onCheckedChange={setIsEnabled}
+                            />
+                        </div>
+                    </div>
+                </CardHeader>
+
+                <CardContent className="space-y-4">
+                    {/* Provider Selection */}
+                    <div className="space-y-2">
+                        <Label htmlFor="ai-provider">AI Provider</Label>
+                        <Select value={provider} onValueChange={(v) => {
+                            if (v) {
+                                setProvider(v as "openai" | "gemini")
+                                setModel("") // Reset model when provider changes
+                                setKeyTested(null)
+                            }
+                        }}>
+                            <SelectTrigger id="ai-provider">
+                                <SelectValue placeholder="Select provider" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {AI_PROVIDERS.map(p => (
+                                    <SelectItem key={p.value} value={p.value}>
+                                        {p.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* API Key Input */}
+                    <div className="space-y-2">
+                        <Label htmlFor="ai-key">API Key</Label>
+                        <div className="flex gap-2">
+                            <Input
+                                id="ai-key"
+                                type="password"
+                                value={apiKey || (aiSettings?.api_key_masked ? aiSettings.api_key_masked : "")}
+                                onChange={(e) => {
+                                    setApiKey(e.target.value)
+                                    setKeyTested(null)
+                                }}
+                                placeholder="Enter API key"
+                                disabled={!apiKey && !!aiSettings?.api_key_masked}
+                                className="flex-1"
+                            />
+                            {aiSettings?.api_key_masked && !apiKey ? (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setApiKey("")}
+                                    className="shrink-0"
+                                >
+                                    Change Key
+                                </Button>
+                            ) : (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handleTestKey}
+                                    disabled={!apiKey.trim() || testKey.isPending}
+                                >
+                                    {testKey.isPending ? (
+                                        <Loader2Icon className="size-4 animate-spin" />
+                                    ) : keyTested === true ? (
+                                        <CheckIcon className="size-4 text-green-600" />
+                                    ) : keyTested === false ? (
+                                        <XCircleIcon className="size-4 text-red-600" />
+                                    ) : (
+                                        "Test"
+                                    )}
+                                </Button>
+                            )}
+                        </div>
+                        {keyTested === true && (
+                            <p className="text-xs text-green-600">API key is valid!</p>
+                        )}
+                        {keyTested === false && (
+                            <p className="text-xs text-red-600">API key is invalid. Please check and try again.</p>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                            {provider === "openai"
+                                ? "Get your key from platform.openai.com"
+                                : "Get your key from aistudio.google.com"}
+                        </p>
+                    </div>
+
+                    {/* Model Selection */}
+                    <div className="space-y-2">
+                        <Label htmlFor="ai-model">Model</Label>
+                        <Select value={model} onValueChange={(v) => setModel(v || "")}>
+                            <SelectTrigger id="ai-model">
+                                <SelectValue placeholder="Select model (optional)" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {selectedProviderModels.map(m => (
+                                    <SelectItem key={m} value={m}>
+                                        {m}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                            Leave empty to use the default model
+                        </p>
+                    </div>
+
+                    {/* Save Button */}
+                    <Button onClick={handleSave} disabled={updateSettings.isPending} className="w-full">
+                        {updateSettings.isPending ? (
+                            <>
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                Saving...
+                            </>
+                        ) : saved ? (
+                            <>
+                                <CheckIcon className="mr-2 size-4" />
+                                Saved!
+                            </>
+                        ) : (
+                            "Save AI Configuration"
+                        )}
+                    </Button>
+                </CardContent>
+            </Card>
+        </div>
+    )
 }
 
 export default function IntegrationsPage() {
@@ -211,6 +447,9 @@ export default function IntegrationsPage() {
                         </Card>
                     </div>
                 </div>
+
+                {/* AI Configuration Section */}
+                <AIConfigurationSection />
 
                 {/* System Integrations Section */}
                 <div className="border-t pt-6">
