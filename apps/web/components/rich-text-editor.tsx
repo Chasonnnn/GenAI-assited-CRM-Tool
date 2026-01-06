@@ -18,7 +18,7 @@ import {
     Redo2Icon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 interface RichTextEditorProps {
     content?: string
@@ -43,8 +43,15 @@ export function RichTextEditor({
     minHeight = '80px',
     maxHeight = '300px',
 }: RichTextEditorProps) {
+    const [mounted, setMounted] = useState(false)
+
+    useEffect(() => {
+        setMounted(true)
+    }, [])
+
     const editor = useEditor({
         immediatelyRender: false, // Fix SSR hydration mismatch
+        shouldRerenderOnTransaction: false, // Better performance with React 19
         extensions: [
             StarterKit.configure({
                 heading: false, // Disable headings for notes
@@ -101,7 +108,24 @@ export function RichTextEditor({
         editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
     }, [editor])
 
-    if (!editor) return null
+    if (!mounted || !editor) {
+        // Show placeholder while editor initializes
+        return (
+            <div className={cn("border rounded-md", className)}>
+                <div className="flex items-center gap-1 border-b px-2 py-1.5 bg-muted/30 h-10">
+                    <div className="h-6 w-6 rounded bg-muted animate-pulse" />
+                    <div className="h-6 w-6 rounded bg-muted animate-pulse" />
+                    <div className="h-6 w-6 rounded bg-muted animate-pulse" />
+                    {onSubmit && (
+                        <div className="ml-auto h-7 w-16 rounded bg-muted animate-pulse" />
+                    )}
+                </div>
+                <div className="px-3 py-2" style={{ minHeight }}>
+                    <div className="h-4 w-3/4 rounded bg-muted/50 animate-pulse" />
+                </div>
+            </div>
+        )
+    }
 
     return (
         <div className={cn("border rounded-md", className)}>

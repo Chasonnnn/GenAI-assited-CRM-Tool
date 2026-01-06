@@ -2,7 +2,7 @@
 
 import hashlib
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -16,6 +16,7 @@ from app.db.models import (
     User,
 )
 from app.schemas.interview import InterviewCreate, InterviewUpdate
+from app.services import tiptap_service
 
 if TYPE_CHECKING:
     from app.db.models import DataRetentionPolicy
@@ -97,11 +98,26 @@ def create_interview(
     Create a new interview.
 
     Validates case access and creates initial version if transcript provided.
+    Supports both TipTap JSON (preferred) and HTML transcript input.
     """
-    # Extract plaintext for search
-    transcript_text = _extract_plaintext(data.transcript_html)
+    # Process transcript: prefer JSON, fall back to HTML
+    transcript_json: dict[str, Any] | None = None
+    transcript_html: str | None = None
+    transcript_text: str | None = None
+
+    if data.transcript_json:
+        # Use TipTap JSON as canonical format
+        transcript_json = tiptap_service.sanitize_tiptap_json(data.transcript_json)
+        transcript_html = tiptap_service.tiptap_to_html(transcript_json)
+        transcript_text = tiptap_service.tiptap_to_text(transcript_json)
+    elif data.transcript_html:
+        # Legacy HTML input - convert to JSON
+        transcript_html = data.transcript_html
+        transcript_text = _extract_plaintext(transcript_html)
+        transcript_json = tiptap_service.html_to_tiptap(transcript_html)
+
     transcript_hash = _compute_hash(transcript_text)
-    transcript_size = len(data.transcript_html.encode("utf-8")) if data.transcript_html else 0
+    transcript_size = len(transcript_html.encode("utf-8")) if transcript_html else 0
 
     # Check size limit
     if transcript_size > MAX_TRANSCRIPT_SIZE_BYTES:
@@ -110,7 +126,7 @@ def create_interview(
     # Determine if offloading needed (will be handled by storage service)
     # For now, store inline - offloading will be handled separately
     storage_key = None
-    html_content = data.transcript_html
+    has_transcript = bool(transcript_html or transcript_json)
 
     # Get retention policy
     retention_policy = _get_retention_policy(db, org_id)
@@ -129,10 +145,11 @@ def create_interview(
         conducted_at=data.conducted_at,
         conducted_by_user_id=user_id,
         duration_minutes=data.duration_minutes,
-        transcript_html=html_content,
+        transcript_json=transcript_json,
+        transcript_html=transcript_html,
         transcript_text=transcript_text,
         transcript_storage_key=storage_key,
-        transcript_version=1 if data.transcript_html else 0,
+        transcript_version=1 if has_transcript else 0,
         transcript_hash=transcript_hash,
         transcript_size_bytes=transcript_size,
         status=data.status,
@@ -143,12 +160,12 @@ def create_interview(
     db.flush()
 
     # Create initial version if transcript provided
-    if data.transcript_html:
+    if has_transcript:
         version = InterviewTranscriptVersion(
             interview_id=interview.id,
             organization_id=org_id,
             version=1,
-            content_html=html_content,
+            content_html=transcript_html,
             content_text=transcript_text,
             content_storage_key=storage_key,
             content_hash=transcript_hash,
@@ -318,10 +335,25 @@ def update_interview(
         interview.status = data.status
 
     # Handle transcript update with versioning
-    if data.transcript_html is not None:
-        new_text = _extract_plaintext(data.transcript_html)
-        new_hash = _compute_hash(new_text)
-        new_size = len(data.transcript_html.encode("utf-8"))
+    # Prefer TipTap JSON, fall back to HTML
+    transcript_json: dict[str, Any] | None = None
+    transcript_html: str | None = None
+    transcript_text: str | None = None
+
+    if data.transcript_json is not None:
+        # TipTap JSON update (preferred)
+        transcript_json = tiptap_service.sanitize_tiptap_json(data.transcript_json)
+        transcript_html = tiptap_service.tiptap_to_html(transcript_json)
+        transcript_text = tiptap_service.tiptap_to_text(transcript_json)
+    elif data.transcript_html is not None:
+        # Legacy HTML update
+        transcript_html = data.transcript_html
+        transcript_text = _extract_plaintext(transcript_html)
+        transcript_json = tiptap_service.html_to_tiptap(transcript_html)
+
+    if transcript_html is not None:
+        new_hash = _compute_hash(transcript_text)
+        new_size = len(transcript_html.encode("utf-8"))
 
         # Check size limit
         if new_size > MAX_TRANSCRIPT_SIZE_BYTES:
@@ -336,8 +368,8 @@ def update_interview(
                 interview_id=interview.id,
                 organization_id=org_id,
                 version=new_version,
-                content_html=data.transcript_html,
-                content_text=new_text,
+                content_html=transcript_html,
+                content_text=transcript_text,
                 content_storage_key=None,  # Offloading handled separately
                 content_hash=new_hash,
                 content_size_bytes=new_size,
@@ -347,8 +379,9 @@ def update_interview(
             db.add(version)
 
             # Update interview with new transcript
-            interview.transcript_html = data.transcript_html
-            interview.transcript_text = new_text
+            interview.transcript_json = transcript_json
+            interview.transcript_html = transcript_html
+            interview.transcript_text = transcript_text
             interview.transcript_storage_key = None
             interview.transcript_version = new_version
             interview.transcript_hash = new_hash
@@ -725,6 +758,7 @@ def to_interview_read(
         "conducted_by_user_id": interview.conducted_by_user_id,
         "conducted_by_name": conducted_by_name,
         "duration_minutes": interview.duration_minutes,
+        "transcript_json": interview.transcript_json,
         "transcript_html": interview.transcript_html,
         "transcript_version": interview.transcript_version,
         "transcript_size_bytes": interview.transcript_size_bytes,

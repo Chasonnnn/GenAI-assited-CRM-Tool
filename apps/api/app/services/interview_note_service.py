@@ -144,6 +144,7 @@ def create_note(
         organization_id=org_id,
         content=clean_content,
         transcript_version=transcript_version,
+        comment_id=data.comment_id,  # TipTap comment mark ID
         anchor_start=data.anchor_start,
         anchor_end=data.anchor_end,
         anchor_text=anchor_text,
@@ -233,6 +234,7 @@ def to_note_read(note: InterviewNote, current_user_id: UUID) -> dict:
         "id": note.id,
         "content": note.content,
         "transcript_version": note.transcript_version,
+        "comment_id": note.comment_id,  # TipTap comment mark ID
         "anchor_start": note.anchor_start,
         "anchor_end": note.anchor_end,
         "anchor_text": note.anchor_text,
