@@ -527,10 +527,10 @@ export default function CaseDetailPage() {
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="notes">Notes {notes && notes.length > 0 && `(${notes.length})`}</TabsTrigger>
                         <TabsTrigger value="tasks">Tasks {tasksData && tasksData.items.length > 0 && `(${tasksData.items.length})`}</TabsTrigger>
-                        <TabsTrigger value="history">History</TabsTrigger>
-                        <TabsTrigger value="application">Application</TabsTrigger>
                         <TabsTrigger value="interviews">Interviews</TabsTrigger>
+                        <TabsTrigger value="application">Application</TabsTrigger>
                         {canViewProfile && <TabsTrigger value="profile">Profile</TabsTrigger>}
+                        <TabsTrigger value="history">History</TabsTrigger>
                         <TabsTrigger value="ai" className="gap-1">
                             <SparklesIcon className="h-3 w-3" />
                             AI

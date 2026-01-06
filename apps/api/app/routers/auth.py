@@ -1,6 +1,7 @@
 """Authentication router with Google OAuth and session management."""
 
 import io
+import logging
 import re
 from urllib.parse import urlencode, urlparse
 from uuid import UUID as UUIDType
@@ -32,6 +33,7 @@ from app.services.google_oauth import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 OAUTH_STATE_COOKIE = "oauth_state"
 OAUTH_STATE_MAX_AGE = 300  # 5 minutes
@@ -542,12 +544,24 @@ HTTPS_URL_PATTERN = re.compile(r"^https://")
 
 
 class UserSignatureResponse(BaseModel):
-    """User signature social links and org branding preview."""
+    """User signature overrides, social links, profile defaults, and org branding."""
 
-    # User-editable social links
+    # Signature overrides (user-editable, NULL = use profile)
+    signature_name: str | None = None
+    signature_title: str | None = None
+    signature_phone: str | None = None
+    signature_photo_url: str | None = None
+
+    # User social links (existing)
     signature_linkedin: str | None = None
     signature_twitter: str | None = None
     signature_instagram: str | None = None
+
+    # Profile defaults (for UI placeholders)
+    profile_name: str
+    profile_title: str | None = None
+    profile_phone: str | None = None
+    profile_photo_url: str | None = None
 
     # Org branding (read-only for users)
     org_signature_template: str | None = None
@@ -560,11 +574,45 @@ class UserSignatureResponse(BaseModel):
 
 
 class UserSignatureUpdate(BaseModel):
-    """Update user social links only - org branding fields are ignored."""
+    """Update user signature overrides and social links. Photo uses dedicated endpoint."""
 
+    # Signature overrides (NULL = reset to profile default)
+    signature_name: str | None = None
+    signature_title: str | None = None
+    signature_phone: str | None = None
+    # NOTE: No signature_photo_url - use POST/DELETE /me/signature/photo
+
+    # Social links (existing)
     signature_linkedin: str | None = None
     signature_twitter: str | None = None
     signature_instagram: str | None = None
+
+    @field_validator("signature_name")
+    @classmethod
+    def validate_name(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        if len(v) > 255:
+            raise ValueError("Name must be 255 characters or less")
+        return v.strip()
+
+    @field_validator("signature_title")
+    @classmethod
+    def validate_title(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        if len(v) > 100:
+            raise ValueError("Title must be 100 characters or less")
+        return v.strip()
+
+    @field_validator("signature_phone")
+    @classmethod
+    def validate_phone(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        if len(v) > 50:
+            raise ValueError("Phone must be 50 characters or less")
+        return v.strip()
 
     @field_validator("signature_linkedin", "signature_twitter", "signature_instagram")
     @classmethod
@@ -596,15 +644,25 @@ def get_my_signature(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ) -> UserSignatureResponse:
-    """Get current user's signature social links and org branding."""
+    """Get user's signature overrides, profile defaults, and org branding."""
     user = user_service.get_user_by_id(db, session.user_id)
     org = org_service.get_org_by_id(db, session.org_id)
 
     return UserSignatureResponse(
+        # Signature overrides (user-editable)
+        signature_name=user.signature_name,
+        signature_title=user.signature_title,
+        signature_phone=user.signature_phone,
+        signature_photo_url=user.signature_photo_url,
         # User social links
         signature_linkedin=user.signature_linkedin,
         signature_twitter=user.signature_twitter,
         signature_instagram=user.signature_instagram,
+        # Profile defaults (for UI placeholders)
+        profile_name=user.display_name,
+        profile_title=user.title,
+        profile_phone=user.phone,
+        profile_photo_url=user.avatar_url,
         # Org branding (read-only)
         org_signature_template=org.signature_template if org else None,
         org_signature_logo_url=org.signature_logo_url if org else None,
@@ -627,27 +685,82 @@ def update_my_signature(
     db: Session = Depends(get_db),
 ) -> UserSignatureResponse:
     """
-    Update user's signature social links.
+    Update user's signature overrides and social links.
 
-    Only social links can be updated - org branding is controlled by admins.
+    Signature overrides allow customizing name/title/phone for email signatures
+    independent of profile values. Set to empty string to reset to profile default.
+    Org branding is read-only and controlled by admins.
     """
     user = user_service.get_user_by_id(db, session.user_id)
     org = org_service.get_org_by_id(db, session.org_id)
 
-    # Update social links only
+    # Track changed fields for audit log (don't log actual values for PII)
+    changed_fields: list[str] = []
+
+    # Update signature overrides (empty string → None → use profile default)
+    if body.signature_name is not None:
+        new_val = body.signature_name if body.signature_name else None
+        if user.signature_name != new_val:
+            changed_fields.append("signature_name")
+        user.signature_name = new_val
+
+    if body.signature_title is not None:
+        new_val = body.signature_title if body.signature_title else None
+        if user.signature_title != new_val:
+            changed_fields.append("signature_title")
+        user.signature_title = new_val
+
+    if body.signature_phone is not None:
+        new_val = body.signature_phone if body.signature_phone else None
+        if user.signature_phone != new_val:
+            changed_fields.append("signature_phone")
+        user.signature_phone = new_val
+
+    # Update social links
     if body.signature_linkedin is not None:
-        user.signature_linkedin = body.signature_linkedin if body.signature_linkedin else None
+        new_val = body.signature_linkedin if body.signature_linkedin else None
+        if user.signature_linkedin != new_val:
+            changed_fields.append("signature_linkedin")
+        user.signature_linkedin = new_val
+
     if body.signature_twitter is not None:
-        user.signature_twitter = body.signature_twitter if body.signature_twitter else None
+        new_val = body.signature_twitter if body.signature_twitter else None
+        if user.signature_twitter != new_val:
+            changed_fields.append("signature_twitter")
+        user.signature_twitter = new_val
+
     if body.signature_instagram is not None:
-        user.signature_instagram = body.signature_instagram if body.signature_instagram else None
+        new_val = body.signature_instagram if body.signature_instagram else None
+        if user.signature_instagram != new_val:
+            changed_fields.append("signature_instagram")
+        user.signature_instagram = new_val
 
     db.commit()
 
+    # Audit log (fields changed only, no PII values)
+    if changed_fields:
+        logger.info(
+            "Signature updated for user %s: fields=%s",
+            session.user_id,
+            changed_fields,
+        )
+
     return UserSignatureResponse(
+        # Signature overrides
+        signature_name=user.signature_name,
+        signature_title=user.signature_title,
+        signature_phone=user.signature_phone,
+        signature_photo_url=user.signature_photo_url,
+        # Social links
         signature_linkedin=user.signature_linkedin,
         signature_twitter=user.signature_twitter,
         signature_instagram=user.signature_instagram,
+        # Profile defaults
+        profile_name=user.display_name,
+        profile_title=user.title,
+        profile_phone=user.phone,
+        profile_photo_url=user.avatar_url,
+        # Org branding
         org_signature_template=org.signature_template if org else None,
         org_signature_logo_url=org.signature_logo_url if org else None,
         org_signature_primary_color=org.signature_primary_color if org else None,
@@ -676,6 +789,160 @@ def get_my_signature_preview(
     )
 
     return SignaturePreviewResponse(html=html)
+
+
+# =============================================================================
+# Signature Photo Upload/Delete
+# =============================================================================
+
+
+class SignaturePhotoResponse(BaseModel):
+    """Response for signature photo upload/delete."""
+    signature_photo_url: str | None
+
+
+def _delete_old_signature_photo(photo_url: str):
+    """Background task to delete old signature photo from S3."""
+    if not photo_url or "signatures/" not in photo_url:
+        return
+
+    try:
+        from app.core.config import settings as app_settings
+        # Extract key from URL
+        key = photo_url.split("/signatures/")[-1]
+        key = f"signatures/{key}"
+
+        s3 = boto3.client(
+            "s3",
+            region_name=getattr(app_settings, "S3_REGION", "us-east-1"),
+            aws_access_key_id=getattr(app_settings, "AWS_ACCESS_KEY_ID", None),
+            aws_secret_access_key=getattr(app_settings, "AWS_SECRET_ACCESS_KEY", None),
+        )
+        bucket = getattr(app_settings, "S3_BUCKET", "crm-attachments")
+        s3.delete_object(Bucket=bucket, Key=key)
+    except Exception:
+        pass  # Best effort
+
+
+@router.post(
+    "/me/signature/photo",
+    response_model=SignaturePhotoResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+async def upload_signature_photo(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> SignaturePhotoResponse:
+    """
+    Upload a signature-specific photo (separate from profile avatar).
+
+    - Max size: 2MB
+    - Allowed types: PNG, JPEG, WebP
+    - Will be resized to max 400x400
+    - Falls back to profile avatar if deleted
+    """
+    # Validate content type
+    if file.content_type not in AVATAR_ALLOWED_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed: {', '.join(AVATAR_ALLOWED_TYPES)}",
+        )
+
+    # Read and validate size
+    content = await file.read()
+    if len(content) > AVATAR_MAX_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File too large. Maximum size: {AVATAR_MAX_SIZE // 1024 // 1024}MB",
+        )
+
+    # Resize image (re-use avatar resize logic)
+    try:
+        resized_content = _resize_avatar(content, file.content_type)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid image file")
+
+    # Upload to S3 under signatures/ prefix
+    import uuid as uuid_module
+    from app.core.config import settings as app_settings
+
+    file_id = str(uuid_module.uuid4())
+    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
+    key = f"signatures/{session.org_id}/{session.user_id}/{file_id}.{ext}"
+
+    s3 = boto3.client(
+        "s3",
+        region_name=getattr(app_settings, "S3_REGION", "us-east-1"),
+        aws_access_key_id=getattr(app_settings, "AWS_ACCESS_KEY_ID", None),
+        aws_secret_access_key=getattr(app_settings, "AWS_SECRET_ACCESS_KEY", None),
+    )
+    bucket = getattr(app_settings, "S3_BUCKET", "crm-attachments")
+
+    s3.put_object(
+        Bucket=bucket,
+        Key=key,
+        Body=resized_content,
+        ContentType=file.content_type,
+    )
+
+    # Get public URL
+    s3_url_style = getattr(app_settings, "S3_URL_STYLE", "path")
+    if s3_url_style == "virtual":
+        photo_url = f"https://{bucket}.s3.amazonaws.com/{key}"
+    else:
+        photo_url = f"https://s3.amazonaws.com/{bucket}/{key}"
+
+    # Get old photo URL for deletion
+    user = user_service.get_user_by_id(db, session.user_id)
+    old_photo_url = user.signature_photo_url
+
+    # Update user record
+    user.signature_photo_url = photo_url
+    db.commit()
+
+    # Delete old photo in background (safe: upload succeeded, DB updated)
+    if old_photo_url:
+        background_tasks.add_task(_delete_old_signature_photo, old_photo_url)
+
+    logger.info("Signature photo uploaded for user %s", session.user_id)
+
+    return SignaturePhotoResponse(signature_photo_url=photo_url)
+
+
+@router.delete(
+    "/me/signature/photo",
+    response_model=SignaturePhotoResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+def delete_signature_photo(
+    background_tasks: BackgroundTasks,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> SignaturePhotoResponse:
+    """
+    Delete signature photo (falls back to profile avatar).
+
+    Sets signature_photo_url to NULL, so signature rendering
+    will use the user's profile avatar instead.
+    """
+    user = user_service.get_user_by_id(db, session.user_id)
+    old_photo_url = user.signature_photo_url
+
+    if not old_photo_url:
+        raise HTTPException(status_code=404, detail="No signature photo to delete")
+
+    # Clear photo URL in DB first
+    user.signature_photo_url = None
+    db.commit()
+
+    # Delete from S3 in background
+    background_tasks.add_task(_delete_old_signature_photo, old_photo_url)
+
+    logger.info("Signature photo deleted for user %s", session.user_id)
+
+    return SignaturePhotoResponse(signature_photo_url=None)
 
 
 @router.post("/logout", dependencies=[Depends(require_csrf_header)])

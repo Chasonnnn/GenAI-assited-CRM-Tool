@@ -8,14 +8,24 @@
 import api from './index'
 
 // =============================================================================
-// User Types (social links + read-only org branding)
+// User Types (signature overrides + social links + read-only org branding)
 // =============================================================================
 
 export interface UserSignature {
+    // Signature overrides (user-editable, NULL = use profile)
+    signature_name: string | null
+    signature_title: string | null
+    signature_phone: string | null
+    signature_photo_url: string | null
     // User-editable social links
     signature_linkedin: string | null
     signature_twitter: string | null
     signature_instagram: string | null
+    // Profile defaults (for UI placeholders)
+    profile_name: string
+    profile_title: string | null
+    profile_phone: string | null
+    profile_photo_url: string | null
     // Org branding (read-only for users)
     org_signature_template: string | null
     org_signature_logo_url: string | null
@@ -27,9 +37,17 @@ export interface UserSignature {
 }
 
 export interface UserSignatureUpdate {
+    signature_name?: string | null
+    signature_title?: string | null
+    signature_phone?: string | null
+    // NOTE: No signature_photo_url - use dedicated upload/delete endpoints
     signature_linkedin?: string | null
     signature_twitter?: string | null
     signature_instagram?: string | null
+}
+
+export interface SignaturePhotoResponse {
+    signature_photo_url: string | null
 }
 
 export interface SignaturePreview {
@@ -89,6 +107,18 @@ export async function updateUserSignature(data: UserSignatureUpdate): Promise<Us
 
 export async function getSignaturePreview(): Promise<SignaturePreview> {
     return api.get<SignaturePreview>('/auth/me/signature/preview')
+}
+
+export async function uploadSignaturePhoto(file: File): Promise<SignaturePhotoResponse> {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post<SignaturePhotoResponse>('/auth/me/signature/photo', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    })
+}
+
+export async function deleteSignaturePhoto(): Promise<SignaturePhotoResponse> {
+    return api.delete<SignaturePhotoResponse>('/auth/me/signature/photo')
 }
 
 // =============================================================================
