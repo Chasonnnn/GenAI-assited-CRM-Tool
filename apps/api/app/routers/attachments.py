@@ -18,7 +18,7 @@ from app.core.policies import POLICIES
 from app.db.enums import Role
 from app.db.models import Case
 from app.schemas.auth import UserSession
-from app.services import attachment_service, case_service, ip_service
+from app.services import activity_service, attachment_service, case_service, ip_service
 
 
 router = APIRouter(prefix="/attachments", tags=["attachments"])
@@ -114,6 +114,16 @@ async def upload_attachment(
             file=file_obj,
             file_size=file_size,
             case_id=case.id,
+        )
+
+        # Log activity AFTER successful upload (before commit so it's in same transaction)
+        activity_service.log_attachment_added(
+            db=db,
+            case_id=case.id,
+            organization_id=case.organization_id,
+            actor_user_id=session.user_id,
+            attachment_id=attachment.id,
+            filename=attachment.filename,
         )
         db.commit()
 
@@ -395,8 +405,12 @@ async def delete_attachment(
             status_code=403, detail="Only uploader or admin can delete"
         )
 
+    case = None
     if attachment.case_id:
-        _get_case_with_access(db, attachment.case_id, session, require_write=True)
+        case = _get_case_with_access(db, attachment.case_id, session, require_write=True)
+
+    # Capture filename before deletion for activity log
+    filename = attachment.filename
 
     success = attachment_service.soft_delete_attachment(
         db=db,
@@ -404,10 +418,22 @@ async def delete_attachment(
         attachment_id=attachment_id,
         user_id=session.user_id,
     )
-    db.commit()
 
     if not success:
         raise HTTPException(status_code=404, detail="Attachment not found")
+
+    # Log activity AFTER successful deletion (case attachments only)
+    if case:
+        activity_service.log_attachment_deleted(
+            db=db,
+            case_id=case.id,
+            organization_id=case.organization_id,
+            actor_user_id=session.user_id,
+            attachment_id=attachment_id,
+            filename=filename,
+        )
+
+    db.commit()
 
     return {"deleted": True}
 

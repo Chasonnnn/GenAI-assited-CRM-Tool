@@ -1,5 +1,6 @@
 """Activity logging service - centralized case activity tracking."""
 
+import re
 from uuid import UUID
 from sqlalchemy.orm import Session
 
@@ -8,6 +9,24 @@ from app.db.models import CaseActivityLog
 
 
 REDACTED_VALUE = "[redacted]"
+
+
+def _sanitize_preview(html: str, max_chars: int = 120) -> str:
+    """Strip HTML, preserve line breaks as ' • ', truncate for activity log display."""
+    if not html:
+        return ""
+    # Replace <br>, </p>, </div> with line break marker
+    text = re.sub(r"<br\s*/?>", " • ", html)
+    text = re.sub(r"</(?:p|div)>", " • ", text)
+    # Strip remaining HTML tags
+    text = re.sub(r"<[^>]*>", "", text)
+    # Decode common HTML entities
+    text = text.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+    # Normalize whitespace around markers
+    text = re.sub(r"\s*•\s*", " • ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = text.strip(" •")
+    return text[:max_chars] + ("..." if len(text) > max_chars else "")
 
 
 def _redact_changes(changes: dict[str, any]) -> dict[str, str]:
@@ -219,7 +238,8 @@ def log_note_added(
     note_id: UUID,
     content: str,
 ) -> CaseActivityLog:
-    """Log note creation without storing content."""
+    """Log note creation with sanitized preview snapshot."""
+    preview = _sanitize_preview(content)
     return log_activity(
         db=db,
         case_id=case_id,
@@ -228,6 +248,7 @@ def log_note_added(
         actor_user_id=actor_user_id,
         details={
             "note_id": str(note_id),
+            "preview": preview,
         },
     )
 
@@ -240,7 +261,8 @@ def log_note_deleted(
     note_id: UUID,
     content_preview: str,
 ) -> CaseActivityLog:
-    """Log note deletion without storing content."""
+    """Log note deletion with sanitized preview snapshot."""
+    preview = _sanitize_preview(content_preview)
     return log_activity(
         db=db,
         case_id=case_id,
@@ -249,6 +271,7 @@ def log_note_deleted(
         actor_user_id=actor_user_id,
         details={
             "note_id": str(note_id),
+            "preview": preview,
         },
     )
 
@@ -272,5 +295,71 @@ def log_email_sent(
         details={
             "email_log_id": str(email_log_id),
             "provider": provider,
+        },
+    )
+
+
+def log_attachment_added(
+    db: Session,
+    case_id: UUID,
+    organization_id: UUID,
+    actor_user_id: UUID,
+    attachment_id: UUID,
+    filename: str,
+) -> CaseActivityLog:
+    """Log attachment upload with filename."""
+    return log_activity(
+        db=db,
+        case_id=case_id,
+        organization_id=organization_id,
+        activity_type=CaseActivityType.ATTACHMENT_ADDED,
+        actor_user_id=actor_user_id,
+        details={
+            "attachment_id": str(attachment_id),
+            "filename": filename,
+        },
+    )
+
+
+def log_attachment_deleted(
+    db: Session,
+    case_id: UUID,
+    organization_id: UUID,
+    actor_user_id: UUID,
+    attachment_id: UUID,
+    filename: str,
+) -> CaseActivityLog:
+    """Log attachment deletion with filename (call AFTER successful deletion)."""
+    return log_activity(
+        db=db,
+        case_id=case_id,
+        organization_id=organization_id,
+        activity_type=CaseActivityType.ATTACHMENT_DELETED,
+        actor_user_id=actor_user_id,
+        details={
+            "attachment_id": str(attachment_id),
+            "filename": filename,
+        },
+    )
+
+
+def log_task_deleted(
+    db: Session,
+    case_id: UUID,
+    organization_id: UUID,
+    actor_user_id: UUID,
+    task_id: UUID,
+    title: str,
+) -> CaseActivityLog:
+    """Log task deletion with title (call BEFORE deletion)."""
+    return log_activity(
+        db=db,
+        case_id=case_id,
+        organization_id=organization_id,
+        activity_type=CaseActivityType.TASK_DELETED,
+        actor_user_id=actor_user_id,
+        details={
+            "task_id": str(task_id),
+            "title": title,
         },
     )

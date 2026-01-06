@@ -5,6 +5,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { attachmentsApi } from "../api/attachments"
 import { toast } from "sonner"
+import { caseKeys } from "./use-cases"
 
 export function useAttachments(caseId: string | null) {
     return useQuery({
@@ -22,6 +23,11 @@ export function useUploadAttachment() {
             attachmentsApi.upload(caseId, file),
         onSuccess: (data, variables) => {
             queryClient.invalidateQueries({ queryKey: ["attachments", variables.caseId] })
+            // Invalidate history/activity cache to show attachment_added immediately
+            queryClient.invalidateQueries({
+                queryKey: [...caseKeys.detail(variables.caseId), 'activity'],
+                exact: false,
+            })
         },
     })
 }
@@ -50,6 +56,11 @@ export function useDeleteAttachment() {
             attachmentsApi.delete(attachmentId),
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: ["attachments", variables.caseId] })
+            // Invalidate history/activity cache to show attachment_deleted immediately
+            queryClient.invalidateQueries({
+                queryKey: [...caseKeys.detail(variables.caseId), 'activity'],
+                exact: false,
+            })
         },
     })
 }
