@@ -1,7 +1,14 @@
 """Settings endpoints for organization and user preferences."""
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+import io
+import os
+import re
+import uuid as uuid_lib
+from urllib.parse import urlparse
+
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
+from PIL import Image
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.deps import (
@@ -9,10 +16,12 @@ from app.core.deps import (
     get_db,
     require_csrf_header,
     require_permission,
+    require_roles,
 )
 from app.core.policies import POLICIES
+from app.db.enums import Role
 from app.schemas.auth import UserSession
-from app.services import org_service
+from app.services import org_service, signature_template_service
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -124,13 +133,36 @@ def update_org_settings(
 # Organization Signature Settings (Admin only)
 # =============================================================================
 
-import re
-from urllib.parse import urlparse
-from pydantic import field_validator
-from app.services import signature_template_service
-
 # Validation patterns
 HEX_COLOR_PATTERN = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+# Max social links per org
+MAX_SOCIAL_LINKS = 6
+
+
+class SocialLinkItem(BaseModel):
+    """A social link with platform name and URL."""
+
+    platform: str = Field(..., min_length=1, max_length=50)
+    url: str = Field(..., max_length=500)
+
+    @field_validator("platform")
+    @classmethod
+    def validate_platform(cls, v: str) -> str:
+        # Allow alphanumeric and spaces only (prevent XSS)
+        if not re.match(r"^[\w\s]+$", v):
+            raise ValueError("Platform name must be alphanumeric")
+        return v.strip()
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        if not v.startswith("https://"):
+            raise ValueError("URL must start with https://")
+        parsed = urlparse(v)
+        if parsed.scheme != "https" or not parsed.netloc:
+            raise ValueError("Invalid URL format")
+        return v
 
 
 class OrgSignatureRead(BaseModel):
@@ -143,6 +175,8 @@ class OrgSignatureRead(BaseModel):
     signature_address: str | None
     signature_phone: str | None
     signature_website: str | None
+    signature_social_links: list[SocialLinkItem] | None
+    signature_disclaimer: str | None
     available_templates: list[dict]
 
 
@@ -155,6 +189,8 @@ class OrgSignatureUpdate(BaseModel):
     signature_address: str | None = None
     signature_phone: str | None = None
     signature_website: str | None = None
+    signature_social_links: list[SocialLinkItem] | None = None
+    signature_disclaimer: str | None = Field(None, max_length=1000)
 
     @field_validator("signature_template")
     @classmethod
@@ -193,16 +229,52 @@ class OrgSignatureUpdate(BaseModel):
             raise ValueError("Website must be a valid https:// URL")
         return v
 
+    @field_validator("signature_social_links")
+    @classmethod
+    def validate_social_links(cls, v: list[SocialLinkItem] | None) -> list[SocialLinkItem] | None:
+        if v is None:
+            return v
+        if len(v) > MAX_SOCIAL_LINKS:
+            raise ValueError(f"Maximum {MAX_SOCIAL_LINKS} social links allowed")
+        # Deduplicate by URL (normalize and keep first)
+        seen_urls = set()
+        deduped = []
+        for link in v:
+            normalized = link.url.lower().rstrip("/")
+            if normalized not in seen_urls:
+                seen_urls.add(normalized)
+                deduped.append(link)
+        return deduped
+
+
+class SignaturePreviewResponse(BaseModel):
+    """Rendered signature HTML preview."""
+
+    html: str
+
 
 @router.get("/organization/signature", response_model=OrgSignatureRead)
 def get_org_signature(
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
     db: Session = Depends(get_db),
 ):
-    """Get organization signature settings."""
+    """
+    Get organization signature settings.
+
+    Requires Admin or Developer role.
+    """
     org = org_service.get_org_by_id(db, session.org_id)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
+
+    # Parse social links from JSONB
+    social_links = None
+    if org.signature_social_links:
+        social_links = [
+            SocialLinkItem(platform=link.get("platform", ""), url=link.get("url", ""))
+            for link in org.signature_social_links
+            if link.get("platform") and link.get("url")
+        ]
 
     return OrgSignatureRead(
         signature_template=org.signature_template,
@@ -212,6 +284,8 @@ def get_org_signature(
         signature_address=org.signature_address,
         signature_phone=org.signature_phone,
         signature_website=org.signature_website,
+        signature_social_links=social_links,
+        signature_disclaimer=org.signature_disclaimer,
         available_templates=signature_template_service.get_available_templates(),
     )
 
@@ -224,15 +298,13 @@ def get_org_signature(
 def update_org_signature(
     body: OrgSignatureUpdate,
     request: Request,
-    session: UserSession = Depends(
-        require_permission(POLICIES["org_settings"].default)
-    ),
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
     db: Session = Depends(get_db),
 ):
     """
     Update organization signature settings.
 
-    Requires manage_org permission (Admin only).
+    Requires Admin or Developer role.
     """
     org = org_service.get_org_by_id(db, session.org_id)
     if not org:
@@ -265,6 +337,17 @@ def update_org_signature(
         org.signature_website = body.signature_website
         changed_fields.append("signature_website")
 
+    if body.signature_social_links is not None:
+        # Convert Pydantic models to dicts for JSONB storage
+        new_links = [{"platform": link.platform, "url": link.url} for link in body.signature_social_links]
+        if new_links != org.signature_social_links:
+            org.signature_social_links = new_links
+            changed_fields.append("signature_social_links")
+
+    if body.signature_disclaimer is not None and body.signature_disclaimer != org.signature_disclaimer:
+        org.signature_disclaimer = body.signature_disclaimer if body.signature_disclaimer else None
+        changed_fields.append("signature_disclaimer")
+
     if changed_fields:
         from app.services import audit_service
 
@@ -279,6 +362,15 @@ def update_org_signature(
         )
         db.commit()
 
+    # Parse social links for response
+    social_links = None
+    if org.signature_social_links:
+        social_links = [
+            SocialLinkItem(platform=link.get("platform", ""), url=link.get("url", ""))
+            for link in org.signature_social_links
+            if link.get("platform") and link.get("url")
+        ]
+
     return OrgSignatureRead(
         signature_template=org.signature_template,
         signature_logo_url=org.signature_logo_url,
@@ -287,19 +379,36 @@ def update_org_signature(
         signature_address=org.signature_address,
         signature_phone=org.signature_phone,
         signature_website=org.signature_website,
+        signature_social_links=social_links,
+        signature_disclaimer=org.signature_disclaimer,
         available_templates=signature_template_service.get_available_templates(),
     )
+
+
+@router.get("/organization/signature/preview", response_model=SignaturePreviewResponse)
+def get_org_signature_preview(
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    db: Session = Depends(get_db),
+):
+    """
+    Get rendered HTML preview of organization signature.
+
+    Uses sample user data (not admin's personal info) to show how
+    the signature template looks with org branding.
+
+    Requires Admin or Developer role.
+    """
+    html = signature_template_service.render_signature_preview(
+        db=db,
+        org_id=session.org_id,
+    )
+
+    return SignaturePreviewResponse(html=html)
 
 
 # =============================================================================
 # Logo Upload/Delete (Admin only)
 # =============================================================================
-
-import io
-import os
-import uuid as uuid_lib
-from fastapi import UploadFile, File, BackgroundTasks
-from PIL import Image
 
 # Logo constraints
 MAX_LOGO_SIZE_BYTES = 50 * 1024  # 50KB

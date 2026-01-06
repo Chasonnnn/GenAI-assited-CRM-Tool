@@ -100,6 +100,15 @@ async def case_manager_client(db, test_org, case_manager_user):
         mfa_verified=True,
         mfa_required=True,
     )
+    from app.services import session_service
+
+    session_service.create_session(
+        db=db,
+        user_id=case_manager_user.id,
+        org_id=test_org.id,
+        token=token,
+        request=None,
+    )
 
     def override_get_db():
         yield db

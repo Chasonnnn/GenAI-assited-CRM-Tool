@@ -9,10 +9,9 @@ Endpoints:
 - Export (PDF, JSON)
 """
 
-from typing import BinaryIO
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.case_access import can_modify_case, check_case_access
@@ -23,7 +22,6 @@ from app.core.deps import (
     require_csrf_header,
     require_permission,
 )
-from app.core.policies import POLICIES
 from app.core.permissions import PermissionKey as P
 from app.db.enums import Role
 from app.schemas.auth import UserSession

@@ -9,7 +9,6 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import (
-    Case,
     CaseInterview,
     InterviewAttachment,
     InterviewNote,

@@ -46,6 +46,11 @@ export interface SignatureTemplate {
     description: string
 }
 
+export interface SocialLink {
+    platform: string
+    url: string
+}
+
 export interface OrgSignature {
     signature_template: string | null
     signature_logo_url: string | null
@@ -54,6 +59,8 @@ export interface OrgSignature {
     signature_address: string | null
     signature_phone: string | null
     signature_website: string | null
+    signature_social_links: SocialLink[] | null
+    signature_disclaimer: string | null
     available_templates: SignatureTemplate[]
 }
 
@@ -64,6 +71,8 @@ export interface OrgSignatureUpdate {
     signature_address?: string | null
     signature_phone?: string | null
     signature_website?: string | null
+    signature_social_links?: SocialLink[] | null
+    signature_disclaimer?: string | null
 }
 
 // =============================================================================
@@ -106,8 +115,6 @@ export async function deleteOrgLogo(): Promise<{ status: string }> {
     return api.delete<{ status: string }>('/settings/organization/signature/logo')
 }
 
-// Legacy exports for backward compatibility (deprecated)
-export type Signature = UserSignature
-export type SignatureUpdate = UserSignatureUpdate
-export const getSignature = getUserSignature
-export const updateSignature = updateUserSignature
+export async function getOrgSignaturePreview(): Promise<SignaturePreview> {
+    return api.get<SignaturePreview>('/settings/organization/signature/preview')
+}

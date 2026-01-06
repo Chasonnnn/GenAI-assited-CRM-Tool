@@ -38,7 +38,8 @@ import {
     useUpdateEmailTemplate,
     useDeleteEmailTemplate,
 } from "@/lib/hooks/use-email-templates"
-import { useSignature, useUpdateSignature, useSignaturePreview } from "@/lib/hooks/use-signature"
+import { useUserSignature, useUpdateUserSignature, useSignaturePreview } from "@/lib/hooks/use-signature"
+import { getSignaturePreview } from "@/lib/api/signature"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
 
@@ -98,8 +99,8 @@ export default function EmailTemplatesPage() {
     const deleteTemplate = useDeleteEmailTemplate()
 
     // Signature hooks - use new hooks from updated use-signature.ts
-    const { data: signatureData } = useSignature()
-    const updateSignatureMutation = useUpdateSignature()
+    const { data: signatureData } = useUserSignature()
+    const updateSignatureMutation = useUpdateUserSignature()
 
     // Get full template details when editing
     const { data: fullTemplate } = useEmailTemplate(editingTemplate?.id || null)
@@ -218,27 +219,22 @@ export default function EmailTemplatesPage() {
     const handleCopySignatureHtml = async () => {
         // Fetch fresh preview from backend
         try {
-            const response = await fetch('/api/auth/me/signature/preview', {
-                credentials: 'include',
-            })
-            if (response.ok) {
-                const data = await response.json()
-                const html = data.html || ""
+            const data = await getSignaturePreview()
+            const html = data.html || ""
 
-                try {
-                    await navigator.clipboard.writeText(html)
-                    // Would normally show a toast here
-                    alert("Signature HTML copied to clipboard!")
-                } catch {
-                    // Fallback for older browsers
-                    const textarea = document.createElement("textarea")
-                    textarea.value = html
-                    document.body.appendChild(textarea)
-                    textarea.select()
-                    document.execCommand("copy")
-                    document.body.removeChild(textarea)
-                    alert("Signature HTML copied to clipboard!")
-                }
+            try {
+                await navigator.clipboard.writeText(html)
+                // Would normally show a toast here
+                alert("Signature HTML copied to clipboard!")
+            } catch {
+                // Fallback for older browsers
+                const textarea = document.createElement("textarea")
+                textarea.value = html
+                document.body.appendChild(textarea)
+                textarea.select()
+                document.execCommand("copy")
+                document.body.removeChild(textarea)
+                alert("Signature HTML copied to clipboard!")
             }
         } catch (error) {
             console.error("Failed to copy signature:", error)

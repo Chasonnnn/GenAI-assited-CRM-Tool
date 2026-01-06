@@ -102,8 +102,11 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
     This is the PRIMARY auth dependency for most endpoints.
     Returns a UserSession with all context needed for authorization.
 
+    CRITICAL: This validates the session exists in the database,
+    enabling session revocation. JWTs alone cannot be revoked.
+
     Raises:
-        HTTPException 401: Not authenticated
+        HTTPException 401: Not authenticated or session revoked
         HTTPException 403: No membership or unknown role
     """
     cached = getattr(request.state, "user_session", None)
@@ -114,21 +117,37 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
     from app.db.models import Membership
     from app.db.enums import Role
     from app.schemas.auth import UserSession
+    from app.services import session_service
 
     # Parse JWT to get MFA status before calling get_current_user
     token = request.cookies.get(COOKIE_NAME)
     mfa_verified = False
     mfa_required = True
+    token_hash = None
 
     if token:
         try:
             payload = decode_session_token(token)
             mfa_verified = payload.get("mfa_verified", False)
             mfa_required = payload.get("mfa_required", True)
+            token_hash = session_service.hash_token(token)
         except Exception:
             pass  # Let get_current_user handle the error
 
     user = get_current_user(request, db)
+
+    # Session table validation (enables revocation)
+    # Skip in dev bypass mode since sessions aren't created there
+    if not settings.DEV_BYPASS_AUTH:
+        if not token_hash:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+
+        db_session = session_service.get_session_by_token_hash(db, token_hash)
+        if not db_session:
+            raise HTTPException(status_code=401, detail="Session revoked or expired")
+
+        # Update last_active_at (throttled to reduce DB writes)
+        session_service.update_last_active(db, db_session)
 
     membership = db.query(Membership).filter(Membership.user_id == user.id).first()
 
@@ -152,6 +171,7 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
         display_name=user.display_name,
         mfa_verified=mfa_verified,
         mfa_required=mfa_required,
+        token_hash=token_hash,
     )
 
     # Skip MFA check in dev bypass mode

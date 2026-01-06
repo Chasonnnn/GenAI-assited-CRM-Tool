@@ -6,11 +6,13 @@ import api from '@/lib/api';
 const DEV_BYPASS_AUTH = process.env.NEXT_PUBLIC_DEV_BYPASS_AUTH === 'true';
 
 // Interface matches backend MeResponse schema
-interface User {
+export interface User {
     user_id: string;
     email: string;
     display_name: string;
     avatar_url?: string;
+    phone?: string;
+    title?: string;
     org_id: string;
     org_name: string;
     org_slug: string;

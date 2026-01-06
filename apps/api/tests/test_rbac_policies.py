@@ -49,6 +49,15 @@ async def _client_with_revoked_permission(db, test_org, permission: P) -> AsyncC
         mfa_verified=True,
         mfa_required=True,
     )
+    from app.services import session_service
+
+    session_service.create_session(
+        db=db,
+        user_id=user.id,
+        org_id=test_org.id,
+        token=token,
+        request=None,
+    )
 
     def override_get_db():
         yield db

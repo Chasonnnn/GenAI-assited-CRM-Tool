@@ -192,11 +192,12 @@ class TestAuth:
 
 
 @pytest.fixture(scope="function")
-def test_auth(test_user, test_org):
+def test_auth(db, test_user, test_org):
     """Create JWT token for test user."""
     from app.core.security import create_session_token
     from app.core.deps import COOKIE_NAME
     from app.db.enums import Role
+    from app.services import session_service
 
     token = create_session_token(
         user_id=test_user.id,
@@ -205,6 +206,13 @@ def test_auth(test_user, test_org):
         token_version=test_user.token_version,
         mfa_verified=True,
         mfa_required=True,
+    )
+    session_service.create_session(
+        db=db,
+        user_id=test_user.id,
+        org_id=test_org.id,
+        token=token,
+        request=None,
     )
     return TestAuth(
         user=test_user,

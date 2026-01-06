@@ -153,7 +153,7 @@ def _build_performance_context(
 
         lines = [
             "\n## Team Performance (Last 90 Days)",
-            f"Mode: Cohort (cases created in the period)",
+            "Mode: Cohort (cases created in the period)",
             "",
             "| Team Member | Cases | Contacted | Qualified | Matched | Applied | Lost | Conv. Rate |",
             "|-------------|-------|-----------|-----------|---------|---------|------|------------|",

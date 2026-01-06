@@ -75,3 +75,6 @@ reportlab==4.4.0
 pyotp==2.9.0
 duo_universal==2.2.0
 playwright==1.49.1
+
+# Session tracking (user agent parsing)
+user-agents==2.2.0

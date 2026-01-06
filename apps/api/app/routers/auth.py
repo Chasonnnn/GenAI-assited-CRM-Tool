@@ -1,14 +1,20 @@
 """Authentication router with Google OAuth and session management."""
 
-from urllib.parse import urlencode
+import io
+import re
+from urllib.parse import urlencode, urlparse
+from uuid import UUID as UUIDType
 
-from fastapi import APIRouter, Depends, Request, Response
+import boto3
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel
+from PIL import Image
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import COOKIE_NAME, get_current_session, get_db, require_csrf_header
+from app.core.rate_limit import limiter
 from app.core.security import (
     create_oauth_state_payload,
     generate_oauth_nonce,
@@ -16,17 +22,14 @@ from app.core.security import (
     parse_oauth_state_payload,
     verify_oauth_state,
 )
-from app.schemas.auth import MeResponse, UserSession
+from app.schemas.auth import MeResponse, SessionResponse, UserSession
+from app.services import org_service, session_service, signature_template_service, user_service
 from app.services.auth_service import resolve_user_and_create_session
-from app.services import org_service, user_service
 from app.services.google_oauth import (
     exchange_code_for_tokens,
     validate_email_domain,
     verify_id_token,
 )
-
-# Rate limiting
-from app.core.rate_limit import limiter
 
 router = APIRouter()
 
@@ -217,6 +220,8 @@ def get_me(
         email=user.email,
         display_name=user.display_name,
         avatar_url=user.avatar_url,
+        phone=user.phone,
+        title=user.title,
         org_id=org.id,
         org_name=org.name,
         org_slug=org.slug,
@@ -231,6 +236,8 @@ def get_me(
 
 class UpdateProfileRequest(BaseModel):
     display_name: str | None = None
+    phone: str | None = None
+    title: str | None = None
 
 
 @router.patch("/me", dependencies=[Depends(require_csrf_header)])
@@ -242,7 +249,7 @@ def update_me(
     """
     Update current user's profile.
 
-    Updateable fields: display_name
+    Updateable fields: display_name, phone, title
     """
     user = user_service.get_user_by_id(db, session.user_id)
     org = org_service.get_org_by_id(db, session.org_id)
@@ -250,6 +257,8 @@ def update_me(
         db,
         session.user_id,
         display_name=body.display_name,
+        phone=body.phone,
+        title=body.title,
     )
 
     return MeResponse(
@@ -257,23 +266,276 @@ def update_me(
         email=user.email,
         display_name=user.display_name,
         avatar_url=user.avatar_url,
+        phone=user.phone,
+        title=user.title,
         org_id=org.id,
         org_name=org.name,
         org_slug=org.slug,
         org_timezone=org.timezone,
         role=session.role,
         ai_enabled=org.ai_enabled if org else False,
+        mfa_enabled=user.mfa_enabled,
+        mfa_required=session.mfa_required,
+        mfa_verified=session.mfa_verified,
     )
+
+
+# =============================================================================
+# Sessions Management
+# =============================================================================
+
+
+@router.get("/me/sessions", response_model=list[SessionResponse])
+def list_my_sessions(
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> list[SessionResponse]:
+    """
+    List all active sessions for the current user.
+
+    Returns session info with is_current flag to identify which session
+    belongs to the current request.
+    """
+    sessions = session_service.list_user_sessions(
+        db=db,
+        user_id=session.user_id,
+        org_id=session.org_id,
+        current_token_hash=session.token_hash,
+    )
+    return [SessionResponse(**s) for s in sessions]
+
+
+@router.delete(
+    "/me/sessions/{session_id}",
+    dependencies=[Depends(require_csrf_header)],
+)
+def revoke_session(
+    session_id: UUIDType,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """
+    Revoke a specific session (logout that device).
+
+    Cannot revoke the current session - use /logout instead.
+    """
+    # Check if trying to revoke current session
+    target_session = session_service.get_session_by_token_hash(
+        db, session.token_hash or ""
+    )
+    if target_session and target_session.id == session_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot revoke current session. Use /logout instead.",
+        )
+
+    success = session_service.revoke_session(
+        db=db,
+        session_id=session_id,
+        user_id=session.user_id,
+        org_id=session.org_id,
+    )
+
+    if not success:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    return {"status": "revoked"}
+
+
+@router.delete(
+    "/me/sessions",
+    dependencies=[Depends(require_csrf_header)],
+)
+def revoke_all_sessions(
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """
+    Revoke all other sessions (logout all other devices).
+
+    Keeps the current session active.
+    """
+    count = session_service.revoke_all_user_sessions(
+        db=db,
+        user_id=session.user_id,
+        org_id=session.org_id,
+        except_token_hash=session.token_hash,
+    )
+
+    return {"status": "revoked", "count": count}
+
+
+# =============================================================================
+# Avatar Upload
+# =============================================================================
+
+AVATAR_MAX_SIZE = 2 * 1024 * 1024  # 2MB
+AVATAR_ALLOWED_TYPES = {"image/png", "image/jpeg", "image/webp"}
+AVATAR_MAX_DIMENSION = 400
+
+
+def _resize_avatar(file_content: bytes, content_type: str) -> bytes:
+    """Resize avatar to max 400x400, maintaining aspect ratio."""
+    img = Image.open(io.BytesIO(file_content))
+
+    # Convert to RGB if needed (for PNG with transparency)
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+
+    # Resize if needed
+    if img.width > AVATAR_MAX_DIMENSION or img.height > AVATAR_MAX_DIMENSION:
+        img.thumbnail((AVATAR_MAX_DIMENSION, AVATAR_MAX_DIMENSION), Image.Resampling.LANCZOS)
+
+    # Save to bytes
+    output = io.BytesIO()
+    format_map = {"image/png": "PNG", "image/jpeg": "JPEG", "image/webp": "WEBP"}
+    img_format = format_map.get(content_type, "JPEG")
+    img.save(output, format=img_format, quality=90)
+    output.seek(0)
+    return output.read()
+
+
+def _delete_old_avatar(avatar_url: str):
+    """Background task to delete old avatar from S3."""
+    if not avatar_url or "avatars/" not in avatar_url:
+        return
+
+    try:
+        from app.core.config import settings as app_settings
+        # Extract key from URL
+        key = avatar_url.split("/avatars/")[-1]
+        key = f"avatars/{key}"
+
+        s3 = boto3.client(
+            "s3",
+            region_name=getattr(app_settings, "S3_REGION", "us-east-1"),
+            aws_access_key_id=getattr(app_settings, "AWS_ACCESS_KEY_ID", None),
+            aws_secret_access_key=getattr(app_settings, "AWS_SECRET_ACCESS_KEY", None),
+        )
+        bucket = getattr(app_settings, "S3_BUCKET", "crm-attachments")
+        s3.delete_object(Bucket=bucket, Key=key)
+    except Exception:
+        pass  # Best effort
+
+
+class AvatarResponse(BaseModel):
+    avatar_url: str | None
+
+
+@router.post(
+    "/me/avatar",
+    response_model=AvatarResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+async def upload_avatar(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> AvatarResponse:
+    """
+    Upload a new avatar image.
+
+    - Max size: 2MB
+    - Allowed types: PNG, JPEG, WebP
+    - Will be resized to max 400x400
+    """
+    # Validate content type
+    if file.content_type not in AVATAR_ALLOWED_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed: {', '.join(AVATAR_ALLOWED_TYPES)}",
+        )
+
+    # Read and validate size
+    content = await file.read()
+    if len(content) > AVATAR_MAX_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File too large. Maximum size: {AVATAR_MAX_SIZE // 1024 // 1024}MB",
+        )
+
+    # Resize image
+    try:
+        resized_content = _resize_avatar(content, file.content_type)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid image file")
+
+    # Upload to S3
+    import uuid as uuid_module
+    from app.core.config import settings as app_settings
+
+    file_id = str(uuid_module.uuid4())
+    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
+    key = f"avatars/{session.org_id}/{session.user_id}/{file_id}.{ext}"
+
+    s3 = boto3.client(
+        "s3",
+        region_name=getattr(app_settings, "S3_REGION", "us-east-1"),
+        aws_access_key_id=getattr(app_settings, "AWS_ACCESS_KEY_ID", None),
+        aws_secret_access_key=getattr(app_settings, "AWS_SECRET_ACCESS_KEY", None),
+    )
+    bucket = getattr(app_settings, "S3_BUCKET", "crm-attachments")
+
+    s3.put_object(
+        Bucket=bucket,
+        Key=key,
+        Body=resized_content,
+        ContentType=file.content_type,
+    )
+
+    # Get public URL
+    s3_url_style = getattr(app_settings, "S3_URL_STYLE", "path")
+    if s3_url_style == "virtual":
+        avatar_url = f"https://{bucket}.s3.amazonaws.com/{key}"
+    else:
+        avatar_url = f"https://s3.amazonaws.com/{bucket}/{key}"
+
+    # Get old avatar URL for deletion
+    user = user_service.get_user_by_id(db, session.user_id)
+    old_avatar_url = user.avatar_url
+
+    # Update user record
+    user.avatar_url = avatar_url
+    db.commit()
+
+    # Delete old avatar in background (safe: upload succeeded, DB updated)
+    if old_avatar_url:
+        background_tasks.add_task(_delete_old_avatar, old_avatar_url)
+
+    return AvatarResponse(avatar_url=avatar_url)
+
+
+@router.delete(
+    "/me/avatar",
+    response_model=AvatarResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+def delete_avatar(
+    background_tasks: BackgroundTasks,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> AvatarResponse:
+    """Delete current user's avatar."""
+    user = user_service.get_user_by_id(db, session.user_id)
+    old_avatar_url = user.avatar_url
+
+    if not old_avatar_url:
+        raise HTTPException(status_code=404, detail="No avatar to delete")
+
+    # Clear avatar URL in DB first
+    user.avatar_url = None
+    db.commit()
+
+    # Delete from S3 in background
+    background_tasks.add_task(_delete_old_avatar, old_avatar_url)
+
+    return AvatarResponse(avatar_url=None)
 
 
 # =============================================================================
 # Email Signature (User Social Links Only)
 # =============================================================================
-
-import re
-from urllib.parse import urlparse
-from pydantic import field_validator
-from app.services import signature_template_service
 
 # URL validation pattern
 HTTPS_URL_PATTERN = re.compile(r"^https://")
@@ -424,11 +686,16 @@ def logout(
     db: Session = Depends(get_db),
 ):
     """
-    Clear session cookie and log logout event.
+    Clear session cookie, delete session from DB, and log logout event.
 
     Requires X-Requested-With header for CSRF protection.
     """
-    # Audit log before clearing cookie
+    # Delete session from database (enables revocation)
+    token = request.cookies.get(COOKIE_NAME)
+    if token:
+        session_service.delete_session_by_token(db, token)
+
+    # Audit log
     from app.services import audit_service
 
     audit_service.log_logout(

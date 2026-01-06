@@ -10,7 +10,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.db.enums import WorkflowActionType
-from app.db.models import Case, User, Queue, PipelineStage
+from app.db.models import User, Queue, PipelineStage
 
 
 def build_action_preview(
