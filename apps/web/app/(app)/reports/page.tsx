@@ -797,17 +797,15 @@ export default function ReportsPage() {
                             isLoading={performanceLoading}
                             isError={performanceError}
                         />
-                        <div className="hidden lg:block" />
+                        <TeamPerformanceTable
+                            data={performanceData?.data}
+                            unassigned={performanceData?.unassigned}
+                            isLoading={performanceLoading}
+                            isError={performanceError}
+                            asOf={performanceData?.as_of}
+                        />
                     </div>
-                    <TeamPerformanceTable
-                        data={performanceData?.data}
-                        unassigned={performanceData?.unassigned}
-                        isLoading={performanceLoading}
-                        isError={performanceError}
-                        asOf={performanceData?.as_of}
-                    />
                 </div>
             </div>
         </div>
     )
-}
