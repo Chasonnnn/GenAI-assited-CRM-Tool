@@ -168,5 +168,22 @@ async def send_invite_email(
         )
     else:
         logger.error(f"Failed to send invite email: {result.get('error')}")
+        # Create system alert for failed invite email
+        try:
+            from app.services import alert_service
+            from app.db.enums import AlertType, AlertSeverity
+
+            alert_service.create_or_update_alert(
+                db=db,
+                org_id=invite.organization_id,
+                alert_type=AlertType.INVITE_SEND_FAILED,
+                severity=AlertSeverity.ERROR,
+                title="Invite email failed to send",
+                message=result.get("error", "Unknown error")[:500],
+                integration_key="gmail",
+                error_class="EmailSendError",
+            )
+        except Exception as alert_err:
+            logger.warning(f"Failed to create alert for invite failure: {alert_err}")
 
     return result

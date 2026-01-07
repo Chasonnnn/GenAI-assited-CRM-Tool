@@ -272,6 +272,8 @@ async def request_transcription(
         interview_attachment.transcription_status = "failed"
         interview_attachment.transcription_error = str(e)[:500]
         db.flush()
+        # Create system alert for transcription failure
+        _create_transcription_alert(db, interview.organization_id, str(e), type(e).__name__)
         raise
 
     except Exception as e:
@@ -279,6 +281,8 @@ async def request_transcription(
         interview_attachment.transcription_status = "failed"
         interview_attachment.transcription_error = f"Unexpected error: {str(e)}"[:500]
         db.flush()
+        # Create system alert for transcription failure
+        _create_transcription_alert(db, interview.organization_id, str(e), type(e).__name__)
         raise TranscriptionError(f"Transcription failed: {str(e)}")
 
 
@@ -298,3 +302,25 @@ def get_transcription_status(
         "result": None,  # Result is written to interview transcript
         "error": interview_attachment.transcription_error,
     }
+
+
+def _create_transcription_alert(
+    db: Session, org_id: UUID, error_msg: str, error_class: str
+) -> None:
+    """Create system alert for transcription failure."""
+    try:
+        from app.services import alert_service
+        from app.db.enums import AlertType, AlertSeverity
+
+        alert_service.create_or_update_alert(
+            db=db,
+            org_id=org_id,
+            alert_type=AlertType.TRANSCRIPTION_FAILED,
+            severity=AlertSeverity.ERROR,
+            title="Interview transcription failed",
+            message=error_msg[:500],
+            integration_key="openai_whisper",
+            error_class=error_class,
+        )
+    except Exception as alert_err:
+        logger.warning(f"Failed to create transcription alert: {alert_err}")
