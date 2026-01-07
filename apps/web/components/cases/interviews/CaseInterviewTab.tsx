@@ -9,8 +9,7 @@ import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { RichTextEditor } from "@/components/rich-text-editor"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
     PlusIcon,
     PhoneIcon,
@@ -22,9 +21,8 @@ import {
     MessageSquareIcon,
     PaperclipIcon,
     ChevronLeftIcon,
+    ChevronDownIcon,
     MoreVerticalIcon,
-    PanelRightOpenIcon,
-    PanelRightCloseIcon,
     TrashIcon,
     EditIcon,
     HistoryIcon,
@@ -41,7 +39,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
-import { formatDistanceToNow } from "date-fns"
 import {
     useInterviews,
     useInterview,
@@ -51,6 +48,7 @@ import {
     useUpdateInterview,
     useDeleteInterview,
     useCreateInterviewNote,
+    useUpdateInterviewNote,
     useDeleteInterviewNote,
     useUploadInterviewAttachment,
     useRequestTranscription,
@@ -67,7 +65,7 @@ import type {
 } from "@/lib/api/interviews"
 import { useAuth } from "@/lib/auth-context"
 import { TranscriptEditor, isTranscriptEmpty } from "./TranscriptEditor"
-import { TranscriptViewer } from "./TranscriptViewer"
+import { InterviewWithComments } from "./InterviewWithComments"
 
 interface CaseInterviewTabProps {
     caseId: string
@@ -114,12 +112,6 @@ function toLocalDateTimeInput(dateString: string): string {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-// Get initials from name
-function getInitials(name: string | null): string {
-    if (!name) return "?"
-    return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)
-}
-
 // Format interview type for display
 function formatInterviewType(type: InterviewType): string {
     const labels: Record<InterviewType, string> = {
@@ -133,12 +125,12 @@ function formatInterviewType(type: InterviewType): string {
 export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
     const { user } = useAuth()
     const [selectedId, setSelectedId] = React.useState<string | null>(null)
-    const [notesCollapsed, setNotesCollapsed] = React.useState(false)
     const [editorOpen, setEditorOpen] = React.useState(false)
     const [editingInterview, setEditingInterview] = React.useState<InterviewRead | null>(null)
     const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
     const [interviewToDelete, setInterviewToDelete] = React.useState<InterviewRead | null>(null)
     const [versionHistoryOpen, setVersionHistoryOpen] = React.useState(false)
+    const [attachmentsDialogOpen, setAttachmentsDialogOpen] = React.useState(false)
 
     // Form state
     const [formType, setFormType] = React.useState<InterviewType>("phone")
@@ -158,6 +150,7 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
     const updateInterviewMutation = useUpdateInterview()
     const deleteInterviewMutation = useDeleteInterview()
     const createNoteMutation = useCreateInterviewNote()
+    const updateNoteMutation = useUpdateInterviewNote()
     const deleteNoteMutation = useDeleteInterviewNote()
     const uploadAttachmentMutation = useUploadInterviewAttachment()
     const requestTranscriptionMutation = useRequestTranscription()
@@ -165,7 +158,7 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
     // User permissions
     const canEdit = user?.role && ["case_manager", "admin", "developer"].includes(user.role)
     const canDelete = user?.role && ["admin", "developer"].includes(user.role)
-    const canDeleteAnyNote = user?.role && ["admin", "developer"].includes(user.role)
+    const canEditNotes = !!user
 
     const [uploadError, setUploadError] = React.useState<string | null>(null)
     const [transcribingAttachmentId, setTranscribingAttachmentId] = React.useState<string | null>(null)
@@ -252,48 +245,41 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
         }
     }
 
-    const handleAddNote = async (html: string) => {
-        if (!selectedId || !html || html === "<p></p>") return
-        try {
-            await createNoteMutation.mutateAsync({
-                interviewId: selectedId,
-                data: { content: html },
-            })
-            toast.success("Note added")
-        } catch {
-            toast.error("Failed to add note")
-        }
-    }
-
-    const handleAddAnchoredNote = async (selection: { text: string; commentId: string }) => {
-        if (!selectedId || !selectedInterview) return
-
-        // Create the note with the comment ID and anchor text
+    // Note handlers for InterviewWithComments
+    const handleAddComment = async (data: {
+        content: string
+        commentId: string
+        anchorText: string
+        parentId?: string
+    }) => {
+        if (!selectedId) return
         try {
             await createNoteMutation.mutateAsync({
                 interviewId: selectedId,
                 data: {
-                    content: `<p>Note about: "${selection.text}"</p>`,
-                    comment_id: selection.commentId,
-                    anchor_text: selection.text,
+                    content: data.content,
+                    comment_id: data.commentId || undefined,
+                    anchor_text: data.anchorText || undefined,
+                    parent_id: data.parentId,
                 },
             })
-            toast.success("Anchored note created! Edit the note to add your comments.")
+            toast.success(data.commentId ? "Comment added" : "Note added")
         } catch {
-            toast.error("Failed to create anchored note")
+            toast.error("Failed to add comment")
         }
     }
 
-    const handleNoteClick = (noteId: string) => {
-        // Scroll the note into view in the sidebar
-        const noteElement = document.querySelector(`[data-note-id="${noteId}"]`)
-        if (noteElement) {
-            noteElement.scrollIntoView({ behavior: "smooth", block: "center" })
-            // Add a brief highlight effect
-            noteElement.classList.add("ring-2", "ring-primary")
-            setTimeout(() => {
-                noteElement.classList.remove("ring-2", "ring-primary")
-            }, 2000)
+    const handleUpdateNote = async (noteId: string, content: string) => {
+        if (!selectedId) return
+        try {
+            await updateNoteMutation.mutateAsync({
+                interviewId: selectedId,
+                noteId,
+                data: { content },
+            })
+            toast.success("Note updated")
+        } catch {
+            toast.error("Failed to update note")
         }
     }
 
@@ -450,8 +436,6 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
                             interview={selectedInterview}
                             notes={notes || []}
                             attachments={attachments || []}
-                            notesCollapsed={notesCollapsed}
-                            onToggleNotes={() => setNotesCollapsed(!notesCollapsed)}
                             onEdit={() => {
                                 setEditingInterview(selectedInterview)
                                 setEditorOpen(true)
@@ -461,15 +445,13 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
                                 setDeleteDialogOpen(true)
                             }}
                             onVersionHistory={() => setVersionHistoryOpen(true)}
-                            onAddNote={handleAddNote}
-                            onAddAnchoredNote={handleAddAnchoredNote}
+                            onAttachments={() => setAttachmentsDialogOpen(true)}
+                            onAddNote={handleAddComment}
+                            onUpdateNote={handleUpdateNote}
                             onDeleteNote={handleDeleteNote}
-                            onNoteClick={handleNoteClick}
                             canEdit={!!canEdit}
+                            canEditNotes={canEditNotes}
                             canDelete={!!canDelete}
-                            canDeleteAnyNote={!!canDeleteAnyNote}
-                            isAddingNote={createNoteMutation.isPending}
-                            currentUserId={user?.user_id}
                             canUpload={!!canEdit}
                             onUploadFiles={handleUploadFiles}
                             uploadError={uploadError}
@@ -477,6 +459,8 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
                             isUploading={uploadAttachmentMutation.isPending}
                             onRequestTranscription={handleRequestTranscription}
                             transcribingAttachmentId={transcribingAttachmentId}
+                            attachmentsDialogOpen={attachmentsDialogOpen}
+                            onAttachmentsDialogOpenChange={setAttachmentsDialogOpen}
                         />
                     ) : (
                         <div className="flex-1 flex items-center justify-center text-muted-foreground">
@@ -493,71 +477,39 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
             <div className="lg:hidden">
                 {selectedId ? (
                     <Card className="overflow-hidden">
-                        <div className="p-2 border-b">
+                        <div className="p-2 border-b flex items-center justify-between">
                             <Button variant="ghost" size="sm" onClick={() => setSelectedId(null)}>
                                 <ChevronLeftIcon className="h-4 w-4 mr-1" />
                                 Back to list
                             </Button>
+                            {selectedInterview && (
+                                <InterviewHeaderActions
+                                    interview={selectedInterview}
+                                    onEdit={() => {
+                                        setEditingInterview(selectedInterview)
+                                        setEditorOpen(true)
+                                    }}
+                                    onDelete={() => {
+                                        setInterviewToDelete(selectedInterview)
+                                        setDeleteDialogOpen(true)
+                                    }}
+                                    onVersionHistory={() => setVersionHistoryOpen(true)}
+                                    canEdit={!!canEdit}
+                                    canDelete={!!canDelete}
+                                />
+                            )}
                         </div>
                         {selectedInterview && (
-                            <Tabs defaultValue="transcript">
-                                <TabsList className="w-full justify-start px-4 pt-2">
-                                    <TabsTrigger value="transcript">Transcript</TabsTrigger>
-                                    <TabsTrigger value="notes">Notes ({notes?.length || 0})</TabsTrigger>
-                                    <TabsTrigger value="files">Files ({attachments?.length || 0})</TabsTrigger>
-                                </TabsList>
-                                <TabsContent value="transcript" className="p-4">
-                                    <InterviewHeader
-                                        interview={selectedInterview}
-                                        onEdit={() => {
-                                            setEditingInterview(selectedInterview)
-                                            setEditorOpen(true)
-                                        }}
-                                        onDelete={() => {
-                                            setInterviewToDelete(selectedInterview)
-                                            setDeleteDialogOpen(true)
-                                        }}
-                                        onVersionHistory={() => setVersionHistoryOpen(true)}
-                                        canEdit={!!canEdit}
-                                        canDelete={!!canDelete}
-                                    />
-                                    <div className="mt-4">
-                                        {selectedInterview.transcript_html || selectedInterview.transcript_json ? (
-                                            <TranscriptViewer
-                                                transcriptHtml={selectedInterview.transcript_html}
-                                                transcriptJson={selectedInterview.transcript_json}
-                                                notes={notes || []}
-                                                onAddNote={handleAddAnchoredNote}
-                                                onNoteClick={handleNoteClick}
-                                            />
-                                        ) : (
-                                            <p className="text-muted-foreground text-sm">No transcript recorded</p>
-                                        )}
-                                    </div>
-                                </TabsContent>
-                                <TabsContent value="notes" className="p-4">
-                                    <NotesSection
-                                        notes={notes || []}
-                                        onAddNote={handleAddNote}
-                                        onDeleteNote={handleDeleteNote}
-                                        isAddingNote={createNoteMutation.isPending}
-                                        currentUserId={user?.user_id}
-                                        canDeleteAnyNote={!!canDeleteAnyNote}
-                                    />
-                                </TabsContent>
-                                <TabsContent value="files" className="p-4">
-                                    <AttachmentsSection
-                                        attachments={attachments || []}
-                                        canUpload={!!canEdit}
-                                        onUploadFiles={handleUploadFiles}
-                                        uploadError={uploadError}
-                                        uploadInputRef={uploadInputRef}
-                                        isUploading={uploadAttachmentMutation.isPending}
-                                        onRequestTranscription={handleRequestTranscription}
-                                        transcribingAttachmentId={transcribingAttachmentId}
-                                    />
-                                </TabsContent>
-                            </Tabs>
+                            <div className="h-[calc(100vh-200px)]">
+                                <InterviewWithComments
+                                    interview={selectedInterview}
+                                    notes={notes || []}
+                                    onAddNote={handleAddComment}
+                                    onUpdateNote={handleUpdateNote}
+                                    onDeleteNote={handleDeleteNote}
+                                    canEdit={canEditNotes}
+                                />
+                            </div>
                         )}
                     </Card>
                 ) : (
@@ -709,20 +661,16 @@ interface InterviewDetailViewProps {
     interview: InterviewRead
     notes: InterviewNoteRead[]
     attachments: InterviewAttachmentRead[]
-    notesCollapsed: boolean
-    onToggleNotes: () => void
     onEdit: () => void
     onDelete: () => void
     onVersionHistory: () => void
-    onAddNote: (html: string) => void
-    onAddAnchoredNote: (selection: { text: string; commentId: string }) => void
-    onDeleteNote: (noteId: string) => void
-    onNoteClick: (noteId: string) => void
+    onAttachments: () => void
+    onAddNote: (data: { content: string; commentId: string; anchorText: string; parentId?: string }) => Promise<void>
+    onUpdateNote: (noteId: string, content: string) => Promise<void>
+    onDeleteNote: (noteId: string) => Promise<void>
     canEdit: boolean
+    canEditNotes: boolean
     canDelete: boolean
-    canDeleteAnyNote: boolean
-    isAddingNote: boolean
-    currentUserId?: string
     canUpload: boolean
     onUploadFiles: (files: FileList | null) => void
     uploadError: string | null
@@ -730,26 +678,24 @@ interface InterviewDetailViewProps {
     isUploading: boolean
     onRequestTranscription: (attachmentId: string) => void
     transcribingAttachmentId: string | null
+    attachmentsDialogOpen: boolean
+    onAttachmentsDialogOpenChange: (open: boolean) => void
 }
 
 function InterviewDetailView({
     interview,
     notes,
     attachments,
-    notesCollapsed,
-    onToggleNotes,
     onEdit,
     onDelete,
     onVersionHistory,
+    onAttachments,
     onAddNote,
-    onAddAnchoredNote,
+    onUpdateNote,
     onDeleteNote,
-    onNoteClick,
     canEdit,
+    canEditNotes,
     canDelete,
-    canDeleteAnyNote,
-    isAddingNote,
-    currentUserId,
     canUpload,
     onUploadFiles,
     uploadError,
@@ -757,113 +703,67 @@ function InterviewDetailView({
     isUploading,
     onRequestTranscription,
     transcribingAttachmentId,
+    attachmentsDialogOpen,
+    onAttachmentsDialogOpenChange,
 }: InterviewDetailViewProps) {
     return (
-        <div className="flex flex-col h-full relative">
+        <div className="flex flex-col h-full">
             {/* Header */}
             <div className="p-4 border-b shrink-0">
                 <InterviewHeader
                     interview={interview}
+                    attachmentsCount={attachments.length}
                     onEdit={onEdit}
                     onDelete={onDelete}
                     onVersionHistory={onVersionHistory}
+                    onAttachments={onAttachments}
                     canEdit={canEdit}
                     canDelete={canDelete}
                 />
             </div>
 
-            {/* Content */}
-            <div className={cn(
-                "flex-1 grid transition-all duration-200 overflow-hidden",
-                notesCollapsed ? "grid-cols-1" : "grid-cols-[1fr_320px]"
-            )}>
-                {/* Transcript */}
-                <div className="overflow-auto p-4 border-r space-y-6">
-                    <div>
-                        {interview.transcript_html || interview.transcript_json ? (
-                            <TranscriptViewer
-                                transcriptHtml={interview.transcript_html}
-                                transcriptJson={interview.transcript_json}
-                                notes={notes}
-                                onAddNote={onAddAnchoredNote}
-                                onNoteClick={onNoteClick}
-                            />
-                        ) : (
-                            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                                <FileTextIcon className="h-12 w-12 mb-3 opacity-50" />
-                                <p>No transcript recorded</p>
-                                {canEdit && (
-                                    <Button variant="outline" size="sm" className="mt-3" onClick={onEdit}>
-                                        Add Transcript
-                                    </Button>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                    <div className="border-t pt-4">
-                        <AttachmentsSection
-                            attachments={attachments}
-                            canUpload={canUpload}
-                            onUploadFiles={onUploadFiles}
-                            uploadError={uploadError}
-                            uploadInputRef={uploadInputRef}
-                            isUploading={isUploading}
-                            onRequestTranscription={onRequestTranscription}
-                            transcribingAttachmentId={transcribingAttachmentId}
-                        />
-                    </div>
-                </div>
-
-                {/* Notes Sidebar */}
-                {!notesCollapsed && (
-                    <div className="bg-muted/30 overflow-auto flex flex-col">
-                        <div className="p-3 border-b bg-background/50 shrink-0">
-                            <div className="flex items-center justify-between">
-                                <h4 className="font-medium text-sm">Notes ({notes.length})</h4>
-                            </div>
-                        </div>
-                        <div className="flex-1 overflow-auto">
-                            <NotesSection
-                                notes={notes}
-                                onAddNote={onAddNote}
-                                onDeleteNote={onDeleteNote}
-                                isAddingNote={isAddingNote}
-                                currentUserId={currentUserId}
-                                canDeleteAnyNote={canDeleteAnyNote}
-                                compact
-                            />
-                        </div>
-                    </div>
-                )}
+            {/* Content - Interview with comments */}
+            <div className="flex-1 overflow-hidden">
+                <InterviewWithComments
+                    interview={interview}
+                    notes={notes}
+                    onAddNote={onAddNote}
+                    onUpdateNote={onUpdateNote}
+                    onDeleteNote={onDeleteNote}
+                    canEdit={canEditNotes}
+                    className="h-full"
+                />
             </div>
 
-            {/* Toggle Button */}
-            <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-2 top-16 h-8 w-8"
-                onClick={onToggleNotes}
-            >
-                {notesCollapsed ? (
-                    <PanelRightOpenIcon className="h-4 w-4" />
-                ) : (
-                    <PanelRightCloseIcon className="h-4 w-4" />
-                )}
-            </Button>
+            {/* Attachments Dialog */}
+            <AttachmentsDialog
+                open={attachmentsDialogOpen}
+                onOpenChange={onAttachmentsDialogOpenChange}
+                attachments={attachments}
+                canUpload={canUpload}
+                onUploadFiles={onUploadFiles}
+                uploadError={uploadError}
+                uploadInputRef={uploadInputRef}
+                isUploading={isUploading}
+                onRequestTranscription={onRequestTranscription}
+                transcribingAttachmentId={transcribingAttachmentId}
+            />
         </div>
     )
 }
 
 interface InterviewHeaderProps {
     interview: InterviewRead
+    attachmentsCount: number
     onEdit: () => void
     onDelete: () => void
     onVersionHistory: () => void
+    onAttachments: () => void
     canEdit: boolean
     canDelete: boolean
 }
 
-function InterviewHeader({ interview, onEdit, onDelete, onVersionHistory, canEdit, canDelete }: InterviewHeaderProps) {
+function InterviewHeader({ interview, attachmentsCount, onEdit, onDelete, onVersionHistory, onAttachments, canEdit, canDelete }: InterviewHeaderProps) {
     const Icon = INTERVIEW_TYPE_ICONS[interview.interview_type as InterviewType]
     const colorClass = INTERVIEW_TYPE_COLORS[interview.interview_type as InterviewType]
 
@@ -907,6 +807,15 @@ function InterviewHeader({ interview, onEdit, onDelete, onVersionHistory, canEdi
                             Edit
                         </DropdownMenuItem>
                     )}
+                    <DropdownMenuItem onClick={onAttachments}>
+                        <PaperclipIcon className="h-4 w-4 mr-2" />
+                        Attachments
+                        {attachmentsCount > 0 && (
+                            <Badge variant="secondary" className="ml-auto text-xs px-1.5 py-0">
+                                {attachmentsCount}
+                            </Badge>
+                        )}
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={onVersionHistory}>
                         <HistoryIcon className="h-4 w-4 mr-2" />
                         Version History
@@ -923,109 +832,42 @@ function InterviewHeader({ interview, onEdit, onDelete, onVersionHistory, canEdi
     )
 }
 
-interface NotesSectionProps {
-    notes: InterviewNoteRead[]
-    onAddNote: (html: string) => void
-    onDeleteNote: (noteId: string) => void
-    isAddingNote: boolean
-    currentUserId?: string
-    canDeleteAnyNote?: boolean
-    compact?: boolean
+interface InterviewHeaderActionsProps {
+    interview: InterviewRead
+    onEdit: () => void
+    onDelete: () => void
+    onVersionHistory: () => void
+    canEdit: boolean
+    canDelete: boolean
 }
 
-function NotesSection({
-    notes,
-    onAddNote,
-    onDeleteNote,
-    isAddingNote,
-    currentUserId,
-    canDeleteAnyNote,
-    compact,
-}: NotesSectionProps) {
+function InterviewHeaderActions({ onEdit, onDelete, onVersionHistory, canEdit, canDelete }: InterviewHeaderActionsProps) {
     return (
-        <div className={cn("space-y-4", compact ? "p-3" : "")}>
-            <div className={cn(compact ? "" : "rounded-lg border border-border bg-muted/30 p-4")}>
-                <RichTextEditor
-                    placeholder="Add a note..."
-                    onSubmit={onAddNote}
-                    submitLabel="Add"
-                    isSubmitting={isAddingNote}
-                />
-            </div>
-
-            {notes.length > 0 ? (
-                <div className="space-y-3">
-                    {notes.map((note) => (
-                        <div
-                            key={note.id}
-                            data-note-id={note.id}
-                            className="group rounded-lg border border-border bg-card p-3 transition-all hover:bg-accent/30"
-                        >
-                            <div className="flex items-start gap-2">
-                                <Avatar className="h-7 w-7 flex-shrink-0">
-                                    <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                                        {getInitials(note.author_name)}
-                                    </AvatarFallback>
-                                </Avatar>
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center justify-between gap-2">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs font-medium">{note.author_name}</span>
-                                            <span className="text-xs text-muted-foreground">
-                                                {formatDistanceToNow(new Date(note.created_at), { addSuffix: true })}
-                                            </span>
-                                        </div>
-                                        {(note.is_own || canDeleteAnyNote) && (
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                onClick={() => onDeleteNote(note.id)}
-                                            >
-                                                <TrashIcon className="h-3 w-3 text-muted-foreground hover:text-destructive" />
-                                            </Button>
-                                        )}
-                                    </div>
-                                    <div
-                                        className="mt-1 text-sm prose prose-sm max-w-none dark:prose-invert"
-                                        dangerouslySetInnerHTML={{ __html: note.content }}
-                                    />
-                                    {/* Show anchor indicator for notes with comment_id or anchor_status */}
-                                    {(note.comment_id || note.anchor_status) && (
-                                        <div className="mt-2 flex items-center gap-2">
-                                            {note.comment_id && !note.anchor_status && (
-                                                <Badge variant="outline" className="text-xs text-teal-600 border-teal-500/20 bg-teal-50 dark:bg-teal-950/30">
-                                                    <MessageSquareIcon className="h-3 w-3 mr-1" />
-                                                    Anchored
-                                                </Badge>
-                                            )}
-                                            {note.anchor_status === "valid" && (
-                                                <Badge variant="outline" className="text-xs text-green-600 border-green-500/20">
-                                                    Anchored
-                                                </Badge>
-                                            )}
-                                            {note.anchor_status === "approximate" && (
-                                                <Badge variant="outline" className="text-xs text-yellow-600 border-yellow-500/20">
-                                                    <AlertCircleIcon className="h-3 w-3 mr-1" />
-                                                    Approximate
-                                                </Badge>
-                                            )}
-                                            {note.anchor_status === "lost" && (
-                                                <Badge variant="outline" className="text-xs text-red-600 border-red-500/20">
-                                                    Text removed
-                                                </Badge>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">No notes yet</p>
-            )}
-        </div>
+        <DropdownMenu>
+            <DropdownMenuTrigger
+                className={buttonVariants({ variant: "ghost", size: "icon", className: "h-8 w-8" })}
+            >
+                <MoreVerticalIcon className="h-4 w-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+                {canEdit && (
+                    <DropdownMenuItem onClick={onEdit}>
+                        <EditIcon className="h-4 w-4 mr-2" />
+                        Edit
+                    </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={onVersionHistory}>
+                    <HistoryIcon className="h-4 w-4 mr-2" />
+                    Version History
+                </DropdownMenuItem>
+                {canDelete && (
+                    <DropdownMenuItem onClick={onDelete} className="text-destructive">
+                        <TrashIcon className="h-4 w-4 mr-2" />
+                        Delete
+                    </DropdownMenuItem>
+                )}
+            </DropdownMenuContent>
+        </DropdownMenu>
     )
 }
 
@@ -1149,6 +991,65 @@ function AttachmentsSection({
                 </div>
             )}
         </div>
+    )
+}
+
+interface AttachmentsDialogProps {
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    attachments: InterviewAttachmentRead[]
+    canUpload: boolean
+    onUploadFiles: (files: FileList | null) => void
+    uploadError: string | null
+    uploadInputRef: React.RefObject<HTMLInputElement | null>
+    isUploading: boolean
+    onRequestTranscription: (attachmentId: string) => void
+    transcribingAttachmentId: string | null
+}
+
+function AttachmentsDialog({
+    open,
+    onOpenChange,
+    attachments,
+    canUpload,
+    onUploadFiles,
+    uploadError,
+    uploadInputRef,
+    isUploading,
+    onRequestTranscription,
+    transcribingAttachmentId,
+}: AttachmentsDialogProps) {
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <PaperclipIcon className="h-5 w-5" />
+                        Attachments
+                        {attachments.length > 0 && (
+                            <Badge variant="secondary" className="text-xs">{attachments.length}</Badge>
+                        )}
+                    </DialogTitle>
+                </DialogHeader>
+                <div className="max-h-[60vh] overflow-auto py-2">
+                    <AttachmentsSection
+                        attachments={attachments}
+                        canUpload={canUpload}
+                        onUploadFiles={onUploadFiles}
+                        uploadError={uploadError}
+                        uploadInputRef={uploadInputRef}
+                        isUploading={isUploading}
+                        onRequestTranscription={onRequestTranscription}
+                        transcribingAttachmentId={transcribingAttachmentId}
+                    />
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>
+                        Close
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     )
 }
 

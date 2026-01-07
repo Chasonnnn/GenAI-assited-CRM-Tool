@@ -126,12 +126,20 @@ export interface InterviewNoteRead {
     content: string;
     transcript_version: number;
     comment_id: string | null;          // TipTap comment mark ID (stable anchor)
+    anchor_text: string | null;          // Anchor text for display
     anchor_start: number | null;         // Legacy: text offset start
     anchor_end: number | null;           // Legacy: text offset end
-    anchor_text: string | null;          // Original anchor text
     current_anchor_start: number | null; // Recalculated position
     current_anchor_end: number | null;   // Recalculated position
     anchor_status: AnchorStatus | null;  // 'valid', 'approximate', 'lost'
+    // Thread support
+    parent_id: string | null;
+    replies: InterviewNoteRead[];        // Nested replies
+    // Resolve support
+    resolved_at: string | null;
+    resolved_by_user_id: string | null;
+    resolved_by_name: string | null;
+    // Author
     author_user_id: string;
     author_name: string;
     is_own: boolean;
@@ -143,9 +151,10 @@ export interface InterviewNoteCreatePayload {
     content: string;
     transcript_version?: number;
     comment_id?: string;                 // TipTap comment mark ID (preferred)
+    anchor_text?: string;                // Anchor text for display
     anchor_start?: number;               // Legacy: text offset
     anchor_end?: number;                 // Legacy: text offset
-    anchor_text?: string;                // Original anchor text
+    parent_id?: string;                  // For replies
 }
 
 export interface InterviewNoteUpdatePayload {
@@ -274,6 +283,20 @@ export function updateNote(interviewId: string, noteId: string, data: InterviewN
  */
 export function deleteNote(interviewId: string, noteId: string): Promise<void> {
     return api.delete(`/interviews/${interviewId}/notes/${noteId}`);
+}
+
+/**
+ * Resolve a note (mark as resolved).
+ */
+export function resolveNote(interviewId: string, noteId: string): Promise<InterviewNoteRead> {
+    return api.post<InterviewNoteRead>(`/interviews/${interviewId}/notes/${noteId}/resolve`);
+}
+
+/**
+ * Unresolve a note (re-open).
+ */
+export function unresolveNote(interviewId: string, noteId: string): Promise<InterviewNoteRead> {
+    return api.post<InterviewNoteRead>(`/interviews/${interviewId}/notes/${noteId}/unresolve`);
 }
 
 // ============================================================================

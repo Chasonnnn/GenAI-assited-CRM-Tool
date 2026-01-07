@@ -4740,6 +4740,12 @@ class InterviewNote(Base):
     """
     Shared notes on interviews, optionally anchored to transcript selections.
 
+    Supports:
+    - General notes (no anchor)
+    - Anchored comments (with comment_id + anchor_text)
+    - Reply threads (parent_id links to parent note)
+    - Resolve functionality (resolved_at/resolved_by_user_id)
+
     Anchors are tied to a specific transcript version and recalculated when
     the transcript changes. Status indicates if anchor is still valid.
     """
@@ -4748,12 +4754,14 @@ class InterviewNote(Base):
     __table_args__ = (
         Index("ix_interview_notes_interview", "interview_id"),
         Index("ix_interview_notes_org", "organization_id"),
+        Index("ix_interview_notes_parent", "parent_id"),
         CheckConstraint(
             "anchor_end IS NULL OR anchor_end >= anchor_start",
             name="ck_interview_notes_anchor_range",
         ),
+        # Allow: (1) no anchor at all, (2) offsets with text, (3) anchor_text alone (for comment_id)
         CheckConstraint(
-            "(anchor_start IS NULL AND anchor_end IS NULL AND anchor_text IS NULL) OR "
+            "(anchor_start IS NULL AND anchor_end IS NULL) OR "
             "(anchor_start IS NOT NULL AND anchor_end IS NOT NULL AND anchor_text IS NOT NULL)",
             name="ck_interview_notes_anchor_complete",
         ),
@@ -4799,6 +4807,21 @@ class InterviewNote(Base):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
 
+    # Thread support (for replies)
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("interview_notes.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+
+    # Resolve support
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    resolved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"), nullable=False
     )
@@ -4809,7 +4832,20 @@ class InterviewNote(Base):
     # Relationships
     interview: Mapped["CaseInterview"] = relationship(back_populates="notes")
     organization: Mapped["Organization"] = relationship()
-    author: Mapped["User"] = relationship()
+    author: Mapped["User"] = relationship(foreign_keys=[author_user_id])
+    resolved_by: Mapped["User | None"] = relationship(foreign_keys=[resolved_by_user_id])
+    parent: Mapped["InterviewNote | None"] = relationship(
+        "InterviewNote",
+        remote_side="InterviewNote.id",
+        back_populates="replies",
+        foreign_keys=[parent_id],
+    )
+    replies: Mapped[list["InterviewNote"]] = relationship(
+        "InterviewNote",
+        back_populates="parent",
+        foreign_keys="InterviewNote.parent_id",
+        order_by="InterviewNote.created_at",
+    )
 
 
 class InterviewAttachment(Base):

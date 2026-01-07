@@ -130,16 +130,13 @@ describe('SettingsPage', () => {
         mockSearchParams = new URLSearchParams()
     })
 
-    it('can toggle notification preferences', () => {
-        mockSearchParams = new URLSearchParams('tab=notifications')
+    it('renders general tab by default', () => {
         render(<SettingsPage />)
-
-        expect(screen.getByText('In-App Notification Preferences')).toBeInTheDocument()
-
-        fireEvent.click(screen.getByLabelText('Case assigned to me'))
-
-        expect(mockUpdateNotificationSettings).toHaveBeenCalledWith({ case_assigned: false })
+        // There are multiple "General" texts (tab + heading), so use getAllByText
+        expect(screen.getAllByText('General').length).toBeGreaterThan(0)
+        expect(screen.getByText('Profile and access settings')).toBeDefined()
     })
 
+    // Note: Notification preferences test removed - notifications moved to main menu
     // Note: Pipeline version history test removed - pipelines moved to dedicated /settings/pipelines page
 })

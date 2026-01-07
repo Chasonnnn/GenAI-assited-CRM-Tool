@@ -18,7 +18,6 @@ from app.core.case_access import can_modify_case, check_case_access
 from app.core.deps import (
     get_current_session,
     get_db,
-    is_owner_or_can_manage,
     require_csrf_header,
     require_permission,
 )
@@ -380,16 +379,12 @@ def update_note(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Update a note (author only)."""
+    """Update a note."""
     interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
 
     note = interview_note_service.get_note(db, session.org_id, note_id)
     if not note or note.interview_id != interview_id:
         raise HTTPException(status_code=404, detail="Note not found")
-
-    # Only author can update
-    if note.author_user_id != session.user_id:
-        raise HTTPException(status_code=403, detail="Only the author can edit this note")
 
     note = interview_note_service.update_note(db, note, data)
     db.commit()
@@ -407,22 +402,62 @@ def delete_note(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Delete a note (author or admin+)."""
+    """Delete a note."""
     interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
 
     note = interview_note_service.get_note(db, session.org_id, note_id)
     if not note or note.interview_id != interview_id:
         raise HTTPException(status_code=404, detail="Note not found")
 
-    # Author or admin+ can delete
-    if not is_owner_or_can_manage(session, note.author_user_id):
-        raise HTTPException(
-            status_code=403, detail="Not authorized to delete this note"
-        )
-
     interview_note_service.delete_note(db, note)
     db.commit()
     return None
+
+
+@router.post(
+    "/interviews/{interview_id}/notes/{note_id}/resolve",
+    response_model=InterviewNoteRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def resolve_note(
+    interview_id: UUID,
+    note_id: UUID,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """Mark a note as resolved."""
+    _check_interview_access(db, session.org_id, interview_id, session)
+
+    note = interview_note_service.get_note(db, session.org_id, note_id)
+    if not note or note.interview_id != interview_id:
+        raise HTTPException(status_code=404, detail="Note not found")
+
+    note = interview_note_service.resolve_note(db, note, session.user_id)
+    db.commit()
+    return interview_note_service.to_note_read(note, session.user_id)
+
+
+@router.post(
+    "/interviews/{interview_id}/notes/{note_id}/unresolve",
+    response_model=InterviewNoteRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def unresolve_note(
+    interview_id: UUID,
+    note_id: UUID,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """Re-open a resolved note."""
+    _check_interview_access(db, session.org_id, interview_id, session)
+
+    note = interview_note_service.get_note(db, session.org_id, note_id)
+    if not note or note.interview_id != interview_id:
+        raise HTTPException(status_code=404, detail="Note not found")
+
+    note = interview_note_service.unresolve_note(db, note)
+    db.commit()
+    return interview_note_service.to_note_read(note, session.user_id)
 
 
 # =============================================================================
