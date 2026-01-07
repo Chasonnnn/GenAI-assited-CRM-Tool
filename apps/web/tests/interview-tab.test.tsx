@@ -44,6 +44,7 @@ vi.mock('@/lib/hooks/use-interviews', () => ({
     useDeleteInterviewNote: () => ({ mutateAsync: mockDeleteInterviewNote, isPending: false }),
     useUploadInterviewAttachment: () => ({ mutateAsync: mockUploadInterviewAttachment, isPending: false }),
     useRequestTranscription: () => ({ mutateAsync: mockRequestTranscription, isPending: false }),
+    useSummarizeInterview: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 describe('CaseInterviewTab', () => {
@@ -126,8 +127,8 @@ describe('CaseInterviewTab', () => {
 
         render(<CaseInterviewTab caseId="c1" />)
 
-        expect(screen.getByText('No Interviews')).toBeInTheDocument()
-        expect(screen.getByRole('button', { name: /add interview/i })).toBeInTheDocument()
+        expect(screen.getByText('No Interviews')).toBeDefined()
+        expect(screen.getByRole('button', { name: /add interview/i })).toBeDefined()
     })
 
     it.skip('requests transcription for audio attachments', async () => {

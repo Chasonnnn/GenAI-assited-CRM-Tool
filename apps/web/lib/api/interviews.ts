@@ -357,3 +357,44 @@ export function requestTranscription(
 export function getTranscriptionStatus(interviewId: string, attachmentId: string): Promise<TranscriptionStatusRead> {
     return api.get<TranscriptionStatusRead>(`/interviews/${interviewId}/attachments/${attachmentId}/transcription`);
 }
+
+// ============================================================================
+// AI Summary
+// ============================================================================
+
+// Interview summary response
+export interface InterviewSummaryResponse {
+    interview_id: string;
+    summary: string;
+    key_points: string[];
+    concerns: string[];
+    sentiment: 'positive' | 'neutral' | 'mixed' | 'concerning';
+    follow_up_items: string[];
+}
+
+// All interviews summary response
+export interface AllInterviewsSummaryResponse {
+    case_id: string;
+    interview_count: number;
+    overall_summary: string;
+    timeline: Array<{ date: string; type: string; key_point: string }>;
+    recurring_themes: string[];
+    candidate_strengths: string[];
+    areas_of_concern: string[];
+    recommended_actions: string[];
+}
+
+/**
+ * Generate AI summary of a single interview.
+ */
+export function summarizeInterview(interviewId: string): Promise<InterviewSummaryResponse> {
+    return api.post<InterviewSummaryResponse>(`/interviews/${interviewId}/ai/summarize`);
+}
+
+/**
+ * Generate AI summary of all interviews for a case.
+ */
+export function summarizeAllInterviews(caseId: string): Promise<AllInterviewsSummaryResponse> {
+    return api.post<AllInterviewsSummaryResponse>(`/cases/${caseId}/interviews/ai/summarize-all`);
+}
+

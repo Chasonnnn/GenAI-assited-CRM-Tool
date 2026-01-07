@@ -359,3 +359,26 @@ export function useRequestTranscription() {
         },
     });
 }
+
+// ============================================================================
+// AI Summary Mutations
+// ============================================================================
+
+/**
+ * Generate AI summary of a single interview.
+ */
+export function useSummarizeInterview() {
+    return useMutation({
+        mutationFn: (interviewId: string) => interviewsApi.summarizeInterview(interviewId),
+    });
+}
+
+/**
+ * Generate AI summary of all interviews for a case.
+ */
+export function useSummarizeAllInterviews() {
+    return useMutation({
+        mutationFn: (caseId: string) => interviewsApi.summarizeAllInterviews(caseId),
+    });
+}
+

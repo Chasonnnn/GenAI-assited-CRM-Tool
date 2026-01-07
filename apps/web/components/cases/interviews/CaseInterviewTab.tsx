@@ -52,6 +52,7 @@ import {
     useDeleteInterviewNote,
     useUploadInterviewAttachment,
     useRequestTranscription,
+    useSummarizeInterview,
 } from "@/lib/hooks/use-interviews"
 import { InterviewVersionHistory } from "./InterviewVersionHistory"
 import type {
@@ -154,6 +155,7 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
     const deleteNoteMutation = useDeleteInterviewNote()
     const uploadAttachmentMutation = useUploadInterviewAttachment()
     const requestTranscriptionMutation = useRequestTranscription()
+    const summarizeInterviewMutation = useSummarizeInterview()
 
     // User permissions
     const canEdit = user?.role && ["case_manager", "admin", "developer"].includes(user.role)
@@ -346,6 +348,30 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
         }
     }
 
+    const handleAISummary = async () => {
+        if (!selectedId) return
+        try {
+            const result = await summarizeInterviewMutation.mutateAsync(selectedId)
+            toast.success("AI Summary Generated", {
+                description: result.summary.slice(0, 100) + (result.summary.length > 100 ? "..." : ""),
+                duration: 8000,
+            })
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Failed to generate summary"
+            if (message.toLowerCase().includes("consent")) {
+                toast.error("AI Consent Required", {
+                    description: "Please accept AI terms in Settings before using AI features.",
+                })
+            } else if (message.toLowerCase().includes("not enabled")) {
+                toast.error("AI Not Available", {
+                    description: "AI features are not enabled for your organization.",
+                })
+            } else {
+                toast.error(message)
+            }
+        }
+    }
+
     // Loading state
     if (interviewsLoading) {
         return (
@@ -446,6 +472,8 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
                             }}
                             onVersionHistory={() => setVersionHistoryOpen(true)}
                             onAttachments={() => setAttachmentsDialogOpen(true)}
+                            onAISummary={handleAISummary}
+                            isAISummaryPending={summarizeInterviewMutation.isPending}
                             onAddNote={handleAddComment}
                             onUpdateNote={handleUpdateNote}
                             onDeleteNote={handleDeleteNote}
@@ -665,6 +693,8 @@ interface InterviewDetailViewProps {
     onDelete: () => void
     onVersionHistory: () => void
     onAttachments: () => void
+    onAISummary: () => void
+    isAISummaryPending: boolean
     onAddNote: (data: { content: string; commentId: string; anchorText: string; parentId?: string }) => Promise<void>
     onUpdateNote: (noteId: string, content: string) => Promise<void>
     onDeleteNote: (noteId: string) => Promise<void>
@@ -690,6 +720,8 @@ function InterviewDetailView({
     onDelete,
     onVersionHistory,
     onAttachments,
+    onAISummary,
+    isAISummaryPending,
     onAddNote,
     onUpdateNote,
     onDeleteNote,
@@ -717,6 +749,8 @@ function InterviewDetailView({
                     onDelete={onDelete}
                     onVersionHistory={onVersionHistory}
                     onAttachments={onAttachments}
+                    onAISummary={onAISummary}
+                    isAISummaryPending={isAISummaryPending}
                     canEdit={canEdit}
                     canDelete={canDelete}
                 />
@@ -759,11 +793,13 @@ interface InterviewHeaderProps {
     onDelete: () => void
     onVersionHistory: () => void
     onAttachments: () => void
+    onAISummary: () => void
+    isAISummaryPending: boolean
     canEdit: boolean
     canDelete: boolean
 }
 
-function InterviewHeader({ interview, attachmentsCount, onEdit, onDelete, onVersionHistory, onAttachments, canEdit, canDelete }: InterviewHeaderProps) {
+function InterviewHeader({ interview, attachmentsCount, onEdit, onDelete, onVersionHistory, onAttachments, onAISummary, isAISummaryPending, canEdit, canDelete }: InterviewHeaderProps) {
     const Icon = INTERVIEW_TYPE_ICONS[interview.interview_type as InterviewType]
     const colorClass = INTERVIEW_TYPE_COLORS[interview.interview_type as InterviewType]
 
@@ -795,11 +831,11 @@ function InterviewHeader({ interview, attachmentsCount, onEdit, onDelete, onVers
                 </div>
             </div>
             <DropdownMenu>
-            <DropdownMenuTrigger
-                className={buttonVariants({ variant: "ghost", size: "icon", className: "h-8 w-8" })}
-            >
-                <MoreVerticalIcon className="h-4 w-4" />
-            </DropdownMenuTrigger>
+                <DropdownMenuTrigger
+                    className={buttonVariants({ variant: "ghost", size: "icon", className: "h-8 w-8" })}
+                >
+                    <MoreVerticalIcon className="h-4 w-4" />
+                </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                     {canEdit && (
                         <DropdownMenuItem onClick={onEdit}>
@@ -819,6 +855,10 @@ function InterviewHeader({ interview, attachmentsCount, onEdit, onDelete, onVers
                     <DropdownMenuItem onClick={onVersionHistory}>
                         <HistoryIcon className="h-4 w-4 mr-2" />
                         Version History
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={onAISummary} disabled={isAISummaryPending}>
+                        <SparklesIcon className="h-4 w-4 mr-2" />
+                        {isAISummaryPending ? "Generating..." : "AI Summary"}
                     </DropdownMenuItem>
                     {canDelete && (
                         <DropdownMenuItem onClick={onDelete} className="text-destructive">
