@@ -153,10 +153,18 @@ class User(Base):
     title: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # Signature override fields (NULL = use profile value)
-    signature_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    signature_title: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    signature_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    signature_photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    signature_name: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, comment="Override display_name in signature (NULL = use profile)"
+    )
+    signature_title: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, comment="Override title in signature (NULL = use profile)"
+    )
+    signature_phone: Mapped[str | None] = mapped_column(
+        String(50), nullable=True, comment="Override phone in signature (NULL = use profile)"
+    )
+    signature_photo_url: Mapped[str | None] = mapped_column(
+        String(500), nullable=True, comment="Override avatar in signature (NULL = use profile)"
+    )
 
     # MFA fields
     mfa_enabled: Mapped[bool] = mapped_column(
