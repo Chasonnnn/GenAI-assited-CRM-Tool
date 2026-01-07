@@ -137,6 +137,5 @@ describe('SettingsPage', () => {
         expect(screen.getByText('Profile and access settings')).toBeDefined()
     })
 
-    // Note: Notification preferences test removed - notifications moved to main menu
     // Note: Pipeline version history test removed - pipelines moved to dedicated /settings/pipelines page
 })

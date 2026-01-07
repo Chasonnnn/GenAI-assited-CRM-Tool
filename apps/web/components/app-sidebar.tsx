@@ -140,7 +140,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
     const settingsItems: Array<{ title: string; url: string; tab?: string | null }> = [
         { title: "General", url: "/settings", tab: null },
-        { title: "Notifications", url: "/settings?tab=notifications", tab: "notifications" },
+        { title: "Notification", url: "/settings/notifications" },
         ...(isManager ? [{ title: "Team", url: "/settings/team" }] : []),
         ...((isAdmin || isDeveloper) ? [{ title: "Pipelines", url: "/settings/pipelines" }] : []),
         ...(isManager ? [{ title: "Queue Management", url: "/settings/queues" }] : []),
@@ -486,7 +486,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem>
-                                            <Link href="/notifications" className="flex items-center w-full">
+                                            <Link href="/settings/notifications" className="flex items-center w-full">
                                                 <Bell className="mr-2 h-4 w-4" />
                                                 Notifications
                                             </Link>
