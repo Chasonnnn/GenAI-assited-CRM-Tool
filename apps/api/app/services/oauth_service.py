@@ -423,6 +423,8 @@ def refresh_token(
         return True
     except Exception as e:
         logger.error(f"Token refresh failed for {integration_type}: {e}")
+        # Create system alert for token refresh failure
+        _create_token_refresh_alert(db, integration.user_id, integration_type, str(e))
         return False
 
 
@@ -459,4 +461,38 @@ async def refresh_token_async(
         return True
     except Exception as e:
         logger.error(f"Async token refresh failed for {integration_type}: {e}")
+        # Create system alert for token refresh failure
+        _create_token_refresh_alert(db, integration.user_id, integration_type, str(e))
         return False
+
+
+def _create_token_refresh_alert(
+    db: Session, user_id: uuid.UUID, integration_type: str, error_msg: str
+) -> None:
+    """Create system alert for token refresh failure."""
+    try:
+        from app.db.models import Membership
+        from app.services import alert_service
+        from app.db.enums import AlertType, AlertSeverity
+
+        # Get user's org_id
+        membership = (
+            db.query(Membership)
+            .filter(Membership.user_id == user_id, Membership.is_active.is_(True))
+            .first()
+        )
+        if not membership:
+            return
+
+        alert_service.create_or_update_alert(
+            db=db,
+            org_id=membership.organization_id,
+            alert_type=AlertType.OAUTH_TOKEN_REFRESH_FAILED,
+            severity=AlertSeverity.CRITICAL,
+            title=f"{integration_type.title()} token refresh failed",
+            message=error_msg[:500],
+            integration_key=integration_type,
+            error_class="TokenRefreshError",
+        )
+    except Exception as alert_err:
+        logger.warning(f"Failed to create token refresh alert: {alert_err}")

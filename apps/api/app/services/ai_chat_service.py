@@ -631,6 +631,23 @@ async def chat_async(
         response: ChatResponse = await provider.chat(ai_messages)
     except Exception as e:
         logger.exception(f"AI provider error: {e}")
+        # Create system alert for AI provider error
+        try:
+            from app.services import alert_service
+            from app.db.enums import AlertType, AlertSeverity
+
+            alert_service.create_or_update_alert(
+                db=db,
+                org_id=organization_id,
+                alert_type=AlertType.AI_PROVIDER_ERROR,
+                severity=AlertSeverity.ERROR,
+                title="AI provider error",
+                message=str(e)[:500],
+                integration_key="ai_chat",
+                error_class=type(e).__name__,
+            )
+        except Exception as alert_err:
+            logger.warning(f"Failed to create AI provider alert: {alert_err}")
         return {
             "content": f"AI error: {str(e)}",
             "proposed_actions": [],

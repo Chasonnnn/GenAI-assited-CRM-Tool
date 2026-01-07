@@ -27,6 +27,28 @@ from app.schemas.workflow import ALLOWED_CONDITION_FIELDS
 logger = logging.getLogger(__name__)
 
 
+def _create_workflow_generation_alert(
+    db: Session, org_id: UUID, error_msg: str, error_class: str
+) -> None:
+    """Create system alert for workflow generation failure."""
+    try:
+        from app.services import alert_service
+        from app.db.enums import AlertType, AlertSeverity
+
+        alert_service.create_or_update_alert(
+            db=db,
+            org_id=org_id,
+            alert_type=AlertType.AI_PROVIDER_ERROR,
+            severity=AlertSeverity.ERROR,
+            title="AI workflow generation failed",
+            message=error_msg[:500],
+            integration_key="ai_workflow",
+            error_class=error_class,
+        )
+    except Exception as alert_err:
+        logger.warning(f"Failed to create workflow generation alert: {alert_err}")
+
+
 # =============================================================================
 # Request/Response Models
 # =============================================================================
@@ -396,12 +418,14 @@ def generate_workflow(
 
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse AI response: {e}")
+        _create_workflow_generation_alert(db, org_id, str(e), "JSONDecodeError")
         return WorkflowGenerationResponse(
             success=False,
             explanation=f"Failed to parse AI response as JSON: {str(e)}",
         )
     except Exception as e:
         logger.error(f"Workflow generation error: {e}")
+        _create_workflow_generation_alert(db, org_id, str(e), type(e).__name__)
         return WorkflowGenerationResponse(
             success=False,
             explanation=f"Error generating workflow: {str(e)}",

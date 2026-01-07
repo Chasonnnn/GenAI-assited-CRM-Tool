@@ -359,23 +359,26 @@ def _record_job_failure(
     from app.services import ops_service, alert_service
     from app.db.enums import IntegrationType, AlertType, AlertSeverity
 
-    # Map job types to integration types
-    job_to_integration = {
-        JobType.META_LEAD_FETCH.value: IntegrationType.META_LEADS,
-        JobType.META_CAPI_EVENT.value: IntegrationType.META_CAPI,
-    }
+    if not job.organization_id:
+        return
 
-    integration_type = job_to_integration.get(job.job_type)
-    if integration_type and job.organization_id:
-        try:
-            # Check both page_id and meta_page_id (CAPI uses latter)
-            integration_key = None
-            if job.payload:
-                integration_key = job.payload.get("page_id") or job.payload.get(
-                    "meta_page_id"
-                )
+    try:
+        # Map job types to integration types (for health tracking)
+        job_to_integration = {
+            JobType.META_LEAD_FETCH.value: IntegrationType.META_LEADS,
+            JobType.META_CAPI_EVENT.value: IntegrationType.META_CAPI,
+        }
 
-            # Record error in integration health
+        # Check both page_id and meta_page_id (CAPI uses latter)
+        integration_key = None
+        if job.payload:
+            integration_key = job.payload.get("page_id") or job.payload.get(
+                "meta_page_id"
+            )
+
+        # Record error in integration health (only for mapped types)
+        integration_type = job_to_integration.get(job.job_type)
+        if integration_type:
             ops_service.record_error(
                 db=db,
                 org_id=job.organization_id,
@@ -384,32 +387,38 @@ def _record_job_failure(
                 integration_key=integration_key,
             )
 
-            # Create alert if this is the final failure (max attempts reached)
-            if job.attempts >= job.max_attempts:
-                # Map to alert types
-                alert_type_map = {
-                    JobType.META_LEAD_FETCH.value: AlertType.META_FETCH_FAILED,
-                    JobType.META_CAPI_EVENT.value: AlertType.WORKER_JOB_FAILED,
-                }
-                alert_type = alert_type_map.get(
-                    job.job_type, AlertType.WORKER_JOB_FAILED
-                )
+        # Create alert if this is the final failure (max attempts reached)
+        if job.attempts >= job.max_attempts:
+            # Map to alert types
+            alert_type_map = {
+                JobType.META_LEAD_FETCH.value: AlertType.META_FETCH_FAILED,
+                JobType.META_CAPI_EVENT.value: AlertType.META_API_ERROR,
+                JobType.SEND_EMAIL.value: AlertType.EMAIL_SEND_FAILED,
+                JobType.CAMPAIGN_SEND.value: AlertType.EMAIL_SEND_FAILED,
+                JobType.WORKFLOW_EMAIL.value: AlertType.EMAIL_SEND_FAILED,
+                JobType.WEBHOOK_RETRY.value: AlertType.WEBHOOK_DELIVERY_FAILED,
+                JobType.AI_CHAT.value: AlertType.AI_PROVIDER_ERROR,
+                JobType.INTERVIEW_TRANSCRIPTION.value: AlertType.TRANSCRIPTION_FAILED,
+            }
+            alert_type = alert_type_map.get(
+                job.job_type, AlertType.WORKER_JOB_FAILED
+            )
 
-                # Use actual exception class name for fingerprinting
-                error_class = type(exception).__name__ if exception else "UnknownError"
+            # Use actual exception class name for fingerprinting
+            error_class = type(exception).__name__ if exception else "UnknownError"
 
-                alert_service.create_or_update_alert(
-                    db=db,
-                    org_id=job.organization_id,
-                    alert_type=alert_type,
-                    severity=AlertSeverity.ERROR,
-                    title=f"{job.job_type} failed after {job.attempts} attempts",
-                    message=error_msg[:500],
-                    integration_key=integration_key,
-                    error_class=error_class,
-                )
-        except Exception as e:
-            logger.warning(f"Failed to record job failure: {e}")
+            alert_service.create_or_update_alert(
+                db=db,
+                org_id=job.organization_id,
+                alert_type=alert_type,
+                severity=AlertSeverity.ERROR,
+                title=f"{job.job_type} failed after {job.attempts} attempts",
+                message=error_msg[:500],
+                integration_key=integration_key,
+                error_class=error_class,
+            )
+    except Exception as e:
+        logger.warning(f"Failed to record job failure: {e}")
 
 
 async def process_meta_lead_fetch(db, job) -> None:
