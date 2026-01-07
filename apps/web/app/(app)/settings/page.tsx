@@ -907,8 +907,8 @@ function SignatureBrandingSection() {
               type="button"
               onClick={() => setTemplate(t.id)}
               className={`p-3 rounded-lg border text-left transition-colors ${template === t.id
-                  ? "border-primary bg-primary/5"
-                  : "border-border hover:border-muted-foreground"
+                ? "border-primary bg-primary/5"
+                : "border-border hover:border-muted-foreground"
                 }`}
             >
               <div className="font-medium text-sm">{t.name}</div>
@@ -1211,8 +1211,6 @@ export default function SettingsPage() {
               </Card>
             </div>
           </TabsContent>
-
-
 
           {/* Email Signature Tab (Admin only) */}
           {isAdmin && (
