@@ -387,6 +387,7 @@ def update_org_signature(
 
 @router.get("/organization/signature/preview", response_model=SignaturePreviewResponse)
 def get_org_signature_preview(
+    template: str | None = None,
     session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
     db: Session = Depends(get_db),
 ):
@@ -396,11 +397,20 @@ def get_org_signature_preview(
     Uses sample user data (not admin's personal info) to show how
     the signature template looks with org branding.
 
+    Optionally pass ?template=modern|minimal|professional|creative to
+    preview a template before saving.
+
     Requires Admin or Developer role.
     """
+    # Validate template parameter if provided
+    valid_templates = ["classic", "modern", "minimal", "professional", "creative"]
+    if template and template not in valid_templates:
+        template = None  # Fall back to saved template
+    
     html = signature_template_service.render_signature_preview(
         db=db,
         org_id=session.org_id,
+        template_override=template,
     )
 
     return SignaturePreviewResponse(html=html)

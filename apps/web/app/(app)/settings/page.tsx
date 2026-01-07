@@ -46,6 +46,7 @@ import {
   useDeleteAvatar,
 } from "@/lib/hooks/use-sessions"
 import type { SocialLink } from "@/lib/api/signature"
+import { getOrgSignaturePreview } from "@/lib/api/signature"
 
 // =============================================================================
 // Browser Notifications Card
@@ -820,6 +821,8 @@ function SignatureBrandingSection() {
   const [website, setWebsite] = useState("")
   const [disclaimer, setDisclaimer] = useState("")
   const [saved, setSaved] = useState(false)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null)
 
   useEffect(() => {
     if (orgSig) {
@@ -1044,78 +1047,58 @@ function SignatureBrandingSection() {
         </div>
       </div>
 
-      <Button onClick={handleSave} disabled={updateOrgSig.isPending}>
-        {updateOrgSig.isPending ? (
-          <>
-            <LoaderIcon className="mr-2 size-4 animate-spin" /> Saving...
-          </>
-        ) : saved ? (
-          <>
-            <CheckIcon className="mr-2 size-4" /> Saved!
-          </>
-        ) : (
-          "Save Signature Branding"
-        )}
-      </Button>
-    </div>
-  )
-}
-
-// =============================================================================
-// Signature Preview Section
-// =============================================================================
-
-function SignaturePreviewSection() {
-  const { refetch: refetchPreview } = useOrgSignaturePreview()
-  const [preview, setPreview] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-
-  const handlePreview = async () => {
-    setIsLoading(true)
-    try {
-      const result = await refetchPreview()
-      if (result.data?.html) {
-        setPreview(result.data.html)
-      }
-    } catch (error) {
-      console.error("Failed to load preview:", error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="font-medium flex items-center gap-2">
-          <EyeIcon className="size-4" />
-          Signature Preview
-        </h3>
-        <p className="text-sm text-muted-foreground">
-          Preview how email signatures look with sample data
-        </p>
-      </div>
-
-      <Button variant="outline" onClick={handlePreview} disabled={isLoading}>
-        {isLoading ? (
-          <>
-            <LoaderIcon className="mr-2 size-4 animate-spin" /> Loading...
-          </>
-        ) : (
-          <>
-            <EyeIcon className="mr-2 size-4" /> Preview Signature
-          </>
-        )}
-      </Button>
-
-      {preview && (
-        <div className="rounded-lg border border-border p-6 bg-white">
-          <p className="text-xs text-muted-foreground mb-3 pb-3 border-b">
-            Preview with sample employee data:
-          </p>
-          <div dangerouslySetInnerHTML={{ __html: preview }} />
+      {/* Preview Button */}
+      <div className="space-y-4">
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={async () => {
+              setPreviewLoading(true)
+              try {
+                const result = await getOrgSignaturePreview(template)
+                setPreviewHtml(result.html)
+              } catch {
+                // Silent fail
+              } finally {
+                setPreviewLoading(false)
+              }
+            }}
+            disabled={previewLoading}
+          >
+            {previewLoading ? (
+              <>
+                <LoaderIcon className="mr-2 size-4 animate-spin" /> Loading...
+              </>
+            ) : (
+              <>
+                <EyeIcon className="mr-2 size-4" /> Preview Template
+              </>
+            )}
+          </Button>
+          <Button onClick={handleSave} disabled={updateOrgSig.isPending}>
+            {updateOrgSig.isPending ? (
+              <>
+                <LoaderIcon className="mr-2 size-4 animate-spin" /> Saving...
+              </>
+            ) : saved ? (
+              <>
+                <CheckIcon className="mr-2 size-4" /> Saved!
+              </>
+            ) : (
+              "Save Signature Branding"
+            )}
+          </Button>
         </div>
-      )}
+
+        {previewHtml && (
+          <div className="rounded-lg border border-border p-6 bg-white">
+            <p className="text-xs text-muted-foreground mb-3 pb-3 border-b">
+              Preview with sample employee data:
+            </p>
+            <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -1237,13 +1220,8 @@ export default function SettingsPage() {
 
                     <div className="border-t border-border" />
 
-                    {/* Signature Branding */}
+                    {/* Signature Branding (includes preview) */}
                     <SignatureBrandingSection />
-
-                    <div className="border-t border-border" />
-
-                    {/* Signature Preview */}
-                    <SignaturePreviewSection />
                   </CardContent>
                 </Card>
               </div>

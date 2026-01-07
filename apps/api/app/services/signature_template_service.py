@@ -504,6 +504,7 @@ def get_available_templates() -> list[dict]:
 def render_signature_preview(
     db: Session,
     org_id: uuid.UUID,
+    template_override: str | None = None,
 ) -> str:
     """
     Render signature preview with sample user data.
@@ -514,6 +515,7 @@ def render_signature_preview(
     Args:
         db: Database session
         org_id: Organization ID
+        template_override: Optional template to preview (overrides org's saved template)
 
     Returns:
         HTML string with inline styles, table layout (email-safe)
@@ -523,7 +525,8 @@ def render_signature_preview(
     if not org:
         return ""
 
-    template = org.signature_template or DEFAULT_TEMPLATE
+    # Use override template if provided, otherwise use org's saved template
+    template = template_override or org.signature_template or DEFAULT_TEMPLATE
     data = _get_sample_data(org)
 
     # Use a variant that works with raw data dict
@@ -531,59 +534,44 @@ def render_signature_preview(
 
 
 def _render_from_data(data: dict, template: str) -> str:
-    """Render signature from pre-built data dict (for preview)."""
-    html_parts = [
-        '<table cellpadding="0" cellspacing="0" border="0" style="font-family: Arial, sans-serif; font-size: 14px; color: #333333;">',
-        "<tr><td>",
-        '<div style="border-top: 2px solid #e0e0e0; padding-top: 16px; margin-top: 16px;">',
-    ]
+    """Render signature from pre-built data dict (for preview).
+    
+    Dispatches to the appropriate template renderer based on template type.
+    Uses a mock org/user wrapper to reuse existing template functions.
+    """
+    # Create a mock object that provides the data dict as attributes
+    class MockOrg:
+        def __init__(self, d: dict):
+            self.signature_logo_url = d.get("logo_url")
+            self.signature_primary_color = d.get("primary_color")
+            self.signature_company_name = d.get("company_name")
+            self.name = d.get("company_name", "")
+            self.signature_address = d.get("address")
+            self.signature_phone = d.get("org_phone")
+            self.signature_website = d.get("website")
+            self.signature_social_links = d.get("org_social_links")
+            self.signature_disclaimer = d.get("disclaimer")
+            self.signature_template = template
+    
+    class MockUser:
+        def __init__(self, d: dict):
+            self.display_name = d.get("name", "")
+            self.title = d.get("user_title")
+            self.phone = d.get("user_phone")
+            self.email = d.get("email", "")
+            self.avatar_url = d.get("photo_url")
+            self.signature_name = None  # Use display_name
+            self.signature_title = None  # Use title
+            self.signature_phone = None  # Use phone
+            self.signature_photo_url = None  # Use avatar_url
+            self.signature_linkedin = d.get("linkedin")
+            self.signature_twitter = d.get("twitter")
+            self.signature_instagram = d.get("instagram")
+    
+    mock_org = MockOrg(data)
+    mock_user = MockUser(data)
+    
+    # Dispatch to the correct template renderer
+    renderer = TEMPLATE_RENDERERS.get(template, _render_classic)
+    return renderer(mock_org, mock_user)
 
-    # Logo
-    if data.get("logo_url"):
-        html_parts.append(f'<img src="{data["logo_url"]}" alt="{data.get("company_name", "")}" style="max-height: 50px; max-width: 200px; margin-bottom: 12px; display: block;" />')
-
-    # Name and Title
-    name_line = data.get("name", "")
-    if data.get("user_title"):
-        name_line += f' | {data["user_title"]}'
-    html_parts.append(f'<p style="margin: 0 0 4px 0; font-weight: 600; color: #1a1a1a;">{name_line}</p>')
-
-    # Company
-    if data.get("company_name"):
-        html_parts.append(f'<p style="margin: 0 0 8px 0; color: #666666;">{data["company_name"]}</p>')
-
-    # Contact info (user phone + email)
-    contact_parts = []
-    if data.get("user_phone"):
-        contact_parts.append(data["user_phone"])
-    if data.get("email"):
-        contact_parts.append(f'<a href="mailto:{data["email"]}" style="color: {data["primary_color"]}; text-decoration: none;">{data["email"]}</a>')
-
-    if contact_parts:
-        html_parts.append(f'<p style="margin: 0 0 4px 0; color: #666666;">{" | ".join(contact_parts)}</p>')
-
-    # Org phone
-    if data.get("org_phone"):
-        html_parts.append(f'<p style="margin: 0 0 4px 0; color: #666666; font-size: 12px;">Office: {data["org_phone"]}</p>')
-
-    # Address
-    if data.get("address"):
-        html_parts.append(f'<p style="margin: 0 0 4px 0; color: #666666; font-size: 12px;">{data["address"]}</p>')
-
-    # Website
-    if data.get("website"):
-        html_parts.append(f'<p style="margin: 0; color: #666666; font-size: 12px;"><a href="{data["website"]}" style="color: {data["primary_color"]}; text-decoration: none;">{data["website"]}</a></p>')
-
-    # Social links
-    html_parts.append(_render_social_links(data))
-
-    # Disclaimer
-    html_parts.append(_render_disclaimer(data))
-
-    html_parts.extend([
-        "</div>",
-        "</td></tr>",
-        "</table>",
-    ])
-
-    return "".join(html_parts)
