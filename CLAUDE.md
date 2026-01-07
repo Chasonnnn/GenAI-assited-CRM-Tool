@@ -90,7 +90,3 @@ pnpm test --run
 - `case_manager` — Full case management
 - `admin` — Administrative access
 - `developer` — Platform administration
-
-### Current Work
-
-See @docs/interview-tab-workplan.md for the Interview tab implementation plan.

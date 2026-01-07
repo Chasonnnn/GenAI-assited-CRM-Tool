@@ -1808,12 +1808,32 @@ def get_pdf_export_data(
     meta_end = end_dt or datetime.now(timezone.utc)
     meta_performance = get_meta_performance(db, organization_id, meta_start, meta_end)
 
+    # Get funnel data
+    start_date = start_dt.date() if start_dt else None
+    end_date = end_dt.date() if end_dt else None
+    funnel_data = get_funnel_with_filter(
+        db, organization_id, start_date=start_date, end_date=end_date
+    )
+
+    # Get state data for US map
+    state_data = get_cases_by_state_with_filter(
+        db, organization_id, start_date=start_date, end_date=end_date
+    )
+
+    # Get performance data
+    performance_data = get_performance_by_user(
+        db, organization_id, start_date=start_date, end_date=end_date
+    )
+
     return {
         "summary": summary,
         "cases_by_status": cases_by_status,
         "cases_by_assignee": cases_by_assignee,
         "trend_data": trend_data,
         "meta_performance": meta_performance,
+        "funnel_data": funnel_data,
+        "state_data": state_data,
+        "performance_data": performance_data,
         "org_name": org_name,
     }
 

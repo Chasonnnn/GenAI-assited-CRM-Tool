@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   CheckSquareIcon,
   UsersIcon,
@@ -256,15 +257,21 @@ export default function DashboardPage() {
                 {trendPeriod === 'day' ? 'Daily' : trendPeriod === 'week' ? 'Weekly' : 'Monthly'} new cases
               </CardDescription>
             </div>
-            <select
-              value={trendPeriod}
-              onChange={(e) => setTrendPeriod(e.target.value as 'day' | 'week' | 'month')}
-              className="h-8 rounded-md border border-input bg-background px-3 text-xs ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-            >
-              <option value="day">Daily</option>
-              <option value="week">Weekly</option>
-              <option value="month">Monthly</option>
-            </select>
+            <Select value={trendPeriod} onValueChange={(v) => v && setTrendPeriod(v as 'day' | 'week' | 'month')}>
+              <SelectTrigger className="w-28" size="sm">
+                <SelectValue>
+                  {(value: string | null) => {
+                    const labels: Record<string, string> = { day: 'Daily', week: 'Weekly', month: 'Monthly' }
+                    return labels[value ?? 'day'] ?? 'Daily'
+                  }}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="day">Daily</SelectItem>
+                <SelectItem value="week">Weekly</SelectItem>
+                <SelectItem value="month">Monthly</SelectItem>
+              </SelectContent>
+            </Select>
           </CardHeader>
           <CardContent className="pb-4">
             {trendLoading ? (

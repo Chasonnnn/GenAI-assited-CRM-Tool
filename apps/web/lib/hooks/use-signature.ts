@@ -129,7 +129,7 @@ export function useDeleteOrgLogo() {
 export function useOrgSignaturePreview() {
     return useQuery({
         queryKey: signatureKeys.orgPreview(),
-        queryFn: getOrgSignaturePreview,
+        queryFn: () => getOrgSignaturePreview(),
         enabled: false, // Only fetch when manually triggered
     })
 }

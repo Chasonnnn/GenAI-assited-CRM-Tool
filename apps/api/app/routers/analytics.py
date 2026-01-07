@@ -572,8 +572,7 @@ async def export_analytics_pdf(
     - Recent trend data
     """
     from fastapi.responses import Response
-    from app.services import analytics_service
-    from app.services.pdf_service import create_analytics_pdf
+    from app.services import pdf_export_service
 
     org_id = session.org_id
 
@@ -605,22 +604,13 @@ async def export_analytics_pdf(
     elif to_date:
         date_range_str = f"Until {to_date}"
 
-    export_data = analytics_service.get_pdf_export_data(
+    # Generate PDF using Playwright-based service (async)
+    pdf_bytes = await pdf_export_service.export_analytics_pdf_async(
         db=db,
         organization_id=org_id,
         start_dt=start_dt,
         end_dt=end_dt,
-    )
-
-    # Generate PDF
-    pdf_bytes = create_analytics_pdf(
-        summary=export_data["summary"],
-        cases_by_status=export_data["cases_by_status"],
-        cases_by_assignee=export_data["cases_by_assignee"],
-        trend_data=export_data["trend_data"],
-        meta_performance=export_data["meta_performance"],
-        org_name=export_data["org_name"],
-        date_range=date_range_str,
+        date_range_str=date_range_str,
     )
 
     # Return PDF response
