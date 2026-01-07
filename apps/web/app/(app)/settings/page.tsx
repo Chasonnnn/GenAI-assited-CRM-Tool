@@ -906,11 +906,10 @@ function SignatureBrandingSection() {
               key={t.id}
               type="button"
               onClick={() => setTemplate(t.id)}
-              className={`p-3 rounded-lg border text-left transition-colors ${
-                template === t.id
+              className={`p-3 rounded-lg border text-left transition-colors ${template === t.id
                   ? "border-primary bg-primary/5"
                   : "border-border hover:border-muted-foreground"
-              }`}
+                }`}
             >
               <div className="font-medium text-sm">{t.name}</div>
               <div className="text-xs text-muted-foreground">{t.description}</div>
@@ -1133,7 +1132,6 @@ export default function SettingsPage() {
 
   const activeTab = (() => {
     const tab = searchParams?.get("tab")
-    if (tab === "notifications") return tab
     if (tab === "email-signature" && isAdmin) return tab
     return "general"
   })()
@@ -1162,7 +1160,6 @@ export default function SettingsPage() {
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList className="mb-6">
             <TabsTrigger value="general">General</TabsTrigger>
-            <TabsTrigger value="notifications">Notifications</TabsTrigger>
             {isAdmin && (
               <TabsTrigger value="email-signature" className="flex items-center gap-2">
                 <MailIcon className="size-4" />
@@ -1215,13 +1212,7 @@ export default function SettingsPage() {
             </div>
           </TabsContent>
 
-          {/* Notifications Tab */}
-          <TabsContent value="notifications">
-            <div className="space-y-6">
-              <BrowserNotificationsCard />
-              <NotificationsSettingsCard />
-            </div>
-          </TabsContent>
+
 
           {/* Email Signature Tab (Admin only) */}
           {isAdmin && (

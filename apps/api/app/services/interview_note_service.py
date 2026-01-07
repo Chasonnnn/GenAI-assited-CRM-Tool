@@ -58,11 +58,29 @@ def create_note(
     Validates anchor position if provided.
     Defaults transcript_version to current interview version.
     """
+    if data.parent_id:
+        if data.comment_id or data.anchor_text or data.anchor_start is not None or data.anchor_end is not None:
+            raise ValueError("Replies cannot be anchored")
+        parent_note = db.scalar(
+            select(InterviewNote).where(
+                InterviewNote.id == data.parent_id,
+                InterviewNote.organization_id == org_id,
+            )
+        )
+        if not parent_note or parent_note.interview_id != interview.id:
+            raise ValueError("Parent note not found")
+        if parent_note.parent_id is not None:
+            raise ValueError("Replies must target a top-level note")
     # Determine transcript version
     transcript_version = data.transcript_version or interview.transcript_version
 
-    # Validate anchor if provided
+    # Handle anchor_text
+    # For comment_id anchoring (Google Docs style), we just store anchor_text directly
+    # For legacy offset anchoring, we validate and normalize
+    anchor_text = data.anchor_text  # Store as-is for display
+
     if data.anchor_start is not None and data.anchor_text is not None:
+        # Legacy offset anchoring - validate positions
         # Get the transcript text for the specified version
         if transcript_version == interview.transcript_version:
             transcript_text = interview.transcript_text or ""
@@ -87,10 +105,8 @@ def create_note(
         if not is_valid:
             raise ValueError(f"Invalid anchor: {error}")
 
-        # Normalize anchor text
+        # Normalize anchor text for offset anchoring
         anchor_text = normalize_anchor_text(data.anchor_text)
-    else:
-        anchor_text = None
 
     # Sanitize content
     clean_content = sanitize_html(data.content)
@@ -152,6 +168,7 @@ def create_note(
         current_anchor_end=current_anchor_end,
         anchor_status=anchor_status,
         author_user_id=user_id,
+        parent_id=data.parent_id,  # Thread support
     )
     db.add(note)
     db.flush()
@@ -179,17 +196,28 @@ def list_notes(
     org_id: UUID,
     interview_id: UUID,
 ) -> list[InterviewNote]:
-    """List all notes for an interview, newest first."""
+    """
+    List top-level notes for an interview with replies eagerly loaded.
+
+    Returns only top-level notes (parent_id=None). Replies are nested
+    under their parent via the `replies` relationship.
+    """
     return list(
         db.scalars(
             select(InterviewNote)
-            .options(joinedload(InterviewNote.author))
+            .options(
+                joinedload(InterviewNote.author),
+                joinedload(InterviewNote.resolved_by),
+                joinedload(InterviewNote.replies).joinedload(InterviewNote.author),
+                joinedload(InterviewNote.replies).joinedload(InterviewNote.resolved_by),
+            )
             .where(
                 InterviewNote.interview_id == interview_id,
                 InterviewNote.organization_id == org_id,
+                InterviewNote.parent_id.is_(None),  # Only top-level notes
             )
             .order_by(InterviewNote.created_at.desc())
-        ).all()
+        ).unique().all()
     )
 
 
@@ -219,28 +247,89 @@ def delete_note(
     db.flush()
 
 
+def _load_thread_root(db: Session, note: InterviewNote) -> InterviewNote:
+    """Load the top-level note with replies for thread-level operations."""
+    root_id = note.parent_id or note.id
+    root = db.scalar(
+        select(InterviewNote)
+        .options(
+            joinedload(InterviewNote.author),
+            joinedload(InterviewNote.resolved_by),
+            joinedload(InterviewNote.replies).joinedload(InterviewNote.author),
+            joinedload(InterviewNote.replies).joinedload(InterviewNote.resolved_by),
+        )
+        .where(InterviewNote.id == root_id)
+    )
+    return root or note
+
+
+def resolve_note(
+    db: Session,
+    note: InterviewNote,
+    user_id: UUID,
+) -> InterviewNote:
+    """Mark a note thread as resolved."""
+    root = _load_thread_root(db, note)
+    now = datetime.now(timezone.utc)
+    for item in [root, *(root.replies or [])]:
+        item.resolved_at = now
+        item.resolved_by_user_id = user_id
+        item.updated_at = now
+    db.flush()
+    return root
+
+
+def unresolve_note(
+    db: Session,
+    note: InterviewNote,
+) -> InterviewNote:
+    """Re-open a resolved note thread."""
+    root = _load_thread_root(db, note)
+    now = datetime.now(timezone.utc)
+    for item in [root, *(root.replies or [])]:
+        item.resolved_at = None
+        item.resolved_by_user_id = None
+        item.updated_at = now
+    db.flush()
+    return root
+
+
 # =============================================================================
 # Response Builders
 # =============================================================================
 
 
 def to_note_read(note: InterviewNote, current_user_id: UUID) -> dict:
-    """Convert note to response dict."""
+    """Convert note to response dict with nested replies."""
     author_name = "Unknown"
     if note.author:
         author_name = note.author.display_name or note.author.email
+
+    resolved_by_name = None
+    if note.resolved_by:
+        resolved_by_name = note.resolved_by.display_name or note.resolved_by.email
+
+    # Recursively convert replies
+    replies = []
+    if hasattr(note, "replies") and note.replies:
+        replies = [to_note_read(reply, current_user_id) for reply in note.replies]
 
     return {
         "id": note.id,
         "content": note.content,
         "transcript_version": note.transcript_version,
         "comment_id": note.comment_id,  # TipTap comment mark ID
+        "anchor_text": note.anchor_text,
         "anchor_start": note.anchor_start,
         "anchor_end": note.anchor_end,
-        "anchor_text": note.anchor_text,
         "current_anchor_start": note.current_anchor_start,
         "current_anchor_end": note.current_anchor_end,
         "anchor_status": note.anchor_status,
+        "parent_id": note.parent_id,
+        "replies": replies,
+        "resolved_at": note.resolved_at,
+        "resolved_by_user_id": note.resolved_by_user_id,
+        "resolved_by_name": resolved_by_name,
         "author_user_id": note.author_user_id,
         "author_name": author_name,
         "is_own": note.author_user_id == current_user_id,

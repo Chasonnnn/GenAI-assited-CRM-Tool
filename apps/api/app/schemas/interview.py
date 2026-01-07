@@ -91,10 +91,15 @@ class InterviewNoteCreate(BaseModel):
     # TipTap comment mark ID (preferred - stable anchor)
     comment_id: str | None = Field(None, max_length=36)
 
+    # Anchor text (for display in comment card)
+    anchor_text: str | None = Field(None, max_length=500)
+
     # Legacy: text offset anchoring (for backward compatibility)
     anchor_start: int | None = Field(None, ge=0)
     anchor_end: int | None = Field(None, ge=0)
-    anchor_text: str | None = Field(None, max_length=500)
+
+    # Thread support
+    parent_id: UUID | None = None  # For replies to existing notes
 
     @model_validator(mode="after")
     def validate_anchor(self) -> "InterviewNoteCreate":
@@ -102,7 +107,6 @@ class InterviewNoteCreate(BaseModel):
         has_start = self.anchor_start is not None
         has_end = self.anchor_end is not None
         has_text = self.anchor_text is not None
-        has_comment = self.comment_id is not None
 
         # If using legacy offset anchoring (start/end), all offset fields required
         if has_start or has_end:
@@ -259,16 +263,28 @@ class InterviewNoteRead(BaseModel):
     # TipTap comment mark ID (stable anchor)
     comment_id: str | None
 
+    # Anchor text (for display in comment card)
+    anchor_text: str | None
+
     # Original anchor (legacy: text offsets)
     anchor_start: int | None
     anchor_end: int | None
-    anchor_text: str | None
 
     # Current position (recalculated)
     current_anchor_start: int | None
     current_anchor_end: int | None
     anchor_status: str | None  # 'valid', 'approximate', 'lost'
 
+    # Thread support
+    parent_id: UUID | None
+    replies: list["InterviewNoteRead"] = []  # Nested replies (eagerly loaded)
+
+    # Resolve support
+    resolved_at: datetime | None
+    resolved_by_user_id: UUID | None
+    resolved_by_name: str | None
+
+    # Author
     author_user_id: UUID
     author_name: str
     is_own: bool
@@ -353,3 +369,7 @@ class InterviewExportResponse(BaseModel):
     expires_at: datetime
     format: str
     file_size: int
+
+
+# Rebuild model to resolve forward references for self-referencing replies
+InterviewNoteRead.model_rebuild()

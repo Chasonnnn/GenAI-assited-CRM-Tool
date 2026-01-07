@@ -257,6 +257,36 @@ export function useDeleteInterviewNote() {
     });
 }
 
+/**
+ * Resolve a note (mark as resolved).
+ */
+export function useResolveInterviewNote() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ interviewId, noteId }: { interviewId: string; noteId: string }) =>
+            interviewsApi.resolveNote(interviewId, noteId),
+        onSuccess: (_, { interviewId }) => {
+            queryClient.invalidateQueries({ queryKey: interviewKeys.notes(interviewId) });
+        },
+    });
+}
+
+/**
+ * Unresolve a note (re-open).
+ */
+export function useUnresolveInterviewNote() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ interviewId, noteId }: { interviewId: string; noteId: string }) =>
+            interviewsApi.unresolveNote(interviewId, noteId),
+        onSuccess: (_, { interviewId }) => {
+            queryClient.invalidateQueries({ queryKey: interviewKeys.notes(interviewId) });
+        },
+    });
+}
+
 // ============================================================================
 // Attachment Mutations
 // ============================================================================
