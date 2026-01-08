@@ -26,8 +26,6 @@ import {
     MoreVerticalIcon,
     FileTextIcon,
     EditIcon,
-    CopyIcon,
-    TrashIcon,
     LoaderIcon,
     ArrowLeftIcon,
 } from "lucide-react"
@@ -201,17 +199,6 @@ export default function FormsListPage() {
                                                         >
                                                             <EditIcon className="mr-2 size-4" />
                                                             Edit
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={(e) => e.stopPropagation()}>
-                                                            <CopyIcon className="mr-2 size-4" />
-                                                            Duplicate
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem
-                                                            className="text-destructive"
-                                                            onClick={(e) => e.stopPropagation()}
-                                                        >
-                                                            <TrashIcon className="mr-2 size-4" />
-                                                            Delete
                                                         </DropdownMenuItem>
                                                     </DropdownMenuContent>
                                                 </DropdownMenu>

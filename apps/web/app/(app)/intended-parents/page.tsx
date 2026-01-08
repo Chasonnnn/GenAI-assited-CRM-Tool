@@ -235,7 +235,7 @@ export default function IntendedParentsPage() {
             <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <div className="flex h-16 items-center justify-between px-6">
                     <h1 className="text-2xl font-semibold">Intended Parents</h1>
-                    <Button className="bg-teal-600 hover:bg-teal-700" onClick={() => setIsCreateOpen(true)}>
+                    <Button onClick={() => setIsCreateOpen(true)}>
                         <PlusIcon className="mr-2 size-4" />
                         New Intended Parent
                     </Button>
@@ -478,7 +478,6 @@ export default function IntendedParentsPage() {
                             Cancel
                         </Button>
                         <Button
-                            className="bg-teal-600 hover:bg-teal-700"
                             onClick={handleCreate}
                             disabled={createMutation.isPending || !formData.full_name || !formData.email}
                         >

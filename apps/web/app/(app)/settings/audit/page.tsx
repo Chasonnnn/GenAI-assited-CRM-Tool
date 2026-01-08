@@ -14,7 +14,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { LoaderIcon, ChevronLeft, ChevronRight, FileText, User, Shield, Settings, Download, Upload, Sparkles, AlertTriangle, CheckIcon, XIcon, Trash2 } from "lucide-react"
+import { Loader2Icon, ChevronLeft, ChevronRight, FileText, User, Shield, Settings, Download, Upload, Sparkles, AlertTriangle, CheckIcon, XIcon, Trash2 } from "lucide-react"
 import { useAIAuditActivity, useAuditExports, useAuditLogs, useCreateAuditExport, useEventTypes } from "@/lib/hooks/use-audit"
 import { useAuth } from "@/lib/auth-context"
 
@@ -226,7 +226,7 @@ export default function AuditLogPage() {
                                     disabled={createExport.isPending || (redactMode === "full" && !acknowledgment.trim())}
                                 >
                                     {createExport.isPending ? (
-                                        <LoaderIcon className="size-4 animate-spin mr-2" />
+                                        <Loader2Icon className="size-4 animate-spin mr-2" />
                                     ) : (
                                         <Upload className="size-4 mr-2" />
                                     )}
@@ -383,7 +383,7 @@ export default function AuditLogPage() {
                                 <div className="mt-2 space-y-2">
                                     {aiActivityLoading ? (
                                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                            <LoaderIcon className="h-3.5 w-3.5 animate-spin" />
+                                            <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
                                             Loading AI activity...
                                         </div>
                                     ) : aiActivity?.recent?.length ? (
@@ -420,7 +420,7 @@ export default function AuditLogPage() {
 
                         {isLoading ? (
                             <div className="py-12 flex items-center justify-center">
-                                <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+                                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
                             </div>
                         ) : auditData?.items.length === 0 ? (
                             <div className="text-center py-12 text-muted-foreground">

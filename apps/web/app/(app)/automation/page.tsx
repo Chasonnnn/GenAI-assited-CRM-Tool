@@ -476,7 +476,7 @@ export default function AutomationPage() {
 
                     {/* Workflow List */}
                     <div className="space-y-4">
-                        <h2 className="text-xl font-semibold">Workflows</h2>
+                        <h2 className="text-lg font-semibold">Workflows</h2>
 
                         {workflowsLoading ? (
                             <div className="flex items-center justify-center py-12">
@@ -922,7 +922,6 @@ export default function AutomationPage() {
                         ) : (
                             <Button
                                 onClick={handleSaveWorkflow}
-                                className="bg-teal-500 hover:bg-teal-600"
                                 disabled={!!workflowValidationError || createWorkflow.isPending || updateWorkflow.isPending}
                             >
                                 {(createWorkflow.isPending || updateWorkflow.isPending) ? (
@@ -1130,7 +1129,6 @@ export default function AutomationPage() {
                         <Button
                             onClick={handleRunTest}
                             disabled={!testCaseId || testWorkflowMutation.isPending}
-                            className="bg-teal-500 hover:bg-teal-600"
                         >
                             {testWorkflowMutation.isPending ? (
                                 <LoaderIcon className="mr-2 size-4 animate-spin" />
