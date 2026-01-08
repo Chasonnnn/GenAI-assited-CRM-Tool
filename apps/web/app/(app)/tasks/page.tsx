@@ -360,8 +360,8 @@ export default function TasksPage() {
         <div className="flex min-h-screen flex-col">
             {/* Page Header */}
             <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-16 items-center justify-between px-6">
-                    <h1 className="text-2xl font-semibold">Tasks</h1>
+                <div className="flex h-14 items-center justify-between px-6">
+                    <h1 className="text-xl font-semibold">Tasks</h1>
                     <Button onClick={() => setAddTaskDialogOpen(true)}>
                         <PlusIcon className="mr-2 size-4" />
                         Add Task

@@ -223,7 +223,7 @@ export default function NotificationSettingsPage() {
     return (
         <div className="flex flex-1 flex-col gap-6 p-6 max-w-3xl mx-auto">
             <div>
-                <h1 className="text-2xl font-bold">Notification</h1>
+                <h1 className="text-2xl font-semibold">Notifications</h1>
                 <p className="text-sm text-muted-foreground">
                     Manage how you receive notifications and alerts
                 </p>

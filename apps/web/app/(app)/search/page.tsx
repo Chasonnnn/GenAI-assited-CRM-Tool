@@ -73,7 +73,7 @@ export default function SearchPage() {
         <div className="flex flex-1 flex-col gap-6 p-6">
             {/* Header */}
             <div>
-                <h1 className="text-3xl font-bold">Search</h1>
+                <h1 className="text-2xl font-semibold">Search</h1>
                 <p className="text-muted-foreground">
                     Search across cases, notes, files, and intended parents
                 </p>

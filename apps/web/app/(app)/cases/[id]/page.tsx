@@ -34,6 +34,7 @@ import {
     BrainIcon,
     HeartHandshakeIcon,
     PhoneIcon,
+    VideoIcon,
 } from "lucide-react"
 import { InlineEditField } from "@/components/inline-edit-field"
 import { FileUploadZone } from "@/components/FileUploadZone"
@@ -565,7 +566,8 @@ export default function CaseDetailPage() {
                             }}
                             disabled={caseData.is_archived}
                         >
-                            📹 Schedule Zoom
+                            <VideoIcon className="mr-2 size-4" />
+                            Schedule Zoom
                         </Button>
                     )}
 
@@ -653,8 +655,6 @@ export default function CaseDetailPage() {
                             ) : (
                                 <DropdownMenuItem onClick={handleArchive}>Archive</DropdownMenuItem>
                             )}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
@@ -1351,7 +1351,10 @@ export default function CaseDetailPage() {
             <Dialog open={zoomDialogOpen} onOpenChange={setZoomDialogOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>📹 Schedule Zoom Appointment</DialogTitle>
+                        <DialogTitle className="flex items-center gap-2">
+                            <VideoIcon className="size-5" />
+                            Schedule Zoom Appointment
+                        </DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                         <div>

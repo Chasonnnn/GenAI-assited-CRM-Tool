@@ -15,7 +15,6 @@ import {
     XCircleIcon,
     Loader2Icon,
     RefreshCwIcon,
-    ExternalLinkIcon,
     KeyIcon,
     FacebookIcon,
     ServerIcon,
@@ -26,8 +25,6 @@ import {
     UnlinkIcon,
     SparklesIcon,
     CheckIcon,
-    EyeIcon,
-    EyeOffIcon,
 } from "lucide-react"
 import { useIntegrationHealth } from "@/lib/hooks/use-ops"
 import { useUserIntegrations, useConnectZoom, useConnectGmail, useDisconnectIntegration } from "@/lib/hooks/use-user-integrations"
@@ -565,13 +562,21 @@ export default function IntegrationsPage() {
 
                                         {/* Action buttons */}
                                         {integration.config_status !== "configured" && (
-                                            <Button variant="outline" size="sm" className="w-full">
-                                                <ExternalLinkIcon className="mr-2 size-3" />
-                                                {integration.config_status === "expired_token"
-                                                    ? "Refresh Token"
-                                                    : "Configure"
-                                                }
-                                            </Button>
+                                            integration.integration_type === "meta_leads" || integration.integration_type === "meta_capi" ? (
+                                                <Link href="/settings/integrations/meta">
+                                                    <Button variant="outline" size="sm" className="w-full">
+                                                        <KeyIcon className="mr-2 size-3" />
+                                                        {integration.config_status === "expired_token"
+                                                            ? "Refresh Token"
+                                                            : "Configure"
+                                                        }
+                                                    </Button>
+                                                </Link>
+                                            ) : (
+                                                <p className="text-xs text-muted-foreground text-center">
+                                                    Configure via CLI
+                                                </p>
+                                            )
                                         )}
                                     </CardContent>
                                 </Card>
