@@ -350,7 +350,10 @@ class TestTokens:
 
         # Test with reschedule token
         appt = get_appointment_by_token(
-            db, confirmed_appointment.reschedule_token, "reschedule"
+            db,
+            confirmed_appointment.organization_id,
+            confirmed_appointment.reschedule_token,
+            "reschedule",
         )
         assert appt is not None
         assert appt.id == confirmed_appointment.id
@@ -359,7 +362,9 @@ class TestTokens:
         """Should return None for invalid token."""
         from app.services.appointment_service import get_appointment_by_token
 
-        appt = get_appointment_by_token(db, "invalid-token-12345", "reschedule")
+        appt = get_appointment_by_token(
+            db, uuid4(), "invalid-token-12345", "reschedule"
+        )
         assert appt is None
 
 

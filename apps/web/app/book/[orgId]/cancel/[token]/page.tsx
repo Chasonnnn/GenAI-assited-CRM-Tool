@@ -1,8 +1,8 @@
 "use client"
 
 /**
- * Self-Service Cancel Page - /book/cancel/[token]
- * 
+ * Self-Service Cancel Page - /book/[orgId]/cancel/[token]
+ *
  * Allows clients to cancel their appointment using a secure token.
  */
 
@@ -24,7 +24,7 @@ import type { PublicAppointmentView } from "@/lib/api/appointments"
 import { getAppointmentForCancel, cancelByToken } from "@/lib/api/appointments"
 
 interface PageProps {
-    params: { token: string }
+    params: { orgId: string; token: string }
 }
 
 export default function CancelPage({ params }: PageProps) {
@@ -39,7 +39,10 @@ export default function CancelPage({ params }: PageProps) {
     useEffect(() => {
         async function load() {
             try {
-                const data = await getAppointmentForCancel(params.token)
+                const data = await getAppointmentForCancel(
+                    params.orgId,
+                    params.token
+                )
                 setAppointment(data as PublicAppointmentView)
             } catch (err: unknown) {
                 setError(err instanceof Error ? err.message : "Appointment not found")
@@ -48,13 +51,13 @@ export default function CancelPage({ params }: PageProps) {
             }
         }
         load()
-    }, [params.token])
+    }, [params.orgId, params.token])
 
     // Submit cancellation
     const handleSubmit = async () => {
         setIsSubmitting(true)
         try {
-            await cancelByToken(params.token, reason || undefined)
+            await cancelByToken(params.orgId, params.token, reason || undefined)
             setIsConfirmed(true)
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : "Failed to cancel")

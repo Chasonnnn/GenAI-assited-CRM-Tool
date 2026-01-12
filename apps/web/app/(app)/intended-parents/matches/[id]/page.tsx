@@ -77,7 +77,8 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 type TabType = "notes" | "files" | "tasks" | "activity"
-type SourceFilter = 'all' | 'case' | 'ip' | 'match'
+type DataSource = "case" | "ip" | "match"
+type SourceFilter = "all" | DataSource
 
 const SOURCE_OPTIONS: { value: SourceFilter; label: string }[] = [
     { value: "all", label: "All Source" },
@@ -93,7 +94,7 @@ const isTabType = (value: string | null): value is TabType =>
     value === "notes" || value === "files" || value === "tasks" || value === "activity"
 const isSourceFilter = (value: string | null): value is SourceFilter =>
     value === "all" || value === "case" || value === "ip" || value === "match"
-const isDeletableSource = (value: string): value is "case" | "ip" =>
+const isDeletableSource = (value: DataSource): value is "case" | "ip" =>
     value === "case" || value === "ip"
 
 export default function MatchDetailPage() {
@@ -897,51 +898,56 @@ export default function MatchDetailPage() {
                                                     Upload File
                                                 </Button>
                                                 {filteredFiles.length > 0 ? (
-                                                    filteredFiles.map((file) => (
-                                                        <div key={file.id} className="p-2 rounded bg-muted/30 flex items-center gap-2">
-                                                            <FolderIcon className="size-4 text-muted-foreground flex-shrink-0" />
-                                                            <div className="flex-1 min-w-0">
-                                                                <div className="flex items-center gap-1 mb-0.5">
-                                                                    <Badge
-                                                                        variant="outline"
-                                                                        className={`text-[10px] px-1 py-0 ${file.source === 'case' ? 'border-green-500 text-green-600' :
-                                                                            file.source === 'ip' ? 'border-blue-500 text-blue-600' :
-                                                                                'border-purple-500 text-purple-600'
-                                                                            }`}
-                                                                    >
-                                                                        {file.source === 'case' ? 'Case' :
-                                                                            file.source === 'ip' ? 'IP' : 'Match'}
-                                                                    </Badge>
+                                                    filteredFiles.map((file) => {
+                                                        const deletableSource = isDeletableSource(file.source)
+                                                            ? file.source
+                                                            : null
+                                                        return (
+                                                            <div key={file.id} className="p-2 rounded bg-muted/30 flex items-center gap-2">
+                                                                <FolderIcon className="size-4 text-muted-foreground flex-shrink-0" />
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="flex items-center gap-1 mb-0.5">
+                                                                        <Badge
+                                                                            variant="outline"
+                                                                            className={`text-[10px] px-1 py-0 ${file.source === 'case' ? 'border-green-500 text-green-600' :
+                                                                                file.source === 'ip' ? 'border-blue-500 text-blue-600' :
+                                                                                    'border-purple-500 text-purple-600'
+                                                                                }`}
+                                                                        >
+                                                                            {file.source === 'case' ? 'Case' :
+                                                                                file.source === 'ip' ? 'IP' : 'Match'}
+                                                                        </Badge>
+                                                                    </div>
+                                                                    <p className="text-sm font-medium truncate">{file.filename}</p>
+                                                                    <p className="text-xs text-muted-foreground">
+                                                                        {(file.file_size / 1024).toFixed(1)} KB • {formatDateTime(file.created_at)}
+                                                                    </p>
                                                                 </div>
-                                                                <p className="text-sm font-medium truncate">{file.filename}</p>
-                                                                <p className="text-xs text-muted-foreground">
-                                                                    {(file.file_size / 1024).toFixed(1)} KB • {formatDateTime(file.created_at)}
-                                                                </p>
-                                                            </div>
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="sm"
-                                                                className="h-7 w-7 p-0 text-muted-foreground hover:text-primary"
-                                                                onClick={() => downloadAttachmentMutation.mutate(file.id)}
-                                                                disabled={downloadAttachmentMutation.isPending}
-                                                                title="Download file"
-                                                            >
-                                                                <DownloadIcon className="size-4" />
-                                                            </Button>
-                                                            {isDeletableSource(file.source) && (
                                                                 <Button
                                                                     variant="ghost"
                                                                     size="sm"
-                                                                    className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                                                                    onClick={() => handleDeleteFile(file.id, file.source)}
-                                                                    disabled={deleteAttachmentMutation.isPending}
-                                                                    title="Delete file"
+                                                                    className="h-7 w-7 p-0 text-muted-foreground hover:text-primary"
+                                                                    onClick={() => downloadAttachmentMutation.mutate(file.id)}
+                                                                    disabled={downloadAttachmentMutation.isPending}
+                                                                    title="Download file"
                                                                 >
-                                                                    <TrashIcon className="size-4" />
+                                                                    <DownloadIcon className="size-4" />
                                                                 </Button>
-                                                            )}
-                                                        </div>
-                                                    ))
+                                                                {deletableSource && (
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                                                                        onClick={() => handleDeleteFile(file.id, deletableSource)}
+                                                                        disabled={deleteAttachmentMutation.isPending}
+                                                                        title="Delete file"
+                                                                    >
+                                                                        <TrashIcon className="size-4" />
+                                                                    </Button>
+                                                                )}
+                                                            </div>
+                                                        )
+                                                    })
                                                 ) : (
                                                     <div className="text-center py-4">
                                                         <FolderIcon className="mx-auto h-6 w-6 text-muted-foreground mb-1" />

@@ -1482,21 +1482,34 @@ def get_appointment(
 
 def get_appointment_by_token(
     db: Session,
+    org_id: UUID,
     token: str,
     token_type: str,  # "reschedule" or "cancel"
 ) -> Appointment | None:
-    """Get appointment by self-service token."""
+    """Get appointment by self-service token scoped to org."""
     now = datetime.now(timezone.utc)
     if token_type == "reschedule":
         appt = (
-            db.query(Appointment).filter(Appointment.reschedule_token == token).first()
+            db.query(Appointment)
+            .filter(
+                Appointment.reschedule_token == token,
+                Appointment.organization_id == org_id,
+            )
+            .first()
         )
         if not appt:
             return None
         if appt.reschedule_token_expires_at and appt.reschedule_token_expires_at <= now:
             return None
     elif token_type == "cancel":
-        appt = db.query(Appointment).filter(Appointment.cancel_token == token).first()
+        appt = (
+            db.query(Appointment)
+            .filter(
+                Appointment.cancel_token == token,
+                Appointment.organization_id == org_id,
+            )
+            .first()
+        )
         if not appt:
             return None
         if appt.cancel_token_expires_at and appt.cancel_token_expires_at <= now:

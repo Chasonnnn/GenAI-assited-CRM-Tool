@@ -27,9 +27,9 @@ def _schema_or_none(schema_json: dict | None) -> FormSchema | None:
         return None
 
 
-@router.get("/logos/{logo_id}")
-def get_form_logo(logo_id: UUID, db: Session = Depends(get_db)):
-    logo = form_service.get_form_logo_by_id(db, logo_id)
+@router.get("/{org_id}/logos/{logo_id}")
+def get_form_logo(org_id: UUID, logo_id: UUID, db: Session = Depends(get_db)):
+    logo = form_service.get_form_logo_by_id(db, org_id, logo_id)
     if not logo:
         raise HTTPException(status_code=404, detail="Logo not found")
 
@@ -61,6 +61,10 @@ def get_public_form(token: str, db: Session = Depends(get_db)):
     schema = _schema_or_none(form.published_schema_json)
     if not schema:
         raise HTTPException(status_code=404, detail="Form not found")
+
+    schema = form_service.normalize_form_schema_logo_url(
+        schema, token_record.organization_id
+    )
 
     return FormPublicRead(
         form_id=form.id,

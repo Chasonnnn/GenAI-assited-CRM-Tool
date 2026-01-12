@@ -153,11 +153,19 @@ def get_alert_for_org(db: Session, org_id: UUID, alert_id: UUID) -> SystemAlert 
 
 def resolve_alert(
     db: Session,
+    org_id: UUID,
     alert_id: UUID,
     user_id: UUID,
 ) -> SystemAlert | None:
     """Resolve an alert."""
-    alert = db.query(SystemAlert).filter(SystemAlert.id == alert_id).first()
+    alert = (
+        db.query(SystemAlert)
+        .filter(
+            SystemAlert.id == alert_id,
+            SystemAlert.organization_id == org_id,
+        )
+        .first()
+    )
     if not alert:
         return None
 
@@ -171,10 +179,18 @@ def resolve_alert(
 
 def acknowledge_alert(
     db: Session,
+    org_id: UUID,
     alert_id: UUID,
 ) -> SystemAlert | None:
     """Acknowledge an alert (stops immediate notifications but keeps open)."""
-    alert = db.query(SystemAlert).filter(SystemAlert.id == alert_id).first()
+    alert = (
+        db.query(SystemAlert)
+        .filter(
+            SystemAlert.id == alert_id,
+            SystemAlert.organization_id == org_id,
+        )
+        .first()
+    )
     if not alert:
         return None
 
@@ -186,11 +202,19 @@ def acknowledge_alert(
 
 def snooze_alert(
     db: Session,
+    org_id: UUID,
     alert_id: UUID,
     hours: int = 24,
 ) -> SystemAlert | None:
     """Snooze an alert for a specified duration."""
-    alert = db.query(SystemAlert).filter(SystemAlert.id == alert_id).first()
+    alert = (
+        db.query(SystemAlert)
+        .filter(
+            SystemAlert.id == alert_id,
+            SystemAlert.organization_id == org_id,
+        )
+        .first()
+    )
     if not alert:
         return None
 

@@ -58,6 +58,15 @@ def _is_case_number_conflict(error: IntegrityError) -> bool:
     return "uq_case_number" in message
 
 
+def _get_org_user(db: Session, org_id: UUID, user_id: UUID | None) -> User | None:
+    if not user_id:
+        return None
+    from app.services import membership_service
+
+    membership = membership_service.get_membership_for_org(db, org_id, user_id)
+    return membership.user if membership else None
+
+
 def create_case(
     db: Session,
     org_id: UUID,
@@ -362,7 +371,7 @@ def change_status(
     # Send notifications
     from app.services import notification_service
 
-    actor = db.query(User).filter(User.id == user_id).first()
+    actor = _get_org_user(db, case.organization_id, user_id)
     actor_name = actor.display_name if actor else "Someone"
 
     # Notify assignee and creator of status change
@@ -429,7 +438,14 @@ def _maybe_send_capi_event(
     # Get the meta lead to get the original Meta leadgen_id
     from app.db.models import MetaLead
 
-    meta_lead = db.query(MetaLead).filter(MetaLead.id == case.meta_lead_id).first()
+    meta_lead = (
+        db.query(MetaLead)
+        .filter(
+            MetaLead.id == case.meta_lead_id,
+            MetaLead.organization_id == case.organization_id,
+        )
+        .first()
+    )
     if not meta_lead:
         return
 
@@ -519,7 +535,7 @@ def accept_handoff(
     # Notify case creator that handoff was accepted
     from app.services import notification_service
 
-    actor = db.query(User).filter(User.id == user_id).first()
+    actor = _get_org_user(db, case.organization_id, user_id)
     actor_name = actor.display_name if actor else "Case Manager"
     notification_service.notify_case_handoff_accepted(
         db=db,
@@ -597,7 +613,7 @@ def deny_handoff(
     # Notify case creator that handoff was denied
     from app.services import notification_service
 
-    actor = db.query(User).filter(User.id == user_id).first()
+    actor = _get_org_user(db, case.organization_id, user_id)
     actor_name = actor.display_name if actor else "Case Manager"
     notification_service.notify_case_handoff_denied(
         db=db,
@@ -661,7 +677,7 @@ def assign_case(
         if case.owner_id != user_id:
             from app.services import notification_service
 
-            actor = db.query(User).filter(User.id == user_id).first()
+            actor = _get_org_user(db, case.organization_id, user_id)
             actor_name = actor.display_name if actor else "Someone"
             notification_service.notify_case_assigned(
                 db=db,
