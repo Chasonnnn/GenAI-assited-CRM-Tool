@@ -1,7 +1,7 @@
 """Pydantic schemas for case interviews."""
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 from uuid import UUID
 
 import nh3
@@ -46,7 +46,7 @@ class InterviewCreate(BaseModel):
     interview_type: Literal["phone", "video", "in_person"]
     conducted_at: datetime
     duration_minutes: int | None = Field(None, ge=1, le=480)
-    transcript_json: dict[str, Any] | None = None  # TipTap JSON (preferred)
+    transcript_json: dict[str, object] | None = None  # TipTap JSON (preferred)
     status: Literal["draft", "completed"] = "completed"
 
 
@@ -56,7 +56,7 @@ class InterviewUpdate(BaseModel):
     interview_type: Literal["phone", "video", "in_person"] | None = None
     conducted_at: datetime | None = None
     duration_minutes: int | None = Field(None, ge=1, le=480)
-    transcript_json: dict[str, Any] | None = None  # TipTap JSON (preferred)
+    transcript_json: dict[str, object] | None = None  # TipTap JSON (preferred)
     status: Literal["draft", "completed"] | None = None
     expected_version: int | None = None  # Optimistic concurrency control
 
@@ -146,7 +146,7 @@ class InterviewRead(BaseModel):
     duration_minutes: int | None
 
     # Transcript
-    transcript_json: dict[str, Any] | None  # TipTap JSON (canonical)
+    transcript_json: dict[str, object] | None  # TipTap JSON (canonical)
     transcript_version: int
     transcript_size_bytes: int
     is_transcript_offloaded: bool  # True if content in S3

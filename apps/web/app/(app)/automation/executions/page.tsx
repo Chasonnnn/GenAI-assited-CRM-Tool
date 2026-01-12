@@ -77,6 +77,9 @@ const statusConfig = {
     },
 }
 
+const isStatusKey = (value: string): value is keyof typeof statusConfig =>
+    Object.prototype.hasOwnProperty.call(statusConfig, value)
+
 // Helper to format duration
 function formatDuration(ms: number): string {
     if (ms < 1000) return `${ms}ms`
@@ -276,7 +279,10 @@ export default function WorkflowExecutionsPage() {
                         <SelectValue placeholder="All Statuses">
                             {(value: string | null) => {
                                 if (!value || value === "all") return "All Statuses"
-                                return statusConfig[value as keyof typeof statusConfig]?.label ?? value
+                                if (value && isStatusKey(value)) {
+                                    return statusConfig[value].label
+                                }
+                                return value
                             }}
                         </SelectValue>
                     </SelectTrigger>

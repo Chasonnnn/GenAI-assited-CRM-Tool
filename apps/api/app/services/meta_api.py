@@ -10,11 +10,11 @@ Handles:
 import hmac
 import hashlib
 from datetime import datetime, timezone
-from typing import Any
 
 import httpx
 
 from app.core.config import settings
+from app.types import JsonObject
 
 
 # Graph API base URL with version
@@ -68,7 +68,7 @@ def compute_appsecret_proof(access_token: str) -> str:
 async def fetch_lead_details(
     leadgen_id: str,
     access_token: str,
-) -> tuple[dict | None, str | None]:
+) -> tuple[JsonObject | None, str | None]:
     """
     Fetch lead details from Meta Graph API.
 
@@ -111,7 +111,7 @@ async def fetch_lead_details(
         return None, f"Meta API error: {str(e)[:200]}"
 
 
-def normalize_field_data(field_data_list: list[dict[str, Any]]) -> dict[str, Any]:
+def normalize_field_data(field_data_list: list[JsonObject]) -> JsonObject:
     """
     Normalize Meta field_data array to dict with standard keys.
 
@@ -121,7 +121,7 @@ def normalize_field_data(field_data_list: list[dict[str, Any]]) -> dict[str, Any
     - email, email_address → email
     - state, us_state → state
     """
-    result: dict[str, Any] = {}
+    result: JsonObject = {}
 
     for field in field_data_list:
         name = field.get("name", "").lower().replace(" ", "_")
@@ -186,7 +186,7 @@ def parse_meta_timestamp(timestamp_str: str | None) -> datetime | None:
     return None
 
 
-def _mock_lead_data(leadgen_id: str) -> dict:
+def _mock_lead_data(leadgen_id: str) -> JsonObject:
     """Return mock data for test mode."""
     return {
         "id": leadgen_id,
@@ -212,7 +212,7 @@ async def fetch_ad_account_insights(
     max_pages: int = 10,
     time_increment: int | None = None,
     breakdowns: list[str] | None = None,
-) -> tuple[list[dict] | None, str | None]:
+) -> tuple[list[JsonObject] | None, str | None]:
     """
     Fetch ad insights (spend, impressions, etc.) from Meta Marketing API.
 
@@ -296,7 +296,7 @@ def _mock_insights_data(
     date_end: str,
     time_increment: int | None = None,
     breakdowns: list[str] | None = None,
-) -> list[dict]:
+) -> list[JsonObject]:
     """Return mock insights data for test mode."""
     breakdowns = breakdowns or []
     return [

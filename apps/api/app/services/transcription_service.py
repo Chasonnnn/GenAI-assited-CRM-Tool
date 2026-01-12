@@ -8,6 +8,7 @@ from uuid import UUID
 
 import boto3
 import httpx
+from botocore.client import BaseClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -56,7 +57,7 @@ def is_transcribable(content_type: str) -> bool:
     return content_type in TRANSCRIBABLE_MIME_TYPES
 
 
-def _get_s3_client():
+def _get_s3_client() -> BaseClient:
     """Get boto3 S3 client."""
     return boto3.client(
         "s3",

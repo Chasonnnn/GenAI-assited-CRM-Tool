@@ -6,7 +6,6 @@ Ensures sensitive data doesn't leave the system.
 
 import re
 from dataclasses import dataclass, field
-from typing import Any
 
 
 @dataclass
@@ -132,7 +131,7 @@ def anonymize_case_context(
     phone: str | None,
     notes_text: str | None,
     mapping: PIIMapping,
-) -> dict[str, Any]:
+) -> dict[str, str | None]:
     """
     Anonymize case context fields.
 

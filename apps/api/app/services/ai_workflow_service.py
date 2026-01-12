@@ -7,7 +7,6 @@ Includes strict validation to ensure generated workflows are safe and valid.
 
 import json
 import logging
-from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -67,10 +66,10 @@ class GeneratedWorkflow(BaseModel):
     description: str | None = None
     icon: str = "zap"
     trigger_type: str
-    trigger_config: dict[str, Any] = {}
-    conditions: list[dict[str, Any]] = []
+    trigger_config: dict[str, object] = Field(default_factory=dict)
+    conditions: list[dict[str, object]] = Field(default_factory=list)
     condition_logic: str = "AND"
-    actions: list[dict[str, Any]] = []
+    actions: list[dict[str, object]] = Field(default_factory=list)
 
 
 class WorkflowGenerationResponse(BaseModel):

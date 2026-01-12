@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import boto3
+from botocore.client import BaseClient
 from botocore.exceptions import ClientError
 
 from app.core.config import settings
@@ -20,7 +21,7 @@ OFFLOAD_THRESHOLD_BYTES = 100 * 1024
 # =============================================================================
 
 
-def _get_s3_client():
+def _get_s3_client() -> BaseClient:
     """Get boto3 S3 client."""
     return boto3.client(
         "s3",

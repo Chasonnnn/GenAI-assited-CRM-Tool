@@ -112,8 +112,8 @@ type FormPage = {
     fields: FormField[]
 }
 
-function toFieldOptions(options?: string[]): FormFieldOption[] | undefined {
-    if (!options || options.length === 0) return undefined
+function toFieldOptions(options?: string[]): FormFieldOption[] | null {
+    if (!options || options.length === 0) return null
     return options.map((option) => ({
         label: option,
         value: option,
@@ -153,15 +153,18 @@ function schemaToPages(schema: FormSchema, mappings: Map<string, string>): FormP
     const pages = schema.pages.map((page, index) => ({
         id: index + 1,
         name: page.title || `Page ${index + 1}`,
-        fields: page.fields.map((field) => ({
-            id: field.key,
-            type: field.type,
-            label: field.label,
-            helperText: field.help_text || "",
-            required: field.required ?? false,
-            caseFieldMapping: mappings.get(field.key) || "",
-            options: field.options?.map((option) => option.label || option.value) || undefined,
-        })),
+        fields: page.fields.map((field) => {
+            const options = field.options?.map((option) => option.label || option.value)
+            return {
+                id: field.key,
+                type: field.type,
+                label: field.label,
+                helperText: field.help_text || "",
+                required: field.required ?? false,
+                caseFieldMapping: mappings.get(field.key) || "",
+                ...(options ? { options } : {}),
+            }
+        }),
     }))
 
     if (pages.length === 0) {
@@ -270,7 +273,7 @@ const buildDraftField = ({
     helperText,
     required,
     caseFieldMapping,
-    options,
+    ...(options ? { options } : {}),
 })
 
 const translateLabel = (label: string) => TRANSLATION_MAP[label] || label
@@ -631,7 +634,8 @@ export default function FormBuilderPage() {
         setHasHydrated(true)
     }, [formData, mappingData, isMappingsLoading, hasHydrated, isNewForm])
 
-    const currentPage = pages.find((p) => p.id === activePage) || pages[0]
+    const fallbackPage: FormPage = { id: 1, name: "Page 1", fields: [] }
+    const currentPage = pages.find((p) => p.id === activePage) ?? pages[0] ?? fallbackPage
 
     if (!isNewForm && (isFormLoading || isMappingsLoading)) {
         return (
@@ -692,17 +696,18 @@ export default function FormBuilderPage() {
                 ? crypto.randomUUID()
                 : `field-${Date.now()}`
 
-        return {
+        const baseField: FormField = {
             id: fieldId,
             type: draggedField.type,
             label: draggedField.label,
             helperText: "",
             required: false,
             caseFieldMapping: "",
-            options: ["select", "multiselect", "radio"].includes(draggedField.type)
-                ? ["Option 1", "Option 2", "Option 3"]
-                : undefined,
         }
+        if (["select", "multiselect", "radio"].includes(draggedField.type)) {
+            return { ...baseField, options: ["Option 1", "Option 2", "Option 3"] }
+        }
+        return baseField
     }
 
     const moveFieldToIndex = (fields: FormField[], fieldId: string, targetIndex: number) => {
@@ -712,6 +717,7 @@ export default function FormBuilderPage() {
 
         const nextFields = [...fields]
         const [moved] = nextFields.splice(fromIndex, 1)
+        if (!moved) return fields
         const adjustedIndex = fromIndex < targetIndex ? targetIndex - 1 : targetIndex
         const clampedIndex = Math.max(0, Math.min(adjustedIndex, nextFields.length))
         nextFields.splice(clampedIndex, 0, moved)
@@ -841,7 +847,7 @@ export default function FormBuilderPage() {
                 return [fallbackPage]
             }
             if (pageToDelete === activePage) {
-                setActivePage(nextPages[0].id)
+                setActivePage(nextPages[0]?.id ?? 1)
                 setSelectedField(null)
             }
             return nextPages
@@ -941,8 +947,9 @@ export default function FormBuilderPage() {
         setFormDescription(formDraft.description)
         setPublicTitle(formDraft.publicTitle)
         setPrivacyNotice(formDraft.privacyNotice)
-        setPages(formDraft.pages)
-        setActivePage(formDraft.pages[0]?.id || 1)
+        const nextPages = formDraft.pages.length > 0 ? formDraft.pages : [{ id: 1, name: "Page 1", fields: [] }]
+        setPages(nextPages)
+        setActivePage(nextPages[0]?.id ?? 1)
         setSelectedField(null)
         toast.success("Draft applied to the form.")
     }

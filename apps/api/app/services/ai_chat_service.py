@@ -9,7 +9,6 @@ import logging
 import re
 import uuid
 from datetime import datetime, timedelta, timezone, date
-from typing import Any
 
 import nh3
 from sqlalchemy.exc import IntegrityError
@@ -29,6 +28,7 @@ from app.db.enums import TaskType
 from app.services.ai_provider import ChatMessage, ChatResponse
 from app.services import ai_settings_service
 from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_text
+from app.types import JsonObject
 
 logger = logging.getLogger(__name__)
 
@@ -306,7 +306,7 @@ def _build_dynamic_context(
     return "\n".join(lines)
 
 
-def _parse_actions(content: str) -> list[dict[str, Any]]:
+def _parse_actions(content: str) -> list[JsonObject]:
     """Extract action JSON from <action> tags in AI response."""
     actions = []
     pattern = r"<action>\s*(.*?)\s*</action>"
@@ -518,7 +518,7 @@ async def chat_async(
     entity_id: uuid.UUID,
     message: str,
     user_integrations: list[str] | None = None,
-) -> dict[str, Any]:
+) -> JsonObject:
     """Process a chat message and return AI response.
 
     Returns:
@@ -749,7 +749,7 @@ def chat(
     entity_id: uuid.UUID,
     message: str,
     user_integrations: list[str] | None = None,
-) -> dict[str, Any]:
+) -> JsonObject:
     """Synchronous wrapper for chat_async (used by API routes)."""
     return asyncio.run(
         chat_async(

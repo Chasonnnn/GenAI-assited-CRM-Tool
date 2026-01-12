@@ -7,7 +7,6 @@ Stores encrypted tokens per-user.
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any
 from urllib.parse import urlencode
 
 import httpx
@@ -16,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import UserIntegration
+from app.types import JsonObject
 
 logger = logging.getLogger(__name__)
 
@@ -203,7 +203,7 @@ def get_gmail_auth_url(redirect_uri: str, state: str) -> str:
     return f"{GMAIL_AUTH_URL}?{urlencode(params)}"
 
 
-async def exchange_gmail_code(code: str, redirect_uri: str) -> dict[str, Any]:
+async def exchange_gmail_code(code: str, redirect_uri: str) -> JsonObject:
     """Exchange authorization code for tokens."""
     async with httpx.AsyncClient() as client:
         response = await client.post(
@@ -220,7 +220,7 @@ async def exchange_gmail_code(code: str, redirect_uri: str) -> dict[str, Any]:
         return response.json()
 
 
-async def get_gmail_user_info(access_token: str) -> dict[str, Any]:
+async def get_gmail_user_info(access_token: str) -> JsonObject:
     """Get user info from Google."""
     async with httpx.AsyncClient() as client:
         response = await client.get(
@@ -231,7 +231,7 @@ async def get_gmail_user_info(access_token: str) -> dict[str, Any]:
         return response.json()
 
 
-async def refresh_gmail_token(refresh_token: str) -> dict[str, Any] | None:
+async def refresh_gmail_token(refresh_token: str) -> JsonObject | None:
     """Refresh Gmail access token."""
     try:
         async with httpx.AsyncClient() as client:
@@ -271,7 +271,7 @@ def get_zoom_auth_url(redirect_uri: str, state: str) -> str:
     return f"{ZOOM_AUTH_URL}?{urlencode(params)}"
 
 
-async def exchange_zoom_code(code: str, redirect_uri: str) -> dict[str, Any]:
+async def exchange_zoom_code(code: str, redirect_uri: str) -> JsonObject:
     """Exchange Zoom authorization code for tokens."""
     import base64
 
@@ -296,7 +296,7 @@ async def exchange_zoom_code(code: str, redirect_uri: str) -> dict[str, Any]:
         return response.json()
 
 
-async def get_zoom_user_info(access_token: str) -> dict[str, Any]:
+async def get_zoom_user_info(access_token: str) -> JsonObject:
     """Get user info from Zoom."""
     async with httpx.AsyncClient() as client:
         response = await client.get(
@@ -307,7 +307,7 @@ async def get_zoom_user_info(access_token: str) -> dict[str, Any]:
         return response.json()
 
 
-async def refresh_zoom_token(refresh_token: str) -> dict[str, Any] | None:
+async def refresh_zoom_token(refresh_token: str) -> JsonObject | None:
     """Refresh Zoom access token."""
     import base64
 
