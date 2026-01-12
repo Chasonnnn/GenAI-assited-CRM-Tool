@@ -1,3 +1,4 @@
+import type { ReactNode, ButtonHTMLAttributes } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { CaseInterviewTab } from '../components/cases/interviews/CaseInterviewTab'
@@ -29,6 +30,50 @@ vi.mock('@/components/rich-text-editor', () => ({
 
 vi.mock('@/components/cases/interviews/InterviewVersionHistory', () => ({
     InterviewVersionHistory: () => <div data-testid="interview-version-history" />,
+}))
+
+// Simplify Base UI dropdowns/dialogs to avoid portal/focus issues in tests.
+vi.mock('@/components/ui/dropdown-menu', () => ({
+    DropdownMenu: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+    DropdownMenuTrigger: ({
+        children,
+        ...props
+    }: { children?: ReactNode } & ButtonHTMLAttributes<HTMLButtonElement>) => (
+        <button type="button" {...props}>
+            {children}
+        </button>
+    ),
+    DropdownMenuContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+    DropdownMenuItem: ({
+        children,
+        onClick,
+        onSelect,
+        ...props
+    }: {
+        children?: ReactNode
+        onClick?: () => void
+        onSelect?: () => void
+    }) => (
+        <button
+            type="button"
+            onClick={() => {
+                onClick?.()
+                onSelect?.()
+            }}
+            {...props}
+        >
+            {children}
+        </button>
+    ),
+}))
+
+vi.mock('@/components/ui/dialog', () => ({
+    Dialog: ({ open, children }: { open?: boolean; children?: ReactNode }) =>
+        open ? <div>{children}</div> : null,
+    DialogContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+    DialogHeader: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+    DialogTitle: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+    DialogFooter: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
 }))
 
 vi.mock('@/lib/hooks/use-interviews', () => ({
@@ -131,13 +176,19 @@ describe('CaseInterviewTab', () => {
         expect(screen.getByRole('button', { name: /add interview/i })).toBeDefined()
     })
 
-    it.skip('requests transcription for audio attachments', async () => {
+    it('requests transcription for audio attachments', async () => {
         render(<CaseInterviewTab caseId="c1" />)
 
         fireEvent.click(screen.getAllByText('Phone')[0])
 
-        const transcribeButtons = screen.getAllByRole('button', { name: /transcribe/i })
-        fireEvent.click(transcribeButtons[0])
+        await waitFor(() => {
+            expect(screen.getByText('Phone Interview')).toBeDefined()
+        })
+
+        fireEvent.click(screen.getByText('Attachments'))
+
+        const transcribeButton = await screen.findByRole('button', { name: /transcribe/i })
+        fireEvent.click(transcribeButton)
 
         await waitFor(() => {
             expect(mockRequestTranscription).toHaveBeenCalledWith({

@@ -98,17 +98,18 @@ const categoryColors: Record<DueCategory, { text: string; badge: string }> = {
 }
 
 type FilterType = "all" | "my_tasks"
-const VALID_FILTERS: FilterType[] = ["all", "my_tasks"]
+const isFilterType = (value: string | null): value is FilterType =>
+    value === "all" || value === "my_tasks"
 
 export default function TasksPage() {
     const searchParams = useSearchParams()
     const router = useRouter()
 
     // Read initial values from URL params
-    const urlFilter = searchParams.get("filter") as FilterType | null
+    const urlFilter = searchParams.get("filter")
 
     const [filter, setFilter] = useState<FilterType>(
-        urlFilter && VALID_FILTERS.includes(urlFilter) ? urlFilter : "my_tasks"
+        isFilterType(urlFilter) ? urlFilter : "my_tasks"
     )
     const [showCompleted, setShowCompleted] = useState(false)
     const [view, setView] = useState<"list" | "calendar">(() => {
@@ -163,7 +164,12 @@ export default function TasksPage() {
     }
 
     // Fetch incomplete tasks
-    const { data: incompleteTasks, isLoading: loadingIncomplete, isError: incompleteError } = useTasks({
+    const {
+        data: incompleteTasks,
+        isLoading: loadingIncomplete,
+        isError: incompleteError,
+        refetch: refetchIncomplete,
+    } = useTasks({
         my_tasks: filter === "my_tasks",
         is_completed: false,
         per_page: 100,
@@ -171,7 +177,12 @@ export default function TasksPage() {
     })
 
     // Fetch completed tasks (only when shown)
-    const { data: completedTasks, isLoading: loadingCompleted, isError: completedError } = useTasks({
+    const {
+        data: completedTasks,
+        isLoading: loadingCompleted,
+        isError: completedError,
+        refetch: refetchCompleted,
+    } = useTasks({
         my_tasks: filter === "my_tasks",
         is_completed: true,
         per_page: 50,
@@ -355,6 +366,10 @@ export default function TasksPage() {
 
     const isLoading = loadingIncomplete
     const hasError = incompleteError || completedError
+    const handleRetry = () => {
+        refetchIncomplete()
+        refetchCompleted()
+    }
 
     return (
         <div className="flex min-h-screen flex-col">
@@ -425,8 +440,11 @@ export default function TasksPage() {
 
                 {/* Error State */}
                 {!isLoading && hasError && (
-                    <Card className="flex items-center justify-center p-12 border-destructive/40 bg-destructive/5">
+                    <Card className="flex flex-col items-center justify-center gap-3 p-12 border-destructive/40 bg-destructive/5">
                         <span className="text-destructive">Unable to load tasks. Please try again.</span>
+                        <Button variant="outline" size="sm" onClick={handleRetry}>
+                            Retry
+                        </Button>
                     </Card>
                 )}
 

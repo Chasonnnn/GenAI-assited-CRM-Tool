@@ -132,11 +132,11 @@ function applyMark(
         case "code":
             return `<code class="px-1 py-0.5 rounded bg-muted text-sm">${text}</code>`
         case "link": {
-            const href = (mark.attrs?.href as string) || "#"
+            const href = typeof mark.attrs?.href === "string" ? mark.attrs.href : "#"
             return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="text-primary underline hover:text-primary/80">${text}</a>`
         }
         case "comment": {
-            const commentId = mark.attrs?.commentId as string
+            const commentId = typeof mark.attrs?.commentId === "string" ? mark.attrs.commentId : ""
             if (!commentId) return text
 
             const noteId = commentNoteMap.get(commentId)
@@ -197,7 +197,8 @@ function renderNode(
         case "paragraph":
             return `<p class="my-2 first:mt-0 last:mb-0">${children || "<br/>"}</p>`
         case "heading": {
-            const level = (node.attrs?.level as number) || 1
+            const rawLevel = node.attrs?.level
+            const level = typeof rawLevel === "number" ? rawLevel : Number(rawLevel) || 1
             const sizes: Record<number, string> = {
                 1: "text-xl font-bold",
                 2: "text-lg font-semibold",
@@ -419,9 +420,9 @@ export function InterviewWithComments({
         }
 
         for (const position of positions) {
-            const cardEl = commentSidebarRef.current?.querySelector(
+            const cardEl = commentSidebarRef.current?.querySelector<HTMLElement>(
                 `[data-note-id="${position.noteId}"]`
-            ) as HTMLElement | null
+            )
             position.height = cardEl?.offsetHeight || 140
         }
 
@@ -552,8 +553,8 @@ export function InterviewWithComments({
     // Handle hover on transcript highlights (event delegation)
     const handleTranscriptMouseOver = useCallback((e: React.MouseEvent) => {
         if (isSelectingRef.current) return
-        const target = e.target as HTMLElement
-        const commentSpan = target.closest("[data-comment-id]")
+        const target = e.target instanceof HTMLElement ? e.target : null
+        const commentSpan = target?.closest("[data-comment-id]")
         if (commentSpan) {
             setHoveredCommentId(commentSpan.getAttribute("data-comment-id"))
         }
@@ -561,8 +562,8 @@ export function InterviewWithComments({
 
     const handleTranscriptMouseOut = useCallback((e: React.MouseEvent) => {
         if (isSelectingRef.current) return
-        const related = e.relatedTarget as HTMLElement | null
-        if (!related || !related.closest("[data-comment-id]")) {
+        const related = e.relatedTarget instanceof HTMLElement ? e.relatedTarget : null
+        if (!related?.closest("[data-comment-id]")) {
             setHoveredCommentId(null)
         }
     }, [])
@@ -570,8 +571,8 @@ export function InterviewWithComments({
     // Handle click on transcript highlights
     const handleTranscriptClick = useCallback((e: React.MouseEvent) => {
         if (isSelectingRef.current) return
-        const target = e.target as HTMLElement
-        const commentSpan = target.closest("[data-comment-id]")
+        const target = e.target instanceof HTMLElement ? e.target : null
+        const commentSpan = target?.closest("[data-comment-id]")
         if (commentSpan) {
             const commentId = commentSpan.getAttribute("data-comment-id")
             setFocusedCommentId(commentId)

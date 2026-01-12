@@ -163,6 +163,11 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
 
     role = Role(membership.role)
 
+    # In dev bypass mode, skip MFA entirely (frontend checks mfa_verified)
+    if settings.DEV_BYPASS_AUTH:
+        mfa_verified = True
+        mfa_required = False
+
     session = UserSession(
         user_id=user.id,
         org_id=membership.organization_id,

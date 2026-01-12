@@ -70,16 +70,8 @@ export default function MetaLeadsAdminPage() {
             setExpiresDays("60")
             setShowAddDialog(false)
         } catch (error: unknown) {
-            const message =
-                typeof error === "object" &&
-                error !== null &&
-                "response" in error &&
-                typeof (error as { response?: { data?: { detail?: string } } }).response?.data?.detail === "string"
-                    ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail
-                    : error instanceof Error
-                        ? error.message
-                        : "Failed to add page"
-            setFormError(message || "Failed to add page")
+            const message = error instanceof Error ? error.message : "Failed to add page"
+            setFormError(message)
         }
     }
 

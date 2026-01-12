@@ -169,17 +169,19 @@ export default function AutomationPage() {
     const deleteTemplate = useDeleteEmailTemplate()
 
     const getActionValidationError = (action: ActionConfig): string | null => {
+        const title = typeof action.title === "string" ? action.title : ""
+        const content = typeof action.content === "string" ? action.content : ""
         if (!action.action_type) return "Select an action type for each action."
         if (action.action_type === "send_email" && !action.template_id) {
             return "Select an email template for all email actions."
         }
-        if (action.action_type === "create_task" && !(action.title as string | undefined)?.trim()) {
+        if (action.action_type === "create_task" && !title.trim()) {
             return "Task actions need a title."
         }
-        if (action.action_type === "send_notification" && !(action.title as string | undefined)?.trim()) {
+        if (action.action_type === "send_notification" && !title.trim()) {
             return "Notification actions need a title."
         }
-        if (action.action_type === "add_note" && !(action.content as string | undefined)?.trim()) {
+        if (action.action_type === "add_note" && !content.trim()) {
             return "Note actions need content."
         }
         return null
@@ -288,7 +290,11 @@ export default function AutomationPage() {
         setTriggerType(editingWorkflow.trigger_type)
         setTriggerConfig(editingWorkflow.trigger_config || {})
         setConditions(editingWorkflow.conditions || [])
-        setConditionLogic((editingWorkflow.condition_logic || "AND") as "AND" | "OR")
+        const logic =
+            editingWorkflow.condition_logic === "AND" || editingWorkflow.condition_logic === "OR"
+                ? editingWorkflow.condition_logic
+                : "AND"
+        setConditionLogic(logic)
         setActions(editingWorkflow.actions || [])
         setHydratedWorkflowId(editingWorkflowId)
     }, [editingWorkflow, editingWorkflowId, hydratedWorkflowId, showCreateModal])
@@ -632,7 +638,7 @@ export default function AutomationPage() {
                                     <div>
                                         <Label>To Status</Label>
                                         <Select
-                                            value={triggerConfig.to_status as string || ""}
+                                            value={typeof triggerConfig.to_status === "string" ? triggerConfig.to_status : ""}
                                             onValueChange={(v) => v && setTriggerConfig({ ...triggerConfig, to_status: v })}
                                         >
                                             <SelectTrigger className="mt-1.5">
@@ -722,7 +728,7 @@ export default function AutomationPage() {
                                                         <Input
                                                             placeholder="Value"
                                                             className="flex-1"
-                                                            value={condition.value as string || ""}
+                                                            value={typeof condition.value === "string" ? condition.value : ""}
                                                             onChange={(e) => updateCondition(index, { value: e.target.value })}
                                                         />
                                                         <Button size="icon" variant="ghost" onClick={() => removeCondition(index)}>
@@ -791,7 +797,7 @@ export default function AutomationPage() {
                                                 </div>
                                                 {action.action_type === "send_email" && (
                                                     <Select
-                                                        value={action.template_id as string || ""}
+                                                        value={typeof action.template_id === "string" ? action.template_id : ""}
                                                         onValueChange={(v) => v && updateAction(index, { template_id: v })}
                                                     >
                                                         <SelectTrigger>
@@ -813,21 +819,21 @@ export default function AutomationPage() {
                                                 {action.action_type === "create_task" && (
                                                     <Input
                                                         placeholder="Task title"
-                                                        value={action.title as string || ""}
+                                                        value={typeof action.title === "string" ? action.title : ""}
                                                         onChange={(e) => updateAction(index, { title: e.target.value })}
                                                     />
                                                 )}
                                                 {action.action_type === "send_notification" && (
                                                     <Input
                                                         placeholder="Notification title"
-                                                        value={action.title as string || ""}
+                                                        value={typeof action.title === "string" ? action.title : ""}
                                                         onChange={(e) => updateAction(index, { title: e.target.value })}
                                                     />
                                                 )}
                                                 {action.action_type === "add_note" && (
                                                     <Textarea
                                                         placeholder="Note content"
-                                                        value={action.content as string || ""}
+                                                        value={typeof action.content === "string" ? action.content : ""}
                                                         onChange={(e) => updateAction(index, { content: e.target.value })}
                                                         rows={2}
                                                     />

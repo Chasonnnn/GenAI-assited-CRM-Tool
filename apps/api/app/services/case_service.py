@@ -892,7 +892,11 @@ def list_cases(
 
     query = (
         db.query(Case)
-        .options(selectinload(Case.stage))
+        .options(
+            selectinload(Case.stage),
+            selectinload(Case.owner_user),
+            selectinload(Case.owner_queue),
+        )
         .filter(Case.organization_id == org_id)
     )
 
@@ -1036,6 +1040,11 @@ def list_handoff_queue(
 
     query = (
         db.query(Case)
+        .options(
+            selectinload(Case.stage),
+            selectinload(Case.owner_user),
+            selectinload(Case.owner_queue),
+        )
         .filter(
             Case.organization_id == org_id,
             Case.stage_id == handoff_stage.id,

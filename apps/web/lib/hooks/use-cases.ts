@@ -26,7 +26,7 @@ export function useCaseStats() {
         queryKey: caseKeys.stats(),
         queryFn: casesApi.getCaseStats,
         staleTime: 30 * 1000, // 30 seconds
-        refetchInterval: 60 * 1000, // Auto-refresh every 60 seconds
+        refetchInterval: (query) => (query.state.status === 'error' ? false : 60 * 1000),
     });
 }
 

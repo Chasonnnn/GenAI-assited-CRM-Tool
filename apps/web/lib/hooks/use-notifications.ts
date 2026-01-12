@@ -38,7 +38,7 @@ export function useUnreadCount() {
         queryKey: notificationKeys.count(),
         queryFn: getUnreadCount,
         staleTime: 30 * 1000, // 30 seconds
-        refetchInterval: 30 * 1000, // Poll every 30 seconds
+        refetchInterval: (query) => (query.state.status === "error" ? false : 30 * 1000),
     })
 }
 
@@ -48,7 +48,8 @@ export function useMarkRead() {
     return useMutation({
         mutationFn: markNotificationRead,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: notificationKeys.all })
+            queryClient.invalidateQueries({ queryKey: [...notificationKeys.all, "list"] })
+            queryClient.invalidateQueries({ queryKey: notificationKeys.count() })
         },
     })
 }
@@ -59,7 +60,8 @@ export function useMarkAllRead() {
     return useMutation({
         mutationFn: markAllNotificationsRead,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: notificationKeys.all })
+            queryClient.invalidateQueries({ queryKey: [...notificationKeys.all, "list"] })
+            queryClient.invalidateQueries({ queryKey: notificationKeys.count() })
         },
     })
 }

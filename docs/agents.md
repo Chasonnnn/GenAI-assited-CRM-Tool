@@ -92,7 +92,6 @@ Build FULLY FUNCTIONAL, POLISHED features — not MVPs.
 ✅ Required:
 - Complete error handling & loading states
 - Validation & edge cases covered
-- Accessibility (keyboard nav, screen readers)
 - Visual polish (consistent styling, transitions)
 
 ❌ Forbidden:
@@ -101,6 +100,8 @@ Build FULLY FUNCTIONAL, POLISHED features — not MVPs.
 - "TODO: Add feature X later" comments
 - Placeholder text instead of functionality
 ```
+
+Accessibility compatibility is not required unless explicitly requested.
 
 ---
 

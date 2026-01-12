@@ -49,7 +49,16 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
         let message: string | undefined;
         try {
             const err = await response.json();
-            message = err.detail || err.message;
+            // Handle FastAPI validation errors (array of {loc, msg, type})
+            if (Array.isArray(err.detail)) {
+                message = err.detail
+                    .map((e: { loc?: string[]; msg?: string }) =>
+                        e.loc ? `${e.loc.slice(1).join('.')}: ${e.msg}` : e.msg
+                    )
+                    .join('; ');
+            } else {
+                message = err.detail || err.message;
+            }
         } catch {
             // Ignore JSON parse errors
         }

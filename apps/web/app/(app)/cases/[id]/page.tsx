@@ -64,6 +64,14 @@ import { parseDateInput } from "@/lib/utils/date"
 import { format, parseISO } from "date-fns"
 import { buildRecurringDates, MAX_TASK_OCCURRENCES } from "@/lib/utils/task-recurrence"
 
+const EMAIL_TYPES: EmailType[] = [
+    "follow_up",
+    "status_update",
+    "meeting_request",
+    "document_request",
+    "introduction",
+]
+
 // Format date for display
 function formatDateTime(dateString: string): string {
     const parsed = parseDateInput(dateString)
@@ -154,6 +162,10 @@ function stripHtml(html: string): string {
     return html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
 // Format activity details for display
 function formatActivityDetails(type: string, details: Record<string, unknown>): string {
     const aiPrefix = details?.source === 'ai' ? 'AI-generated' : ''
@@ -164,8 +176,8 @@ function formatActivityDetails(type: string, details: Record<string, unknown>): 
         case 'status_changed':
             return withAiPrefix(`${details.from} → ${details.to}${details.reason ? `: ${details.reason}` : ''}`)
         case 'info_edited':
-            if (details.changes && typeof details.changes === 'object') {
-                const changes = Object.entries(details.changes as Record<string, unknown>)
+            if (isRecord(details.changes)) {
+                const changes = Object.entries(details.changes)
                     .map(([field, value]) => `${field.replace(/_/g, ' ')}: ${String(value)}`)
                     .join(', ')
                 return aiPrefix ? withAiPrefix(changes) : changes
@@ -207,7 +219,7 @@ function formatActivityDetails(type: string, details: Record<string, unknown>): 
             return details.title ? withAiPrefix(`Deleted: ${String(details.title)}`) : withAiPrefix('Task deleted')
         case 'contact_attempt': {
             const methods = Array.isArray(details.contact_methods)
-                ? (details.contact_methods as string[]).join(', ')
+                ? details.contact_methods.map((method) => String(method)).join(', ')
                 : ''
             const outcome = String(details.outcome || '').replace(/_/g, ' ')
             const backdated = details.is_backdated ? ' (backdated)' : ''
@@ -219,8 +231,8 @@ function formatActivityDetails(type: string, details: Record<string, unknown>): 
 }
 
 export default function CaseDetailPage() {
-    const params = useParams()
-    const id = params.id as string
+    const params = useParams<{ id: string }>()
+    const id = params.id
     const router = useRouter()
     const { user } = useAuth()
     const canViewProfile = user
@@ -1092,7 +1104,7 @@ export default function CaseDetailPage() {
                                     </CardHeader>
                                     <CardContent className="space-y-4">
                                         <div className="grid grid-cols-2 gap-2">
-                                            {(['follow_up', 'status_update', 'meeting_request', 'document_request', 'introduction'] as EmailType[]).map((emailType) => {
+                                            {EMAIL_TYPES.map((emailType) => {
                                                 const label =
                                                     emailType === 'meeting_request'
                                                         ? 'appointment request'
@@ -1183,29 +1195,39 @@ export default function CaseDetailPage() {
                     <DialogHeader>
                         <DialogTitle>Edit Case: #{caseData?.case_number}</DialogTitle>
                     </DialogHeader>
-                    <form onSubmit={async (e) => {
+                    <form onSubmit={async (e: React.FormEvent<HTMLFormElement>) => {
                         e.preventDefault()
-                        const form = e.target as HTMLFormElement
+                        const form = e.currentTarget
                         const formData = new FormData(form)
                         const data: Record<string, unknown> = {}
+                        const getString = (key: string) => {
+                            const value = formData.get(key)
+                            return typeof value === "string" ? value : ""
+                        }
 
                         // Text fields
-                        if (formData.get('full_name')) data.full_name = formData.get('full_name')
-                        if (formData.get('email')) data.email = formData.get('email')
-                        data.phone = formData.get('phone') || null
-                        data.state = formData.get('state') || null
-                        data.date_of_birth = formData.get('date_of_birth') || null
-                        data.race = formData.get('race') || null
+                        const fullName = getString("full_name")
+                        if (fullName) data.full_name = fullName
+                        const email = getString("email")
+                        if (email) data.email = email
+                        const phone = getString("phone")
+                        data.phone = phone || null
+                        const state = getString("state")
+                        data.state = state || null
+                        const dateOfBirth = getString("date_of_birth")
+                        data.date_of_birth = dateOfBirth || null
+                        const race = getString("race")
+                        data.race = race || null
 
                         // Number fields
-                        const heightFt = formData.get('height_ft')
-                        data.height_ft = heightFt ? parseFloat(heightFt as string) : null
-                        const weightLb = formData.get('weight_lb')
-                        data.weight_lb = weightLb ? parseFloat(weightLb as string) : null
-                        const numDeliveries = formData.get('num_deliveries')
-                        data.num_deliveries = numDeliveries ? parseInt(numDeliveries as string) : null
-                        const numCsections = formData.get('num_csections')
-                        data.num_csections = numCsections ? parseInt(numCsections as string) : null
+                        const heightFt = getString("height_ft")
+                        data.height_ft = heightFt ? parseFloat(heightFt) : null
+                        const weightLb = getString("weight_lb")
+                        data.weight_lb = weightLb ? parseFloat(weightLb) : null
+                        const numDeliveries = getString("num_deliveries")
+                        data.num_deliveries = numDeliveries ? parseInt(numDeliveries, 10) : null
+                        const numCsections = getString("num_csections")
+                        data.num_csections = numCsections ? parseInt(numCsections, 10) : null
 
                         // Boolean fields (checkboxes)
                         data.is_age_eligible = formData.get('is_age_eligible') === 'on'

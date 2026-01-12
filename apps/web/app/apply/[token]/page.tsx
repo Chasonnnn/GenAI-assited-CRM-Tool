@@ -38,6 +38,19 @@ type Step = {
 
 type AnswerValue = string | number | boolean | string[] | null
 type Answers = Record<string, AnswerValue>
+type UnknownRecord = Record<string, unknown>
+
+const isFormPublicRead = (value: unknown): value is FormPublicRead => {
+    if (!value || typeof value !== "object") return false
+    const record = value as UnknownRecord
+    if (typeof record.form_id !== "string") return false
+    if (typeof record.name !== "string") return false
+    if (typeof record.max_file_size_bytes !== "number") return false
+    if (typeof record.max_file_count !== "number") return false
+    if (!record.form_schema || typeof record.form_schema !== "object") return false
+    const schema = record.form_schema as UnknownRecord
+    return Array.isArray(schema.pages)
+}
 
 // Format date for display
 function formatDate(value: string | null): string {
@@ -368,8 +381,8 @@ export default function PublicApplicationForm() {
                     if (!stored) {
                         throw new Error("Missing preview payload")
                     }
-                    const parsed = JSON.parse(stored) as FormPublicRead
-                    if (!parsed?.form_schema?.pages) {
+                    const parsed = JSON.parse(stored)
+                    if (!isFormPublicRead(parsed)) {
                         throw new Error("Invalid preview payload")
                     }
                     setFormConfig(parsed)

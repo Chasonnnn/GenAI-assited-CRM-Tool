@@ -245,7 +245,7 @@ export default function CasesPage() {
         return from ? { created_from: formatLocalDate(from) } : {}
     }
 
-    const { data, isLoading, isError, error } = useCases({
+    const { data, isLoading, isError, error, refetch } = useCases({
         page,
         per_page: perPage,
         stage_id: stageFilter === "all" ? undefined : stageFilter,
@@ -443,6 +443,9 @@ export default function CasesPage() {
                         {error instanceof Error && (
                             <p className="mt-2 text-xs text-muted-foreground">{error.message}</p>
                         )}
+                        <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()}>
+                            Retry
+                        </Button>
                     </Card>
                 )}
 
