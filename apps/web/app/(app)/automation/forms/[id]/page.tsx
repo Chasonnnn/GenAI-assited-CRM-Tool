@@ -92,7 +92,7 @@ const caseFieldMappings = [
 
 type FormField = {
     id: string
-    type: string
+    type: FormSchema["pages"][number]["fields"][number]["type"]
     label: string
     helperText: string
     required: boolean
@@ -131,7 +131,7 @@ function buildFormSchema(pages: FormPage[], metadata: SchemaMetadata): FormSchem
             fields: page.fields.map((field) => ({
                 key: field.id,
                 label: field.label,
-                type: field.type as FormSchema["pages"][number]["fields"][number]["type"],
+                type: field.type,
                 required: field.required,
                 options: toFieldOptions(field.options),
                 help_text: field.helperText || null,

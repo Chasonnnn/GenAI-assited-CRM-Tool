@@ -49,6 +49,8 @@ import {
 import type { IntendedParentStatus, IntendedParentListItem } from "@/lib/types/intended-parent"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
+import { toast } from "sonner"
+import { US_STATES } from "@/lib/constants/us-states"
 
 const STATUS_LABELS: Record<IntendedParentStatus, string> = {
     new: "New",
@@ -64,7 +66,8 @@ const STATUS_COLORS: Record<IntendedParentStatus, string> = {
     inactive: "bg-gray-500/10 text-gray-500 border-gray-500/20",
 }
 
-const VALID_STATUSES = ["all", "new", "in_review", "matched", "inactive"]
+const STATUS_OPTIONS: IntendedParentStatus[] = ["new", "in_review", "matched", "inactive"]
+const VALID_STATUSES = ["all", ...STATUS_OPTIONS]
 
 export default function IntendedParentsPage() {
     const searchParams = useSearchParams()
@@ -171,7 +174,7 @@ export default function IntendedParentsPage() {
         sort_order: sortOrder,
         ...getDateRangeParams(),
     }
-    const { data, isLoading, isError } = useIntendedParents(filters)
+    const { data, isLoading, isError, refetch } = useIntendedParents(filters)
     const { data: stats } = useIntendedParentStats()
     const createMutation = useCreateIntendedParent()
 
@@ -196,16 +199,22 @@ export default function IntendedParentsPage() {
     }
 
     const handleCreate = async () => {
-        await createMutation.mutateAsync({
-            full_name: formData.full_name,
-            email: formData.email,
-            phone: formData.phone || undefined,
-            state: formData.state || undefined,
-            budget: formData.budget ? parseFloat(formData.budget) : undefined,
-            notes_internal: formData.notes_internal || undefined,
-        })
-        setIsCreateOpen(false)
-        resetForm()
+        try {
+            await createMutation.mutateAsync({
+                full_name: formData.full_name,
+                email: formData.email,
+                phone: formData.phone || undefined,
+                state: formData.state || undefined,
+                budget: formData.budget ? parseFloat(formData.budget) : undefined,
+                notes_internal: formData.notes_internal || undefined,
+            })
+            setIsCreateOpen(false)
+            resetForm()
+            toast.success("Intended parent created successfully")
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Failed to create intended parent"
+            toast.error(message)
+        }
     }
 
     const formatDate = (dateStr: string) => {
@@ -254,7 +263,7 @@ export default function IntendedParentsPage() {
                             <div className="text-2xl font-bold">{stats?.total ?? 0}</div>
                         </CardContent>
                     </Card>
-                    {(["new", "in_review", "matched", "inactive"] as IntendedParentStatus[]).map((status) => (
+                    {STATUS_OPTIONS.map((status) => (
                         <Card key={status}>
                             <CardHeader className="pb-2">
                                 <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -275,7 +284,8 @@ export default function IntendedParentsPage() {
                             <SelectValue placeholder="All Stages">
                                 {(value: string | null) => {
                                     if (!value || value === "all") return "All Stages"
-                                    return STATUS_LABELS[value as IntendedParentStatus] ?? value
+                                    const status = STATUS_OPTIONS.find((option) => option === value)
+                                    return status ? STATUS_LABELS[status] : value
                                 }}
                             </SelectValue>
                         </SelectTrigger>
@@ -321,6 +331,9 @@ export default function IntendedParentsPage() {
                                 <AlertCircleIcon className="size-12 text-destructive mb-4" />
                                 <h3 className="text-lg font-medium">Failed to load intended parents</h3>
                                 <p className="text-muted-foreground">Please try again or contact support if the issue persists.</p>
+                                <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()}>
+                                    Retry
+                                </Button>
                             </div>
                         ) : !data?.items.length ? (
                             <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -361,8 +374,8 @@ export default function IntendedParentsPage() {
                                             <TableCell className="text-muted-foreground">{ip.state || "—"}</TableCell>
                                             <TableCell>{formatBudget(ip.budget)}</TableCell>
                                             <TableCell>
-                                                <Badge className={STATUS_COLORS[ip.status as IntendedParentStatus]}>
-                                                    {STATUS_LABELS[ip.status as IntendedParentStatus]}
+                                                <Badge className={STATUS_COLORS[ip.status]}>
+                                                    {STATUS_LABELS[ip.status]}
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className="text-muted-foreground">
@@ -444,12 +457,21 @@ export default function IntendedParentsPage() {
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="state">State</Label>
-                                <Input
-                                    id="state"
-                                    value={formData.state}
-                                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                                    placeholder="California"
-                                />
+                                <Select
+                                    value={formData.state || undefined}
+                                    onValueChange={(value) => setFormData({ ...formData, state: value ?? "" })}
+                                >
+                                    <SelectTrigger id="state">
+                                        <SelectValue placeholder="Select a state" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {US_STATES.map((state) => (
+                                            <SelectItem key={state.value} value={state.value}>
+                                                {state.label} ({state.value})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
                         </div>
                         <div className="space-y-2">

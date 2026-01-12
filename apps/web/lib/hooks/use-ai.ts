@@ -119,8 +119,8 @@ export function useApproveAction() {
     return useMutation({
         mutationFn: (approvalId: string) => aiApi.approveAction(approvalId),
         onSuccess: () => {
-            // Invalidate all conversations to update action statuses
-            queryClient.invalidateQueries({ queryKey: aiKeys.all });
+            // Invalidate conversations to update action statuses
+            queryClient.invalidateQueries({ queryKey: [...aiKeys.all, 'conversation'] });
         },
     });
 }
@@ -131,7 +131,7 @@ export function useRejectAction() {
     return useMutation({
         mutationFn: (approvalId: string) => aiApi.rejectAction(approvalId),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: aiKeys.all });
+            queryClient.invalidateQueries({ queryKey: [...aiKeys.all, 'conversation'] });
         },
     });
 }
@@ -165,4 +165,3 @@ export function useAIUsageSummary(days: number = 30) {
         staleTime: 5 * 60 * 1000, // 5 minutes
     });
 }
-

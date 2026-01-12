@@ -16,6 +16,11 @@ export const taskKeys = {
     detail: (id: string) => [...taskKeys.details(), id] as const,
 };
 
+function invalidateCaseActivity(queryClient: ReturnType<typeof useQueryClient>, caseId?: string | null) {
+    if (!caseId) return;
+    queryClient.invalidateQueries({ queryKey: [...caseKeys.detail(caseId), 'activity'] });
+}
+
 /**
  * Fetch paginated tasks list.
  */
@@ -48,8 +53,9 @@ export function useCreateTask() {
 
     return useMutation({
         mutationFn: tasksApi.createTask,
-        onSuccess: () => {
+        onSuccess: (createdTask) => {
             queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
+            invalidateCaseActivity(queryClient, createdTask.case_id);
         },
     });
 }
@@ -66,6 +72,7 @@ export function useUpdateTask() {
         onSuccess: (updatedTask) => {
             queryClient.setQueryData(taskKeys.detail(updatedTask.id), updatedTask);
             queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
+            invalidateCaseActivity(queryClient, updatedTask.case_id);
         },
     });
 }
@@ -83,6 +90,7 @@ export function useCompleteTask() {
             queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
             // Also invalidate dashboard stats since pending_tasks count changes
             queryClient.invalidateQueries({ queryKey: caseKeys.stats() });
+            invalidateCaseActivity(queryClient, updatedTask.case_id);
         },
     });
 }
@@ -100,6 +108,7 @@ export function useUncompleteTask() {
             queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
             // Also invalidate dashboard stats since pending_tasks count changes
             queryClient.invalidateQueries({ queryKey: caseKeys.stats() });
+            invalidateCaseActivity(queryClient, updatedTask.case_id);
         },
     });
 }
@@ -157,6 +166,7 @@ export function useResolveWorkflowApproval() {
             queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
             // Also invalidate dashboard stats
             queryClient.invalidateQueries({ queryKey: caseKeys.stats() });
+            invalidateCaseActivity(queryClient, updatedTask.case_id);
         },
     });
 }

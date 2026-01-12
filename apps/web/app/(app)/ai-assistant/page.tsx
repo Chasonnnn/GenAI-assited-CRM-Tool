@@ -60,8 +60,14 @@ export default function AIAssistantPage() {
     ])
     const messagesEndRef = useRef<HTMLDivElement>(null)
 
-    const { data: cases, isLoading: casesLoading } = useCases()
-    const { data: aiSettings } = useAISettings()
+    const casesQuery = useCases()
+    const { data: cases, isLoading: casesLoading, isError: casesError, error: casesErrorData } = casesQuery
+    const aiSettingsQuery = useAISettings()
+    const {
+        data: aiSettings,
+        isError: aiSettingsError,
+        error: aiSettingsErrorData,
+    } = aiSettingsQuery
     const sendMessage = useSendMessage()
     const approveAction = useApproveAction()
     const rejectAction = useRejectAction()
@@ -79,6 +85,8 @@ export default function AIAssistantPage() {
         "Summarize recent notes",
         "Draft an email to the intended parents",
     ]
+    const casesErrorMessage = casesErrorData instanceof Error ? casesErrorData.message : ""
+    const aiSettingsErrorMessage = aiSettingsErrorData instanceof Error ? aiSettingsErrorData.message : ""
 
     // Scroll to bottom when messages change
     useEffect(() => {
@@ -183,6 +191,32 @@ export default function AIAssistantPage() {
                     </SelectContent>
                 </Select>
             </div>
+
+            {(casesError || aiSettingsError) && (
+                <div className="mx-4 mt-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+                    <AlertCircleIcon className="h-5 w-5 text-destructive" />
+                    <div className="flex-1">
+                        <p className="text-sm font-medium">Unable to load AI settings or cases</p>
+                        <p className="text-xs text-muted-foreground">
+                            {casesErrorMessage || aiSettingsErrorMessage || "Please try again."}
+                        </p>
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                            if (casesError) {
+                                void casesQuery.refetch()
+                            }
+                            if (aiSettingsError) {
+                                void aiSettingsQuery.refetch()
+                            }
+                        }}
+                    >
+                        Retry
+                    </Button>
+                </div>
+            )}
 
             {/* AI Not Enabled Warning */}
             {aiSettings && !isAIEnabled && (

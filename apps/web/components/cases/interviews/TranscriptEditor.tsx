@@ -39,6 +39,8 @@ import { cn } from '@/lib/utils'
 import { useCallback, useEffect } from 'react'
 import type { TipTapDoc, TipTapNode, TipTapMark } from '@/lib/api/interviews'
 
+const isTipTapDoc = (value: JSONContent): value is TipTapDoc => value?.type === 'doc'
+
 /**
  * Comment mark extension for anchored notes.
  * Stores a stable commentId that links to the note.
@@ -48,8 +50,8 @@ const CommentMark = Mark.create({
 
     addOptions() {
         return {
-            HTMLAttributes: {} as Record<string, unknown>,
-        }
+            HTMLAttributes: {},
+        } satisfies { HTMLAttributes: Record<string, unknown> }
     },
 
     addAttributes() {
@@ -176,8 +178,10 @@ export function TranscriptEditor({
         },
         onUpdate: ({ editor }) => {
             if (onChange) {
-                const json = editor.getJSON() as TipTapDoc
-                onChange(json)
+                const json = editor.getJSON()
+                if (isTipTapDoc(json)) {
+                    onChange(json)
+                }
             }
         },
     })
@@ -424,8 +428,12 @@ export function extractCommentIds(doc: TipTapDoc | null | undefined): Set<string
         // Check for comment marks on text nodes
         if (node.type === 'text' && node.marks) {
             for (const mark of node.marks) {
-                if (mark.type === 'comment' && mark.attrs?.commentId) {
-                    commentIds.add(mark.attrs.commentId as string)
+                const commentId =
+                    mark.type === 'comment' && typeof mark.attrs?.commentId === 'string'
+                        ? mark.attrs.commentId
+                        : null
+                if (commentId) {
+                    commentIds.add(commentId)
                 }
             }
         }

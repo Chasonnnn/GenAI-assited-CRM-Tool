@@ -51,7 +51,6 @@ Build FULLY FUNCTIONAL, POLISHED features — not MVPs.
 ✅ Required:
 - Complete error handling & loading states
 - Validation & edge cases covered
-- Accessibility (keyboard nav, screen readers)
 - Visual polish (consistent styling, transitions)
 
 ❌ Forbidden:
@@ -84,6 +83,7 @@ pnpm test --run
 3. **No backward compatibility** — Clean design over legacy support
 4. **Production quality** — Complete error handling, loading states, validation
 5. **Cookie JWT + CSRF** — Always include `credentials: "include"` and `X-Requested-With` header
+6. **Accessibility** — Not required unless explicitly requested
 
 ### Roles
 - `intake_specialist` — Lead intake

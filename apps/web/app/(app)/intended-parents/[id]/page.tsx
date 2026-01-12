@@ -75,11 +75,13 @@ const STATUS_COLORS: Record<IntendedParentStatus, string> = {
     matched: "bg-green-500/10 text-green-500 border-green-500/20",
     inactive: "bg-gray-500/10 text-gray-500 border-gray-500/20",
 }
+const isIntendedParentStatus = (value: string | null): value is IntendedParentStatus =>
+    !!value && Object.prototype.hasOwnProperty.call(STATUS_LABELS, value)
 
 export default function IntendedParentDetailPage() {
-    const params = useParams()
+    const params = useParams<{ id: string }>()
     const router = useRouter()
-    const id = params.id as string
+    const id = params.id
 
     const [isEditOpen, setIsEditOpen] = useState(false)
     const [newNote, setNewNote] = useState("")
@@ -167,9 +169,8 @@ export default function IntendedParentDetailPage() {
     }
 
     const handleStatusChange = async (newStatus: string | null) => {
-        if (newStatus) {
-            await statusMutation.mutateAsync({ id, data: { status: newStatus as IntendedParentStatus } })
-        }
+        if (!isIntendedParentStatus(newStatus)) return
+        await statusMutation.mutateAsync({ id, data: { status: newStatus } })
     }
 
     const handleArchive = async () => {
@@ -239,8 +240,8 @@ export default function IntendedParentDetailPage() {
                             <HeartHandshakeIcon className="size-4 mr-2" />
                             Propose Match
                         </Button>
-                        <Badge className={STATUS_COLORS[ip.status as IntendedParentStatus]}>
-                            {STATUS_LABELS[ip.status as IntendedParentStatus]}
+                        <Badge className={STATUS_COLORS[ip.status]}>
+                            {STATUS_LABELS[ip.status]}
                         </Badge>
                         <DropdownMenu>
                             <DropdownMenuTrigger className="inline-flex items-center justify-center size-10 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground">
@@ -402,12 +403,16 @@ export default function IntendedParentDetailPage() {
                                                         {item.old_status ? (
                                                             <>
                                                                 <span className="text-muted-foreground">
-                                                                    {STATUS_LABELS[item.old_status as IntendedParentStatus] || item.old_status}
+                                                                    {isIntendedParentStatus(item.old_status)
+                                                                        ? STATUS_LABELS[item.old_status]
+                                                                        : item.old_status}
                                                                 </span>
                                                                 {" → "}
                                                             </>
                                                         ) : null}
-                                                        {STATUS_LABELS[item.new_status as IntendedParentStatus] || item.new_status}
+                                                        {isIntendedParentStatus(item.new_status)
+                                                            ? STATUS_LABELS[item.new_status]
+                                                            : item.new_status}
                                                     </p>
                                                     {item.reason && (
                                                         <p className="text-xs text-muted-foreground">{item.reason}</p>

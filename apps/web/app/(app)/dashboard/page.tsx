@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
@@ -37,11 +38,11 @@ function getFirstName(displayName: string | undefined): string {
 
 export default function DashboardPage() {
   const { user } = useAuth()
-  const { data: stats, isLoading: statsLoading, isError: statsError } = useCaseStats()
-  const { data: tasksData, isLoading: tasksLoading, isError: tasksError } = useTasks({ my_tasks: true, is_completed: false, per_page: 5, exclude_approvals: true })
+  const { data: stats, isLoading: statsLoading, isError: statsError, refetch: refetchStats } = useCaseStats()
+  const { data: tasksData, isLoading: tasksLoading, isError: tasksError, refetch: refetchTasks } = useTasks({ my_tasks: true, is_completed: false, per_page: 5, exclude_approvals: true })
   const [trendPeriod, setTrendPeriod] = useState<'day' | 'week' | 'month'>('day')
-  const { data: trendData, isLoading: trendLoading, isError: trendError } = useCasesTrend({ period: trendPeriod })
-  const { data: statusData, isLoading: statusLoading, isError: statusError } = useCasesByStatus()
+  const { data: trendData, isLoading: trendLoading, isError: trendError, refetch: refetchTrend } = useCasesTrend({ period: trendPeriod })
+  const { data: statusData, isLoading: statusLoading, isError: statusError, refetch: refetchStatus } = useCasesByStatus()
   const { data: defaultPipeline } = useDefaultPipeline()
 
   // WebSocket for real-time updates (falls back to polling if disconnected)
@@ -111,9 +112,14 @@ export default function DashboardPage() {
             {statsLoading ? (
               <LoaderIcon className="h-6 w-6 animate-spin text-muted-foreground" />
             ) : statsError ? (
-              <div className="flex items-center text-xs text-destructive">
-                <AlertCircleIcon className="mr-1 h-4 w-4" />
-                Unable to load
+              <div className="flex items-center justify-between text-xs text-destructive">
+                <div className="flex items-center">
+                  <AlertCircleIcon className="mr-1 h-4 w-4" />
+                  Unable to load
+                </div>
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => refetchStats()}>
+                  Retry
+                </Button>
               </div>
             ) : (
               <>
@@ -153,9 +159,14 @@ export default function DashboardPage() {
             {statsLoading ? (
               <LoaderIcon className="h-6 w-6 animate-spin text-muted-foreground" />
             ) : statsError ? (
-              <div className="flex items-center text-xs text-destructive">
-                <AlertCircleIcon className="mr-1 h-4 w-4" />
-                Unable to load
+              <div className="flex items-center justify-between text-xs text-destructive">
+                <div className="flex items-center">
+                  <AlertCircleIcon className="mr-1 h-4 w-4" />
+                  Unable to load
+                </div>
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => refetchStats()}>
+                  Retry
+                </Button>
               </div>
             ) : (
               <>
@@ -190,9 +201,14 @@ export default function DashboardPage() {
             {statsLoading ? (
               <LoaderIcon className="h-6 w-6 animate-spin text-muted-foreground" />
             ) : statsError ? (
-              <div className="flex items-center text-xs text-destructive">
-                <AlertCircleIcon className="mr-1 h-4 w-4" />
-                Unable to load
+              <div className="flex items-center justify-between text-xs text-destructive">
+                <div className="flex items-center">
+                  <AlertCircleIcon className="mr-1 h-4 w-4" />
+                  Unable to load
+                </div>
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => refetchStats()}>
+                  Retry
+                </Button>
               </div>
             ) : (
               <>
@@ -225,9 +241,14 @@ export default function DashboardPage() {
             {tasksLoading ? (
               <LoaderIcon className="h-6 w-6 animate-spin text-muted-foreground" />
             ) : tasksError ? (
-              <div className="flex items-center text-xs text-destructive">
-                <AlertCircleIcon className="mr-1 h-4 w-4" />
-                Unable to load
+              <div className="flex items-center justify-between text-xs text-destructive">
+                <div className="flex items-center">
+                  <AlertCircleIcon className="mr-1 h-4 w-4" />
+                  Unable to load
+                </div>
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => refetchTasks()}>
+                  Retry
+                </Button>
               </div>
             ) : (
               <>
@@ -279,9 +300,14 @@ export default function DashboardPage() {
                 <LoaderIcon className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             ) : trendError ? (
-              <div className="flex items-center justify-center h-[280px] text-destructive">
-                <AlertCircleIcon className="mr-2 h-4 w-4" />
-                Unable to load data
+              <div className="flex flex-col items-center justify-center h-[280px] text-destructive gap-2">
+                <div className="flex items-center">
+                  <AlertCircleIcon className="mr-2 h-4 w-4" />
+                  Unable to load data
+                </div>
+                <Button variant="outline" size="sm" onClick={() => refetchTrend()}>
+                  Retry
+                </Button>
               </div>
             ) : chartTrendData.length === 0 ? (
               <div className="flex items-center justify-center h-[280px] text-muted-foreground">
@@ -339,9 +365,14 @@ export default function DashboardPage() {
                 <LoaderIcon className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             ) : statusError ? (
-              <div className="flex items-center justify-center h-[280px] text-destructive">
-                <AlertCircleIcon className="mr-2 h-4 w-4" />
-                Unable to load data
+              <div className="flex flex-col items-center justify-center h-[280px] text-destructive gap-2">
+                <div className="flex items-center">
+                  <AlertCircleIcon className="mr-2 h-4 w-4" />
+                  Unable to load data
+                </div>
+                <Button variant="outline" size="sm" onClick={() => refetchStatus()}>
+                  Retry
+                </Button>
               </div>
             ) : chartStatusData.length === 0 ? (
               <div className="flex items-center justify-center h-[280px] text-muted-foreground">

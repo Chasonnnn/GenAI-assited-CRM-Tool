@@ -2,6 +2,9 @@
 
 import os
 
+DEFAULT_JWT_SECRET = "change-this-in-production"
+DEFAULT_DEV_SECRET = "change-me"
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,7 +30,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str
 
     # Session Token (supports key rotation)
-    JWT_SECRET: str = "change-this-in-production"
+    JWT_SECRET: str = DEFAULT_JWT_SECRET
     JWT_SECRET_PREVIOUS: str = ""  # Set during rotation, clear after
     JWT_EXPIRES_HOURS: int = 4
 
@@ -46,7 +49,7 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:3000"
 
     # Dev-only
-    DEV_SECRET: str = "change-me"
+    DEV_SECRET: str = DEFAULT_DEV_SECRET
     DEV_BYPASS_AUTH: bool = False
 
     # Meta Lead Ads webhook
@@ -118,6 +121,33 @@ class Settings(BaseSettings):
     # SLO defaults (core workflows)
     SLO_SUCCESS_RATE: float = 0.99
     SLO_AVG_LATENCY_MS: int = 500
+
+    def model_post_init(self, __context) -> None:
+        env = self.ENV.lower()
+        if env in {"dev", "development", "test"}:
+            return
+
+        errors: list[str] = []
+        if self.JWT_SECRET == DEFAULT_JWT_SECRET:
+            errors.append("JWT_SECRET must be set for non-dev environments")
+        if self.DEV_SECRET == DEFAULT_DEV_SECRET:
+            errors.append("DEV_SECRET must be set for non-dev environments")
+
+        url_fields = [
+            "GOOGLE_REDIRECT_URI",
+            "CORS_ORIGINS",
+            "FRONTEND_URL",
+            "ZOOM_REDIRECT_URI",
+            "GMAIL_REDIRECT_URI",
+            "DUO_REDIRECT_URI",
+        ]
+        for field in url_fields:
+            value = getattr(self, field, "")
+            if "localhost" in value or "127.0.0.1" in value:
+                errors.append(f"{field} must not use localhost in non-dev environments")
+
+        if errors:
+            raise ValueError("Invalid production configuration: " + "; ".join(errors))
     SLO_WINDOW_MINUTES: int = 60
 
     # Compliance exports

@@ -89,24 +89,28 @@ const SOURCE_OPTIONS: { value: SourceFilter; label: string }[] = [
 const sourceLabel = (value: SourceFilter | null | undefined) =>
     SOURCE_OPTIONS.find((opt) => opt.value === value)?.label ?? "All Source"
 
-const VALID_TABS: TabType[] = ["notes", "files", "tasks", "activity"]
-const VALID_SOURCES: SourceFilter[] = ["all", "case", "ip", "match"]
+const isTabType = (value: string | null): value is TabType =>
+    value === "notes" || value === "files" || value === "tasks" || value === "activity"
+const isSourceFilter = (value: string | null): value is SourceFilter =>
+    value === "all" || value === "case" || value === "ip" || value === "match"
+const isDeletableSource = (value: string): value is "case" | "ip" =>
+    value === "case" || value === "ip"
 
 export default function MatchDetailPage() {
-    const params = useParams()
+    const params = useParams<{ id: string }>()
     const searchParams = useSearchParams()
     const router = useRouter()
-    const matchId = params.id as string
+    const matchId = params.id
 
     // Read initial values from URL params
-    const urlTab = searchParams.get("tab") as TabType | null
-    const urlSource = searchParams.get("source") as SourceFilter | null
+    const urlTab = searchParams.get("tab")
+    const urlSource = searchParams.get("source")
 
     const [activeTab, setActiveTab] = useState<TabType>(
-        urlTab && VALID_TABS.includes(urlTab) ? urlTab : "notes"
+        isTabType(urlTab) ? urlTab : "notes"
     )
     const [sourceFilter, setSourceFilter] = useState<SourceFilter>(
-        urlSource && VALID_SOURCES.includes(urlSource) ? urlSource : "all"
+        isSourceFilter(urlSource) ? urlSource : "all"
     )
     const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
     const [addNoteDialogOpen, setAddNoteDialogOpen] = useState(false)
@@ -307,13 +311,15 @@ export default function MatchDetailPage() {
         const activities: CombinedActivity[] = []
         // Case activity (includes actor_name)
         for (const a of caseActivity?.items || []) {
+            const description =
+                typeof a.details?.description === "string" ? a.details.description : a.activity_type
             activities.push({
                 id: a.id,
                 event_type: a.activity_type,
-                description: (a.details?.description as string) || a.activity_type,
+                description,
                 actor_name: a.actor_name,
                 created_at: a.created_at,
-                source: 'case'
+                source: 'case',
             })
         }
         // IP history
@@ -335,7 +341,7 @@ export default function MatchDetailPage() {
                 description: 'Match was proposed',
                 actor_name: null,
                 created_at: match.proposed_at,
-                source: 'match' as const
+                source: 'match',
             })
         }
         // Sort by created_at descending
@@ -761,11 +767,17 @@ export default function MatchDetailPage() {
                                     <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30">
                                         <Select
                                             value={sourceFilter}
-                                            onValueChange={(v) => handleSourceFilterChange(v as SourceFilter)}
+                                            onValueChange={(value) => {
+                                                if (isSourceFilter(value)) {
+                                                    handleSourceFilterChange(value)
+                                                }
+                                            }}
                                         >
                                             <SelectTrigger className="w-[160px] h-9 text-sm">
                                                 <SelectValue placeholder="All Source">
-                                                    {(value: string | null) => sourceLabel(value as SourceFilter)}
+                                                    {(value: string | null) =>
+                                                        sourceLabel(isSourceFilter(value) ? value : null)
+                                                    }
                                                 </SelectValue>
                                             </SelectTrigger>
                                             <SelectContent>
@@ -916,12 +928,12 @@ export default function MatchDetailPage() {
                                                             >
                                                                 <DownloadIcon className="size-4" />
                                                             </Button>
-                                                            {(file.source === 'case' || file.source === 'ip') && (
+                                                            {isDeletableSource(file.source) && (
                                                                 <Button
                                                                     variant="ghost"
                                                                     size="sm"
                                                                     className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                                                                    onClick={() => handleDeleteFile(file.id, file.source as "case" | "ip")}
+                                                                    onClick={() => handleDeleteFile(file.id, file.source)}
                                                                     disabled={deleteAttachmentMutation.isPending}
                                                                     title="Delete file"
                                                                 >
