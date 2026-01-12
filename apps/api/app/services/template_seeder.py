@@ -555,19 +555,19 @@ def seed_system_templates(db: Session, org_id: UUID) -> int:
         Number of templates created.
     """
     created_count = 0
+    template_keys = [t["system_key"] for t in SYSTEM_TEMPLATES]
+    existing_keys = {
+        row[0]
+        for row in db.query(EmailTemplate.system_key)
+        .filter(
+            EmailTemplate.organization_id == org_id,
+            EmailTemplate.system_key.in_(template_keys),
+        )
+        .all()
+    }
 
     for template_data in SYSTEM_TEMPLATES:
-        # Check if template already exists
-        existing = (
-            db.query(EmailTemplate)
-            .filter(
-                EmailTemplate.organization_id == org_id,
-                EmailTemplate.system_key == template_data["system_key"],
-            )
-            .first()
-        )
-
-        if existing:
+        if template_data["system_key"] in existing_keys:
             continue
 
         # Create new template
@@ -624,18 +624,19 @@ def seed_system_workflows(
     )
     template_map = {t.system_key: str(t.id) for t in templates}
 
-    for workflow_data in SYSTEM_WORKFLOWS:
-        # Check if workflow already exists
-        existing = (
-            db.query(AutomationWorkflow)
-            .filter(
-                AutomationWorkflow.organization_id == org_id,
-                AutomationWorkflow.system_key == workflow_data["system_key"],
-            )
-            .first()
+    workflow_keys = [w["system_key"] for w in SYSTEM_WORKFLOWS]
+    existing_workflow_keys = {
+        row[0]
+        for row in db.query(AutomationWorkflow.system_key)
+        .filter(
+            AutomationWorkflow.organization_id == org_id,
+            AutomationWorkflow.system_key.in_(workflow_keys),
         )
+        .all()
+    }
 
-        if existing:
+    for workflow_data in SYSTEM_WORKFLOWS:
+        if workflow_data["system_key"] in existing_workflow_keys:
             continue
 
         trigger_config = workflow_data.get("trigger_config", {}).copy()

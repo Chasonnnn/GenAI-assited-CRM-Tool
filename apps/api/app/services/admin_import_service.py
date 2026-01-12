@@ -544,6 +544,23 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
 
     rows = list(reader)
     created_meta_leads: set[UUID] = set()
+    meta_lead_ids: set[UUID] = set()
+    for row in rows:
+        meta_lead_id = _parse_uuid(row.get("meta_lead_id"))
+        meta_lead_external_id = row.get("meta_lead_external_id")
+        if meta_lead_id and meta_lead_external_id:
+            meta_lead_ids.add(meta_lead_id)
+
+    existing_meta_lead_ids: set[UUID] = set()
+    if meta_lead_ids:
+        existing_meta_lead_ids = {
+            meta_id
+            for (meta_id,) in (
+                db.query(MetaLead.id)
+                .filter(MetaLead.id.in_(meta_lead_ids))
+                .all()
+            )
+        }
 
     for row in rows:
         meta_lead_id = _parse_uuid(row.get("meta_lead_id"))
@@ -556,8 +573,7 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
             continue
         if meta_lead_id in created_meta_leads:
             continue
-        existing_meta = db.query(MetaLead).filter(MetaLead.id == meta_lead_id).first()
-        if existing_meta:
+        if meta_lead_id in existing_meta_lead_ids:
             created_meta_leads.add(meta_lead_id)
             continue
 
@@ -708,9 +724,13 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
 
     db.flush()
 
-    for meta_lead_id, case_id in meta_leads_to_link:
-        db.query(MetaLead).filter(MetaLead.id == meta_lead_id).update(
-            {MetaLead.converted_case_id: case_id}
+    if meta_leads_to_link:
+        db.bulk_update_mappings(
+            MetaLead,
+            [
+                {"id": meta_lead_id, "converted_case_id": case_id}
+                for meta_lead_id, case_id in meta_leads_to_link
+            ],
         )
 
     db.commit()

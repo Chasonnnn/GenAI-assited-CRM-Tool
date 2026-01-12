@@ -336,25 +336,27 @@ def seed_global_templates(db: Session) -> int:
     ]
 
     created = 0
-    for data in templates_data:
-        existing = (
-            db.query(WorkflowTemplate)
-            .filter(
-                WorkflowTemplate.is_global.is_(True),
-                WorkflowTemplate.name == data["name"],
-            )
-            .first()
+    template_names = [data["name"] for data in templates_data]
+    existing_names = {
+        row[0]
+        for row in db.query(WorkflowTemplate.name)
+        .filter(
+            WorkflowTemplate.is_global.is_(True),
+            WorkflowTemplate.name.in_(template_names),
         )
-
-        if not existing:
-            template = WorkflowTemplate(
-                is_global=True,
-                organization_id=None,
-                created_by_user_id=None,
-                **data,
-            )
-            db.add(template)
-            created += 1
+        .all()
+    }
+    for data in templates_data:
+        if data["name"] in existing_names:
+            continue
+        template = WorkflowTemplate(
+            is_global=True,
+            organization_id=None,
+            created_by_user_id=None,
+            **data,
+        )
+        db.add(template)
+        created += 1
 
     if created > 0:
         db.commit()

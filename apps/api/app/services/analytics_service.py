@@ -820,12 +820,19 @@ def get_conversion_funnel(
         query = query.filter(func.date(Case.created_at) <= end_date)
 
     active_stages = [s for s in stages if s.is_active]
-    total = query.count()
+    counts_by_stage = dict(
+        query.with_entities(Case.stage_id, func.count(Case.id))
+        .group_by(Case.stage_id)
+        .all()
+    )
+    total = sum(counts_by_stage.values())
 
     funnel_data = []
     for stage in funnel_stages:
         eligible_stage_ids = [s.id for s in active_stages if s.order >= stage.order]
-        count = query.filter(Case.stage_id.in_(eligible_stage_ids)).count()
+        count = sum(
+            counts_by_stage.get(stage_id, 0) for stage_id in eligible_stage_ids
+        )
         funnel_data.append(
             {
                 "stage": stage.slug,
@@ -1240,12 +1247,19 @@ def get_funnel_with_filter(
         query = query.filter(Case.meta_ad_id == ad_id)
 
     active_stages = [s for s in stages if s.is_active]
-    total = query.count()
+    counts_by_stage = dict(
+        query.with_entities(Case.stage_id, func.count(Case.id))
+        .group_by(Case.stage_id)
+        .all()
+    )
+    total = sum(counts_by_stage.values())
 
     funnel_data = []
     for stage in funnel_stages:
         eligible_stage_ids = [s.id for s in active_stages if s.order >= stage.order]
-        count = query.filter(Case.stage_id.in_(eligible_stage_ids)).count()
+        count = sum(
+            counts_by_stage.get(stage_id, 0) for stage_id in eligible_stage_ids
+        )
         funnel_data.append(
             {
                 "stage": stage.slug,

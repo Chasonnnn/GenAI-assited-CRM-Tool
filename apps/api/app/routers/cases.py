@@ -15,6 +15,7 @@ from app.core.deps import (
 )
 from app.core.policies import POLICIES
 from app.db.enums import AuditEventType, CaseSource, OwnerType
+from app.db.models import User
 from app.schemas.auth import UserSession
 from app.schemas.case import (
     CaseAssign,
@@ -1155,12 +1156,17 @@ def get_case_history(
 
     history = case_service.get_status_history(db, case_id, session.org_id)
 
+    user_ids = {h.changed_by_user_id for h in history if h.changed_by_user_id}
+    users_by_id: dict[UUID, str | None] = {}
+    if user_ids:
+        users_by_id = {
+            user.id: user.display_name
+            for user in db.query(User).filter(User.id.in_(user_ids)).all()
+        }
+
     result = []
     for h in history:
-        changed_by_name = None
-        if h.changed_by_user_id:
-            user = user_service.get_user_by_id(db, h.changed_by_user_id)
-            changed_by_name = user.display_name if user else None
+        changed_by_name = users_by_id.get(h.changed_by_user_id)
 
         result.append(
             CaseStatusHistoryRead(
