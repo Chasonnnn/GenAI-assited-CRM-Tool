@@ -20,7 +20,7 @@ from uuid import UUID
 from app.core.config import settings
 from app.db.models import Attachment
 from app.db.session import SessionLocal
-from app.services import attachment_service
+from app.services import attachment_service, notification_service
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +144,12 @@ def scan_attachment_job(attachment_id: UUID) -> bool:
         else:
             attachment_service.mark_attachment_scanned(db, attachment_id, "infected")
             logger.warning(f"Attachment {attachment_id} is infected: {message}")
-            # TODO: Send notification to uploader
+            try:
+                notification_service.notify_attachment_infected(db, attachment)
+            except Exception as notify_error:
+                logger.warning(
+                    f"Failed to notify uploader for attachment {attachment_id}: {notify_error}"
+                )
 
         db.commit()
         return True

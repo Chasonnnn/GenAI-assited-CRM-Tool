@@ -12,8 +12,8 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.models import FormSubmission
-from app.services import profile_service, form_service
+from app.db.models import CaseInterview, FormSubmission
+from app.services import form_service, interview_service, profile_service, tiptap_service
 
 
 # Chart colors matching frontend design system
@@ -289,6 +289,272 @@ def _generate_submission_html(
 </html>"""
 
 
+def _format_datetime(value: datetime | None) -> str:
+    if not value:
+        return "—"
+    return value.strftime("%Y-%m-%d %H:%M")
+
+
+def _build_transcript_html(interview_data: dict[str, Any]) -> str:
+    transcript_json = interview_data.get("transcript_json")
+    transcript_text = ""
+    if transcript_json:
+        try:
+            transcript_text = tiptap_service.tiptap_to_text(transcript_json)
+        except Exception:
+            transcript_text = ""
+
+    if not transcript_text:
+        if interview_data.get("is_transcript_offloaded"):
+            return '<div class="muted">Transcript is stored externally.</div>'
+        return '<div class="muted">No transcript available.</div>'
+
+    escaped = html.escape(transcript_text).replace("\n", "<br>")
+    return f'<div class="transcript">{escaped}</div>'
+
+
+def _render_note_html(note: dict[str, Any], depth: int = 0) -> str:
+    author = html.escape(note.get("author_name") or "Unknown")
+    created_at = _format_datetime(note.get("created_at"))
+    anchor_text = note.get("anchor_text") or "General"
+    anchor = html.escape(anchor_text)
+    content = note.get("content") or ""
+    content_html = content or '<span class="muted">—</span>'
+    margin = depth * 16
+
+    replies_html = ""
+    for reply in note.get("replies") or []:
+        replies_html += _render_note_html(reply, depth + 1)
+
+    return f"""
+    <div class="note" style="margin-left: {margin}px;">
+        <div class="note-meta">
+            <span class="note-author">{author}</span>
+            <span class="note-date">{created_at}</span>
+        </div>
+        <div class="note-anchor">Anchor: {anchor}</div>
+        <div class="note-content">{content_html}</div>
+    </div>
+    {replies_html}
+    """
+
+
+def _build_notes_html(notes: list[dict[str, Any]]) -> str:
+    if not notes:
+        return '<div class="muted">No notes.</div>'
+    return "".join(_render_note_html(note) for note in notes)
+
+
+def _build_attachments_html(attachments: list[dict[str, Any]]) -> str:
+    if not attachments:
+        return '<div class="muted">No attachments.</div>'
+
+    items = ""
+    for attachment in attachments:
+        filename = html.escape(attachment.get("filename") or "Unknown file")
+        size = _format_file_size(int(attachment.get("file_size") or 0))
+        items += f"<li>{filename} • {size}</li>"
+    return f"<ul class=\"attachment-list\">{items}</ul>"
+
+
+def _generate_interview_export_html(
+    title: str,
+    case_name: str,
+    org_name: str,
+    exports: list[dict[str, Any]],
+) -> str:
+    sections_html = ""
+    for index, payload in enumerate(exports, start=1):
+        interview = payload["interview"]
+        notes_html = _build_notes_html(payload.get("notes") or [])
+        attachments_html = _build_attachments_html(payload.get("attachments") or [])
+        transcript_html = _build_transcript_html(interview)
+
+        conducted_at = _format_datetime(interview.get("conducted_at"))
+        conducted_by = html.escape(interview.get("conducted_by_name") or "Unknown")
+        interview_type = html.escape(interview.get("interview_type") or "Interview")
+        status = html.escape(interview.get("status") or "unknown")
+        duration = interview.get("duration_minutes")
+        duration_label = f"{duration} min" if duration else "—"
+
+        sections_html += f"""
+        <div class="section">
+            <h2>Interview {index}</h2>
+            <div class="field-row">
+                <span class="field-label">Type</span>
+                <span class="field-value">{interview_type}</span>
+            </div>
+            <div class="field-row">
+                <span class="field-label">Status</span>
+                <span class="field-value">{status}</span>
+            </div>
+            <div class="field-row">
+                <span class="field-label">Conducted At</span>
+                <span class="field-value">{conducted_at}</span>
+            </div>
+            <div class="field-row">
+                <span class="field-label">Conducted By</span>
+                <span class="field-value">{conducted_by}</span>
+            </div>
+            <div class="field-row">
+                <span class="field-label">Duration</span>
+                <span class="field-value">{duration_label}</span>
+            </div>
+
+            <div class="section-block">
+                <h3>Transcript</h3>
+                {transcript_html}
+            </div>
+
+            <div class="section-block">
+                <h3>Notes</h3>
+                {notes_html}
+            </div>
+
+            <div class="section-block">
+                <h3>Attachments</h3>
+                {attachments_html}
+            </div>
+        </div>
+        """
+        if index < len(exports):
+            sections_html += '<div class="page-break"></div>'
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{html.escape(title)} - {html.escape(case_name)}</title>
+    <style>
+        * {{
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 11pt;
+            line-height: 1.5;
+            color: #1a1a1a;
+            background: white;
+        }}
+        .header {{
+            border-bottom: 2px solid #14b8a6;
+            padding-bottom: 16px;
+            margin-bottom: 24px;
+        }}
+        .header h1 {{
+            font-size: 22pt;
+            font-weight: 600;
+            color: #0f172a;
+        }}
+        .header .subtitle {{
+            font-size: 10pt;
+            color: #64748b;
+            margin-top: 4px;
+        }}
+        .muted {{
+            color: #94a3b8;
+        }}
+        .section {{
+            margin-bottom: 24px;
+            page-break-inside: avoid;
+        }}
+        .section h2 {{
+            font-size: 13pt;
+            font-weight: 600;
+            color: #14b8a6;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 8px;
+            margin-bottom: 12px;
+        }}
+        .field-row {{
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid #f1f5f9;
+        }}
+        .field-row:last-child {{
+            border-bottom: none;
+        }}
+        .field-label {{
+            font-weight: 500;
+            color: #64748b;
+            flex-shrink: 0;
+        }}
+        .field-value {{
+            text-align: right;
+            color: #1e293b;
+            max-width: 60%;
+        }}
+        .section-block {{
+            margin-top: 16px;
+        }}
+        .section-block h3 {{
+            font-size: 11pt;
+            font-weight: 600;
+            color: #0f172a;
+            margin-bottom: 8px;
+        }}
+        .transcript {{
+            white-space: pre-wrap;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 12px;
+            background: #f8fafc;
+            color: #0f172a;
+        }}
+        .note {{
+            border-left: 3px solid #14b8a6;
+            padding-left: 12px;
+            margin-bottom: 12px;
+        }}
+        .note-meta {{
+            font-size: 9pt;
+            color: #64748b;
+            display: flex;
+            justify-content: space-between;
+        }}
+        .note-anchor {{
+            font-size: 9pt;
+            color: #64748b;
+            margin-bottom: 6px;
+        }}
+        .note-content {{
+            color: #0f172a;
+        }}
+        .attachment-list {{
+            padding-left: 16px;
+        }}
+        .attachment-list li {{
+            margin-bottom: 4px;
+        }}
+        .page-break {{
+            page-break-after: always;
+        }}
+        .footer {{
+            margin-top: 24px;
+            font-size: 9pt;
+            color: #94a3b8;
+            text-align: center;
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{html.escape(title)}</h1>
+        <div class="subtitle">{html.escape(org_name)} • {html.escape(case_name)}</div>
+    </div>
+
+    {sections_html}
+
+    <div class="footer">
+        Generated on {datetime.now().strftime("%Y-%m-%d %H:%M")} • Confidential
+    </div>
+</body>
+</html>"""
+
+
 def _format_value(value: Any) -> str:
     """Format a value for HTML display."""
     if value is None or value == "":
@@ -433,6 +699,83 @@ def export_profile_pdf(
     )
 
     # Render to PDF (run async in sync context)
+    loop = asyncio.new_event_loop()
+    try:
+        pdf_bytes = loop.run_until_complete(_render_html_to_pdf(html_content))
+    finally:
+        loop.close()
+
+    return pdf_bytes
+
+
+def export_interview_pdf(
+    db: Session,
+    org_id: uuid.UUID,
+    interview: CaseInterview,
+    case_name: str,
+    org_name: str,
+    current_user_id: uuid.UUID,
+) -> bytes:
+    """Export a single interview as PDF."""
+    exports = interview_service.build_interview_exports(
+        db=db,
+        org_id=org_id,
+        interviews=[interview],
+        current_user_id=current_user_id,
+    )
+    payload = exports.get(interview.id)
+    if not payload:
+        raise ValueError("Interview not found")
+
+    html_content = _generate_interview_export_html(
+        title="Interview Export",
+        case_name=case_name,
+        org_name=org_name,
+        exports=[payload],
+    )
+
+    loop = asyncio.new_event_loop()
+    try:
+        pdf_bytes = loop.run_until_complete(_render_html_to_pdf(html_content))
+    finally:
+        loop.close()
+
+    return pdf_bytes
+
+
+def export_interviews_pdf(
+    db: Session,
+    org_id: uuid.UUID,
+    interviews: list[CaseInterview],
+    case_name: str,
+    org_name: str,
+    current_user_id: uuid.UUID,
+) -> bytes:
+    """Export all interviews for a case as a single PDF."""
+    if not interviews:
+        raise ValueError("No interviews found")
+
+    exports = interview_service.build_interview_exports(
+        db=db,
+        org_id=org_id,
+        interviews=interviews,
+        current_user_id=current_user_id,
+    )
+    ordered_exports = [
+        exports[interview.id]
+        for interview in interviews
+        if interview.id in exports
+    ]
+    if not ordered_exports:
+        raise ValueError("No interviews found")
+
+    html_content = _generate_interview_export_html(
+        title="Interview Export",
+        case_name=case_name,
+        org_name=org_name,
+        exports=ordered_exports,
+    )
+
     loop = asyncio.new_event_loop()
     try:
         pdf_bytes = loop.run_until_complete(_render_html_to_pdf(html_content))
