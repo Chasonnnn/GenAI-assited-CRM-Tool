@@ -6,12 +6,12 @@ Logs token usage and provides analytics for cost monitoring.
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.models import AIUsageLog
+from app.types import JsonObject
 
 
 def log_usage(
@@ -44,7 +44,7 @@ def get_org_usage_summary(
     db: Session,
     organization_id: uuid.UUID,
     days: int = 30,
-) -> dict[str, Any]:
+) -> JsonObject:
     """Get usage summary for an organization."""
     since = datetime.now(timezone.utc) - timedelta(days=days)
 
@@ -77,7 +77,7 @@ def get_user_usage_summary(
     db: Session,
     user_id: uuid.UUID,
     days: int = 30,
-) -> dict[str, Any]:
+) -> JsonObject:
     """Get usage summary for a specific user."""
     since = datetime.now(timezone.utc) - timedelta(days=days)
 
@@ -106,7 +106,7 @@ def get_usage_by_model(
     db: Session,
     organization_id: uuid.UUID,
     days: int = 30,
-) -> list[dict[str, Any]]:
+) -> list[JsonObject]:
     """Get usage breakdown by model."""
     since = datetime.now(timezone.utc) - timedelta(days=days)
 
@@ -140,7 +140,7 @@ def get_daily_usage(
     db: Session,
     organization_id: uuid.UUID,
     days: int = 30,
-) -> list[dict[str, Any]]:
+) -> list[JsonObject]:
     """Get daily usage for the past N days."""
     since = datetime.now(timezone.utc) - timedelta(days=days)
 
@@ -176,7 +176,7 @@ def get_top_users(
     organization_id: uuid.UUID,
     days: int = 30,
     limit: int = 10,
-) -> list[dict[str, Any]]:
+) -> list[JsonObject]:
     """Get top users by token usage."""
     since = datetime.now(timezone.utc) - timedelta(days=days)
 

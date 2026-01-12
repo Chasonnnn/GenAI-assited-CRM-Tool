@@ -12,7 +12,6 @@ Security guidelines:
 import hashlib
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
-from typing import Any
 
 from fastapi import Request
 from sqlalchemy import func
@@ -21,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.enums import AuditEventType
 from app.db.models import AuditLog, User
+from app.types import JsonObject
 
 
 def hash_email(email: str) -> str:
@@ -86,7 +86,7 @@ def log_event(
     actor_user_id: UUID | None = None,
     target_type: str | None = None,
     target_id: UUID | None = None,
-    details: dict[str, Any] | None = None,
+    details: JsonObject | None = None,
     request: Request | None = None,
     request_id: UUID | None = None,
     before_version_id: UUID | None = None,
@@ -169,7 +169,7 @@ def log_phi_access(
     target_type: str,
     target_id: UUID | None,
     request: Request | None = None,
-    details: dict[str, Any] | None = None,
+    details: JsonObject | None = None,
 ) -> AuditLog:
     """Log explicit PHI access for HIPAA auditing."""
     return log_event(
@@ -198,8 +198,8 @@ def list_audit_logs(
     per_page: int,
     event_type: str | None = None,
     actor_user_id: UUID | None = None,
-    start_date: Any | None = None,
-    end_date: Any | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
 ) -> tuple[list[AuditLog], int, dict[UUID, str | None]]:
     """List audit logs with optional filters and actor name lookup."""
     query = db.query(AuditLog).filter(AuditLog.organization_id == org_id)
@@ -381,7 +381,7 @@ def log_settings_changed(
     org_id: UUID,
     user_id: UUID,
     setting_area: str,
-    changes: dict[str, Any],
+    changes: JsonObject,
     request: Request | None = None,
 ) -> AuditLog:
     """Log organization or AI settings change."""

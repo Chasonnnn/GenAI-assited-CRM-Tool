@@ -5,7 +5,8 @@ Used for interview transcripts with anchored notes support.
 """
 
 import re
-from typing import Any
+
+from app.types import JsonObject, JsonValue
 
 
 # Allowed TipTap node types (XSS prevention)
@@ -44,7 +45,7 @@ ALLOWED_MARK_ATTRS = {
 ALLOWED_HEADING_LEVELS = {1, 2, 3}
 
 
-def sanitize_tiptap_json(doc: dict | None) -> dict | None:
+def sanitize_tiptap_json(doc: JsonObject | None) -> JsonObject | None:
     """
     Sanitize TipTap JSON document, removing disallowed nodes/marks.
 
@@ -63,7 +64,7 @@ def sanitize_tiptap_json(doc: dict | None) -> dict | None:
     return _sanitize_node(doc)
 
 
-def _sanitize_node(node: dict) -> dict | None:
+def _sanitize_node(node: JsonValue) -> JsonObject | None:
     """Recursively sanitize a TipTap node."""
     if not isinstance(node, dict):
         return None
@@ -76,7 +77,7 @@ def _sanitize_node(node: dict) -> dict | None:
     if node_type not in ALLOWED_NODES:
         return None
 
-    result: dict[str, Any] = {"type": node_type}
+    result: JsonObject = {"type": node_type}
 
     # Handle text nodes
     if node_type == "text":
@@ -118,7 +119,7 @@ def _sanitize_node(node: dict) -> dict | None:
     return result
 
 
-def _sanitize_mark(mark: dict) -> dict | None:
+def _sanitize_mark(mark: JsonValue) -> JsonObject | None:
     """Sanitize a TipTap mark."""
     if not isinstance(mark, dict):
         return None
@@ -127,7 +128,7 @@ def _sanitize_mark(mark: dict) -> dict | None:
     if not mark_type or mark_type not in ALLOWED_MARKS:
         return None
 
-    result: dict[str, Any] = {"type": mark_type}
+    result: JsonObject = {"type": mark_type}
 
     # Handle mark attributes
     if "attrs" in mark and isinstance(mark["attrs"], dict):
@@ -169,7 +170,7 @@ def _sanitize_url(url: str) -> str | None:
     return url
 
 
-def tiptap_to_html(doc: dict | None) -> str:
+def tiptap_to_html(doc: JsonObject | None) -> str:
     """
     Convert TipTap JSON to sanitized HTML.
 
@@ -188,7 +189,7 @@ def tiptap_to_html(doc: dict | None) -> str:
     return _node_to_html(doc)
 
 
-def _node_to_html(node: dict) -> str:
+def _node_to_html(node: JsonObject) -> str:
     """Convert a TipTap node to HTML."""
     node_type = node.get("type")
 
@@ -285,7 +286,7 @@ def _escape_html(text: str) -> str:
     )
 
 
-def tiptap_to_text(doc: dict | None) -> str:
+def tiptap_to_text(doc: JsonObject | None) -> str:
     """
     Extract plain text from TipTap JSON.
 
@@ -304,7 +305,7 @@ def tiptap_to_text(doc: dict | None) -> str:
     return _node_to_text(doc).strip()
 
 
-def _node_to_text(node: dict) -> str:
+def _node_to_text(node: JsonObject) -> str:
     """Convert a TipTap node to plain text."""
     node_type = node.get("type")
 

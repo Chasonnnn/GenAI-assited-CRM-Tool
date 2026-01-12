@@ -14,7 +14,7 @@ import logging
 import secrets
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
-from typing import NamedTuple
+from typing import Coroutine, NamedTuple, TypeVar
 from uuid import UUID
 import re
 
@@ -37,6 +37,7 @@ from app.schemas.appointment import AppointmentRead, AppointmentListItem
 from app.db.enums import AppointmentStatus, MeetingMode
 
 logger = logging.getLogger(__name__)
+T = TypeVar("T")
 
 
 # =============================================================================
@@ -44,7 +45,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-def _run_async(coro):
+def _run_async(coro: Coroutine[object, object, T]) -> T | None:
     """
     Run an async coroutine from sync code.
 

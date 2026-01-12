@@ -1,7 +1,7 @@
 """Pydantic schemas for Automation Workflows."""
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
@@ -83,7 +83,7 @@ class Condition(BaseModel):
 
     field: str
     operator: WorkflowConditionOperator
-    value: Any = None
+    value: object = None
 
     @field_validator("field")
     @classmethod
@@ -190,7 +190,7 @@ class UpdateFieldActionConfig(BaseModel):
 
     action_type: Literal["update_field"] = "update_field"
     field: str
-    value: Any
+    value: object
 
     @field_validator("field")
     @classmethod
@@ -232,10 +232,10 @@ class WorkflowCreate(BaseModel):
     description: str | None = None
     icon: str = Field(default="workflow", max_length=50)
     trigger_type: WorkflowTriggerType
-    trigger_config: dict = Field(default_factory=dict)
+    trigger_config: dict[str, object] = Field(default_factory=dict)
     conditions: list[Condition] = Field(default_factory=list)
     condition_logic: Literal["AND", "OR"] = "AND"
-    actions: list[dict] = Field(min_length=1)  # Validated per action_type
+    actions: list[dict[str, object]] = Field(min_length=1)  # Validated per action_type
     is_enabled: bool = True
     # Rate limits (None = unlimited)
     rate_limit_per_hour: int | None = Field(default=None, ge=1, le=1000)

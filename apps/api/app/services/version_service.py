@@ -16,7 +16,6 @@ NOT versioned: Cases, tasks, notes (use activity logs instead)
 
 import hashlib
 import json
-from typing import Any
 from uuid import UUID
 
 from cryptography.fernet import Fernet
@@ -26,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import AuditLog, EntityVersion
+from app.types import JsonObject
 
 
 # =============================================================================
@@ -49,19 +49,19 @@ def get_fernet() -> Fernet:
     return _fernet
 
 
-def encrypt_payload(payload: dict[str, Any]) -> bytes:
+def encrypt_payload(payload: JsonObject) -> bytes:
     """Encrypt JSON payload using Fernet."""
     json_bytes = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
     return get_fernet().encrypt(json_bytes)
 
 
-def decrypt_payload(encrypted: bytes) -> dict[str, Any]:
+def decrypt_payload(encrypted: bytes) -> JsonObject:
     """Decrypt Fernet-encrypted payload to dict."""
     json_bytes = get_fernet().decrypt(encrypted)
     return json.loads(json_bytes.decode("utf-8"))
 
 
-def compute_checksum(payload: dict[str, Any]) -> str:
+def compute_checksum(payload: JsonObject) -> str:
     """Compute SHA256 checksum of payload for integrity verification."""
     json_bytes = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
     return hashlib.sha256(json_bytes).hexdigest()
@@ -152,7 +152,7 @@ def create_version(
     org_id: UUID,
     entity_type: str,
     entity_id: UUID,
-    payload: dict[str, Any],
+    payload: JsonObject,
     created_by_user_id: UUID | None,
     comment: str | None = None,
 ) -> EntityVersion:
@@ -318,7 +318,7 @@ def rollback_to_version(
 class VersionConflictError(Exception):
     """Raised when expected_version doesn't match current version."""
 
-    def __init__(self, expected: int, actual: int):
+    def __init__(self, expected: int, actual: int) -> None:
         self.expected = expected
         self.actual = actual
         super().__init__(f"Version conflict: expected {expected}, got {actual}")
@@ -345,7 +345,7 @@ def check_version(
 SECRET_FIELDS = {"api_key", "access_token", "refresh_token", "secret", "password"}
 
 
-def redact_secrets(payload: dict[str, Any], key_id: str = "current") -> dict[str, Any]:
+def redact_secrets(payload: JsonObject, key_id: str = "current") -> JsonObject:
     """
     Recursively redact secret fields from payload.
 

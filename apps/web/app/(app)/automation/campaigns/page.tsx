@@ -103,6 +103,11 @@ export default function CampaignsPage() {
     const [campaignName, setCampaignName] = useState("")
     const [campaignDescription, setCampaignDescription] = useState("")
     const [selectedTemplateId, setSelectedTemplateId] = useState("")
+    const isRecipientType = (value: string | null): value is "case" | "intended_parent" =>
+        value === "case" || value === "intended_parent"
+    const isScheduleFor = (value: unknown): value is "now" | "later" =>
+        value === "now" || value === "later"
+
     const [recipientType, setRecipientType] = useState<"case" | "intended_parent">("case")
     const [selectedStages, setSelectedStages] = useState<string[]>([])
     const [selectedStates, setSelectedStates] = useState<string[]>([])
@@ -118,6 +123,11 @@ export default function CampaignsPage() {
     const duplicateCampaign = useDuplicateCampaign()
     const sendCampaign = useSendCampaign()
     const previewFilters = usePreviewFilters()
+
+    const buildFilterCriteria = () => ({
+        ...(selectedStages.length > 0 ? { stage_ids: selectedStages } : {}),
+        ...(selectedStates.length > 0 ? { states: selectedStates } : {}),
+    })
 
     // Fetch pipeline stages for status filter
     const { data: pipeline } = useQuery({
@@ -167,14 +177,11 @@ export default function CampaignsPage() {
                     : undefined
             const campaign = await createCampaign.mutateAsync({
                 name: campaignName,
-                description: campaignDescription || undefined,
                 email_template_id: selectedTemplateId,
                 recipient_type: recipientType,
-                filter_criteria: {
-                    stage_ids: selectedStages.length > 0 ? selectedStages : undefined,
-                    states: selectedStates.length > 0 ? selectedStates : undefined,
-                },
-                scheduled_at: scheduledAt,
+                filter_criteria: buildFilterCriteria(),
+                ...(campaignDescription ? { description: campaignDescription } : {}),
+                ...(scheduledAt ? { scheduled_at: scheduledAt } : {}),
             })
 
             toast.success("Campaign created successfully")
@@ -536,7 +543,11 @@ export default function CampaignsPage() {
                                     <Label>Recipient Type</Label>
                                     <Select
                                         value={recipientType}
-                                        onValueChange={(v) => setRecipientType(v as "case" | "intended_parent")}
+                                        onValueChange={(value) => {
+                                            if (isRecipientType(value)) {
+                                                setRecipientType(value)
+                                            }
+                                        }}
                                     >
                                         <SelectTrigger>
                                             <SelectValue placeholder="Select type">
@@ -641,10 +652,7 @@ export default function CampaignsPage() {
                                     onRefresh={() => {
                                         previewFilters.mutate({
                                             recipientType,
-                                            filterCriteria: {
-                                                stage_ids: selectedStages.length > 0 ? selectedStages : undefined,
-                                                states: selectedStates.length > 0 ? selectedStates : undefined,
-                                            },
+                                            filterCriteria: buildFilterCriteria(),
                                         })
                                     }}
                                     maxVisible={3}
@@ -724,10 +732,7 @@ export default function CampaignsPage() {
                                     if (nextStep === 5) {
                                         previewFilters.mutate({
                                             recipientType,
-                                            filterCriteria: {
-                                                stage_ids: selectedStages.length > 0 ? selectedStages : undefined,
-                                                states: selectedStates.length > 0 ? selectedStates : undefined,
-                                            },
+                                            filterCriteria: buildFilterCriteria(),
                                         })
                                     }
                                 }}

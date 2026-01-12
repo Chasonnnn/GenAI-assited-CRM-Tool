@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import BinaryIO
 
 import boto3
+from botocore.client import BaseClient
 from botocore.exceptions import ClientError
 from sqlalchemy.orm import Session
 
@@ -40,7 +41,7 @@ SIGNED_URL_EXPIRY_SECONDS = 300  # 5 minutes
 # =============================================================================
 
 
-def _get_s3_client():
+def _get_s3_client() -> BaseClient:
     """Get boto3 S3 client."""
     return boto3.client(
         "s3",

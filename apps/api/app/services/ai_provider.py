@@ -7,7 +7,6 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any
 
 import httpx
 
@@ -88,7 +87,7 @@ class AIProvider(ABC):
 class OpenAIProvider(AIProvider):
     """OpenAI API provider."""
 
-    def __init__(self, api_key: str, default_model: str = "gpt-4o-mini"):
+    def __init__(self, api_key: str, default_model: str = "gpt-4o-mini") -> None:
         self.api_key = api_key
         self.default_model = default_model
         self.base_url = "https://api.openai.com/v1"
@@ -147,7 +146,7 @@ class OpenAIProvider(AIProvider):
 class GeminiProvider(AIProvider):
     """Google Gemini API provider."""
 
-    def __init__(self, api_key: str, default_model: str = "gemini-3-flash-preview"):
+    def __init__(self, api_key: str, default_model: str = "gemini-3-flash-preview") -> None:
         self.api_key = api_key
         self.default_model = default_model
         self.base_url = "https://generativelanguage.googleapis.com/v1beta"
@@ -173,7 +172,7 @@ class GeminiProvider(AIProvider):
                 role = "model" if msg.role == "assistant" else "user"
                 contents.append({"role": role, "parts": [{"text": msg.content}]})
 
-        request_body: dict[str, Any] = {
+        request_body: dict[str, object] = {
             "contents": contents,
             "generationConfig": {
                 "temperature": temperature,

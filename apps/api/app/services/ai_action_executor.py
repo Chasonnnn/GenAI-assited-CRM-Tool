@@ -8,12 +8,12 @@ import logging
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime, date, timezone
-from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app.db.models import Case, EntityNote, Task, AIActionApproval
 from app.db.enums import TaskType, OwnerType
+from app.types import JsonObject
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class ActionExecutor(ABC):
     @abstractmethod
     def validate(
         self,
-        payload: dict[str, Any],
+        payload: JsonObject,
         db: Session,
         user_id: uuid.UUID,
         org_id: uuid.UUID,
@@ -46,12 +46,12 @@ class ActionExecutor(ABC):
     @abstractmethod
     def execute(
         self,
-        payload: dict[str, Any],
+        payload: JsonObject,
         db: Session,
         user_id: uuid.UUID,
         org_id: uuid.UUID,
         entity_id: uuid.UUID,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         """Execute the action.
 
         Returns:
@@ -72,7 +72,7 @@ class AddNoteExecutor(ActionExecutor):
 
     def validate(
         self,
-        payload: dict[str, Any],
+        payload: JsonObject,
         db: Session,
         user_id: uuid.UUID,
         org_id: uuid.UUID,
@@ -84,12 +84,12 @@ class AddNoteExecutor(ActionExecutor):
 
     def execute(
         self,
-        payload: dict[str, Any],
+        payload: JsonObject,
         db: Session,
         user_id: uuid.UUID,
         org_id: uuid.UUID,
         entity_id: uuid.UUID,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         content = payload.get("content") or payload.get("body") or payload.get("text")
 
         # Create note (EntityNote uses entity_type, entity_id, content)
@@ -128,7 +128,7 @@ class CreateTaskExecutor(ActionExecutor):
 
     def validate(
         self,
-        payload: dict[str, Any],
+        payload: JsonObject,
         db: Session,
         user_id: uuid.UUID,
         org_id: uuid.UUID,
@@ -140,12 +140,12 @@ class CreateTaskExecutor(ActionExecutor):
 
     def execute(
         self,
-        payload: dict[str, Any],
+        payload: JsonObject,
         db: Session,
         user_id: uuid.UUID,
         org_id: uuid.UUID,
         entity_id: uuid.UUID,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         title = payload.get("title")
         description = payload.get("description", "")
         due_date_str = payload.get("due_date")
@@ -189,7 +189,7 @@ class UpdateStatusExecutor(ActionExecutor):
 
     def validate(
         self,
-        payload: dict[str, Any],
+        payload: JsonObject,
         db: Session,
         user_id: uuid.UUID,
         org_id: uuid.UUID,
@@ -208,12 +208,12 @@ class UpdateStatusExecutor(ActionExecutor):
 
     def execute(
         self,
-        payload: dict[str, Any],
+        payload: JsonObject,
         db: Session,
         user_id: uuid.UUID,
         org_id: uuid.UUID,
         entity_id: uuid.UUID,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         stage_id = payload.get("stage_id")
 
         case = (
@@ -278,7 +278,7 @@ class SendEmailExecutor(ActionExecutor):
 
     def validate(
         self,
-        payload: dict[str, Any],
+        payload: JsonObject,
         db: Session,
         user_id: uuid.UUID,
         org_id: uuid.UUID,
@@ -316,12 +316,12 @@ class SendEmailExecutor(ActionExecutor):
 
     def execute(
         self,
-        payload: dict[str, Any],
+        payload: JsonObject,
         db: Session,
         user_id: uuid.UUID,
         org_id: uuid.UUID,
         entity_id: uuid.UUID,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         """Execute email send via Gmail API."""
         import asyncio
         from app.services import gmail_service
@@ -435,7 +435,7 @@ def execute_action(
     org_id: uuid.UUID,
     entity_id: uuid.UUID,
     user_permissions: set[str] | None = None,
-) -> dict[str, Any]:
+) -> JsonObject:
     """Execute an approved action with permission checks and activity logging.
 
     Args:

@@ -11,7 +11,6 @@ Features:
 import csv
 import io
 from datetime import datetime, timezone
-from typing import Any
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -86,9 +85,9 @@ def map_columns(headers: list[str]) -> dict[int, str]:
 class ImportPreview:
     """Preview of CSV import before confirmation."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.total_rows: int = 0
-        self.sample_rows: list[dict] = []  # First 5 rows
+        self.sample_rows: list[dict[str, str]] = []  # First 5 rows
         self.detected_columns: list[str] = []  # Mapped field names
         self.unmapped_columns: list[str] = []  # Columns we couldn't map
         self.duplicate_emails_db: int = 0  # Emails already in DB
@@ -199,7 +198,7 @@ def preview_import(
     return preview
 
 
-def _row_to_dict(row: list[str], column_map: dict[int, str]) -> dict[str, Any]:
+def _row_to_dict(row: list[str], column_map: dict[int, str]) -> dict[str, str]:
     """Convert CSV row to dict using column mapping."""
     result = {}
     for idx, field in column_map.items():
@@ -210,7 +209,7 @@ def _row_to_dict(row: list[str], column_map: dict[int, str]) -> dict[str, Any]:
     return result
 
 
-def _validate_row(row_data: dict[str, Any]) -> CaseCreate:
+def _validate_row(row_data: dict[str, str]) -> CaseCreate:
     """
     Validate row data using CaseCreate schema.
 
@@ -232,10 +231,10 @@ def _validate_row(row_data: dict[str, Any]) -> CaseCreate:
 class ImportResult:
     """Result of import execution."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.imported: int = 0
         self.skipped: int = 0
-        self.errors: list[dict] = []  # [{row: int, errors: list[str]}]
+        self.errors: list[dict[str, object]] = []  # [{row: int, errors: list[str]}]
 
 
 def execute_import(

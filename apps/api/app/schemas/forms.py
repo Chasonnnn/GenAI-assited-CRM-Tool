@@ -1,7 +1,7 @@
 """Schemas for application forms and submissions."""
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -134,7 +134,7 @@ class FormLogoRead(BaseModel):
 
 
 class FormSubmissionCreate(BaseModel):
-    answers: dict[str, Any]
+    answers: dict[str, object]
 
 
 class FormSubmissionFileRead(BaseModel):
@@ -160,8 +160,8 @@ class FormSubmissionRead(BaseModel):
     reviewed_at: datetime | None
     reviewed_by_user_id: UUID | None
     review_notes: str | None
-    answers: dict[str, Any]
-    schema_snapshot: dict | None
+    answers: dict[str, object]
+    schema_snapshot: dict[str, object] | None
     files: list[FormSubmissionFileRead]
 
 
@@ -186,7 +186,7 @@ class FormFieldMappingsUpdate(BaseModel):
 class FormSubmissionAnswerUpdate(BaseModel):
     """Single field update in a submission."""
     field_key: str = Field(..., min_length=1, max_length=100)
-    value: Any
+    value: object
 
 
 class FormSubmissionAnswersUpdate(BaseModel):

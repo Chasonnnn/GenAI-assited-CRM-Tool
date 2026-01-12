@@ -14,12 +14,12 @@ Enterprise implementation includes:
 import hashlib
 import logging
 import time
-from typing import Any
 
 import httpx
 
 from app.core.config import settings
 from app.services.meta_api import compute_appsecret_proof
+from app.types import JsonObject
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +70,8 @@ def hash_for_capi(value: str) -> str:
 async def send_lead_event(
     lead_id: str,
     event_name: str = "Lead",
-    user_data: dict[str, Any] | None = None,
-    custom_data: dict[str, Any] | None = None,
+    user_data: JsonObject | None = None,
+    custom_data: JsonObject | None = None,
     access_token: str | None = None,
     event_id: str | None = None,
 ) -> tuple[bool, str | None]:

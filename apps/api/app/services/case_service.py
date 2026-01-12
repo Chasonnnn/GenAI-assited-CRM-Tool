@@ -1076,7 +1076,9 @@ def list_handoff_queue(
     return cases, total
 
 
-def get_status_history(db: Session, case_id: UUID, org_id: UUID):
+def get_status_history(
+    db: Session, case_id: UUID, org_id: UUID
+) -> list[CaseStatusHistory]:
     """Get status history for a case (org-scoped)."""
     return (
         db.query(CaseStatusHistory)

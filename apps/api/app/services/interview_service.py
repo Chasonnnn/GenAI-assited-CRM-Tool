@@ -4,7 +4,7 @@ import hashlib
 import json
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -20,6 +20,7 @@ from app.db.models import (
 )
 from app.schemas.interview import InterviewCreate, InterviewUpdate
 from app.services import tiptap_service
+from app.types import JsonObject
 
 if TYPE_CHECKING:
     from app.db.models import DataRetentionPolicy
@@ -48,7 +49,7 @@ def _compute_hash(text: str | None) -> str | None:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _compute_transcript_size_bytes(transcript_json: dict | None) -> int:
+def _compute_transcript_size_bytes(transcript_json: JsonObject | None) -> int:
     """Compute size of TipTap JSON payload (bytes)."""
     if not transcript_json:
         return 0
@@ -58,8 +59,8 @@ def _compute_transcript_size_bytes(transcript_json: dict | None) -> int:
 
 
 def _build_transcript_content(
-    transcript_json: dict[str, Any] | None,
-) -> tuple[dict[str, Any] | None, str | None, str | None, int]:
+    transcript_json: JsonObject | None,
+) -> tuple[JsonObject | None, str | None, str | None, int]:
     """Sanitize and derive HTML/text/size from TipTap JSON."""
     if transcript_json is None:
         return None, None, None, 0
@@ -74,7 +75,7 @@ def _build_transcript_content(
     return sanitized, transcript_html, transcript_text, transcript_size
 
 
-def _tiptap_doc_from_text(text: str) -> dict[str, Any]:
+def _tiptap_doc_from_text(text: str) -> JsonObject:
     """Convert plain text into a minimal TipTap doc."""
     paragraphs = [paragraph.strip() for paragraph in text.split("\n\n") if paragraph.strip()]
     content = [
@@ -117,7 +118,7 @@ def create_interview(
     Validates case access and creates initial version if transcript provided.
     Supports TipTap JSON transcript input.
     """
-    transcript_json: dict[str, Any] | None = None
+    transcript_json: JsonObject | None = None
     transcript_html: str | None = None
     transcript_text: str | None = None
     transcript_size = 0
@@ -346,7 +347,7 @@ def update_interview(
         interview.status = data.status
 
     # Handle transcript update with versioning (TipTap JSON only)
-    transcript_json: dict[str, Any] | None = None
+    transcript_json: JsonObject | None = None
     transcript_html: str | None = None
     transcript_text: str | None = None
     transcript_size = 0
@@ -410,7 +411,7 @@ def delete_interview(
 async def update_transcript(
     db: Session,
     interview: CaseInterview,
-    new_transcript_json: dict[str, Any],
+    new_transcript_json: JsonObject,
     user_id: UUID,
     source: str = "manual",
 ) -> CaseInterview:
@@ -552,7 +553,7 @@ def restore_version(
     )
     db.add(restore_version_record)
 
-    transcript_json: dict[str, Any] | None = None
+    transcript_json: JsonObject | None = None
     if version.content_html:
         transcript_json = tiptap_service.html_to_tiptap(version.content_html)
     elif version.content_text:

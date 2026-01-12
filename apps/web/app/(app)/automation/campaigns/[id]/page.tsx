@@ -79,7 +79,13 @@ const statusLabels: Record<string, string> = {
 export default function CampaignDetailPage() {
     const params = useParams()
     const router = useRouter()
-    const campaignId = params.id as string
+    const rawCampaignId = params.id
+    const campaignId =
+        typeof rawCampaignId === "string"
+            ? rawCampaignId
+            : Array.isArray(rawCampaignId)
+              ? rawCampaignId[0] ?? ""
+              : ""
 
     const [showDeleteDialog, setShowDeleteDialog] = useState(false)
     const [showTemplatePreview, setShowTemplatePreview] = useState(true)

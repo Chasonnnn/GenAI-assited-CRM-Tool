@@ -8,7 +8,6 @@ import json
 import logging
 import re
 from datetime import date, datetime, time
-from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -38,7 +37,7 @@ class ProposedTask(BaseModel):
     confidence: float = Field(default=0.8, ge=0, le=1)
     dedupe_key: str = ""  # Generated hash for duplicate detection
 
-    def model_post_init(self, __context: Any) -> None:
+    def model_post_init(self, __context: object | None) -> None:
         """Generate dedupe_key after initialization."""
         if not self.dedupe_key:
             key_parts = f"{self.title}|{self.due_date}|{self.due_time}"

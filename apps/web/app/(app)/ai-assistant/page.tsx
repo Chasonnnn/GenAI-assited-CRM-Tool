@@ -138,12 +138,15 @@ export default function AIAssistantPage() {
         try {
             await approveAction.mutateAsync(approvalId)
             // Update the action status in messages
-            setMessages(prev => prev.map(msg => ({
-                ...msg,
-                proposed_actions: msg.proposed_actions?.map(action =>
-                    action.approval_id === approvalId ? { ...action, status: 'approved' } : action
-                )
-            })))
+            setMessages(prev => prev.map(msg => {
+                if (!msg.proposed_actions) return msg
+                return {
+                    ...msg,
+                    proposed_actions: msg.proposed_actions.map(action =>
+                        action.approval_id === approvalId ? { ...action, status: 'approved' } : action
+                    ),
+                }
+            }))
         } catch (error) {
             console.error('Failed to approve action:', error)
         }
@@ -153,12 +156,15 @@ export default function AIAssistantPage() {
         if (!approvalId) return
         try {
             await rejectAction.mutateAsync(approvalId)
-            setMessages(prev => prev.map(msg => ({
-                ...msg,
-                proposed_actions: msg.proposed_actions?.map(action =>
-                    action.approval_id === approvalId ? { ...action, status: 'rejected' } : action
-                )
-            })))
+            setMessages(prev => prev.map(msg => {
+                if (!msg.proposed_actions) return msg
+                return {
+                    ...msg,
+                    proposed_actions: msg.proposed_actions.map(action =>
+                        action.approval_id === approvalId ? { ...action, status: 'rejected' } : action
+                    ),
+                }
+            }))
         } catch (error) {
             console.error('Failed to reject action:', error)
         }

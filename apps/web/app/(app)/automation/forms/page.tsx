@@ -58,9 +58,10 @@ export default function FormsListPage() {
     const handleCreate = async () => {
         if (!formName.trim()) return
         try {
+            const description = formDescription.trim()
             const newForm = await createFormMutation.mutateAsync({
                 name: formName.trim(),
-                description: formDescription.trim() || undefined,
+                ...(description ? { description } : {}),
             })
             setShowCreateModal(false)
             setFormName("")
@@ -148,9 +149,11 @@ export default function FormsListPage() {
                             {[...forms]
                                 .sort((a, b) => {
                                     // Published first, then draft, then archived
-                                    const order = { published: 0, draft: 1, archived: 2 }
-                                    const aOrder = order[a.status as keyof typeof order] ?? 3
-                                    const bOrder = order[b.status as keyof typeof order] ?? 3
+                                    const order = { published: 0, draft: 1, archived: 2 } as const
+                                    const isOrderKey = (value: string): value is keyof typeof order =>
+                                        Object.prototype.hasOwnProperty.call(order, value)
+                                    const aOrder = isOrderKey(a.status) ? order[a.status] : 3
+                                    const bOrder = isOrderKey(b.status) ? order[b.status] : 3
                                     if (aOrder !== bOrder) return aOrder - bOrder
                                     // Then by updated_at descending
                                     return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
