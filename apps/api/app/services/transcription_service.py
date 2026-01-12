@@ -195,13 +195,19 @@ async def request_transcription(
     """
     # Get related records
     attachment = db.scalar(
-        select(Attachment).where(Attachment.id == interview_attachment.attachment_id)
+        select(Attachment).where(
+            Attachment.id == interview_attachment.attachment_id,
+            Attachment.organization_id == interview_attachment.organization_id,
+        )
     )
     if not attachment:
         raise TranscriptionError("Attachment not found")
 
     interview = db.scalar(
-        select(CaseInterview).where(CaseInterview.id == interview_attachment.interview_id)
+        select(CaseInterview).where(
+            CaseInterview.id == interview_attachment.interview_id,
+            CaseInterview.organization_id == interview_attachment.organization_id,
+        )
     )
     if not interview:
         raise TranscriptionError("Interview not found")

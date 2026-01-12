@@ -60,13 +60,24 @@ def _form_summary(form: Form) -> FormSummary:
 
 
 def _form_read(form: Form) -> FormRead:
+    schema = _schema_or_none(form.schema_json)
+    published_schema = _schema_or_none(form.published_schema_json)
+    if schema:
+        schema = form_service.normalize_form_schema_logo_url(
+            schema, form.organization_id
+        )
+    if published_schema:
+        published_schema = form_service.normalize_form_schema_logo_url(
+            published_schema, form.organization_id
+        )
+
     return FormRead(
         id=form.id,
         name=form.name,
         status=form.status,
         description=form.description,
-        form_schema=_schema_or_none(form.schema_json),
-        published_schema=_schema_or_none(form.published_schema_json),
+        form_schema=schema,
+        published_schema=published_schema,
         max_file_size_bytes=form.max_file_size_bytes,
         max_file_count=form.max_file_count,
         allowed_mime_types=form.allowed_mime_types,

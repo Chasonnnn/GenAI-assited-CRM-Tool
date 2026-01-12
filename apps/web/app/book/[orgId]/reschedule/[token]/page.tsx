@@ -1,8 +1,8 @@
 "use client"
 
 /**
- * Self-Service Reschedule Page - /book/reschedule/[token]
- * 
+ * Self-Service Reschedule Page - /book/[orgId]/reschedule/[token]
+ *
  * Allows clients to reschedule their appointment using a secure token.
  */
 
@@ -41,7 +41,7 @@ const TIMEZONE_OPTIONS = [
 ]
 
 interface PageProps {
-    params: { token: string }
+    params: { orgId: string; token: string }
 }
 
 export default function ReschedulePage({ params }: PageProps) {
@@ -72,7 +72,10 @@ export default function ReschedulePage({ params }: PageProps) {
     useEffect(() => {
         async function load() {
             try {
-                const data = await getAppointmentForReschedule(params.token)
+                const data = await getAppointmentForReschedule(
+                    params.orgId,
+                    params.token
+                )
                 setAppointment(data as PublicAppointmentView)
             } catch (err: unknown) {
                 setError(err instanceof Error ? err.message : "Appointment not found")
@@ -81,7 +84,7 @@ export default function ReschedulePage({ params }: PageProps) {
             }
         }
         load()
-    }, [params.token])
+    }, [params.orgId, params.token])
 
     useEffect(() => {
         if (appointment?.client_timezone) {
@@ -99,6 +102,7 @@ export default function ReschedulePage({ params }: PageProps) {
             // Fetch real availability from API
             const dateStr = format(date, "yyyy-MM-dd")
             const response = await getRescheduleSlotsByToken(
+                params.orgId,
                 params.token,
                 dateStr,
                 dateStr,
@@ -119,7 +123,7 @@ export default function ReschedulePage({ params }: PageProps) {
 
         setIsSubmitting(true)
         try {
-            await rescheduleByToken(params.token, selectedSlot.start)
+            await rescheduleByToken(params.orgId, params.token, selectedSlot.start)
             setIsConfirmed(true)
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : "Failed to reschedule")

@@ -403,12 +403,16 @@ export function getBookingPreviewSlots(
 }
 
 export function getAppointmentForReschedule(
+    orgId: string,
     token: string
 ): Promise<PublicAppointmentView> {
-    return publicRequest<PublicAppointmentView>(`/book/self-service/reschedule/${token}`);
+    return publicRequest<PublicAppointmentView>(
+        `/book/self-service/${orgId}/reschedule/${token}`
+    );
 }
 
 export function getRescheduleSlotsByToken(
+    orgId: string,
     token: string,
     dateStart: string,
     dateEnd?: string,
@@ -418,34 +422,45 @@ export function getRescheduleSlotsByToken(
     if (dateEnd) params.append('date_end', dateEnd);
     if (clientTimezone) params.append('client_timezone', clientTimezone);
     return publicRequest<AvailableSlotsResponse>(
-        `/book/self-service/reschedule/${token}/slots?${params}`
+        `/book/self-service/${orgId}/reschedule/${token}/slots?${params}`
     );
 }
 
 export function rescheduleByToken(
+    orgId: string,
     token: string,
     scheduledStart: string
 ): Promise<PublicAppointmentView> {
-    return publicRequest<PublicAppointmentView>(`/book/self-service/reschedule/${token}`, {
+    return publicRequest<PublicAppointmentView>(
+        `/book/self-service/${orgId}/reschedule/${token}`,
+        {
         method: 'POST',
         body: JSON.stringify({ scheduled_start: scheduledStart }),
-    });
+        }
+    );
 }
 
 export function getAppointmentForCancel(
+    orgId: string,
     token: string
 ): Promise<PublicAppointmentView> {
-    return publicRequest<PublicAppointmentView>(`/book/self-service/cancel/${token}`);
+    return publicRequest<PublicAppointmentView>(
+        `/book/self-service/${orgId}/cancel/${token}`
+    );
 }
 
 export function cancelByToken(
+    orgId: string,
     token: string,
     reason?: string
 ): Promise<PublicAppointmentView> {
-    return publicRequest<PublicAppointmentView>(`/book/self-service/cancel/${token}`, {
-        method: 'POST',
-        body: JSON.stringify({ reason }),
-    });
+    return publicRequest<PublicAppointmentView>(
+        `/book/self-service/${orgId}/cancel/${token}`,
+        {
+            method: 'POST',
+            body: JSON.stringify({ reason }),
+        }
+    );
 }
 
 // =============================================================================

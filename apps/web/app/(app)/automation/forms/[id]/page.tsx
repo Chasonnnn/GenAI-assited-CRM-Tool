@@ -49,10 +49,16 @@ import {
     useUpdateForm,
     useUploadFormLogo,
 } from "@/lib/hooks/use-forms"
-import type { FormSchema, FormFieldOption, FormRead } from "@/lib/api/forms"
+import type { FieldType, FormSchema, FormFieldOption, FormRead } from "@/lib/api/forms"
 
 // Field type definitions
-const fieldTypes = {
+type FieldTypeOption = {
+    id: FieldType
+    label: string
+    icon: typeof TypeIcon
+}
+
+const fieldTypes: { basic: FieldTypeOption[]; advanced: FieldTypeOption[] } = {
     basic: [
         { id: "text", label: "Name", icon: TypeIcon },
         { id: "email", label: "Email", icon: MailIcon },
@@ -92,7 +98,7 @@ const caseFieldMappings = [
 
 type FormField = {
     id: string
-    type: FormSchema["pages"][number]["fields"][number]["type"]
+    type: FieldType
     label: string
     helperText: string
     required: boolean
@@ -252,7 +258,7 @@ const buildDraftField = ({
     options,
 }: {
     label: string
-    type: string
+    type: FieldType
     required?: boolean
     helperText?: string
     caseFieldMapping?: string
@@ -586,7 +592,10 @@ export default function FormBuilderPage() {
     const [pages, setPages] = useState<FormPage[]>([{ id: 1, name: "Page 1", fields: [] }])
     const [activePage, setActivePage] = useState(1)
     const [selectedField, setSelectedField] = useState<string | null>(null)
-    const [draggedField, setDraggedField] = useState<{ type: string; label: string } | null>(null)
+    const [draggedField, setDraggedField] = useState<{
+        type: FieldType
+        label: string
+    } | null>(null)
     const [draggedFieldId, setDraggedFieldId] = useState<string | null>(null)
     const [dropIndicatorId, setDropIndicatorId] = useState<string | "end" | null>(null)
 
@@ -646,7 +655,7 @@ export default function FormBuilderPage() {
     }
 
     // Drag and drop handlers
-    const handleDragStart = (type: string, label: string) => {
+    const handleDragStart = (type: FieldType, label: string) => {
         setDraggedField({ type, label })
         setDraggedFieldId(null)
     }

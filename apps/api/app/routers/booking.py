@@ -250,21 +250,25 @@ def create_booking(
 # =============================================================================
 
 
-@router.get("/self-service/reschedule/{token}")
+@router.get("/self-service/{org_id}/reschedule/{token}")
 def get_appointment_for_reschedule(
+    org_id: UUID,
     token: str,
     db: Session = Depends(get_db),
 ):
     """Get appointment details for reschedule form."""
-    appt = appointment_service.get_appointment_by_token(db, token, "reschedule")
+    appt = appointment_service.get_appointment_by_token(
+        db, org_id, token, "reschedule"
+    )
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
 
     return _appointment_to_public_read(appt, db)
 
 
-@router.get("/self-service/reschedule/{token}/slots")
+@router.get("/self-service/{org_id}/reschedule/{token}/slots")
 def get_reschedule_slots(
+    org_id: UUID,
     token: str,
     date_start: date = Query(..., description="Start date (YYYY-MM-DD)"),
     date_end: date = Query(None, description="End date (defaults to start date)"),
@@ -276,7 +280,9 @@ def get_reschedule_slots(
 
     Uses the appointment's existing settings to determine availability.
     """
-    appt = appointment_service.get_appointment_by_token(db, token, "reschedule")
+    appt = appointment_service.get_appointment_by_token(
+        db, org_id, token, "reschedule"
+    )
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
 
@@ -321,16 +327,19 @@ def get_reschedule_slots(
     )
 
 
-@router.post("/self-service/reschedule/{token}")
+@router.post("/self-service/{org_id}/reschedule/{token}")
 @limiter.limit("10/minute")
 def reschedule_by_token(
+    org_id: UUID,
     token: str,
     data: AppointmentReschedule,
     request: Request,
     db: Session = Depends(get_db),
 ):
     """Reschedule an appointment using self-service token."""
-    appt = appointment_service.get_appointment_by_token(db, token, "reschedule")
+    appt = appointment_service.get_appointment_by_token(
+        db, org_id, token, "reschedule"
+    )
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
 
@@ -353,29 +362,31 @@ def reschedule_by_token(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/self-service/cancel/{token}")
+@router.get("/self-service/{org_id}/cancel/{token}")
 def get_appointment_for_cancel(
+    org_id: UUID,
     token: str,
     db: Session = Depends(get_db),
 ):
     """Get appointment details for cancel confirmation."""
-    appt = appointment_service.get_appointment_by_token(db, token, "cancel")
+    appt = appointment_service.get_appointment_by_token(db, org_id, token, "cancel")
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
 
     return _appointment_to_public_read(appt, db)
 
 
-@router.post("/self-service/cancel/{token}")
+@router.post("/self-service/{org_id}/cancel/{token}")
 @limiter.limit("10/minute")
 def cancel_by_token(
+    org_id: UUID,
     token: str,
     data: AppointmentCancel,
     request: Request,
     db: Session = Depends(get_db),
 ):
     """Cancel an appointment using self-service token."""
-    appt = appointment_service.get_appointment_by_token(db, token, "cancel")
+    appt = appointment_service.get_appointment_by_token(db, org_id, token, "cancel")
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
 

@@ -39,6 +39,7 @@ DEFAULT_MAX_FILE_COUNT = 10
 FORM_LOGO_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024
 FORM_LOGO_ALLOWED_MIME_TYPES = {"image/png", "image/jpeg", "image/jpg"}
 FORM_LOGO_ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg"}
+LEGACY_PUBLIC_LOGO_PREFIX = "/forms/public/logos/"
 
 
 def list_forms(db: Session, org_id: uuid.UUID) -> list[Form]:
@@ -177,12 +178,27 @@ def get_form_logo(
     )
 
 
-def get_form_logo_by_id(db: Session, logo_id: uuid.UUID) -> FormLogo | None:
-    return db.query(FormLogo).filter(FormLogo.id == logo_id).first()
+def get_form_logo_by_id(
+    db: Session, org_id: uuid.UUID, logo_id: uuid.UUID
+) -> FormLogo | None:
+    return get_form_logo(db, org_id, logo_id)
 
 
 def get_form_logo_public_url(logo: FormLogo) -> str:
-    return f"/forms/public/logos/{logo.id}"
+    return f"/forms/public/{logo.organization_id}/logos/{logo.id}"
+
+
+def normalize_form_schema_logo_url(
+    schema: FormSchema, org_id: uuid.UUID
+) -> FormSchema:
+    if not schema.logo_url:
+        return schema
+    if schema.logo_url.startswith(LEGACY_PUBLIC_LOGO_PREFIX):
+        logo_id = schema.logo_url.removeprefix(LEGACY_PUBLIC_LOGO_PREFIX)
+        return schema.model_copy(
+            update={"logo_url": f"/forms/public/{org_id}/logos/{logo_id}"}
+        )
+    return schema
 
 
 def get_form_logo_download_url(logo: FormLogo) -> str | None:

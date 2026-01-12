@@ -224,7 +224,7 @@ def resolve_alert(
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
 
-    alert_service.resolve_alert(db, alert_id, session.user_id)
+    alert_service.resolve_alert(db, session.org_id, alert_id, session.user_id)
     return {"status": "resolved", "alert_id": str(alert_id)}
 
 
@@ -243,7 +243,7 @@ def acknowledge_alert(
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
 
-    alert_service.acknowledge_alert(db, alert_id)
+    alert_service.acknowledge_alert(db, session.org_id, alert_id)
     return {"status": "acknowledged", "alert_id": str(alert_id)}
 
 
@@ -261,5 +261,5 @@ def snooze_alert(
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
 
-    alert_service.snooze_alert(db, alert_id, hours)
+    alert_service.snooze_alert(db, session.org_id, alert_id, hours)
     return {"status": "snoozed", "alert_id": str(alert_id), "hours": hours}
