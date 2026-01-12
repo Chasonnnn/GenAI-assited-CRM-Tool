@@ -3,6 +3,7 @@
  */
 
 import api from './index'
+import type { JsonObject } from '../types/json'
 
 export type FormStatus = 'draft' | 'published' | 'archived'
 export type FormSubmissionStatus = 'pending_review' | 'approved' | 'rejected'
@@ -125,7 +126,7 @@ export interface FormSubmissionRead {
     reviewed_at?: string | null
     reviewed_by_user_id?: string | null
     review_notes?: string | null
-    answers: Record<string, unknown>
+    answers: JsonObject
     schema_snapshot?: FormSchema | null
     files: FormSubmissionFileRead[]
 }
@@ -216,7 +217,7 @@ export function getPublicForm(token: string): Promise<FormPublicRead> {
 
 export function submitPublicForm(
     token: string,
-    answers: Record<string, unknown>,
+    answers: JsonObject,
     files: File[] = []
 ): Promise<FormSubmissionPublicResponse> {
     const formData = new FormData()

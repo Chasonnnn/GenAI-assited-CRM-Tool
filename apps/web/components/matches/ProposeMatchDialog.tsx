@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircleIcon, Loader2Icon, UsersIcon } from "lucide-react"
+import { toast } from "sonner"
 import { useCreateMatch } from "@/lib/hooks/use-matches"
 import { useIntendedParents } from "@/lib/hooks/use-intended-parents"
 
@@ -43,10 +44,10 @@ export function ProposeMatchDialog({
             await createMatch.mutateAsync({
                 case_id: caseId,
                 intended_parent_id: selectedIpId,
-                compatibility_score: compatibilityScore ? parseFloat(compatibilityScore) : undefined,
-                notes: notes || undefined,
+                ...(compatibilityScore ? { compatibility_score: parseFloat(compatibilityScore) } : {}),
+                ...(notes.trim() ? { notes: notes.trim() } : {}),
             })
-            alert("Match proposed successfully!")
+            toast.success("Match proposed successfully!")
             onOpenChange(false)
             setSelectedIpId("")
             setCompatibilityScore("")

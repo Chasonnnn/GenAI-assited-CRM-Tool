@@ -19,7 +19,9 @@ interface InviteDetails {
 export default function InviteAcceptPage() {
     const params = useParams()
     const router = useRouter()
-    const inviteId = params.id as string
+    const rawId = params.id
+    const inviteId =
+        typeof rawId === "string" ? rawId : Array.isArray(rawId) ? rawId[0] : ""
 
     const [invite, setInvite] = useState<InviteDetails | null>(null)
     const [isLoading, setIsLoading] = useState(true)
@@ -187,8 +189,7 @@ export default function InviteAcceptPage() {
 
                             <Button
                                 onClick={handleAccept}
-                                className="w-full font-semibold py-6 text-base rounded-full transition-all duration-300"
-                                style={{ backgroundColor: "#15803d", color: "white" }}
+                                className="w-full font-semibold py-6 text-base rounded-full transition-all duration-300 bg-green-700 text-white hover:bg-green-800"
                                 disabled={isAccepting}
                             >
                                 {isAccepting ? (

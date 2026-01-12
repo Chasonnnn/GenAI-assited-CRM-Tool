@@ -47,7 +47,7 @@ export default function RolePermissionsPage() {
             </div>
 
             <div>
-                <h1 className="text-2xl font-bold flex items-center gap-2">
+                <h1 className="text-2xl font-semibold flex items-center gap-2">
                     <Shield className="size-6" />
                     Role Permissions
                 </h1>

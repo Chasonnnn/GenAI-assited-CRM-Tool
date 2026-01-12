@@ -19,11 +19,11 @@ function DropdownMenuTrigger({
   render,
   ...props
 }: MenuPrimitive.Trigger.Props) {
+  const triggerProps = render === undefined ? props : { ...props, render }
   return (
     <MenuPrimitive.Trigger
       data-slot="dropdown-menu-trigger"
-      render={render}
-      {...props}
+      {...triggerProps}
     >
       {children}
     </MenuPrimitive.Trigger>
@@ -160,6 +160,7 @@ function DropdownMenuCheckboxItem({
   checked,
   ...props
 }: MenuPrimitive.CheckboxItem.Props) {
+  const checkboxProps = checked === undefined ? props : { ...props, checked }
   return (
     <MenuPrimitive.CheckboxItem
       data-slot="dropdown-menu-checkbox-item"
@@ -167,8 +168,7 @@ function DropdownMenuCheckboxItem({
         "focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground gap-2.5 rounded-xl py-2 pr-8 pl-3 text-sm [&_svg:not([class*='size-'])]:size-4 relative flex cursor-default items-center outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         className
       )}
-      checked={checked}
-      {...props}
+      {...checkboxProps}
     >
       <span
         className="pointer-events-none absolute right-2 flex items-center justify-center pointer-events-none"

@@ -47,7 +47,7 @@ import {
     VideoIcon,
     PhoneIcon,
     MapPinIcon,
-    LoaderIcon,
+    Loader2Icon,
     MailIcon,
     ExternalLinkIcon,
     EyeIcon,
@@ -166,7 +166,7 @@ function BookingLinkCard() {
         return (
             <Card>
                 <CardContent className="py-8 flex items-center justify-center">
-                    <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
+                    <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                 </CardContent>
             </Card>
         )
@@ -245,8 +245,9 @@ function AvailabilityRulesCard() {
                 }
             })
             setLocalRules(initialRules)
-            if (rules.length > 0) {
-                setTimezone(rules[0].timezone)
+            const firstRule = rules[0]
+            if (firstRule) {
+                setTimezone(firstRule.timezone)
             } else if (user?.org_timezone) {
                 setTimezone(user.org_timezone)
             }
@@ -288,7 +289,7 @@ function AvailabilityRulesCard() {
         return (
             <Card>
                 <CardContent className="py-8 flex items-center justify-center">
-                    <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
+                    <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                 </CardContent>
             </Card>
         )
@@ -403,7 +404,7 @@ function AvailabilityRulesCard() {
                         disabled={!hasChanges || setRulesMutation.isPending}
                     >
                         {setRulesMutation.isPending ? (
-                            <LoaderIcon className="size-4 mr-2 animate-spin" />
+                            <Loader2Icon className="size-4 mr-2 animate-spin" />
                         ) : null}
                         Save Availability
                     </Button>
@@ -497,7 +498,7 @@ function AppointmentTypesCard() {
         return (
             <Card>
                 <CardContent className="py-8 flex items-center justify-center">
-                    <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
+                    <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                 </CardContent>
             </Card>
         )
@@ -640,7 +641,7 @@ function AppointmentTypesCard() {
                                 disabled={!formData.name || createMutation.isPending || updateMutation.isPending}
                             >
                                 {(createMutation.isPending || updateMutation.isPending) ? (
-                                    <LoaderIcon className="size-4 mr-2 animate-spin" />
+                                    <Loader2Icon className="size-4 mr-2 animate-spin" />
                                 ) : null}
                                 {editingType ? "Save Changes" : "Create Type"}
                             </Button>

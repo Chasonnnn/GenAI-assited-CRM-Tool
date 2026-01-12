@@ -19,7 +19,7 @@ import {
 import {
     ChevronLeftIcon,
     ChevronRightIcon,
-    LoaderIcon,
+    Loader2Icon,
     CheckCircleIcon,
     AlertCircleIcon,
     GlobeIcon,
@@ -76,7 +76,7 @@ export default function ReschedulePage({ params }: PageProps) {
                     params.orgId,
                     params.token
                 )
-                setAppointment(data as PublicAppointmentView)
+                setAppointment(data)
             } catch (err: unknown) {
                 setError(err instanceof Error ? err.message : "Appointment not found")
             } finally {
@@ -162,7 +162,7 @@ export default function ReschedulePage({ params }: PageProps) {
     if (isLoading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-background">
-                <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
             </div>
         )
     }
@@ -269,21 +269,23 @@ export default function ReschedulePage({ params }: PageProps) {
                                             if (!day.date) return <div key={i} className="h-10" />
                                             const isSelected = selectedDate && isSameDay(day.date, selectedDate)
                                             return (
-                                                <button
+                                                <Button
                                                     key={i}
+                                                    variant="ghost"
+                                                    size="sm"
                                                     onClick={() => day.isAvailable && handleDateSelect(day.date!)}
                                                     disabled={!day.isAvailable}
-                                                    className={`h-10 rounded-lg text-sm font-medium transition-colors ${isSelected
-                                                        ? "bg-primary text-primary-foreground"
+                                                    className={`h-10 text-sm font-medium ${isSelected
+                                                        ? "bg-primary text-primary-foreground hover:bg-primary/90"
                                                         : day.isToday
-                                                            ? "bg-primary/10 text-primary"
+                                                            ? "bg-primary/10 text-primary hover:bg-primary/20"
                                                             : day.isAvailable
                                                                 ? "hover:bg-muted"
-                                                                : "text-muted-foreground/40 cursor-not-allowed"
+                                                                : "text-muted-foreground/40"
                                                         }`}
                                                 >
                                                     {day.date.getDate()}
-                                                </button>
+                                                </Button>
                                             )
                                         })}
                                     </div>
@@ -297,7 +299,7 @@ export default function ReschedulePage({ params }: PageProps) {
                                 <p className="font-medium">Select New Time</p>
                                 {isLoadingSlots ? (
                                     <div className="py-8 flex items-center justify-center">
-                                        <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
+                                        <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                                     </div>
                                 ) : slots.length === 0 ? (
                                     <p className="text-muted-foreground text-center py-4">No available times</p>
@@ -307,16 +309,18 @@ export default function ReschedulePage({ params }: PageProps) {
                                             const time = format(parseISO(slot.start), "h:mm a")
                                             const isSelected = selectedSlot?.start === slot.start
                                             return (
-                                                <button
+                                                <Button
                                                     key={slot.start}
+                                                    variant="outline"
+                                                    size="sm"
                                                     onClick={() => setSelectedSlot(slot)}
-                                                    className={`py-2 px-3 rounded-lg border text-sm font-medium transition-all ${isSelected
-                                                        ? "border-primary bg-primary text-primary-foreground"
-                                                        : "border-border hover:border-primary/50"
+                                                    className={`py-2 px-3 h-auto text-sm font-medium ${isSelected
+                                                        ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+                                                        : "hover:border-primary/50"
                                                         }`}
                                                 >
                                                     {time}
-                                                </button>
+                                                </Button>
                                             )
                                         })}
                                     </div>
@@ -327,7 +331,7 @@ export default function ReschedulePage({ params }: PageProps) {
                         {/* Submit */}
                         {selectedSlot && (
                             <Button className="w-full" size="lg" onClick={handleSubmit} disabled={isSubmitting}>
-                                {isSubmitting && <LoaderIcon className="size-4 mr-2 animate-spin" />}
+                                {isSubmitting && <Loader2Icon className="size-4 mr-2 animate-spin" />}
                                 Confirm Reschedule
                             </Button>
                         )}

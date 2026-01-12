@@ -33,7 +33,7 @@ import {
     MousePointerClickIcon,
     CopyIcon,
     TrashIcon,
-    LoaderIcon,
+    Loader2Icon,
     ChevronDownIcon,
     ChevronUpIcon,
     MailIcon,
@@ -128,7 +128,7 @@ export default function CampaignDetailPage() {
     if (isLoading) {
         return (
             <div className="flex min-h-screen items-center justify-center">
-                <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
             </div>
         )
     }
@@ -165,7 +165,7 @@ export default function CampaignDetailPage() {
                         </Link>
                         <div>
                             <div className="flex items-center gap-3">
-                                <h1 className="text-2xl font-bold">{campaign.name}</h1>
+                                <h1 className="text-2xl font-semibold">{campaign.name}</h1>
                                 <Badge
                                     variant={statusStyles[campaign.status]?.variant || "secondary"}
                                     className={statusStyles[campaign.status]?.className}
@@ -207,7 +207,7 @@ export default function CampaignDetailPage() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-bold">{totalRecipients}</div>
+                            <div className="text-2xl font-bold">{totalRecipients}</div>
                         </CardContent>
                     </Card>
 
@@ -219,7 +219,7 @@ export default function CampaignDetailPage() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-bold">{campaign.sent_count}</div>
+                            <div className="text-2xl font-bold">{campaign.sent_count}</div>
                             <p className="text-sm text-muted-foreground">{sentPercent}% of total</p>
                             {campaign.failed_count > 0 && (
                                 <p className="text-xs text-muted-foreground">
@@ -237,7 +237,7 @@ export default function CampaignDetailPage() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-bold text-green-600">{openedCount}</div>
+                            <div className="text-2xl font-bold text-green-600">{openedCount}</div>
                             <p className="text-sm text-muted-foreground">{openPercent}% of sent</p>
                         </CardContent>
                     </Card>
@@ -250,7 +250,7 @@ export default function CampaignDetailPage() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-bold text-blue-600">{clickedCount}</div>
+                            <div className="text-2xl font-bold text-blue-600">{clickedCount}</div>
                             <p className="text-sm text-muted-foreground">{clickPercent}% of sent</p>
                         </CardContent>
                     </Card>

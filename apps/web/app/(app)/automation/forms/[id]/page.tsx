@@ -134,15 +134,15 @@ function buildFormSchema(pages: FormPage[], metadata: SchemaMetadata): FormSchem
     return {
         pages: pages.map((page) => ({
             title: page.name || null,
-            fields: page.fields.map((field) => ({
-                key: field.id,
-                label: field.label,
-                type: field.type,
-                required: field.required,
-                options: toFieldOptions(field.options),
-                help_text: field.helperText || null,
-            })),
+        fields: page.fields.map((field) => ({
+            key: field.id,
+            label: field.label,
+            type: field.type,
+            required: field.required,
+            options: toFieldOptions(field.options),
+            help_text: field.helperText || null,
         })),
+    })),
         public_title: publicTitle || null,
         logo_url: logoUrl || null,
         privacy_notice: privacyNotice || null,

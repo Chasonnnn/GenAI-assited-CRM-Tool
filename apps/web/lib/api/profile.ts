@@ -4,20 +4,21 @@
 
 import api from './index'
 import type { FormSchema } from './forms'
+import type { JsonObject, JsonValue } from '../types/json'
 
 export interface ProfileDataResponse {
     base_submission_id: string | null
-    base_answers: Record<string, unknown>
-    overrides: Record<string, unknown>
+    base_answers: JsonObject
+    overrides: JsonObject
     hidden_fields: string[]
-    merged_view: Record<string, unknown>
+    merged_view: JsonObject
     schema_snapshot: FormSchema | null
 }
 
 export interface SyncDiffItem {
     field_key: string
-    old_value: unknown
-    new_value: unknown
+    old_value: JsonValue
+    new_value: JsonValue
 }
 
 export interface SyncDiffResponse {
@@ -26,7 +27,7 @@ export interface SyncDiffResponse {
 }
 
 export interface ProfileOverridesUpdate {
-    overrides: Record<string, unknown>
+    overrides: JsonObject
     new_base_submission_id?: string | null
 }
 
@@ -45,7 +46,7 @@ export function syncProfile(caseId: string): Promise<SyncDiffResponse> {
 
 export function saveProfileOverrides(
     caseId: string,
-    overrides: Record<string, unknown>,
+    overrides: JsonObject,
     newBaseSubmissionId?: string | null
 ): Promise<{ status: string }> {
     return api.put<{ status: string }>(`/cases/${caseId}/profile/overrides`, {

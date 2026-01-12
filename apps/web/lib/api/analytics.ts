@@ -3,6 +3,7 @@
  */
 
 import { api } from '../api';
+import type { JsonObject } from '../types/json';
 
 // Types
 export interface AnalyticsSummary {
@@ -247,7 +248,7 @@ export interface ActivityFeedItem {
     case_number: string | null;
     case_name: string | null;
     actor_name: string | null;
-    details: Record<string, unknown> | null;
+    details: JsonObject | null;
     created_at: string;
 }
 

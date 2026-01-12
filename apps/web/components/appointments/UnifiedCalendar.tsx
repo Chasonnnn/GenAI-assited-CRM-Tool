@@ -38,7 +38,7 @@ import {
     MapPinIcon,
     CheckSquareIcon,
     UserIcon,
-    LoaderIcon,
+    Loader2Icon,
     LinkIcon,
     XIcon,
     MailIcon,
@@ -514,7 +514,7 @@ function AppointmentDetailDialog({
                                     >
                                         {updateLinkMutation.isPending ? (
                                             <>
-                                                <LoaderIcon className="size-4 mr-2 animate-spin" />
+                                                <Loader2Icon className="size-4 mr-2 animate-spin" />
                                                 Saving...
                                             </>
                                         ) : (
@@ -689,12 +689,17 @@ function MonthView({
                                         onClick={() => onEventClick(appt)}
                                         compact
                                         draggable
-                                        onDragStart={onDragStart}
+                                        {...(onDragStart ? { onDragStart } : {})}
                                     />
                                 ))}
                                 {/* Tasks */}
                                 {shownTasks.map((task) => (
-                                    <TaskItem key={task.id} task={task} compact onClick={onTaskClick} />
+                                    <TaskItem
+                                        key={task.id}
+                                        task={task}
+                                        compact
+                                        {...(onTaskClick ? { onClick: onTaskClick } : {})}
+                                    />
                                 ))}
                                 {/* Google Calendar Events */}
                                 {shownGoogleEvents.map((event) => (
@@ -815,7 +820,11 @@ function WeekView({
                                 />
                             ))}
                             {dayTasks.map((task) => (
-                                <TaskItem key={task.id} task={task} onClick={onTaskClick} />
+                                <TaskItem
+                                    key={task.id}
+                                    task={task}
+                                    {...(onTaskClick ? { onClick: onTaskClick } : {})}
+                                />
                             ))}
                             {dayGoogleEvents.map((event) => (
                                 <GoogleEventItem
@@ -909,7 +918,12 @@ function DayView({
                     <p className="text-xs text-muted-foreground mb-1">Tasks</p>
                     <div className="space-y-1">
                         {allDayTasks.map((task) => (
-                            <TaskItem key={task.id} task={task} compact onClick={onTaskClick} />
+                            <TaskItem
+                                key={task.id}
+                                task={task}
+                                compact
+                                {...(onTaskClick ? { onClick: onTaskClick } : {})}
+                            />
                         ))}
                     </div>
                 </div>
@@ -944,7 +958,12 @@ function DayView({
                                     />
                                 ))}
                                 {hourTasks.map((task) => (
-                                    <TaskItem key={task.id} task={task} compact onClick={onTaskClick} />
+                                    <TaskItem
+                                        key={task.id}
+                                        task={task}
+                                        compact
+                                        {...(onTaskClick ? { onClick: onTaskClick } : {})}
+                                    />
                                 ))}
                                 {hourGoogleEvents.map((event) => (
                                     <GoogleEventItem
@@ -1026,13 +1045,13 @@ export function UnifiedCalendar({
     const calendarError = includeGoogleEvents ? googleEventsData?.error ?? null : null
 
     const taskParams = {
-        my_tasks: taskFilter?.my_tasks ? true : undefined,
-        case_id: taskFilter?.case_id,
         is_completed: false,
         per_page: 100,
         due_after: dateRange.date_start,
         due_before: dateRange.date_end,
         exclude_approvals: true,
+        ...(taskFilter?.my_tasks ? { my_tasks: true } : {}),
+        ...(taskFilter?.case_id ? { case_id: taskFilter.case_id } : {}),
     }
     const { data: tasksData, isLoading: tasksLoading } = useTasks(taskParams)
     const tasks = tasksData?.items || []
@@ -1148,7 +1167,7 @@ export function UnifiedCalendar({
             <CardContent>
                 {appointmentsLoading || tasksLoading ? (
                     <div className="py-12 flex items-center justify-center">
-                        <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+                        <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
                     </div>
                 ) : (
                     <>
@@ -1177,12 +1196,14 @@ export function UnifiedCalendar({
                                 tasks={tasks}
                                 googleEvents={googleEvents}
                                 onEventClick={handleEventClick}
-                                onTaskClick={onTaskClick}
-                                onDragStart={includeAppointments ? handleDragStart : undefined}
-                                onDrop={includeAppointments ? handleDrop : undefined}
                                 dragOverDate={dragOverDate}
-                                onDragOver={includeAppointments ? handleDragOver : undefined}
-                                onDragLeave={includeAppointments ? handleDragLeave : undefined}
+                                {...(onTaskClick ? { onTaskClick } : {})}
+                                {...(includeAppointments ? {
+                                    onDragStart: handleDragStart,
+                                    onDrop: handleDrop,
+                                    onDragOver: handleDragOver,
+                                    onDragLeave: handleDragLeave,
+                                } : {})}
                             />
                         )}
                         {viewType === "week" && (
@@ -1192,7 +1213,7 @@ export function UnifiedCalendar({
                                 tasks={tasks}
                                 googleEvents={googleEvents}
                                 onEventClick={handleEventClick}
-                                onTaskClick={onTaskClick}
+                                {...(onTaskClick ? { onTaskClick } : {})}
                             />
                         )}
                         {viewType === "day" && (
@@ -1202,7 +1223,7 @@ export function UnifiedCalendar({
                                 tasks={tasks}
                                 googleEvents={googleEvents}
                                 onEventClick={handleEventClick}
-                                onTaskClick={onTaskClick}
+                                {...(onTaskClick ? { onTaskClick } : {})}
                             />
                         )}
                     </>

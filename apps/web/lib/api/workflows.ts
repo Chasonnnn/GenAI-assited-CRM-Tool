@@ -3,6 +3,7 @@
  */
 
 import api from './index'
+import type { JsonObject, JsonValue } from '../types/json'
 
 // =============================================================================
 // Types
@@ -15,7 +16,7 @@ export interface Workflow {
     icon: string
     schema_version: number
     trigger_type: string
-    trigger_config: Record<string, unknown>
+    trigger_config: JsonObject
     conditions: Condition[]
     condition_logic: "AND" | "OR"
     actions: ActionConfig[]
@@ -45,12 +46,12 @@ export interface WorkflowListItem {
 export interface Condition {
     field: string
     operator: string
-    value: unknown
+    value: JsonValue
 }
 
 export interface ActionConfig {
     action_type: string
-    [key: string]: unknown
+    [key: string]: JsonValue
 }
 
 export interface WorkflowCreate {
@@ -58,7 +59,7 @@ export interface WorkflowCreate {
     description?: string
     icon?: string
     trigger_type: string
-    trigger_config?: Record<string, unknown>
+    trigger_config?: JsonObject
     conditions?: Condition[]
     condition_logic?: "AND" | "OR"
     actions: ActionConfig[]
@@ -70,7 +71,7 @@ export interface WorkflowUpdate {
     description?: string
     icon?: string
     trigger_type?: string
-    trigger_config?: Record<string, unknown>
+    trigger_config?: JsonObject
     conditions?: Condition[]
     condition_logic?: "AND" | "OR"
     actions?: ActionConfig[]
@@ -85,7 +86,7 @@ export interface WorkflowExecution {
     event_source: string
     entity_type: string
     entity_id: string
-    trigger_event: Record<string, unknown>
+    trigger_event: JsonObject
     matched_conditions: boolean
     actions_executed: ActionResult[]
     status: "success" | "partial" | "failed" | "skipped" | "paused" | "canceled" | "expired"
@@ -99,7 +100,7 @@ export interface ActionResult {
     action_type?: string
     description?: string
     error?: string
-    [key: string]: unknown
+    [key: string]: JsonValue
 }
 
 export interface WorkflowStats {
@@ -224,4 +225,3 @@ export async function updateUserPreference(
 ): Promise<UserWorkflowPreference> {
     return api.patch<UserWorkflowPreference>(`/workflows/me/preferences/${workflowId}`, { is_opted_out: isOptedOut })
 }
-

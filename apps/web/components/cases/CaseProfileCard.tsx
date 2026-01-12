@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils"
 import { useProfile, useSyncProfile, useSaveProfileOverrides, useToggleProfileHidden } from "@/lib/hooks/use-profile"
 import { exportProfilePdf } from "@/lib/api/profile"
 import type { FormSchema } from "@/lib/api/forms"
+import type { JsonObject, JsonValue } from "@/lib/types/json"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 
 interface CaseProfileCardProps {
@@ -38,8 +39,8 @@ export function CaseProfileCard({ caseId }: CaseProfileCardProps) {
     const toggleHiddenMutation = useToggleProfileHidden()
 
     // Local edit state
-    const [editedFields, setEditedFields] = React.useState<Record<string, unknown>>({})
-    const [baselineOverrides, setBaselineOverrides] = React.useState<Record<string, unknown>>({})
+    const [editedFields, setEditedFields] = React.useState<JsonObject>({})
+    const [baselineOverrides, setBaselineOverrides] = React.useState<JsonObject>({})
     const [hiddenFields, setHiddenFields] = React.useState<string[]>([])
     const [baselineHidden, setBaselineHidden] = React.useState<string[]>([])
     const [revealedFields, setRevealedFields] = React.useState<Set<string>>(new Set())
@@ -77,7 +78,7 @@ export function CaseProfileCard({ caseId }: CaseProfileCardProps) {
         setSectionOpen(initialState)
     }, [profile?.schema_snapshot])
 
-    const isSameOverrides = (a: Record<string, unknown>, b: Record<string, unknown>) => {
+    const isSameOverrides = (a: JsonObject, b: JsonObject) => {
         const keys = new Set([...Object.keys(a), ...Object.keys(b)])
         for (const key of keys) {
             if (a[key] !== b[key]) return false
@@ -157,7 +158,7 @@ export function CaseProfileCard({ caseId }: CaseProfileCardProps) {
         }
     }
 
-    const handleFieldChange = (fieldKey: string, value: unknown) => {
+    const handleFieldChange = (fieldKey: string, value: JsonValue) => {
         setEditedFields(prev => ({ ...prev, [fieldKey]: value }))
     }
 

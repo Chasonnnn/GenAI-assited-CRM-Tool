@@ -17,7 +17,7 @@ import {
     ActivityIcon,
     TrendingUpIcon,
     ClockIcon,
-    LoaderIcon,
+    Loader2Icon,
 } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import api from "@/lib/api"
@@ -184,9 +184,9 @@ export default function WorkflowExecutionsPage() {
         <div className="flex min-h-screen flex-col">
             {/* Page Header */}
             <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-14 items-center justify-between px-6">
+                <div className="flex h-16 items-center justify-between px-6">
                     <div>
-                        <h1 className="text-xl font-semibold">Workflow Executions</h1>
+                        <h1 className="text-2xl font-semibold">Workflow Executions</h1>
                         <p className="text-xs text-muted-foreground">
                             {totalExecutions.toLocaleString()} executions in last 7 days
                         </p>
@@ -208,7 +208,7 @@ export default function WorkflowExecutionsPage() {
                             <div>
                                 <p className="text-sm text-muted-foreground">Total 24h</p>
                                 {statsLoading ? (
-                                    <LoaderIcon className="h-5 w-5 animate-spin text-muted-foreground" />
+                                    <Loader2Icon className="h-5 w-5 animate-spin text-muted-foreground" />
                                 ) : (
                                     <p className="text-2xl font-bold">{stats?.total_24h || 0}</p>
                                 )}
@@ -226,7 +226,7 @@ export default function WorkflowExecutionsPage() {
                             <div>
                                 <p className="text-sm text-muted-foreground">Success Rate</p>
                                 {statsLoading ? (
-                                    <LoaderIcon className="h-5 w-5 animate-spin text-muted-foreground" />
+                                    <Loader2Icon className="h-5 w-5 animate-spin text-muted-foreground" />
                                 ) : (
                                     <p className="text-2xl font-bold">{stats?.success_rate?.toFixed(1) || 0}%</p>
                                 )}
@@ -244,7 +244,7 @@ export default function WorkflowExecutionsPage() {
                             <div>
                                 <p className="text-sm text-muted-foreground">Failed 24h</p>
                                 {statsLoading ? (
-                                    <LoaderIcon className="h-5 w-5 animate-spin text-muted-foreground" />
+                                    <Loader2Icon className="h-5 w-5 animate-spin text-muted-foreground" />
                                 ) : (
                                     <p className="text-2xl font-bold">{stats?.failed_24h || 0}</p>
                                 )}
@@ -262,7 +262,7 @@ export default function WorkflowExecutionsPage() {
                             <div>
                                 <p className="text-sm text-muted-foreground">Avg Duration</p>
                                 {statsLoading ? (
-                                    <LoaderIcon className="h-5 w-5 animate-spin text-muted-foreground" />
+                                    <Loader2Icon className="h-5 w-5 animate-spin text-muted-foreground" />
                                 ) : (
                                     <p className="text-2xl font-bold">{formatDuration(stats?.avg_duration_ms || 0)}</p>
                                 )}
@@ -335,7 +335,7 @@ export default function WorkflowExecutionsPage() {
                             {executionsLoading ? (
                                 <TableRow>
                                     <TableCell colSpan={7} className="py-12 text-center">
-                                        <LoaderIcon className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
+                                        <Loader2Icon className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
                                         <p className="mt-2 text-sm text-muted-foreground">Loading executions...</p>
                                     </TableCell>
                                 </TableRow>

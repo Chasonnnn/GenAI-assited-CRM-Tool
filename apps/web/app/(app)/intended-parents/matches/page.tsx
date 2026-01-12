@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select"
 import {
     HeartHandshakeIcon,
-    LoaderIcon,
+    Loader2Icon,
     ChevronLeftIcon,
     ChevronRightIcon,
     SearchIcon,
@@ -31,7 +31,7 @@ import {
 import { useMatches, useMatchStats, type MatchStatus } from "@/lib/hooks/use-matches"
 import { parseDateInput } from "@/lib/utils/date"
 
-const STATUS_LABELS: Record<string, string> = {
+const STATUS_LABELS: Record<MatchStatus, string> = {
     proposed: "Proposed",
     reviewing: "Reviewing",
     accepted: "Accepted",
@@ -39,7 +39,7 @@ const STATUS_LABELS: Record<string, string> = {
     cancelled: "Cancelled",
 }
 
-const STATUS_COLORS: Record<string, string> = {
+const STATUS_COLORS: Record<MatchStatus, string> = {
     proposed: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
     reviewing: "bg-blue-500/10 text-blue-500 border-blue-500/20",
     accepted: "bg-green-500/10 text-green-500 border-green-500/20",
@@ -47,8 +47,13 @@ const STATUS_COLORS: Record<string, string> = {
     cancelled: "bg-gray-500/10 text-gray-500 border-gray-500/20",
 }
 
+const MATCH_STATUSES = ["proposed", "reviewing", "accepted", "rejected", "cancelled"] as const
+type MatchStatusFilter = (typeof MATCH_STATUSES)[number] | "all"
+const isMatchStatus = (value: string): value is MatchStatus =>
+    MATCH_STATUSES.includes(value as MatchStatus)
+
 export default function MatchesPage() {
-    const [statusFilter, setStatusFilter] = useState<string>("all")
+    const [statusFilter, setStatusFilter] = useState<MatchStatusFilter>("all")
     const [page, setPage] = useState(1)
     const [search, setSearch] = useState("")
     const [debouncedSearch, setDebouncedSearch] = useState("")
@@ -60,10 +65,12 @@ export default function MatchesPage() {
     }, [search])
 
     const filters = {
-        status: statusFilter !== "all" ? statusFilter as MatchStatus : undefined,
-        q: debouncedSearch || undefined,
         page,
         per_page: 20,
+        ...(statusFilter !== "all" && isMatchStatus(statusFilter)
+            ? { status: statusFilter }
+            : {}),
+        ...(debouncedSearch ? { q: debouncedSearch } : {}),
     }
     const { data, isLoading, isError } = useMatches(filters)
     const { data: stats } = useMatchStats()
@@ -124,7 +131,8 @@ export default function MatchesPage() {
                             <SelectValue placeholder="All Stages">
                                 {(value: string | null) => {
                                     if (!value || value === "all") return "All Stages"
-                                    return STATUS_LABELS[value] ?? value
+                                    if (isMatchStatus(value)) return STATUS_LABELS[value]
+                                    return value
                                 }}
                             </SelectValue>
                         </SelectTrigger>
@@ -157,7 +165,7 @@ export default function MatchesPage() {
                     <CardContent className="p-0">
                         {isLoading ? (
                             <div className="flex items-center justify-center py-12">
-                                <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
+                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                                 <span className="ml-2 text-muted-foreground">Loading...</span>
                             </div>
                         ) : isError ? (
@@ -214,9 +222,16 @@ export default function MatchesPage() {
                                                     : "—"}
                                             </TableCell>
                                             <TableCell>
-                                                <Badge className={STATUS_COLORS[match.status]}>
-                                                    {STATUS_LABELS[match.status]}
-                                                </Badge>
+                                                {(() => {
+                                                    const status = isMatchStatus(match.status)
+                                                        ? match.status
+                                                        : "proposed"
+                                                    return (
+                                                        <Badge className={STATUS_COLORS[status]}>
+                                                            {STATUS_LABELS[status]}
+                                                        </Badge>
+                                                    )
+                                                })()}
                                             </TableCell>
                                             <TableCell>
                                                 {match.case_stage_label ? (

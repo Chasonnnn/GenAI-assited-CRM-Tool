@@ -170,7 +170,7 @@ export function SidebarIconExample() {
     ],
   }
 
-  const [activeTeam, setActiveTeam] = React.useState(data.teams[0])
+  const [activeTeam, setActiveTeam] = React.useState(() => data.teams[0] ?? { name: "Team", plan: "Plan" })
 
   return (
     <SidebarProvider>
@@ -266,8 +266,10 @@ export function SidebarIconExample() {
           <SidebarGroup>
             <SidebarGroupLabel>Platform</SidebarGroupLabel>
             <SidebarMenu>
-              {data.navMain.map((item) => (
-                <Collapsible key={item.title} defaultOpen={item.isActive} className="group/collapsible">
+              {data.navMain.map((item) => {
+                const collapsibleProps = item.isActive ? { defaultOpen: true } : {}
+                return (
+                  <Collapsible key={item.title} className="group/collapsible" {...collapsibleProps}>
                   <SidebarMenuItem>
                     <CollapsibleTrigger>
                       <SidebarMenuButton tooltip={item.title}>
@@ -289,7 +291,7 @@ export function SidebarIconExample() {
                     </CollapsibleContent>
                   </SidebarMenuItem>
                 </Collapsible>
-              ))}
+              )})}
             </SidebarMenu>
           </SidebarGroup>
           <SidebarGroup className="group-data-[collapsible=icon]:hidden">

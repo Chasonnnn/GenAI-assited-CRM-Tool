@@ -8,6 +8,7 @@ import { toast } from "sonner"
 import { useState, useEffect } from "react"
 import { useNotificationSettings, useUpdateNotificationSettings } from "@/lib/hooks/use-notifications"
 import { useAuth } from "@/lib/auth-context"
+import type { NotificationSettings } from "@/lib/api/notifications"
 
 // Browser push notification card
 function BrowserNotificationsCard() {
@@ -141,7 +142,12 @@ function NotificationsSettingsCard() {
     }
 
     // These match the NotificationSettings interface in notifications.ts
-    const notificationTypes = [
+    const notificationTypes: Array<{
+        key: keyof NotificationSettings
+        icon: typeof Bell
+        title: string
+        description: string
+    }> = [
         {
             key: "case_assigned",
             icon: FolderOpen,
@@ -208,7 +214,7 @@ function NotificationsSettingsCard() {
                             </div>
                         </div>
                         <Switch
-                            checked={settings?.[type.key as keyof typeof settings] ?? true}
+                            checked={settings?.[type.key] ?? true}
                             onCheckedChange={(checked) => handleToggle(type.key, checked)}
                             disabled={updateSettings.isPending}
                         />

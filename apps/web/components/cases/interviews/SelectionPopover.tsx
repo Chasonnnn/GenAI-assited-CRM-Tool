@@ -105,6 +105,11 @@ export function SelectionPopover({
 
         // Use the first rect (first line of selection)
         const firstRect = rects[0]
+        if (!firstRect) {
+            setPosition({ x: 0, y: 0, visible: false })
+            setSelectionActive(false)
+            return
+        }
 
         setPosition({
             x: firstRect.left + firstRect.width / 2,

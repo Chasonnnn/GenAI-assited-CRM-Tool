@@ -67,11 +67,12 @@ export function AddTaskDialog({
     const handleSubmit = async () => {
         if (!title.trim()) return
 
+        const trimmedDescription = description.trim()
         await onSubmit(target, {
             title: title.trim(),
-            description: description.trim() || undefined,
             task_type: taskType,
-            due_date: dueDate || undefined,
+            ...(trimmedDescription ? { description: trimmedDescription } : {}),
+            ...(dueDate ? { due_date: dueDate } : {}),
         })
 
         // Reset form

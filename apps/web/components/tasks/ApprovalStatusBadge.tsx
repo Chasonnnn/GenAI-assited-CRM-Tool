@@ -49,7 +49,12 @@ const statusConfig: Record<string, {
 }
 
 export function ApprovalStatusBadge({ status, denialReason, className = "" }: ApprovalStatusBadgeProps) {
-    const config = statusConfig[status || "pending"] || statusConfig.pending
+    const fallbackConfig = statusConfig.pending ?? {
+        label: "Pending Approval",
+        icon: ClockIcon,
+        className: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+    }
+    const config = (status ? statusConfig[status] : undefined) ?? fallbackConfig
     const Icon = config.icon
 
     return (

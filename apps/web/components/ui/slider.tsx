@@ -23,16 +23,20 @@ function Slider({
     [value, defaultValue, min, max]
   )
 
+  const rootProps = {
+    className: "data-horizontal:w-full data-vertical:h-full",
+    "data-slot": "slider",
+    min,
+    max,
+    thumbAlignment: "edge" as const,
+    ...props,
+    ...(value !== undefined ? { value } : {}),
+    ...(defaultValue !== undefined ? { defaultValue } : {}),
+  }
+
   return (
     <SliderPrimitive.Root
-      className="data-horizontal:w-full data-vertical:h-full"
-      data-slot="slider"
-      defaultValue={defaultValue}
-      value={value}
-      min={min}
-      max={max}
-      thumbAlignment="edge"
-      {...props}
+      {...rootProps}
     >
       <SliderPrimitive.Control
         className={cn(

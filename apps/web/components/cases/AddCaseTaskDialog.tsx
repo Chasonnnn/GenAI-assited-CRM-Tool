@@ -87,14 +87,15 @@ export function AddCaseTaskDialog({
             }
         }
 
+        const trimmedDescription = description.trim()
         await onSubmit({
             title: title.trim(),
-            description: description.trim() || undefined,
             task_type: taskType,
-            due_date: dueDate || undefined,
-            due_time: dueTime || undefined,
             recurrence,
-            repeat_until: repeatUntil || undefined,
+            ...(trimmedDescription ? { description: trimmedDescription } : {}),
+            ...(dueDate ? { due_date: dueDate } : {}),
+            ...(dueTime ? { due_time: dueTime } : {}),
+            ...(repeatUntil ? { repeat_until: repeatUntil } : {}),
         })
 
         setTitle("")

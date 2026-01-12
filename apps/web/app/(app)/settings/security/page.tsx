@@ -36,7 +36,7 @@ import {
     KeyIcon,
     CopyIcon,
     CheckIcon,
-    LoaderIcon,
+    Loader2Icon,
     AlertTriangleIcon,
     RefreshCwIcon,
 } from "lucide-react"
@@ -199,7 +199,7 @@ export default function SecuritySettingsPage() {
     if (statusLoading) {
         return (
             <div className="flex items-center justify-center h-64">
-                <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
             </div>
         )
     }
@@ -253,7 +253,7 @@ export default function SecuritySettingsPage() {
                             <Button onClick={handleStartSetup} disabled={setupTOTP.isPending}>
                                 {setupTOTP.isPending ? (
                                     <>
-                                        <LoaderIcon className="size-4 mr-2 animate-spin" />
+                                        <Loader2Icon className="size-4 mr-2 animate-spin" />
                                         Setting up...
                                     </>
                                 ) : (
@@ -298,7 +298,7 @@ export default function SecuritySettingsPage() {
                                     disabled={regenerateCodes.isPending}
                                 >
                                     {regenerateCodes.isPending ? (
-                                        <LoaderIcon className="size-4 animate-spin" />
+                                        <Loader2Icon className="size-4 animate-spin" />
                                     ) : (
                                         <>
                                             <RefreshCwIcon className="size-4 mr-2" />
@@ -366,7 +366,7 @@ export default function SecuritySettingsPage() {
                             >
                                 {verifyTOTP.isPending ? (
                                     <>
-                                        <LoaderIcon className="size-4 mr-2 animate-spin" />
+                                        <Loader2Icon className="size-4 mr-2 animate-spin" />
                                         Verifying...
                                     </>
                                 ) : (
@@ -382,7 +382,7 @@ export default function SecuritySettingsPage() {
                         </div>
                     ) : (
                         <div className="flex items-center justify-center h-40">
-                            <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+                            <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
                         </div>
                     )}
                 </DialogContent>
@@ -409,7 +409,7 @@ export default function SecuritySettingsPage() {
                         >
                             {disableMFA.isPending ? (
                                 <>
-                                    <LoaderIcon className="size-4 mr-2 animate-spin" />
+                                    <Loader2Icon className="size-4 mr-2 animate-spin" />
                                     Disabling...
                                 </>
                             ) : (

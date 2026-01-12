@@ -44,6 +44,7 @@ function BreadcrumbLink({
   render,
   ...props
 }: useRender.ComponentProps<"a">) {
+  const renderProp = render === undefined ? {} : { render }
   return useRender({
     defaultTagName: "a",
     props: mergeProps<"a">(
@@ -52,10 +53,10 @@ function BreadcrumbLink({
       },
       props
     ),
-    render,
     state: {
       slot: "breadcrumb-link",
     },
+    ...renderProp,
   })
 }
 

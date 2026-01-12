@@ -84,8 +84,7 @@ export default function LoginPage() {
         <CardContent className="space-y-5">
           <Button
             onClick={handleGoogleLogin}
-            className="w-full font-semibold py-6 text-base rounded-full transition-all duration-300"
-            style={{ backgroundColor: "#1e1b4b", color: "white" }}
+            className="w-full font-semibold py-6 text-base rounded-full transition-all duration-300 bg-indigo-950 text-white hover:bg-indigo-900"
             disabled={isLoading}
           >
             <ShieldCheck className="w-5 h-5 mr-2" />
@@ -104,13 +103,14 @@ export default function LoginPage() {
           </div>
 
           <div className="space-y-4">
-            <button
+            <Button
+              variant="outline"
               onClick={() => setShowOtherOptions(!showOtherOptions)}
-              className="w-full flex items-center justify-between px-4 py-3 rounded-lg border border-gray-200 bg-gray-50/50 hover:bg-gray-100/50 text-gray-700 font-medium transition-all duration-200"
+              className="w-full flex items-center justify-between px-4 py-3 border-gray-200 bg-gray-50/50 hover:bg-gray-100/50 text-gray-700 font-medium transition-all duration-200"
             >
               <span>Other sign-in methods</span>
               {showOtherOptions ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
-            </button>
+            </Button>
 
             {showOtherOptions && (
               <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-2 duration-300">
@@ -148,12 +148,9 @@ export default function LoginPage() {
 
           <div className="pt-4 space-y-3 border-t border-gray-100">
             <div className="text-center">
-              <a
-                href="#"
-                className="text-sm text-gray-500 hover:text-gray-700 transition-colors inline-flex items-center gap-1"
-              >
-                Need help signing in? Contact IT Support
-              </a>
+              <p className="text-sm text-gray-500">
+                Need help signing in? Contact your administrator.
+              </p>
             </div>
             <div className="text-center">
               <p className="text-xs text-gray-400">© 2025 Surrogacy CRM. All rights reserved.</p>

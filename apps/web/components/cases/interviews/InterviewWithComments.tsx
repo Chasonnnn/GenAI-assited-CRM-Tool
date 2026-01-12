@@ -395,7 +395,10 @@ export function InterviewWithComments({
                 topOffset = anchorRect.top - containerRect.top
                 anchorLeft = anchorRect.left - layoutRect.left + Math.min(anchorRect.width, 12)
             } else if (positions.length > 0) {
-                topOffset = positions[positions.length - 1].anchorTop + 24
+                const lastPosition = positions[positions.length - 1]
+                if (lastPosition) {
+                    topOffset = lastPosition.anchorTop + 24
+                }
             }
 
             positions.push({
@@ -484,6 +487,7 @@ export function InterviewWithComments({
         for (let i = 1; i < positions.length; i++) {
             const prev = positions[i - 1]
             const curr = positions[i]
+            if (!prev || !curr) continue
             const minTop = prev.top + prev.height + MIN_GAP
             if (curr.top < minTop) {
                 curr.top = minTop
@@ -592,8 +596,8 @@ export function InterviewWithComments({
             const anchorLeft = rect && layoutRect
                 ? rect.left - layoutRect.left + Math.min(rect.width, 12)
                 : 0
-            const anchorText = selection.text
-                .split(/\r?\n/)[0]
+            const firstLine = selection.text.split(/\r?\n/)[0] ?? ""
+            const anchorText = firstLine
                 .replace(/\s+/g, " ")
                 .trim()
             setPendingComment({

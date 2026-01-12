@@ -63,15 +63,30 @@ export default function AuditLogPage() {
     const perPage = 20
     const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
 
-    const [exportFormat, setExportFormat] = useState<"csv" | "json">("csv")
-    const [redactMode, setRedactMode] = useState<"redacted" | "full">("redacted")
+    const EXPORT_FORMATS = ["csv", "json"] as const
+    type ExportFormat = (typeof EXPORT_FORMATS)[number]
+    const isExportFormat = (value: string | null): value is ExportFormat =>
+        value === "csv" || value === "json"
+
+    const REDACT_MODES = ["redacted", "full"] as const
+    type RedactMode = (typeof REDACT_MODES)[number]
+    const isRedactMode = (value: string | null): value is RedactMode =>
+        value === "redacted" || value === "full"
+
+    const AI_ACTIVITY_HOURS = [24, 168, 720] as const
+    type AiActivityHours = (typeof AI_ACTIVITY_HOURS)[number]
+    const isAiActivityHours = (value: number): value is AiActivityHours =>
+        AI_ACTIVITY_HOURS.includes(value as AiActivityHours)
+
+    const [exportFormat, setExportFormat] = useState<ExportFormat>("csv")
+    const [redactMode, setRedactMode] = useState<RedactMode>("redacted")
     const [exportRange, setExportRange] = useState<DateRangePreset>("month")
     const [customRange, setCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
         from: undefined,
         to: undefined,
     })
     const [acknowledgment, setAcknowledgment] = useState("")
-    const [aiActivityHours, setAiActivityHours] = useState<24 | 168 | 720>(24) // 24h, 7d, 30d
+    const [aiActivityHours, setAiActivityHours] = useState<AiActivityHours>(24) // 24h, 7d, 30d
 
     const filters = {
         page,
@@ -138,7 +153,9 @@ export default function AuditLogPage() {
             end_date: end.toISOString(),
             format: exportFormat,
             redact_mode: redactMode,
-            acknowledgment: redactMode === "full" ? acknowledgment : undefined,
+            ...(redactMode === "full" && acknowledgment.trim()
+                ? { acknowledgment: acknowledgment.trim() }
+                : {}),
         })
         setAcknowledgment("")
     }
@@ -187,7 +204,14 @@ export default function AuditLogPage() {
                             </div>
                             <div className="flex flex-col gap-2">
                                 <span className="text-sm text-muted-foreground">Format</span>
-                                <Select value={exportFormat} onValueChange={(value) => setExportFormat(value as "csv" | "json")}>
+                                <Select
+                                    value={exportFormat}
+                                    onValueChange={(value) => {
+                                        if (isExportFormat(value)) {
+                                            setExportFormat(value)
+                                        }
+                                    }}
+                                >
                                     <SelectTrigger className="w-[160px]">
                                         <SelectValue>
                                             {(value: string | null) => value?.toUpperCase() ?? "CSV"}
@@ -203,7 +227,11 @@ export default function AuditLogPage() {
                                 <span className="text-sm text-muted-foreground">Redaction</span>
                                 <Select
                                     value={redactMode}
-                                    onValueChange={(value) => setRedactMode(value as "redacted" | "full")}
+                                    onValueChange={(value) => {
+                                        if (isRedactMode(value)) {
+                                            setRedactMode(value)
+                                        }
+                                    }}
                                     disabled={!isDeveloper}
                                 >
                                     <SelectTrigger className="w-[180px]">
@@ -346,7 +374,12 @@ export default function AuditLogPage() {
                                 <div className="flex items-center gap-2">
                                     <Select
                                         value={String(aiActivityHours)}
-                                        onValueChange={(v) => setAiActivityHours(Number(v) as 24 | 168 | 720)}
+                                        onValueChange={(value) => {
+                                            const parsed = Number(value)
+                                            if (isAiActivityHours(parsed)) {
+                                                setAiActivityHours(parsed)
+                                            }
+                                        }}
                                     >
                                         <SelectTrigger className="w-[100px] h-8 text-xs">
                                             <SelectValue>

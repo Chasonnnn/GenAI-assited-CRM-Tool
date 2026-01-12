@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Checkbox } from "@/components/ui/checkbox"
-import { MoreVerticalIcon, SearchIcon, XIcon, LoaderIcon, ArchiveIcon, UserPlusIcon, UsersIcon, UploadIcon } from "lucide-react"
+import { MoreVerticalIcon, SearchIcon, XIcon, Loader2Icon, ArchiveIcon, UserPlusIcon, UsersIcon, UploadIcon } from "lucide-react"
 import { SortableTableHead } from "@/components/ui/sortable-table-head"
 import { useCases, useArchiveCase, useRestoreCase, useUpdateCase, useAssignees, useBulkAssign, useBulkArchive } from "@/lib/hooks/use-cases"
 import { useQueues } from "@/lib/hooks/use-queues"
@@ -123,20 +123,23 @@ function FloatingActionBar({
     )
 }
 
-const VALID_SOURCES: (CaseSource | "all")[] = ["all", "manual", "meta", "website", "referral"]
+const VALID_SOURCES = ["all", "manual", "meta", "website", "referral"] as const
+type SourceFilter = (typeof VALID_SOURCES)[number]
+const isSourceFilter = (value: string | null): value is SourceFilter =>
+    value !== null && VALID_SOURCES.includes(value as SourceFilter)
 export default function CasesPage() {
     const searchParams = useSearchParams()
     const router = useRouter()
 
     // Read initial values from URL params
     const urlStage = searchParams.get("stage")
-    const urlSource = searchParams.get("source") as CaseSource | "all" | null
+    const urlSource = searchParams.get("source")
     const urlQueue = searchParams.get("queue")
     const urlSearch = searchParams.get("q")
 
     const [stageFilter, setStageFilter] = useState<string>(urlStage || "all")
-    const [sourceFilter, setSourceFilter] = useState<CaseSource | "all">(
-        urlSource && VALID_SOURCES.includes(urlSource) ? urlSource : "all"
+    const [sourceFilter, setSourceFilter] = useState<SourceFilter>(
+        isSourceFilter(urlSource) ? urlSource : "all"
     )
     const [queueFilter, setQueueFilter] = useState<string>(urlQueue || "all")
     const [dateRange, setDateRange] = useState<DateRangePreset>('all')
@@ -227,10 +230,8 @@ export default function CasesPage() {
     const getDateRangeParams = () => {
         if (dateRange === 'all') return {}
         if (dateRange === 'custom' && customRange.from) {
-            return {
-                created_from: formatLocalDate(customRange.from),
-                created_to: customRange.to ? formatLocalDate(customRange.to) : undefined,
-            }
+            const params = { created_from: formatLocalDate(customRange.from) }
+            return customRange.to ? { ...params, created_to: formatLocalDate(customRange.to) } : params
         }
         // For presets, calculate dates
         const now = new Date()
@@ -248,13 +249,13 @@ export default function CasesPage() {
     const { data, isLoading, isError, error, refetch } = useCases({
         page,
         per_page: perPage,
-        stage_id: stageFilter === "all" ? undefined : stageFilter,
-        source: sourceFilter === "all" ? undefined : sourceFilter,
-        q: debouncedSearch || undefined,
-        queue_id: queueFilter !== "all" ? queueFilter : undefined,
-        sort_by: sortBy || undefined,
         sort_order: sortOrder,
         ...getDateRangeParams(),
+        ...(stageFilter === "all" ? {} : { stage_id: stageFilter }),
+        ...(sourceFilter === "all" ? {} : { source: sourceFilter }),
+        ...(debouncedSearch ? { q: debouncedSearch } : {}),
+        ...(queueFilter === "all" ? {} : { queue_id: queueFilter }),
+        ...(sortBy ? { sort_by: sortBy } : {}),
     })
 
     const handleSort = (column: string) => {
@@ -326,7 +327,7 @@ export default function CasesPage() {
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
                     <div>
-                        <h1 className="text-2xl font-bold">Cases</h1>
+                        <h1 className="text-2xl font-semibold">Cases</h1>
                         <p className="text-muted-foreground">
                             {data?.total ?? 0} total cases
                         </p>
@@ -361,7 +362,12 @@ export default function CasesPage() {
                         </SelectContent>
                     </Select>
 
-                    <Select value={sourceFilter} onValueChange={(value) => handleSourceChange((value || "all") as CaseSource | "all")}>
+                    <Select
+                        value={sourceFilter}
+                        onValueChange={(value) =>
+                            handleSourceChange(isSourceFilter(value) ? value : "all")
+                        }
+                    >
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="All Sources">
                                 {(value: string | null) => {
@@ -452,7 +458,7 @@ export default function CasesPage() {
                 {/* Loading State */}
                 {isLoading && (
                     <Card className="p-12 flex items-center justify-center">
-                        <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+                        <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
                     </Card>
                 )}
 

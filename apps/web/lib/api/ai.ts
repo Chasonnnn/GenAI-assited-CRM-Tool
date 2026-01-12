@@ -3,6 +3,7 @@
  */
 
 import { api } from '../api';
+import type { JsonObject } from '../types/json';
 
 // Types
 export interface AISettings {
@@ -43,7 +44,7 @@ export interface ConsentAcceptResponse {
 export interface ProposedAction {
     approval_id: string | null;
     action_type: string;
-    action_data: Record<string, unknown>;
+    action_data: JsonObject;
     status: string;
 }
 
@@ -106,7 +107,7 @@ export interface ActionApprovalResult {
     success: boolean;
     action_type: string;
     status: string;
-    result?: Record<string, unknown>;
+    result?: JsonObject;
     error?: string;
 }
 
@@ -269,7 +270,7 @@ export interface GeneratedWorkflow {
     description: string | null;
     icon: string;
     trigger_type: string;
-    trigger_config: Record<string, unknown>;
+    trigger_config: JsonObject;
     conditions: Array<{ field: string; operator: string; value: unknown }>;
     condition_logic: string;
     actions: Array<{ action_type: string;[key: string]: unknown }>;

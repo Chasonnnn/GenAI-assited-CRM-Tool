@@ -123,21 +123,25 @@ export function InterviewVersionHistory({
                             </div>
                         ) : (
                             <div className="space-y-2">
-                                {versions.map((version, idx) => (
-                                    <VersionItem
-                                        key={version.version}
-                                        version={version}
-                                        isCurrent={version.version === currentVersion}
-                                        isLatest={idx === 0}
-                                        previousVersion={idx < versions.length - 1 ? versions[idx + 1].version : null}
-                                        canRestore={canRestore && version.version !== currentVersion}
-                                        onCompare={(v1, v2) => handleCompare(v1, v2)}
-                                        onRestore={(v) => {
-                                            setVersionToRestore(v)
-                                            setRestoreConfirmOpen(true)
-                                        }}
-                                    />
-                                ))}
+                                {versions.map((version, idx) => {
+                                    const previous = versions[idx + 1]
+                                    const previousVersion = previous ? previous.version : null
+                                    return (
+                                        <VersionItem
+                                            key={version.version}
+                                            version={version}
+                                            isCurrent={version.version === currentVersion}
+                                            isLatest={idx === 0}
+                                            previousVersion={previousVersion}
+                                            canRestore={canRestore && version.version !== currentVersion}
+                                            onCompare={(v1, v2) => handleCompare(v1, v2)}
+                                            onRestore={(v) => {
+                                                setVersionToRestore(v)
+                                                setRestoreConfirmOpen(true)
+                                            }}
+                                        />
+                                    )
+                                })}
                             </div>
                         )}
                     </div>

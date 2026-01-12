@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { LoaderIcon, ShieldCheck, Trash2 } from "lucide-react"
+import { Loader2Icon, ShieldCheck, Trash2 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import {
     useCreateLegalHold,
@@ -137,7 +137,7 @@ export default function ComplianceSettingsPage() {
                     <CardContent>
                         {policiesLoading ? (
                             <div className="flex items-center justify-center py-8">
-                                <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
+                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                             </div>
                         ) : (
                             <Table>
@@ -252,7 +252,7 @@ export default function ComplianceSettingsPage() {
 
                         {holdsLoading ? (
                             <div className="flex items-center justify-center py-8">
-                                <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
+                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                             </div>
                         ) : (
                             <Table>

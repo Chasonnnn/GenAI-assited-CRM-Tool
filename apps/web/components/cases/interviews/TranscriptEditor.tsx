@@ -146,7 +146,7 @@ export function TranscriptEditor({
             }),
             CommentMark,
         ],
-        content: content || undefined,
+        ...(content ? { content } : {}),
         editorProps: {
             attributes: {
                 class: cn(

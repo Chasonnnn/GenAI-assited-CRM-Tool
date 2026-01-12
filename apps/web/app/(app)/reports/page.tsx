@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { TrendingUpIcon, TrendingDownIcon, SparklesIcon, UsersIcon, CheckCircle2Icon, Loader2Icon, AlertCircleIcon, FacebookIcon, DollarSignIcon } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Line, LineChart, Pie, PieChart } from "recharts"
@@ -96,7 +97,12 @@ export default function ReportsPage() {
     })
     const [selectedCampaign, setSelectedCampaign] = useState<string>('')
     const [isExporting, setIsExporting] = useState(false)
-    const [performanceMode, setPerformanceMode] = useState<'cohort' | 'activity'>('cohort')
+    const PERFORMANCE_MODES = ["cohort", "activity"] as const
+    type PerformanceMode = (typeof PERFORMANCE_MODES)[number]
+    const isPerformanceMode = (value: string | null): value is PerformanceMode =>
+        value === "cohort" || value === "activity"
+
+    const [performanceMode, setPerformanceMode] = useState<PerformanceMode>("cohort")
 
     // Clear AI context for reports pages (use global mode)
     useSetAIContext(null)
@@ -136,30 +142,32 @@ export default function ReportsPage() {
     }, [dateRange, customRange])
 
     // Fetch data
-    const { data: summary, isLoading: summaryLoading, isError: summaryError } = useAnalyticsSummary({ from_date: fromDate, to_date: toDate })
+    const dateParams = {
+        ...(fromDate ? { from_date: fromDate } : {}),
+        ...(toDate ? { to_date: toDate } : {}),
+    }
+
+    const { data: summary, isLoading: summaryLoading, isError: summaryError } = useAnalyticsSummary(dateParams)
     const { data: byStatus, isLoading: byStatusLoading, isError: byStatusError } = useCasesByStatus()
     const { data: byAssignee, isLoading: byAssigneeLoading, isError: byAssigneeError } = useCasesByAssignee()
-    const { data: trend, isLoading: trendLoading, isError: trendError } = useCasesTrend({ from_date: fromDate, to_date: toDate })
-    const { data: metaPerf, isLoading: metaLoading, isError: metaError } = useMetaPerformance({ from_date: fromDate, to_date: toDate })
-    const { data: metaSpend, isLoading: spendLoading, isError: spendError } = useMetaSpend({ from_date: fromDate, to_date: toDate })
+    const { data: trend, isLoading: trendLoading, isError: trendError } = useCasesTrend(dateParams)
+    const { data: metaPerf, isLoading: metaLoading, isError: metaError } = useMetaPerformance(dateParams)
+    const { data: metaSpend, isLoading: spendLoading, isError: spendError } = useMetaSpend(dateParams)
 
     // New hooks for funnel and map
     const { data: campaigns, isLoading: campaignsLoading, isError: campaignsError } = useCampaigns()
     const { data: funnel, isLoading: funnelLoading, isError: funnelError } = useFunnelCompare({
-        from_date: fromDate,
-        to_date: toDate,
-        ad_id: selectedCampaign || undefined
+        ...dateParams,
+        ...(selectedCampaign ? { ad_id: selectedCampaign } : {}),
     })
     const { data: byState, isLoading: byStateLoading, isError: byStateError } = useCasesByStateCompare({
-        from_date: fromDate,
-        to_date: toDate,
-        ad_id: selectedCampaign || undefined
+        ...dateParams,
+        ...(selectedCampaign ? { ad_id: selectedCampaign } : {}),
     })
 
     // Performance by user
     const { data: performanceData, isLoading: performanceLoading, isError: performanceError } = usePerformanceByUser({
-        from_date: fromDate,
-        to_date: toDate,
+        ...dateParams,
         mode: performanceMode,
     })
 
@@ -199,13 +207,15 @@ export default function ReportsPage() {
     }, [trend])
 
     const topStatus = useMemo(() => {
-        if (!statusChartData.length) return null
-        return statusChartData.reduce((max, item) => item.count > max.count ? item : max, statusChartData[0])
+        const [first] = statusChartData
+        if (!first) return null
+        return statusChartData.reduce((max, item) => item.count > max.count ? item : max, first)
     }, [statusChartData])
 
     const topPerformer = useMemo(() => {
-        if (!assigneeChartData.length) return null
-        return assigneeChartData.reduce((max, item) => item.count > max.count ? item : max, assigneeChartData[0])
+        const [first] = assigneeChartData
+        if (!first) return null
+        return assigneeChartData.reduce((max, item) => item.count > max.count ? item : max, first)
     }, [assigneeChartData])
 
     const totalCasesInPeriod = useMemo(() => {
@@ -232,10 +242,14 @@ export default function ReportsPage() {
             const counts = trendChartData.map((point) => point.count)
             const average = counts.reduce((sum, value) => sum + value, 0) / counts.length
             if (average > 0) {
-                const maxPoint = trendChartData.reduce((max, point) =>
-                    point.count > max.count ? point : max, trendChartData[0])
-                const minPoint = trendChartData.reduce((min, point) =>
-                    point.count < min.count ? point : min, trendChartData[0])
+                const [firstPoint] = trendChartData
+                if (!firstPoint) {
+                    anomalyText = "Anomalies: no volume yet."
+                } else {
+                    const maxPoint = trendChartData.reduce((max, point) =>
+                        point.count > max.count ? point : max, firstPoint)
+                    const minPoint = trendChartData.reduce((min, point) =>
+                        point.count < min.count ? point : min, firstPoint)
                 const spikeDelta = (maxPoint.count - average) / average
                 const dipDelta = (average - minPoint.count) / average
 
@@ -245,6 +259,7 @@ export default function ReportsPage() {
                     anomalyText = `Anomaly: dip on ${formatShortDate(minPoint.date)} (${minPoint.count} cases, -${Math.round(dipDelta * 100)}% vs avg).`
                 } else {
                     anomalyText = "Anomalies: no major spikes or dips."
+                }
                 }
             } else {
                 anomalyText = "Anomalies: no volume yet."
@@ -357,8 +372,7 @@ export default function ReportsPage() {
                                 ))}
                             </SelectContent>
                         </Select>
-                        <button
-                            className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                        <Button
                             onClick={handleExportPDF}
                             disabled={isExporting}
                         >
@@ -370,7 +384,7 @@ export default function ReportsPage() {
                             ) : (
                                 'Export PDF'
                             )}
-                        </button>
+                        </Button>
                     </div>
                 </div>
             </div>
@@ -775,7 +789,14 @@ export default function ReportsPage() {
                         <h2 className="text-xl font-semibold">Individual Performance</h2>
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">Mode:</span>
-                            <Select value={performanceMode} onValueChange={(v) => v && setPerformanceMode(v as 'cohort' | 'activity')}>
+                            <Select
+                                value={performanceMode}
+                                onValueChange={(value) => {
+                                    if (isPerformanceMode(value)) {
+                                        setPerformanceMode(value)
+                                    }
+                                }}
+                            >
                                 <SelectTrigger className="w-40">
                                     <SelectValue />
                                 </SelectTrigger>
@@ -802,7 +823,7 @@ export default function ReportsPage() {
                             unassigned={performanceData?.unassigned}
                             isLoading={performanceLoading}
                             isError={performanceError}
-                            asOf={performanceData?.as_of}
+                            {...(performanceData?.as_of ? { asOf: performanceData.as_of } : {})}
                         />
                     </div>
                 </div>

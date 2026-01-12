@@ -50,9 +50,16 @@ export default function AdminDataPage() {
             }
 
             const createData = await createResponse.json()
-            const jobId = createData.job_id as string
+            if (
+                !createData
+                || typeof createData.job_id !== "string"
+                || typeof createData.status !== "string"
+            ) {
+                throw new Error("Invalid export response")
+            }
+            const jobId = createData.job_id
 
-            let jobStatus = createData.status as string
+            let jobStatus = createData.status
             let jobError: string | null = null
 
             for (let attempt = 0; attempt < 60; attempt += 1) {
@@ -85,8 +92,15 @@ export default function AdminDataPage() {
             }
 
             const downloadData = await downloadResponse.json()
-            const downloadUrl = downloadData.download_url as string
-            const filename = downloadData.filename as string
+            if (
+                !downloadData
+                || typeof downloadData.download_url !== "string"
+                || typeof downloadData.filename !== "string"
+            ) {
+                throw new Error("Invalid export download response")
+            }
+            const downloadUrl = downloadData.download_url
+            const filename = downloadData.filename
 
             const link = document.createElement("a")
             link.href = downloadUrl
@@ -352,7 +366,7 @@ function ImportForm({
 
                     <div className="flex flex-wrap gap-3">
                         <Button
-                            onClick={() => onImport("config", { config: configFile || undefined })}
+                            onClick={() => onImport("config", configFile ? { config: configFile } : {})}
                             disabled={isLoading || !configFile}
                         >
                             {isLoading ? (
@@ -365,7 +379,7 @@ function ImportForm({
 
                         <Button
                             variant="outline"
-                            onClick={() => onImport("cases", { cases: casesFile || undefined })}
+                            onClick={() => onImport("cases", casesFile ? { cases: casesFile } : {})}
                             disabled={isLoading || !casesFile}
                         >
                             {isLoading ? (
@@ -378,7 +392,10 @@ function ImportForm({
 
                         <Button
                             variant="secondary"
-                            onClick={() => onImport("all", { config: configFile || undefined, cases: casesFile || undefined })}
+                            onClick={() => onImport("all", {
+                                ...(configFile ? { config: configFile } : {}),
+                                ...(casesFile ? { cases: casesFile } : {}),
+                            })}
                             disabled={isLoading || !configFile || !casesFile}
                         >
                             {isLoading ? (

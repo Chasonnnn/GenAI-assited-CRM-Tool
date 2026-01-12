@@ -13,7 +13,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { CheckIcon, CopyIcon, KeyIcon, LoaderIcon } from "lucide-react"
+import { CheckIcon, CopyIcon, KeyIcon, Loader2Icon } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { verifyDuoCallback } from "@/lib/api/mfa"
 
@@ -143,7 +143,7 @@ function DuoCallbackContent() {
                 <CardContent className="space-y-4 text-center">
                     {status === "loading" && (
                         <div className="flex flex-col items-center gap-3">
-                            <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+                            <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
                             <p className="text-sm text-muted-foreground">Verifying Duo response...</p>
                         </div>
                     )}
@@ -187,7 +187,7 @@ export default function DuoCallbackPage() {
         <Suspense
             fallback={
                 <div className="min-h-screen flex items-center justify-center bg-muted/30">
-                    <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+                    <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
                 </div>
             }
         >

@@ -3,6 +3,7 @@
  */
 
 import api from './index';
+import type { JsonObject } from '../types/json';
 
 // ============================================================================
 // Types
@@ -37,7 +38,7 @@ export interface TipTapDoc {
 
 export interface TipTapNode {
     type: string;
-    attrs?: Record<string, unknown>;
+    attrs?: JsonObject;
     content?: TipTapNode[];
     text?: string;
     marks?: TipTapMark[];
@@ -45,7 +46,7 @@ export interface TipTapNode {
 
 export interface TipTapMark {
     type: string;
-    attrs?: Record<string, unknown>;
+    attrs?: JsonObject;
 }
 
 // Full interview

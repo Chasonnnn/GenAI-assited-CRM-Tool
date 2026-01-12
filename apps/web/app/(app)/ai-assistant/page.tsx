@@ -180,7 +180,7 @@ export default function AIAssistantPage() {
             <div className="flex shrink-0 items-center gap-3 border-b p-4">
                 <SidebarTrigger />
                 <div className="flex-1">
-                    <h1 className="text-xl font-bold">AI Assistant</h1>
+                    <h1 className="text-2xl font-semibold">AI Assistant</h1>
                     <p className="text-xs text-muted-foreground">Get help with your cases, tasks, and workflows</p>
                 </div>
                 {/* Case Selector */}

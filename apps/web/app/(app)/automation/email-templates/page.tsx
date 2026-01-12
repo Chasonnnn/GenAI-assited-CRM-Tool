@@ -26,7 +26,7 @@ import {
     TrashIcon,
     EyeIcon,
     CameraIcon,
-    LoaderIcon,
+    Loader2Icon,
     CodeIcon,
     XIcon,
     LinkedinIcon,
@@ -51,6 +51,7 @@ import {
 import { getSignaturePreview } from "@/lib/api/signature"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
+import { toast } from "sonner"
 
 // =============================================================================
 // Signature Override Field Component
@@ -163,12 +164,12 @@ function SignaturePhotoField({
 
         const allowedTypes = ["image/png", "image/jpeg", "image/webp"]
         if (!allowedTypes.includes(file.type)) {
-            alert("Please select a PNG, JPEG, or WebP image")
+            toast.error("Please select a PNG, JPEG, or WebP image")
             return
         }
 
         if (file.size > 2 * 1024 * 1024) {
-            alert("Image must be less than 2MB")
+            toast.error("Image must be less than 2MB")
             return
         }
 
@@ -201,7 +202,7 @@ function SignaturePhotoField({
                         className="absolute bottom-0 right-0 flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-md"
                     >
                         {isUploading ? (
-                            <LoaderIcon className="size-3.5 animate-spin" />
+                            <Loader2Icon className="size-3.5 animate-spin" />
                         ) : (
                             <CameraIcon className="size-3.5" />
                         )}
@@ -225,7 +226,7 @@ function SignaturePhotoField({
                                 disabled={isDeleting}
                             >
                                 {isDeleting ? (
-                                    <LoaderIcon className="mr-1 size-3 animate-spin" />
+                                    <Loader2Icon className="mr-1 size-3 animate-spin" />
                                 ) : (
                                     <TrashIcon className="mr-1 size-3" />
                                 )}
@@ -258,7 +259,7 @@ function SignaturePreviewComponent() {
     if (isLoading) {
         return (
             <div className="flex items-center justify-center py-8">
-                <LoaderIcon className="size-5 animate-spin text-muted-foreground" />
+                <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
             </div>
         )
     }
@@ -500,7 +501,7 @@ export default function EmailTemplatesPage() {
 
             try {
                 await navigator.clipboard.writeText(html)
-                alert("Signature HTML copied to clipboard!")
+                toast.success("Signature HTML copied to clipboard!")
             } catch {
                 const textarea = document.createElement("textarea")
                 textarea.value = html
@@ -508,7 +509,7 @@ export default function EmailTemplatesPage() {
                 textarea.select()
                 document.execCommand("copy")
                 document.body.removeChild(textarea)
-                alert("Signature HTML copied to clipboard!")
+                toast.success("Signature HTML copied to clipboard!")
             }
         } catch (error) {
             console.error("Failed to copy signature:", error)
@@ -542,7 +543,7 @@ export default function EmailTemplatesPage() {
                     <TabsContent value="templates" className="space-y-4">
                         {isLoading ? (
                             <div className="flex items-center justify-center py-12">
-                                <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
+                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                             </div>
                         ) : !templates?.length ? (
                             <Card>
@@ -734,7 +735,7 @@ export default function EmailTemplatesPage() {
                                             >
                                                 {updateSignatureMutation.isPending ? (
                                                     <>
-                                                        <LoaderIcon className="mr-2 size-4 animate-spin" />
+                                                        <Loader2Icon className="mr-2 size-4 animate-spin" />
                                                         Saving...
                                                     </>
                                                 ) : (
@@ -925,7 +926,7 @@ export default function EmailTemplatesPage() {
                             disabled={createTemplate.isPending || updateTemplate.isPending}
                         >
                             {(createTemplate.isPending || updateTemplate.isPending) && (
-                                <LoaderIcon className="mr-2 size-4 animate-spin" />
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
                             )}
                             {editingTemplate ? "Save Changes" : "Create Template"}
                         </Button>

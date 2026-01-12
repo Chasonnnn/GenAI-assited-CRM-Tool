@@ -62,11 +62,12 @@ export function useBrowserNotifications(hookOptions: UseBrowserNotificationsOpti
         }
 
         try {
-            const notification = new Notification(title, {
-                body: options?.body,
+            const notificationOptions: NotificationOptions = {
                 icon: options?.icon || '/icon-192x192.png',
-                tag: options?.tag, // Prevents duplicate notifications with same tag
-            })
+                ...(options?.body ? { body: options.body } : {}),
+                ...(options?.tag ? { tag: options.tag } : {}),
+            }
+            const notification = new Notification(title, notificationOptions)
 
             notification.onclick = () => {
                 // Focus the window
@@ -87,10 +88,10 @@ export function useBrowserNotifications(hookOptions: UseBrowserNotificationsOpti
                     router.push('/notifications')
                 }
 
-                hookOptions.onNotificationClick?.(notification, {
-                    entityType: options?.entityType,
-                    entityId: options?.entityId,
-                })
+                const clickData = options?.entityType && options?.entityId
+                    ? { entityType: options.entityType, entityId: options.entityId }
+                    : undefined
+                hookOptions.onNotificationClick?.(notification, clickData)
             }
 
             return notification

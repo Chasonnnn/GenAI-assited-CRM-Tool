@@ -155,6 +155,7 @@ function ContextMenuCheckboxItem({
   checked,
   ...props
 }: ContextMenuPrimitive.CheckboxItem.Props) {
+  const checkboxProps = checked === undefined ? props : { ...props, checked }
   return (
     <ContextMenuPrimitive.CheckboxItem
       data-slot="context-menu-checkbox-item"
@@ -162,8 +163,7 @@ function ContextMenuCheckboxItem({
         "focus:bg-accent focus:text-accent-foreground gap-2 rounded-xl py-2 pr-8 pl-3 text-sm [&_svg:not([class*='size-'])]:size-4 relative flex cursor-default items-center outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         className
       )}
-      checked={checked}
-      {...props}
+      {...checkboxProps}
     >
       <span className="absolute right-2 pointer-events-none">
         <ContextMenuPrimitive.CheckboxItemIndicator>

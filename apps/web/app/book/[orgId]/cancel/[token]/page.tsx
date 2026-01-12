@@ -12,9 +12,19 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
     CalendarIcon,
     ClockIcon,
-    LoaderIcon,
+    Loader2Icon,
     CheckCircleIcon,
     AlertCircleIcon,
     AlertTriangleIcon,
@@ -34,6 +44,7 @@ export default function CancelPage({ params }: PageProps) {
     const [reason, setReason] = useState("")
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isConfirmed, setIsConfirmed] = useState(false)
+    const [showConfirmDialog, setShowConfirmDialog] = useState(false)
 
     // Fetch appointment
     useEffect(() => {
@@ -43,7 +54,7 @@ export default function CancelPage({ params }: PageProps) {
                     params.orgId,
                     params.token
                 )
-                setAppointment(data as PublicAppointmentView)
+                setAppointment(data)
             } catch (err: unknown) {
                 setError(err instanceof Error ? err.message : "Appointment not found")
             } finally {
@@ -70,7 +81,7 @@ export default function CancelPage({ params }: PageProps) {
     if (isLoading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-background">
-                <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
             </div>
         )
     }
@@ -97,8 +108,8 @@ export default function CancelPage({ params }: PageProps) {
                 <div className="max-w-lg mx-auto px-4">
                     <Card>
                         <CardContent className="pt-6 text-center">
-                            <div className="size-16 mx-auto rounded-full bg-red-500/10 flex items-center justify-center mb-6">
-                                <CheckCircleIcon className="size-8 text-red-600" />
+                            <div className="size-16 mx-auto rounded-full bg-green-500/10 flex items-center justify-center mb-6">
+                                <CheckCircleIcon className="size-8 text-green-600" />
                             </div>
                             <h2 className="text-2xl font-semibold mb-2">Appointment Cancelled</h2>
                             <p className="text-muted-foreground">
@@ -182,10 +193,9 @@ export default function CancelPage({ params }: PageProps) {
                             <Button
                                 variant="destructive"
                                 className="flex-1"
-                                onClick={handleSubmit}
+                                onClick={() => setShowConfirmDialog(true)}
                                 disabled={isSubmitting}
                             >
-                                {isSubmitting && <LoaderIcon className="size-4 mr-2 animate-spin" />}
                                 Cancel Appointment
                             </Button>
                         </div>
@@ -196,6 +206,29 @@ export default function CancelPage({ params }: PageProps) {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Confirmation Dialog */}
+            <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Confirm Cancellation</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This action cannot be undone. Your appointment will be cancelled and the time slot will be released.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isSubmitting}>Keep Appointment</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleSubmit}
+                            disabled={isSubmitting}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {isSubmitting && <Loader2Icon className="size-4 mr-2 animate-spin" />}
+                            Yes, Cancel It
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }

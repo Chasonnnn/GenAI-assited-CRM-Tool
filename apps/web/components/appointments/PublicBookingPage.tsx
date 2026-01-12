@@ -37,7 +37,7 @@ import {
     PhoneIcon,
     MapPinIcon,
     CheckCircleIcon,
-    LoaderIcon,
+    Loader2Icon,
     GlobeIcon,
 } from "lucide-react"
 import {
@@ -155,12 +155,13 @@ function AppointmentTypeSelector({
                     const isSelected = selectedId === type.id
 
                     return (
-                        <button
+                        <Button
                             key={type.id}
+                            variant="outline"
                             onClick={() => onSelect(type.id)}
-                            className={`flex items-center gap-4 p-4 rounded-xl border text-left transition-all ${isSelected
+                            className={`flex items-center gap-4 p-4 h-auto rounded-xl text-left justify-start ${isSelected
                                 ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                                : "border-border hover:border-primary/50 hover:bg-muted/50"
+                                : "hover:border-primary/50 hover:bg-muted/50"
                                 }`}
                         >
                             <div className={`p-3 rounded-lg ${isSelected ? "bg-primary/20" : "bg-muted"}`}>
@@ -175,7 +176,7 @@ function AppointmentTypeSelector({
                                     <p className="text-sm text-muted-foreground mt-1">{type.description}</p>
                                 )}
                             </div>
-                        </button>
+                        </Button>
                     )
                 })}
             </div>
@@ -266,21 +267,23 @@ function CalendarView({
                             const isPast = day.date < startOfDay(new Date())
 
                             return (
-                                <button
+                                <Button
                                     key={i}
+                                    variant="ghost"
+                                    size="sm"
                                     onClick={() => day.hasSlots && onSelect(day.date!)}
                                     disabled={!day.hasSlots || isPast}
-                                    className={`h-10 rounded-lg text-sm font-medium transition-colors ${isSelected
-                                        ? "bg-primary text-primary-foreground"
+                                    className={`h-10 text-sm font-medium ${isSelected
+                                        ? "bg-primary text-primary-foreground hover:bg-primary/90"
                                         : day.isToday
-                                            ? "bg-primary/10 text-primary"
+                                            ? "bg-primary/10 text-primary hover:bg-primary/20"
                                             : day.hasSlots
                                                 ? "hover:bg-muted text-foreground"
-                                                : "text-muted-foreground/40 cursor-not-allowed"
+                                                : "text-muted-foreground/40"
                                         }`}
                                 >
                                     {day.date.getDate()}
-                                </button>
+                                </Button>
                             )
                         })}
                     </div>
@@ -310,7 +313,7 @@ function TimeSlotSelector({
     if (isLoading) {
         return (
             <div className="py-8 flex items-center justify-center">
-                <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
+                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
             </div>
         )
     }
@@ -333,16 +336,18 @@ function TimeSlotSelector({
                     const isSelected = selectedSlot?.start === slot.start
 
                     return (
-                        <button
+                        <Button
                             key={slot.start}
+                            variant="outline"
+                            size="sm"
                             onClick={() => onSelect(slot)}
-                            className={`py-2 px-3 rounded-lg border text-sm font-medium transition-all ${isSelected
-                                ? "border-primary bg-primary text-primary-foreground"
-                                : "border-border hover:border-primary/50 hover:bg-muted/50"
+                            className={`py-2 px-3 h-auto text-sm font-medium ${isSelected
+                                ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+                                : "hover:border-primary/50 hover:bg-muted/50"
                                 }`}
                         >
                             {time}
-                        </button>
+                        </Button>
                     )
                 })}
             </div>
@@ -491,7 +496,7 @@ function BookingForm({
             </div>
 
             <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
-                {isSubmitting && <LoaderIcon className="size-4 mr-2 animate-spin" />}
+                {isSubmitting && <Loader2Icon className="size-4 mr-2 animate-spin" />}
                 Request Appointment
             </Button>
 
@@ -767,7 +772,7 @@ export function PublicBookingPage({
     if (isLoadingPage) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-background">
-                <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
             </div>
         )
     }
