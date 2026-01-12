@@ -18,6 +18,7 @@ from app.db.models import (
     Notification,
     UserNotificationSettings,
     Case,
+    Attachment,
     Membership,
 )
 from app.core.websocket import manager
@@ -795,4 +796,36 @@ def notify_form_submission_received(
         entity_type="case",
         entity_id=case.id,
         dedupe_key=dedupe_key,
+    )
+
+
+# =============================================================================
+# Attachment Notification Triggers
+# =============================================================================
+
+
+def notify_attachment_infected(
+    db: Session,
+    attachment: Attachment,
+) -> None:
+    """Notify uploader when an attachment fails virus scan."""
+    if not attachment.uploaded_by_user_id:
+        return
+
+    case_id = attachment.case_id
+    title = "Attachment quarantined"
+    body = f"{attachment.filename} failed the virus scan and was quarantined."
+    dedupe_key = f"attachment_infected:{attachment.id}"
+
+    create_notification(
+        db=db,
+        org_id=attachment.organization_id,
+        user_id=attachment.uploaded_by_user_id,
+        type=NotificationType.ATTACHMENT_INFECTED,
+        title=title,
+        body=body,
+        entity_type="case" if case_id else None,
+        entity_id=case_id,
+        dedupe_key=dedupe_key,
+        dedupe_window_hours=None,
     )

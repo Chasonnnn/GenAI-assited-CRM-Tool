@@ -12,6 +12,8 @@ Endpoints:
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
 from app.core.case_access import can_modify_case, check_case_access
@@ -50,6 +52,8 @@ from app.services import (
     interview_note_service,
     interview_service,
     job_service,
+    org_service,
+    pdf_export_service,
 )
 
 router = APIRouter(tags=["interviews"])
@@ -764,7 +768,7 @@ async def summarize_all_interviews(
 
 
 # =============================================================================
-# Export (Placeholder - full implementation in interview_export_service)
+# Export
 # =============================================================================
 
 
@@ -790,8 +794,42 @@ def export_interview(
                 status_code=403, detail="Case manager or higher required for JSON export"
             )
 
-    # TODO: Implement export
-    raise HTTPException(status_code=501, detail="Export not yet implemented")
+    case = interview.case
+    case_name = case.full_name or f"Case #{case.case_number or case.id}"
+    org = org_service.get_org_by_id(db, session.org_id)
+    org_name = org.name if org else ""
+
+    if format == "json":
+        exports = interview_service.build_interview_exports(
+            db=db,
+            org_id=session.org_id,
+            interviews=[interview],
+            current_user_id=session.user_id,
+        )
+        payload = exports.get(interview.id)
+        if not payload:
+            raise HTTPException(status_code=404, detail="Interview not found")
+
+        filename = f"interview_{case.case_number or interview.id}.json"
+        return JSONResponse(
+            content=jsonable_encoder(payload),
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    pdf_bytes = pdf_export_service.export_interview_pdf(
+        db=db,
+        org_id=session.org_id,
+        interview=interview,
+        case_name=case_name,
+        org_name=org_name,
+        current_user_id=session.user_id,
+    )
+    filename = f"interview_{case.case_number or interview.id}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/cases/{case_id}/interviews/export")
@@ -810,5 +848,49 @@ def export_all_interviews(
         case, session.role, session.user_id, db=db, org_id=session.org_id
     )
 
-    # TODO: Implement export
-    raise HTTPException(status_code=501, detail="Export not yet implemented")
+    case_name = case.full_name or f"Case #{case.case_number or case.id}"
+    org = org_service.get_org_by_id(db, session.org_id)
+    org_name = org.name if org else ""
+
+    interviews = interview_service.list_interviews(db, session.org_id, case_id)
+    if not interviews:
+        raise HTTPException(status_code=404, detail="No interviews found")
+
+    if format == "json":
+        exports = interview_service.build_interview_exports(
+            db=db,
+            org_id=session.org_id,
+            interviews=interviews,
+            current_user_id=session.user_id,
+        )
+        payload = {
+            "case_id": case.id,
+            "case_number": case.case_number,
+            "case_name": case_name,
+            "interviews": [
+                exports[interview.id]
+                for interview in interviews
+                if interview.id in exports
+            ],
+        }
+
+        filename = f"interviews_{case.case_number or case.id}.json"
+        return JSONResponse(
+            content=jsonable_encoder(payload),
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    pdf_bytes = pdf_export_service.export_interviews_pdf(
+        db=db,
+        org_id=session.org_id,
+        interviews=interviews,
+        case_name=case_name,
+        org_name=org_name,
+        current_user_id=session.user_id,
+    )
+    filename = f"interviews_{case.case_number or case.id}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

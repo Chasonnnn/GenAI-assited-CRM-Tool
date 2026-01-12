@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
@@ -10,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import (
+    Attachment,
     CaseInterview,
     InterviewAttachment,
     InterviewNote,
@@ -664,6 +666,175 @@ def get_versions_count(db: Session, interview_id: UUID) -> int:
         .select_from(InterviewTranscriptVersion)
         .where(InterviewTranscriptVersion.interview_id == interview_id)
     ) or 0
+
+
+# =============================================================================
+# Export Helpers
+# =============================================================================
+
+
+def build_interview_exports(
+    db: Session,
+    org_id: UUID,
+    interviews: list[CaseInterview],
+    current_user_id: UUID,
+) -> dict[UUID, dict]:
+    """Build export payloads for interviews with notes, attachments, and versions."""
+    if not interviews:
+        return {}
+
+    from app.services import interview_attachment_service, interview_note_service
+
+    interview_ids = [interview.id for interview in interviews]
+
+    notes_counts = dict(
+        db.execute(
+            select(
+                InterviewNote.interview_id,
+                func.count(InterviewNote.id).label("notes_count"),
+            )
+            .where(
+                InterviewNote.organization_id == org_id,
+                InterviewNote.interview_id.in_(interview_ids),
+            )
+            .group_by(InterviewNote.interview_id)
+        ).all()
+    )
+    attachments_counts = dict(
+        db.execute(
+            select(
+                InterviewAttachment.interview_id,
+                func.count(InterviewAttachment.id).label("attachments_count"),
+            )
+            .where(
+                InterviewAttachment.organization_id == org_id,
+                InterviewAttachment.interview_id.in_(interview_ids),
+            )
+            .group_by(InterviewAttachment.interview_id)
+        ).all()
+    )
+    versions_counts = dict(
+        db.execute(
+            select(
+                InterviewTranscriptVersion.interview_id,
+                func.count(InterviewTranscriptVersion.id).label("versions_count"),
+            )
+            .where(
+                InterviewTranscriptVersion.organization_id == org_id,
+                InterviewTranscriptVersion.interview_id.in_(interview_ids),
+            )
+            .group_by(InterviewTranscriptVersion.interview_id)
+        ).all()
+    )
+
+    notes_by_interview: dict[UUID, list[InterviewNote]] = defaultdict(list)
+    notes = (
+        db.scalars(
+            select(InterviewNote)
+            .options(
+                joinedload(InterviewNote.author),
+                joinedload(InterviewNote.resolved_by),
+                joinedload(InterviewNote.replies).joinedload(InterviewNote.author),
+                joinedload(InterviewNote.replies).joinedload(InterviewNote.resolved_by),
+            )
+            .where(
+                InterviewNote.organization_id == org_id,
+                InterviewNote.interview_id.in_(interview_ids),
+                InterviewNote.parent_id.is_(None),
+            )
+            .order_by(InterviewNote.created_at.desc())
+        )
+        .unique()
+        .all()
+    )
+    for note in notes:
+        notes_by_interview[note.interview_id].append(note)
+
+    attachments_by_interview: dict[UUID, list[InterviewAttachment]] = defaultdict(list)
+    attachments = (
+        db.scalars(
+            select(InterviewAttachment)
+            .options(
+                joinedload(InterviewAttachment.attachment).joinedload(
+                    Attachment.uploaded_by
+                )
+            )
+            .where(
+                InterviewAttachment.organization_id == org_id,
+                InterviewAttachment.interview_id.in_(interview_ids),
+            )
+            .order_by(InterviewAttachment.created_at.desc())
+        )
+        .all()
+    )
+    for link in attachments:
+        attachments_by_interview[link.interview_id].append(link)
+
+    versions_by_interview: dict[UUID, list[InterviewTranscriptVersion]] = defaultdict(list)
+    versions = (
+        db.scalars(
+            select(InterviewTranscriptVersion)
+            .options(joinedload(InterviewTranscriptVersion.author))
+            .where(
+                InterviewTranscriptVersion.organization_id == org_id,
+                InterviewTranscriptVersion.interview_id.in_(interview_ids),
+            )
+            .order_by(InterviewTranscriptVersion.version.desc())
+        )
+        .all()
+    )
+    for version in versions:
+        versions_by_interview[version.interview_id].append(version)
+
+    exports: dict[UUID, dict] = {}
+    for interview in interviews:
+        conducted_by_name = "Unknown"
+        if interview.conducted_by:
+            conducted_by_name = (
+                interview.conducted_by.display_name or interview.conducted_by.email
+            )
+
+        interview_payload = {
+            "id": interview.id,
+            "case_id": interview.case_id,
+            "interview_type": interview.interview_type,
+            "conducted_at": interview.conducted_at,
+            "conducted_by_user_id": interview.conducted_by_user_id,
+            "conducted_by_name": conducted_by_name,
+            "duration_minutes": interview.duration_minutes,
+            "transcript_json": interview.transcript_json,
+            "transcript_version": interview.transcript_version,
+            "transcript_size_bytes": interview.transcript_size_bytes,
+            "is_transcript_offloaded": interview.transcript_storage_key is not None,
+            "status": interview.status,
+            "notes_count": int(notes_counts.get(interview.id, 0)),
+            "attachments_count": int(attachments_counts.get(interview.id, 0)),
+            "versions_count": int(versions_counts.get(interview.id, 0)),
+            "expires_at": interview.expires_at,
+            "created_at": interview.created_at,
+            "updated_at": interview.updated_at,
+        }
+
+        attachments_payload = [
+            interview_attachment_service.to_attachment_read(link)
+            for link in attachments_by_interview.get(interview.id, [])
+            if link.attachment and not link.attachment.quarantined
+        ]
+
+        exports[interview.id] = {
+            "interview": interview_payload,
+            "notes": [
+                interview_note_service.to_note_read(note, current_user_id)
+                for note in notes_by_interview.get(interview.id, [])
+            ],
+            "attachments": attachments_payload,
+            "versions": [
+                to_version_list_item(version)
+                for version in versions_by_interview.get(interview.id, [])
+            ],
+        }
+
+    return exports
 
 
 # =============================================================================

@@ -227,6 +227,9 @@ class NotificationType(str, Enum):
     # Interview notifications
     INTERVIEW_TRANSCRIPTION_COMPLETED = "interview_transcription_completed"
 
+    # Attachment notifications
+    ATTACHMENT_INFECTED = "attachment_infected"
+
 
 # Note: is_priority is a boolean field on Case model, not an enum
 # Default: False (normal), True (priority - shown with gold styling in UI)
