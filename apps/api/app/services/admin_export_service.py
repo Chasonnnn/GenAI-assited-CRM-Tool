@@ -346,14 +346,20 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
         .order_by(Pipeline.is_default.desc(), Pipeline.name)
         .all()
     )
-    pipeline_payload = []
-    for pipeline in pipelines:
+    pipeline_ids = [pipeline.id for pipeline in pipelines]
+    stages_by_pipeline: dict[UUID, list[PipelineStage]] = {}
+    if pipeline_ids:
         stages = (
             db.query(PipelineStage)
-            .filter(PipelineStage.pipeline_id == pipeline.id)
-            .order_by(PipelineStage.order)
+            .filter(PipelineStage.pipeline_id.in_(pipeline_ids))
+            .order_by(PipelineStage.pipeline_id, PipelineStage.order)
             .all()
         )
+        for stage in stages:
+            stages_by_pipeline.setdefault(stage.pipeline_id, []).append(stage)
+    pipeline_payload = []
+    for pipeline in pipelines:
+        stages = stages_by_pipeline.get(pipeline.id, [])
         pipeline_payload.append(
             {
                 "id": str(pipeline.id),

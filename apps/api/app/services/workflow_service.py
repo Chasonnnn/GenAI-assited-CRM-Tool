@@ -523,14 +523,16 @@ def get_workflow_options(db: Session, org_id: UUID) -> WorkflowOptions:
     # Users in org
     from app.db.models import Membership
 
-    memberships = (
-        db.query(Membership).filter(Membership.organization_id == org_id).all()
+    user_rows = (
+        db.query(User.id, User.display_name)
+        .join(Membership, Membership.user_id == User.id)
+        .filter(Membership.organization_id == org_id)
+        .all()
     )
-    users = []
-    for m in memberships:
-        user = db.query(User).filter(User.id == m.user_id).first()
-        if user:
-            users.append({"id": str(user.id), "display_name": user.display_name})
+    users = [
+        {"id": str(user_id), "display_name": display_name}
+        for user_id, display_name in user_rows
+    ]
 
     # Queues
     queues = db.query(Queue).filter(Queue.organization_id == org_id).all()
@@ -601,7 +603,7 @@ def list_org_executions(
     Returns executions with workflow name joined for display.
     """
     query = (
-        db.query(WorkflowExecution)
+        db.query(WorkflowExecution, AutomationWorkflow.name)
         .join(
             AutomationWorkflow, WorkflowExecution.workflow_id == AutomationWorkflow.id
         )
@@ -624,18 +626,12 @@ def list_org_executions(
 
     # Build response with workflow name
     result = []
-    for exec in items:
-        workflow = (
-            db.query(AutomationWorkflow)
-            .filter(AutomationWorkflow.id == exec.workflow_id)
-            .first()
-        )
-
+    for exec, workflow_name in items:
         result.append(
             {
                 "id": exec.id,
                 "workflow_id": exec.workflow_id,
-                "workflow_name": workflow.name if workflow else "Unknown",
+                "workflow_name": workflow_name or "Unknown",
                 "status": exec.status,
                 "entity_type": exec.entity_type,
                 "entity_id": exec.entity_id,
@@ -917,17 +913,20 @@ def _validate_action_config(db: Session, org_id: UUID, action: dict) -> None:
         if isinstance(config.recipients, list):
             from app.db.models import Membership
 
-            for user_id in config.recipients:
-                membership = (
-                    db.query(Membership)
-                    .filter(
-                        Membership.user_id == user_id,
-                        Membership.organization_id == org_id,
-                    )
-                    .first()
+            recipient_ids = set(config.recipients)
+            rows = (
+                db.query(Membership.user_id)
+                .filter(
+                    Membership.organization_id == org_id,
+                    Membership.user_id.in_(recipient_ids),
                 )
-                if not membership:
-                    raise ValueError(f"User {user_id} not found in organization")
+                .all()
+            )
+            found_ids = {row[0] for row in rows}
+            missing_ids = recipient_ids - found_ids
+            if missing_ids:
+                missing_list = ", ".join(str(user_id) for user_id in missing_ids)
+                raise ValueError(f"Users not found in organization: {missing_list}")
 
     elif action_type == "update_field":
         UpdateFieldActionConfig.model_validate(action)

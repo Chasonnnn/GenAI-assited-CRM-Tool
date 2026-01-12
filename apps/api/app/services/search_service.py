@@ -12,6 +12,7 @@ from typing import TypedDict
 from uuid import UUID
 
 from sqlalchemy import and_, func, literal, or_, select, true
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.encryption import hash_email, hash_phone
@@ -60,13 +61,13 @@ def _extract_hashes(query: str) -> tuple[str | None, str | None]:
     if "@" in query:
         try:
             email_hash = hash_email(query)
-        except Exception:
+        except (RuntimeError, ValueError):
             email_hash = None
     digit_count = sum(1 for ch in query if ch.isdigit())
     if digit_count >= 7:
         try:
             phone_hash = hash_phone(query) or None
-        except Exception:
+        except (RuntimeError, ValueError):
             phone_hash = None
     return email_hash, phone_hash
 
@@ -333,7 +334,7 @@ def _search_cases(
                     case_name=row.full_name,
                 )
             )
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.warning(f"Case search failed, trying fallback: {e}")
         # Try fallback
         try:
@@ -377,7 +378,7 @@ def _search_cases(
                         case_name=row.full_name,
                     )
                 )
-        except Exception:
+        except SQLAlchemyError:
             pass
 
     return results
@@ -535,12 +536,12 @@ def _search_notes(
         # Use 'english' dictionary for notes (with stemming)
         tsquery = func.websearch_to_tsquery("english", query)
         _run_queries(tsquery)
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.warning(f"Note search failed, trying fallback: {e}")
         try:
             tsquery = func.plainto_tsquery("english", query)
             _run_queries(tsquery)
-        except Exception as fallback_error:
+        except SQLAlchemyError as fallback_error:
             logger.warning(f"Note search fallback failed: {fallback_error}")
 
     return results
@@ -677,12 +678,12 @@ def _search_attachments(
     try:
         tsquery = func.websearch_to_tsquery("simple", query)
         _run_queries(tsquery)
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.warning(f"Attachment search failed, trying fallback: {e}")
         try:
             tsquery = func.plainto_tsquery("simple", query)
             _run_queries(tsquery)
-        except Exception as fallback_error:
+        except SQLAlchemyError as fallback_error:
             logger.warning(f"Attachment search fallback failed: {fallback_error}")
 
     return results
@@ -764,7 +765,7 @@ def _search_intended_parents(
                     case_name=None,
                 )
             )
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.warning(f"Intended parent search failed, trying fallback: {e}")
         try:
             tsquery = func.plainto_tsquery("simple", query)
@@ -794,7 +795,7 @@ def _search_intended_parents(
                         case_name=None,
                     )
                 )
-        except Exception as fallback_error:
+        except SQLAlchemyError as fallback_error:
             logger.warning(f"Intended parent search fallback failed: {fallback_error}")
 
     return results

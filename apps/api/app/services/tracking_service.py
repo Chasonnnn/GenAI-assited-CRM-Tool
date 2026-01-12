@@ -39,12 +39,8 @@ def generate_tracking_token() -> str:
 
 def get_tracking_base_url() -> str:
     """Get the base URL for tracking endpoints."""
-    # Use API_BASE_URL from settings, or construct from known values
-    base = getattr(settings, "API_BASE_URL", None)
-    if base:
-        return base.rstrip("/")
-    # Fallback for development
-    return "http://localhost:8000"
+    base = settings.API_BASE_URL or settings.FRONTEND_URL
+    return base.rstrip("/") if base else ""
 
 
 def get_tracking_pixel_url(token: str) -> str:

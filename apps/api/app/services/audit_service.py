@@ -15,6 +15,7 @@ from uuid import UUID, uuid4
 from typing import Any
 
 from fastapi import Request
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -240,17 +241,19 @@ def get_ai_activity(
     ]
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
-    counts = {}
-    for event_type in ai_event_types:
-        counts[event_type] = (
-            db.query(AuditLog)
-            .filter(
-                AuditLog.organization_id == org_id,
-                AuditLog.event_type == event_type,
-                AuditLog.created_at >= cutoff,
-            )
-            .count()
+    counts = {event_type: 0 for event_type in ai_event_types}
+    rows = (
+        db.query(AuditLog.event_type, func.count(AuditLog.id))
+        .filter(
+            AuditLog.organization_id == org_id,
+            AuditLog.event_type.in_(ai_event_types),
+            AuditLog.created_at >= cutoff,
         )
+        .group_by(AuditLog.event_type)
+        .all()
+    )
+    for event_type, count in rows:
+        counts[event_type] = count
 
     recent_logs = (
         db.query(AuditLog)

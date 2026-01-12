@@ -382,6 +382,7 @@ GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 CORS_ORIGINS=http://localhost:3000
 FRONTEND_URL=http://localhost:3000
+API_BASE_URL=http://localhost:8000
 ```
 
 ### Frontend (.env.local)
