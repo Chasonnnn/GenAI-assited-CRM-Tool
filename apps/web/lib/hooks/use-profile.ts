@@ -9,6 +9,7 @@ import {
     saveProfileOverrides,
     toggleProfileHiddenField,
 } from '@/lib/api/profile'
+import type { JsonObject } from '@/lib/types/json'
 
 export const profileKeys = {
     all: ['profile'] as const,
@@ -45,7 +46,7 @@ export function useSaveProfileOverrides() {
             newBaseSubmissionId,
         }: {
             caseId: string
-            overrides: Record<string, unknown>
+            overrides: JsonObject
             newBaseSubmissionId?: string | null
         }) => saveProfileOverrides(caseId, overrides, newBaseSubmissionId),
         onSuccess: (_, { caseId }) => {

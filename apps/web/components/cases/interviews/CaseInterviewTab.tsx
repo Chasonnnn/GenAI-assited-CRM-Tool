@@ -260,9 +260,9 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
                 interviewId: selectedId,
                 data: {
                     content: data.content,
-                    comment_id: data.commentId || undefined,
-                    anchor_text: data.anchorText || undefined,
-                    parent_id: data.parentId,
+                    ...(data.commentId ? { comment_id: data.commentId } : {}),
+                    ...(data.anchorText ? { anchor_text: data.anchorText } : {}),
+                    ...(data.parentId ? { parent_id: data.parentId } : {}),
                 },
             })
             toast.success(data.commentId ? "Comment added" : "Note added")

@@ -353,7 +353,7 @@ export function CaseTasksCalendar({
                     taskFilter={{ case_id: caseId }}
                     includeAppointments={false}
                     includeGoogleEvents={false}
-                    onTaskClick={onTaskClick}
+                    {...(onTaskClick ? { onTaskClick } : {})}
                 />
             )}
         </div>

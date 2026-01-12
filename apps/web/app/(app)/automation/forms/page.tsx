@@ -26,7 +26,7 @@ import {
     MoreVerticalIcon,
     FileTextIcon,
     EditIcon,
-    LoaderIcon,
+    Loader2Icon,
     ArrowLeftIcon,
 } from "lucide-react"
 import { useForms, useCreateForm } from "@/lib/hooks/use-forms"
@@ -128,7 +128,7 @@ export default function FormsListPage() {
                     {/* Form List */}
                     {isLoading ? (
                         <div className="flex items-center justify-center py-12">
-                            <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
+                            <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                         </div>
                     ) : !forms?.length ? (
                         <Card>
@@ -257,7 +257,7 @@ export default function FormsListPage() {
                             disabled={!formName.trim() || createFormMutation.isPending}
                         >
                             {createFormMutation.isPending && (
-                                <LoaderIcon className="mr-2 size-4 animate-spin" />
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
                             )}
                             Create Form
                         </Button>

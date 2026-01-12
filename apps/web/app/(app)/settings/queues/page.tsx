@@ -35,7 +35,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { PlusIcon, MoreVerticalIcon, LoaderIcon, UsersIcon, XIcon, UserPlusIcon } from "lucide-react"
+import { PlusIcon, MoreVerticalIcon, Loader2Icon, UsersIcon, XIcon, UserPlusIcon } from "lucide-react"
 import {
     useQueues,
     useCreateQueue,
@@ -97,9 +97,13 @@ export default function QueuesSettingsPage() {
         e.preventDefault()
         if (!editingQueue || !formData.name.trim()) return
 
+        const trimmedDescription = (formData.description ?? "").trim()
         await updateQueueMutation.mutateAsync({
             queueId: editingQueue.id,
-            data: { name: formData.name, description: formData.description }
+            data: {
+                name: formData.name,
+                ...(trimmedDescription ? { description: trimmedDescription } : {}),
+            },
         })
         setEditDialogOpen(false)
         setEditingQueue(null)
@@ -159,7 +163,7 @@ export default function QueuesSettingsPage() {
     if (!isManager) {
         return (
             <div className="flex min-h-screen items-center justify-center">
-                <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
+                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
             </div>
         )
     }
@@ -168,7 +172,7 @@ export default function QueuesSettingsPage() {
         <div className="p-6 max-w-4xl mx-auto">
             <div className="flex items-center justify-between mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold flex items-center gap-2">
+                    <h1 className="text-2xl font-semibold flex items-center gap-2">
                         <UsersIcon className="h-6 w-6" />
                         Queue Management
                     </h1>
@@ -192,7 +196,7 @@ export default function QueuesSettingsPage() {
             {/* Loading State */}
             {isLoading && (
                 <Card className="p-12 flex items-center justify-center">
-                    <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+                    <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
                 </Card>
             )}
 
@@ -405,7 +409,7 @@ export default function QueuesSettingsPage() {
                             </Label>
                             {loadingMembers ? (
                                 <div className="flex items-center justify-center py-4">
-                                    <LoaderIcon className="size-4 animate-spin" />
+                                    <Loader2Icon className="size-4 animate-spin" />
                                 </div>
                             ) : queueMembers?.length === 0 ? (
                                 <div className="text-center py-4 text-sm text-muted-foreground">

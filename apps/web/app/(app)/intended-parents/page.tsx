@@ -34,7 +34,7 @@ import { Textarea } from "@/components/ui/textarea"
 import {
     PlusIcon,
     SearchIcon,
-    LoaderIcon,
+    Loader2Icon,
     UsersIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
@@ -148,10 +148,8 @@ export default function IntendedParentsPage() {
     const getDateRangeParams = () => {
         if (dateRange === 'all') return {}
         if (dateRange === 'custom' && customRange.from) {
-            return {
-                created_after: formatLocalDate(customRange.from),
-                created_before: customRange.to ? formatLocalDate(customRange.to) : undefined,
-            }
+            const params = { created_after: formatLocalDate(customRange.from) }
+            return customRange.to ? { ...params, created_before: formatLocalDate(customRange.to) } : params
         }
         const now = new Date()
         let from: Date | undefined
@@ -166,13 +164,13 @@ export default function IntendedParentsPage() {
     }
 
     const filters = {
-        q: debouncedSearch || undefined,
-        status: statusFilter !== "all" ? [statusFilter] : undefined,
         page,
         per_page: 20,
-        sort_by: sortBy || undefined,
         sort_order: sortOrder,
         ...getDateRangeParams(),
+        ...(debouncedSearch ? { q: debouncedSearch } : {}),
+        ...(statusFilter !== "all" ? { status: [statusFilter] } : {}),
+        ...(sortBy ? { sort_by: sortBy } : {}),
     }
     const { data, isLoading, isError, refetch } = useIntendedParents(filters)
     const { data: stats } = useIntendedParentStats()
@@ -200,13 +198,16 @@ export default function IntendedParentsPage() {
 
     const handleCreate = async () => {
         try {
+            const phone = formData.phone.trim()
+            const state = formData.state.trim()
+            const notesInternal = formData.notes_internal.trim()
             await createMutation.mutateAsync({
                 full_name: formData.full_name,
                 email: formData.email,
-                phone: formData.phone || undefined,
-                state: formData.state || undefined,
-                budget: formData.budget ? parseFloat(formData.budget) : undefined,
-                notes_internal: formData.notes_internal || undefined,
+                ...(phone ? { phone } : {}),
+                ...(state ? { state } : {}),
+                ...(formData.budget ? { budget: parseFloat(formData.budget) } : {}),
+                ...(notesInternal ? { notes_internal: notesInternal } : {}),
             })
             setIsCreateOpen(false)
             resetForm()
@@ -323,7 +324,7 @@ export default function IntendedParentsPage() {
                     <CardContent className="p-0">
                         {isLoading ? (
                             <div className="flex items-center justify-center py-12">
-                                <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
+                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                                 <span className="ml-2 text-muted-foreground">Loading...</span>
                             </div>
                         ) : isError ? (
@@ -503,7 +504,7 @@ export default function IntendedParentsPage() {
                             onClick={handleCreate}
                             disabled={createMutation.isPending || !formData.full_name || !formData.email}
                         >
-                            {createMutation.isPending && <LoaderIcon className="mr-2 size-4 animate-spin" />}
+                            {createMutation.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
                             Create
                         </Button>
                     </DialogFooter>

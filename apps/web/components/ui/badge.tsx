@@ -29,6 +29,7 @@ function Badge({
   render,
   ...props
 }: useRender.ComponentProps<"span"> & VariantProps<typeof badgeVariants>) {
+  const renderProp = render === undefined ? {} : { render }
   return useRender({
     defaultTagName: "span",
     props: mergeProps<"span">(
@@ -37,11 +38,11 @@ function Badge({
       },
       props
     ),
-    render,
     state: {
       slot: "badge",
       variant,
     },
+    ...renderProp,
   })
 }
 

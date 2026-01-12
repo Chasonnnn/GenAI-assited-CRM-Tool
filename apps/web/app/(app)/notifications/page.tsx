@@ -60,7 +60,7 @@ export default function NotificationsPage() {
 
     const { data: notificationsData, isLoading, isError: notificationsError } = useNotifications({
         limit: 50,
-        notification_types: notificationTypes,
+        ...(notificationTypes ? { notification_types: notificationTypes } : {}),
     })
     const markRead = useMarkRead()
     const markAllRead = useMarkAllRead()

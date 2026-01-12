@@ -50,13 +50,13 @@ export function NotificationBell() {
             document.hidden // Only show if tab is not focused
         ) {
             lastNotificationIdRef.current = lastNotification.id
-            showNotification(lastNotification.title || 'New notification', {
-                body: lastNotification.body,
-                tag: lastNotification.id, // Prevent duplicates
-                // Use the actual entity_type and entity_id for deep-linking
-                entityType: lastNotification.entity_type,
-                entityId: lastNotification.entity_id,
-            })
+            const notificationOptions = {
+                tag: lastNotification.id,
+                ...(lastNotification.body ? { body: lastNotification.body } : {}),
+                ...(lastNotification.entity_type ? { entityType: lastNotification.entity_type } : {}),
+                ...(lastNotification.entity_id ? { entityId: lastNotification.entity_id } : {}),
+            }
+            showNotification(lastNotification.title || 'New notification', notificationOptions)
         }
     }, [lastNotification, permission, showNotification])
 

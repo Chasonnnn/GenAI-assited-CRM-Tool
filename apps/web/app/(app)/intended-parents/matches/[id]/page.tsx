@@ -184,14 +184,13 @@ export default function MatchDetailPage() {
 
     // Fetch tasks from Case and IP
     const { data: caseTasks } = useTasks(
-        { case_id: match?.case_id || undefined, exclude_approvals: true },
+        match?.case_id ? { case_id: match.case_id, exclude_approvals: true } : { exclude_approvals: true },
         { enabled: !!match?.case_id }
     )
     const { data: ipTasks } = useTasks(
-        {
-            intended_parent_id: match?.intended_parent_id || undefined,
-            exclude_approvals: true,
-        },
+        match?.intended_parent_id
+            ? { intended_parent_id: match.intended_parent_id, exclude_approvals: true }
+            : { exclude_approvals: true },
         { enabled: !!match?.intended_parent_id }
     )
 
@@ -221,7 +220,11 @@ export default function MatchDetailPage() {
         const notes: CombinedNote[] = []
         // Case notes
         for (const n of caseNotes) {
-            notes.push({ id: n.id, content: n.body, created_at: n.created_at, source: 'case', author_name: n.author_name ?? undefined })
+            const note: CombinedNote = { id: n.id, content: n.body, created_at: n.created_at, source: 'case' }
+            if (n.author_name) {
+                note.author_name = n.author_name
+            }
+            notes.push(note)
         }
         // IP notes
         for (const n of ipNotes) {
@@ -470,18 +473,18 @@ export default function MatchDetailPage() {
             if (target === "case" && match?.case_id) {
                 await createTaskMutation.mutateAsync({
                     title: data.title,
-                    description: data.description,
                     task_type: data.task_type,
-                    due_date: data.due_date,
                     case_id: match.case_id,
+                    ...(data.description ? { description: data.description } : {}),
+                    ...(data.due_date ? { due_date: data.due_date } : {}),
                 })
             } else if (target === "ip" && match?.intended_parent_id) {
                 await createTaskMutation.mutateAsync({
                     title: data.title,
-                    description: data.description,
                     task_type: data.task_type,
-                    due_date: data.due_date,
                     intended_parent_id: match.intended_parent_id,
+                    ...(data.description ? { description: data.description } : {}),
+                    ...(data.due_date ? { due_date: data.due_date } : {}),
                 })
             }
             queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
@@ -518,7 +521,7 @@ export default function MatchDetailPage() {
             <div className="flex min-h-screen flex-col">
                 {/* Page Header */}
                 <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                    <div className="flex h-12 items-center gap-4 px-4">
+                    <div className="flex h-14 items-center gap-4 px-6">
                         <Link href="/intended-parents/matches">
                             <Button variant="ghost" size="sm" className="h-7 text-xs">
                                 <ArrowLeftIcon className="mr-1 size-3" />
@@ -526,7 +529,7 @@ export default function MatchDetailPage() {
                             </Button>
                         </Link>
                         <div className="flex-1 flex items-center gap-2">
-                            <h1 className="text-base font-semibold">
+                            <h1 className="text-xl font-semibold">
                                 {match.case_name || "Surrogate"} ↔ {match.ip_name || "Intended Parents"}
                             </h1>
                             {/* Case Stage Badge */}

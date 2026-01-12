@@ -74,7 +74,9 @@ function AddOverrideDialog({
 
     // Clear selected permission when type changes (since options change)
     const handleTypeChange = (value: string | null) => {
-        if (value) setType(value as "grant" | "revoke")
+        if (value === "grant" || value === "revoke") {
+            setType(value)
+        }
         setPermission("") // Reset selection when type changes
     }
 
@@ -169,7 +171,13 @@ function AddOverrideDialog({
 export default function MemberDetailPage() {
     const params = useParams()
     const router = useRouter()
-    const memberId = params.id as string
+    const rawMemberId = params.id
+    const memberId =
+        typeof rawMemberId === "string"
+            ? rawMemberId
+            : Array.isArray(rawMemberId)
+              ? rawMemberId[0] ?? ""
+              : ""
     const { data: member, isLoading } = useMember(memberId)
     const updateMember = useUpdateMember()
     const removeMember = useRemoveMember()
@@ -216,9 +224,9 @@ export default function MemberDetailPage() {
             await updateMember.mutateAsync({
                 memberId,
                 data: {
-                    role: pendingRole || undefined,
-                    add_overrides: pendingOverrides.add.length > 0 ? pendingOverrides.add : undefined,
-                    remove_overrides: pendingOverrides.remove.length > 0 ? pendingOverrides.remove : undefined,
+                    ...(pendingRole ? { role: pendingRole } : {}),
+                    ...(pendingOverrides.add.length > 0 ? { add_overrides: pendingOverrides.add } : {}),
+                    ...(pendingOverrides.remove.length > 0 ? { remove_overrides: pendingOverrides.remove } : {}),
                 },
             })
             setPendingRole(null)

@@ -82,9 +82,9 @@ export function AIChatPanel({
         if (!message.trim() || sendMessage.isPending) return
 
         sendMessage.mutate({
-            entity_type: entityType,
-            entity_id: entityId,
             message: message.trim(),
+            ...(entityType ? { entity_type: entityType } : {}),
+            ...(entityId ? { entity_id: entityId } : {}),
         })
         setMessage("")
     }
@@ -278,7 +278,7 @@ export function AIChatPanel({
                     onOpenChange={setScheduleParserOpen}
                     entityType="case"
                     entityId={entityId}
-                    entityName={entityName || undefined}
+                    {...(entityName ? { entityName } : {})}
                 />
             )}
         </div>
@@ -416,12 +416,14 @@ function QuickActionButton({
     disabled?: boolean
 }) {
     return (
-        <button
+        <Button
+            variant="outline"
+            size="sm"
             onClick={onClick}
             disabled={disabled}
-            className="rounded-full border bg-background px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+            className="rounded-full h-auto px-3 py-1 text-xs"
         >
             {children}
-        </button>
+        </Button>
     )
 }

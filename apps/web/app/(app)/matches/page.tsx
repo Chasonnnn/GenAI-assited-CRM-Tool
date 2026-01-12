@@ -8,9 +8,18 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Loader2Icon, UsersIcon, CheckCircleIcon, XCircleIcon, ArrowRightIcon, PlusIcon, SearchIcon } from "lucide-react"
-import { useMatches, type MatchStatus, type MatchListItem } from "@/lib/hooks/use-matches"
+import { Loader2Icon, UsersIcon, CheckCircleIcon, XCircleIcon, ArrowRightIcon, PlusIcon, SearchIcon, AlertCircleIcon } from "lucide-react"
+import { useMatches, useCreateMatch, type MatchStatus, type MatchListItem } from "@/lib/hooks/use-matches"
+import { useCases } from "@/lib/hooks/use-cases"
+import { useIntendedParents } from "@/lib/hooks/use-intended-parents"
 import { formatDistanceToNow } from "date-fns"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { toast } from "sonner"
+import { useQueryClient } from "@tanstack/react-query"
 
 const STATUS_CONFIG: Record<MatchStatus, { label: string; color: string; icon?: React.ReactNode }> = {
     proposed: { label: "Proposed", color: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" },
@@ -20,8 +29,11 @@ const STATUS_CONFIG: Record<MatchStatus, { label: string; color: string; icon?: 
     cancelled: { label: "Cancelled", color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300" },
 }
 
-function StatusBadge({ status }: { status: string }) {
-    const config = STATUS_CONFIG[status as MatchStatus] || STATUS_CONFIG.proposed
+const isMatchStatus = (value: string): value is MatchStatus =>
+    Object.prototype.hasOwnProperty.call(STATUS_CONFIG, value)
+
+function StatusBadge({ status }: { status: MatchStatus }) {
+    const config = STATUS_CONFIG[status] || STATUS_CONFIG.proposed
     return (
         <Badge variant="outline" className={`gap-1 ${config.color}`}>
             {config.icon}
@@ -31,6 +43,8 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function MatchRow({ match }: { match: MatchListItem }) {
+    const status = isMatchStatus(match.status) ? match.status : "proposed"
+
     return (
         <TableRow className="hover:bg-accent/50">
             <TableCell>
@@ -49,7 +63,7 @@ function MatchRow({ match }: { match: MatchListItem }) {
                 </Link>
             </TableCell>
             <TableCell>
-                <StatusBadge status={match.status} />
+                <StatusBadge status={status} />
             </TableCell>
             <TableCell>
                 {match.compatibility_score !== null ? (
@@ -73,8 +87,182 @@ function MatchRow({ match }: { match: MatchListItem }) {
     )
 }
 
+// =============================================================================
+// New Match Dialog
+// =============================================================================
+
+interface NewMatchDialogProps {
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    onSuccess?: () => void
+}
+
+function NewMatchDialog({ open, onOpenChange, onSuccess }: NewMatchDialogProps) {
+    const [selectedCaseId, setSelectedCaseId] = useState("")
+    const [selectedIpId, setSelectedIpId] = useState("")
+    const [notes, setNotes] = useState("")
+    const [error, setError] = useState<string | null>(null)
+
+    const queryClient = useQueryClient()
+    const { data: casesData, isLoading: casesLoading } = useCases({ per_page: 100 })
+    const { data: ipsData, isLoading: ipsLoading } = useIntendedParents({ per_page: 100 })
+    const createMatch = useCreateMatch()
+
+    // Filter cases to pending_match status
+    const eligibleCases = casesData?.items?.filter((c) => {
+        if (c.stage_slug) {
+            return c.stage_slug === "pending_match"
+        }
+        return c.status_label?.toLowerCase() === "pending match"
+    }) || []
+
+    const handleSubmit = async () => {
+        if (!selectedCaseId || !selectedIpId) return
+        setError(null)
+
+        try {
+            await createMatch.mutateAsync({
+                case_id: selectedCaseId,
+                intended_parent_id: selectedIpId,
+                ...(notes.trim() ? { notes: notes.trim() } : {}),
+            })
+            toast.success("Match proposed successfully!")
+            queryClient.invalidateQueries({ queryKey: ["matches"] })
+            onOpenChange(false)
+            resetForm()
+            onSuccess?.()
+        } catch (e: unknown) {
+            console.error("Failed to propose match:", e instanceof Error ? e.message : e)
+            setError(e instanceof Error ? e.message : "Failed to propose match. Please try again.")
+        }
+    }
+
+    const resetForm = () => {
+        setSelectedCaseId("")
+        setSelectedIpId("")
+        setNotes("")
+        setError(null)
+    }
+
+    const handleClose = () => {
+        onOpenChange(false)
+        resetForm()
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={handleClose}>
+            <DialogContent className="max-w-md">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <UsersIcon className="size-5" />
+                        New Match
+                    </DialogTitle>
+                    <DialogDescription>
+                        Create a new match between a surrogate and intended parents
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4 py-4">
+                    {error && (
+                        <Alert variant="destructive">
+                            <AlertCircleIcon className="size-4" />
+                            <AlertDescription>{error}</AlertDescription>
+                        </Alert>
+                    )}
+
+                    {/* Case/Surrogate Selector */}
+                    <div className="space-y-2">
+                        <Label>Surrogate (Pending Match Only)</Label>
+                        {casesLoading ? (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Loader2Icon className="size-4 animate-spin" />
+                                Loading surrogates...
+                            </div>
+                        ) : eligibleCases.length === 0 ? (
+                            <div className="text-sm text-muted-foreground p-3 border rounded-md bg-muted/30">
+                                No surrogates are currently in "Pending Match" status.
+                            </div>
+                        ) : (
+                            <Select value={selectedCaseId} onValueChange={(v) => setSelectedCaseId(v || "")}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select a surrogate" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-[200px]">
+                                    {eligibleCases.map((c) => (
+                                        <SelectItem key={c.id} value={c.id}>
+                                            <span className="font-medium">{c.full_name || "Unknown"}</span>
+                                            <span className="text-muted-foreground ml-2">#{c.case_number}</span>
+                                            {c.state && <span className="text-muted-foreground ml-2">• {c.state}</span>}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
+                    </div>
+
+                    {/* IP Selector */}
+                    <div className="space-y-2">
+                        <Label>Intended Parents</Label>
+                        {ipsLoading ? (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Loader2Icon className="size-4 animate-spin" />
+                                Loading intended parents...
+                            </div>
+                        ) : (
+                            <Select value={selectedIpId} onValueChange={(v) => setSelectedIpId(v || "")}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select intended parents" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-[200px]">
+                                    {ipsData?.items?.map((ip) => (
+                                        <SelectItem key={ip.id} value={ip.id}>
+                                            {ip.full_name || ip.email || "Unknown"}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
+                    </div>
+
+                    {/* Notes */}
+                    <div className="space-y-2">
+                        <Label>Notes (optional)</Label>
+                        <Textarea
+                            placeholder="Add any notes about this match proposal..."
+                            value={notes}
+                            onChange={(e) => setNotes(e.target.value)}
+                            className="min-h-20"
+                        />
+                    </div>
+                </div>
+
+                <DialogFooter>
+                    <Button variant="outline" onClick={handleClose}>
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={handleSubmit}
+                        disabled={!selectedCaseId || !selectedIpId || createMatch.isPending}
+                    >
+                        {createMatch.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
+                        Create Match
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+// =============================================================================
+// Match Table
+// =============================================================================
+
 function MatchTable({ status, search }: { status?: MatchStatus; search?: string }) {
-    const { data, isLoading, isError } = useMatches({ status, q: search || undefined, per_page: 50 })
+    const { data, isLoading, isError } = useMatches({
+        per_page: 50,
+        ...(status ? { status } : {}),
+        ...(search ? { q: search } : {}),
+    })
 
     if (isLoading) {
         return (
@@ -126,6 +314,7 @@ export default function MatchesPage() {
     const [activeTab, setActiveTab] = useState<string>("proposed")
     const [search, setSearch] = useState("")
     const [debouncedSearch, setDebouncedSearch] = useState("")
+    const [newMatchOpen, setNewMatchOpen] = useState(false)
 
     // Debounce search input
     useEffect(() => {
@@ -143,12 +332,12 @@ export default function MatchesPage() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold">Matches</h1>
+                    <h1 className="text-2xl font-semibold">Matches</h1>
                     <p className="text-sm text-muted-foreground">
                         Surrogate and intended parent matching
                     </p>
                 </div>
-                <Button disabled>
+                <Button onClick={() => setNewMatchOpen(true)}>
                     <PlusIcon className="size-4 mr-2" />
                     New Match
                 </Button>
@@ -229,6 +418,8 @@ export default function MatchesPage() {
                     </Tabs>
                 </CardContent>
             </Card>
+
+            <NewMatchDialog open={newMatchOpen} onOpenChange={setNewMatchOpen} />
         </div>
     )
 }

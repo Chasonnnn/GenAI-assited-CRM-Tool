@@ -27,7 +27,7 @@ import {
     GlobeIcon,
     BuildingIcon,
     SparklesIcon,
-    LoaderIcon,
+    Loader2Icon,
     PlayIcon,
     PlusIcon,
 } from "lucide-react"
@@ -237,7 +237,7 @@ export default function TemplatesPage() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold">Workflow Templates</h1>
+                    <h1 className="text-2xl font-semibold">Workflow Templates</h1>
                     <p className="text-sm text-muted-foreground">
                         Start with a pre-built template or create a custom workflow
                     </p>
@@ -271,7 +271,7 @@ export default function TemplatesPage() {
 
             {isLoading ? (
                 <div className="flex items-center justify-center py-12">
-                    <LoaderIcon className="h-8 w-8 animate-spin text-muted-foreground" />
+                    <Loader2Icon className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
             ) : templates.length === 0 ? (
                 <Card>
@@ -363,7 +363,7 @@ export default function TemplatesPage() {
 
                         {isTemplateDetailLoading && (
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <LoaderIcon className="h-4 w-4 animate-spin" />
+                                <Loader2Icon className="h-4 w-4 animate-spin" />
                                 Loading template details...
                             </div>
                         )}
@@ -382,7 +382,7 @@ export default function TemplatesPage() {
                                 </div>
                                 {isLoadingEmailTemplates ? (
                                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <LoaderIcon className="h-4 w-4 animate-spin" />
+                                        <Loader2Icon className="h-4 w-4 animate-spin" />
                                         Loading email templates...
                                     </div>
                                 ) : emailTemplates.length === 0 ? (
@@ -408,9 +408,9 @@ export default function TemplatesPage() {
                                                             setFormData((prev) => ({
                                                                 ...prev,
                                                                 action_overrides: {
-                                                                    ...((prev.action_overrides ?? {}) as Record<string, { template_id: string | null }>),
+                                                                    ...(prev.action_overrides ?? {}),
                                                                     [String(index)]: { template_id: value },
-                                                                } as Record<string, { template_id: string | null }>,
+                                                                },
                                                             }))
                                                         }
                                                     >
@@ -465,7 +465,7 @@ export default function TemplatesPage() {
                             disabled={!canCreateWorkflow}
                         >
                             {useTemplateMutation.isPending ? (
-                                <LoaderIcon className="mr-2 h-4 w-4 animate-spin" />
+                                <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
                             ) : (
                                 <PlayIcon className="mr-2 h-4 w-4" />
                             )}

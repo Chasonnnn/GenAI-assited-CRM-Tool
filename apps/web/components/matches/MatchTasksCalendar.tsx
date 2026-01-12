@@ -420,12 +420,18 @@ export function MatchTasksCalendar({ caseId, ipId, onAddTask }: MatchTasksCalend
 
     // Fetch tasks for IP (now supported via intended_parent_id filter)
     const { data: ipTasks, isLoading: loadingIP } = useTasks(
-        {
-            intended_parent_id: ipId || undefined,
-            is_completed: false,
-            per_page: 100,
-            exclude_approvals: true,
-        },
+        ipId
+            ? {
+                intended_parent_id: ipId,
+                is_completed: false,
+                per_page: 100,
+                exclude_approvals: true,
+            }
+            : {
+                is_completed: false,
+                per_page: 100,
+                exclude_approvals: true,
+            },
         { enabled: !!ipId }
     )
 
@@ -434,8 +440,8 @@ export function MatchTasksCalendar({ caseId, ipId, onAddTask }: MatchTasksCalend
         date_start: dateStart,
         date_end: dateEnd,
         case_id: caseId,
-        intended_parent_id: ipId,
         per_page: 100,
+        ...(ipId ? { intended_parent_id: ipId } : {}),
     })
 
     // Build combined task list and source tracking

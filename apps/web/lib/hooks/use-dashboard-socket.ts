@@ -47,7 +47,6 @@ export function useDashboardSocket(enabled: boolean = true) {
             const ws = new WebSocket(`${WS_URL}/ws/notifications`);
 
             ws.onopen = () => {
-                console.log('[Dashboard WS] Connected');
                 setIsConnected(true);
                 reconnectDelayRef.current = INITIAL_RECONNECT_DELAY; // Reset delay on successful connect
                 errorLoggedRef.current = false;
@@ -90,7 +89,6 @@ export function useDashboardSocket(enabled: boolean = true) {
             };
 
             ws.onclose = (event) => {
-                console.log('[Dashboard WS] Disconnected:', event.code, event.reason);
                 setIsConnected(false);
                 wsRef.current = null;
 
@@ -101,7 +99,6 @@ export function useDashboardSocket(enabled: boolean = true) {
 
                 // Reconnect with exponential backoff
                 reconnectTimeoutRef.current = setTimeout(() => {
-                    console.log(`[Dashboard WS] Attempting reconnect...`);
                     connect();
                 }, reconnectDelayRef.current);
 

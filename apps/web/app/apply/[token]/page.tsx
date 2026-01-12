@@ -81,8 +81,8 @@ function ProgressStepper({
                                 <div
                                     className={cn(
                                         "flex size-10 items-center justify-center rounded-full text-sm font-semibold transition-all",
-                                        isCompleted && "bg-teal-500 text-white",
-                                        isCurrent && "bg-teal-500 text-white ring-4 ring-teal-500/20",
+                                        isCompleted && "bg-primary text-white",
+                                        isCurrent && "bg-primary text-white ring-4 ring-primary/20",
                                         !isCompleted && !isCurrent && "bg-stone-200 text-stone-500"
                                     )}
                                 >
@@ -91,7 +91,7 @@ function ProgressStepper({
                                 <span
                                     className={cn(
                                         "text-sm font-medium",
-                                        isCurrent && "text-teal-600",
+                                        isCurrent && "text-primary",
                                         !isCurrent && "text-stone-500"
                                     )}
                                 >
@@ -102,7 +102,7 @@ function ProgressStepper({
                                 <div
                                     className={cn(
                                         "h-0.5 w-12 transition-all",
-                                        isCompleted ? "bg-teal-500" : "bg-stone-200"
+                                        isCompleted ? "bg-primary" : "bg-stone-200"
                                     )}
                                 />
                             )}
@@ -116,7 +116,7 @@ function ProgressStepper({
                 <span className="text-sm font-medium text-stone-600">
                     Step {currentStep} of {steps.length}
                 </span>
-                <span className="text-sm font-semibold text-teal-600">
+                <span className="text-sm font-semibold text-primary">
                     {steps[currentStep - 1]?.label}
                 </span>
             </div>
@@ -142,10 +142,10 @@ function OptionCard({
             onClick={onClick}
             className={cn(
                 "w-full p-4 rounded-xl border-2 text-left transition-all",
-                "hover:border-teal-400 hover:bg-teal-50/50",
-                "focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2",
+                "hover:border-primary hover:bg-primary/10/50",
+                "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
                 selected
-                    ? "border-teal-500 bg-teal-50"
+                    ? "border-primary bg-primary/10"
                     : "border-stone-200 bg-white"
             )}
         >
@@ -154,7 +154,7 @@ function OptionCard({
                     className={cn(
                         "flex size-6 items-center justify-center rounded-full border-2 transition-all",
                         selected
-                            ? "border-teal-500 bg-teal-500"
+                            ? "border-primary bg-primary"
                             : "border-stone-300 bg-white"
                     )}
                 >
@@ -251,9 +251,9 @@ function FileUploadZone({
                 onDragLeave={() => setIsDragging(false)}
                 className={cn(
                     "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-8 cursor-pointer transition-all",
-                    "hover:border-teal-400 hover:bg-teal-50/50",
+                    "hover:border-primary hover:bg-primary/10/50",
                     isDragging
-                        ? "border-teal-500 bg-teal-50"
+                        ? "border-primary bg-primary/10"
                         : "border-stone-300 bg-stone-50"
                 )}
             >
@@ -264,7 +264,7 @@ function FileUploadZone({
                     </p>
                     <p className="text-sm text-stone-500">
                         or{" "}
-                        <span className="text-teal-600 underline underline-offset-2">
+                        <span className="text-primary underline underline-offset-2">
                             click to browse
                         </span>
                     </p>
@@ -334,7 +334,7 @@ function PrivacyNotice({ text }: { text?: string | null }) {
                     href={trimmed}
                     target="_blank"
                     rel="noreferrer"
-                    className="underline decoration-dotted underline-offset-2 hover:text-teal-600"
+                    className="underline decoration-dotted underline-offset-2 hover:text-primary"
                 >
                     View privacy policy
                 </a>
@@ -440,6 +440,7 @@ export default function PublicApplicationForm() {
         if (step > pages.length) return true
 
         const page = pages[step - 1]
+        if (!page) return false
         const missingFields = page.fields.filter((field) => {
             if (!field.required || field.type === "file") return false
             const value = answers[field.key]
@@ -511,7 +512,7 @@ export default function PublicApplicationForm() {
             return <span className="font-medium">{formatDate(value)}</span>
         }
         if (typeof value === "boolean") {
-            return value ? <Badge className="bg-teal-500">Yes</Badge> : <Badge variant="secondary">No</Badge>
+            return value ? <Badge className="bg-primary">Yes</Badge> : <Badge variant="secondary">No</Badge>
         }
         if (Array.isArray(value)) {
             return <span className="font-medium">{value.join(", ") || "—"}</span>
@@ -565,7 +566,7 @@ export default function PublicApplicationForm() {
                                     )}
                                 >
                                     <CalendarIcon className="mr-2 size-4" />
-                                    {value ? formatDate(value as string) : "Select a date"}
+                                    {typeof value === "string" ? formatDate(value) : "Select a date"}
                                 </Button>
                             }
                         />
@@ -676,7 +677,7 @@ export default function PublicApplicationForm() {
         return (
             <div className="min-h-screen flex items-center justify-center">
                 <div className="text-center">
-                    <Loader2Icon className="size-10 animate-spin text-teal-500 mx-auto mb-4" />
+                    <Loader2Icon className="size-10 animate-spin text-primary mx-auto mb-4" />
                     <p className="text-stone-600">Loading application form...</p>
                 </div>
             </div>
@@ -706,8 +707,8 @@ export default function PublicApplicationForm() {
             <div className="min-h-screen flex items-center justify-center p-4">
                 <Card className="max-w-md w-full rounded-2xl shadow-lg">
                     <CardContent className="pt-12 pb-12 text-center">
-                        <div className="flex size-20 items-center justify-center rounded-full bg-teal-100 mx-auto mb-6">
-                            <CheckCircle2Icon className="size-10 text-teal-600" />
+                        <div className="flex size-20 items-center justify-center rounded-full bg-primary/20 mx-auto mb-6">
+                            <CheckCircle2Icon className="size-10 text-primary" />
                         </div>
                         <h1 className="text-2xl font-semibold text-stone-900 mb-3">
                             Application Submitted!
@@ -738,7 +739,7 @@ export default function PublicApplicationForm() {
                             />
                         </div>
                     ) : (
-                        <div className="w-16 h-16 bg-gradient-to-br from-teal-400 to-teal-600 rounded-2xl mx-auto mb-6 flex items-center justify-center">
+                        <div className="w-16 h-16 bg-primary rounded-2xl mx-auto mb-6 flex items-center justify-center">
                             <span className="text-white text-2xl font-bold">
                                 {publicTitle.charAt(0).toUpperCase()}
                             </span>
@@ -796,7 +797,7 @@ export default function PublicApplicationForm() {
                                                 variant="ghost"
                                                 size="sm"
                                                 onClick={() => goToEditStep(index + 1)}
-                                                className="text-teal-600 hover:text-teal-700"
+                                                className="text-primary hover:text-primary/80"
                                             >
                                                 <PencilIcon className="size-3 mr-1" />
                                                 Edit
@@ -839,7 +840,7 @@ export default function PublicApplicationForm() {
                                 </label>
                             </div>
 
-                            <PrivacyNotice text={privacyNotice} />
+                            <PrivacyNotice text={privacyNotice ?? null} />
                         </CardContent>
                     </Card>
                 ) : currentPage ? (
@@ -868,12 +869,12 @@ export default function PublicApplicationForm() {
                                         onFilesChange={setFiles}
                                         maxFiles={formConfig.max_file_count}
                                         maxFileSizeBytes={formConfig.max_file_size_bytes}
-                                        allowedMimeTypes={formConfig.allowed_mime_types}
+                                        allowedMimeTypes={formConfig.allowed_mime_types ?? null}
                                     />
                                 </div>
                             )}
 
-                            <PrivacyNotice text={privacyNotice} />
+                            <PrivacyNotice text={privacyNotice ?? null} />
                         </CardContent>
                     </Card>
                 ) : (
@@ -899,7 +900,7 @@ export default function PublicApplicationForm() {
                 {currentStep < steps.length ? (
                     <Button
                         onClick={handleNext}
-                        className="h-12 px-8 bg-teal-500 hover:bg-teal-600"
+                        className="h-12 px-8 bg-primary hover:bg-primary/90"
                     >
                         Continue
                         <ChevronRightIcon className="size-4 ml-2" />
@@ -908,7 +909,7 @@ export default function PublicApplicationForm() {
                     <Button
                         onClick={handleSubmit}
                         disabled={isSubmitting || !agreed}
-                        className="h-12 px-8 bg-teal-500 hover:bg-teal-600"
+                        className="h-12 px-8 bg-primary hover:bg-primary/90"
                     >
                         {isSubmitting ? (
                             <>
@@ -926,7 +927,7 @@ export default function PublicApplicationForm() {
             <footer className="max-w-2xl mx-auto px-4 mt-12 text-center">
                 <a
                     href="/privacy"
-                    className="text-sm text-stone-500 hover:text-teal-600 underline underline-offset-2"
+                    className="text-sm text-stone-500 hover:text-primary underline underline-offset-2"
                 >
                     Privacy Policy
                 </a>

@@ -24,6 +24,9 @@ const severityConfig = {
     warn: { icon: AlertTriangleIcon, color: "text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30", badge: "warning" },
 } as const
 
+const isSeverityKey = (value: string): value is keyof typeof severityConfig =>
+    Object.prototype.hasOwnProperty.call(severityConfig, value)
+
 const alertTypeLabels: Record<string, string> = {
     meta_fetch_failed: "Meta Lead Fetch Failed",
     meta_convert_failed: "Meta Lead Conversion Failed",
@@ -37,7 +40,9 @@ export default function AlertsPage() {
     const [statusFilter, setStatusFilter] = useState<string>("open")
 
     const { data: summary, isLoading: summaryLoading, refetch: refetchSummary } = useAlertsSummary()
-    const { data: alertsData, isLoading: alertsLoading, refetch: refetchAlerts } = useAlerts({ status: statusFilter !== "all" ? statusFilter : undefined })
+    const { data: alertsData, isLoading: alertsLoading, refetch: refetchAlerts } = useAlerts(
+        statusFilter !== "all" ? { status: statusFilter } : {}
+    )
 
     const resolveAlert = useResolveAlert()
     const acknowledgeAlert = useAcknowledgeAlert()
@@ -159,7 +164,9 @@ export default function AlertsPage() {
                         ) : (
                             <div className="space-y-4">
                                 {alertsData?.items?.map((alert) => {
-                                    const config = severityConfig[alert.severity as keyof typeof severityConfig] || severityConfig.warn
+                                    const config = isSeverityKey(alert.severity)
+                                        ? severityConfig[alert.severity]
+                                        : severityConfig.warn
                                     const Icon = config.icon
 
                                     return (

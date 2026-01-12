@@ -25,7 +25,12 @@ const CATEGORY_ORDER = [
 
 export default function RoleDetailPage() {
     const params = useParams()
-    const role = params.role as string
+    const rawRole = params.role
+    const role = typeof rawRole === "string"
+        ? rawRole
+        : Array.isArray(rawRole)
+            ? rawRole[0] ?? ""
+            : ""
     const { data: roleDetail, isLoading } = useRoleDetail(role)
     const updatePermissions = useUpdateRolePermissions()
     const { user } = useAuth()
@@ -121,7 +126,7 @@ export default function RoleDetailPage() {
             </div>
 
             <div>
-                <h1 className="text-2xl font-bold flex items-center gap-2">
+                <h1 className="text-2xl font-semibold flex items-center gap-2">
                     <Shield className="size-6" />
                     {roleDetail.label} Permissions
                 </h1>
@@ -143,7 +148,7 @@ export default function RoleDetailPage() {
 
             <div className="space-y-6">
                 {sortedCategories.map((category) => {
-                    const permissions = roleDetail.permissions_by_category[category]
+                    const permissions = roleDetail.permissions_by_category[category] ?? []
 
                     return (
                         <Card key={category}>

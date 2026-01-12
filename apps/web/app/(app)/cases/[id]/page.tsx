@@ -27,7 +27,7 @@ import {
     CheckIcon,
     XIcon,
     TrashIcon,
-    LoaderIcon,
+    Loader2Icon,
     ArrowLeftIcon,
     SparklesIcon,
     MailIcon,
@@ -374,16 +374,17 @@ export default function CaseDetailPage() {
 
     const handleAddTask = async (data: CaseTaskFormData) => {
         const dueTime = data.due_time ? `${data.due_time}:00` : undefined
+        const buildPayload = (dueDate?: string) => ({
+            title: data.title,
+            task_type: data.task_type,
+            case_id: id,
+            ...(data.description ? { description: data.description } : {}),
+            ...(dueDate ? { due_date: dueDate } : {}),
+            ...(dueTime ? { due_time: dueTime } : {}),
+        })
 
         if (data.recurrence === "none") {
-            await createTaskMutation.mutateAsync({
-                title: data.title,
-                description: data.description,
-                task_type: data.task_type,
-                due_date: data.due_date,
-                due_time: dueTime,
-                case_id: id,
-            })
+            await createTaskMutation.mutateAsync(buildPayload(data.due_date))
             return
         }
 
@@ -395,19 +396,13 @@ export default function CaseDetailPage() {
         const end = parseISO(data.repeat_until)
         const dates = buildRecurringDates(start, end, data.recurrence)
 
-        if (dates.length >= MAX_TASK_OCCURRENCES && end > dates[dates.length - 1]) {
+        const lastDate = dates[dates.length - 1]
+        if (dates.length >= MAX_TASK_OCCURRENCES && lastDate && end > lastDate) {
             return
         }
 
         for (const date of dates) {
-            await createTaskMutation.mutateAsync({
-                title: data.title,
-                description: data.description,
-                task_type: data.task_type,
-                due_date: format(date, "yyyy-MM-dd"),
-                due_time: dueTime,
-                case_id: id,
-            })
+            await createTaskMutation.mutateAsync(buildPayload(format(date, "yyyy-MM-dd")))
         }
     }
 
@@ -446,7 +441,7 @@ export default function CaseDetailPage() {
     if (isLoading) {
         return (
             <div className="flex min-h-screen items-center justify-center">
-                <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
+                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                 <span className="ml-2 text-muted-foreground">Loading case...</span>
             </div>
         )
@@ -478,7 +473,7 @@ export default function CaseDetailPage() {
                         <ArrowLeftIcon className="mr-2 size-4" />
                         Back
                     </Button>
-                    <h1 className="text-lg font-semibold">Case #{caseData.case_number}</h1>
+                    <h1 className="text-xl font-semibold">Case #{caseData.case_number}</h1>
                     <Badge style={{ backgroundColor: statusColor, color: 'white' }}>{statusLabel}</Badge>
                     {caseData.is_archived && <Badge variant="secondary">Archived</Badge>}
                 </div>
@@ -618,7 +613,7 @@ export default function CaseDetailPage() {
                         <DropdownMenu>
                             <DropdownMenuTrigger className={cn(buttonVariants({ variant: "outline", size: "sm" }))} disabled={assignCaseMutation.isPending}>
                                 {assignCaseMutation.isPending ? (
-                                    <LoaderIcon className="size-4 mr-2 animate-spin" />
+                                    <Loader2Icon className="size-4 mr-2 animate-spin" />
                                 ) : null}
                                 Assign
                             </DropdownMenuTrigger>
@@ -1056,7 +1051,7 @@ export default function CaseDetailPage() {
                                             className="w-full"
                                         >
                                             {summarizeCaseMutation.isPending ? (
-                                                <><LoaderIcon className="h-4 w-4 mr-2 animate-spin" /> Generating...</>
+                                                <><Loader2Icon className="h-4 w-4 mr-2 animate-spin" /> Generating...</>
                                             ) : (
                                                 <><SparklesIcon className="h-4 w-4 mr-2" /> Generate Summary</>
                                             )}
@@ -1147,7 +1142,7 @@ export default function CaseDetailPage() {
                                             className="w-full"
                                         >
                                             {draftEmailMutation.isPending ? (
-                                                <><LoaderIcon className="h-4 w-4 mr-2 animate-spin" /> Drafting...</>
+                                                <><Loader2Icon className="h-4 w-4 mr-2 animate-spin" /> Drafting...</>
                                             ) : (
                                                 <><MailIcon className="h-4 w-4 mr-2" /> Draft Email</>
                                             )}
@@ -1453,11 +1448,11 @@ export default function CaseDetailPage() {
                                                 meeting_id: lastMeetingResult.meeting_id,
                                                 join_url: lastMeetingResult.join_url,
                                                 topic: zoomTopic,
-                                                start_time: lastMeetingResult.start_time || undefined,
                                                 duration: zoomDuration,
-                                                password: lastMeetingResult.password || undefined,
                                                 contact_name: caseData.full_name || 'there',
                                                 case_id: id,
+                                                ...(lastMeetingResult.start_time ? { start_time: lastMeetingResult.start_time } : {}),
+                                                ...(lastMeetingResult.password ? { password: lastMeetingResult.password } : {}),
                                             })
                                             setZoomDialogOpen(false)
                                             setLastMeetingResult(null)
@@ -1514,8 +1509,8 @@ export default function CaseDetailPage() {
                     full_name: caseData.full_name,
                     case_number: caseData.case_number,
                     status: caseData.status_label,
-                    state: caseData.state || undefined,
-                    phone: caseData.phone || undefined,
+                    ...(caseData.state ? { state: caseData.state } : {}),
+                    ...(caseData.phone ? { phone: caseData.phone } : {}),
                 }}
             />
 

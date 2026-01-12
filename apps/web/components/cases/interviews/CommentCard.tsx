@@ -324,13 +324,20 @@ export function CommentCard({
                 {note.replies && note.replies.length > 0 && (
                     <div className="pt-1">
                         {note.replies.map((reply) => (
-                            <ReplyItem
-                                key={reply.id}
-                                reply={reply}
-                                canEdit={canEdit}
-                                onDelete={() => onDeleteReply(reply.id)}
-                                onEdit={onEditReply ? (content) => onEditReply(reply.id, content) : undefined}
-                            />
+                            (() => {
+                                const onEdit = onEditReply
+                                    ? (content: string) => onEditReply(reply.id, content)
+                                    : undefined
+                                return (
+                                    <ReplyItem
+                                        key={reply.id}
+                                        reply={reply}
+                                        canEdit={canEdit}
+                                        onDelete={() => onDeleteReply(reply.id)}
+                                        {...(onEdit ? { onEdit } : {})}
+                                    />
+                                )
+                            })()
                         ))}
                     </div>
                 )}

@@ -46,6 +46,7 @@ function StageEditor({
 
         const newStages = [...stages]
         const [removed] = newStages.splice(dragIndex, 1)
+        if (!removed) return
         newStages.splice(targetIndex, 0, removed)
 
         // Recompute order field based on new positions (1-indexed)
@@ -64,7 +65,9 @@ function StageEditor({
 
     const updateStage = (index: number, field: "label" | "color", value: string) => {
         const newStages = [...stages]
-        newStages[index] = { ...newStages[index], [field]: value }
+        const currentStage = newStages[index]
+        if (!currentStage) return
+        newStages[index] = { ...currentStage, [field]: value }
         onChange(newStages)
     }
 
@@ -290,7 +293,7 @@ export default function PipelinesSettingsPage() {
         <div className="flex flex-1 flex-col gap-6 p-6 max-w-5xl mx-auto">
             {/* Header */}
             <div>
-                <h1 className="text-2xl font-bold">Pipeline Settings</h1>
+                <h1 className="text-2xl font-semibold">Pipeline Settings</h1>
                 <p className="text-sm text-muted-foreground">
                     Configure case stages and their display order
                 </p>
@@ -382,10 +385,8 @@ export default function PipelinesSettingsPage() {
                                 {currentStages.map((stage) => (
                                     <Badge
                                         key={stage.id}
-                                        style={{
-                                            backgroundColor: stage.color,
-                                            color: '#fff'
-                                        }}
+                                        className="text-white"
+                                        style={{ backgroundColor: stage.color }}
                                     >
                                         {stage.label}
                                     </Badge>

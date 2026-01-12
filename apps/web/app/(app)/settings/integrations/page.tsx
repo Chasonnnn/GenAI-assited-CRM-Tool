@@ -64,8 +64,12 @@ const integrationTypeConfig: Record<string, { icon: typeof FacebookIcon; label: 
 // AI provider options
 const AI_PROVIDERS = [
     { value: "openai", label: "OpenAI", models: ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"] },
-    { value: "gemini", label: "Google Gemini", models: ["gemini-3-flash-preview", "gemini-2.0-flash-exp", "gemini-1.5-pro"] },
-]
+    {
+        value: "gemini",
+        label: "Google Gemini",
+        models: ["gemini-3-flash-preview", "gemini-2.0-flash-exp", "gemini-1.5-pro"],
+    },
+] as const
 
 function AIConfigurationSection() {
     const { data: aiSettings, isLoading } = useAISettings()
@@ -73,7 +77,11 @@ function AIConfigurationSection() {
     const testKey = useTestAPIKey()
 
     const [isEnabled, setIsEnabled] = useState(false)
-    const [provider, setProvider] = useState<"openai" | "gemini">("openai")
+    type AiProvider = (typeof AI_PROVIDERS)[number]["value"]
+    const isAiProvider = (value: string | null | undefined): value is AiProvider =>
+        AI_PROVIDERS.some((providerOption) => providerOption.value === value)
+
+    const [provider, setProvider] = useState<AiProvider>("openai")
     const [apiKey, setApiKey] = useState("")
     const [model, setModel] = useState("")
     const [keyTested, setKeyTested] = useState<boolean | null>(null)
@@ -83,12 +91,18 @@ function AIConfigurationSection() {
     useEffect(() => {
         if (aiSettings) {
             setIsEnabled(aiSettings.is_enabled)
-            setProvider((aiSettings.provider as "openai" | "gemini") || "openai")
+            if (isAiProvider(aiSettings.provider)) {
+                setProvider(aiSettings.provider)
+            } else {
+                setProvider("openai")
+            }
             setModel(aiSettings.model || "")
         }
     }, [aiSettings])
 
-    const selectedProviderModels = AI_PROVIDERS.find(p => p.value === provider)?.models || []
+    const selectedProviderModels =
+        AI_PROVIDERS.find((providerOption) => providerOption.value === provider)?.models ??
+        []
 
     const handleTestKey = async () => {
         if (!apiKey.trim()) return
@@ -170,7 +184,9 @@ function AIConfigurationSection() {
                         <Label htmlFor="ai-provider">AI Provider</Label>
                         <Select value={provider} onValueChange={(v) => {
                             if (v) {
-                                setProvider(v as "openai" | "gemini")
+                                if (isAiProvider(v)) {
+                                    setProvider(v)
+                                }
                                 setModel("") // Reset model when provider changes
                                 setKeyTested(null)
                             }
@@ -474,7 +490,9 @@ export default function IntegrationsPage() {
                                 description: "Custom integration",
                             }
                             const status = statusConfig[integration.status] || statusConfig.error
-                            const configStatus = configStatusLabels[integration.config_status] || configStatusLabels.configured
+                            const configStatus = configStatusLabels[integration.config_status]
+                                ?? configStatusLabels.configured
+                                ?? { label: "Configured", variant: "default" as const }
                             const Icon = typeConfig.icon
                             const StatusIcon = status.icon
 

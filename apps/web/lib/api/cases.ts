@@ -3,6 +3,7 @@
  */
 
 import api from './index';
+import type { JsonObject } from '../types/json';
 import type {
     CaseListResponse,
     CaseRead,
@@ -311,7 +312,7 @@ export interface CaseActivity {
     activity_type: string;
     actor_user_id: string | null;
     actor_name: string | null;
-    details: Record<string, unknown> | null;
+    details: JsonObject | null;
     created_at: string;
 }
 

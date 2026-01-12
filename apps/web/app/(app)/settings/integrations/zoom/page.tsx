@@ -45,7 +45,7 @@ export default function ZoomSettingsPage() {
                         <VideoIcon className="size-5 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold">Zoom Integration</h1>
+                        <h1 className="text-2xl font-semibold">Zoom Integration</h1>
                         <p className="text-sm text-muted-foreground">Manage your Zoom connection and view appointment history</p>
                     </div>
                 </div>

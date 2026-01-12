@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import {
     ArrowLeftIcon,
-    LoaderIcon,
+    Loader2Icon,
     MoreVerticalIcon,
     MailIcon,
     PhoneIcon,
@@ -154,15 +154,18 @@ export default function IntendedParentDetailPage() {
     }
 
     const handleSave = async () => {
+        const phone = formData.phone.trim()
+        const state = formData.state.trim()
+        const notesInternal = formData.notes_internal.trim()
         await updateMutation.mutateAsync({
             id,
             data: {
                 full_name: formData.full_name,
                 email: formData.email,
-                phone: formData.phone || undefined,
-                state: formData.state || undefined,
-                budget: formData.budget ? parseFloat(formData.budget) : undefined,
-                notes_internal: formData.notes_internal || undefined,
+                ...(phone ? { phone } : {}),
+                ...(state ? { state } : {}),
+                ...(formData.budget ? { budget: parseFloat(formData.budget) } : {}),
+                ...(notesInternal ? { notes_internal: notesInternal } : {}),
             },
         })
         setIsEditOpen(false)
@@ -199,7 +202,7 @@ export default function IntendedParentDetailPage() {
     if (isLoading) {
         return (
             <div className="flex min-h-screen items-center justify-center">
-                <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
             </div>
         )
     }
@@ -226,7 +229,7 @@ export default function IntendedParentDetailPage() {
                             <ArrowLeftIcon className="size-5" />
                         </Link>
                         <div>
-                            <h1 className="text-xl font-semibold">{ip.full_name}</h1>
+                            <h1 className="text-2xl font-semibold">{ip.full_name}</h1>
                             <p className="text-sm text-muted-foreground">{ip.email}</p>
                         </div>
                     </div>
@@ -522,7 +525,7 @@ export default function IntendedParentDetailPage() {
                             onClick={handleSave}
                             disabled={updateMutation.isPending}
                         >
-                            {updateMutation.isPending && <LoaderIcon className="mr-2 size-4 animate-spin" />}
+                            {updateMutation.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
                             Save Changes
                         </Button>
                     </DialogFooter>

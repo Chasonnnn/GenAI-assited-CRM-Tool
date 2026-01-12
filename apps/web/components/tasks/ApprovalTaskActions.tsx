@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { CheckIcon, XIcon, LoaderIcon } from "lucide-react"
+import { CheckIcon, XIcon, Loader2Icon } from "lucide-react"
 import { useResolveWorkflowApproval } from "@/lib/hooks/use-tasks"
 
 interface ApprovalTaskActionsProps {
@@ -51,7 +51,7 @@ export function ApprovalTaskActions({
         await resolveApproval.mutateAsync({
             taskId,
             decision: "deny",
-            reason: denyReason || undefined,
+            ...(denyReason.trim() ? { reason: denyReason.trim() } : {}),
         })
         setShowDenyDialog(false)
         setDenyReason("")
@@ -79,7 +79,7 @@ export function ApprovalTaskActions({
                     disabled={disabled || isPending}
                 >
                     {isPending ? (
-                        <LoaderIcon className="mr-1 size-4 animate-spin" />
+                        <Loader2Icon className="mr-1 size-4 animate-spin" />
                     ) : (
                         <CheckIcon className="mr-1 size-4" />
                     )}
@@ -129,7 +129,7 @@ export function ApprovalTaskActions({
                             onClick={handleDeny}
                             disabled={isPending}
                         >
-                            {isPending && <LoaderIcon className="mr-1 size-4 animate-spin" />}
+                            {isPending && <Loader2Icon className="mr-1 size-4 animate-spin" />}
                             Deny
                         </Button>
                     </DialogFooter>

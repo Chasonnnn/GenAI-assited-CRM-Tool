@@ -43,6 +43,7 @@ function ButtonGroupText({
   render,
   ...props
 }: useRender.ComponentProps<"div">) {
+  const renderProp = render === undefined ? {} : { render }
   return useRender({
     defaultTagName: "div",
     props: mergeProps<"div">(
@@ -54,10 +55,10 @@ function ButtonGroupText({
       },
       props
     ),
-    render,
     state: {
       slot: "button-group-text",
     },
+    ...renderProp,
   })
 }
 

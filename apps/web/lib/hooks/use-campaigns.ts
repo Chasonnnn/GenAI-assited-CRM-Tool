@@ -48,8 +48,8 @@ export const campaignKeys = {
 
 export function useCampaigns(status?: string) {
     return useQuery({
-        queryKey: campaignKeys.list({ status }),
-        queryFn: () => listCampaigns({ status }),
+        queryKey: campaignKeys.list(status ? { status } : undefined),
+        queryFn: () => (status ? listCampaigns({ status }) : listCampaigns()),
     });
 }
 

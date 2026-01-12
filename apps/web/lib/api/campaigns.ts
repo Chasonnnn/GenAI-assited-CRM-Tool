@@ -162,13 +162,16 @@ export async function deleteCampaign(id: string): Promise<void> {
 
 export async function duplicateCampaign(id: string): Promise<Campaign> {
     const original = await getCampaign(id)
-    return createCampaign({
+    const payload: CampaignCreate = {
         name: `${original.name} (Copy)`,
-        description: original.description || undefined,
         email_template_id: original.email_template_id,
         recipient_type: original.recipient_type as "case" | "intended_parent",
         filter_criteria: original.filter_criteria,
-    })
+    }
+    if (original.description) {
+        payload.description = original.description
+    }
+    return createCampaign(payload)
 }
 
 // Preview & Send

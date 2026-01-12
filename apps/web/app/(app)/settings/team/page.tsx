@@ -491,7 +491,7 @@ export default function TeamSettingsPage() {
         <div className="flex flex-1 flex-col gap-6 p-6 max-w-5xl mx-auto">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold">Team Management</h1>
+                    <h1 className="text-2xl font-semibold">Team Management</h1>
                     <p className="text-sm text-muted-foreground">
                         Manage team members, roles, and permissions
                     </p>

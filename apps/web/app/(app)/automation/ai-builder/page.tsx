@@ -10,7 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
     WandIcon,
     ZapIcon,
-    LoaderIcon,
+    Loader2Icon,
     CheckCircleIcon,
     AlertTriangleIcon,
     XCircleIcon,
@@ -138,7 +138,7 @@ export default function AIWorkflowBuilderPage() {
                         <div>
                             <div className="flex items-center gap-3">
                                 <SparklesIcon className="size-6 text-teal-500" />
-                                <h1 className="text-2xl font-bold">AI Workflow Builder</h1>
+                                <h1 className="text-2xl font-semibold">AI Workflow Builder</h1>
                                 <Badge variant="secondary" className="bg-teal-500/10 text-teal-500 border-teal-500/20">
                                     Beta
                                 </Badge>
@@ -197,7 +197,7 @@ export default function AIWorkflowBuilderPage() {
                             >
                                 {isGenerating ? (
                                     <>
-                                        <LoaderIcon className="size-4 animate-spin" />
+                                        <Loader2Icon className="size-4 animate-spin" />
                                         Generating...
                                     </>
                                 ) : (
@@ -344,7 +344,7 @@ export default function AIWorkflowBuilderPage() {
                                     <Button onClick={handleSave} disabled={isSaving}>
                                         {isSaving ? (
                                             <>
-                                                <LoaderIcon className="size-4 animate-spin mr-2" />
+                                                <Loader2Icon className="size-4 animate-spin mr-2" />
                                                 Saving...
                                             </>
                                         ) : (

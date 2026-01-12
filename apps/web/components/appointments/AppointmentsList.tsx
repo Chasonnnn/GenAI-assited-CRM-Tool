@@ -33,7 +33,7 @@ import {
     MailIcon,
     VideoIcon,
     MapPinIcon,
-    LoaderIcon,
+    Loader2Icon,
     AlertCircleIcon,
     ChevronRightIcon,
 } from "lucide-react"
@@ -140,7 +140,7 @@ function AppointmentCard({
                             className="bg-green-600 hover:bg-green-700"
                         >
                             {isApproving ? (
-                                <LoaderIcon className="size-4 animate-spin" />
+                                <Loader2Icon className="size-4 animate-spin" />
                             ) : (
                                 <CheckIcon className="size-4" />
                             )}
@@ -154,7 +154,7 @@ function AppointmentCard({
                             className="text-destructive border-destructive/30 hover:bg-destructive/10"
                         >
                             {isCancelling ? (
-                                <LoaderIcon className="size-4 animate-spin" />
+                                <Loader2Icon className="size-4 animate-spin" />
                             ) : (
                                 <XIcon className="size-4" />
                             )}
@@ -198,10 +198,11 @@ function AppointmentDetailDialog({
     }
 
     const handleCancel = () => {
-        cancelMutation.mutate(
-            { appointmentId, reason: cancelReason || undefined },
-            { onSuccess: () => onOpenChange(false) }
-        )
+        const payload = {
+            appointmentId,
+            ...(cancelReason.trim() ? { reason: cancelReason.trim() } : {}),
+        }
+        cancelMutation.mutate(payload, { onSuccess: () => onOpenChange(false) })
     }
 
     if (isLoading) {
@@ -209,7 +210,7 @@ function AppointmentDetailDialog({
             <Dialog open={open} onOpenChange={onOpenChange}>
                 <DialogContent>
                     <div className="py-12 flex items-center justify-center">
-                        <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+                        <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
                     </div>
                 </DialogContent>
             </Dialog>
@@ -327,7 +328,7 @@ function AppointmentDetailDialog({
                                     onClick={handleCancel}
                                     disabled={cancelMutation.isPending}
                                 >
-                                    {cancelMutation.isPending && <LoaderIcon className="size-4 mr-2 animate-spin" />}
+                                    {cancelMutation.isPending && <Loader2Icon className="size-4 mr-2 animate-spin" />}
                                     Confirm Cancel
                                 </Button>
                             </>
@@ -345,7 +346,7 @@ function AppointmentDetailDialog({
                                     disabled={approveMutation.isPending}
                                     className="bg-green-600 hover:bg-green-700"
                                 >
-                                    {approveMutation.isPending && <LoaderIcon className="size-4 mr-2 animate-spin" />}
+                                    {approveMutation.isPending && <Loader2Icon className="size-4 mr-2 animate-spin" />}
                                     Approve
                                 </Button>
                             </>
@@ -402,7 +403,7 @@ function AppointmentsTabContent({
     if (isLoading) {
         return (
             <div className="py-12 flex items-center justify-center">
-                <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
             </div>
         )
     }
@@ -414,31 +415,31 @@ function AppointmentsTabContent({
     return (
         <>
             <div className="space-y-3">
-                {data.items.map((appt) => (
-                    <AppointmentCard
-                        key={appt.id}
-                        appointment={appt}
-                        onSelect={() => {
-                            setSelectedId(appt.id)
-                            setDialogOpen(true)
-                        }}
-                        onApprove={
-                            status === "pending"
-                                ? () => approveMutation.mutate(appt.id)
-                                : undefined
-                        }
-                        onCancel={
-                            status === "pending"
-                                ? () => cancelMutation.mutate({ appointmentId: appt.id })
-                                : undefined
-                        }
-                        isApproving={approveMutation.isPending && approveMutation.variables === appt.id}
-                        isCancelling={
-                            cancelMutation.isPending &&
-                            cancelMutation.variables?.appointmentId === appt.id
-                        }
-                    />
-                ))}
+                {data.items.map((appt) => {
+                    const onApprove = status === "pending"
+                        ? () => approveMutation.mutate(appt.id)
+                        : undefined
+                    const onCancel = status === "pending"
+                        ? () => cancelMutation.mutate({ appointmentId: appt.id })
+                        : undefined
+                    return (
+                        <AppointmentCard
+                            key={appt.id}
+                            appointment={appt}
+                            onSelect={() => {
+                                setSelectedId(appt.id)
+                                setDialogOpen(true)
+                            }}
+                            isApproving={approveMutation.isPending && approveMutation.variables === appt.id}
+                            isCancelling={
+                                cancelMutation.isPending &&
+                                cancelMutation.variables?.appointmentId === appt.id
+                            }
+                            {...(onApprove ? { onApprove } : {})}
+                            {...(onCancel ? { onCancel } : {})}
+                        />
+                    )
+                })}
             </div>
 
             <AppointmentDetailDialog

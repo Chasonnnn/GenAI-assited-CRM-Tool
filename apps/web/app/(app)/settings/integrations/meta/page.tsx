@@ -58,9 +58,9 @@ export default function MetaLeadsAdminPage() {
         try {
             await createMutation.mutateAsync({
                 page_id: pageId,
-                page_name: pageName || undefined,
                 access_token: accessToken,
                 expires_days: parseInt(expiresDays),
+                ...(pageName.trim() ? { page_name: pageName.trim() } : {}),
             })
 
             // Reset form

@@ -63,6 +63,7 @@ function Item({
   render,
   ...props
 }: useRender.ComponentProps<"div"> & VariantProps<typeof itemVariants>) {
+  const renderProp = render === undefined ? {} : { render }
   return useRender({
     defaultTagName: "div",
     props: mergeProps<"div">(
@@ -71,12 +72,12 @@ function Item({
       },
       props
     ),
-    render,
     state: {
       slot: "item",
       variant,
       size,
     },
+    ...renderProp,
   })
 }
 

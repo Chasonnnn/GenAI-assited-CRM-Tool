@@ -36,7 +36,7 @@ import {
     ClockIcon,
     ZapIcon,
     FileTextIcon,
-    LoaderIcon,
+    Loader2Icon,
     AlertCircleIcon,
 } from "lucide-react"
 import {
@@ -56,6 +56,7 @@ import type { WorkflowListItem, Condition, ActionConfig, WorkflowCreate, Workflo
 import { useCreateEmailTemplate, useUpdateEmailTemplate, useDeleteEmailTemplate } from "@/lib/hooks/use-email-templates"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
 import { parseDateInput } from "@/lib/utils/date"
+import type { JsonObject, JsonValue } from "@/lib/types/json"
 
 // Icon mapping for trigger types
 const triggerIcons: Record<string, React.ElementType> = {
@@ -138,7 +139,7 @@ export default function AutomationPage() {
     const [workflowName, setWorkflowName] = useState("")
     const [workflowDescription, setWorkflowDescription] = useState("")
     const [triggerType, setTriggerType] = useState("")
-    const [triggerConfig, setTriggerConfig] = useState<Record<string, unknown>>({})
+    const [triggerConfig, setTriggerConfig] = useState<JsonObject>({})
     const [conditions, setConditions] = useState<Condition[]>([])
     const [conditionLogic, setConditionLogic] = useState<"AND" | "OR">("AND")
     const [actions, setActions] = useState<ActionConfig[]>([])
@@ -319,13 +320,13 @@ export default function AutomationPage() {
 
         const data: WorkflowCreate = {
             name: workflowName,
-            description: workflowDescription || undefined,
             trigger_type: triggerType,
             trigger_config: triggerConfig,
             conditions,
             condition_logic: conditionLogic,
             actions,
             is_enabled: true,
+            ...(workflowDescription ? { description: workflowDescription } : {}),
         }
 
         if (editingWorkflowId) {
@@ -359,8 +360,18 @@ export default function AutomationPage() {
         setActions(actions.filter((_, i) => i !== index))
     }
 
+    const mergeActionConfig = (action: ActionConfig, updates: Partial<ActionConfig>): ActionConfig => {
+        const next: ActionConfig = { ...action }
+        for (const [key, value] of Object.entries(updates)) {
+            if (value !== undefined) {
+                next[key] = value as JsonValue
+            }
+        }
+        return next
+    }
+
     const updateAction = (index: number, updates: Partial<ActionConfig>) => {
-        setActions(actions.map((a, i) => i === index ? { ...a, ...updates } : a))
+        setActions(actions.map((a, i) => i === index ? mergeActionConfig(a, updates) : a))
     }
 
     // Email template handlers (preserved)
@@ -432,7 +443,7 @@ export default function AutomationPage() {
                                 <CardTitle className="text-sm font-medium text-muted-foreground">Total Workflows</CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-3xl font-bold">
+                                <div className="text-2xl font-bold">
                                     {statsLoading ? "-" : stats?.total_workflows ?? 0}
                                 </div>
                             </CardContent>
@@ -443,7 +454,7 @@ export default function AutomationPage() {
                                 <CardTitle className="text-sm font-medium text-muted-foreground">Enabled</CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-3xl font-bold">
+                                <div className="text-2xl font-bold">
                                     {statsLoading ? "-" : stats?.enabled_workflows ?? 0}
                                 </div>
                             </CardContent>
@@ -455,7 +466,7 @@ export default function AutomationPage() {
                             </CardHeader>
                             <CardContent>
                                 <div className="flex items-baseline gap-2">
-                                    <div className="text-3xl font-bold">
+                                    <div className="text-2xl font-bold">
                                         {statsLoading ? "-" : `${stats?.success_rate_24h?.toFixed(1) ?? 0}%`}
                                     </div>
                                     {stats?.success_rate_24h && stats.success_rate_24h > 95 && (
@@ -473,7 +484,7 @@ export default function AutomationPage() {
                                 <CardTitle className="text-sm font-medium text-muted-foreground">Executions 24h</CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-3xl font-bold">
+                                <div className="text-2xl font-bold">
                                     {statsLoading ? "-" : stats?.total_executions_24h ?? 0}
                                 </div>
                             </CardContent>
@@ -486,7 +497,7 @@ export default function AutomationPage() {
 
                         {workflowsLoading ? (
                             <div className="flex items-center justify-center py-12">
-                                <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
+                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                             </div>
                         ) : !workflows?.length ? (
                             <Card>
@@ -586,7 +597,7 @@ export default function AutomationPage() {
                     {/* Step Progress */}
                     <div className="flex items-center justify-between w-full">
                         {[1, 2, 3, 4].map((step, index) => (
-                            <div key={step} className="flex items-center" style={{ flex: index < 3 ? 1 : 'none' }}>
+                            <div key={step} className={`flex items-center ${index < 3 ? 'flex-1' : 'flex-none'}`}>
                                 <div
                                     className={`flex size-8 items-center justify-center rounded-full text-sm font-medium ${step === wizardStep
                                         ? "bg-teal-500 text-white"
@@ -931,7 +942,7 @@ export default function AutomationPage() {
                                 disabled={!!workflowValidationError || createWorkflow.isPending || updateWorkflow.isPending}
                             >
                                 {(createWorkflow.isPending || updateWorkflow.isPending) ? (
-                                    <LoaderIcon className="mr-2 size-4 animate-spin" />
+                                    <Loader2Icon className="mr-2 size-4 animate-spin" />
                                 ) : null}
                                 {editingWorkflowId ? "Save Changes" : "Create Workflow"}
                             </Button>
@@ -995,7 +1006,7 @@ export default function AutomationPage() {
                         </Button>
                         <Button onClick={handleSaveTemplate} disabled={createTemplate.isPending || updateTemplate.isPending}>
                             {(createTemplate.isPending || updateTemplate.isPending) && (
-                                <LoaderIcon className="mr-2 size-4 animate-spin" />
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
                             )}
                             {editingTemplate ? "Save Changes" : "Create Template"}
                         </Button>
@@ -1137,7 +1148,7 @@ export default function AutomationPage() {
                             disabled={!testCaseId || testWorkflowMutation.isPending}
                         >
                             {testWorkflowMutation.isPending ? (
-                                <LoaderIcon className="mr-2 size-4 animate-spin" />
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
                             ) : null}
                             Run Test
                         </Button>

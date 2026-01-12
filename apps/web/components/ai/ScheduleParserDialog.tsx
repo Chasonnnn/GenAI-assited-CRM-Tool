@@ -32,7 +32,7 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { LoaderIcon, SparklesIcon, AlertTriangleIcon, CheckCircle2Icon } from "lucide-react"
+import { Loader2Icon, SparklesIcon, AlertTriangleIcon, CheckCircle2Icon } from "lucide-react"
 import { useParseSchedule, useCreateBulkTasks } from "@/lib/hooks/use-schedule-parser"
 import type { ProposedTask } from "@/lib/api/schedule-parser"
 
@@ -396,7 +396,7 @@ Medication Schedule:
                                 onClick={handleParse}
                                 disabled={!scheduleText.trim() || parseSchedule.isPending}
                             >
-                                {parseSchedule.isPending && <LoaderIcon className="mr-2 size-4 animate-spin" />}
+                                {parseSchedule.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
                                 Parse Schedule
                             </Button>
                         </>
@@ -411,7 +411,7 @@ Medication Schedule:
                                 onClick={handleCreateTasks}
                                 disabled={selectedCount === 0 || createBulkTasks.isPending}
                             >
-                                {createBulkTasks.isPending && <LoaderIcon className="mr-2 size-4 animate-spin" />}
+                                {createBulkTasks.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
                                 Create {selectedCount} Task{selectedCount !== 1 ? "s" : ""}
                             </Button>
                         </>

@@ -18,9 +18,14 @@ interface RecipientPreviewCardProps {
 function getInitials(name: string | null, email: string): string {
     if (name) {
         const parts = name.split(" ")
-        return parts.length > 1
-            ? `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
-            : name.slice(0, 2).toUpperCase()
+        if (parts.length > 1) {
+            const first = parts[0] ?? ""
+            const last = parts[parts.length - 1] ?? ""
+            const firstInitial = first[0] ?? ""
+            const lastInitial = last[0] ?? ""
+            return `${firstInitial}${lastInitial}`.toUpperCase()
+        }
+        return name.slice(0, 2).toUpperCase()
     }
     return email.slice(0, 2).toUpperCase()
 }

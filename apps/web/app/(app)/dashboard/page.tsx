@@ -9,7 +9,7 @@ import {
   UsersIcon,
   TrendingUpIcon,
   TrendingDownIcon,
-  LoaderIcon,
+  Loader2Icon,
   AlertCircleIcon,
 } from "lucide-react"
 import { useMemo, useState } from "react"
@@ -33,14 +33,20 @@ function isOverdue(dueDate: string | null): boolean {
 // Get user's first name
 function getFirstName(displayName: string | undefined): string {
   if (!displayName) return 'there'
-  return displayName.split(' ')[0]
+  const [firstName] = displayName.split(' ')
+  return firstName || displayName
 }
 
 export default function DashboardPage() {
   const { user } = useAuth()
   const { data: stats, isLoading: statsLoading, isError: statsError, refetch: refetchStats } = useCaseStats()
   const { data: tasksData, isLoading: tasksLoading, isError: tasksError, refetch: refetchTasks } = useTasks({ my_tasks: true, is_completed: false, per_page: 5, exclude_approvals: true })
-  const [trendPeriod, setTrendPeriod] = useState<'day' | 'week' | 'month'>('day')
+  const TREND_PERIODS = ["day", "week", "month"] as const
+  type TrendPeriod = (typeof TREND_PERIODS)[number]
+  const isTrendPeriod = (value: string | null): value is TrendPeriod =>
+    value === "day" || value === "week" || value === "month"
+
+  const [trendPeriod, setTrendPeriod] = useState<TrendPeriod>('day')
   const { data: trendData, isLoading: trendLoading, isError: trendError, refetch: refetchTrend } = useCasesTrend({ period: trendPeriod })
   const { data: statusData, isLoading: statusLoading, isError: statusError, refetch: refetchStatus } = useCasesByStatus()
   const { data: defaultPipeline } = useDefaultPipeline()
@@ -110,7 +116,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {statsLoading ? (
-              <LoaderIcon className="h-6 w-6 animate-spin text-muted-foreground" />
+              <Loader2Icon className="h-6 w-6 animate-spin text-muted-foreground" />
             ) : statsError ? (
               <div className="flex items-center justify-between text-xs text-destructive">
                 <div className="flex items-center">
@@ -157,7 +163,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {statsLoading ? (
-              <LoaderIcon className="h-6 w-6 animate-spin text-muted-foreground" />
+              <Loader2Icon className="h-6 w-6 animate-spin text-muted-foreground" />
             ) : statsError ? (
               <div className="flex items-center justify-between text-xs text-destructive">
                 <div className="flex items-center">
@@ -199,7 +205,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {statsLoading ? (
-              <LoaderIcon className="h-6 w-6 animate-spin text-muted-foreground" />
+              <Loader2Icon className="h-6 w-6 animate-spin text-muted-foreground" />
             ) : statsError ? (
               <div className="flex items-center justify-between text-xs text-destructive">
                 <div className="flex items-center">
@@ -239,7 +245,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {tasksLoading ? (
-              <LoaderIcon className="h-6 w-6 animate-spin text-muted-foreground" />
+              <Loader2Icon className="h-6 w-6 animate-spin text-muted-foreground" />
             ) : tasksError ? (
               <div className="flex items-center justify-between text-xs text-destructive">
                 <div className="flex items-center">
@@ -278,7 +284,14 @@ export default function DashboardPage() {
                 {trendPeriod === 'day' ? 'Daily' : trendPeriod === 'week' ? 'Weekly' : 'Monthly'} new cases
               </CardDescription>
             </div>
-            <Select value={trendPeriod} onValueChange={(v) => v && setTrendPeriod(v as 'day' | 'week' | 'month')}>
+            <Select
+              value={trendPeriod}
+              onValueChange={(value) => {
+                if (isTrendPeriod(value)) {
+                  setTrendPeriod(value)
+                }
+              }}
+            >
               <SelectTrigger className="w-28" size="sm">
                 <SelectValue>
                   {(value: string | null) => {
@@ -297,7 +310,7 @@ export default function DashboardPage() {
           <CardContent className="pb-4">
             {trendLoading ? (
               <div className="flex items-center justify-center h-[280px]">
-                <LoaderIcon className="h-8 w-8 animate-spin text-muted-foreground" />
+                <Loader2Icon className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             ) : trendError ? (
               <div className="flex flex-col items-center justify-center h-[280px] text-destructive gap-2">
@@ -362,7 +375,7 @@ export default function DashboardPage() {
           <CardContent className="pb-4">
             {statusLoading ? (
               <div className="flex items-center justify-center h-[280px]">
-                <LoaderIcon className="h-8 w-8 animate-spin text-muted-foreground" />
+                <Loader2Icon className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             ) : statusError ? (
               <div className="flex flex-col items-center justify-center h-[280px] text-destructive gap-2">

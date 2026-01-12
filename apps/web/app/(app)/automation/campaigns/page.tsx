@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
     AlertDialog,
@@ -49,7 +50,7 @@ import {
     SendIcon,
     CopyIcon,
     TrashIcon,
-    LoaderIcon,
+    Loader2Icon,
     ArrowLeftIcon,
     CalendarIcon,
     EyeIcon,
@@ -69,6 +70,7 @@ import { useEmailTemplates } from "@/lib/hooks/use-email-templates"
 import { getDefaultPipeline } from "@/lib/api/pipelines"
 import { useQuery } from "@tanstack/react-query"
 import { RecipientPreviewCard } from "@/components/recipient-preview-card"
+import { US_STATES } from "@/lib/constants/us-states"
 
 // Status badge styles
 const statusStyles: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; className?: string }> = {
@@ -240,7 +242,7 @@ export default function CampaignsPage() {
                             </Button>
                         </Link>
                         <div>
-                            <h1 className="text-2xl font-bold">Campaigns</h1>
+                            <h1 className="text-2xl font-semibold">Campaigns</h1>
                             <p className="text-sm text-muted-foreground">
                                 Send targeted emails to groups of cases
                             </p>
@@ -268,7 +270,7 @@ export default function CampaignsPage() {
                     <TabsContent value={statusFilter || "all"} className="space-y-4">
                         {isLoading ? (
                             <div className="flex items-center justify-center py-12">
-                                <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+                                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
                             </div>
                         ) : filteredCampaigns.length === 0 ? (
                             <Card>
@@ -588,6 +590,34 @@ export default function CampaignsPage() {
                                         ))}
                                     </div>
                                 </div>
+                                <div className="space-y-2">
+                                    <Label>Filter by State (optional)</Label>
+                                    <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
+                                        {US_STATES.map((state) => (
+                                            <div key={state.value} className="flex items-center space-x-2">
+                                                <Checkbox
+                                                    id={`state-${state.value}`}
+                                                    checked={selectedStates.includes(state.value)}
+                                                    onCheckedChange={(checked) => {
+                                                        if (checked) {
+                                                            setSelectedStates([...selectedStates, state.value])
+                                                        } else {
+                                                            setSelectedStates(selectedStates.filter((s) => s !== state.value))
+                                                        }
+                                                    }}
+                                                />
+                                                <Label htmlFor={`state-${state.value}`} className="text-sm cursor-pointer">
+                                                    {state.label}
+                                                </Label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {selectedStates.length > 0 && (
+                                        <p className="text-xs text-muted-foreground">
+                                            {selectedStates.length} state{selectedStates.length !== 1 ? "s" : ""} selected
+                                        </p>
+                                    )}
+                                </div>
                                 <Card className="bg-muted/50">
                                     <CardContent className="py-4">
                                         <p className="text-sm text-muted-foreground">
@@ -632,6 +662,21 @@ export default function CampaignsPage() {
                                                 </div>
                                             </div>
                                         )}
+                                        {selectedStates.length > 0 && (
+                                            <div className="flex justify-between items-start">
+                                                <span className="text-muted-foreground">Filtered by State:</span>
+                                                <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
+                                                    {selectedStates.map((stateCode) => {
+                                                        const state = US_STATES.find(s => s.value === stateCode)
+                                                        return state ? (
+                                                            <Badge key={stateCode} variant="secondary" className="text-xs">
+                                                                {state.label}
+                                                            </Badge>
+                                                        ) : null
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
                                     </CardContent>
                                 </Card>
                             </div>
@@ -666,28 +711,24 @@ export default function CampaignsPage() {
 
                                 <div className="space-y-2">
                                     <Label>When to send?</Label>
-                                    <div className="flex gap-4">
+                                    <RadioGroup
+                                        value={scheduleFor}
+                                        onValueChange={(value) => {
+                                            if (isScheduleFor(value)) {
+                                                setScheduleFor(value)
+                                            }
+                                        }}
+                                        className="flex gap-4"
+                                    >
                                         <label className="flex items-center gap-2 cursor-pointer">
-                                            <input
-                                                type="radio"
-                                                name="schedule"
-                                                checked={scheduleFor === "now"}
-                                                onChange={() => setScheduleFor("now")}
-                                                className="accent-primary"
-                                            />
+                                            <RadioGroupItem value="now" />
                                             <span>Send now</span>
                                         </label>
                                         <label className="flex items-center gap-2 cursor-pointer">
-                                            <input
-                                                type="radio"
-                                                name="schedule"
-                                                checked={scheduleFor === "later"}
-                                                onChange={() => setScheduleFor("later")}
-                                                className="accent-primary"
-                                            />
+                                            <RadioGroupItem value="later" />
                                             <span>Schedule for later</span>
                                         </label>
-                                    </div>
+                                    </RadioGroup>
                                 </div>
 
                                 {scheduleFor === "later" && (
@@ -753,7 +794,7 @@ export default function CampaignsPage() {
                                 }
                             >
                                 {createCampaign.isPending || sendCampaign.isPending ? (
-                                    <LoaderIcon className="size-4 animate-spin" />
+                                    <Loader2Icon className="size-4 animate-spin" />
                                 ) : scheduleFor === "now" ? (
                                     <>
                                         <SendIcon className="size-4" />

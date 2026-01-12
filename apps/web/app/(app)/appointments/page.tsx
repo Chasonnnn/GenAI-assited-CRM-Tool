@@ -20,7 +20,7 @@ import {
     DialogTitle,
     DialogDescription,
 } from "@/components/ui/dialog"
-import { LinkIcon, CopyIcon, CheckIcon, LoaderIcon } from "lucide-react"
+import { LinkIcon, CopyIcon, CheckIcon, Loader2Icon } from "lucide-react"
 import { useBookingLink } from "@/lib/hooks/use-appointments"
 
 function BookingLinkButton() {
@@ -39,7 +39,7 @@ function BookingLinkButton() {
     if (isLoading) {
         return (
             <Button variant="outline" disabled>
-                <LoaderIcon className="size-4 mr-2 animate-spin" />
+                <Loader2Icon className="size-4 mr-2 animate-spin" />
                 Loading...
             </Button>
         )
@@ -87,8 +87,8 @@ export default function AppointmentsPage() {
         <div className="flex min-h-screen flex-col">
             {/* Page Header */}
             <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-14 items-center justify-between px-6">
-                    <h1 className="text-xl font-semibold">Appointments</h1>
+                <div className="flex h-16 items-center justify-between px-6">
+                    <h1 className="text-2xl font-semibold">Appointments</h1>
                     <BookingLinkButton />
                 </div>
             </div>

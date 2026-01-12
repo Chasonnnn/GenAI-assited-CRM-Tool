@@ -15,7 +15,7 @@ import {
   CameraIcon,
   MonitorIcon,
   SmartphoneIcon,
-  LoaderIcon,
+  Loader2Icon,
   CheckIcon,
   BellRingIcon,
   UploadIcon,
@@ -46,6 +46,7 @@ import {
   useDeleteAvatar,
 } from "@/lib/hooks/use-sessions"
 import type { SocialLink } from "@/lib/api/signature"
+import { toast } from "sonner"
 import { getOrgSignaturePreview } from "@/lib/api/signature"
 
 // =============================================================================
@@ -95,7 +96,7 @@ function BrowserNotificationsCard() {
             <Button onClick={handleRequestPermission} disabled={isRequesting} size="sm">
               {isRequesting ? (
                 <>
-                  <LoaderIcon className="mr-2 size-4 animate-spin" /> Requesting...
+                  <Loader2Icon className="mr-2 size-4 animate-spin" /> Requesting...
                 </>
               ) : (
                 "Enable"
@@ -124,7 +125,7 @@ function NotificationsSettingsCard() {
     return (
       <Card>
         <CardContent className="py-12 flex items-center justify-center">
-          <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+          <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
         </CardContent>
       </Card>
     )
@@ -275,13 +276,13 @@ function ProfileSection() {
     // Validate file type
     const allowedTypes = ["image/png", "image/jpeg", "image/webp"]
     if (!allowedTypes.includes(file.type)) {
-      alert("Please select a PNG, JPEG, or WebP image")
+      toast.error("Please select a PNG, JPEG, or WebP image")
       return
     }
 
     // Validate file size (max 2MB)
     if (file.size > 2 * 1024 * 1024) {
-      alert("Image must be less than 2MB")
+      toast.error("Image must be less than 2MB")
       return
     }
 
@@ -301,10 +302,13 @@ function ProfileSection() {
   const handleSaveProfile = async () => {
     setProfileSaving(true)
     try {
+      const trimmedName = profileName.trim()
+      const trimmedPhone = profilePhone.trim()
+      const trimmedTitle = profileTitle.trim()
       await updateProfile({
-        display_name: profileName || undefined,
-        phone: profilePhone || undefined,
-        title: profileTitle || undefined,
+        ...(trimmedName ? { display_name: trimmedName } : {}),
+        ...(trimmedPhone ? { phone: trimmedPhone } : {}),
+        ...(trimmedTitle ? { title: trimmedTitle } : {}),
       })
       setProfileSaved(true)
       setTimeout(() => setProfileSaved(false), 2000)
@@ -338,7 +342,7 @@ function ProfileSection() {
             className="absolute bottom-0 right-0 flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
           >
             {uploadAvatarMutation.isPending ? (
-              <LoaderIcon className="size-3.5 animate-spin" />
+              <Loader2Icon className="size-3.5 animate-spin" />
             ) : (
               <CameraIcon className="size-3.5" />
             )}
@@ -406,7 +410,7 @@ function ProfileSection() {
       <Button onClick={handleSaveProfile} disabled={profileSaving}>
         {profileSaving ? (
           <>
-            <LoaderIcon className="mr-2 size-4 animate-spin" /> Saving...
+            <Loader2Icon className="mr-2 size-4 animate-spin" /> Saving...
           </>
         ) : profileSaved ? (
           <>
@@ -464,7 +468,7 @@ function ActiveSessionsSection() {
       <div className="space-y-3">
         <h4 className="font-medium">Active Sessions</h4>
         <div className="flex items-center justify-center py-8">
-          <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
+          <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
         </div>
       </div>
     )
@@ -485,7 +489,7 @@ function ActiveSessionsSection() {
             className="text-destructive hover:text-destructive"
           >
             {revokeAllSessions.isPending ? (
-              <LoaderIcon className="mr-2 size-4 animate-spin" />
+              <Loader2Icon className="mr-2 size-4 animate-spin" />
             ) : null}
             Log out all others
           </Button>
@@ -522,7 +526,7 @@ function ActiveSessionsSection() {
               disabled={revokeSession.isPending}
             >
               {revokeSession.isPending ? (
-                <LoaderIcon className="size-4 animate-spin" />
+                <Loader2Icon className="size-4 animate-spin" />
               ) : (
                 "Revoke"
               )}
@@ -582,11 +586,15 @@ function OrganizationSection() {
   const handleSaveOrg = async () => {
     setOrgSaving(true)
     try {
+      const trimmedName = orgName.trim()
+      const trimmedAddress = orgAddress.trim()
+      const trimmedPhone = orgPhone.trim()
+      const trimmedEmail = orgEmail.trim()
       await updateOrgSettings({
-        name: orgName || undefined,
-        address: orgAddress || undefined,
-        phone: orgPhone || undefined,
-        email: orgEmail || undefined,
+        ...(trimmedName ? { name: trimmedName } : {}),
+        ...(trimmedAddress ? { address: trimmedAddress } : {}),
+        ...(trimmedPhone ? { phone: trimmedPhone } : {}),
+        ...(trimmedEmail ? { email: trimmedEmail } : {}),
       })
       setOrgSaved(true)
       setTimeout(() => setOrgSaved(false), 2000)
@@ -660,7 +668,7 @@ function OrganizationSection() {
       <Button onClick={handleSaveOrg} disabled={orgSaving}>
         {orgSaving ? (
           <>
-            <LoaderIcon className="mr-2 size-4 animate-spin" /> Saving...
+            <Loader2Icon className="mr-2 size-4 animate-spin" /> Saving...
           </>
         ) : orgSaved ? (
           <>
@@ -693,7 +701,7 @@ function SocialLinksSection() {
 
   const addLink = () => {
     if (links.length >= 6) {
-      alert("Maximum 6 social links allowed")
+      toast.error("Maximum 6 social links allowed")
       return
     }
     setLinks([...links, { platform: "", url: "" }])
@@ -705,7 +713,9 @@ function SocialLinksSection() {
 
   const updateLink = (index: number, field: keyof SocialLink, value: string) => {
     const newLinks = [...links]
-    newLinks[index] = { ...newLinks[index], [field]: value }
+    const current = newLinks[index]
+    if (!current) return
+    newLinks[index] = { ...current, [field]: value }
     setLinks(newLinks)
   }
 
@@ -716,7 +726,7 @@ function SocialLinksSection() {
     // Validate URLs
     for (const link of validLinks) {
       if (!link.url.startsWith("https://")) {
-        alert(`URL must start with https:// (${link.platform})`)
+        toast.error(`URL must start with https:// (${link.platform})`)
         return
       }
     }
@@ -788,7 +798,7 @@ function SocialLinksSection() {
       <Button onClick={handleSave} disabled={updateOrgSig.isPending}>
         {updateOrgSig.isPending ? (
           <>
-            <LoaderIcon className="mr-2 size-4 animate-spin" /> Saving...
+            <Loader2Icon className="mr-2 size-4 animate-spin" /> Saving...
           </>
         ) : saved ? (
           <>
@@ -855,11 +865,11 @@ function SignatureBrandingSection() {
     if (file) {
       const allowedTypes = ["image/png", "image/jpeg"]
       if (!allowedTypes.includes(file.type)) {
-        alert("Logo must be a PNG or JPEG file")
+        toast.error("Logo must be a PNG or JPEG file")
         return
       }
       if (file.size > 1024 * 1024) {
-        alert("Logo must be less than 1MB")
+        toast.error("Logo must be less than 1MB")
         return
       }
       uploadLogo.mutate(file)
@@ -961,7 +971,7 @@ function SignatureBrandingSection() {
               disabled={uploadLogo.isPending}
             >
               {uploadLogo.isPending ? (
-                <LoaderIcon className="mr-2 size-4 animate-spin" />
+                <Loader2Icon className="mr-2 size-4 animate-spin" />
               ) : (
                 <UploadIcon className="mr-2 size-4" />
               )}
@@ -1067,7 +1077,7 @@ function SignatureBrandingSection() {
           >
             {previewLoading ? (
               <>
-                <LoaderIcon className="mr-2 size-4 animate-spin" /> Loading...
+                <Loader2Icon className="mr-2 size-4 animate-spin" /> Loading...
               </>
             ) : (
               <>
@@ -1078,7 +1088,7 @@ function SignatureBrandingSection() {
           <Button onClick={handleSave} disabled={updateOrgSig.isPending}>
             {updateOrgSig.isPending ? (
               <>
-                <LoaderIcon className="mr-2 size-4 animate-spin" /> Saving...
+                <Loader2Icon className="mr-2 size-4 animate-spin" /> Saving...
               </>
             ) : saved ? (
               <>

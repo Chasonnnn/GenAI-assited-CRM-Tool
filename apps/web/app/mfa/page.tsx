@@ -19,7 +19,7 @@ import {
     CheckIcon,
     CopyIcon,
     KeyIcon,
-    LoaderIcon,
+    Loader2Icon,
     ShieldCheckIcon,
     SmartphoneIcon,
 } from "lucide-react"
@@ -192,7 +192,7 @@ export default function MFAPage() {
     if (authLoading || mfaLoading) {
         return (
             <div className="flex min-h-screen items-center justify-center">
-                <LoaderIcon className="size-8 animate-spin text-muted-foreground" />
+                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
             </div>
         )
     }

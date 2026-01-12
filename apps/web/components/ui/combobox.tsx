@@ -90,15 +90,14 @@ function ComboboxContent({
     ComboboxPrimitive.Positioner.Props,
     "side" | "align" | "sideOffset" | "alignOffset" | "anchor"
   >) {
+  const positionerProps = anchor === undefined
+    ? { side, sideOffset, align, alignOffset, className: "isolate z-50" }
+    : { side, sideOffset, align, alignOffset, anchor, className: "isolate z-50" }
+
   return (
     <ComboboxPrimitive.Portal>
       <ComboboxPrimitive.Positioner
-        side={side}
-        sideOffset={sideOffset}
-        align={align}
-        alignOffset={alignOffset}
-        anchor={anchor}
-        className="isolate z-50"
+        {...positionerProps}
       >
         <ComboboxPrimitive.Popup
           data-slot="combobox-content"

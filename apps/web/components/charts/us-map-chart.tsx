@@ -127,7 +127,7 @@ export function USMapChart({
                     <ComposableMap
                         projection="geoAlbersUsa"
                         projectionConfig={{ scale: 800 }}
-                        style={{ width: "100%", height: "auto" }}
+                        className="w-full h-auto"
                     >
                         <Geographies geography={geoUrl}>
                             {({ geographies }) =>

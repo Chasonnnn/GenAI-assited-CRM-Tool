@@ -3,6 +3,7 @@
  */
 
 import api from './index'
+import type { JsonObject } from '../types/json'
 
 // Types
 export interface AuditLogEntry {
@@ -12,7 +13,7 @@ export interface AuditLogEntry {
     actor_name: string | null
     target_type: string | null
     target_id: string | null
-    details: Record<string, unknown> | null
+    details: JsonObject | null
     ip_address: string | null
     created_at: string
 }

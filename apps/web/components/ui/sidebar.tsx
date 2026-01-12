@@ -399,6 +399,7 @@ function SidebarGroupLabel({
   render,
   ...props
 }: useRender.ComponentProps<"div"> & React.ComponentProps<"div">) {
+  const renderProp = render === undefined ? {} : { render }
   return useRender({
     defaultTagName: "div",
     props: mergeProps<"div">(
@@ -410,11 +411,11 @@ function SidebarGroupLabel({
       },
       props
     ),
-    render,
     state: {
       slot: "sidebar-group-label",
       sidebar: "group-label",
     },
+    ...renderProp,
   })
 }
 
@@ -423,6 +424,7 @@ function SidebarGroupAction({
   render,
   ...props
 }: useRender.ComponentProps<"button"> & React.ComponentProps<"button">) {
+  const renderProp = render === undefined ? {} : { render }
   return useRender({
     defaultTagName: "button",
     props: mergeProps<"button">(
@@ -434,11 +436,11 @@ function SidebarGroupAction({
       },
       props
     ),
-    render,
     state: {
       slot: "sidebar-group-action",
       sidebar: "group-action",
     },
+    ...renderProp,
   })
 }
 
@@ -513,6 +515,12 @@ function SidebarMenuButton({
     tooltip?: string | React.ComponentProps<typeof TooltipContent>
   } & VariantProps<typeof sidebarMenuButtonVariants>) {
   const { isMobile, state } = useSidebar()
+  const renderOverride = !tooltip
+    ? render
+    : ((props: React.HTMLAttributes<HTMLElement>) => (
+      <TooltipTrigger {...(props as React.ComponentProps<typeof TooltipTrigger>)} />
+    ))
+  const renderProp = renderOverride === undefined ? {} : { render: renderOverride }
   const comp = useRender({
     defaultTagName: "button",
     props: mergeProps<"button">(
@@ -521,13 +529,13 @@ function SidebarMenuButton({
       },
       props
     ),
-    render: !tooltip ? render : TooltipTrigger,
     state: {
       slot: "sidebar-menu-button",
       sidebar: "menu-button",
       size,
       active: isActive,
     },
+    ...renderProp,
   })
 
   if (!tooltip) {
@@ -562,6 +570,7 @@ function SidebarMenuAction({
   React.ComponentProps<"button"> & {
     showOnHover?: boolean
   }) {
+  const renderProp = render === undefined ? {} : { render }
   return useRender({
     defaultTagName: "button",
     props: mergeProps<"button">(
@@ -575,11 +584,11 @@ function SidebarMenuAction({
       },
       props
     ),
-    render,
     state: {
       slot: "sidebar-menu-action",
       sidebar: "menu-action",
     },
+    ...renderProp,
   })
 }
 
@@ -674,6 +683,7 @@ function SidebarMenuSubButton({
     size?: "sm" | "md"
     isActive?: boolean
   }) {
+  const renderProp = render === undefined ? {} : { render }
   return useRender({
     defaultTagName: "a",
     props: mergeProps<"a">(
@@ -685,13 +695,13 @@ function SidebarMenuSubButton({
       },
       props
     ),
-    render,
     state: {
       slot: "sidebar-menu-sub-button",
       sidebar: "menu-sub-button",
       size,
       active: isActive,
     },
+    ...renderProp,
   })
 }
 

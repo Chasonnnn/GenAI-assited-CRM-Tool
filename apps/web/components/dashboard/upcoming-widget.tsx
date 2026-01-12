@@ -163,7 +163,7 @@ function UpcomingItemRow({ item }: { item: UpcomingItem }) {
     // Format time for display
     const formatTime = (time: string | null) => {
         if (!time) return "All Day"
-        const [hours, minutes] = time.split(':')
+        const [hours = "0", minutes = "00"] = time.split(':')
         const hour = parseInt(hours, 10)
         const ampm = hour >= 12 ? 'PM' : 'AM'
         const displayHour = hour % 12 || 12

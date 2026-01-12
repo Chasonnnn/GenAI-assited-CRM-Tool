@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { PlusIcon, LoaderIcon, ListIcon, CalendarIcon, ShieldCheckIcon, ClockIcon } from "lucide-react"
+import { PlusIcon, Loader2Icon, ListIcon, CalendarIcon, ShieldCheckIcon, ClockIcon } from "lucide-react"
 import { UnifiedCalendar } from "@/components/appointments"
 import { TaskEditModal } from "@/components/tasks/TaskEditModal"
 import { AddTaskDialog, type TaskFormData } from "@/components/tasks/AddTaskDialog"
@@ -249,15 +249,16 @@ export default function TasksPage() {
 
     const handleAddTask = async (data: TaskFormData) => {
         const dueTime = data.due_time ? `${data.due_time}:00` : undefined
+        const buildPayload = (dueDate?: string) => ({
+            title: data.title,
+            task_type: data.task_type,
+            ...(data.description ? { description: data.description } : {}),
+            ...(dueDate ? { due_date: dueDate } : {}),
+            ...(dueTime ? { due_time: dueTime } : {}),
+        })
 
         if (data.recurrence === "none") {
-            await createTask.mutateAsync({
-                title: data.title,
-                description: data.description,
-                task_type: data.task_type,
-                due_date: data.due_date,
-                due_time: dueTime,
-            })
+            await createTask.mutateAsync(buildPayload(data.due_date))
             return
         }
 
@@ -269,18 +270,13 @@ export default function TasksPage() {
         const end = parseISO(data.repeat_until)
         const dates = buildRecurringDates(start, end, data.recurrence)
 
-        if (dates.length >= MAX_TASK_OCCURRENCES && end > dates[dates.length - 1]) {
+        const lastDate = dates[dates.length - 1]
+        if (dates.length >= MAX_TASK_OCCURRENCES && lastDate && end > lastDate) {
             return
         }
 
         for (const date of dates) {
-            await createTask.mutateAsync({
-                title: data.title,
-                description: data.description,
-                task_type: data.task_type,
-                due_date: format(date, "yyyy-MM-dd"),
-                due_time: dueTime,
-            })
+            await createTask.mutateAsync(buildPayload(format(date, "yyyy-MM-dd")))
         }
     }
 
@@ -391,8 +387,8 @@ export default function TasksPage() {
         <div className="flex min-h-screen flex-col">
             {/* Page Header */}
             <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-14 items-center justify-between px-6">
-                    <h1 className="text-xl font-semibold">Tasks</h1>
+                <div className="flex h-16 items-center justify-between px-6">
+                    <h1 className="text-2xl font-semibold">Tasks</h1>
                     <Button onClick={() => setAddTaskDialogOpen(true)}>
                         <PlusIcon className="mr-2 size-4" />
                         Add Task
@@ -449,7 +445,7 @@ export default function TasksPage() {
                 {/* Loading State */}
                 {isLoading && (
                     <Card className="flex items-center justify-center p-12">
-                        <LoaderIcon className="size-6 animate-spin text-muted-foreground" />
+                        <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                         <span className="ml-2 text-muted-foreground">Loading tasks...</span>
                     </Card>
                 )}
@@ -493,7 +489,7 @@ export default function TasksPage() {
                         <div className="divide-y divide-border">
                             {loadingApprovals ? (
                                 <div className="flex items-center justify-center py-8">
-                                    <LoaderIcon className="size-5 animate-spin text-muted-foreground" />
+                                    <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
                                 </div>
                             ) : pendingApprovals?.items?.length ? (
                                 pendingApprovals.items.map((approval: TaskListItem) => {
@@ -592,7 +588,7 @@ export default function TasksPage() {
                                     <div className="mt-4 space-y-2">
                                         {loadingCompleted ? (
                                             <div className="flex items-center justify-center py-4">
-                                                <LoaderIcon className="size-4 animate-spin text-muted-foreground" />
+                                                <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
                                             </div>
                                         ) : completedError ? (
                                             <p className="text-center text-destructive py-4">Unable to load completed tasks</p>
