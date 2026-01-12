@@ -11,7 +11,6 @@ import api from './index';
 // Interview types
 export type InterviewType = 'phone' | 'video' | 'in_person';
 export type InterviewStatus = 'draft' | 'completed';
-export type AnchorStatus = 'valid' | 'approximate' | 'lost';
 export type TranscriptionStatus = 'not_started' | 'pending' | 'processing' | 'completed' | 'failed';
 
 // Interview list item
@@ -59,7 +58,6 @@ export interface InterviewRead {
     conducted_by_name: string;
     duration_minutes: number | null;
     transcript_json: TipTapDoc | null;  // TipTap JSON (canonical)
-    transcript_html: string | null;      // Sanitized HTML for display
     transcript_version: number;
     transcript_size_bytes: number;
     is_transcript_offloaded: boolean;
@@ -78,7 +76,6 @@ export interface InterviewCreatePayload {
     conducted_at: string;
     duration_minutes?: number | null;
     transcript_json?: TipTapDoc | null;   // TipTap JSON (preferred)
-    transcript_html?: string | null;       // Legacy HTML
     status?: InterviewStatus;
 }
 
@@ -87,7 +84,6 @@ export interface InterviewUpdatePayload {
     conducted_at?: string;
     duration_minutes?: number | null;
     transcript_json?: TipTapDoc | null;   // TipTap JSON (preferred)
-    transcript_html?: string | null;       // Legacy HTML
     status?: InterviewStatus;
     expected_version?: number;
 }
@@ -127,11 +123,6 @@ export interface InterviewNoteRead {
     transcript_version: number;
     comment_id: string | null;          // TipTap comment mark ID (stable anchor)
     anchor_text: string | null;          // Anchor text for display
-    anchor_start: number | null;         // Legacy: text offset start
-    anchor_end: number | null;           // Legacy: text offset end
-    current_anchor_start: number | null; // Recalculated position
-    current_anchor_end: number | null;   // Recalculated position
-    anchor_status: AnchorStatus | null;  // 'valid', 'approximate', 'lost'
     // Thread support
     parent_id: string | null;
     replies: InterviewNoteRead[];        // Nested replies
@@ -152,8 +143,6 @@ export interface InterviewNoteCreatePayload {
     transcript_version?: number;
     comment_id?: string;                 // TipTap comment mark ID (preferred)
     anchor_text?: string;                // Anchor text for display
-    anchor_start?: number;               // Legacy: text offset
-    anchor_end?: number;                 // Legacy: text offset
     parent_id?: string;                  // For replies
 }
 
@@ -397,4 +386,3 @@ export function summarizeInterview(interviewId: string): Promise<InterviewSummar
 export function summarizeAllInterviews(caseId: string): Promise<AllInterviewsSummaryResponse> {
     return api.post<AllInterviewsSummaryResponse>(`/cases/${caseId}/interviews/ai/summarize-all`);
 }
-

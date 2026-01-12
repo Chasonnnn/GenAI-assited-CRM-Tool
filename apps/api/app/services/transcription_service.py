@@ -1,6 +1,5 @@
 """AI Transcription service using OpenAI Whisper API."""
 
-import html
 import io
 import logging
 import os
@@ -141,20 +140,38 @@ async def transcribe_audio(
             raise TranscriptionError(f"Transcription failed: {str(e)}")
 
 
-def _format_transcript_html(text: str, filename: str) -> str:
-    """Format transcription text as HTML."""
-    # Split into paragraphs and wrap
-    paragraphs = text.strip().split("\n\n")
-    formatted = "\n".join(
-        f"<p>{html.escape(p.strip())}</p>" for p in paragraphs if p.strip()
-    )
-    safe_filename = html.escape(filename)
+def _format_transcript_doc(text: str, filename: str) -> dict:
+    """Format transcription text as TipTap JSON."""
+    paragraphs = [paragraph.strip() for paragraph in text.strip().split("\n\n") if paragraph.strip()]
 
-    return f"""<div class="ai-transcription">
-<p><strong>AI Transcription</strong> — {safe_filename}</p>
-<hr />
-{formatted}
-</div>"""
+    header = [
+        {"type": "text", "text": "AI Transcription", "marks": [{"type": "bold"}]},
+        {"type": "text", "text": f" \u2014 {filename}"},
+    ]
+
+    content = [
+        {"type": "paragraph", "content": header},
+        {"type": "horizontalRule"},
+    ]
+    for paragraph in paragraphs:
+        content.append(
+            {"type": "paragraph", "content": [{"type": "text", "text": paragraph}]}
+        )
+
+    return {"type": "doc", "content": content}
+
+
+def _append_transcript_doc(current_doc: dict | None, new_doc: dict) -> dict:
+    """Append transcription content to an existing TipTap document."""
+    if not current_doc or current_doc.get("type") != "doc":
+        return new_doc
+    return {
+        "type": "doc",
+        "content": [
+            *(current_doc.get("content") or []),
+            *(new_doc.get("content") or []),
+        ],
+    }
 
 
 async def request_transcription(
@@ -237,21 +254,17 @@ async def request_transcription(
             prompt=prompt,
         )
 
-        # Format as HTML
-        transcription_html = _format_transcript_html(transcription, attachment.filename)
+        # Format as TipTap JSON
+        transcription_doc = _format_transcript_doc(transcription, attachment.filename)
 
         # Append to interview transcript (or set if empty)
-        current_html = interview.transcript_html or ""
-        if current_html:
-            new_html = f"{current_html}\n\n{transcription_html}"
-        else:
-            new_html = transcription_html
+        new_doc = _append_transcript_doc(interview.transcript_json, transcription_doc)
 
         # Update interview with new transcript version
         await interview_service.update_transcript(
             db=db,
             interview=interview,
-            new_html=new_html,
+            new_transcript_json=new_doc,
             user_id=requested_by_user_id or interview.conducted_by_user_id,
             source="ai_transcription",
         )

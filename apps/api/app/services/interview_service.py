@@ -1,6 +1,7 @@
 """Interview service - CRUD operations with versioning support."""
 
 import hashlib
+import json
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
@@ -26,7 +27,7 @@ if TYPE_CHECKING:
 # Constants
 # =============================================================================
 
-# Size threshold for S3 offloading (100KB HTML)
+# Size threshold for S3 offloading (100KB JSON)
 OFFLOAD_THRESHOLD_BYTES = 100 * 1024
 
 # Maximum transcript size (2MB)
@@ -45,26 +46,40 @@ def _compute_hash(text: str | None) -> str | None:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _extract_plaintext(html: str | None) -> str | None:
-    """Extract plaintext from HTML for search/diff."""
-    if not html:
-        return None
+def _compute_transcript_size_bytes(transcript_json: dict | None) -> int:
+    """Compute size of TipTap JSON payload (bytes)."""
+    if not transcript_json:
+        return 0
+    return len(
+        json.dumps(transcript_json, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    )
 
-    # Use a simple regex-based approach for now
-    # In production, consider using lxml or beautifulsoup
-    import re
 
-    # Remove script/style tags and their contents
-    text = re.sub(r"<(script|style)[^>]*>.*?</\1>", "", html, flags=re.DOTALL | re.I)
-    # Remove HTML tags
-    text = re.sub(r"<[^>]+>", " ", text)
-    # Normalize whitespace
-    text = re.sub(r"\s+", " ", text).strip()
-    # Decode HTML entities
-    import html as html_module
+def _build_transcript_content(
+    transcript_json: dict[str, Any] | None,
+) -> tuple[dict[str, Any] | None, str | None, str | None, int]:
+    """Sanitize and derive HTML/text/size from TipTap JSON."""
+    if transcript_json is None:
+        return None, None, None, 0
 
-    text = html_module.unescape(text)
-    return text
+    sanitized = tiptap_service.sanitize_tiptap_json(transcript_json)
+    if not sanitized:
+        return None, None, None, 0
+
+    transcript_html = tiptap_service.tiptap_to_html(sanitized)
+    transcript_text = tiptap_service.tiptap_to_text(sanitized)
+    transcript_size = _compute_transcript_size_bytes(sanitized)
+    return sanitized, transcript_html, transcript_text, transcript_size
+
+
+def _tiptap_doc_from_text(text: str) -> dict[str, Any]:
+    """Convert plain text into a minimal TipTap doc."""
+    paragraphs = [paragraph.strip() for paragraph in text.split("\n\n") if paragraph.strip()]
+    content = [
+        {"type": "paragraph", "content": [{"type": "text", "text": paragraph}]}
+        for paragraph in paragraphs
+    ]
+    return {"type": "doc", "content": content}
 
 
 def _get_retention_policy(
@@ -98,26 +113,21 @@ def create_interview(
     Create a new interview.
 
     Validates case access and creates initial version if transcript provided.
-    Supports both TipTap JSON (preferred) and HTML transcript input.
+    Supports TipTap JSON transcript input.
     """
-    # Process transcript: prefer JSON, fall back to HTML
     transcript_json: dict[str, Any] | None = None
     transcript_html: str | None = None
     transcript_text: str | None = None
+    transcript_size = 0
 
-    if data.transcript_json:
-        # Use TipTap JSON as canonical format
-        transcript_json = tiptap_service.sanitize_tiptap_json(data.transcript_json)
-        transcript_html = tiptap_service.tiptap_to_html(transcript_json)
-        transcript_text = tiptap_service.tiptap_to_text(transcript_json)
-    elif data.transcript_html:
-        # Legacy HTML input - convert to JSON
-        transcript_html = data.transcript_html
-        transcript_text = _extract_plaintext(transcript_html)
-        transcript_json = tiptap_service.html_to_tiptap(transcript_html)
+    if data.transcript_json is not None:
+        transcript_json, transcript_html, transcript_text, transcript_size = (
+            _build_transcript_content(data.transcript_json)
+        )
+        if transcript_json is None:
+            raise ValueError("Invalid transcript JSON")
 
     transcript_hash = _compute_hash(transcript_text)
-    transcript_size = len(transcript_html.encode("utf-8")) if transcript_html else 0
 
     # Check size limit
     if transcript_size > MAX_TRANSCRIPT_SIZE_BYTES:
@@ -126,7 +136,7 @@ def create_interview(
     # Determine if offloading needed (will be handled by storage service)
     # For now, store inline - offloading will be handled separately
     storage_key = None
-    has_transcript = bool(transcript_html or transcript_json)
+    has_transcript = bool(transcript_json or storage_key)
 
     # Get retention policy
     retention_policy = _get_retention_policy(db, org_id)
@@ -146,7 +156,6 @@ def create_interview(
         conducted_by_user_id=user_id,
         duration_minutes=data.duration_minutes,
         transcript_json=transcript_json,
-        transcript_html=transcript_html,
         transcript_text=transcript_text,
         transcript_storage_key=storage_key,
         transcript_version=1 if has_transcript else 0,
@@ -334,26 +343,22 @@ def update_interview(
     if data.status is not None:
         interview.status = data.status
 
-    # Handle transcript update with versioning
-    # Prefer TipTap JSON, fall back to HTML
+    # Handle transcript update with versioning (TipTap JSON only)
     transcript_json: dict[str, Any] | None = None
     transcript_html: str | None = None
     transcript_text: str | None = None
+    transcript_size = 0
 
     if data.transcript_json is not None:
-        # TipTap JSON update (preferred)
-        transcript_json = tiptap_service.sanitize_tiptap_json(data.transcript_json)
-        transcript_html = tiptap_service.tiptap_to_html(transcript_json)
-        transcript_text = tiptap_service.tiptap_to_text(transcript_json)
-    elif data.transcript_html is not None:
-        # Legacy HTML update
-        transcript_html = data.transcript_html
-        transcript_text = _extract_plaintext(transcript_html)
-        transcript_json = tiptap_service.html_to_tiptap(transcript_html)
+        transcript_json, transcript_html, transcript_text, transcript_size = (
+            _build_transcript_content(data.transcript_json)
+        )
+        if transcript_json is None:
+            raise ValueError("Invalid transcript JSON")
 
-    if transcript_html is not None:
+    if transcript_json is not None:
         new_hash = _compute_hash(transcript_text)
-        new_size = len(transcript_html.encode("utf-8"))
+        new_size = transcript_size
 
         # Check size limit
         if new_size > MAX_TRANSCRIPT_SIZE_BYTES:
@@ -380,15 +385,11 @@ def update_interview(
 
             # Update interview with new transcript
             interview.transcript_json = transcript_json
-            interview.transcript_html = transcript_html
             interview.transcript_text = transcript_text
             interview.transcript_storage_key = None
             interview.transcript_version = new_version
             interview.transcript_hash = new_hash
             interview.transcript_size_bytes = new_size
-
-            # Recalculate note anchors after version change
-            _recalculate_note_anchors(db, interview)
 
     interview.updated_at = datetime.now(timezone.utc)
     db.flush()
@@ -407,7 +408,7 @@ def delete_interview(
 async def update_transcript(
     db: Session,
     interview: CaseInterview,
-    new_html: str,
+    new_transcript_json: dict[str, Any],
     user_id: UUID,
     source: str = "manual",
 ) -> CaseInterview:
@@ -420,16 +421,21 @@ async def update_transcript(
     Args:
         db: Database session
         interview: Interview to update
-        new_html: New HTML content
+        new_transcript_json: New TipTap JSON content
         user_id: User ID for version authorship
         source: Source of change ('manual', 'ai_transcription', 'restore')
 
     Returns:
         Updated interview
     """
-    new_text = _extract_plaintext(new_html)
-    new_hash = _compute_hash(new_text)
-    new_size = len(new_html.encode("utf-8"))
+    transcript_json, transcript_html, transcript_text, transcript_size = (
+        _build_transcript_content(new_transcript_json)
+    )
+    if transcript_json is None:
+        raise ValueError("Invalid transcript JSON")
+
+    new_hash = _compute_hash(transcript_text)
+    new_size = transcript_size
 
     # Check size limit
     if new_size > MAX_TRANSCRIPT_SIZE_BYTES:
@@ -444,8 +450,8 @@ async def update_transcript(
             interview_id=interview.id,
             organization_id=interview.organization_id,
             version=new_version,
-            content_html=new_html,
-            content_text=new_text,
+            content_html=transcript_html,
+            content_text=transcript_text,
             content_storage_key=None,
             content_hash=new_hash,
             content_size_bytes=new_size,
@@ -455,16 +461,13 @@ async def update_transcript(
         db.add(version)
 
         # Update interview with new transcript
-        interview.transcript_html = new_html
-        interview.transcript_text = new_text
+        interview.transcript_json = transcript_json
+        interview.transcript_text = transcript_text
         interview.transcript_storage_key = None
         interview.transcript_version = new_version
         interview.transcript_hash = new_hash
         interview.transcript_size_bytes = new_size
         interview.updated_at = datetime.now(timezone.utc)
-
-        # Recalculate note anchors after version change
-        _recalculate_note_anchors(db, interview)
 
     db.flush()
     return interview
@@ -547,17 +550,22 @@ def restore_version(
     )
     db.add(restore_version_record)
 
+    transcript_json: dict[str, Any] | None = None
+    if version.content_html:
+        transcript_json = tiptap_service.html_to_tiptap(version.content_html)
+    elif version.content_text:
+        transcript_json = _tiptap_doc_from_text(version.content_text)
+    if transcript_json is not None:
+        transcript_json = tiptap_service.sanitize_tiptap_json(transcript_json)
+
     # Update interview
-    interview.transcript_html = version.content_html
+    interview.transcript_json = transcript_json
     interview.transcript_text = version.content_text
     interview.transcript_storage_key = version.content_storage_key
     interview.transcript_version = new_version
     interview.transcript_hash = new_hash
     interview.transcript_size_bytes = version.content_size_bytes
     interview.updated_at = datetime.now(timezone.utc)
-
-    # Recalculate note anchors
-    _recalculate_note_anchors(db, interview)
 
     db.flush()
     return interview
@@ -627,61 +635,6 @@ def get_version_diff(
 
 
 # =============================================================================
-# Anchor Recalculation (simplified - full logic in anchor_service.py)
-# =============================================================================
-
-
-def _recalculate_note_anchors(db: Session, interview: CaseInterview) -> None:
-    """
-    Recalculate note anchor positions after transcript change.
-
-    Called internally after transcript updates or restores.
-    """
-    from app.services.anchor_service import recalculate_anchor_positions
-
-    current_text = interview.transcript_text or ""
-    current_version = interview.transcript_version
-
-    # Get all notes with anchors
-    notes = db.scalars(
-        select(InterviewNote).where(
-            InterviewNote.interview_id == interview.id,
-            InterviewNote.anchor_text.isnot(None),
-        )
-    ).all()
-
-    for note in notes:
-        if note.transcript_version == current_version:
-            # Note created on current version, anchor is valid
-            note.current_anchor_start = note.anchor_start
-            note.current_anchor_end = note.anchor_end
-            note.anchor_status = "valid"
-        else:
-            # Get original version text
-            original_version = db.scalar(
-                select(InterviewTranscriptVersion).where(
-                    InterviewTranscriptVersion.interview_id == interview.id,
-                    InterviewTranscriptVersion.version == note.transcript_version,
-                )
-            )
-
-            if original_version:
-                original_text = original_version.content_text or ""
-                new_start, new_end, status = recalculate_anchor_positions(
-                    note=note,
-                    original_text=original_text,
-                    current_text=current_text,
-                )
-                note.current_anchor_start = new_start
-                note.current_anchor_end = new_end
-                note.anchor_status = status
-            else:
-                note.anchor_status = "lost"
-
-        db.add(note)
-
-
-# =============================================================================
 # Count Helpers
 # =============================================================================
 
@@ -734,7 +687,8 @@ def to_interview_list_item(
         "conducted_by_name": conducted_by_name,
         "duration_minutes": interview.duration_minutes,
         "status": interview.status,
-        "has_transcript": bool(interview.transcript_html or interview.transcript_storage_key),
+        "has_transcript": interview.transcript_version > 0
+        or bool(interview.transcript_storage_key),
         "transcript_version": interview.transcript_version,
         "notes_count": get_notes_count(db, interview.id),
         "attachments_count": get_attachments_count(db, interview.id),
@@ -759,7 +713,6 @@ def to_interview_read(
         "conducted_by_name": conducted_by_name,
         "duration_minutes": interview.duration_minutes,
         "transcript_json": interview.transcript_json,
-        "transcript_html": interview.transcript_html,
         "transcript_version": interview.transcript_version,
         "transcript_size_bytes": interview.transcript_size_bytes,
         "is_transcript_offloaded": interview.transcript_storage_key is not None,
