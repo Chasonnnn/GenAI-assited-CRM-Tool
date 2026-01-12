@@ -26,6 +26,17 @@ alembic upgrade head
 # Create new migration
 alembic revision --autogenerate -m "description"
 
+# Migration naming convention: YYYYMMDD_HHMM_<slug>.py
+# Use a time-based rev-id + slug to match filename pattern
+alembic revision --autogenerate --rev-id 20260111_1420 -m "add_case_flags"
+
+# Baseline reset (rare)
+# 1) Archive old versions/ to versions_archive/
+# 2) Generate a consolidated baseline in versions/
+# 3) Stamp all existing DBs to the new revision
+#    alembic stamp --purge <new_revision_id>
+# 4) Verify alembic upgrade head is a no-op
+
 # Bootstrap org (CLI)
 python -m app.cli create-org
 ```

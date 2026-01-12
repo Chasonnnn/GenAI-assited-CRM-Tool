@@ -4578,7 +4578,7 @@ class CaseInterview(Base):
     Interview record for a case.
 
     Supports multiple interviews per case with versioned transcripts.
-    Transcripts > 100KB are offloaded to S3 (HTML only, text kept inline for search).
+    Transcripts > 100KB are offloaded to S3 (text kept inline for search).
     """
 
     __tablename__ = "case_interviews"
@@ -4622,9 +4622,6 @@ class CaseInterview(Base):
     transcript_json: Mapped[dict | None] = mapped_column(
         JSONB, nullable=True
     )  # TipTap JSON (canonical format)
-    transcript_html: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )  # Sanitized HTML for display (NULL if offloaded to S3)
     transcript_text: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )  # Always stored for search/diff
@@ -4746,8 +4743,7 @@ class InterviewNote(Base):
     - Reply threads (parent_id links to parent note)
     - Resolve functionality (resolved_at/resolved_by_user_id)
 
-    Anchors are tied to a specific transcript version and recalculated when
-    the transcript changes. Status indicates if anchor is still valid.
+    Anchors are tied to a specific transcript version.
     """
 
     __tablename__ = "interview_notes"
@@ -4755,16 +4751,6 @@ class InterviewNote(Base):
         Index("ix_interview_notes_interview", "interview_id"),
         Index("ix_interview_notes_org", "organization_id"),
         Index("ix_interview_notes_parent", "parent_id"),
-        CheckConstraint(
-            "anchor_end IS NULL OR anchor_end >= anchor_start",
-            name="ck_interview_notes_anchor_range",
-        ),
-        # Allow: (1) no anchor at all, (2) offsets with text, (3) anchor_text alone (for comment_id)
-        CheckConstraint(
-            "(anchor_start IS NULL AND anchor_end IS NULL) OR "
-            "(anchor_start IS NOT NULL AND anchor_end IS NOT NULL AND anchor_text IS NOT NULL)",
-            name="ck_interview_notes_anchor_complete",
-        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -4790,17 +4776,7 @@ class InterviewNote(Base):
         String(36), nullable=True, index=True
     )  # UUID format
 
-    # Legacy: text offset anchoring (for backward compatibility)
-    anchor_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    anchor_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
     anchor_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
-
-    # Recalculated anchor for current version
-    current_anchor_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    current_anchor_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    anchor_status: Mapped[str | None] = mapped_column(
-        String(20), nullable=True
-    )  # 'valid', 'approximate', 'lost'
 
     # Metadata
     author_user_id: Mapped[uuid.UUID] = mapped_column(

@@ -34,12 +34,27 @@ def test_case(db, test_org, test_user, default_stage):
     return case
 
 
-def _create_interview(db, org_id, case_id, user_id, transcript_html="<p>Transcript</p>"):
+def _default_transcript_json():
+    return {
+        "type": "doc",
+        "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": "Transcript"}]},
+        ],
+    }
+
+
+_DEFAULT_TRANSCRIPT = object()
+
+
+def _create_interview(db, org_id, case_id, user_id, transcript_json=_DEFAULT_TRANSCRIPT):
+    if transcript_json is _DEFAULT_TRANSCRIPT:
+        transcript_json = _default_transcript_json()
+
     data = InterviewCreate(
         interview_type="phone",
         conducted_at=datetime.now(timezone.utc),
         duration_minutes=30,
-        transcript_html=transcript_html,
+        transcript_json=transcript_json,
         status="completed",
     )
     interview = interview_service.create_interview(
@@ -109,7 +124,7 @@ async def test_list_interviews_includes_counts(
 async def test_request_transcription_enqueues_job(
     authed_client: AsyncClient, db, test_org, test_user, test_case
 ):
-    interview = _create_interview(db, test_org.id, test_case.id, test_user.id, transcript_html=None)
+    interview = _create_interview(db, test_org.id, test_case.id, test_user.id, transcript_json=None)
 
     attachment = Attachment(
         id=uuid4(),

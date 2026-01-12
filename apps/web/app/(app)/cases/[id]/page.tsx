@@ -72,6 +72,17 @@ const EMAIL_TYPES: EmailType[] = [
     "introduction",
 ]
 
+type TaskEditPayload = {
+    id: string
+    title: string
+    description: string | null
+    task_type: string
+    due_date: string | null
+    due_time: string | null
+    is_completed: boolean
+    case_id: string | null
+}
+
 // Format date for display
 function formatDateTime(dateString: string): string {
     const parsed = parseDateInput(dateString)
@@ -404,7 +415,7 @@ export default function CaseDetailPage() {
         setEditingTask(task)
     }
 
-    const handleSaveTask = async (taskId: string, data: Partial<TaskListItem>) => {
+    const handleSaveTask = async (taskId: string, data: Partial<TaskEditPayload>) => {
         const payload: Record<string, unknown> = {}
         for (const [key, value] of Object.entries(data)) {
             payload[key] = value === null ? undefined : value
@@ -983,13 +994,13 @@ export default function CaseDetailPage() {
                             due_time: editingTask.due_time ?? null,
                             is_completed: editingTask.is_completed,
                             case_id: editingTask.case_id,
-                        } : null}
-                        open={!!editingTask}
-                        onClose={() => setEditingTask(null)}
-                        onSave={(taskId, data) => handleSaveTask(taskId, data as Partial<TaskListItem>)}
-                        onDelete={handleDeleteTask}
-                        isDeleting={deleteTaskMutation.isPending}
-                    />
+                    } : null}
+                    open={!!editingTask}
+                    onClose={() => setEditingTask(null)}
+                    onSave={handleSaveTask}
+                    onDelete={handleDeleteTask}
+                    isDeleting={deleteTaskMutation.isPending}
+                />
 
                     {/* APPLICATION TAB */}
                     <TabsContent value="application" className="space-y-4">

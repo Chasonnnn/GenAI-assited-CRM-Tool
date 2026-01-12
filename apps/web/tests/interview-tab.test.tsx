@@ -127,7 +127,6 @@ describe('CaseInterviewTab', () => {
                 },
             ],
         },
-        transcript_html: '<p>Transcript</p>',
         transcript_version: 2,
         transcript_size_bytes: 1200,
         is_transcript_offloaded: false,

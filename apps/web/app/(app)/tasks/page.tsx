@@ -101,6 +101,21 @@ type FilterType = "all" | "my_tasks"
 const isFilterType = (value: string | null): value is FilterType =>
     value === "all" || value === "my_tasks"
 
+type ViewType = "list" | "calendar"
+const isViewType = (value: string | null): value is ViewType =>
+    value === "list" || value === "calendar"
+
+type TaskEditPayload = {
+    id: string
+    title: string
+    description: string | null
+    task_type: string
+    due_date: string | null
+    due_time: string | null
+    is_completed: boolean
+    case_id: string | null
+}
+
 export default function TasksPage() {
     const searchParams = useSearchParams()
     const router = useRouter()
@@ -112,9 +127,10 @@ export default function TasksPage() {
         isFilterType(urlFilter) ? urlFilter : "my_tasks"
     )
     const [showCompleted, setShowCompleted] = useState(false)
-    const [view, setView] = useState<"list" | "calendar">(() => {
+    const [view, setView] = useState<ViewType>(() => {
         if (typeof window !== "undefined") {
-            return (localStorage.getItem("tasks-view") as "list" | "calendar") || "calendar"
+            const stored = localStorage.getItem("tasks-view")
+            return isViewType(stored) ? stored : "calendar"
         }
         return "calendar"
     })
@@ -137,7 +153,7 @@ export default function TasksPage() {
         updateUrlParams(newFilter)
     }, [updateUrlParams])
 
-    const handleViewChange = (newView: "list" | "calendar") => {
+    const handleViewChange = (newView: ViewType) => {
         setView(newView)
         localStorage.setItem("tasks-view", newView)
     }
@@ -150,7 +166,7 @@ export default function TasksPage() {
         setEditingTask(task)
     }
 
-    const handleSaveTask = async (taskId: string, data: Partial<TaskListItem>) => {
+    const handleSaveTask = async (taskId: string, data: Partial<TaskEditPayload>) => {
         const payload: Record<string, unknown> = {}
         for (const [key, value] of Object.entries(data)) {
             payload[key] = value === null ? undefined : value
@@ -606,7 +622,7 @@ export default function TasksPage() {
                     } : null}
                     open={!!editingTask}
                     onClose={() => setEditingTask(null)}
-                    onSave={(taskId, data) => handleSaveTask(taskId, data as Partial<TaskListItem>)}
+                    onSave={handleSaveTask}
                     onDelete={handleDeleteTask}
                     isDeleting={deleteTask.isPending}
                 />

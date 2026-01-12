@@ -7,13 +7,8 @@ import nh3
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import CaseInterview, InterviewNote, InterviewTranscriptVersion
+from app.db.models import CaseInterview, InterviewNote
 from app.schemas.interview import InterviewNoteCreate, InterviewNoteUpdate
-from app.services.anchor_service import (
-    normalize_anchor_text,
-    recalculate_anchor_positions,
-    validate_anchor_selection,
-)
 
 # Allowed HTML tags for note content (same as note_service)
 ALLOWED_TAGS = {
@@ -55,11 +50,10 @@ def create_note(
     """
     Create a new note on an interview.
 
-    Validates anchor position if provided.
     Defaults transcript_version to current interview version.
     """
     if data.parent_id:
-        if data.comment_id or data.anchor_text or data.anchor_start is not None or data.anchor_end is not None:
+        if data.comment_id or data.anchor_text:
             raise ValueError("Replies cannot be anchored")
         parent_note = db.scalar(
             select(InterviewNote).where(
@@ -74,86 +68,11 @@ def create_note(
     # Determine transcript version
     transcript_version = data.transcript_version or interview.transcript_version
 
-    # Handle anchor_text
-    # For comment_id anchoring (Google Docs style), we just store anchor_text directly
-    # For legacy offset anchoring, we validate and normalize
-    anchor_text = data.anchor_text  # Store as-is for display
-
-    if data.anchor_start is not None and data.anchor_text is not None:
-        # Legacy offset anchoring - validate positions
-        # Get the transcript text for the specified version
-        if transcript_version == interview.transcript_version:
-            transcript_text = interview.transcript_text or ""
-        else:
-            version = db.scalar(
-                select(InterviewTranscriptVersion).where(
-                    InterviewTranscriptVersion.interview_id == interview.id,
-                    InterviewTranscriptVersion.version == transcript_version,
-                )
-            )
-            if not version:
-                raise ValueError(f"Version {transcript_version} not found")
-            transcript_text = version.content_text or ""
-
-        # Validate anchor selection
-        is_valid, error = validate_anchor_selection(
-            transcript_text=transcript_text,
-            anchor_start=data.anchor_start,
-            anchor_end=data.anchor_end,
-            anchor_text=data.anchor_text,
-        )
-        if not is_valid:
-            raise ValueError(f"Invalid anchor: {error}")
-
-        # Normalize anchor text for offset anchoring
-        anchor_text = normalize_anchor_text(data.anchor_text)
+    # Anchor text is stored for comment display
+    anchor_text = data.anchor_text
 
     # Sanitize content
     clean_content = sanitize_html(data.content)
-
-    # Determine current anchor position
-    # If note is on current version, current anchor = original anchor
-    # Otherwise, need to recalculate
-    if transcript_version == interview.transcript_version:
-        current_anchor_start = data.anchor_start
-        current_anchor_end = data.anchor_end
-        anchor_status = "valid" if data.anchor_text else None
-    else:
-        # Recalculate anchor position for current version
-        if data.anchor_text:
-            # Get original version text
-            original_version = db.scalar(
-                select(InterviewTranscriptVersion).where(
-                    InterviewTranscriptVersion.interview_id == interview.id,
-                    InterviewTranscriptVersion.version == transcript_version,
-                )
-            )
-            if original_version:
-                # Create a temporary note-like object for recalculation
-                class TempNote:
-                    pass
-
-                temp = TempNote()
-                temp.anchor_start = data.anchor_start
-                temp.anchor_end = data.anchor_end
-                temp.anchor_text = data.anchor_text
-                temp.transcript_version = transcript_version
-
-                current_anchor_start, current_anchor_end, anchor_status = (
-                    recalculate_anchor_positions(
-                        note=temp,
-                        original_text=original_version.content_text or "",
-                        current_text=interview.transcript_text or "",
-                    )
-                )
-            else:
-                current_anchor_start = None
-                current_anchor_end = None
-                anchor_status = "lost"
-        else:
-            current_anchor_start = None
-            current_anchor_end = None
-            anchor_status = None
 
     note = InterviewNote(
         interview_id=interview.id,
@@ -161,12 +80,7 @@ def create_note(
         content=clean_content,
         transcript_version=transcript_version,
         comment_id=data.comment_id,  # TipTap comment mark ID
-        anchor_start=data.anchor_start,
-        anchor_end=data.anchor_end,
         anchor_text=anchor_text,
-        current_anchor_start=current_anchor_start,
-        current_anchor_end=current_anchor_end,
-        anchor_status=anchor_status,
         author_user_id=user_id,
         parent_id=data.parent_id,  # Thread support
     )
@@ -320,11 +234,6 @@ def to_note_read(note: InterviewNote, current_user_id: UUID) -> dict:
         "transcript_version": note.transcript_version,
         "comment_id": note.comment_id,  # TipTap comment mark ID
         "anchor_text": note.anchor_text,
-        "anchor_start": note.anchor_start,
-        "anchor_end": note.anchor_end,
-        "current_anchor_start": note.current_anchor_start,
-        "current_anchor_end": note.current_anchor_end,
-        "anchor_status": note.anchor_status,
         "parent_id": note.parent_id,
         "replies": replies,
         "resolved_at": note.resolved_at,
