@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Self-Service Cancel Page - /book/[orgId]/cancel/[token]
+ * Self-Service Cancel Page - /book/self-service/[orgId]/cancel/[token]
  *
  * Allows clients to cancel their appointment using a secure token.
  */
