@@ -188,58 +188,6 @@ export async function getCasesByStateCompare(params: CompareParams = {}): Promis
     return res.data;
 }
 
-// Meta Spend types
-export interface CampaignSpend {
-    campaign_id: string;
-    campaign_name: string;
-    spend: number;
-    impressions: number;
-    reach: number;
-    clicks: number;
-    leads: number;
-    cost_per_lead: number | null;
-}
-
-export interface MetaSpendSummary {
-    total_spend: number;
-    total_impressions: number;
-    total_leads: number;
-    cost_per_lead: number | null;
-    campaigns: CampaignSpend[];
-    time_series?: MetaSpendTimePoint[];
-    breakdowns?: MetaSpendBreakdown[];
-}
-
-export interface MetaSpendTimePoint {
-    date_start: string;
-    date_stop: string;
-    spend: number;
-    impressions: number;
-    reach: number;
-    clicks: number;
-    leads: number;
-    cost_per_lead: number | null;
-}
-
-export interface MetaSpendBreakdown {
-    breakdown_values: Record<string, string>;
-    spend: number;
-    impressions: number;
-    reach: number;
-    clicks: number;
-    leads: number;
-    cost_per_lead: number | null;
-}
-
-export async function getMetaSpend(params: DateRangeParams = {}): Promise<MetaSpendSummary> {
-    const searchParams = new URLSearchParams();
-    if (params.from_date) searchParams.set('from_date', params.from_date);
-    if (params.to_date) searchParams.set('to_date', params.to_date);
-
-    const query = searchParams.toString();
-    return api.get<MetaSpendSummary>(`/analytics/meta/spend${query ? `?${query}` : ''}`);
-}
-
 // Activity Feed types
 export interface ActivityFeedItem {
     id: string;
@@ -380,4 +328,161 @@ export async function exportAnalyticsPDF(params: DateRangeParams = {}): Promise<
     link.click();
     link.remove();
     URL.revokeObjectURL(blobUrl);
+}
+
+// =============================================================================
+// Meta Ad Account Types (Stored Data)
+// =============================================================================
+
+export interface MetaAdAccount {
+    id: string;
+    ad_account_external_id: string;
+    ad_account_name: string;
+    hierarchy_synced_at: string | null;
+    spend_synced_at: string | null;
+}
+
+export interface SpendSyncStatus {
+    sync_status: 'synced' | 'pending' | 'never';
+    last_synced_at: string | null;
+    ad_accounts_configured: number;
+}
+
+export interface StoredCampaignSpend {
+    campaign_external_id: string;
+    campaign_name: string;
+    spend: number;
+    impressions: number;
+    clicks: number;
+    leads: number;
+    cost_per_lead: number | null;
+}
+
+export interface SpendBreakdownItem {
+    breakdown_value: string;
+    spend: number;
+    impressions: number;
+    clicks: number;
+    leads: number;
+    cost_per_lead: number | null;
+}
+
+export interface SpendTrendPoint {
+    date: string;
+    spend: number;
+    impressions: number;
+    clicks: number;
+    leads: number;
+    cost_per_lead: number | null;
+}
+
+export interface SpendTotals extends SpendSyncStatus {
+    total_spend: number;
+    total_impressions: number;
+    total_clicks: number;
+    total_leads: number;
+    cost_per_lead: number | null;
+}
+
+export interface FormPerformance {
+    form_external_id: string;
+    form_name: string;
+    lead_count: number;
+    case_count: number;
+    qualified_count: number;
+    conversion_rate: number;
+    qualified_rate: number;
+}
+
+export interface MetaCampaignListItem {
+    campaign_external_id: string;
+    campaign_name: string;
+    status: string;
+    objective: string | null;
+}
+
+// Params interfaces
+export interface SpendParams extends DateRangeParams {
+    ad_account_id?: string;
+}
+
+export interface SpendTrendParams extends SpendParams {
+    campaign_external_id?: string;
+}
+
+export interface BreakdownParams extends SpendParams {
+    breakdown_type: 'publisher_platform' | 'platform_position' | 'age' | 'region';
+}
+
+// =============================================================================
+// Meta Ad Account API Functions
+// =============================================================================
+
+export async function getMetaAdAccounts(): Promise<MetaAdAccount[]> {
+    const res = await api.get<{ data: MetaAdAccount[] }>('/analytics/meta/ad-accounts');
+    return res.data;
+}
+
+export async function getSpendTotals(params: SpendParams = {}): Promise<SpendTotals> {
+    const searchParams = new URLSearchParams();
+    if (params.from_date) searchParams.set('from_date', params.from_date);
+    if (params.to_date) searchParams.set('to_date', params.to_date);
+    if (params.ad_account_id) searchParams.set('ad_account_id', params.ad_account_id);
+
+    const query = searchParams.toString();
+    return api.get<SpendTotals>(`/analytics/meta/spend/totals${query ? `?${query}` : ''}`);
+}
+
+export async function getSpendByCampaign(params: SpendParams = {}): Promise<StoredCampaignSpend[]> {
+    const searchParams = new URLSearchParams();
+    if (params.from_date) searchParams.set('from_date', params.from_date);
+    if (params.to_date) searchParams.set('to_date', params.to_date);
+    if (params.ad_account_id) searchParams.set('ad_account_id', params.ad_account_id);
+
+    const query = searchParams.toString();
+    const res = await api.get<{ data: StoredCampaignSpend[] }>(`/analytics/meta/spend/by-campaign${query ? `?${query}` : ''}`);
+    return res.data;
+}
+
+export async function getSpendByBreakdown(params: BreakdownParams): Promise<SpendBreakdownItem[]> {
+    const searchParams = new URLSearchParams();
+    if (params.from_date) searchParams.set('from_date', params.from_date);
+    if (params.to_date) searchParams.set('to_date', params.to_date);
+    if (params.ad_account_id) searchParams.set('ad_account_id', params.ad_account_id);
+    searchParams.set('breakdown_type', params.breakdown_type);
+
+    const query = searchParams.toString();
+    const res = await api.get<{ data: SpendBreakdownItem[] }>(`/analytics/meta/spend/by-breakdown?${query}`);
+    return res.data;
+}
+
+export async function getSpendTrend(params: SpendTrendParams = {}): Promise<SpendTrendPoint[]> {
+    const searchParams = new URLSearchParams();
+    if (params.from_date) searchParams.set('from_date', params.from_date);
+    if (params.to_date) searchParams.set('to_date', params.to_date);
+    if (params.ad_account_id) searchParams.set('ad_account_id', params.ad_account_id);
+    if (params.campaign_external_id) searchParams.set('campaign_external_id', params.campaign_external_id);
+
+    const query = searchParams.toString();
+    const res = await api.get<{ data: SpendTrendPoint[] }>(`/analytics/meta/spend/trend${query ? `?${query}` : ''}`);
+    return res.data;
+}
+
+export async function getFormPerformance(params: DateRangeParams = {}): Promise<FormPerformance[]> {
+    const searchParams = new URLSearchParams();
+    if (params.from_date) searchParams.set('from_date', params.from_date);
+    if (params.to_date) searchParams.set('to_date', params.to_date);
+
+    const query = searchParams.toString();
+    const res = await api.get<{ data: FormPerformance[] }>(`/analytics/meta/forms${query ? `?${query}` : ''}`);
+    return res.data;
+}
+
+export async function getMetaCampaignList(params: { ad_account_id?: string } = {}): Promise<MetaCampaignListItem[]> {
+    const searchParams = new URLSearchParams();
+    if (params.ad_account_id) searchParams.set('ad_account_id', params.ad_account_id);
+
+    const query = searchParams.toString();
+    const res = await api.get<{ data: MetaCampaignListItem[] }>(`/analytics/meta/campaigns${query ? `?${query}` : ''}`);
+    return res.data;
 }

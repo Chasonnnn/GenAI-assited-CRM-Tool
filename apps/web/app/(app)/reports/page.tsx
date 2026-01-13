@@ -13,11 +13,12 @@ import {
     ChartLegend,
     ChartLegendContent,
 } from "@/components/ui/chart"
-import { useAnalyticsSummary, useCasesByStatus, useCasesByAssignee, useCasesTrend, useMetaPerformance, useFunnelCompare, useCasesByStateCompare, useCampaigns, useMetaSpend, usePerformanceByUser } from "@/lib/hooks/use-analytics"
+import { useAnalyticsSummary, useCasesByStatus, useCasesByAssignee, useCasesTrend, useMetaPerformance, useFunnelCompare, useCasesByStateCompare, useCampaigns, useSpendTotals, usePerformanceByUser } from "@/lib/hooks/use-analytics"
 import { FunnelChart } from "@/components/charts/funnel-chart"
 import { USMapChart } from "@/components/charts/us-map-chart"
 import { TeamPerformanceTable } from "@/components/reports/TeamPerformanceTable"
 import { TeamPerformanceChart } from "@/components/reports/TeamPerformanceChart"
+import { MetaSpendDashboard } from "@/components/reports/MetaSpendDashboard"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { useAuth } from "@/lib/auth-context"
 import { useSetAIContext } from "@/lib/context/ai-context"
@@ -152,7 +153,7 @@ export default function ReportsPage() {
     const { data: byAssignee, isLoading: byAssigneeLoading, isError: byAssigneeError } = useCasesByAssignee()
     const { data: trend, isLoading: trendLoading, isError: trendError } = useCasesTrend(dateParams)
     const { data: metaPerf, isLoading: metaLoading, isError: metaError } = useMetaPerformance(dateParams)
-    const { data: metaSpend, isLoading: spendLoading, isError: spendError } = useMetaSpend(dateParams)
+    const { data: spendTotals, isLoading: spendLoading, isError: spendError } = useSpendTotals(dateParams)
 
     // New hooks for funnel and map
     const { data: campaigns, isLoading: campaignsLoading, isError: campaignsError } = useCampaigns()
@@ -506,11 +507,16 @@ export default function ReportsPage() {
                             ) : (
                                 <>
                                     <div className="text-2xl font-bold">
-                                        ${metaSpend?.total_spend?.toLocaleString() ?? '0'}
+                                        ${spendTotals?.total_spend?.toLocaleString() ?? '0'}
                                     </div>
                                     <p className="text-xs text-muted-foreground">
-                                        CPL: ${metaSpend?.cost_per_lead?.toFixed(2) ?? 'N/A'}
+                                        CPL: ${spendTotals?.cost_per_lead?.toFixed(2) ?? 'N/A'}
                                     </p>
+                                    {spendTotals?.sync_status === 'never' && (
+                                        <p className="text-xs text-amber-600 mt-1">
+                                            No sync data yet
+                                        </p>
+                                    )}
                                 </>
                             )}
                         </CardContent>
@@ -781,6 +787,11 @@ export default function ReportsPage() {
                         isError={byStateError}
                         title="Cases by State"
                     />
+                </div>
+
+                {/* Meta Spend Analytics Dashboard */}
+                <div className="mt-8">
+                    <MetaSpendDashboard dateParams={dateParams} />
                 </div>
 
                 {/* Individual Performance Section */}

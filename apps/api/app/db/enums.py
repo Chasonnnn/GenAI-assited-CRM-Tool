@@ -273,6 +273,9 @@ class JobType(str, Enum):
     NOTIFICATION = "notification"
     META_LEAD_FETCH = "meta_lead_fetch"
     META_CAPI_EVENT = "meta_capi_event"
+    META_HIERARCHY_SYNC = "meta_hierarchy_sync"  # Sync campaigns/adsets/ads
+    META_SPEND_SYNC = "meta_spend_sync"  # Sync daily spend data
+    META_FORM_SYNC = "meta_form_sync"  # Sync form metadata
     WORKFLOW_SWEEP = "workflow_sweep"
     WORKFLOW_EMAIL = "workflow_email"
     CSV_IMPORT = "csv_import"  # Background CSV imports for large files
@@ -358,6 +361,9 @@ class IntegrationType(str, Enum):
 
     META_LEADS = "meta_leads"
     META_CAPI = "meta_capi"
+    META_HIERARCHY = "meta_hierarchy"  # Hierarchy sync health
+    META_SPEND = "meta_spend"  # Spend sync health
+    META_FORMS = "meta_forms"  # Forms sync health
     WORKER = "worker"
 
 

@@ -9,17 +9,22 @@ Enterprise implementation includes:
 - Proper conversion event naming
 - Event deduplication via event_id
 - Flexible status configuration
+- Per-ad-account pixel_id configuration
 """
 
 import hashlib
 import logging
 import time
+from typing import TYPE_CHECKING
 
 import httpx
 
 from app.core.config import settings
 from app.services.meta_api import compute_appsecret_proof
 from app.types import JsonObject
+
+if TYPE_CHECKING:
+    from app.db.models import MetaAdAccount
 
 logger = logging.getLogger(__name__)
 
@@ -247,3 +252,165 @@ def should_send_capi_event(from_status: str, to_status: str) -> bool:
     if not to_meta:
         return False
     return from_meta != to_meta
+
+
+# =============================================================================
+# Per-Account CAPI Support
+# =============================================================================
+
+
+async def send_lead_event_for_account(
+    lead_id: str,
+    ad_account: "MetaAdAccount",
+    event_name: str = "Lead",
+    user_data: JsonObject | None = None,
+    custom_data: JsonObject | None = None,
+    event_id: str | None = None,
+) -> tuple[bool, str | None]:
+    """
+    Send a conversion event using per-account pixel configuration.
+
+    Uses ad_account.pixel_id and ad_account.capi_token_encrypted
+    instead of global settings.
+
+    Args:
+        lead_id: The original Meta leadgen_id
+        ad_account: MetaAdAccount with pixel_id and CAPI token
+        event_name: Event type (Lead, CompleteRegistration, etc.)
+        user_data: Hashed user identifiers
+        custom_data: Additional data (lead_status, value, etc.)
+        event_id: Unique event ID for deduplication
+
+    Returns:
+        (success, error) tuple
+    """
+    from app.core.encryption import decrypt_token
+
+    if not ad_account.capi_enabled:
+        logger.debug(f"CAPI disabled for ad account {ad_account.ad_account_external_id}")
+        return True, None
+
+    if not ad_account.pixel_id:
+        logger.warning(f"No pixel_id configured for ad account {ad_account.ad_account_external_id}")
+        return False, "No pixel_id configured"
+
+    if settings.META_TEST_MODE:
+        logger.info(
+            f"[TEST MODE] Would send CAPI event: {event_name} for lead {lead_id} "
+            f"to pixel {ad_account.pixel_id}"
+        )
+        return True, None
+
+    # Get CAPI token
+    if ad_account.capi_token_encrypted:
+        try:
+            token = decrypt_token(ad_account.capi_token_encrypted)
+        except Exception as e:
+            logger.error(f"Failed to decrypt CAPI token: {e}")
+            return False, "Failed to decrypt CAPI token"
+    else:
+        # Fall back to global token if available
+        token = getattr(settings, "META_CAPI_ACCESS_TOKEN", None)
+        if not token:
+            logger.warning("No CAPI token available (account or global)")
+            return False, "No CAPI token available"
+
+    # Build event payload
+    event_time = int(time.time())
+
+    final_user_data = {"lead_id": lead_id}
+    if user_data:
+        final_user_data.update(user_data)
+
+    event_data = {
+        "event_name": event_name,
+        "event_time": event_time,
+        "action_source": "system_generated",
+        "user_data": final_user_data,
+    }
+
+    if event_id:
+        event_data["event_id"] = event_id
+
+    if custom_data:
+        event_data["custom_data"] = custom_data
+
+    payload = {
+        "data": [event_data],
+        "access_token": token,
+    }
+
+    if settings.META_APP_SECRET:
+        payload["appsecret_proof"] = compute_appsecret_proof(token)
+
+    url = f"{CAPI_URL}/{ad_account.pixel_id}/events"
+
+    try:
+        async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
+            resp = await client.post(url, json=payload)
+
+            if resp.status_code != 200:
+                error_body = resp.text[:500]
+                logger.error(f"Meta CAPI error {resp.status_code}: {error_body}")
+                return False, f"CAPI error {resp.status_code}: {error_body}"
+
+            result = resp.json()
+            events_received = result.get("events_received", 0)
+            logger.info(
+                f"Meta CAPI: sent {event_name} to pixel {ad_account.pixel_id} "
+                f"for lead {lead_id}, received: {events_received}"
+            )
+            return True, None
+
+    except httpx.TimeoutException:
+        logger.error(f"Meta CAPI timeout for lead {lead_id}")
+        return False, "Meta CAPI timeout"
+    except httpx.ConnectError:
+        logger.error(f"Meta CAPI connection failed for lead {lead_id}")
+        return False, "Meta CAPI connection failed"
+    except Exception as e:
+        logger.error(f"Meta CAPI error for lead {lead_id}: {e}")
+        return False, f"Meta CAPI error: {str(e)[:200]}"
+
+
+async def send_status_event_for_account(
+    meta_lead_id: str,
+    ad_account: "MetaAdAccount",
+    case_status: str,
+    meta_status: str,
+    email: str | None = None,
+    phone: str | None = None,
+) -> tuple[bool, str | None]:
+    """
+    Send a lead status update using per-account configuration.
+
+    Args:
+        meta_lead_id: Original Meta leadgen_id
+        ad_account: MetaAdAccount with CAPI configuration
+        case_status: The CRM status that triggered this
+        meta_status: Meta Ads CRM status label
+        email: Optional email for hashed matching
+        phone: Optional phone for hashed matching
+    """
+    user_data = {}
+    if email and "@" in email and "placeholder" not in email:
+        user_data["em"] = hash_for_capi(email)
+    if phone:
+        phone_digits = "".join(c for c in phone if c.isdigit())
+        if len(phone_digits) >= 10:
+            user_data["ph"] = hash_for_capi(phone_digits)
+
+    meta_status_id = _normalize_event_id_value(meta_status)
+    event_id = f"capi_{meta_lead_id}_{meta_status_id}"
+
+    return await send_lead_event_for_account(
+        lead_id=meta_lead_id,
+        ad_account=ad_account,
+        event_name="Lead",
+        user_data=user_data,
+        custom_data={
+            "lead_status": meta_status,
+            "crm_status": case_status,
+        },
+        event_id=event_id,
+    )

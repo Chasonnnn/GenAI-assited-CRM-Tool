@@ -156,17 +156,6 @@ export function useCasesByStateCompare(params: CompareParams = {}) {
     });
 }
 
-/**
- * Fetch Meta Ads spend data.
- */
-export function useMetaSpend(params: DateRangeParams = {}) {
-    return useQuery({
-        queryKey: [...analyticsKeys.all, 'meta-spend', params] as const,
-        queryFn: () => analyticsApi.getMetaSpend(params),
-        staleTime: 60 * 1000,
-    });
-}
-
 interface ActivityFeedParams {
     limit?: number;
     offset?: number;
@@ -194,5 +183,87 @@ export function usePerformanceByUser(params: PerformanceByUserParams = {}) {
         queryKey: [...analyticsKeys.all, 'performance-by-user', params] as const,
         queryFn: () => analyticsApi.getPerformanceByUser(params),
         staleTime: 60 * 1000,
+    });
+}
+
+// =============================================================================
+// Meta Stored Data Hooks (New)
+// =============================================================================
+
+/**
+ * Fetch configured ad accounts for filter dropdown.
+ */
+export function useMetaAdAccounts() {
+    return useQuery({
+        queryKey: [...analyticsKeys.all, 'meta-ad-accounts'] as const,
+        queryFn: analyticsApi.getMetaAdAccounts,
+        staleTime: 5 * 60 * 1000, // 5 minutes - accounts don't change often
+    });
+}
+
+/**
+ * Fetch spend totals with sync status.
+ */
+export function useSpendTotals(params: analyticsApi.SpendParams = {}) {
+    return useQuery({
+        queryKey: [...analyticsKeys.all, 'spend-totals', params] as const,
+        queryFn: () => analyticsApi.getSpendTotals(params),
+        staleTime: 60 * 1000,
+    });
+}
+
+/**
+ * Fetch spend by campaign from stored data.
+ */
+export function useSpendByCampaign(params: analyticsApi.SpendParams = {}) {
+    return useQuery({
+        queryKey: [...analyticsKeys.all, 'spend-by-campaign', params] as const,
+        queryFn: () => analyticsApi.getSpendByCampaign(params),
+        staleTime: 60 * 1000,
+    });
+}
+
+/**
+ * Fetch spend by breakdown dimension from stored data.
+ */
+export function useSpendByBreakdown(params: analyticsApi.BreakdownParams) {
+    return useQuery({
+        queryKey: [...analyticsKeys.all, 'spend-by-breakdown', params] as const,
+        queryFn: () => analyticsApi.getSpendByBreakdown(params),
+        staleTime: 60 * 1000,
+        enabled: !!params.breakdown_type,
+    });
+}
+
+/**
+ * Fetch spend trend from stored data.
+ */
+export function useSpendTrend(params: analyticsApi.SpendTrendParams = {}) {
+    return useQuery({
+        queryKey: [...analyticsKeys.all, 'spend-trend', params] as const,
+        queryFn: () => analyticsApi.getSpendTrend(params),
+        staleTime: 60 * 1000,
+    });
+}
+
+/**
+ * Fetch form performance metrics.
+ */
+export function useFormPerformance(params: DateRangeParams = {}) {
+    return useQuery({
+        queryKey: [...analyticsKeys.all, 'form-performance', params] as const,
+        queryFn: () => analyticsApi.getFormPerformance(params),
+        staleTime: 60 * 1000,
+    });
+}
+
+/**
+ * Fetch synced campaigns for filter dropdown.
+ */
+export function useMetaCampaignList(params: { ad_account_id?: string } = {}) {
+    return useQuery({
+        queryKey: [...analyticsKeys.all, 'meta-campaign-list', params] as const,
+        queryFn: () => analyticsApi.getMetaCampaignList(params),
+        staleTime: 5 * 60 * 1000,
     });
 }

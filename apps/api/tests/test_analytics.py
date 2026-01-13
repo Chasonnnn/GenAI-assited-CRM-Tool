@@ -10,12 +10,13 @@ Tests the analytics router endpoints including:
 """
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
+from decimal import Decimal
 
 import pytest
 
 from app.core.encryption import hash_email, hash_phone
-from app.db.models import Case, PipelineStage, MetaLead
+from app.db.models import Case, PipelineStage, MetaLead, MetaAdAccount, MetaDailySpend
 from app.utils.normalization import normalize_email
 
 
@@ -418,27 +419,47 @@ class TestMetaPerformance:
 
 
 class TestMetaSpend:
-    """Tests for GET /analytics/meta/spend"""
+    """Tests for stored Meta spend endpoints."""
 
     @pytest.mark.asyncio
-    async def test_meta_spend_with_time_series_and_breakdowns(
-        self, authed_client, monkeypatch
-    ):
-        """Meta spend returns time series and breakdowns when requested."""
-        from app.core.config import settings
-
-        monkeypatch.setattr(settings, "META_TEST_MODE", True)
-
-        response = await authed_client.get(
-            "/analytics/meta/spend?time_increment=1&breakdowns=region"
+    async def test_meta_spend_totals(self, authed_client, db, test_org):
+        """Meta spend totals reflect stored spend data."""
+        ad_account = MetaAdAccount(
+            id=uuid.uuid4(),
+            organization_id=test_org.id,
+            ad_account_external_id="act_test_123",
+            ad_account_name="Test Ad Account",
+            is_active=True,
+            spend_synced_at=datetime.now(timezone.utc),
         )
+        db.add(ad_account)
+        db.flush()
+
+        spend_row = MetaDailySpend(
+            id=uuid.uuid4(),
+            organization_id=test_org.id,
+            ad_account_id=ad_account.id,
+            spend_date=date.today(),
+            campaign_external_id="cmp_123",
+            campaign_name="Test Campaign",
+            breakdown_type="_total",
+            breakdown_value="_all",
+            spend=Decimal("100.50"),
+            impressions=1000,
+            reach=900,
+            clicks=50,
+            leads=10,
+        )
+        db.add(spend_row)
+        db.commit()
+
+        response = await authed_client.get("/analytics/meta/spend/totals")
         assert response.status_code == 200
 
         data = response.json()
-        assert "time_series" in data
-        assert "breakdowns" in data
-        assert len(data["time_series"]) >= 1
-        assert len(data["breakdowns"]) >= 1
+        assert data["total_spend"] == 100.5
+        assert data["total_leads"] == 10
+        assert data["sync_status"] == "synced"
 
 
 class TestAnalyticsKPIs:

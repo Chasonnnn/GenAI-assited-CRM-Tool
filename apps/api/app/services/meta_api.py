@@ -349,3 +349,361 @@ def _mock_insights_data(
             **({"country": "US"} if "country" in breakdowns else {}),
         },
     ]
+
+
+# =============================================================================
+# Field Data Processing
+# =============================================================================
+
+
+def extract_field_data_raw(field_data_list: list[JsonObject]) -> JsonObject:
+    """
+    Extract field_data preserving multi-select arrays.
+
+    Returns dict with values as arrays when multiple values present.
+    Used for field_data_raw storage and form analysis.
+    """
+    result: JsonObject = {}
+    for field in field_data_list:
+        name = field.get("name", "").lower().replace(" ", "_")
+        values = field.get("values", [])
+        # Preserve array if multiple values, else single value
+        result[name] = values if len(values) > 1 else (values[0] if values else None)
+    return result
+
+
+# =============================================================================
+# Hierarchy Fetch Functions (Campaigns, AdSets, Ads)
+# =============================================================================
+
+
+async def fetch_campaigns(
+    ad_account_id: str,
+    access_token: str,
+    updated_since: datetime | None = None,
+    fields: str = "id,name,objective,status,updated_time",
+    max_pages: int = 50,
+) -> tuple[list[JsonObject] | None, str | None]:
+    """
+    Fetch campaigns from Meta Marketing API.
+
+    Args:
+        ad_account_id: Meta Ad Account ID (format: act_XXXXX)
+        access_token: System access token with ads_read permission
+        updated_since: Only fetch campaigns updated after this time (delta sync)
+        fields: Fields to retrieve
+        max_pages: Maximum number of pages to fetch
+
+    Returns:
+        (data, error) tuple - data is list of campaign objects
+    """
+    if settings.META_TEST_MODE:
+        return _mock_campaigns_data(), None
+
+    if not access_token:
+        return None, "No access token provided"
+
+    if not ad_account_id:
+        return None, "No ad account ID provided"
+
+    proof = compute_appsecret_proof(access_token)
+    url = f"{_graph_base()}/{ad_account_id}/campaigns"
+    params = {
+        "access_token": access_token,
+        "appsecret_proof": proof,
+        "fields": fields,
+        "limit": 100,
+    }
+    if updated_since:
+        # Use filtering for delta sync
+        params["filtering"] = (
+            f'[{{"field":"updated_time","operator":"GREATER_THAN",'
+            f'"value":"{int(updated_since.timestamp())}"}}]'
+        )
+
+    return await _fetch_paginated(url, params, max_pages)
+
+
+async def fetch_adsets(
+    ad_account_id: str,
+    access_token: str,
+    updated_since: datetime | None = None,
+    fields: str = "id,name,campaign_id,targeting,status,updated_time",
+    max_pages: int = 50,
+) -> tuple[list[JsonObject] | None, str | None]:
+    """
+    Fetch ad sets from Meta Marketing API.
+
+    Args:
+        ad_account_id: Meta Ad Account ID
+        access_token: System access token
+        updated_since: Only fetch adsets updated after this time (delta sync)
+        fields: Fields to retrieve
+        max_pages: Maximum number of pages to fetch
+
+    Returns:
+        (data, error) tuple - data is list of adset objects
+    """
+    if settings.META_TEST_MODE:
+        return _mock_adsets_data(), None
+
+    if not access_token:
+        return None, "No access token provided"
+
+    if not ad_account_id:
+        return None, "No ad account ID provided"
+
+    proof = compute_appsecret_proof(access_token)
+    url = f"{_graph_base()}/{ad_account_id}/adsets"
+    params = {
+        "access_token": access_token,
+        "appsecret_proof": proof,
+        "fields": fields,
+        "limit": 100,
+    }
+    if updated_since:
+        params["filtering"] = (
+            f'[{{"field":"updated_time","operator":"GREATER_THAN",'
+            f'"value":"{int(updated_since.timestamp())}"}}]'
+        )
+
+    return await _fetch_paginated(url, params, max_pages)
+
+
+async def fetch_ads(
+    ad_account_id: str,
+    access_token: str,
+    updated_since: datetime | None = None,
+    fields: str = "id,name,adset_id,campaign_id,status,updated_time",
+    max_pages: int = 100,
+) -> tuple[list[JsonObject] | None, str | None]:
+    """
+    Fetch ads from Meta Marketing API.
+
+    Args:
+        ad_account_id: Meta Ad Account ID
+        access_token: System access token
+        updated_since: Only fetch ads updated after this time (delta sync)
+        fields: Fields to retrieve
+        max_pages: Maximum number of pages to fetch
+
+    Returns:
+        (data, error) tuple - data is list of ad objects
+    """
+    if settings.META_TEST_MODE:
+        return _mock_ads_data(), None
+
+    if not access_token:
+        return None, "No access token provided"
+
+    if not ad_account_id:
+        return None, "No ad account ID provided"
+
+    proof = compute_appsecret_proof(access_token)
+    url = f"{_graph_base()}/{ad_account_id}/ads"
+    params = {
+        "access_token": access_token,
+        "appsecret_proof": proof,
+        "fields": fields,
+        "limit": 100,
+    }
+    if updated_since:
+        params["filtering"] = (
+            f'[{{"field":"updated_time","operator":"GREATER_THAN",'
+            f'"value":"{int(updated_since.timestamp())}"}}]'
+        )
+
+    return await _fetch_paginated(url, params, max_pages)
+
+
+async def fetch_page_leadgen_forms(
+    page_id: str,
+    access_token: str,
+    fields: str = "id,name,questions",
+    max_pages: int = 20,
+) -> tuple[list[JsonObject] | None, str | None]:
+    """
+    Fetch lead gen forms from a Meta Page.
+
+    NOTE: This uses PAGE access tokens, not ad account tokens.
+    Ad accounts don't have permission to access page leadgen_forms.
+
+    Args:
+        page_id: Meta Page ID
+        access_token: Page access token (NOT ad account token)
+        fields: Fields to retrieve
+        max_pages: Maximum number of pages to fetch
+
+    Returns:
+        (data, error) tuple - data is list of form objects
+    """
+    if settings.META_TEST_MODE:
+        return _mock_forms_data(page_id), None
+
+    if not access_token:
+        return None, "No access token provided"
+
+    if not page_id:
+        return None, "No page ID provided"
+
+    proof = compute_appsecret_proof(access_token)
+    url = f"{_graph_base()}/{page_id}/leadgen_forms"
+    params = {
+        "access_token": access_token,
+        "appsecret_proof": proof,
+        "fields": fields,
+        "limit": 50,
+    }
+
+    return await _fetch_paginated(url, params, max_pages)
+
+
+async def _fetch_paginated(
+    url: str,
+    params: dict,
+    max_pages: int,
+) -> tuple[list[JsonObject] | None, str | None]:
+    """Generic paginated fetch helper."""
+    all_data = []
+    pages_fetched = 0
+
+    try:
+        async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
+            while url and pages_fetched < max_pages:
+                resp = await client.get(
+                    url, params=params if pages_fetched == 0 else None
+                )
+
+                if resp.status_code != 200:
+                    error_body = resp.text[:500]
+                    return None, f"Meta API {resp.status_code}: {error_body}"
+
+                data = resp.json()
+                all_data.extend(data.get("data", []))
+                pages_fetched += 1
+
+                # Check for next page
+                paging = data.get("paging", {})
+                url = paging.get("next")
+                params = None  # Next page URL includes all params
+
+            return all_data, None
+
+    except httpx.TimeoutException:
+        return None, "Meta API timeout"
+    except httpx.ConnectError:
+        return None, "Meta API connection failed"
+    except Exception as e:
+        return None, f"Meta API error: {str(e)[:200]}"
+
+
+# =============================================================================
+# Mock Data for Test Mode
+# =============================================================================
+
+
+def _mock_campaigns_data() -> list[JsonObject]:
+    """Return mock campaigns for test mode."""
+    return [
+        {
+            "id": "camp_001",
+            "name": "Surrogacy Leads - California",
+            "objective": "LEAD_GENERATION",
+            "status": "ACTIVE",
+            "updated_time": "2026-01-10T12:00:00+0000",
+        },
+        {
+            "id": "camp_002",
+            "name": "Surrogacy Leads - Texas",
+            "objective": "LEAD_GENERATION",
+            "status": "ACTIVE",
+            "updated_time": "2026-01-10T12:00:00+0000",
+        },
+        {
+            "id": "camp_003",
+            "name": "Surrogacy Awareness",
+            "objective": "REACH",
+            "status": "PAUSED",
+            "updated_time": "2026-01-05T12:00:00+0000",
+        },
+    ]
+
+
+def _mock_adsets_data() -> list[JsonObject]:
+    """Return mock adsets for test mode."""
+    return [
+        {
+            "id": "adset_001",
+            "name": "CA - Women 25-35",
+            "campaign_id": "camp_001",
+            "status": "ACTIVE",
+            "targeting": {"geo_locations": {"regions": [{"key": "CA"}]}},
+            "updated_time": "2026-01-10T12:00:00+0000",
+        },
+        {
+            "id": "adset_002",
+            "name": "TX - Women 25-35",
+            "campaign_id": "camp_002",
+            "status": "ACTIVE",
+            "targeting": {"geo_locations": {"regions": [{"key": "TX"}]}},
+            "updated_time": "2026-01-10T12:00:00+0000",
+        },
+    ]
+
+
+def _mock_ads_data() -> list[JsonObject]:
+    """Return mock ads for test mode."""
+    return [
+        {
+            "id": "ad_001",
+            "name": "CA Lead Ad - Video",
+            "adset_id": "adset_001",
+            "campaign_id": "camp_001",
+            "status": "ACTIVE",
+            "updated_time": "2026-01-10T12:00:00+0000",
+        },
+        {
+            "id": "ad_002",
+            "name": "CA Lead Ad - Image",
+            "adset_id": "adset_001",
+            "campaign_id": "camp_001",
+            "status": "ACTIVE",
+            "updated_time": "2026-01-10T12:00:00+0000",
+        },
+        {
+            "id": "ad_003",
+            "name": "TX Lead Ad - Video",
+            "adset_id": "adset_002",
+            "campaign_id": "camp_002",
+            "status": "ACTIVE",
+            "updated_time": "2026-01-10T12:00:00+0000",
+        },
+    ]
+
+
+def _mock_forms_data(page_id: str) -> list[JsonObject]:
+    """Return mock forms for test mode."""
+    return [
+        {
+            "id": "form_001",
+            "name": "Surrogacy Application - Standard",
+            "questions": [
+                {"key": "full_name", "type": "FULL_NAME", "label": "Full Name"},
+                {"key": "email", "type": "EMAIL", "label": "Email"},
+                {"key": "phone_number", "type": "PHONE", "label": "Phone"},
+                {"key": "state", "type": "CUSTOM", "label": "State of Residence"},
+            ],
+        },
+        {
+            "id": "form_002",
+            "name": "Surrogacy Application - Extended",
+            "questions": [
+                {"key": "full_name", "type": "FULL_NAME", "label": "Full Name"},
+                {"key": "email", "type": "EMAIL", "label": "Email"},
+                {"key": "phone_number", "type": "PHONE", "label": "Phone"},
+                {"key": "date_of_birth", "type": "DATE_OF_BIRTH", "label": "DOB"},
+                {"key": "state", "type": "CUSTOM", "label": "State of Residence"},
+                {"key": "has_child", "type": "CUSTOM", "label": "Have you given birth?"},
+            ],
+        },
+    ]

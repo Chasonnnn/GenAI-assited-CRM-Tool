@@ -411,18 +411,15 @@ def _maybe_send_capi_event(
     Triggers when:
     - Case source is META
     - Status changes into a different Meta status bucket
-    - CAPI is enabled
+
+    Note: Per-account CAPI enablement is checked in the worker handler,
+    allowing us to skip cases without an ad account or where CAPI is disabled.
     """
-    from app.core.config import settings
     from app.db.enums import CaseSource, JobType
     from app.services import job_service
 
     # Only for Meta-sourced cases
     if case.source != CaseSource.META.value:
-        return
-
-    # Only if CAPI is enabled
-    if not settings.META_CAPI_ENABLED:
         return
 
     # Check if this status change should trigger CAPI
@@ -458,6 +455,7 @@ def _maybe_send_capi_event(
             job_type=JobType.META_CAPI_EVENT,
             payload={
                 "meta_lead_id": meta_lead.meta_lead_id,
+                "meta_ad_external_id": case.meta_ad_external_id,  # For per-account CAPI
                 "case_status": new_status,
                 "email": case.email,
                 "phone": case.phone,
