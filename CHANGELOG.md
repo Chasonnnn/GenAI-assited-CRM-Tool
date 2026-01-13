@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.18.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.17.0...surrogacy-crm-platform-v0.18.0) (2026-01-13)
+
+
+### Features
+
+* improve dev experience and code quality ([0aeca2d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0aeca2d4a9c72fc94e2bedfcddf709b63715a88b))
+* membership soft-delete + dependency upgrades + lifespan ([29f403b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/29f403bf82582842bc11a2c23d69d50c9497eddd))
+* scope org-sensitive paths for security ([e990150](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e9901503b57d188e1f3aff9a0e3ef8d0da78aed1))
+* **ui:** comprehensive UI/UX audit Phase 1 & 2 ([7661078](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7661078aa5450cb212db3d4c1eae2f92e528adcc))
+
+
+### Bug Fixes
+
+* baseline migration FK ordering + protobuf CVE ([c37d027](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c37d027260b89ea54ceb97a4a89693830e9015a9))
+
+
+### Performance Improvements
+
+* eliminate N+1 queries and harden config ([a690226](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a690226396e81508b7a34f50f62147bf4ba1954c))
+
 ## [0.17.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.16.0...surrogacy-crm-platform-v0.17.0) (2026-01-08)
 
 
