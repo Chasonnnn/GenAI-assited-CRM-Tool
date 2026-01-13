@@ -149,7 +149,7 @@ def list_tasks(
     )
     db.commit()
 
-    context = task_service.get_task_context(db, tasks)
+    context = task_service.get_task_context(db, session.org_id, tasks)
     return TaskListResponse(
         items=[task_service.to_task_list_item(t, context) for t in tasks],
         total=total,
@@ -206,7 +206,7 @@ def create_task(
         data=data,
     )
     dashboard_service.push_dashboard_stats(db, session.org_id)
-    context = task_service.get_task_context(db, [task])
+    context = task_service.get_task_context(db, session.org_id, [task])
     return task_service.to_task_read(task, context)
 
 
@@ -244,7 +244,7 @@ def get_task(
     )
     db.commit()
 
-    context = task_service.get_task_context(db, [task])
+    context = task_service.get_task_context(db, session.org_id, [task])
     return task_service.to_task_read(task, context)
 
 
@@ -289,7 +289,7 @@ def update_task(
             raise HTTPException(status_code=400, detail=str(e))
 
     task = task_service.update_task(db, task, data, actor_user_id=session.user_id)
-    context = task_service.get_task_context(db, [task])
+    context = task_service.get_task_context(db, session.org_id, [task])
     return task_service.to_task_read(task, context)
 
 
@@ -330,7 +330,7 @@ def complete_task(
 
     task = task_service.complete_task(db, task, session.user_id)
     dashboard_service.push_dashboard_stats(db, session.org_id)
-    context = task_service.get_task_context(db, [task])
+    context = task_service.get_task_context(db, session.org_id, [task])
     return task_service.to_task_read(task, context)
 
 
@@ -367,7 +367,7 @@ def uncomplete_task(
 
     task = task_service.uncomplete_task(db, task)
     dashboard_service.push_dashboard_stats(db, session.org_id)
-    context = task_service.get_task_context(db, [task])
+    context = task_service.get_task_context(db, session.org_id, [task])
     return task_service.to_task_read(task, context)
 
 
@@ -562,5 +562,5 @@ def resolve_workflow_approval(
         else:
             raise HTTPException(status_code=400, detail=str(e))
 
-    context = task_service.get_task_context(db, [task])
+    context = task_service.get_task_context(db, session.org_id, [task])
     return task_service.to_task_read(task, context)

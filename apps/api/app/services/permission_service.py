@@ -159,6 +159,7 @@ def set_user_override(
             .filter(
                 Membership.organization_id == org_id,
                 Membership.user_id == target_user_id,
+                Membership.is_active.is_(True),
             )
             .first()
         )
@@ -403,7 +404,10 @@ def list_members(
     return (
         db.query(Membership, User)
         .join(User, Membership.user_id == User.id)
-        .filter(Membership.organization_id == org_id)
+        .filter(
+            Membership.organization_id == org_id,
+            Membership.is_active.is_(True),
+        )
         .order_by(User.display_name, User.email)
         .all()
     )
@@ -423,6 +427,7 @@ def get_member(
         .filter(
             Membership.id == member_id,
             Membership.organization_id == org_id,
+            Membership.is_active.is_(True),
         )
         .first()
     )
@@ -441,6 +446,7 @@ def get_membership_for_user(
         .filter(
             Membership.user_id == user_id,
             Membership.organization_id == org_id,
+            Membership.is_active.is_(True),
         )
         .first()
     )

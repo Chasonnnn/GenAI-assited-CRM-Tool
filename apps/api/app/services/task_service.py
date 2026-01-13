@@ -8,7 +8,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.db.enums import TaskType, TaskStatus, OwnerType
-from app.db.models import Task, User, Queue, Case, WorkflowExecution, WorkflowResumeJob
+from app.db.models import Case, Membership, Queue, Task, User, WorkflowExecution, WorkflowResumeJob
 from app.schemas.task import TaskCreate, TaskUpdate, TaskRead, TaskListItem
 from app.services import membership_service, queue_service
 
@@ -238,6 +238,7 @@ def validate_task_owner(
 
 def get_task_context(
     db: Session,
+    org_id: UUID,
     tasks: list[Task],
 ) -> dict[str, dict[UUID, str | None]]:
     """Fetch related data for tasks in bulk."""
@@ -264,17 +265,29 @@ def get_task_context(
 
     user_names = {}
     if user_ids:
-        users = db.query(User).filter(User.id.in_(user_ids)).all()
+        # Include inactive memberships so historical tasks keep user names.
+        users = (
+            db.query(User)
+            .join(Membership, Membership.user_id == User.id)
+            .filter(Membership.organization_id == org_id, User.id.in_(user_ids))
+            .all()
+        )
         user_names = {user.id: user.display_name for user in users}
 
     queue_names = {}
     if queue_ids:
-        queues = db.query(Queue).filter(Queue.id.in_(queue_ids)).all()
+        queues = db.query(Queue).filter(
+            Queue.organization_id == org_id,
+            Queue.id.in_(queue_ids),
+        ).all()
         queue_names = {queue.id: queue.name for queue in queues}
 
     case_numbers = {}
     if case_ids:
-        cases = db.query(Case).filter(Case.id.in_(case_ids)).all()
+        cases = db.query(Case).filter(
+            Case.organization_id == org_id,
+            Case.id.in_(case_ids),
+        ).all()
         case_numbers = {case.id: case.case_number for case in cases}
 
     return {

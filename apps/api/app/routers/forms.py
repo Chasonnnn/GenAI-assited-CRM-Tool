@@ -14,7 +14,7 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
-from app.db.models import Case, Form, FormSubmission, Organization
+from app.db.models import Form, FormSubmission
 from app.schemas.auth import UserSession
 from app.schemas.forms import (
     FormCreate,
@@ -35,7 +35,7 @@ from app.schemas.forms import (
     FormSubmissionAnswersUpdate,
     FormSubmissionAnswersUpdateResponse,
 )
-from app.services import form_service, audit_service
+from app.services import audit_service, case_service, form_service, org_service
 
 router = APIRouter(prefix="/forms", tags=["forms"])
 
@@ -342,8 +342,8 @@ def create_submission_token(
     form = form_service.get_form(db, session.org_id, form_id)
     if not form:
         raise HTTPException(status_code=404, detail="Form not found")
-    case = db.query(Case).filter(Case.id == body.case_id).first()
-    if not case or case.organization_id != session.org_id:
+    case = case_service.get_case(db, session.org_id, body.case_id)
+    if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
     try:
@@ -377,8 +377,8 @@ def get_case_submission(
     form = form_service.get_form(db, session.org_id, form_id)
     if not form:
         raise HTTPException(status_code=404, detail="Form not found")
-    case = db.query(Case).filter(Case.id == case_id).first()
-    if not case or case.organization_id != session.org_id:
+    case = case_service.get_case(db, session.org_id, case_id)
+    if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
     submission = form_service.get_submission_by_case(
@@ -456,7 +456,7 @@ def approve_submission(
     submission = form_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
-    case = db.query(Case).filter(Case.id == submission.case_id).first()
+    case = case_service.get_case(db, session.org_id, submission.case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
@@ -490,7 +490,7 @@ def reject_submission(
     submission = form_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
-    case = db.query(Case).filter(Case.id == submission.case_id).first()
+    case = case_service.get_case(db, session.org_id, submission.case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
@@ -525,7 +525,7 @@ def update_submission_answers(
     submission = form_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
-    case = db.query(Case).filter(Case.id == submission.case_id).first()
+    case = case_service.get_case(db, session.org_id, submission.case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
@@ -560,7 +560,7 @@ def download_submission_file(
     submission = form_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
-    case = db.query(Case).filter(Case.id == submission.case_id).first()
+    case = case_service.get_case(db, session.org_id, submission.case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
@@ -621,7 +621,7 @@ async def upload_submission_file(
     submission = form_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
-    case = db.query(Case).filter(Case.id == submission.case_id).first()
+    case = case_service.get_case(db, session.org_id, submission.case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
@@ -663,7 +663,7 @@ def delete_submission_file(
     submission = form_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
-    case = db.query(Case).filter(Case.id == submission.case_id).first()
+    case = case_service.get_case(db, session.org_id, submission.case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
@@ -702,12 +702,12 @@ def export_submission_pdf(
     submission = form_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
-    case = db.query(Case).filter(Case.id == submission.case_id).first()
+    case = case_service.get_case(db, session.org_id, submission.case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
 
-    org = db.query(Organization).filter(Organization.id == session.org_id).first()
+    org = org_service.get_org_by_id(db, session.org_id)
     org_name = org.name if org else ""
     case_name = case.full_name or f"Case #{case.case_number or case.id}"
 

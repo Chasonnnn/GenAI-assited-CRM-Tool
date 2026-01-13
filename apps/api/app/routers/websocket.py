@@ -90,7 +90,10 @@ async def websocket_notifications(
                 user_id = dev_user.id
                 membership = (
                     db.query(Membership)
-                    .filter(Membership.user_id == dev_user.id)
+                    .filter(
+                        Membership.user_id == dev_user.id,
+                        Membership.is_active.is_(True),
+                    )
                     .first()
                 )
                 if membership:

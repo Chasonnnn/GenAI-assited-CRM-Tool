@@ -95,6 +95,7 @@ def create_user_from_invite(
         user_id=user.id,
         organization_id=invite.organization_id,
         role=invite.role,
+        is_active=True,
     )
     db.add(membership)
 
@@ -148,7 +149,14 @@ def resolve_user_and_create_session(
 
     if user:
         # Existing user - validate and create session
-        membership = db.query(Membership).filter(Membership.user_id == user.id).first()
+        membership = (
+            db.query(Membership)
+            .filter(
+                Membership.user_id == user.id,
+                Membership.is_active.is_(True),
+            )
+            .first()
+        )
         if not user.is_active:
             _log_login_failed(
                 membership.organization_id if membership else None, "account_disabled"

@@ -638,6 +638,10 @@ Deliverable
 Deferred Improvements (Future Work)
 -----------------------------------
 
+Dependencies (2026-01) — COMPLETE
+- Upgraded opentelemetry instrumentation to remove pkg_resources deprecation warnings.
+- Upgraded protobuf to address PyType_Spec deprecation warnings.
+
 Dependencies (2025-12-14) — COMPLETED
 - Upgraded to Next.js 16, React 19.2.3, Zod 4, latest Radix UI
 - recharts upgraded to v3.5.1 — Rewrote ChartTooltipContent and ChartLegendContent

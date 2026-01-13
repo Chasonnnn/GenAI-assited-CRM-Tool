@@ -14,9 +14,9 @@ from app.core.deps import (
     require_csrf_header,
 )
 from app.db.enums import Role
-from app.db.models import Case, FormSubmission
+from app.db.models import FormSubmission
 from app.schemas.auth import UserSession
-from app.services import profile_service
+from app.services import case_service, org_service, profile_service
 
 router = APIRouter(prefix="/cases", tags=["profile"])
 
@@ -91,8 +91,8 @@ def get_profile(
     """Get profile data for a case (case_manager+ only)."""
     _require_case_manager(session)
 
-    case = db.query(Case).filter(Case.id == case_id).first()
-    if not case or case.organization_id != session.org_id:
+    case = case_service.get_case(db, session.org_id, case_id)
+    if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
 
@@ -113,8 +113,8 @@ def sync_profile(
     """Get staged diff from latest submission (requires Save to persist)."""
     _require_case_manager(session)
 
-    case = db.query(Case).filter(Case.id == case_id).first()
-    if not case or case.organization_id != session.org_id:
+    case = case_service.get_case(db, session.org_id, case_id)
+    if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
 
@@ -150,8 +150,8 @@ def save_profile_overrides(
     """Save profile overrides (and optionally update base submission ID after sync)."""
     _require_case_manager(session)
 
-    case = db.query(Case).filter(Case.id == case_id).first()
-    if not case or case.organization_id != session.org_id:
+    case = case_service.get_case(db, session.org_id, case_id)
+    if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
 
@@ -182,8 +182,8 @@ def toggle_hidden_field(
     """Toggle hidden state for a profile field."""
     _require_case_manager(session)
 
-    case = db.query(Case).filter(Case.id == case_id).first()
-    if not case or case.organization_id != session.org_id:
+    case = case_service.get_case(db, session.org_id, case_id)
+    if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
 
@@ -208,18 +208,17 @@ def export_profile_pdf(
 ):
     """Export profile as PDF with hidden fields masked."""
     from fastapi.responses import Response
-    from app.db.models import Organization
     from app.services import pdf_export_service
 
     _require_case_manager(session)
 
-    case = db.query(Case).filter(Case.id == case_id).first()
-    if not case or case.organization_id != session.org_id:
+    case = case_service.get_case(db, session.org_id, case_id)
+    if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
 
     # Get org name for header
-    org = db.query(Organization).filter(Organization.id == session.org_id).first()
+    org = org_service.get_org_by_id(db, session.org_id)
     org_name = org.name if org else ""
 
     # Case display name

@@ -1967,6 +1967,7 @@ def _get_cohort_performance(
         .join(Membership, Membership.user_id == User.id)
         .filter(
             Membership.organization_id == organization_id,
+            Membership.is_active.is_(True),
             User.is_active.is_(True),
         )
         .all()
@@ -2125,6 +2126,7 @@ def _get_activity_performance(
         .join(Membership, Membership.user_id == User.id)
         .filter(
             Membership.organization_id == organization_id,
+            Membership.is_active.is_(True),
             User.is_active.is_(True),
         )
         .all()

@@ -1158,6 +1158,7 @@ class WorkflowEngine:
                 .filter(
                     Membership.organization_id == entity.organization_id,
                     Membership.role.in_([Role.ADMIN.value, Role.DEVELOPER.value]),
+                    Membership.is_active.is_(True),
                 )
                 .all()
             )

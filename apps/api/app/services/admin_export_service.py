@@ -488,6 +488,7 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "user_id": str(membership.user_id),
             "organization_id": str(membership.organization_id),
             "role": membership.role,
+            "is_active": membership.is_active,
             "created_at": membership.created_at,
         }
         for _user, membership in members

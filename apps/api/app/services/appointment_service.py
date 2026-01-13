@@ -804,6 +804,7 @@ def get_available_slots(
     # Get existing appointments
     existing_appointments = _get_conflicting_appointments(
         db,
+        query.org_id,
         query.user_id,
         user_date_start,
         user_date_end,
@@ -976,6 +977,7 @@ def _build_day_slots(
 
 def _get_conflicting_appointments(
     db: Session,
+    org_id: UUID,
     user_id: UUID,
     date_start: date,
     date_end: date,
@@ -987,6 +989,7 @@ def _get_conflicting_appointments(
     now = datetime.now(timezone.utc)
 
     query = db.query(Appointment).filter(
+        Appointment.organization_id == org_id,
         Appointment.user_id == user_id,
         Appointment.scheduled_start < end_dt,
         Appointment.scheduled_end > start_dt,

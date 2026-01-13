@@ -250,12 +250,16 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
         membership = existing_memberships_by_user.get(user_id)
         if membership:
             membership.role = membership_data.get("role", membership.role)
+            membership.is_active = membership_data.get(
+                "is_active", membership.is_active
+            )
         else:
             membership = Membership(
                 id=UUID(membership_data["id"]),
                 user_id=user_id,
                 organization_id=org_id,
                 role=membership_data.get("role"),
+                is_active=membership_data.get("is_active", True),
                 created_at=_parse_datetime(membership_data.get("created_at"))
                 or datetime.now(timezone.utc),
             )

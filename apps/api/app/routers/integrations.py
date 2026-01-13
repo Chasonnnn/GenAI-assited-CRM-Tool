@@ -192,7 +192,8 @@ async def gmail_callback(
 
     try:
         stored_payload = parse_oauth_state_payload(state_cookie)
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Gmail OAuth state parse failed for user={session.user_id} org={session.org_id}: {e}")
         return error_response
 
     user_agent = request.headers.get("user-agent", "")
@@ -247,7 +248,8 @@ async def gmail_callback(
         )
         success.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
         return success
-    except Exception:
+    except Exception as e:
+        logger.exception(f"Gmail OAuth callback failed for user={session.user_id} org={session.org_id}: {e}")
         error = RedirectResponse(
             f"{settings.FRONTEND_URL}/settings/integrations?error=gmail_failed",
             status_code=302,
@@ -442,7 +444,8 @@ async def zoom_callback(
 
     try:
         stored_payload = parse_oauth_state_payload(state_cookie)
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Zoom OAuth state parse failed for user={session.user_id} org={session.org_id}: {e}")
         return error_response
 
     user_agent = request.headers.get("user-agent", "")
@@ -497,7 +500,8 @@ async def zoom_callback(
         )
         success.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
         return success
-    except Exception:
+    except Exception as e:
+        logger.exception(f"Zoom OAuth callback failed for user={session.user_id} org={session.org_id}: {e}")
         error = RedirectResponse(
             f"{settings.FRONTEND_URL}/settings/integrations?error=zoom_failed",
             status_code=302,
