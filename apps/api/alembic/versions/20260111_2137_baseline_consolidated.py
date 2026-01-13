@@ -11,6 +11,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from app.db import types
+
 
 # revision identifiers, used by Alembic.
 revision: str = "20260111_2137"
@@ -459,13 +461,13 @@ def upgrade() -> None:
     sa.Column('id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
     sa.Column('organization_id', sa.UUID(), nullable=False),
     sa.Column('full_name', sa.String(length=255), nullable=False),
-    sa.Column('email', app.db.types.EncryptedString(), nullable=False),
+    sa.Column('email', types.EncryptedString(), nullable=False),
     sa.Column('email_hash', sa.String(length=64), nullable=False),
-    sa.Column('phone', app.db.types.EncryptedString(), nullable=True),
+    sa.Column('phone', types.EncryptedString(), nullable=True),
     sa.Column('phone_hash', sa.String(length=64), nullable=True),
     sa.Column('state', sa.String(length=100), nullable=True),
     sa.Column('budget', sa.Numeric(precision=12, scale=2), nullable=True),
-    sa.Column('notes_internal', app.db.types.EncryptedText(), nullable=True),
+    sa.Column('notes_internal', types.EncryptedText(), nullable=True),
     sa.Column('status', sa.String(length=50), server_default=sa.text("'new'"), nullable=False),
     sa.Column('owner_type', sa.String(length=10), nullable=True),
     sa.Column('owner_id', sa.UUID(), nullable=True),
@@ -915,12 +917,12 @@ def upgrade() -> None:
     sa.Column('meta_ad_id', sa.String(length=100), nullable=True),
     sa.Column('meta_form_id', sa.String(length=100), nullable=True),
     sa.Column('full_name', sa.String(length=255), nullable=False),
-    sa.Column('email', app.db.types.EncryptedString(), nullable=False),
+    sa.Column('email', types.EncryptedString(), nullable=False),
     sa.Column('email_hash', sa.String(length=64), nullable=False),
-    sa.Column('phone', app.db.types.EncryptedString(), nullable=True),
+    sa.Column('phone', types.EncryptedString(), nullable=True),
     sa.Column('phone_hash', sa.String(length=64), nullable=True),
     sa.Column('state', sa.String(length=2), nullable=True),
-    sa.Column('date_of_birth', app.db.types.EncryptedDate(), nullable=True),
+    sa.Column('date_of_birth', types.EncryptedDate(), nullable=True),
     sa.Column('race', sa.String(length=100), nullable=True),
     sa.Column('height_ft', sa.Numeric(precision=3, scale=1), nullable=True),
     sa.Column('weight_lb', sa.Integer(), nullable=True),
