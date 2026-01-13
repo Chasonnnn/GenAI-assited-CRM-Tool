@@ -1511,7 +1511,7 @@ def upgrade() -> None:
     op.create_index('idx_role_permissions_org_role', 'role_permissions', ['organization_id', 'role'], unique=False)
     op.create_index('ix_system_alerts_org_status', 'system_alerts', ['organization_id', 'status', 'severity'], unique=False)
     op.create_index('idx_user_overrides_org_user', 'user_permission_overrides', ['organization_id', 'user_id'], unique=False)
-    op.create_index('idx_user_sessions_expires', 'user_sessions', ['expires_at'], unique=False, postgresql_where=sa.text('expires_at > now()'))
+    op.create_index('idx_user_sessions_expires', 'user_sessions', ['expires_at'], unique=False)
     op.create_index('idx_user_sessions_org_id', 'user_sessions', ['organization_id'], unique=False)
     op.create_index('idx_user_sessions_token_hash', 'user_sessions', ['session_token_hash'], unique=False)
     op.create_index('idx_user_sessions_user_id', 'user_sessions', ['user_id'], unique=False)
