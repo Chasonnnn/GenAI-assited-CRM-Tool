@@ -71,42 +71,6 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('organization_id', 'period_start', 'route', 'method', name='uq_request_metrics_rollup')
     )
-    op.create_table('tasks',
-    sa.Column('id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
-    sa.Column('organization_id', sa.UUID(), nullable=False),
-    sa.Column('case_id', sa.UUID(), nullable=True),
-    sa.Column('intended_parent_id', sa.UUID(), nullable=True),
-    sa.Column('created_by_user_id', sa.UUID(), nullable=False),
-    sa.Column('owner_type', sa.String(length=10), nullable=False),
-    sa.Column('owner_id', sa.UUID(), nullable=False),
-    sa.Column('title', sa.String(length=255), nullable=False),
-    sa.Column('description', sa.Text(), nullable=True),
-    sa.Column('task_type', sa.String(length=50), server_default=sa.text("'other'"), nullable=False),
-    sa.Column('due_date', sa.Date(), nullable=True),
-    sa.Column('due_time', sa.Time(), nullable=True),
-    sa.Column('duration_minutes', sa.Integer(), nullable=True),
-    sa.Column('is_completed', sa.Boolean(), server_default=sa.text('FALSE'), nullable=False),
-    sa.Column('completed_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('completed_by_user_id', sa.UUID(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('workflow_execution_id', sa.UUID(), nullable=True),
-    sa.Column('workflow_action_index', sa.Integer(), nullable=True),
-    sa.Column('workflow_action_type', sa.String(length=50), nullable=True),
-    sa.Column('workflow_action_preview', sa.Text(), nullable=True),
-    sa.Column('workflow_action_payload', postgresql.JSONB(astext_type=sa.Text()), nullable=True, comment='Internal only - never exposed via API'),
-    sa.Column('workflow_triggered_by_user_id', sa.UUID(), nullable=True),
-    sa.Column('workflow_denial_reason', sa.Text(), nullable=True),
-    sa.Column('status', sa.String(length=20), nullable=True, comment='For workflow approvals: pending, completed, denied, expired'),
-    sa.Column('due_at', sa.DateTime(timezone=True), nullable=True),
-    sa.ForeignKeyConstraint(['case_id'], ['cases.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['completed_by_user_id'], ['users.id'], ondelete='SET NULL'),
-    sa.ForeignKeyConstraint(['created_by_user_id'], ['users.id'], ondelete='RESTRICT'),
-    sa.ForeignKeyConstraint(['intended_parent_id'], ['intended_parents.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['workflow_triggered_by_user_id'], ['users.id'], ondelete='SET NULL'),
-    sa.PrimaryKeyConstraint('id')
-    )
     op.create_table('users',
     sa.Column('id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
     sa.Column('email', postgresql.CITEXT(), nullable=False),
@@ -135,29 +99,6 @@ def upgrade() -> None:
     sa.Column('mfa_required_at', sa.TIMESTAMP(timezone=True), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('email')
-    )
-    op.create_table('workflow_executions',
-    sa.Column('id', sa.UUID(), nullable=False),
-    sa.Column('organization_id', sa.UUID(), nullable=False),
-    sa.Column('workflow_id', sa.UUID(), nullable=False),
-    sa.Column('event_id', sa.UUID(), nullable=False),
-    sa.Column('depth', sa.Integer(), nullable=False),
-    sa.Column('event_source', sa.String(length=20), nullable=False),
-    sa.Column('entity_type', sa.String(length=50), nullable=False),
-    sa.Column('entity_id', sa.UUID(), nullable=False),
-    sa.Column('trigger_event', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-    sa.Column('dedupe_key', sa.String(length=200), nullable=True),
-    sa.Column('matched_conditions', sa.Boolean(), nullable=False),
-    sa.Column('actions_executed', postgresql.JSONB(astext_type=sa.Text()), server_default='[]', nullable=False),
-    sa.Column('status', sa.String(length=20), nullable=False),
-    sa.Column('error_message', sa.Text(), nullable=True),
-    sa.Column('duration_ms', sa.Integer(), nullable=True),
-    sa.Column('executed_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('paused_at_action_index', sa.Integer(), nullable=True),
-    sa.Column('paused_task_id', sa.UUID(), nullable=True),
-    sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['workflow_id'], ['automation_workflows.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
     )
     op.create_table('ai_conversations',
     sa.Column('id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
@@ -272,6 +213,29 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['updated_by_user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('organization_id', 'name', name='uq_workflow_name')
+    )
+    op.create_table('workflow_executions',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('organization_id', sa.UUID(), nullable=False),
+    sa.Column('workflow_id', sa.UUID(), nullable=False),
+    sa.Column('event_id', sa.UUID(), nullable=False),
+    sa.Column('depth', sa.Integer(), nullable=False),
+    sa.Column('event_source', sa.String(length=20), nullable=False),
+    sa.Column('entity_type', sa.String(length=50), nullable=False),
+    sa.Column('entity_id', sa.UUID(), nullable=False),
+    sa.Column('trigger_event', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('dedupe_key', sa.String(length=200), nullable=True),
+    sa.Column('matched_conditions', sa.Boolean(), nullable=False),
+    sa.Column('actions_executed', postgresql.JSONB(astext_type=sa.Text()), server_default='[]', nullable=False),
+    sa.Column('status', sa.String(length=20), nullable=False),
+    sa.Column('error_message', sa.Text(), nullable=True),
+    sa.Column('duration_ms', sa.Integer(), nullable=True),
+    sa.Column('executed_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('paused_at_action_index', sa.Integer(), nullable=True),
+    sa.Column('paused_task_id', sa.UUID(), nullable=True),
+    sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['workflow_id'], ['automation_workflows.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
     )
     op.create_table('availability_overrides',
     sa.Column('id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
@@ -754,20 +718,6 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('session_token_hash')
     )
-    op.create_table('workflow_resume_jobs',
-    sa.Column('id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
-    sa.Column('idempotency_key', sa.String(length=255), nullable=False),
-    sa.Column('execution_id', sa.UUID(), nullable=False),
-    sa.Column('task_id', sa.UUID(), nullable=False),
-    sa.Column('status', sa.String(length=20), server_default=sa.text("'pending'"), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('processed_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('error_message', sa.Text(), nullable=True),
-    sa.ForeignKeyConstraint(['execution_id'], ['workflow_executions.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['task_id'], ['tasks.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('idempotency_key')
-    )
     op.create_table('workflow_templates',
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('name', sa.String(length=100), nullable=False),
@@ -999,6 +949,56 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['stage_id'], ['pipeline_stages.id'], ondelete='RESTRICT'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('organization_id', 'case_number', name='uq_case_number')
+    )
+    op.create_table('tasks',
+    sa.Column('id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
+    sa.Column('organization_id', sa.UUID(), nullable=False),
+    sa.Column('case_id', sa.UUID(), nullable=True),
+    sa.Column('intended_parent_id', sa.UUID(), nullable=True),
+    sa.Column('created_by_user_id', sa.UUID(), nullable=False),
+    sa.Column('owner_type', sa.String(length=10), nullable=False),
+    sa.Column('owner_id', sa.UUID(), nullable=False),
+    sa.Column('title', sa.String(length=255), nullable=False),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('task_type', sa.String(length=50), server_default=sa.text("'other'"), nullable=False),
+    sa.Column('due_date', sa.Date(), nullable=True),
+    sa.Column('due_time', sa.Time(), nullable=True),
+    sa.Column('duration_minutes', sa.Integer(), nullable=True),
+    sa.Column('is_completed', sa.Boolean(), server_default=sa.text('FALSE'), nullable=False),
+    sa.Column('completed_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('completed_by_user_id', sa.UUID(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('workflow_execution_id', sa.UUID(), nullable=True),
+    sa.Column('workflow_action_index', sa.Integer(), nullable=True),
+    sa.Column('workflow_action_type', sa.String(length=50), nullable=True),
+    sa.Column('workflow_action_preview', sa.Text(), nullable=True),
+    sa.Column('workflow_action_payload', postgresql.JSONB(astext_type=sa.Text()), nullable=True, comment='Internal only - never exposed via API'),
+    sa.Column('workflow_triggered_by_user_id', sa.UUID(), nullable=True),
+    sa.Column('workflow_denial_reason', sa.Text(), nullable=True),
+    sa.Column('status', sa.String(length=20), nullable=True, comment='For workflow approvals: pending, completed, denied, expired'),
+    sa.Column('due_at', sa.DateTime(timezone=True), nullable=True),
+    sa.ForeignKeyConstraint(['case_id'], ['cases.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['completed_by_user_id'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['created_by_user_id'], ['users.id'], ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['intended_parent_id'], ['intended_parents.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['workflow_triggered_by_user_id'], ['users.id'], ondelete='SET NULL'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('workflow_resume_jobs',
+    sa.Column('id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
+    sa.Column('idempotency_key', sa.String(length=255), nullable=False),
+    sa.Column('execution_id', sa.UUID(), nullable=False),
+    sa.Column('task_id', sa.UUID(), nullable=False),
+    sa.Column('status', sa.String(length=20), server_default=sa.text("'pending'"), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('processed_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('error_message', sa.Text(), nullable=True),
+    sa.ForeignKeyConstraint(['execution_id'], ['workflow_executions.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['task_id'], ['tasks.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('idempotency_key')
     )
     op.create_table('appointments',
     sa.Column('id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
@@ -1607,6 +1607,14 @@ def upgrade() -> None:
     op.create_index('idx_profile_state_case', 'case_profile_states', ['case_id'], unique=False)
     op.create_index('idx_form_files_org', 'form_submission_files', ['organization_id'], unique=False)
     op.create_index('idx_form_files_submission', 'form_submission_files', ['submission_id'], unique=False)
+    op.create_foreign_key(
+        'fk_meta_leads_converted_case_id_cases',
+        'meta_leads',
+        'cases',
+        ['converted_case_id'],
+        ['id'],
+        ondelete='SET NULL',
+    )
     op.create_foreign_key(None, 'tasks', 'workflow_executions', ['workflow_execution_id'], ['id'], ondelete='SET NULL')
     op.create_foreign_key(None, 'workflow_executions', 'tasks', ['paused_task_id'], ['id'], ondelete='SET NULL')
     op.execute("""
@@ -1815,6 +1823,11 @@ def downgrade() -> None:
     op.drop_table('campaign_recipients')
     op.drop_table('attachments')
     op.drop_table('appointments')
+    op.drop_constraint(
+        'fk_meta_leads_converted_case_id_cases',
+        'meta_leads',
+        type_='foreignkey',
+    )
     op.drop_table('cases')
     op.drop_table('campaign_runs')
     op.drop_table('ai_action_approvals')

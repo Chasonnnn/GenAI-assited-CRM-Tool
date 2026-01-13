@@ -58,7 +58,7 @@ opentelemetry-instrumentation-requests==0.50b0
 opentelemetry-instrumentation-sqlalchemy==0.50b0
 
 # Protobuf (avoid deprecated PyType_Spec usage warnings in Python 3.14+)
-protobuf==5.28.3
+protobuf==5.29.5
 
 # Timezone support (for containers without system tzdata)
 tzdata==2024.1
