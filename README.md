@@ -1,6 +1,6 @@
 # Surrogacy CRM Platform
 
-**Version:** 0.16.0 | **Last Updated:** December 29, 2025
+**Version:** 0.18.1 | **Last Updated:** January 13, 2026
 
 A modern, multi-tenant CRM platform purpose-built for surrogacy agencies. Manage cases from lead intake through delivery with customizable pipelines, intended parent matching, AI-powered assistance, and comprehensive automation.
 
@@ -26,13 +26,16 @@ A modern, multi-tenant CRM platform purpose-built for surrogacy agencies. Manage
 - **Notes & Files** — Centralized documentation per match
 
 ### Automation
-- **Workflow Engine** — Event-driven automation (8 triggers, 6 action types)
+- **Workflow Engine** — Event-driven automation with approvals and scheduling hooks
+- **Workflow Approvals** — Human-in-the-loop gating for sensitive actions
 - **Email Campaigns** — Bulk sends with recipient filtering and tracking
 - **Email Templates** — Customizable templates with variable substitution
 
 ### AI Assistant (Optional)
 - **BYOK Model** — Bring your own API key (OpenAI, etc.)
-- **Case Summarization** — AI-generated case summaries
+- **Case Summarization** — AI-generated case and interview summaries
+- **Schedule Parsing** — Extract meeting intent into tasks or appointments
+- **Smart Task Creation** — Suggest tasks from case and match context
 - **Email Drafting** — Context-aware email composition
 - **Dashboard Insights** — Smart analytics recommendations
 
@@ -48,6 +51,7 @@ A modern, multi-tenant CRM platform purpose-built for surrogacy agencies. Manage
 - **RBAC** — Role-based permissions (intake, case manager, admin, developer)
 - **MFA** — TOTP and Duo Security support
 - **Audit Trail** — Tamper-evident hash-chain logging
+- **Notifications** — Browser push alerts with per-user preferences
 - **Version Control** — Rollback support for configurations
 
 ---
@@ -87,14 +91,23 @@ A modern, multi-tenant CRM platform purpose-built for surrogacy agencies. Manage
 │       │   ├── book/           # Public booking pages
 │       │   └── login/          # Authentication
 │       ├── components/         # Shared UI components
-│       └── lib/                # API client, hooks, utilities
+│       └── lib/                # API client, hooks, schemas, utilities
 │
 ├── docs/                       # Documentation
 │   ├── DESIGN.md               # Architecture documentation
 │   ├── automation.md           # Automation system guide
-│   └── oauth-setup-guide.md    # Integration setup
+│   ├── oauth-setup-guide.md    # Integration setup
+│   ├── agents.md               # Agent rules and workflows
+│   ├── email-template-variables.md # Email template variables reference
+│   ├── gcp-oidc-deploy.md      # GCP deployment notes
+│   ├── FEATURE_GAPS.md         # Known gaps and roadmap
+│   └── ROADMAP.txt             # Planning notes
 │
+├── load-tests/                 # k6 and performance scripts
 ├── CHANGELOG.md                # Version history
+├── CLAUDE.md                   # Project conventions and rules
+├── release-please-config.json  # Release automation config
+├── zap-baseline.conf           # ZAP baseline scan config
 └── docker-compose.yml          # PostgreSQL for development
 ```
 
@@ -169,11 +182,15 @@ Frontend: `http://localhost:3000`
 ### Backend (`apps/api/.env`)
 
 ```env
+# Environment
+ENV=dev
+
 # Database
 DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/crm
 
-# Authentication
+# Authentication (JWT in HTTP-only cookie)
 JWT_SECRET=your-secret-key-minimum-32-characters
+JWT_SECRET_PREVIOUS=
 JWT_EXPIRES_HOURS=4
 
 # Google OAuth
@@ -181,29 +198,35 @@ GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:8000/auth/google/callback
 
-# Encryption (required for OAuth tokens, versioned configs)
+# Encryption (required)
 FERNET_KEY=generate-with-Fernet.generate_key()
+DATA_ENCRYPTION_KEY=generate-with-Fernet.generate_key()
+PII_HASH_KEY=generate-with-secrets.token_urlsafe(32)
 VERSION_ENCRYPTION_KEY=generate-with-Fernet.generate_key()
 
 # Frontend
 CORS_ORIGINS=http://localhost:3000
 FRONTEND_URL=http://localhost:3000
 
-# Email (Resend)
-RESEND_API_KEY=re_your_api_key
-
 # Integrations (optional)
 ZOOM_CLIENT_ID=
 ZOOM_CLIENT_SECRET=
+ZOOM_REDIRECT_URI=http://localhost:8000/integrations/zoom/callback
 GMAIL_REDIRECT_URI=http://localhost:8000/integrations/gmail/callback
 
 # Meta Lead Ads (optional)
+META_APP_ID=
+META_APP_SECRET=
 META_VERIFY_TOKEN=
+META_ENCRYPTION_KEY=
 META_AD_ACCOUNT_ID=
 META_SYSTEM_TOKEN=
+META_PIXEL_ID=
+META_CAPI_ENABLED=false
 
 # Development
 DEV_SECRET=local-dev-secret
+DEV_BYPASS_AUTH=false
 ```
 
 ### Frontend (`apps/web/.env.local`)
@@ -240,7 +263,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 - **Authorization**: Role-based access control (RBAC) with granular permissions
 - **CSRF Protection**: Required header on all mutations
 - **Multi-Factor**: TOTP and Duo Security integration
-- **Encryption**: Fernet encryption for OAuth tokens and sensitive configs
+- **Encryption**: Fernet encryption for OAuth tokens, PII fields, and versioned configs
 - **Audit**: Hash-chain logging with tamper detection
 - **Data Isolation**: All queries scoped by organization_id
 
@@ -275,8 +298,9 @@ pytest
 ### Frontend
 ```bash
 cd apps/web
-pnpm test        # Unit tests
+pnpm test            # Unit tests
 pnpm test:integration  # Integration tests
+pnpm test:all        # Full frontend suite
 ```
 
 ---
