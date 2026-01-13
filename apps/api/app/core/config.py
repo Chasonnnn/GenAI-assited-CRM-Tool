@@ -20,8 +20,8 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # Environment
-    ENV: str = "dev"
+    # Environment (required - no default to prevent accidental dev mode in production)
+    ENV: str
 
     # App Version (SemVer: MAJOR.MINOR.PATCH)
     VERSION: str = "0.16.0"
@@ -176,6 +176,17 @@ class Settings(BaseSettings):
             value = getattr(self, field, "")
             if "localhost" in value or "127.0.0.1" in value:
                 errors.append(f"{field} must not use localhost in non-dev environments")
+
+        # Enforce encryption keys in production
+        encryption_keys = [
+            ("META_ENCRYPTION_KEY", self.META_ENCRYPTION_KEY),
+            ("FERNET_KEY", self.FERNET_KEY),
+            ("DATA_ENCRYPTION_KEY", self.DATA_ENCRYPTION_KEY),
+            ("PII_HASH_KEY", self.PII_HASH_KEY),
+        ]
+        for key_name, key_value in encryption_keys:
+            if not key_value:
+                errors.append(f"{key_name} must be set for non-dev environments")
 
         if errors:
             raise ValueError("Invalid production configuration: " + "; ".join(errors))

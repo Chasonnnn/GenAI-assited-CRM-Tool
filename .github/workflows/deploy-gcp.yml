@@ -79,4 +79,5 @@ jobs:
             --image "${IMAGE}" \
             --region "${GCP_REGION}" \
             --platform managed \
+            --set-env-vars "ENV=production" \
             --quiet

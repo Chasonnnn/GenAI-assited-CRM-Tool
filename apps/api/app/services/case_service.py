@@ -1202,7 +1202,10 @@ def list_assignees(db: Session, org_id: UUID) -> list[dict[str, str]]:
     rows = (
         db.query(Membership, User)
         .join(User, Membership.user_id == User.id)
-        .filter(Membership.organization_id == org_id)
+        .filter(
+            Membership.organization_id == org_id,
+            Membership.is_active.is_(True),
+        )
         .all()
     )
 

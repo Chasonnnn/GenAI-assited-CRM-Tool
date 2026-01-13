@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+from contextlib import asynccontextmanager
 from time import perf_counter
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
@@ -102,12 +103,22 @@ if settings.SENTRY_DSN and settings.ENV != "dev":
 # FastAPI App
 # ============================================================================
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from app.core.websocket import manager, start_session_revocation_listener
+
+    manager.set_event_loop(asyncio.get_running_loop())
+    await start_session_revocation_listener()
+    yield
+
+
 app = FastAPI(
     title="CRM API",
     description="Multi-tenant CRM and case management API",
     version=settings.VERSION,
     docs_url="/docs" if settings.ENV == "dev" else None,
     redoc_url="/redoc" if settings.ENV == "dev" else None,
+    lifespan=lifespan,
 )
 
 configure_telemetry(app, engine)
@@ -367,19 +378,6 @@ app.include_router(search.router)
 # Dev router (ONLY mounted in dev mode)
 if settings.ENV == "dev":
     app.include_router(dev.router, prefix="/dev", tags=["dev"])
-
-
-# ============================================================================
-# WebSocket Session Revocation
-# ============================================================================
-
-
-@app.on_event("startup")
-async def start_websocket_revocation_listener() -> None:
-    from app.core.websocket import manager, start_session_revocation_listener
-
-    manager.set_event_loop(asyncio.get_running_loop())
-    await start_session_revocation_listener()
 
 
 # ============================================================================

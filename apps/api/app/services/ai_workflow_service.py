@@ -268,6 +268,7 @@ def _get_context_for_prompt(db: Session, org_id: UUID) -> dict[str, str]:
         .join(User, Membership.user_id == User.id)
         .filter(
             Membership.organization_id == org_id,
+            Membership.is_active.is_(True),
             User.is_active.is_(True),
         )
         .limit(20)
@@ -562,6 +563,7 @@ def validate_workflow(
                     .filter(
                         Membership.user_id == owner_id,
                         Membership.organization_id == org_id,
+                        Membership.is_active.is_(True),
                     )
                     .first()
                 )
@@ -626,13 +628,14 @@ def validate_workflow(
                         )
                         continue
                     member = (
-                        db.query(Membership)
-                        .filter(
-                            Membership.user_id == user_uuid,
-                            Membership.organization_id == org_id,
-                        )
-                        .first()
+                    db.query(Membership)
+                    .filter(
+                        Membership.user_id == user_uuid,
+                        Membership.organization_id == org_id,
+                        Membership.is_active.is_(True),
                     )
+                    .first()
+                )
                     if not member:
                         errors.append(
                             f"Action {i + 1}: User ID does not exist: {user_uuid}"

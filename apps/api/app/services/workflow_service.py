@@ -526,7 +526,10 @@ def get_workflow_options(db: Session, org_id: UUID) -> WorkflowOptions:
     user_rows = (
         db.query(User.id, User.display_name)
         .join(Membership, Membership.user_id == User.id)
-        .filter(Membership.organization_id == org_id)
+        .filter(
+            Membership.organization_id == org_id,
+            Membership.is_active.is_(True),
+        )
         .all()
     )
     users = [
@@ -873,6 +876,7 @@ def _validate_action_config(db: Session, org_id: UUID, action: dict) -> None:
                 .filter(
                     Membership.user_id == config.assignee,
                     Membership.organization_id == org_id,
+                    Membership.is_active.is_(True),
                 )
                 .first()
             )
@@ -890,6 +894,7 @@ def _validate_action_config(db: Session, org_id: UUID, action: dict) -> None:
                 .filter(
                     Membership.user_id == config.owner_id,
                     Membership.organization_id == org_id,
+                    Membership.is_active.is_(True),
                 )
                 .first()
             )
@@ -919,6 +924,7 @@ def _validate_action_config(db: Session, org_id: UUID, action: dict) -> None:
                 .filter(
                     Membership.organization_id == org_id,
                     Membership.user_id.in_(recipient_ids),
+                    Membership.is_active.is_(True),
                 )
                 .all()
             )

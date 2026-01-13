@@ -370,7 +370,7 @@ def remove_member(
     """
     Remove member from organization.
 
-    Deletes membership and all permission overrides.
+    Deactivates membership and removes permission overrides.
     Cannot remove yourself.
 
     Requires: Manager+ role
@@ -392,8 +392,8 @@ def remove_member(
     # Delete overrides
     permission_service.delete_user_overrides(db, session.org_id, user.id)
 
-    # Delete membership
-    db.delete(membership)
+    # Deactivate membership (soft remove)
+    membership.is_active = False
     from app.services import audit_service
 
     audit_service.log_user_deactivated(

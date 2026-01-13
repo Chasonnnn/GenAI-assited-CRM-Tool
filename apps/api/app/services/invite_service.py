@@ -99,7 +99,7 @@ def create_invite(
             )
             .first()
         )
-        if existing_membership:
+        if existing_membership and existing_membership.is_active:
             raise ValueError("User is already a member of this organization")
 
     # Check for existing pending invite
@@ -250,6 +250,12 @@ def accept_invite(
     if user.email.lower() != invite.email.lower():
         raise PermissionError("This invite was sent to a different email address")
 
+    role_map = {
+        "member": RoleEnum.MEMBER,
+        "admin": RoleEnum.ADMIN,
+    }
+    role = role_map.get(invite.role, RoleEnum.MEMBER)
+
     existing = (
         db.query(Membership)
         .filter(
@@ -259,18 +265,30 @@ def accept_invite(
         .first()
     )
     if existing:
-        raise ValueError("Already a member of this organization")
-
-    role_map = {
-        "member": RoleEnum.MEMBER,
-        "admin": RoleEnum.ADMIN,
-    }
-    role = role_map.get(invite.role, RoleEnum.MEMBER)
+        if existing.is_active:
+            raise ValueError("Already a member of this organization")
+        existing.role = role
+        existing.is_active = True
+        invite.accepted_at = datetime.now(timezone.utc)
+        if not user.active_org_id:
+            user.active_org_id = invite.organization_id
+        db.commit()
+        org = (
+            db.query(Organization)
+            .filter(Organization.id == invite.organization_id)
+            .first()
+        )
+        org_name = org.name if org else "Unknown"
+        return {
+            "organization_id": str(invite.organization_id),
+            "organization_name": org_name,
+        }
 
     membership = Membership(
         user_id=user_id,
         organization_id=invite.organization_id,
         role=role,
+        is_active=True,
     )
     db.add(membership)
 

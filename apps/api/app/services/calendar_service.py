@@ -8,7 +8,11 @@ Handles:
 Note: Requires calendar.readonly and calendar.events scopes.
 """
 
+import logging
+
 import httpx
+
+logger = logging.getLogger(__name__)
 from datetime import datetime, timezone
 from typing import TypedDict
 from uuid import UUID
@@ -113,7 +117,8 @@ async def get_google_busy_slots(
                 )
                 for b in busy_list
             ]
-    except Exception:
+    except Exception as e:
+        logger.exception(f"Google freebusy query failed for calendar={calendar_id}: {e}")
         return []
 
 
@@ -225,8 +230,8 @@ async def get_google_events(
                 if not page_token:
                     break
 
-    except Exception:
-        pass
+    except Exception as e:
+        logger.exception(f"Google Calendar events fetch failed for calendar={calendar_id}: {e}")
 
     return events
 
@@ -327,8 +332,8 @@ async def create_google_event(
                     ),
                     html_link=data.get("htmlLink", ""),
                 )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.exception(f"Google Calendar event creation failed for calendar={calendar_id}: {e}")
 
     return None
 
@@ -403,8 +408,8 @@ async def update_google_event(
                     ),
                     html_link=data.get("htmlLink", ""),
                 )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.exception(f"Google Calendar event update failed for calendar={calendar_id} event={event_id}: {e}")
 
     return None
 
@@ -427,7 +432,8 @@ async def delete_google_event(
                 params={"sendUpdates": "all"},
             )
             return response.status_code in [200, 204, 410]  # 410 = already deleted
-    except Exception:
+    except Exception as e:
+        logger.exception(f"Google Calendar event deletion failed for calendar={calendar_id} event={event_id}: {e}")
         return False
 
 

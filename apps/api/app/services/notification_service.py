@@ -429,6 +429,7 @@ def notify_case_handoff_ready(
         .filter(
             Membership.organization_id == case.organization_id,
             Membership.role.in_([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER]),
+            Membership.is_active.is_(True),
         )
         .all()
     )
