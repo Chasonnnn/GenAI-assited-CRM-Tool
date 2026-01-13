@@ -19,12 +19,17 @@ def store_meta_lead(
     meta_lead_id: str,
     field_data: dict,
     raw_payload: dict | None = None,
+    field_data_raw: dict | None = None,
     meta_form_id: str | None = None,
     meta_page_id: str | None = None,
     meta_created_time: datetime | None = None,
 ) -> tuple[MetaLead | None, str | None]:
     """
     Store a raw Meta lead.
+
+    Args:
+        field_data: Normalized field data (scalars for conversion)
+        field_data_raw: Raw field data preserving multi-select arrays (for form analysis)
 
     Returns:
         (meta_lead, error) - meta_lead is None if error
@@ -43,6 +48,8 @@ def store_meta_lead(
         existing.field_data = field_data
         if raw_payload is not None:
             existing.raw_payload = raw_payload
+        if field_data_raw is not None:
+            existing.field_data_raw = field_data_raw
         if meta_form_id is not None:
             existing.meta_form_id = meta_form_id
         if meta_page_id is not None:
@@ -59,6 +66,7 @@ def store_meta_lead(
         meta_form_id=meta_form_id,
         meta_page_id=meta_page_id,
         field_data=field_data,
+        field_data_raw=field_data_raw,
         raw_payload=raw_payload,
         meta_created_time=meta_created_time,
     )
@@ -188,7 +196,7 @@ def convert_to_case(
         case.meta_lead_id = meta_lead.id
         case.meta_form_id = meta_lead.meta_form_id
         # Get ad_id from field_data if available (stored during fetch)
-        case.meta_ad_id = fields.get("meta_ad_id")
+        case.meta_ad_external_id = fields.get("meta_ad_id")
 
         # Update meta lead
         meta_lead.is_converted = True

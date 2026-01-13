@@ -62,48 +62,6 @@ class MetaPerformance(BaseModel):
     avg_time_to_convert_hours: Optional[float]
 
 
-class CampaignSpend(BaseModel):
-    campaign_id: str
-    campaign_name: str
-    spend: float
-    impressions: int
-    reach: int
-    clicks: int
-    leads: int
-    cost_per_lead: Optional[float]
-
-
-class MetaSpendTimePoint(BaseModel):
-    date_start: str
-    date_stop: str
-    spend: float
-    impressions: int
-    reach: int
-    clicks: int
-    leads: int
-    cost_per_lead: Optional[float]
-
-
-class MetaSpendBreakdown(BaseModel):
-    breakdown_values: dict[str, str]
-    spend: float
-    impressions: int
-    reach: int
-    clicks: int
-    leads: int
-    cost_per_lead: Optional[float]
-
-
-class MetaSpendSummary(BaseModel):
-    total_spend: float
-    total_impressions: int
-    total_leads: int
-    cost_per_lead: Optional[float]
-    campaigns: list[CampaignSpend]
-    time_series: list[MetaSpendTimePoint] = Field(default_factory=list)
-    breakdowns: list[MetaSpendBreakdown] = Field(default_factory=list)
-
-
 # =============================================================================
 # Performance by User Schemas
 # =============================================================================
@@ -236,58 +194,255 @@ def get_meta_performance(
     return MetaPerformance(**data)
 
 
-@router.get("/meta/spend", response_model=MetaSpendSummary)
-async def get_meta_spend(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
-    time_increment: Optional[int] = Query(
-        None,
-        description="Time increment in days for time series (e.g. 1, 7, 28)",
-        ge=1,
-        le=90,
-    ),
-    breakdowns: Optional[str] = Query(
-        None,
-        description="Comma-separated breakdowns (e.g. region,country)",
-    ),
+# =============================================================================
+# Meta Stored Data Endpoints
+# =============================================================================
+
+
+class MetaAdAccountItem(BaseModel):
+    """Ad account for dropdown/list."""
+
+    id: str
+    ad_account_external_id: str
+    ad_account_name: str
+    hierarchy_synced_at: Optional[str]
+    spend_synced_at: Optional[str]
+
+
+class SpendTotalsResponse(BaseModel):
+    """Spend totals with sync status."""
+
+    total_spend: float
+    total_impressions: int
+    total_clicks: int
+    total_leads: int
+    cost_per_lead: Optional[float]
+    sync_status: str
+    last_synced_at: Optional[str]
+    ad_accounts_configured: int
+
+
+class StoredCampaignSpendItem(BaseModel):
+    """Spend data for a single campaign from stored data."""
+
+    campaign_external_id: str
+    campaign_name: str
+    spend: float
+    impressions: int
+    clicks: int
+    leads: int
+    cost_per_lead: Optional[float]
+
+
+class SpendBreakdownItem(BaseModel):
+    """Spend data for a breakdown dimension."""
+
+    breakdown_value: str
+    spend: float
+    impressions: int
+    clicks: int
+    leads: int
+    cost_per_lead: Optional[float]
+
+
+class SpendTrendPoint(BaseModel):
+    """Daily spend data point."""
+
+    date: str
+    spend: float
+    impressions: int
+    clicks: int
+    leads: int
+    cost_per_lead: Optional[float]
+
+
+class FormPerformanceItem(BaseModel):
+    """Form performance metrics."""
+
+    form_external_id: str
+    form_name: str
+    lead_count: int
+    case_count: int
+    qualified_count: int
+    conversion_rate: float
+    qualified_rate: float
+
+
+class MetaCampaignListItem(BaseModel):
+    """Campaign for filter dropdown."""
+
+    campaign_external_id: str
+    campaign_name: str
+    status: str
+    objective: Optional[str]
+
+
+@router.get("/meta/ad-accounts")
+def get_meta_ad_accounts(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
-):
-    """
-    Get Meta Ads spend data from Marketing API.
+) -> dict:
+    """Get list of configured ad accounts for filter dropdown."""
+    data = analytics_service.get_meta_ad_accounts(db, session.org_id)
+    return {"data": [MetaAdAccountItem(**item).model_dump() for item in data]}
 
-    Returns total spend, impressions, leads and cost per lead,
-    broken down by campaign. Optional time series and breakdowns
-    are included when requested via query params.
+
+@router.get("/meta/spend/totals", response_model=SpendTotalsResponse)
+def get_spend_totals(
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    ad_account_id: Optional[str] = Query(None, description="Filter by ad account UUID"),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> SpendTotalsResponse:
     """
-    from app.services import analytics_service
+    Get spend totals with sync status.
+
+    Returns aggregate metrics plus sync status to help UI show
+    appropriate empty/pending states.
+    """
+    from uuid import UUID as _UUID
 
     start, end = analytics_service.parse_date_range(from_date, to_date)
-    breakdown_list = (
-        [item.strip() for item in breakdowns.split(",")] if breakdowns else []
-    )
-    breakdown_list = [item for item in breakdown_list if item]
+    account_uuid = _UUID(ad_account_id) if ad_account_id else None
 
-    data = await analytics_service.get_cached_meta_spend_summary(
+    data = analytics_service.get_spend_totals(
         db=db,
         organization_id=session.org_id,
-        start=start,
-        end=end,
-        time_increment=time_increment,
-        breakdowns=breakdown_list or None,
+        start_date=start.date() if start else None,
+        end_date=end.date() if end else None,
+        ad_account_id=account_uuid,
     )
+    return SpendTotalsResponse(**data)
 
-    return MetaSpendSummary(
-        total_spend=data["total_spend"],
-        total_impressions=data["total_impressions"],
-        total_leads=data["total_leads"],
-        cost_per_lead=data["cost_per_lead"],
-        campaigns=[CampaignSpend(**item) for item in data.get("campaigns", [])],
-        time_series=[
-            MetaSpendTimePoint(**item) for item in data.get("time_series", [])
-        ],
-        breakdowns=[MetaSpendBreakdown(**item) for item in data.get("breakdowns", [])],
+
+@router.get("/meta/spend/by-campaign")
+def get_spend_by_campaign(
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    ad_account_id: Optional[str] = Query(None),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Get spend aggregated by campaign from stored data."""
+    from uuid import UUID as _UUID
+
+    start, end = analytics_service.parse_date_range(from_date, to_date)
+    account_uuid = _UUID(ad_account_id) if ad_account_id else None
+
+    data = analytics_service.get_cached_spend_by_campaign(
+        db=db,
+        organization_id=session.org_id,
+        start_date=start.date() if start else None,
+        end_date=end.date() if end else None,
+        ad_account_id=account_uuid,
     )
+    return {"data": [StoredCampaignSpendItem(**item).model_dump() for item in data]}
+
+
+@router.get("/meta/spend/by-breakdown")
+def get_spend_by_breakdown(
+    breakdown_type: Literal["publisher_platform", "platform_position", "age", "region"] = Query(
+        ..., description="Breakdown dimension"
+    ),
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    ad_account_id: Optional[str] = Query(None),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Get spend aggregated by breakdown dimension.
+
+    Breakdown types:
+    - publisher_platform: facebook, instagram, audience_network
+    - platform_position: feed, stories, reels, etc.
+    - age: 18-24, 25-34, 35-44, etc.
+    - region: US states
+    """
+    from uuid import UUID as _UUID
+
+    start, end = analytics_service.parse_date_range(from_date, to_date)
+    account_uuid = _UUID(ad_account_id) if ad_account_id else None
+
+    data = analytics_service.get_cached_spend_by_breakdown(
+        db=db,
+        organization_id=session.org_id,
+        start_date=start.date() if start else None,
+        end_date=end.date() if end else None,
+        breakdown_type=breakdown_type,
+        ad_account_id=account_uuid,
+    )
+    return {"data": [SpendBreakdownItem(**item).model_dump() for item in data]}
+
+
+@router.get("/meta/spend/trend")
+def get_spend_trend(
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    ad_account_id: Optional[str] = Query(None),
+    campaign_external_id: Optional[str] = Query(None, description="Filter by campaign"),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Get daily spend time series from stored data."""
+    from uuid import UUID as _UUID
+
+    start, end = analytics_service.parse_date_range(from_date, to_date)
+    account_uuid = _UUID(ad_account_id) if ad_account_id else None
+
+    data = analytics_service.get_cached_spend_trend(
+        db=db,
+        organization_id=session.org_id,
+        start_date=start.date() if start else None,
+        end_date=end.date() if end else None,
+        ad_account_id=account_uuid,
+        campaign_external_id=campaign_external_id,
+    )
+    return {"data": [SpendTrendPoint(**item).model_dump() for item in data]}
+
+
+@router.get("/meta/forms")
+def get_form_performance(
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Get form performance metrics.
+
+    Returns lead counts from meta_leads and conversion rates
+    from joined Cases.
+    """
+    start, end = analytics_service.parse_date_range(from_date, to_date)
+
+    data = analytics_service.get_cached_leads_by_form(
+        db=db,
+        organization_id=session.org_id,
+        start_date=start.date() if start else None,
+        end_date=end.date() if end else None,
+    )
+    return {"data": [FormPerformanceItem(**item).model_dump() for item in data]}
+
+
+@router.get("/meta/campaigns")
+def get_meta_campaign_list(
+    ad_account_id: Optional[str] = Query(None),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Get list of synced campaigns for filter dropdown."""
+    from uuid import UUID as _UUID
+
+    account_uuid = _UUID(ad_account_id) if ad_account_id else None
+
+    data = analytics_service.get_meta_campaign_list(
+        db=db,
+        organization_id=session.org_id,
+        ad_account_id=account_uuid,
+    )
+    return {"data": [MetaCampaignListItem(**item).model_dump() for item in data]}
 
 
 # =============================================================================

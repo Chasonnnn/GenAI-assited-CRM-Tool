@@ -253,8 +253,63 @@ async def process_job(db, job) -> None:
     elif job.job_type == JobType.WORKFLOW_RESUME.value:
         await process_workflow_resume(db, job)
 
+    elif job.job_type == JobType.META_HIERARCHY_SYNC.value:
+        await process_meta_hierarchy_sync(db, job)
+
+    elif job.job_type == JobType.META_SPEND_SYNC.value:
+        await process_meta_spend_sync(db, job)
+
+    elif job.job_type == JobType.META_FORM_SYNC.value:
+        await process_meta_form_sync(db, job)
+
     else:
         raise Exception(f"Unknown job type: {job.job_type}")
+
+
+def _resolve_integration_keys(db, job, integration_type) -> list[str]:
+    from app.db.enums import IntegrationType
+
+    payload = job.payload or {}
+    keys: list[str] = []
+
+    if integration_type in (
+        IntegrationType.META_HIERARCHY,
+        IntegrationType.META_SPEND,
+    ):
+        ad_account_id = payload.get("ad_account_id")
+        if ad_account_id:
+            try:
+                ad_account_uuid = UUID(ad_account_id)
+            except (TypeError, ValueError):
+                keys.append(str(ad_account_id))
+            else:
+                from app.db.models import MetaAdAccount
+
+                ad_account = (
+                    db.query(MetaAdAccount)
+                    .filter(MetaAdAccount.id == ad_account_uuid)
+                    .first()
+                )
+                if ad_account and ad_account.ad_account_external_id:
+                    keys.append(ad_account.ad_account_external_id)
+                else:
+                    keys.append(str(ad_account_uuid))
+
+    elif integration_type == IntegrationType.META_FORMS:
+        page_id = payload.get("page_id") or payload.get("meta_page_id")
+        if page_id:
+            keys.append(str(page_id))
+        page_ids = payload.get("page_ids")
+        if isinstance(page_ids, list):
+            keys.extend(str(page_id) for page_id in page_ids if page_id)
+
+    else:
+        page_id = payload.get("page_id") or payload.get("meta_page_id")
+        if page_id:
+            keys.append(str(page_id))
+
+    # De-dupe while preserving order
+    return list(dict.fromkeys(keys))
 
 
 def _record_job_success(db, job) -> None:
@@ -266,23 +321,30 @@ def _record_job_success(db, job) -> None:
     job_to_integration = {
         JobType.META_LEAD_FETCH.value: IntegrationType.META_LEADS,
         JobType.META_CAPI_EVENT.value: IntegrationType.META_CAPI,
+        JobType.META_HIERARCHY_SYNC.value: IntegrationType.META_HIERARCHY,
+        JobType.META_SPEND_SYNC.value: IntegrationType.META_SPEND,
+        JobType.META_FORM_SYNC.value: IntegrationType.META_FORMS,
     }
 
     integration_type = job_to_integration.get(job.job_type)
     if integration_type and job.organization_id:
         try:
-            # Check both page_id and meta_page_id (CAPI uses latter)
-            integration_key = None
-            if job.payload:
-                integration_key = job.payload.get("page_id") or job.payload.get(
-                    "meta_page_id"
+            keys = _resolve_integration_keys(db, job, integration_type)
+            if not keys:
+                ops_service.record_success(
+                    db=db,
+                    org_id=job.organization_id,
+                    integration_type=integration_type,
+                    integration_key=None,
                 )
-            ops_service.record_success(
-                db=db,
-                org_id=job.organization_id,
-                integration_type=integration_type,
-                integration_key=integration_key,
-            )
+            else:
+                for key in keys:
+                    ops_service.record_success(
+                        db=db,
+                        org_id=job.organization_id,
+                        integration_type=integration_type,
+                        integration_key=key,
+                    )
         except Exception as e:
             logger.warning(f"Failed to record job success: {e}")
 
@@ -367,25 +429,34 @@ def _record_job_failure(
         job_to_integration = {
             JobType.META_LEAD_FETCH.value: IntegrationType.META_LEADS,
             JobType.META_CAPI_EVENT.value: IntegrationType.META_CAPI,
+            JobType.META_HIERARCHY_SYNC.value: IntegrationType.META_HIERARCHY,
+            JobType.META_SPEND_SYNC.value: IntegrationType.META_SPEND,
+            JobType.META_FORM_SYNC.value: IntegrationType.META_FORMS,
         }
 
-        # Check both page_id and meta_page_id (CAPI uses latter)
-        integration_key = None
-        if job.payload:
-            integration_key = job.payload.get("page_id") or job.payload.get(
-                "meta_page_id"
-            )
+        integration_keys: list[str] = []
 
         # Record error in integration health (only for mapped types)
         integration_type = job_to_integration.get(job.job_type)
         if integration_type:
-            ops_service.record_error(
-                db=db,
-                org_id=job.organization_id,
-                integration_type=integration_type,
-                error_message=error_msg,
-                integration_key=integration_key,
-            )
+            integration_keys = _resolve_integration_keys(db, job, integration_type)
+            if not integration_keys:
+                ops_service.record_error(
+                    db=db,
+                    org_id=job.organization_id,
+                    integration_type=integration_type,
+                    error_message=error_msg,
+                    integration_key=None,
+                )
+            else:
+                for key in integration_keys:
+                    ops_service.record_error(
+                        db=db,
+                        org_id=job.organization_id,
+                        integration_type=integration_type,
+                        error_message=error_msg,
+                        integration_key=key,
+                    )
 
         # Create alert if this is the final failure (max attempts reached)
         if job.attempts >= job.max_attempts:
@@ -414,7 +485,7 @@ def _record_job_failure(
                 severity=AlertSeverity.ERROR,
                 title=f"{job.job_type} failed after {job.attempts} attempts",
                 message=error_msg[:500],
-                integration_key=integration_key,
+                integration_key=integration_keys[0] if integration_keys else None,
                 error_class=error_class,
             )
     except Exception as e:
@@ -492,12 +563,16 @@ async def process_meta_lead_fetch(db, job) -> None:
 
         raise Exception(error)
 
-    # Normalize field data
+    # Normalize field data (scalars for conversion)
     field_data = meta_api.normalize_field_data(lead_data.get("field_data", []))
+
+    # Extract raw field data preserving multi-select arrays (for form analysis)
+    field_data_raw = meta_api.extract_field_data_raw(lead_data.get("field_data", []))
 
     # Add ad_id for campaign tracking (stored in field_data for conversion)
     if lead_data.get("ad_id"):
         field_data["meta_ad_id"] = lead_data["ad_id"]
+        field_data_raw["meta_ad_id"] = lead_data["ad_id"]
 
     # Parse Meta timestamp
     meta_created_time = meta_api.parse_meta_timestamp(lead_data.get("created_time"))
@@ -508,6 +583,7 @@ async def process_meta_lead_fetch(db, job) -> None:
         org_id=mapping.organization_id,
         meta_lead_id=leadgen_id,
         field_data=field_data,
+        field_data_raw=field_data_raw,
         raw_payload=None,  # PII minimization - don't store raw
         meta_form_id=lead_data.get("form_id"),
         meta_page_id=page_id,
@@ -557,62 +633,90 @@ async def process_meta_capi_event(db, job) -> None:
 
     Payload:
       - meta_lead_id (leadgen id)
+      - meta_ad_external_id (for resolving ad account)
       - case_status
       - email, phone (optional)
-      - meta_page_id (optional, used to find a page token)
+      - meta_page_id (optional, unused - kept for backward compatibility)
+
+    Ad account resolution:
+      meta_ad_external_id → MetaAd → MetaAdAccount
+      Uses per-account CAPI config (pixel_id, capi_token_encrypted, capi_enabled).
+      Skips if no ad account found or CAPI is disabled for that account.
     """
-    from app.core.encryption import decrypt_token
-    from app.db.models import MetaPageMapping
+    from app.db.models import MetaAd, MetaAdAccount
     from app.services import meta_capi
 
-    meta_lead_id = job.payload.get("meta_lead_id")
-    case_status = job.payload.get("case_status")
-    email = job.payload.get("email")
-    phone = job.payload.get("phone")
-    meta_page_id = job.payload.get("meta_page_id")
+    payload = job.payload or {}
+    meta_lead_id = payload.get("meta_lead_id")
+    meta_ad_external_id = payload.get("meta_ad_external_id")
+    case_status = payload.get("case_status")
+    email = payload.get("email")
+    phone = payload.get("phone")
 
     if not meta_lead_id or not case_status:
         raise Exception("Missing meta_lead_id or case_status in job payload")
 
-    access_token = None
-    page_mapping = None
-    if meta_page_id:
-        page_mapping = (
-            db.query(MetaPageMapping)
+    # Resolve ad account chain: meta_ad_external_id → MetaAd → MetaAdAccount
+    ad_account = None
+    if meta_ad_external_id:
+        meta_ad = (
+            db.query(MetaAd)
             .filter(
-                MetaPageMapping.page_id == str(meta_page_id),
-                MetaPageMapping.is_active.is_(True),
+                MetaAd.organization_id == job.organization_id,
+                MetaAd.ad_external_id == meta_ad_external_id,
             )
             .first()
         )
+        if meta_ad:
+            ad_account = (
+                db.query(MetaAdAccount)
+                .filter(
+                    MetaAdAccount.id == meta_ad.ad_account_id,
+                    MetaAdAccount.is_active.is_(True),
+                )
+                .first()
+            )
 
-    if page_mapping and page_mapping.access_token_encrypted:
-        try:
-            access_token = decrypt_token(page_mapping.access_token_encrypted)
-        except Exception as e:
-            page_mapping.last_error = f"Token decryption failed: {str(e)[:100]}"
-            page_mapping.last_error_at = datetime.now(timezone.utc)
-            db.commit()
-            raise Exception(f"Token decryption failed: {e}")
+    # Skip if no ad account or CAPI not enabled for this account
+    if not ad_account:
+        logger.info(
+            f"Skipping CAPI for lead {meta_lead_id}: no ad account found "
+            f"(ad_external_id={meta_ad_external_id})"
+        )
+        return
+
+    if not ad_account.capi_enabled:
+        logger.info(
+            f"Skipping CAPI for lead {meta_lead_id}: CAPI disabled for ad account "
+            f"{ad_account.ad_account_external_id}"
+        )
+        return
+
+    if not ad_account.pixel_id:
+        logger.warning(
+            f"Skipping CAPI for lead {meta_lead_id}: no pixel_id configured for ad account "
+            f"{ad_account.ad_account_external_id}"
+        )
+        return
 
     meta_status = meta_capi.map_case_status_to_meta_status(str(case_status))
     if not meta_status:
         raise Exception(f"Unsupported case status for Meta CAPI: {case_status}")
 
-    success, error = await meta_capi.send_status_event(
+    success, error = await meta_capi.send_status_event_for_account(
         meta_lead_id=str(meta_lead_id),
+        ad_account=ad_account,
         case_status=str(case_status),
         meta_status=meta_status,
         email=str(email) if email else None,
         phone=str(phone) if phone else None,
-        access_token=access_token,
     )
 
     if not success:
-        if page_mapping:
-            page_mapping.last_error = error
-            page_mapping.last_error_at = datetime.now(timezone.utc)
-            db.commit()
+        # Record error on ad account for observability
+        ad_account.last_error = f"CAPI: {error}"
+        ad_account.last_error_at = datetime.now(timezone.utc)
+        db.commit()
         raise Exception(error or "Meta CAPI failed")
 
 
@@ -1226,6 +1330,211 @@ async def process_workflow_resume(db, job) -> None:
 
     db.commit()
     logger.info(f"Workflow resume complete for execution {execution_id}")
+
+
+# =============================================================================
+# Meta Sync Job Handlers
+# =============================================================================
+
+
+async def process_meta_hierarchy_sync(db, job) -> None:
+    """
+    Process a META_HIERARCHY_SYNC job - sync campaign/adset/ad hierarchy.
+
+    Payload:
+        - ad_account_id: UUID of the MetaAdAccount
+        - full_sync: bool (if True, ignore delta and fetch all)
+    """
+    from app.db.models import MetaAdAccount
+    from app.services import meta_sync_service
+
+    payload = job.payload or {}
+    ad_account_id = payload.get("ad_account_id")
+    full_sync = payload.get("full_sync", False)
+
+    if not ad_account_id:
+        raise Exception("Missing ad_account_id in job payload")
+
+    # Get ad account
+    ad_account = (
+        db.query(MetaAdAccount)
+        .filter(
+            MetaAdAccount.id == UUID(ad_account_id),
+            MetaAdAccount.organization_id == job.organization_id,
+        )
+        .first()
+    )
+
+    if not ad_account:
+        raise Exception(f"Ad account {ad_account_id} not found")
+
+    if not ad_account.is_active:
+        logger.info(f"Skipping hierarchy sync for inactive ad account {ad_account_id}")
+        return
+
+    logger.info(
+        f"Starting hierarchy sync for ad account {ad_account.ad_account_external_id} "
+        f"(full_sync={full_sync})"
+    )
+
+    try:
+        result = await meta_sync_service.sync_hierarchy(
+            db=db,
+            ad_account=ad_account,
+            full_sync=full_sync,
+        )
+
+        logger.info(
+            f"Hierarchy sync complete: campaigns={result.get('campaigns', 0)}, "
+            f"adsets={result.get('adsets', 0)}, ads={result.get('ads', 0)}"
+        )
+
+        # Note: Health recording handled centrally by _record_job_success
+
+        # Link cases to campaigns (backfill)
+        linked = meta_sync_service.link_cases_to_campaigns(db, job.organization_id)
+        if linked:
+            logger.info(f"Linked {linked} cases to campaign data")
+
+    except Exception:
+        raise
+
+
+async def process_meta_spend_sync(db, job) -> None:
+    """
+    Process a META_SPEND_SYNC job - sync daily spend data.
+
+    Payload:
+        - ad_account_id: UUID of the MetaAdAccount
+        - sync_type: 'daily' (default), 'weekly', 'initial'
+        - date_start: optional override
+        - date_end: optional override
+    """
+    from datetime import date, timedelta
+    from app.db.models import MetaAdAccount
+    from app.services import meta_sync_service
+
+    payload = job.payload or {}
+    ad_account_id = payload.get("ad_account_id")
+    sync_type = payload.get("sync_type", "daily")
+
+    if not ad_account_id:
+        raise Exception("Missing ad_account_id in job payload")
+
+    # Get ad account
+    ad_account = (
+        db.query(MetaAdAccount)
+        .filter(
+            MetaAdAccount.id == UUID(ad_account_id),
+            MetaAdAccount.organization_id == job.organization_id,
+        )
+        .first()
+    )
+
+    if not ad_account:
+        raise Exception(f"Ad account {ad_account_id} not found")
+
+    if not ad_account.is_active:
+        logger.info(f"Skipping spend sync for inactive ad account {ad_account_id}")
+        return
+
+    # Determine date range based on sync_type
+    today = date.today()
+
+    if payload.get("date_start") and payload.get("date_end"):
+        # Override dates
+        date_start = date.fromisoformat(payload["date_start"])
+        date_end = date.fromisoformat(payload["date_end"])
+    elif sync_type == "daily":
+        # Yesterday + 7-day rolling backfill
+        date_start = today - timedelta(days=7)
+        date_end = today - timedelta(days=1)
+    elif sync_type == "weekly":
+        # 90-day backfill
+        date_start = today - timedelta(days=90)
+        date_end = today - timedelta(days=1)
+    elif sync_type == "initial":
+        # 180-day initial load
+        date_start = today - timedelta(days=180)
+        date_end = today - timedelta(days=1)
+    else:
+        date_start = today - timedelta(days=7)
+        date_end = today - timedelta(days=1)
+
+    logger.info(
+        f"Starting spend sync for ad account {ad_account.ad_account_external_id} "
+        f"({sync_type}: {date_start} to {date_end})"
+    )
+
+    try:
+        result = await meta_sync_service.sync_spend(
+            db=db,
+            ad_account=ad_account,
+            date_start=date_start,
+            date_end=date_end,
+        )
+
+        logger.info(
+            f"Spend sync complete: rows_synced={result.get('rows_synced', 0)}, "
+            f"campaigns={result.get('campaigns', 0)}"
+        )
+
+        # Note: Health recording handled centrally by _record_job_success
+
+    except Exception:
+        raise
+
+
+async def process_meta_form_sync(db, job) -> None:
+    """
+    Process a META_FORM_SYNC job - sync form metadata with versioning.
+
+    NOTE: Uses PAGE tokens from meta_page_mappings, NOT ad account tokens.
+    Ad accounts don't have page permissions for leadgen_forms endpoint.
+
+    Payload:
+        - page_ids: list of page IDs to sync (optional, syncs all active if not provided)
+    """
+    from app.services import meta_sync_service
+
+    payload = job.payload or {}
+    page_ids = payload.get("page_ids")
+
+    logger.info(
+        f"Starting forms sync for org {job.organization_id} "
+        f"(pages={page_ids or 'all'})"
+    )
+
+    try:
+        if page_ids and isinstance(page_ids, list):
+            # Sync each specified page
+            total_result = {"forms_synced": 0, "versions_created": 0}
+            for page_id in page_ids:
+                page_result = await meta_sync_service.sync_forms(
+                    db=db,
+                    org_id=job.organization_id,
+                    page_id=page_id,
+                )
+                total_result["forms_synced"] += page_result.get("forms_synced", 0)
+                total_result["versions_created"] += page_result.get("versions_created", 0)
+            result = total_result
+        else:
+            # Sync all pages
+            result = await meta_sync_service.sync_forms(
+                db=db,
+                org_id=job.organization_id,
+                page_id=None,
+            )
+
+        logger.info(
+            f"Forms sync complete: forms_synced={result.get('forms_synced', 0)}, "
+            f"versions_created={result.get('versions_created', 0)}"
+        )
+
+        # Note: Health recording handled centrally by _record_job_success
+
+    except Exception:
+        raise
 
 
 def main() -> None:

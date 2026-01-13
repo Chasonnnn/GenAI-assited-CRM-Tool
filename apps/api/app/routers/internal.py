@@ -21,6 +21,7 @@ from app.db.enums import (
 )
 from app.services import (
     alert_service,
+    job_service,
     meta_page_service,
     ops_service,
     org_service,
@@ -357,4 +358,163 @@ def task_notifications_sweep(x_internal_secret: str = Header(...)):
         tasks_due_soon=tasks_due_soon,
         tasks_overdue=tasks_overdue,
         notifications_created=notifications_created,
+    )
+
+
+# =============================================================================
+# Meta Sync Scheduled Jobs
+# =============================================================================
+
+
+class MetaHierarchySyncResponse(BaseModel):
+    ad_accounts_processed: int
+    jobs_created: int
+
+
+@router.post("/meta-hierarchy-sync", response_model=MetaHierarchySyncResponse)
+def meta_hierarchy_sync(x_internal_secret: str = Header(...)):
+    """
+    Schedule Meta hierarchy sync jobs for all active ad accounts.
+
+    Called by external cron (every 6-12 hours recommended).
+    Syncs campaign/adset/ad hierarchy using delta sync (updated_time filter).
+    """
+    verify_internal_secret(x_internal_secret)
+
+    from app.db.models import MetaAdAccount
+
+    ad_accounts_processed = 0
+    jobs_created = 0
+
+    with SessionLocal() as db:
+        # Get all active ad accounts across all orgs
+        ad_accounts = (
+            db.query(MetaAdAccount)
+            .filter(MetaAdAccount.is_active.is_(True))
+            .all()
+        )
+
+        for ad_account in ad_accounts:
+            job_service.schedule_job(
+                db=db,
+                job_type=JobType.META_HIERARCHY_SYNC,
+                org_id=ad_account.organization_id,
+                payload={
+                    "ad_account_id": str(ad_account.id),
+                    "full_sync": False,  # Delta sync by default
+                },
+            )
+            ad_accounts_processed += 1
+            jobs_created += 1
+
+        db.commit()
+
+    return MetaHierarchySyncResponse(
+        ad_accounts_processed=ad_accounts_processed,
+        jobs_created=jobs_created,
+    )
+
+
+class MetaSpendSyncResponse(BaseModel):
+    ad_accounts_processed: int
+    jobs_created: int
+
+
+@router.post("/meta-spend-sync", response_model=MetaSpendSyncResponse)
+def meta_spend_sync(
+    x_internal_secret: str = Header(...),
+    sync_type: str = "daily",
+):
+    """
+    Schedule Meta spend sync jobs for all active ad accounts.
+
+    Called by external cron (daily recommended).
+
+    Args:
+        sync_type: 'daily' (yesterday + 7-day rolling), 'weekly' (90-day backfill),
+                   'initial' (180-day backfill for new accounts)
+    """
+    verify_internal_secret(x_internal_secret)
+
+    from app.db.models import MetaAdAccount
+
+    ad_accounts_processed = 0
+    jobs_created = 0
+
+    with SessionLocal() as db:
+        ad_accounts = (
+            db.query(MetaAdAccount)
+            .filter(MetaAdAccount.is_active.is_(True))
+            .all()
+        )
+
+        for ad_account in ad_accounts:
+            job_service.schedule_job(
+                db=db,
+                job_type=JobType.META_SPEND_SYNC,
+                org_id=ad_account.organization_id,
+                payload={
+                    "ad_account_id": str(ad_account.id),
+                    "sync_type": sync_type,
+                },
+            )
+            ad_accounts_processed += 1
+            jobs_created += 1
+
+        db.commit()
+
+    return MetaSpendSyncResponse(
+        ad_accounts_processed=ad_accounts_processed,
+        jobs_created=jobs_created,
+    )
+
+
+class MetaFormsSyncResponse(BaseModel):
+    pages_processed: int
+    jobs_created: int
+
+
+@router.post("/meta-forms-sync", response_model=MetaFormsSyncResponse)
+def meta_forms_sync(x_internal_secret: str = Header(...)):
+    """
+    Schedule Meta forms sync jobs for all active page mappings.
+
+    Called by external cron (nightly/weekly recommended).
+    Syncs form metadata with versioning (uses PAGE tokens, not ad account tokens).
+    """
+    verify_internal_secret(x_internal_secret)
+
+    pages_processed = 0
+    jobs_created = 0
+
+    with SessionLocal() as db:
+        # Get all active page mappings (forms sync uses page tokens)
+        mappings = meta_page_service.list_active_mappings(db)
+
+        # Group by org to create one job per org
+        orgs_with_pages: dict = {}
+        for mapping in mappings:
+            org_id = mapping.organization_id
+            if org_id not in orgs_with_pages:
+                orgs_with_pages[org_id] = []
+            orgs_with_pages[org_id].append(mapping.page_id)
+            pages_processed += 1
+
+        # Schedule one job per org (covers all pages in that org)
+        for org_id, page_ids in orgs_with_pages.items():
+            job_service.schedule_job(
+                db=db,
+                job_type=JobType.META_FORM_SYNC,
+                org_id=org_id,
+                payload={
+                    "page_ids": page_ids,
+                },
+            )
+            jobs_created += 1
+
+        db.commit()
+
+    return MetaFormsSyncResponse(
+        pages_processed=pages_processed,
+        jobs_created=jobs_created,
     )

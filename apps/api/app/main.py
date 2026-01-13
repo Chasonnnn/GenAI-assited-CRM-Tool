@@ -332,6 +332,8 @@ app.include_router(forms_public.router)
 app.include_router(profile.router)
 
 app.include_router(admin_meta.router)  # Already has prefix in router definition
+app.include_router(admin_meta.ad_account_router)  # Meta ad account management
+app.include_router(admin_meta.sync_router)  # Meta sync triggers
 
 # Admin Versions (Developer-only)
 app.include_router(admin_versions.router)

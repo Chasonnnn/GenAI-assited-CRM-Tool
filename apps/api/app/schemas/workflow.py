@@ -50,7 +50,7 @@ ALLOWED_CONDITION_FIELDS = {
     "num_csections",
     # Meta tracking
     "meta_lead_id",
-    "meta_ad_id",
+    "meta_ad_external_id",
     "meta_form_id",
 }
 

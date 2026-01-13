@@ -590,6 +590,7 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
             meta_page_id=row.get("meta_lead_page_id"),
             field_data=_parse_json(row.get("meta_lead_field_data")),
             raw_payload=_parse_json(row.get("meta_lead_raw_payload")),
+            field_data_raw=_parse_json(row.get("meta_lead_field_data_raw")),
             is_converted=meta_lead_is_converted
             if meta_lead_is_converted is not None
             else True,
@@ -694,7 +695,7 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
             owner_id=owner_id,
             created_by_user_id=created_by_user_id,
             meta_lead_id=meta_lead_id,
-            meta_ad_id=row.get("meta_ad_id"),
+            meta_ad_external_id=row.get("meta_ad_external_id"),
             meta_form_id=row.get("meta_form_id"),
             full_name=row.get("full_name"),
             email=normalized_email,
