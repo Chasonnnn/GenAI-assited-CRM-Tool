@@ -13,6 +13,11 @@ from sqlalchemy.dialects import postgresql
 
 from app.db import types
 
+# System user constants (used for workflow-created tasks)
+SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000001"
+SYSTEM_USER_EMAIL = "system@internal"
+SYSTEM_USER_DISPLAY_NAME = "System"
+
 
 # revision identifiers, used by Alembic.
 revision: str = "20260111_2137"
@@ -101,6 +106,20 @@ def upgrade() -> None:
     sa.Column('mfa_required_at', sa.TIMESTAMP(timezone=True), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('email')
+    )
+    op.execute(
+        f"""
+        INSERT INTO users (id, email, display_name, is_active, created_at, updated_at)
+        VALUES (
+            '{SYSTEM_USER_ID}'::uuid,
+            '{SYSTEM_USER_EMAIL}',
+            '{SYSTEM_USER_DISPLAY_NAME}',
+            false,
+            now(),
+            now()
+        )
+        ON CONFLICT (id) DO NOTHING
+        """
     )
     op.create_table('ai_conversations',
     sa.Column('id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
