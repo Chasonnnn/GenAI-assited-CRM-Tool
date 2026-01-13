@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Self-Service Reschedule Page - /book/[orgId]/reschedule/[token]
+ * Self-Service Reschedule Page - /book/self-service/[orgId]/reschedule/[token]
  *
  * Allows clients to reschedule their appointment using a secure token.
  */
