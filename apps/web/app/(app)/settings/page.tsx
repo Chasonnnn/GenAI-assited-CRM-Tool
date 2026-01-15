@@ -17,18 +17,14 @@ import {
   SmartphoneIcon,
   Loader2Icon,
   CheckIcon,
-  BellRingIcon,
   UploadIcon,
   TrashIcon,
   PaletteIcon,
   PlusIcon,
   MailIcon,
   EyeIcon,
-  GlobeIcon,
   LinkIcon,
 } from "lucide-react"
-import { useNotificationSettings, useUpdateNotificationSettings } from "@/lib/hooks/use-notifications"
-import { useBrowserNotifications } from "@/lib/hooks/use-browser-notifications"
 import { useAuth } from "@/lib/auth-context"
 import { getOrgSettings, updateProfile, updateOrgSettings } from "@/lib/api/settings"
 import {
@@ -36,7 +32,6 @@ import {
   useUpdateOrgSignature,
   useUploadOrgLogo,
   useDeleteOrgLogo,
-  useOrgSignaturePreview,
 } from "@/lib/hooks/use-signature"
 import {
   useSessions,
@@ -48,194 +43,6 @@ import {
 import type { SocialLink } from "@/lib/api/signature"
 import { toast } from "sonner"
 import { getOrgSignaturePreview } from "@/lib/api/signature"
-
-// =============================================================================
-// Browser Notifications Card
-// =============================================================================
-
-function BrowserNotificationsCard() {
-  const { isSupported, permission, requestPermission } = useBrowserNotifications()
-  const [isRequesting, setIsRequesting] = useState(false)
-
-  const handleRequestPermission = async () => {
-    setIsRequesting(true)
-    await requestPermission()
-    setIsRequesting(false)
-  }
-
-  if (!isSupported) {
-    return null
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <BellRingIcon className="size-5" />
-          Browser Notifications
-        </CardTitle>
-        <CardDescription>Get desktop notifications when new updates arrive</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label>Desktop push notifications</Label>
-            <p className="text-sm text-muted-foreground">
-              {permission === "granted"
-                ? "Enabled - you will receive push notifications"
-                : permission === "denied"
-                  ? "Blocked - enable in browser settings"
-                  : "Enable to receive notifications when tab is not focused"}
-            </p>
-          </div>
-          {permission === "granted" ? (
-            <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Enabled</Badge>
-          ) : permission === "denied" ? (
-            <Badge variant="secondary">Blocked</Badge>
-          ) : (
-            <Button onClick={handleRequestPermission} disabled={isRequesting} size="sm">
-              {isRequesting ? (
-                <>
-                  <Loader2Icon className="mr-2 size-4 animate-spin" /> Requesting...
-                </>
-              ) : (
-                "Enable"
-              )}
-            </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-// =============================================================================
-// Notification Settings Card
-// =============================================================================
-
-function NotificationsSettingsCard() {
-  const { data: settings, isLoading } = useNotificationSettings()
-  const updateMutation = useUpdateNotificationSettings()
-
-  const handleToggle = (key: string, value: boolean) => {
-    updateMutation.mutate({ [key]: value })
-  }
-
-  if (isLoading) {
-    return (
-      <Card>
-        <CardContent className="py-12 flex items-center justify-center">
-          <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
-        </CardContent>
-      </Card>
-    )
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>In-App Notification Preferences</CardTitle>
-        <CardDescription>Control which notifications you receive</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="case_assigned">Case assigned to me</Label>
-              <p className="text-sm text-muted-foreground">Get notified when a case is assigned to you</p>
-            </div>
-            <Switch
-              id="case_assigned"
-              checked={settings?.case_assigned ?? true}
-              onCheckedChange={(checked) => handleToggle("case_assigned", checked)}
-              disabled={updateMutation.isPending}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="case_status_changed">Case stage changes</Label>
-              <p className="text-sm text-muted-foreground">Get notified when case stage changes</p>
-            </div>
-            <Switch
-              id="case_status_changed"
-              checked={settings?.case_status_changed ?? true}
-              onCheckedChange={(checked) => handleToggle("case_status_changed", checked)}
-              disabled={updateMutation.isPending}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="case_handoff">Case handoff events</Label>
-              <p className="text-sm text-muted-foreground">Get notified for handoff requests and approvals</p>
-            </div>
-            <Switch
-              id="case_handoff"
-              checked={settings?.case_handoff ?? true}
-              onCheckedChange={(checked) => handleToggle("case_handoff", checked)}
-              disabled={updateMutation.isPending}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="task_assigned">Task assigned to me</Label>
-              <p className="text-sm text-muted-foreground">Get notified when a task is assigned to you</p>
-            </div>
-            <Switch
-              id="task_assigned"
-              checked={settings?.task_assigned ?? true}
-              onCheckedChange={(checked) => handleToggle("task_assigned", checked)}
-              disabled={updateMutation.isPending}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="workflow_approvals">Workflow approvals</Label>
-              <p className="text-sm text-muted-foreground">Get notified when a workflow needs your decision</p>
-            </div>
-            <Switch
-              id="workflow_approvals"
-              checked={settings?.workflow_approvals ?? true}
-              onCheckedChange={(checked) => handleToggle("workflow_approvals", checked)}
-              disabled={updateMutation.isPending}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="task_reminders">Task due date reminders</Label>
-              <p className="text-sm text-muted-foreground">Get notified when tasks are due soon or overdue</p>
-            </div>
-            <Switch
-              id="task_reminders"
-              checked={settings?.task_reminders ?? true}
-              onCheckedChange={(checked) => handleToggle("task_reminders", checked)}
-              disabled={updateMutation.isPending}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="appointments">Appointment updates</Label>
-              <p className="text-sm text-muted-foreground">
-                Get notified for new, confirmed, and cancelled appointments
-              </p>
-            </div>
-            <Switch
-              id="appointments"
-              checked={settings?.appointments ?? true}
-              onCheckedChange={(checked) => handleToggle("appointments", checked)}
-              disabled={updateMutation.isPending}
-            />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
 
 // =============================================================================
 // Profile Section with Avatar Upload, Phone, Title
