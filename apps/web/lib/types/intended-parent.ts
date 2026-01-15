@@ -7,6 +7,7 @@ export type IntendedParentStatus = 'new' | 'in_review' | 'matched' | 'inactive'
 export interface IntendedParent {
     id: string
     organization_id: string
+    intended_parent_number: string
     full_name: string
     email: string
     phone: string | null
@@ -26,6 +27,7 @@ export interface IntendedParent {
 
 export interface IntendedParentListItem {
     id: string
+    intended_parent_number: string
     full_name: string
     email: string
     phone: string | null
@@ -110,4 +112,3 @@ export interface EntityNoteListItem {
 export interface EntityNoteCreate {
     content: string
 }
-

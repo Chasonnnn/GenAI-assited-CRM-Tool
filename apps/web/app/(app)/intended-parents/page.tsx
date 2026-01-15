@@ -308,7 +308,7 @@ export default function IntendedParentsPage() {
                     <div className="relative w-full max-w-sm">
                         <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
-                            placeholder="Search name, email, phone..."
+                            placeholder="Search name, number, email, phone..."
                             value={search}
                             onChange={(e) => {
                                 setSearch(e.target.value)
@@ -350,6 +350,7 @@ export default function IntendedParentsPage() {
                             <Table>
                                 <TableHeader>
                                     <TableRow>
+                                        <SortableTableHead column="intended_parent_number" label="Number" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <SortableTableHead column="full_name" label="Name" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <SortableTableHead column="email" label="Email" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <SortableTableHead column="phone" label="Phone" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
@@ -362,6 +363,9 @@ export default function IntendedParentsPage() {
                                 <TableBody>
                                     {data.items.map((ip: IntendedParentListItem) => (
                                         <TableRow key={ip.id} className="cursor-pointer hover:bg-muted/50">
+                                            <TableCell className="font-medium text-muted-foreground">
+                                                {ip.intended_parent_number}
+                                            </TableCell>
                                             <TableCell>
                                                 <Link
                                                     href={`/intended-parents/${ip.id}`}

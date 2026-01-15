@@ -244,7 +244,7 @@ def test_specific_entity_legal_hold_blocks_related(db, test_org, test_user):
     surrogate1_email = normalize_email("surrogate1@test.com")
     surrogate1 = Surrogate(
         organization_id=test_org.id,
-        surrogate_number="TEST-001",
+        surrogate_number="S10001",
         stage_id=stage.id,
         status_label=stage.label,
         full_name="Surrogate One",
@@ -259,7 +259,7 @@ def test_specific_entity_legal_hold_blocks_related(db, test_org, test_user):
     surrogate2_email = normalize_email("surrogate2@test.com")
     surrogate2 = Surrogate(
         organization_id=test_org.id,
-        surrogate_number="TEST-002",
+        surrogate_number="S10002",
         stage_id=stage.id,
         status_label=stage.label,
         full_name="Surrogate Two",

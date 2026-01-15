@@ -135,7 +135,7 @@ export interface Appointment {
     google_event_id: string | null;
     // Linkage fields
     surrogate_id: string | null;
-    surrogate_number: number | null;
+    surrogate_number: string | null;
     intended_parent_id: string | null;
     intended_parent_name: string | null;
     created_at: string;
@@ -156,7 +156,7 @@ export interface AppointmentListItem {
     status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show' | 'expired';
     // Linkage fields
     surrogate_id: string | null;
-    surrogate_number: number | null;
+    surrogate_number: string | null;
     intended_parent_id: string | null;
     intended_parent_name: string | null;
     created_at: string;

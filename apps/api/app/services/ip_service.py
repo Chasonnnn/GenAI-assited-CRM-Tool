@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
 from app.core.encryption import hash_email, hash_phone
@@ -16,6 +16,29 @@ from app.utils.normalization import normalize_email, normalize_phone
 # =============================================================================
 # CRUD Operations
 # =============================================================================
+
+
+def generate_intended_parent_number(db: Session, org_id: UUID) -> str:
+    """
+    Generate next sequential intended parent number for org (I10001+).
+
+    Uses atomic INSERT...ON CONFLICT for race-condition-free counter increment.
+    """
+    result = db.execute(
+        text("""
+            INSERT INTO org_counters (organization_id, counter_type, current_value)
+            VALUES (:org_id, 'intended_parent_number', 10001)
+            ON CONFLICT (organization_id, counter_type)
+            DO UPDATE SET current_value = org_counters.current_value + 1,
+                          updated_at = now()
+            RETURNING current_value
+        """),
+        {"org_id": org_id},
+    ).scalar_one_or_none()
+    if result is None:
+        raise RuntimeError("Failed to generate intended parent number")
+
+    return f"I{result:05d}"
 
 
 def list_intended_parents(
@@ -63,10 +86,13 @@ def list_intended_parents(
     if budget_max is not None:
         query = query.filter(IntendedParent.budget <= budget_max)
 
-    # Search filter (name, email, phone)
+    # Search filter (name, number, email, phone)
     if q:
         search_term = f"%{q}%"
-        filters = [IntendedParent.full_name.ilike(search_term)]
+        filters = [
+            IntendedParent.full_name.ilike(search_term),
+            IntendedParent.intended_parent_number.ilike(search_term),
+        ]
         if "@" in q:
             try:
                 filters.append(IntendedParent.email_hash == hash_email(q))
@@ -103,6 +129,7 @@ def list_intended_parents(
     # Dynamic sorting
     order_func = asc if sort_order == "asc" else desc
     sortable_columns = {
+        "intended_parent_number": IntendedParent.intended_parent_number,
         "full_name": IntendedParent.full_name,
         "state": IntendedParent.state,
         "budget": IntendedParent.budget,
@@ -150,6 +177,7 @@ def create_intended_parent(
     normalized_email = normalize_email(email)
     normalized_phone = normalize_phone(phone) if phone else None
     ip = IntendedParent(
+        intended_parent_number=generate_intended_parent_number(db, org_id),
         organization_id=org_id,
         full_name=full_name,
         email=normalized_email,

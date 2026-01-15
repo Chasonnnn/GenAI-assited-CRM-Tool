@@ -24,9 +24,10 @@ describe('MatchesPage', () => {
         items: [
             {
                 id: 'match1',
+                match_number: 'M10001',
                 surrogate_id: 'surrogate1',
                 surrogate_name: 'Jane Doe',
-                surrogate_number: 'SUR-001',
+                surrogate_number: 'S10001',
                 ip_id: 'ip1',
                 ip_name: 'John Smith',
                 status: 'proposed' as const,
@@ -37,9 +38,10 @@ describe('MatchesPage', () => {
             },
             {
                 id: 'match2',
+                match_number: 'M10002',
                 surrogate_id: 'surrogate2',
                 surrogate_name: 'Mary Johnson',
-                surrogate_number: 'SUR-002',
+                surrogate_number: 'S10002',
                 ip_id: 'ip2',
                 ip_name: 'Bob Williams',
                 status: 'accepted' as const,
@@ -88,12 +90,12 @@ describe('MatchesPage', () => {
 
         // Match data
         expect(screen.getByText('Jane Doe')).toBeInTheDocument()
-        expect(screen.getByText('SUR-001')).toBeInTheDocument()
+        expect(screen.getByText('S10001')).toBeInTheDocument()
         expect(screen.getByText('John Smith')).toBeInTheDocument()
         expect(screen.getByText('85%')).toBeInTheDocument()
 
         expect(screen.getByText('Mary Johnson')).toBeInTheDocument()
-        expect(screen.getByText('SUR-002')).toBeInTheDocument()
+        expect(screen.getByText('S10002')).toBeInTheDocument()
         expect(screen.getByText('Bob Williams')).toBeInTheDocument()
         expect(screen.getByText('92%')).toBeInTheDocument()
     })

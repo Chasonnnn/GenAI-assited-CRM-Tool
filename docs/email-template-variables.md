@@ -1,15 +1,15 @@
 # Email Template Variables
 
 Use these placeholders in email templates and automation actions.
-Variables are case-scoped and use a flat namespace:
+Variables are surrogate-scoped and use a flat namespace:
 
-## Case Variables
-- `{{full_name}}` - Case contact full name
-- `{{email}}` - Case contact email
-- `{{phone}}` - Case contact phone (normalized)
-- `{{case_number}}` - Internal case number
-- `{{status_label}}` - Case status (human-readable)
-- `{{state}}` - Case state
+## Surrogate Variables
+- `{{full_name}}` - Surrogate full name
+- `{{email}}` - Surrogate email
+- `{{phone}}` - Surrogate phone (normalized)
+- `{{surrogate_number}}` - Internal surrogate number (S10001+)
+- `{{status_label}}` - Surrogate status (human-readable)
+- `{{state}}` - Surrogate state
 - `{{owner_name}}` - Current owner (user or queue)
 - `{{org_name}}` - Organization name
 
@@ -28,3 +28,4 @@ Used in appointment reminder and confirmation emails:
 - `{{partner1_first_name}}` - Primary partner first name
 - `{{partner1_last_name}}` - Primary partner last name
 - `{{ip_email}}` - Intended parent email
+- `{{intended_parent_number}}` - Internal intended parent number (I10001+)

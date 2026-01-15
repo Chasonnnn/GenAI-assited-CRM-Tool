@@ -79,6 +79,7 @@ class IntendedParentRead(BaseModel):
 
     id: UUID
     organization_id: UUID
+    intended_parent_number: str
     full_name: str
     email: str
     phone: str | None
@@ -102,6 +103,7 @@ class IntendedParentListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    intended_parent_number: str
     full_name: str
     email: str
     phone: str | None

@@ -70,6 +70,8 @@ def login_as(user_id: UUID, response: Response, db: Session = Depends(get_db)):
         membership.organization_id,
         membership.role,
         user.token_version,
+        mfa_verified=True,
+        mfa_required=False,
     )
 
     response.set_cookie(

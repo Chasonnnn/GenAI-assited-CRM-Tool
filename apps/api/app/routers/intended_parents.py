@@ -45,7 +45,7 @@ def list_intended_parents(
     state: str | None = None,
     budget_min: Decimal | None = None,
     budget_max: Decimal | None = None,
-    q: str | None = Query(None, description="Search name or exact email/phone"),
+    q: str | None = Query(None, description="Search name/number or exact email/phone"),
     owner_id: UUID | None = None,
     include_archived: bool = False,
     created_after: str | None = Query(None, description="Created after (ISO format)"),

@@ -532,6 +532,9 @@ export default function MatchDetailPage() {
                             <h1 className="text-xl font-semibold">
                                 {match.surrogate_name || "Surrogate"} ↔ {match.ip_name || "Intended Parents"}
                             </h1>
+                            <span className="text-sm text-muted-foreground">
+                                {match.match_number ? `Match #${match.match_number}` : "—"}
+                            </span>
                         {/* Surrogate Stage Badge */}
                             {match.surrogate_stage_label && (
                                 <Badge variant="secondary" className="text-xs">

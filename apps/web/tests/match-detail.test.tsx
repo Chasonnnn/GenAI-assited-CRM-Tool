@@ -123,9 +123,10 @@ vi.mock('@/hooks/use-toast', () => ({
 describe('MatchDetailPage', () => {
     const mockMatch = {
         id: 'match1',
+        match_number: 'M10001',
         surrogate_id: 'surrogate1',
         surrogate_name: 'Jane Doe',
-        surrogate_number: 'SUR-001',
+        surrogate_number: 'S10001',
         ip_id: 'ip1',
         ip_name: 'John Smith',
         status: 'proposed' as const,
@@ -138,7 +139,7 @@ describe('MatchDetailPage', () => {
 
     const mockSurrogate = {
         id: 'surrogate1',
-        surrogate_number: 'SUR-001',
+        surrogate_number: 'S10001',
         full_name: 'Jane Doe',
         status_label: 'Matched',
         stage_id: 'stage2',
@@ -266,7 +267,7 @@ describe('MatchDetailPage with different statuses', () => {
         mockUseSurrogate.mockReturnValue({
             data: {
                 id: 'surrogate1',
-                surrogate_number: 'SUR-001',
+                surrogate_number: 'S10001',
                 full_name: 'Jane Doe',
                 status_label: 'Matched',
                 stage_id: 'stage2',

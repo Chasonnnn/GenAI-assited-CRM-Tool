@@ -18,7 +18,7 @@ def _create_case(db, org_id, user_id, stage):
     case = Surrogate(
         id=uuid.uuid4(),
         organization_id=org_id,
-        surrogate_number=f"C{uuid.uuid4().hex[:9]}",
+        surrogate_number=f"S{uuid.uuid4().int % 90000 + 10000:05d}",
         stage_id=stage.id,
         status_label=stage.label,
         owner_type="user",
@@ -39,6 +39,7 @@ def _create_intended_parent(db, org_id):
     ip = IntendedParent(
         id=uuid.uuid4(),
         organization_id=org_id,
+        intended_parent_number=f"I{uuid.uuid4().int % 90000 + 10000:05d}",
         full_name="Test IP",
         email=normalized_email,
         email_hash=hash_email(normalized_email),
@@ -54,6 +55,7 @@ def _create_match(db, org_id, user_id, stage):
     match = Match(
         id=uuid.uuid4(),
         organization_id=org_id,
+        match_number=f"M{uuid.uuid4().int % 90000 + 10000:05d}",
         surrogate_id=case.id,
         intended_parent_id=ip.id,
         proposed_by_user_id=user_id,

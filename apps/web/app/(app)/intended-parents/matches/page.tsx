@@ -190,6 +190,7 @@ export default function MatchesPage() {
                             <Table>
                                 <TableHeader>
                                     <TableRow>
+                                        <TableHead>Match #</TableHead>
                                         <TableHead>Surrogate</TableHead>
                                         <TableHead>Surrogate #</TableHead>
                                         <TableHead>Intended Parents</TableHead>
@@ -202,6 +203,9 @@ export default function MatchesPage() {
                                 <TableBody>
                                     {data.items.map((match) => (
                                         <TableRow key={match.id} className="cursor-pointer hover:bg-muted/50">
+                                            <TableCell className="text-muted-foreground">
+                                                {match.match_number || "—"}
+                                            </TableCell>
                                             <TableCell>
                                                 <Link
                                                     href={`/intended-parents/matches/${match.id}`}

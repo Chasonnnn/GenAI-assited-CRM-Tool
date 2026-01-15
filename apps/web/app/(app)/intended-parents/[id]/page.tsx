@@ -230,7 +230,10 @@ export default function IntendedParentDetailPage() {
                         </Link>
                         <div>
                             <h1 className="text-2xl font-semibold">{ip.full_name}</h1>
-                            <p className="text-sm text-muted-foreground">{ip.email}</p>
+                            <p className="text-sm text-muted-foreground">
+                                {ip.intended_parent_number ? `${ip.intended_parent_number} • ` : ""}
+                                {ip.email}
+                            </p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">

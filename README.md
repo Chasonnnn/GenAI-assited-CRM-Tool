@@ -233,7 +233,81 @@ DEV_BYPASS_AUTH=false
 
 ```env
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+NEXT_PUBLIC_DEV_BYPASS_AUTH=false
 ```
+
+---
+
+## 🔧 Local Development Setup
+
+### Dev Auth Bypass (Skip Google OAuth)
+
+For local development without configuring Google OAuth:
+
+1. **Backend** (`apps/api/.env`):
+   ```env
+   DEV_BYPASS_AUTH=true
+   ```
+
+2. **Frontend** (`apps/web/.env.local`):
+   ```env
+   NEXT_PUBLIC_DEV_BYPASS_AUTH=true
+   ```
+
+3. Restart both servers — you'll be auto-logged in as `admin@test.com`
+
+### Database Reset & Seed
+
+When you need a fresh database:
+
+```bash
+# 1. Reset database (removes all data)
+docker-compose down -v && docker-compose up -d
+
+# 2. Run migrations
+cd apps/api
+.venv/bin/python -m alembic upgrade head
+
+# 3. Create org and admin user
+.venv/bin/python -m app.cli create-org --name "Test Agency" --slug "test" --admin-email "admin@test.com"
+
+# 4. Create the admin user (for dev bypass)
+.venv/bin/python -c "
+from app.db.session import SessionLocal
+from app.db.models import User, Membership, Organization
+from app.db.enums import Role
+from uuid import uuid4
+
+db = SessionLocal()
+org = db.query(Organization).first()
+user = User(id=uuid4(), email='admin@test.com', display_name='Test Admin', is_active=True, token_version=0)
+db.add(user)
+db.commit()
+
+membership = Membership(id=uuid4(), user_id=user.id, organization_id=org.id, role=Role.DEVELOPER.value, is_active=True)
+db.add(membership)
+db.commit()
+print(f'Created user: {user.email}')
+db.close()
+"
+
+# 5. Restart backend to pick up changes
+```
+
+### Required Encryption Keys
+
+Generate and add these to `apps/api/.env`:
+
+```bash
+# Generate keys
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# Required in .env:
+DATA_ENCRYPTION_KEY=<generated-key>
+META_ENCRYPTION_KEY=<generated-key>
+```
+
+Without these, you'll get "DATA_ENCRYPTION_KEY not configured" errors.
 
 ---
 

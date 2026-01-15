@@ -201,7 +201,7 @@ EmailTemplate:
 
 See [email-template-variables.md](./email-template-variables.md) for full list:
 - `{{full_name}}`, `{{email}}`, `{{phone}}`
-- `{{case_number}}`, `{{status_label}}`, `{{owner_name}}`
+- `{{surrogate_number}}`, `{{status_label}}`, `{{owner_name}}`
 - `{{appointment_date}}`, `{{appointment_time}}`, `{{appointment_location}}`
 - `{{new_status}}`, `{{old_status}}`
 

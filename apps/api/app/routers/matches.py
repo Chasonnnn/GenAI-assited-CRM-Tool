@@ -51,6 +51,7 @@ class MatchRead(BaseModel):
     """Match response."""
 
     id: str
+    match_number: str
     surrogate_id: str
     intended_parent_id: str
     status: str
@@ -67,6 +68,7 @@ class MatchRead(BaseModel):
     surrogate_number: str | None = None
     surrogate_name: str | None = None
     ip_name: str | None = None
+    ip_number: str | None = None
     # Surrogate stage info for status sync
     surrogate_stage_id: str | None = None
     surrogate_stage_slug: str | None = None
@@ -77,11 +79,13 @@ class MatchListItem(BaseModel):
     """Match list item with summary info."""
 
     id: str
+    match_number: str
     surrogate_id: str
     surrogate_number: str | None
     surrogate_name: str | None
     intended_parent_id: str
     ip_name: str | None
+    ip_number: str | None = None
     status: str
     compatibility_score: float | None
     proposed_at: str
@@ -147,6 +151,7 @@ def _match_to_read(match: Match, db: Session, org_id: str | None = None) -> Matc
 
     return MatchRead(
         id=str(match.id),
+        match_number=match.match_number,
         surrogate_id=str(match.surrogate_id),
         intended_parent_id=str(match.intended_parent_id),
         status=match.status,
@@ -162,6 +167,7 @@ def _match_to_read(match: Match, db: Session, org_id: str | None = None) -> Matc
         surrogate_number=surrogate.surrogate_number if surrogate else None,
         surrogate_name=surrogate.full_name if surrogate else None,
         ip_name=ip.full_name if ip else None,
+        ip_number=ip.intended_parent_number if ip else None,
         surrogate_stage_id=str(surrogate.stage.id) if surrogate and surrogate.stage else None,
         surrogate_stage_slug=surrogate.stage.slug if surrogate and surrogate.stage else None,
         surrogate_stage_label=surrogate.stage.label if surrogate and surrogate.stage else None,
@@ -174,11 +180,13 @@ def _match_to_list_item(
     """Convert Match to list item."""
     return MatchListItem(
         id=str(match.id),
+        match_number=match.match_number,
         surrogate_id=str(match.surrogate_id),
         surrogate_number=surrogate.surrogate_number if surrogate else None,
         surrogate_name=surrogate.full_name if surrogate else None,
         intended_parent_id=str(match.intended_parent_id),
         ip_name=ip.full_name if ip else None,
+        ip_number=ip.intended_parent_number if ip else None,
         status=match.status,
         compatibility_score=float(match.compatibility_score) if match.compatibility_score else None,
         proposed_at=match.proposed_at.isoformat() if match.proposed_at else "",
@@ -253,6 +261,7 @@ def create_match(
 
     match = Match(
         organization_id=session.org_id,
+        match_number=match_service.generate_match_number(db, session.org_id),
         surrogate_id=data.surrogate_id,
         intended_parent_id=data.intended_parent_id,
         status=MatchStatus.PROPOSED.value,

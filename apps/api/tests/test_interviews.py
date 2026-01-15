@@ -18,7 +18,7 @@ from app.services import interview_note_service, interview_service
 def test_surrogate(db, test_org, test_user, default_stage):
     surrogate = Surrogate(
         id=uuid4(),
-        surrogate_number=uuid4().hex[:10],
+        surrogate_number=f"S{uuid4().int % 90000 + 10000:05d}",
         organization_id=test_org.id,
         stage_id=default_stage.id,
         status_label="new_unread",

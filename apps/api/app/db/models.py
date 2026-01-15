@@ -1703,6 +1703,11 @@ class IntendedParent(Base):
         Index("idx_ip_org_created", "organization_id", "created_at"),
         Index("idx_ip_org_updated", "organization_id", "updated_at"),
         Index("idx_ip_org_owner", "organization_id", "owner_type", "owner_id"),
+        UniqueConstraint(
+            "organization_id",
+            "intended_parent_number",
+            name="uq_intended_parent_number",
+        ),
         # Partial unique index: unique email per org for non-archived records
         Index(
             "uq_ip_email_hash_active",
@@ -1729,6 +1734,7 @@ class IntendedParent(Base):
         ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False,
     )
+    intended_parent_number: Mapped[str] = mapped_column(String(10), nullable=False)
 
     # Contact info
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -3346,6 +3352,11 @@ class Match(Base):
             "intended_parent_id",
             name="uq_match_org_surrogate_ip",
         ),
+        UniqueConstraint(
+            "organization_id",
+            "match_number",
+            name="uq_match_number",
+        ),
         # Only one accepted match allowed per surrogate per org
         Index(
             "uq_one_accepted_match_per_surrogate",
@@ -3354,6 +3365,7 @@ class Match(Base):
             unique=True,
             postgresql_where=text("status = 'accepted'"),
         ),
+        Index("ix_matches_match_number", "match_number"),
         Index("ix_matches_surrogate_id", "surrogate_id"),
         Index("ix_matches_ip_id", "intended_parent_id"),
         Index("ix_matches_status", "status"),
@@ -3376,6 +3388,7 @@ class Match(Base):
         ForeignKey("intended_parents.id", ondelete="CASCADE"),
         nullable=False,
     )
+    match_number: Mapped[str] = mapped_column(String(10), nullable=False)
 
     # Status workflow: proposed → reviewing → accepted/rejected/cancelled
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="proposed")
