@@ -36,24 +36,12 @@ def upgrade():
         sa.Column("name", sa.String(100), nullable=False),
         sa.Column("slug", sa.String(100), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
-        sa.Column(
-            "duration_minutes", sa.Integer(), nullable=False, server_default="30"
-        ),
-        sa.Column(
-            "buffer_before_minutes", sa.Integer(), nullable=False, server_default="0"
-        ),
-        sa.Column(
-            "buffer_after_minutes", sa.Integer(), nullable=False, server_default="5"
-        ),
-        sa.Column(
-            "meeting_mode", sa.String(20), nullable=False, server_default="'zoom'"
-        ),
-        sa.Column(
-            "reminder_hours_before", sa.Integer(), nullable=False, server_default="24"
-        ),
-        sa.Column(
-            "is_active", sa.Boolean(), nullable=False, server_default=sa.text("TRUE")
-        ),
+        sa.Column("duration_minutes", sa.Integer(), nullable=False, server_default="30"),
+        sa.Column("buffer_before_minutes", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("buffer_after_minutes", sa.Integer(), nullable=False, server_default="5"),
+        sa.Column("meeting_mode", sa.String(20), nullable=False, server_default="'zoom'"),
+        sa.Column("reminder_hours_before", sa.Integer(), nullable=False, server_default="24"),
+        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("TRUE")),
         sa.Column(
             "created_at",
             sa.TIMESTAMP(timezone=True),
@@ -67,18 +55,12 @@ def upgrade():
             server_default=sa.text("now()"),
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.UniqueConstraint("user_id", "slug", name="uq_appointment_type_slug"),
     )
-    op.create_index(
-        "idx_appointment_types_user", "appointment_types", ["user_id", "is_active"]
-    )
-    op.create_index(
-        "idx_appointment_types_org", "appointment_types", ["organization_id"]
-    )
+    op.create_index("idx_appointment_types_user", "appointment_types", ["user_id", "is_active"])
+    op.create_index("idx_appointment_types_org", "appointment_types", ["organization_id"])
 
     # ==========================================================================
     # availability_rules - Weekly availability per user
@@ -115,18 +97,12 @@ def upgrade():
             server_default=sa.text("now()"),
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
-        sa.CheckConstraint(
-            "day_of_week >= 0 AND day_of_week <= 6", name="ck_valid_day_of_week"
-        ),
+        sa.CheckConstraint("day_of_week >= 0 AND day_of_week <= 6", name="ck_valid_day_of_week"),
     )
     op.create_index("idx_availability_rules_user", "availability_rules", ["user_id"])
-    op.create_index(
-        "idx_availability_rules_org", "availability_rules", ["organization_id"]
-    )
+    op.create_index("idx_availability_rules_org", "availability_rules", ["organization_id"])
 
     # ==========================================================================
     # availability_overrides - Date-specific overrides
@@ -158,20 +134,12 @@ def upgrade():
             server_default=sa.text("now()"),
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
-        sa.UniqueConstraint(
-            "user_id", "override_date", name="uq_availability_override_date"
-        ),
+        sa.UniqueConstraint("user_id", "override_date", name="uq_availability_override_date"),
     )
-    op.create_index(
-        "idx_availability_overrides_user", "availability_overrides", ["user_id"]
-    )
-    op.create_index(
-        "idx_availability_overrides_org", "availability_overrides", ["organization_id"]
-    )
+    op.create_index("idx_availability_overrides_user", "availability_overrides", ["user_id"])
+    op.create_index("idx_availability_overrides_org", "availability_overrides", ["organization_id"])
 
     # ==========================================================================
     # booking_links - Secure public URLs for booking
@@ -187,9 +155,7 @@ def upgrade():
         sa.Column("organization_id", UUID(as_uuid=True), nullable=False),
         sa.Column("user_id", UUID(as_uuid=True), nullable=False),
         sa.Column("public_slug", sa.String(32), nullable=False),
-        sa.Column(
-            "is_active", sa.Boolean(), nullable=False, server_default=sa.text("TRUE")
-        ),
+        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("TRUE")),
         sa.Column(
             "created_at",
             sa.TIMESTAMP(timezone=True),
@@ -203,9 +169,7 @@ def upgrade():
             server_default=sa.text("now()"),
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.UniqueConstraint("public_slug", name="uq_booking_link_slug"),
         sa.UniqueConstraint("user_id", name="uq_booking_link_user"),
@@ -274,26 +238,18 @@ def upgrade():
             server_default=sa.text("now()"),
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(
             ["appointment_type_id"], ["appointment_types.id"], ondelete="SET NULL"
         ),
-        sa.ForeignKeyConstraint(
-            ["approved_by_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["approved_by_user_id"], ["users.id"], ondelete="SET NULL"),
         sa.UniqueConstraint("idempotency_key", name="uq_appointment_idempotency"),
         sa.UniqueConstraint("reschedule_token", name="uq_appointment_reschedule_token"),
         sa.UniqueConstraint("cancel_token", name="uq_appointment_cancel_token"),
     )
-    op.create_index(
-        "idx_appointments_user_date", "appointments", ["user_id", "scheduled_start"]
-    )
-    op.create_index(
-        "idx_appointments_org_status", "appointments", ["organization_id", "status"]
-    )
+    op.create_index("idx_appointments_user_date", "appointments", ["user_id", "scheduled_start"])
+    op.create_index("idx_appointments_org_status", "appointments", ["organization_id", "status"])
     op.create_index("idx_appointments_type", "appointments", ["appointment_type_id"])
     op.create_index(
         "idx_appointments_pending_expiry",
@@ -329,19 +285,11 @@ def upgrade():
             server_default=sa.text("now()"),
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
-        sa.ForeignKeyConstraint(
-            ["appointment_id"], ["appointments.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["appointment_id"], ["appointments.id"], ondelete="CASCADE"),
     )
-    op.create_index(
-        "idx_appointment_email_logs_appt", "appointment_email_logs", ["appointment_id"]
-    )
-    op.create_index(
-        "idx_appointment_email_logs_org", "appointment_email_logs", ["organization_id"]
-    )
+    op.create_index("idx_appointment_email_logs_appt", "appointment_email_logs", ["appointment_id"])
+    op.create_index("idx_appointment_email_logs_org", "appointment_email_logs", ["organization_id"])
 
 
 def downgrade():

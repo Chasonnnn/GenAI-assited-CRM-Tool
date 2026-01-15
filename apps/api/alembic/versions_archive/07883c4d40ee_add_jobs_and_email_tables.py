@@ -24,29 +24,17 @@ def upgrade() -> None:
     # Create email_templates table
     op.create_table(
         "email_templates",
-        sa.Column(
-            "id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False
-        ),
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("organization_id", sa.UUID(), nullable=False),
         sa.Column("created_by_user_id", sa.UUID(), nullable=True),
         sa.Column("name", sa.String(length=100), nullable=False),
         sa.Column("subject", sa.String(length=200), nullable=False),
         sa.Column("body", sa.Text(), nullable=False),
-        sa.Column(
-            "is_active", sa.Boolean(), server_default=sa.text("TRUE"), nullable=False
-        ),
-        sa.Column(
-            "created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
-        sa.Column(
-            "updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
-        sa.ForeignKeyConstraint(
-            ["created_by_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.Column("is_active", sa.Boolean(), server_default=sa.text("TRUE"), nullable=False),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
+        sa.ForeignKeyConstraint(["created_by_user_id"], ["users.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("organization_id", "name", name="uq_email_template_name"),
     )
@@ -60,40 +48,26 @@ def upgrade() -> None:
     # Create jobs table
     op.create_table(
         "jobs",
-        sa.Column(
-            "id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False
-        ),
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("organization_id", sa.UUID(), nullable=False),
         sa.Column("job_type", sa.String(length=50), nullable=False),
         sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-        sa.Column(
-            "run_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
+        sa.Column("run_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
         sa.Column(
             "status",
             sa.String(length=20),
             server_default=sa.text("'pending'"),
             nullable=False,
         ),
-        sa.Column(
-            "attempts", sa.Integer(), server_default=sa.text("0"), nullable=False
-        ),
-        sa.Column(
-            "max_attempts", sa.Integer(), server_default=sa.text("3"), nullable=False
-        ),
+        sa.Column("attempts", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("max_attempts", sa.Integer(), server_default=sa.text("3"), nullable=False),
         sa.Column("last_error", sa.Text(), nullable=True),
-        sa.Column(
-            "created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
         sa.Column("completed_at", sa.DateTime(), nullable=True),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        "idx_jobs_org", "jobs", ["organization_id", "created_at"], unique=False
-    )
+    op.create_index("idx_jobs_org", "jobs", ["organization_id", "created_at"], unique=False)
     op.create_index(
         "idx_jobs_pending",
         "jobs",
@@ -105,9 +79,7 @@ def upgrade() -> None:
     # Create email_logs table
     op.create_table(
         "email_logs",
-        sa.Column(
-            "id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False
-        ),
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("organization_id", sa.UUID(), nullable=False),
         sa.Column("job_id", sa.UUID(), nullable=True),
         sa.Column("template_id", sa.UUID(), nullable=True),
@@ -123,22 +95,14 @@ def upgrade() -> None:
         ),
         sa.Column("sent_at", sa.DateTime(), nullable=True),
         sa.Column("error", sa.Text(), nullable=True),
-        sa.Column(
-            "created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
         sa.ForeignKeyConstraint(["case_id"], ["cases.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["job_id"], ["jobs.id"], ondelete="SET NULL"),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
-        sa.ForeignKeyConstraint(
-            ["template_id"], ["email_templates.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["template_id"], ["email_templates.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        "idx_email_logs_case", "email_logs", ["case_id", "created_at"], unique=False
-    )
+    op.create_index("idx_email_logs_case", "email_logs", ["case_id", "created_at"], unique=False)
     op.create_index(
         "idx_email_logs_org",
         "email_logs",

@@ -40,12 +40,8 @@ def upgrade() -> None:
         sa.Column("name", sa.String(100), server_default="Default", nullable=False),
         sa.Column("is_default", sa.Boolean(), server_default="true", nullable=False),
         sa.Column("stages", postgresql.JSONB(), nullable=False),
-        sa.Column(
-            "created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
-        sa.Column(
-            "updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
     )
 
     op.create_index("idx_pipelines_org", "pipelines", ["organization_id"])

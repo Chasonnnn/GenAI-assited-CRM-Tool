@@ -34,18 +34,10 @@ def upgrade():
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("name", sa.String(length=100), nullable=False),
         sa.Column("description", sa.String(length=500), nullable=True),
-        sa.Column(
-            "is_active", sa.Boolean(), server_default=sa.text("TRUE"), nullable=False
-        ),
-        sa.Column(
-            "created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
-        sa.Column(
-            "updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.Column("is_active", sa.Boolean(), server_default=sa.text("TRUE"), nullable=False),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("organization_id", "name", name="uq_queue_name"),
     )
@@ -53,9 +45,7 @@ def upgrade():
 
     # Add ownership columns to cases (nullable for migration)
     op.add_column("cases", sa.Column("owner_type", sa.String(length=10), nullable=True))
-    op.add_column(
-        "cases", sa.Column("owner_id", postgresql.UUID(as_uuid=True), nullable=True)
-    )
+    op.add_column("cases", sa.Column("owner_id", postgresql.UUID(as_uuid=True), nullable=True))
 
     # Backfill: set owner_type="user" and owner_id=assigned_to or created_by
     op.execute("""
@@ -66,9 +56,7 @@ def upgrade():
     """)
 
     # Create ownership index
-    op.create_index(
-        "idx_cases_org_owner", "cases", ["organization_id", "owner_type", "owner_id"]
-    )
+    op.create_index("idx_cases_org_owner", "cases", ["organization_id", "owner_type", "owner_id"])
 
 
 def downgrade():

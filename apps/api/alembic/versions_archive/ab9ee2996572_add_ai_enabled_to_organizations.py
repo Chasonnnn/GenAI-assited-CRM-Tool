@@ -23,9 +23,7 @@ def upgrade() -> None:
     """Add ai_enabled column to organizations table."""
     op.add_column(
         "organizations",
-        sa.Column(
-            "ai_enabled", sa.Boolean(), server_default=sa.text("false"), nullable=False
-        ),
+        sa.Column("ai_enabled", sa.Boolean(), server_default=sa.text("false"), nullable=False),
     )
 
 

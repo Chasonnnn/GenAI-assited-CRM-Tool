@@ -40,9 +40,7 @@ def upgrade() -> None:
         sa.Column("meta_form_id", sa.String(100), nullable=True),
         sa.Column("meta_page_id", sa.String(100), nullable=True),
         sa.Column("field_data", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column(
-            "raw_payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True
-        ),
+        sa.Column("raw_payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column(
             "is_converted",
             sa.Boolean(),
@@ -59,9 +57,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("converted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("organization_id", "meta_lead_id", name="uq_meta_lead"),
     )
@@ -93,9 +89,7 @@ def upgrade() -> None:
             server_default=sa.text("'new_unread'"),
             nullable=False,
         ),
-        sa.Column(
-            "source", sa.String(20), server_default=sa.text("'manual'"), nullable=False
-        ),
+        sa.Column("source", sa.String(20), server_default=sa.text("'manual'"), nullable=False),
         sa.Column("assigned_to_user_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("created_by_user_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("meta_lead_id", postgresql.UUID(as_uuid=True), nullable=True),
@@ -118,9 +112,7 @@ def upgrade() -> None:
         sa.Column("num_deliveries", sa.Integer(), nullable=True),
         sa.Column("num_csections", sa.Integer(), nullable=True),
         # Soft delete
-        sa.Column(
-            "is_archived", sa.Boolean(), server_default=sa.text("FALSE"), nullable=False
-        ),
+        sa.Column("is_archived", sa.Boolean(), server_default=sa.text("FALSE"), nullable=False),
         sa.Column("archived_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("archived_by_user_id", postgresql.UUID(as_uuid=True), nullable=True),
         # Timestamps
@@ -137,21 +129,11 @@ def upgrade() -> None:
             nullable=False,
         ),
         # Constraints
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
-        sa.ForeignKeyConstraint(
-            ["assigned_to_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
-        sa.ForeignKeyConstraint(
-            ["created_by_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
-        sa.ForeignKeyConstraint(
-            ["archived_by_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
-        sa.ForeignKeyConstraint(
-            ["meta_lead_id"], ["meta_leads.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["assigned_to_user_id"], ["users.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(["created_by_user_id"], ["users.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(["archived_by_user_id"], ["users.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(["meta_lead_id"], ["meta_leads.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("organization_id", "case_number", name="uq_case_number"),
     )
@@ -167,9 +149,7 @@ def upgrade() -> None:
 
     # Query optimization indexes
     op.create_index("idx_cases_org_status", "cases", ["organization_id", "status"])
-    op.create_index(
-        "idx_cases_org_assigned", "cases", ["organization_id", "assigned_to_user_id"]
-    )
+    op.create_index("idx_cases_org_assigned", "cases", ["organization_id", "assigned_to_user_id"])
     op.create_index("idx_cases_org_created", "cases", ["organization_id", "created_at"])
     op.create_index(
         "idx_cases_org_active",
@@ -212,18 +192,12 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.ForeignKeyConstraint(["case_id"], ["cases.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
-        sa.ForeignKeyConstraint(
-            ["changed_by_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["changed_by_user_id"], ["users.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )
 
-    op.create_index(
-        "idx_case_history_case", "case_status_history", ["case_id", "changed_at"]
-    )
+    op.create_index("idx_case_history_case", "case_status_history", ["case_id", "changed_at"])
 
     # ==========================================================================
     # case_notes
@@ -247,9 +221,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.ForeignKeyConstraint(["case_id"], ["cases.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["author_id"], ["users.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -301,19 +273,11 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["case_id"], ["cases.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(
-            ["assigned_to_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
-        sa.ForeignKeyConstraint(
-            ["created_by_user_id"], ["users.id"], ondelete="RESTRICT"
-        ),
-        sa.ForeignKeyConstraint(
-            ["completed_by_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["assigned_to_user_id"], ["users.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(["created_by_user_id"], ["users.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["completed_by_user_id"], ["users.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )
 

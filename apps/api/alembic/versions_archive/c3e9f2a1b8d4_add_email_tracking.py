@@ -29,9 +29,7 @@ def upgrade():
     )
 
     # Add tracking fields to campaign_recipients
-    op.add_column(
-        "campaign_recipients", sa.Column("tracking_token", sa.String(64), nullable=True)
-    )
+    op.add_column("campaign_recipients", sa.Column("tracking_token", sa.String(64), nullable=True))
     op.add_column(
         "campaign_recipients",
         sa.Column("opened_at", sa.TIMESTAMP(timezone=True), nullable=True),
@@ -77,31 +75,21 @@ def upgrade():
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(
-            ["recipient_id"], ["campaign_recipients.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["recipient_id"], ["campaign_recipients.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        "idx_tracking_events_recipient", "campaign_tracking_events", ["recipient_id"]
-    )
-    op.create_index(
-        "idx_tracking_events_type", "campaign_tracking_events", ["event_type"]
-    )
+    op.create_index("idx_tracking_events_recipient", "campaign_tracking_events", ["recipient_id"])
+    op.create_index("idx_tracking_events_type", "campaign_tracking_events", ["event_type"])
 
 
 def downgrade():
     # Drop campaign_tracking_events table
     op.drop_index("idx_tracking_events_type", table_name="campaign_tracking_events")
-    op.drop_index(
-        "idx_tracking_events_recipient", table_name="campaign_tracking_events"
-    )
+    op.drop_index("idx_tracking_events_recipient", table_name="campaign_tracking_events")
     op.drop_table("campaign_tracking_events")
 
     # Remove tracking fields from campaign_recipients
-    op.drop_index(
-        "idx_campaign_recipients_tracking_token", table_name="campaign_recipients"
-    )
+    op.drop_index("idx_campaign_recipients_tracking_token", table_name="campaign_recipients")
     op.drop_column("campaign_recipients", "click_count")
     op.drop_column("campaign_recipients", "clicked_at")
     op.drop_column("campaign_recipients", "open_count")

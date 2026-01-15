@@ -19,15 +19,11 @@ def upgrade():
     """Add token expiry timestamps to appointments."""
     op.add_column(
         "appointments",
-        sa.Column(
-            "reschedule_token_expires_at", sa.TIMESTAMP(timezone=True), nullable=True
-        ),
+        sa.Column("reschedule_token_expires_at", sa.TIMESTAMP(timezone=True), nullable=True),
     )
     op.add_column(
         "appointments",
-        sa.Column(
-            "cancel_token_expires_at", sa.TIMESTAMP(timezone=True), nullable=True
-        ),
+        sa.Column("cancel_token_expires_at", sa.TIMESTAMP(timezone=True), nullable=True),
     )
 
     # Backfill existing appointments with default expiry (end time + 7 days)

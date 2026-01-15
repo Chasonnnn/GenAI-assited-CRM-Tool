@@ -96,9 +96,7 @@ def upgrade() -> None:
         ),
         sa.Column("integration_type", sa.String(50), nullable=False),
         sa.Column("integration_key", sa.String(255), nullable=True),
-        sa.Column(
-            "period_start", sa.DateTime(timezone=True), nullable=False
-        ),  # Hour bucket
+        sa.Column("period_start", sa.DateTime(timezone=True), nullable=False),  # Hour bucket
         sa.Column("error_count", sa.Integer, nullable=False, server_default="0"),
         sa.Column("last_error", sa.Text, nullable=True),
         sa.Column(
@@ -191,9 +189,7 @@ def upgrade() -> None:
         sa.Column(
             "organization_id", UUID(as_uuid=True), nullable=True
         ),  # Null for unauthenticated requests
-        sa.Column(
-            "period_start", sa.DateTime(timezone=True), nullable=False
-        ),  # Minute bucket
+        sa.Column("period_start", sa.DateTime(timezone=True), nullable=False),  # Minute bucket
         sa.Column(
             "period_type", sa.String(10), nullable=False, server_default="minute"
         ),  # minute, hour

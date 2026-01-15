@@ -20,12 +20,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.drop_constraint(
-        "ck_interview_notes_anchor_complete", "interview_notes", type_="check"
-    )
-    op.drop_constraint(
-        "ck_interview_notes_anchor_range", "interview_notes", type_="check"
-    )
+    op.drop_constraint("ck_interview_notes_anchor_complete", "interview_notes", type_="check")
+    op.drop_constraint("ck_interview_notes_anchor_range", "interview_notes", type_="check")
     op.drop_column("interview_notes", "anchor_start")
     op.drop_column("interview_notes", "anchor_end")
     op.drop_column("interview_notes", "current_anchor_start")
@@ -37,7 +33,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     op.add_column("case_interviews", sa.Column("transcript_html", sa.Text(), nullable=True))
-    op.add_column("interview_notes", sa.Column("anchor_status", sa.String(length=20), nullable=True))
+    op.add_column(
+        "interview_notes", sa.Column("anchor_status", sa.String(length=20), nullable=True)
+    )
     op.add_column("interview_notes", sa.Column("current_anchor_end", sa.Integer(), nullable=True))
     op.add_column("interview_notes", sa.Column("current_anchor_start", sa.Integer(), nullable=True))
     op.add_column("interview_notes", sa.Column("anchor_end", sa.Integer(), nullable=True))

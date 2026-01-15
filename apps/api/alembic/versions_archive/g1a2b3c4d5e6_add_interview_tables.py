@@ -5,6 +5,7 @@ Revises: f8b3c2d1e4a5
 Create Date: 2026-01-04 12:00:00.000000
 
 """
+
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
@@ -20,7 +21,12 @@ def upgrade() -> None:
     # Create case_interviews table
     op.create_table(
         "case_interviews",
-        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            server_default=sa.text("gen_random_uuid()"),
+            nullable=False,
+        ),
         sa.Column("case_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         # Metadata
@@ -34,15 +40,27 @@ def upgrade() -> None:
         sa.Column("transcript_storage_key", sa.String(500), nullable=True),
         sa.Column("transcript_version", sa.Integer(), server_default=sa.text("1"), nullable=False),
         sa.Column("transcript_hash", sa.String(64), nullable=True),
-        sa.Column("transcript_size_bytes", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column(
+            "transcript_size_bytes", sa.Integer(), server_default=sa.text("0"), nullable=False
+        ),
         # Status
         sa.Column("status", sa.String(20), server_default=sa.text("'completed'"), nullable=False),
         # Retention
         sa.Column("retention_policy_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("expires_at", sa.TIMESTAMP(timezone=True), nullable=True),
         # Timestamps
-        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         # Full-text search
         sa.Column("search_vector", postgresql.TSVECTOR(), nullable=True),
         # Primary key
@@ -56,13 +74,25 @@ def upgrade() -> None:
 
     # Create indexes for case_interviews
     op.create_index("ix_case_interviews_case_id", "case_interviews", ["case_id"])
-    op.create_index("ix_case_interviews_org_conducted", "case_interviews", ["organization_id", "conducted_at"])
-    op.create_index("ix_case_interviews_search_vector", "case_interviews", ["search_vector"], postgresql_using="gin")
+    op.create_index(
+        "ix_case_interviews_org_conducted", "case_interviews", ["organization_id", "conducted_at"]
+    )
+    op.create_index(
+        "ix_case_interviews_search_vector",
+        "case_interviews",
+        ["search_vector"],
+        postgresql_using="gin",
+    )
 
     # Create interview_transcript_versions table
     op.create_table(
         "interview_transcript_versions",
-        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            server_default=sa.text("gen_random_uuid()"),
+            nullable=False,
+        ),
         sa.Column("interview_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("version", sa.Integer(), nullable=False),
@@ -76,7 +106,12 @@ def upgrade() -> None:
         sa.Column("author_user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("source", sa.String(30), nullable=False),
         # Timestamps
-        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         # Primary key
         sa.PrimaryKeyConstraint("id"),
         # Foreign keys
@@ -88,13 +123,24 @@ def upgrade() -> None:
     )
 
     # Create indexes for interview_transcript_versions
-    op.create_index("ix_interview_versions_interview", "interview_transcript_versions", ["interview_id", "version"])
-    op.create_index("ix_interview_versions_org", "interview_transcript_versions", ["organization_id"])
+    op.create_index(
+        "ix_interview_versions_interview",
+        "interview_transcript_versions",
+        ["interview_id", "version"],
+    )
+    op.create_index(
+        "ix_interview_versions_org", "interview_transcript_versions", ["organization_id"]
+    )
 
     # Create interview_notes table
     op.create_table(
         "interview_notes",
-        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            server_default=sa.text("gen_random_uuid()"),
+            nullable=False,
+        ),
         sa.Column("interview_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         # Content
@@ -111,8 +157,18 @@ def upgrade() -> None:
         # Metadata
         sa.Column("author_user_id", postgresql.UUID(as_uuid=True), nullable=False),
         # Timestamps
-        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         # Primary key
         sa.PrimaryKeyConstraint("id"),
         # Foreign keys
@@ -120,11 +176,14 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"]),
         sa.ForeignKeyConstraint(["author_user_id"], ["users.id"]),
         # Check constraints
-        sa.CheckConstraint("anchor_end IS NULL OR anchor_end >= anchor_start", name="ck_interview_notes_anchor_range"),
+        sa.CheckConstraint(
+            "anchor_end IS NULL OR anchor_end >= anchor_start",
+            name="ck_interview_notes_anchor_range",
+        ),
         sa.CheckConstraint(
             "(anchor_start IS NULL AND anchor_end IS NULL AND anchor_text IS NULL) OR "
             "(anchor_start IS NOT NULL AND anchor_end IS NOT NULL AND anchor_text IS NOT NULL)",
-            name="ck_interview_notes_anchor_complete"
+            name="ck_interview_notes_anchor_complete",
         ),
     )
 
@@ -135,7 +194,12 @@ def upgrade() -> None:
     # Create interview_attachments table (link table)
     op.create_table(
         "interview_attachments",
-        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            server_default=sa.text("gen_random_uuid()"),
+            nullable=False,
+        ),
         sa.Column("interview_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("attachment_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -145,7 +209,12 @@ def upgrade() -> None:
         sa.Column("transcription_error", sa.Text(), nullable=True),
         sa.Column("transcription_completed_at", sa.TIMESTAMP(timezone=True), nullable=True),
         # Timestamps
-        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         # Primary key
         sa.PrimaryKeyConstraint("id"),
         # Foreign keys

@@ -58,9 +58,7 @@ def downgrade() -> None:
     """Remove case_id and intended_parent_id from appointments."""
     op.drop_index("idx_appointments_ip", table_name="appointments")
     op.drop_index("idx_appointments_case", table_name="appointments")
-    op.drop_constraint(
-        "fk_appointments_intended_parent_id", "appointments", type_="foreignkey"
-    )
+    op.drop_constraint("fk_appointments_intended_parent_id", "appointments", type_="foreignkey")
     op.drop_constraint("fk_appointments_case_id", "appointments", type_="foreignkey")
     op.drop_column("appointments", "intended_parent_id")
     op.drop_column("appointments", "case_id")

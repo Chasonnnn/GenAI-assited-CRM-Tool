@@ -33,15 +33,9 @@ def upgrade() -> None:
         ),
         sa.Column("role", sa.String(50), nullable=False),
         sa.Column("permission", sa.String(100), nullable=False),
-        sa.Column(
-            "is_granted", sa.Boolean(), server_default=sa.text("true"), nullable=False
-        ),
-        sa.Column(
-            "created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
-        sa.Column(
-            "updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
+        sa.Column("is_granted", sa.Boolean(), server_default=sa.text("true"), nullable=False),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
             "organization_id",
@@ -76,15 +70,9 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("permission", sa.String(100), nullable=False),
-        sa.Column(
-            "override_type", sa.String(10), nullable=False
-        ),  # 'grant' or 'revoke'
-        sa.Column(
-            "created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
-        sa.Column(
-            "updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
+        sa.Column("override_type", sa.String(10), nullable=False),  # 'grant' or 'revoke'
+        sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
             "organization_id",
@@ -92,9 +80,7 @@ def upgrade() -> None:
             "permission",
             name="uq_user_overrides_org_user_perm",
         ),
-        sa.CheckConstraint(
-            "override_type IN ('grant', 'revoke')", name="ck_override_type_valid"
-        ),
+        sa.CheckConstraint("override_type IN ('grant', 'revoke')", name="ck_override_type_valid"),
     )
     op.create_index(
         "idx_user_overrides_org_user",

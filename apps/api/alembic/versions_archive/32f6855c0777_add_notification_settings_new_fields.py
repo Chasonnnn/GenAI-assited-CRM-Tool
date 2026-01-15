@@ -33,9 +33,7 @@ def upgrade() -> None:
     )
     op.add_column(
         "user_notification_settings",
-        sa.Column(
-            "appointments", sa.Boolean(), server_default=sa.text("true"), nullable=False
-        ),
+        sa.Column("appointments", sa.Boolean(), server_default=sa.text("true"), nullable=False),
     )
     # ### end Alembic commands ###
 

@@ -49,9 +49,7 @@ def upgrade() -> None:
             server_default="[]",
             nullable=False,
         ),
-        sa.Column(
-            "is_global", sa.Boolean(), server_default=sa.text("FALSE"), nullable=False
-        ),
+        sa.Column("is_global", sa.Boolean(), server_default=sa.text("FALSE"), nullable=False),
         sa.Column("organization_id", sa.UUID(), nullable=True),
         sa.Column("usage_count", sa.Integer(), nullable=False),
         sa.Column("created_by_user_id", sa.UUID(), nullable=True),
@@ -67,21 +65,13 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(
-            ["created_by_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["created_by_user_id"], ["users.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("organization_id", "name", name="uq_template_name"),
     )
-    op.create_index(
-        "idx_template_category", "workflow_templates", ["category"], unique=False
-    )
-    op.create_index(
-        "idx_template_org", "workflow_templates", ["organization_id"], unique=False
-    )
+    op.create_index("idx_template_category", "workflow_templates", ["category"], unique=False)
+    op.create_index("idx_template_org", "workflow_templates", ["organization_id"], unique=False)
     # ### end Alembic commands ###
 
 

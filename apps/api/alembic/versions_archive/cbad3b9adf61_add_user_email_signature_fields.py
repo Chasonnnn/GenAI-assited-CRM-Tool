@@ -21,30 +21,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Add email signature fields to users table."""
-    op.add_column(
-        "users", sa.Column("signature_name", sa.String(length=255), nullable=True)
-    )
-    op.add_column(
-        "users", sa.Column("signature_title", sa.String(length=255), nullable=True)
-    )
-    op.add_column(
-        "users", sa.Column("signature_company", sa.String(length=255), nullable=True)
-    )
-    op.add_column(
-        "users", sa.Column("signature_phone", sa.String(length=50), nullable=True)
-    )
-    op.add_column(
-        "users", sa.Column("signature_email", sa.String(length=255), nullable=True)
-    )
-    op.add_column(
-        "users", sa.Column("signature_address", sa.String(length=500), nullable=True)
-    )
-    op.add_column(
-        "users", sa.Column("signature_website", sa.String(length=255), nullable=True)
-    )
-    op.add_column(
-        "users", sa.Column("signature_logo_url", sa.String(length=500), nullable=True)
-    )
+    op.add_column("users", sa.Column("signature_name", sa.String(length=255), nullable=True))
+    op.add_column("users", sa.Column("signature_title", sa.String(length=255), nullable=True))
+    op.add_column("users", sa.Column("signature_company", sa.String(length=255), nullable=True))
+    op.add_column("users", sa.Column("signature_phone", sa.String(length=50), nullable=True))
+    op.add_column("users", sa.Column("signature_email", sa.String(length=255), nullable=True))
+    op.add_column("users", sa.Column("signature_address", sa.String(length=500), nullable=True))
+    op.add_column("users", sa.Column("signature_website", sa.String(length=255), nullable=True))
+    op.add_column("users", sa.Column("signature_logo_url", sa.String(length=500), nullable=True))
     op.add_column("users", sa.Column("signature_html", sa.Text(), nullable=True))
 
 

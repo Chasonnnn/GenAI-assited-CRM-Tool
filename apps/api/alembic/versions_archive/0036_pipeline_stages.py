@@ -58,34 +58,20 @@ def upgrade() -> None:
         sa.Column("label", sa.String(100), nullable=False),
         sa.Column("color", sa.String(7), nullable=False),
         sa.Column("order", sa.Integer(), nullable=False),
-        sa.Column(
-            "is_active", sa.Boolean(), server_default=sa.text("TRUE"), nullable=False
-        ),
+        sa.Column("is_active", sa.Boolean(), server_default=sa.text("TRUE"), nullable=False),
         sa.Column("deleted_at", sa.DateTime(), nullable=True),
-        sa.Column(
-            "allowed_next_slugs", postgresql.JSONB(astext_type=sa.Text()), nullable=True
-        ),
-        sa.Column(
-            "created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
-        sa.Column(
-            "updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
+        sa.Column("allowed_next_slugs", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
         sa.ForeignKeyConstraint(["pipeline_id"], ["pipelines.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("pipeline_id", "slug", name="uq_stage_slug"),
     )
-    op.create_index(
-        "idx_stage_pipeline_order", "pipeline_stages", ["pipeline_id", "order"]
-    )
-    op.create_index(
-        "idx_stage_pipeline_active", "pipeline_stages", ["pipeline_id", "is_active"]
-    )
+    op.create_index("idx_stage_pipeline_order", "pipeline_stages", ["pipeline_id", "order"])
+    op.create_index("idx_stage_pipeline_active", "pipeline_stages", ["pipeline_id", "is_active"])
 
     # 2. Add new columns to cases
-    op.add_column(
-        "cases", sa.Column("stage_id", postgresql.UUID(as_uuid=True), nullable=True)
-    )
+    op.add_column("cases", sa.Column("stage_id", postgresql.UUID(as_uuid=True), nullable=True))
     op.add_column("cases", sa.Column("status_label", sa.String(100), nullable=True))
     op.create_foreign_key(
         "fk_cases_stage",
@@ -141,9 +127,7 @@ def upgrade() -> None:
 
     # Get all pipelines with their JSON stages
     pipelines = conn.execute(
-        sa.text(
-            "SELECT id, organization_id, stages FROM pipelines WHERE stages IS NOT NULL"
-        )
+        sa.text("SELECT id, organization_id, stages FROM pipelines WHERE stages IS NOT NULL")
     ).fetchall()
 
     for pipeline in pipelines:
@@ -246,9 +230,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Remove new columns
     op.drop_constraint("fk_history_to_stage", "case_status_history", type_="foreignkey")
-    op.drop_constraint(
-        "fk_history_from_stage", "case_status_history", type_="foreignkey"
-    )
+    op.drop_constraint("fk_history_from_stage", "case_status_history", type_="foreignkey")
     op.drop_column("case_status_history", "to_label_snapshot")
     op.drop_column("case_status_history", "from_label_snapshot")
     op.drop_column("case_status_history", "to_stage_id")

@@ -21,9 +21,7 @@ def upgrade() -> None:
     # Add resend throttling columns
     op.add_column(
         "org_invites",
-        sa.Column(
-            "resend_count", sa.Integer(), server_default=sa.text("0"), nullable=False
-        ),
+        sa.Column("resend_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
     )
     op.add_column(
         "org_invites",

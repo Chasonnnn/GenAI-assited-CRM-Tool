@@ -61,9 +61,7 @@ def upgrade() -> None:
         existing_nullable=False,
         existing_server_default=sa.text("now()"),
     )
-    op.drop_constraint(
-        op.f("tasks_created_by_user_id_fkey"), "tasks", type_="foreignkey"
-    )
+    op.drop_constraint(op.f("tasks_created_by_user_id_fkey"), "tasks", type_="foreignkey")
     op.create_foreign_key(
         None, "tasks", "users", ["created_by_user_id"], ["id"], ondelete="RESTRICT"
     )
