@@ -36,10 +36,7 @@ def upgrade():
         pipeline_id = row[0]
 
         exists = conn.execute(
-            sa.text(
-                "SELECT 1 FROM pipeline_stages "
-                "WHERE pipeline_id = :pid AND slug = 'matched'"
-            ),
+            sa.text("SELECT 1 FROM pipeline_stages WHERE pipeline_id = :pid AND slug = 'matched'"),
             {"pid": pipeline_id},
         ).first()
         if exists:

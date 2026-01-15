@@ -25,9 +25,7 @@ def upgrade() -> None:
     Migrate existing assigned_to_user_id data to owner fields.
     """
     # Add new columns
-    op.add_column(
-        "intended_parents", sa.Column("owner_type", sa.String(10), nullable=True)
-    )
+    op.add_column("intended_parents", sa.Column("owner_type", sa.String(10), nullable=True))
     op.add_column("intended_parents", sa.Column("owner_id", sa.UUID(), nullable=True))
 
     # Migrate existing data
@@ -55,9 +53,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Re-add assigned_to_user_id column."""
     # Re-add the column
-    op.add_column(
-        "intended_parents", sa.Column("assigned_to_user_id", sa.UUID(), nullable=True)
-    )
+    op.add_column("intended_parents", sa.Column("assigned_to_user_id", sa.UUID(), nullable=True))
 
     # Re-add foreign key
     op.create_foreign_key(

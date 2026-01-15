@@ -27,9 +27,7 @@ def upgrade() -> None:
         "ai_settings",
         sa.Column("consent_accepted_at", sa.DateTime(timezone=True), nullable=True),
     )
-    op.add_column(
-        "ai_settings", sa.Column("consent_accepted_by", UUID(), nullable=True)
-    )
+    op.add_column("ai_settings", sa.Column("consent_accepted_by", UUID(), nullable=True))
     # Add anonymization toggle (defaults to True for safety)
     op.add_column(
         "ai_settings",

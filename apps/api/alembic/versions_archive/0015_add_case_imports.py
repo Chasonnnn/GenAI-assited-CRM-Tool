@@ -50,9 +50,7 @@ def upgrade() -> None:
         sa.Column("skipped_count", sa.Integer(), server_default="0", nullable=False),
         sa.Column("error_count", sa.Integer(), server_default="0", nullable=False),
         sa.Column("errors", postgresql.JSONB(), nullable=True),
-        sa.Column(
-            "created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
         sa.Column("completed_at", sa.DateTime(), nullable=True),
     )
 

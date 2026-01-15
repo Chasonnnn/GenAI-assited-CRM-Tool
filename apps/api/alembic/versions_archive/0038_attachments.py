@@ -43,9 +43,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("scanned_at", sa.TIMESTAMP(timezone=True), nullable=True),
-        sa.Column(
-            "quarantined", sa.Boolean(), server_default=sa.text("TRUE"), nullable=False
-        ),
+        sa.Column("quarantined", sa.Boolean(), server_default=sa.text("TRUE"), nullable=False),
         # Soft-delete
         sa.Column("deleted_at", sa.TIMESTAMP(timezone=True), nullable=True),
         sa.Column("deleted_by_user_id", UUID(as_uuid=True), nullable=True),
@@ -57,23 +55,15 @@ def upgrade() -> None:
         ),
         # Constraints
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["case_id"], ["cases.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(
-            ["uploaded_by_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
-        sa.ForeignKeyConstraint(
-            ["deleted_by_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["uploaded_by_user_id"], ["users.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(["deleted_by_user_id"], ["users.id"], ondelete="SET NULL"),
     )
 
     # Indexes
     op.create_index("idx_attachments_case", "attachments", ["case_id"])
-    op.create_index(
-        "idx_attachments_org_scan", "attachments", ["organization_id", "scan_status"]
-    )
+    op.create_index("idx_attachments_org_scan", "attachments", ["organization_id", "scan_status"])
     op.create_index(
         "idx_attachments_active",
         "attachments",

@@ -24,21 +24,15 @@ def upgrade() -> None:
     # Create entity_notes table (polymorphic notes for any entity)
     op.create_table(
         "entity_notes",
-        sa.Column(
-            "id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False
-        ),
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("organization_id", sa.UUID(), nullable=False),
         sa.Column("entity_type", sa.String(length=50), nullable=False),
         sa.Column("entity_id", sa.UUID(), nullable=False),
         sa.Column("author_id", sa.UUID(), nullable=False),
         sa.Column("content", sa.Text(), nullable=False),
-        sa.Column(
-            "created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
         sa.ForeignKeyConstraint(["author_id"], ["users.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
@@ -57,9 +51,7 @@ def upgrade() -> None:
     # Create intended_parents table
     op.create_table(
         "intended_parents",
-        sa.Column(
-            "id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False
-        ),
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("organization_id", sa.UUID(), nullable=False),
         sa.Column("full_name", sa.String(length=255), nullable=False),
         sa.Column("email", postgresql.CITEXT(), nullable=False),
@@ -74,9 +66,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("assigned_to_user_id", sa.UUID(), nullable=True),
-        sa.Column(
-            "is_archived", sa.Boolean(), server_default=sa.text("FALSE"), nullable=False
-        ),
+        sa.Column("is_archived", sa.Boolean(), server_default=sa.text("FALSE"), nullable=False),
         sa.Column("archived_at", sa.DateTime(), nullable=True),
         sa.Column(
             "last_activity",
@@ -84,18 +74,10 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.Column(
-            "created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
-        sa.Column(
-            "updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
-        sa.ForeignKeyConstraint(
-            ["assigned_to_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
+        sa.ForeignKeyConstraint(["assigned_to_user_id"], ["users.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
@@ -121,20 +103,14 @@ def upgrade() -> None:
     # Create intended_parent_status_history table
     op.create_table(
         "intended_parent_status_history",
-        sa.Column(
-            "id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False
-        ),
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("intended_parent_id", sa.UUID(), nullable=False),
         sa.Column("changed_by_user_id", sa.UUID(), nullable=True),
         sa.Column("old_status", sa.String(length=50), nullable=True),
         sa.Column("new_status", sa.String(length=50), nullable=False),
         sa.Column("reason", sa.Text(), nullable=True),
-        sa.Column(
-            "changed_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
-        sa.ForeignKeyConstraint(
-            ["changed_by_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
+        sa.Column("changed_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
+        sa.ForeignKeyConstraint(["changed_by_user_id"], ["users.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(
             ["intended_parent_id"], ["intended_parents.id"], ondelete="CASCADE"
         ),

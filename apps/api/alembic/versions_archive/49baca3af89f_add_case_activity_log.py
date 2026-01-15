@@ -23,22 +23,16 @@ def upgrade() -> None:
     """Create case_activity_log table for comprehensive case history tracking."""
     op.create_table(
         "case_activity_log",
-        sa.Column(
-            "id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False
-        ),
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("case_id", sa.UUID(), nullable=False),
         sa.Column("organization_id", sa.UUID(), nullable=False),
         sa.Column("activity_type", sa.String(length=50), nullable=False),
         sa.Column("actor_user_id", sa.UUID(), nullable=True),
         sa.Column("details", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column(
-            "created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
         sa.ForeignKeyConstraint(["actor_user_id"], ["users.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["case_id"], ["cases.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(

@@ -223,18 +223,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_index(
-        "uq_request_metrics_rollup_null_org", table_name="request_metrics_rollup"
-    )
-    op.drop_index(
-        "uq_integration_error_rollup_null_key", table_name="integration_error_rollup"
-    )
-    op.drop_index(
-        "uq_integration_health_org_type_null_key", table_name="integration_health"
-    )
-    op.drop_constraint(
-        "uq_ai_conversations_user_entity", "ai_conversations", type_="unique"
-    )
+    op.drop_index("uq_request_metrics_rollup_null_org", table_name="request_metrics_rollup")
+    op.drop_index("uq_integration_error_rollup_null_key", table_name="integration_error_rollup")
+    op.drop_index("uq_integration_health_org_type_null_key", table_name="integration_health")
+    op.drop_constraint("uq_ai_conversations_user_entity", "ai_conversations", type_="unique")
 
     op.alter_column(
         "attachments",

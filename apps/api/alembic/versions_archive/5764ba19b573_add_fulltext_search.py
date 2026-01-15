@@ -175,15 +175,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Drop triggers
     op.execute("DROP TRIGGER IF EXISTS cases_search_vector_trigger ON cases;")
-    op.execute(
-        "DROP TRIGGER IF EXISTS entity_notes_search_vector_trigger ON entity_notes;"
-    )
-    op.execute(
-        "DROP TRIGGER IF EXISTS attachments_search_vector_trigger ON attachments;"
-    )
-    op.execute(
-        "DROP TRIGGER IF EXISTS intended_parents_search_vector_trigger ON intended_parents;"
-    )
+    op.execute("DROP TRIGGER IF EXISTS entity_notes_search_vector_trigger ON entity_notes;")
+    op.execute("DROP TRIGGER IF EXISTS attachments_search_vector_trigger ON attachments;")
+    op.execute("DROP TRIGGER IF EXISTS intended_parents_search_vector_trigger ON intended_parents;")
 
     # Drop trigger functions
     op.execute("DROP FUNCTION IF EXISTS cases_search_vector_update();")

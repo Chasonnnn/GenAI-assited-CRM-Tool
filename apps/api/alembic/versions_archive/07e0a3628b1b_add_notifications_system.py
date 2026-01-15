@@ -23,9 +23,7 @@ def upgrade() -> None:
     # Create notifications table
     op.create_table(
         "notifications",
-        sa.Column(
-            "id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False
-        ),
+        sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("organization_id", sa.UUID(), nullable=False),
         sa.Column("user_id", sa.UUID(), nullable=False),
         sa.Column("type", sa.String(length=50), nullable=False),
@@ -35,18 +33,12 @@ def upgrade() -> None:
         sa.Column("entity_id", sa.UUID(), nullable=True),
         sa.Column("dedupe_key", sa.String(length=255), nullable=True),
         sa.Column("read_at", sa.DateTime(), nullable=True),
-        sa.Column(
-            "created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        "idx_notif_dedupe", "notifications", ["dedupe_key", "created_at"], unique=False
-    )
+    op.create_index("idx_notif_dedupe", "notifications", ["dedupe_key", "created_at"], unique=False)
     op.create_index(
         "idx_notif_org_user",
         "notifications",
@@ -77,21 +69,15 @@ def upgrade() -> None:
             server_default=sa.text("true"),
             nullable=False,
         ),
-        sa.Column(
-            "case_handoff", sa.Boolean(), server_default=sa.text("true"), nullable=False
-        ),
+        sa.Column("case_handoff", sa.Boolean(), server_default=sa.text("true"), nullable=False),
         sa.Column(
             "task_assigned",
             sa.Boolean(),
             server_default=sa.text("true"),
             nullable=False,
         ),
-        sa.Column(
-            "updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.Column("updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("user_id"),
     )

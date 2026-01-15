@@ -49,15 +49,11 @@ def upgrade() -> None:
         sa.Column("details", postgresql.JSONB(), nullable=True),
         sa.Column("ip_address", sa.String(45), nullable=True),
         sa.Column("user_agent", sa.String(500), nullable=True),
-        sa.Column(
-            "created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
     )
 
     # Create indexes for efficient querying
-    op.create_index(
-        "idx_audit_org_created", "audit_logs", ["organization_id", "created_at"]
-    )
+    op.create_index("idx_audit_org_created", "audit_logs", ["organization_id", "created_at"])
     op.create_index(
         "idx_audit_org_event_created",
         "audit_logs",

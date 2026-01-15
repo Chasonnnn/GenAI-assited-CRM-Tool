@@ -39,9 +39,7 @@ def upgrade() -> None:
         sa.Column("schema_version", sa.Integer, server_default="1"),
         # Trigger
         sa.Column("trigger_type", sa.String(50), nullable=False),
-        sa.Column(
-            "trigger_config", postgresql.JSONB, nullable=False, server_default="{}"
-        ),
+        sa.Column("trigger_config", postgresql.JSONB, nullable=False, server_default="{}"),
         # Conditions
         sa.Column("conditions", postgresql.JSONB, server_default="[]"),
         sa.Column("condition_logic", sa.String(10), server_default="AND"),

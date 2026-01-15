@@ -49,18 +49,12 @@ def upgrade():
         """
     )
 
-    op.alter_column(
-        "cases", "owner_type", existing_type=sa.String(length=10), nullable=False
-    )
+    op.alter_column("cases", "owner_type", existing_type=sa.String(length=10), nullable=False)
     op.alter_column(
         "cases", "owner_id", existing_type=postgresql.UUID(as_uuid=True), nullable=False
     )
 
 
 def downgrade():
-    op.alter_column(
-        "cases", "owner_id", existing_type=postgresql.UUID(as_uuid=True), nullable=True
-    )
-    op.alter_column(
-        "cases", "owner_type", existing_type=sa.String(length=10), nullable=True
-    )
+    op.alter_column("cases", "owner_id", existing_type=postgresql.UUID(as_uuid=True), nullable=True)
+    op.alter_column("cases", "owner_type", existing_type=sa.String(length=10), nullable=True)

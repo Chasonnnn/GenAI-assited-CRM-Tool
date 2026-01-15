@@ -32,17 +32,13 @@ def upgrade() -> None:
     # Org-level AI configuration
     op.create_table(
         "ai_settings",
-        sa.Column(
-            "id", UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False
-        ),
+        sa.Column("id", UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("organization_id", UUID(), nullable=False),
         sa.Column("is_enabled", sa.Boolean(), nullable=False, server_default="false"),
         sa.Column("provider", sa.String(20), nullable=False, server_default="openai"),
         sa.Column("api_key_encrypted", sa.Text(), nullable=True),
         sa.Column("model", sa.String(50), nullable=True, server_default="gpt-4o-mini"),
-        sa.Column(
-            "context_notes_limit", sa.Integer(), nullable=True, server_default="5"
-        ),
+        sa.Column("context_notes_limit", sa.Integer(), nullable=True, server_default="5"),
         sa.Column(
             "conversation_history_limit",
             sa.Integer(),
@@ -62,18 +58,14 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.UniqueConstraint("organization_id"),
     )
 
     # AI conversation threads
     op.create_table(
         "ai_conversations",
-        sa.Column(
-            "id", UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False
-        ),
+        sa.Column("id", UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("organization_id", UUID(), nullable=False),
         sa.Column("user_id", UUID(), nullable=False),
         sa.Column("entity_type", sa.String(50), nullable=False),
@@ -91,9 +83,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
     )
     op.create_index(
@@ -110,9 +100,7 @@ def upgrade() -> None:
     # Individual messages
     op.create_table(
         "ai_messages",
-        sa.Column(
-            "id", UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False
-        ),
+        sa.Column("id", UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("conversation_id", UUID(), nullable=False),
         sa.Column("role", sa.String(20), nullable=False),  # user, assistant, system
         sa.Column("content", sa.Text(), nullable=False),
@@ -124,20 +112,14 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["conversation_id"], ["ai_conversations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["conversation_id"], ["ai_conversations.id"], ondelete="CASCADE"),
     )
-    op.create_index(
-        "ix_ai_messages_conversation", "ai_messages", ["conversation_id", "created_at"]
-    )
+    op.create_index("ix_ai_messages_conversation", "ai_messages", ["conversation_id", "created_at"])
 
     # Action approval tracking
     op.create_table(
         "ai_action_approvals",
-        sa.Column(
-            "id", UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False
-        ),
+        sa.Column("id", UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("message_id", UUID(), nullable=False),
         sa.Column("action_index", sa.Integer(), nullable=False),
         sa.Column("action_type", sa.String(50), nullable=False),
@@ -154,17 +136,13 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(["message_id"], ["ai_messages.id"], ondelete="CASCADE"),
     )
-    op.create_index(
-        "ix_ai_action_approvals_message", "ai_action_approvals", ["message_id"]
-    )
+    op.create_index("ix_ai_action_approvals_message", "ai_action_approvals", ["message_id"])
     op.create_index("ix_ai_action_approvals_status", "ai_action_approvals", ["status"])
 
     # Cached entity summaries
     op.create_table(
         "ai_entity_summaries",
-        sa.Column(
-            "id", UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False
-        ),
+        sa.Column("id", UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("organization_id", UUID(), nullable=False),
         sa.Column("entity_type", sa.String(50), nullable=False),
         sa.Column("entity_id", UUID(), nullable=False),
@@ -183,9 +161,7 @@ def upgrade() -> None:
     # Token usage tracking
     op.create_table(
         "ai_usage_log",
-        sa.Column(
-            "id", UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False
-        ),
+        sa.Column("id", UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("organization_id", UUID(), nullable=False),
         sa.Column("user_id", UUID(), nullable=False),
         sa.Column("conversation_id", UUID(), nullable=True),
@@ -201,24 +177,16 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(
-            ["conversation_id"], ["ai_conversations.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["conversation_id"], ["ai_conversations.id"], ondelete="SET NULL"),
     )
-    op.create_index(
-        "ix_ai_usage_log_org_date", "ai_usage_log", ["organization_id", "created_at"]
-    )
+    op.create_index("ix_ai_usage_log_org_date", "ai_usage_log", ["organization_id", "created_at"])
 
     # Per-user integrations (Gmail, Zoom, etc.)
     op.create_table(
         "user_integrations",
-        sa.Column(
-            "id", UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False
-        ),
+        sa.Column("id", UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("user_id", UUID(), nullable=False),
         sa.Column(
             "integration_type", sa.String(30), nullable=False
@@ -249,9 +217,7 @@ def upgrade() -> None:
         "cases",
         sa.Column("last_contacted_at", sa.DateTime(timezone=True), nullable=True),
     )
-    op.add_column(
-        "cases", sa.Column("last_contact_method", sa.String(20), nullable=True)
-    )
+    op.add_column("cases", sa.Column("last_contact_method", sa.String(20), nullable=True))
 
 
 def downgrade() -> None:

@@ -37,21 +37,13 @@ def upgrade() -> None:
         sa.Column("page_name", sa.String(255), nullable=True),
         sa.Column("access_token_encrypted", sa.Text(), nullable=True),
         sa.Column("token_expires_at", sa.DateTime(), nullable=True),
-        sa.Column(
-            "is_active", sa.Boolean(), server_default=sa.text("TRUE"), nullable=False
-        ),
+        sa.Column("is_active", sa.Boolean(), server_default=sa.text("TRUE"), nullable=False),
         sa.Column("last_success_at", sa.DateTime(), nullable=True),
         sa.Column("last_error", sa.Text(), nullable=True),
         sa.Column("last_error_at", sa.DateTime(), nullable=True),
-        sa.Column(
-            "created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
-        sa.Column(
-            "updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
-        sa.ForeignKeyConstraint(
-            ["organization_id"], ["organizations.id"], ondelete="CASCADE"
-        ),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("page_id", name="uq_meta_page_id"),
     )
@@ -82,9 +74,7 @@ def upgrade() -> None:
         ),
     )
     op.add_column("meta_leads", sa.Column("fetch_error", sa.Text(), nullable=True))
-    op.create_index(
-        "idx_meta_leads_status", "meta_leads", ["organization_id", "status"]
-    )
+    op.create_index("idx_meta_leads_status", "meta_leads", ["organization_id", "status"])
 
     # ==========================================================================
     # Add campaign tracking to cases (for filtering by ad/form)

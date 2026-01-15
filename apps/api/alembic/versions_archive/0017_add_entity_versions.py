@@ -60,9 +60,7 @@ def upgrade() -> None:
             nullable=True,
         ),
         sa.Column("comment", sa.String(500), nullable=True),
-        sa.Column(
-            "created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
-        ),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
     )
 
     # Unique constraint and index
@@ -138,9 +136,7 @@ def upgrade() -> None:
         prev_hash = org_hashes.get(org_id, GENESIS_HASH)
 
         # Compute entry hash
-        data = (
-            f"{prev_hash}|{entry_id}|{org_id}|{event_type}|{created_at}|{details_json}"
-        )
+        data = f"{prev_hash}|{entry_id}|{org_id}|{event_type}|{created_at}|{details_json}"
         entry_hash = hashlib.sha256(data.encode("utf-8")).hexdigest()
 
         # Update record

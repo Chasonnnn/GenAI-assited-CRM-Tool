@@ -20,9 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Add external_id column to email_logs."""
-    op.add_column(
-        "email_logs", sa.Column("external_id", sa.String(length=255), nullable=True)
-    )
+    op.add_column("email_logs", sa.Column("external_id", sa.String(length=255), nullable=True))
 
 
 def downgrade() -> None:

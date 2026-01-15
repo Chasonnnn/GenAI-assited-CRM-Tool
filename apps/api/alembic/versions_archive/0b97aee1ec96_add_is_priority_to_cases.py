@@ -22,9 +22,7 @@ def upgrade() -> None:
     """Add is_priority boolean column to cases table."""
     op.add_column(
         "cases",
-        sa.Column(
-            "is_priority", sa.Boolean(), server_default=sa.text("FALSE"), nullable=False
-        ),
+        sa.Column("is_priority", sa.Boolean(), server_default=sa.text("FALSE"), nullable=False),
     )
 
 

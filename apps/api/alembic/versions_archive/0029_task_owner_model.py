@@ -68,9 +68,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Re-add legacy assigned_to_user_id column."""
     # Re-add the column
-    op.add_column(
-        "tasks", sa.Column("assigned_to_user_id", UUID(as_uuid=True), nullable=True)
-    )
+    op.add_column("tasks", sa.Column("assigned_to_user_id", UUID(as_uuid=True), nullable=True))
 
     # Re-add foreign key
     op.create_foreign_key(

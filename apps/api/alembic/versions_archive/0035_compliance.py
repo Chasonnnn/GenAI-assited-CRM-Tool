@@ -56,12 +56,8 @@ def upgrade() -> None:
         ),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
     )
-    op.create_index(
-        "idx_export_jobs_org_created", "export_jobs", ["organization_id", "created_at"]
-    )
-    op.create_index(
-        "idx_export_jobs_org_status", "export_jobs", ["organization_id", "status"]
-    )
+    op.create_index("idx_export_jobs_org_created", "export_jobs", ["organization_id", "created_at"])
+    op.create_index("idx_export_jobs_org_status", "export_jobs", ["organization_id", "status"])
 
     op.create_table(
         "legal_holds",
@@ -100,9 +96,7 @@ def upgrade() -> None:
         ),
         sa.Column("released_at", sa.DateTime(timezone=True), nullable=True),
     )
-    op.create_index(
-        "idx_legal_holds_org_active", "legal_holds", ["organization_id", "released_at"]
-    )
+    op.create_index("idx_legal_holds_org_active", "legal_holds", ["organization_id", "released_at"])
     op.create_index(
         "idx_legal_holds_entity_active",
         "legal_holds",
@@ -125,9 +119,7 @@ def upgrade() -> None:
         ),
         sa.Column("entity_type", sa.String(50), nullable=False),
         sa.Column("retention_days", sa.Integer(), nullable=False),
-        sa.Column(
-            "is_active", sa.Boolean(), nullable=False, server_default=sa.text("TRUE")
-        ),
+        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("TRUE")),
         sa.Column(
             "created_by_user_id",
             postgresql.UUID(as_uuid=True),
@@ -160,12 +152,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "idx_retention_policy_org_active", table_name="data_retention_policies"
-    )
-    op.drop_constraint(
-        "uq_retention_policy_org_entity", "data_retention_policies", type_="unique"
-    )
+    op.drop_index("idx_retention_policy_org_active", table_name="data_retention_policies")
+    op.drop_constraint("uq_retention_policy_org_entity", "data_retention_policies", type_="unique")
     op.drop_table("data_retention_policies")
     op.drop_index("idx_legal_holds_entity_active", table_name="legal_holds")
     op.drop_index("idx_legal_holds_org_active", table_name="legal_holds")

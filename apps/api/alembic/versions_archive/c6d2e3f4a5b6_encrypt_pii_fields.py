@@ -122,9 +122,7 @@ def upgrade() -> None:
         phone_plain = _maybe_decrypt(row["phone"], decrypt_value)
         normalized_phone = _normalize_phone(phone_plain)
         phone_hash = hash_phone(normalized_phone) if normalized_phone else None
-        encrypted_phone = (
-            encrypt_value(normalized_phone) if normalized_phone is not None else None
-        )
+        encrypted_phone = encrypt_value(normalized_phone) if normalized_phone is not None else None
 
         dob_plain = _maybe_decrypt(row["date_of_birth"], decrypt_value)
         dob_text = _coerce_date_text(dob_plain)
@@ -164,9 +162,7 @@ def upgrade() -> None:
         phone_plain = _maybe_decrypt(row["phone"], decrypt_value)
         normalized_phone = _normalize_phone(phone_plain)
         phone_hash = hash_phone(normalized_phone) if normalized_phone else None
-        encrypted_phone = (
-            encrypt_value(normalized_phone) if normalized_phone is not None else None
-        )
+        encrypted_phone = encrypt_value(normalized_phone) if normalized_phone is not None else None
 
         notes_plain = _maybe_decrypt(row["notes_internal"], decrypt_value)
         encrypted_notes = encrypt_value(notes_plain) if notes_plain else None
@@ -282,9 +278,7 @@ def downgrade() -> None:
         dob_plain = _maybe_decrypt(row["date_of_birth"], decrypt_value)
         dob_value = None
         if isinstance(dob_plain, (date, datetime)):
-            dob_value = (
-                dob_plain.date() if isinstance(dob_plain, datetime) else dob_plain
-            )
+            dob_value = dob_plain.date() if isinstance(dob_plain, datetime) else dob_plain
         elif dob_plain:
             try:
                 dob_value = date.fromisoformat(_safe_str(dob_plain))

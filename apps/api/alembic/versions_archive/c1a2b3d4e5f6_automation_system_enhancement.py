@@ -43,12 +43,8 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.add_column(
-        "email_templates", sa.Column("system_key", sa.String(100), nullable=True)
-    )
-    op.add_column(
-        "email_templates", sa.Column("category", sa.String(50), nullable=True)
-    )
+    op.add_column("email_templates", sa.Column("system_key", sa.String(100), nullable=True))
+    op.add_column("email_templates", sa.Column("category", sa.String(50), nullable=True))
 
     # ==========================================================================
     # Automation Workflows: Add recurrence and system fields
@@ -79,9 +75,7 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.add_column(
-        "automation_workflows", sa.Column("system_key", sa.String(100), nullable=True)
-    )
+    op.add_column("automation_workflows", sa.Column("system_key", sa.String(100), nullable=True))
     op.add_column(
         "automation_workflows",
         sa.Column(
@@ -136,13 +130,9 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("recipient_type", sa.String(30), nullable=False),
-        sa.Column(
-            "filter_criteria", postgresql.JSONB(), server_default="{}", nullable=False
-        ),
+        sa.Column("filter_criteria", postgresql.JSONB(), server_default="{}", nullable=False),
         sa.Column("scheduled_at", sa.TIMESTAMP(timezone=True), nullable=True),
-        sa.Column(
-            "status", sa.String(20), server_default=sa.text("'draft'"), nullable=False
-        ),
+        sa.Column("status", sa.String(20), server_default=sa.text("'draft'"), nullable=False),
         sa.Column(
             "created_by_user_id",
             sa.UUID(),
@@ -163,15 +153,9 @@ def upgrade() -> None:
         ),
     )
 
-    op.create_unique_constraint(
-        "uq_campaign_name", "campaigns", ["organization_id", "name"]
-    )
-    op.create_index(
-        "idx_campaigns_org_status", "campaigns", ["organization_id", "status"]
-    )
-    op.create_index(
-        "idx_campaigns_org_created", "campaigns", ["organization_id", "created_at"]
-    )
+    op.create_unique_constraint("uq_campaign_name", "campaigns", ["organization_id", "name"])
+    op.create_index("idx_campaigns_org_status", "campaigns", ["organization_id", "status"])
+    op.create_index("idx_campaigns_org_created", "campaigns", ["organization_id", "created_at"])
 
     # ==========================================================================
     # Campaign Runs Table
@@ -203,30 +187,16 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("completed_at", sa.TIMESTAMP(timezone=True), nullable=True),
-        sa.Column(
-            "status", sa.String(20), server_default=sa.text("'running'"), nullable=False
-        ),
+        sa.Column("status", sa.String(20), server_default=sa.text("'running'"), nullable=False),
         sa.Column("error_message", sa.Text(), nullable=True),
-        sa.Column(
-            "total_count", sa.Integer(), server_default=sa.text("0"), nullable=False
-        ),
-        sa.Column(
-            "sent_count", sa.Integer(), server_default=sa.text("0"), nullable=False
-        ),
-        sa.Column(
-            "failed_count", sa.Integer(), server_default=sa.text("0"), nullable=False
-        ),
-        sa.Column(
-            "skipped_count", sa.Integer(), server_default=sa.text("0"), nullable=False
-        ),
+        sa.Column("total_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("sent_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("failed_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("skipped_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
     )
 
-    op.create_index(
-        "idx_campaign_runs_campaign", "campaign_runs", ["campaign_id", "started_at"]
-    )
-    op.create_index(
-        "idx_campaign_runs_org", "campaign_runs", ["organization_id", "started_at"]
-    )
+    op.create_index("idx_campaign_runs_campaign", "campaign_runs", ["campaign_id", "started_at"])
+    op.create_index("idx_campaign_runs_org", "campaign_runs", ["organization_id", "started_at"])
 
     # ==========================================================================
     # Campaign Recipients Table
@@ -249,9 +219,7 @@ def upgrade() -> None:
         sa.Column("entity_id", sa.UUID(), nullable=False),
         sa.Column("recipient_email", postgresql.CITEXT(), nullable=False),
         sa.Column("recipient_name", sa.String(255), nullable=True),
-        sa.Column(
-            "status", sa.String(20), server_default=sa.text("'pending'"), nullable=False
-        ),
+        sa.Column("status", sa.String(20), server_default=sa.text("'pending'"), nullable=False),
         sa.Column("error", sa.Text(), nullable=True),
         sa.Column("skip_reason", sa.String(100), nullable=True),
         sa.Column("sent_at", sa.TIMESTAMP(timezone=True), nullable=True),
@@ -308,9 +276,7 @@ def upgrade() -> None:
     op.create_unique_constraint(
         "uq_email_suppression", "email_suppressions", ["organization_id", "email"]
     )
-    op.create_index(
-        "idx_email_suppressions_org", "email_suppressions", ["organization_id"]
-    )
+    op.create_index("idx_email_suppressions_org", "email_suppressions", ["organization_id"])
     op.create_index("idx_email_suppressions_email", "email_suppressions", ["email"])
 
 
@@ -322,9 +288,7 @@ def downgrade() -> None:
     op.drop_table("email_suppressions")
 
     # Drop workflow additions
-    op.drop_constraint(
-        "fk_workflow_reviewed_by", "automation_workflows", type_="foreignkey"
-    )
+    op.drop_constraint("fk_workflow_reviewed_by", "automation_workflows", type_="foreignkey")
 
     op.drop_column("automation_workflows", "reviewed_by_user_id")
     op.drop_column("automation_workflows", "reviewed_at")

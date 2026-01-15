@@ -144,9 +144,7 @@ def downgrade() -> None:
 
     # Drop triggers first
     op.execute("DROP TRIGGER IF EXISTS update_users_updated_at ON users")
-    op.execute(
-        "DROP TRIGGER IF EXISTS update_organizations_updated_at ON organizations"
-    )
+    op.execute("DROP TRIGGER IF EXISTS update_organizations_updated_at ON organizations")
     op.execute("DROP FUNCTION IF EXISTS update_updated_at_column()")
 
     # Drop tables in reverse order (respecting foreign keys)

@@ -151,7 +151,5 @@ def downgrade() -> None:
 
     op.drop_index("idx_analytics_snapshot_expires", table_name="analytics_snapshots")
     op.drop_index("idx_analytics_snapshot_org_type", table_name="analytics_snapshots")
-    op.drop_constraint(
-        "uq_analytics_snapshot_key", "analytics_snapshots", type_="unique"
-    )
+    op.drop_constraint("uq_analytics_snapshot_key", "analytics_snapshots", type_="unique")
     op.drop_table("analytics_snapshots")
