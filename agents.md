@@ -418,8 +418,8 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ### Core Entities
 - Organization, User, Membership
-- Surrogate (with sequential surrogate_number)
-- IntendedParent
+- Surrogate (with sequential surrogate_number: S10001+)
+- IntendedParent (with sequential intended_parent_number: I10001+)
 - Match (surrogate ↔ IP)
 - Task, Note, Attachment
 - Appointment, Notification

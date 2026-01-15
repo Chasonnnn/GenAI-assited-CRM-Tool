@@ -3,11 +3,34 @@
 from datetime import datetime, date
 from uuid import UUID
 
-from sqlalchemy import asc, desc, func, and_, or_
+from sqlalchemy import asc, desc, func, and_, or_, text
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.enums import MatchStatus
 from app.db.models import Surrogate, IntendedParent, Match, MatchEvent
+
+
+def generate_match_number(db: Session, org_id: UUID) -> str:
+    """
+    Generate next sequential match number for org (M10001+).
+
+    Uses atomic INSERT...ON CONFLICT for race-condition-free counter increment.
+    """
+    result = db.execute(
+        text("""
+            INSERT INTO org_counters (organization_id, counter_type, current_value)
+            VALUES (:org_id, 'match_number', 10001)
+            ON CONFLICT (organization_id, counter_type)
+            DO UPDATE SET current_value = org_counters.current_value + 1,
+                          updated_at = now()
+            RETURNING current_value
+        """),
+        {"org_id": org_id},
+    ).scalar_one_or_none()
+    if result is None:
+        raise RuntimeError("Failed to generate match number")
+
+    return f"M{result:05d}"
 
 
 def get_surrogate_with_stage(
@@ -118,9 +141,11 @@ def list_matches(
             )
             .filter(
                 or_(
+                    Match.match_number.ilike(search_term),
                     Surrogate.full_name.ilike(search_term),
                     Surrogate.surrogate_number.ilike(search_term),
                     IntendedParent.full_name.ilike(search_term),
+                    IntendedParent.intended_parent_number.ilike(search_term),
                 )
             )
         )

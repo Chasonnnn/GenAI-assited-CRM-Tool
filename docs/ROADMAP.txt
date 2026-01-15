@@ -57,7 +57,7 @@ Backend
 ✓ 4 roles: intake_specialist, case_manager, admin, developer
 ✓ cases table:
   ✓ organization_id, source, meta_lead_id, contact fields, status, assigned_to, created_by, timestamps
-  ✓ Sequential case_number per org (00001-99999)
+  ✓ Sequential surrogate_number per org (S10001+)
   ✓ Phone normalization (E.164: +15551234567)
   ✓ State normalization (2-letter codes: CA, TX, etc.)
   ✓ Email unique per org (active cases only)

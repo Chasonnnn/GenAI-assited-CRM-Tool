@@ -5,6 +5,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from time import perf_counter
+from uuid import UUID
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,6 +21,7 @@ from app.core.structured_logging import build_log_context
 from app.core.rate_limit import limiter
 from app.core.telemetry import configure_telemetry
 from app.db.session import SessionLocal, engine
+from app.db.enums import AlertSeverity, AlertType
 from app.routers import (
     admin_exports,
     admin_imports,
@@ -66,7 +68,7 @@ from app.routers import (
     websocket as ws_router,
     workflows,
 )
-from app.services import metrics_service
+from app.services import alert_service, metrics_service
 
 # ============================================================================
 # GCP Monitoring (Cloud Logging + Error Reporting)
@@ -77,6 +79,65 @@ if gcp_monitoring.logging_enabled:
     logging.info("GCP Cloud Logging: enabled")
 if gcp_monitoring.error_reporter:
     logging.info("GCP Error Reporting: enabled")
+
+
+def _get_org_id_for_alert(request: Request) -> UUID | None:
+    session = getattr(request.state, "user_session", None)
+    if session and getattr(session, "org_id", None):
+        return session.org_id
+
+    token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        return None
+
+    try:
+        from app.core.security import decode_session_token
+
+        payload = decode_session_token(token)
+        org_id = payload.get("org_id")
+        return UUID(org_id) if org_id else None
+    except Exception:
+        return None
+
+
+def _record_api_error_alert(
+    request: Request,
+    status_code: int,
+    error_class: str | None = None,
+) -> None:
+    org_id = _get_org_id_for_alert(request)
+    if not org_id:
+        return
+
+    route = request.scope.get("route")
+    route_path = getattr(route, "path", request.url.path)
+    request_id = request.headers.get("x-request-id")
+    details = {
+        "method": request.method,
+        "path": route_path,
+        "status_code": status_code,
+    }
+    if request_id:
+        details["request_id"] = request_id
+
+    db = SessionLocal()
+    try:
+        alert_service.create_or_update_alert(
+            db=db,
+            org_id=org_id,
+            alert_type=AlertType.API_ERROR,
+            severity=AlertSeverity.ERROR,
+            title=f"API error {status_code}: {request.method} {route_path}",
+            message="Unhandled server error",
+            integration_key=route_path,
+            error_class=error_class,
+            http_status=status_code,
+            details=details,
+        )
+    except Exception:
+        logging.exception("Failed to record system alert for API error")
+    finally:
+        db.close()
 
 # ============================================================================
 # Sentry Integration (optional, for production error tracking)
@@ -129,7 +190,14 @@ configure_telemetry(app, engine)
 @app.middleware("http")
 async def gcp_error_reporting_middleware(request, call_next):
     try:
-        return await call_next(request)
+        response = await call_next(request)
+        if response.status_code >= 500:
+            _record_api_error_alert(
+                request,
+                response.status_code,
+                error_class="http_response",
+            )
+        return response
     except HTTPException as exc:
         if exc.status_code >= 500:
             report_exception(gcp_monitoring.error_reporter, request)
@@ -142,10 +210,15 @@ async def gcp_error_reporting_middleware(request, call_next):
                 method=request.method,
             )
             logging.exception("Unhandled HTTPException", extra=context)
+            _record_api_error_alert(
+                request,
+                exc.status_code,
+                error_class=exc.__class__.__name__,
+            )
         raise
     except RateLimitExceeded:
         raise
-    except Exception:
+    except Exception as exc:
         report_exception(gcp_monitoring.error_reporter, request)
         session = getattr(request.state, "user_session", None)
         context = build_log_context(
@@ -156,6 +229,11 @@ async def gcp_error_reporting_middleware(request, call_next):
             method=request.method,
         )
         logging.exception("Unhandled exception", extra=context)
+        _record_api_error_alert(
+            request,
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            error_class=exc.__class__.__name__,
+        )
         raise
 
 

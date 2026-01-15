@@ -322,13 +322,12 @@ export default function SurrogatesPage() {
 
     return (
         <div className="flex flex-col h-full overflow-hidden">
-            {/* Sticky Header */}
-            <div className="flex-shrink-0 p-6 pb-0">
-                {/* Header */}
-                <div className="flex items-center justify-between mb-6">
+            {/* Page Header - Fixed Height */}
+            <div className="flex-shrink-0 border-b border-border bg-background/95 backdrop-blur">
+                <div className="flex h-14 items-center justify-between px-6">
                     <div>
-                        <h1 className="text-2xl font-semibold">Surrogates</h1>
-                        <p className="text-muted-foreground">
+                        <h1 className="text-xl font-semibold">Surrogates</h1>
+                        <p className="text-sm text-muted-foreground">
                             {data?.total ?? 0} total surrogates
                         </p>
                     </div>
@@ -339,11 +338,13 @@ export default function SurrogatesPage() {
                         </Button>
                     </Link>
                 </div>
+            </div>
 
-                {/* Filters Row */}
+            {/* Filters Row */}
+            <div className="flex-shrink-0 border-b border-border px-6 py-3">
                 <div className="flex flex-wrap items-center gap-3">
                     <Select value={stageFilter} onValueChange={(value) => handleStageChange(value || "all")}>
-                        <SelectTrigger className="w-[180px]">
+                        <SelectTrigger className="w-full sm:w-[180px]">
                             <SelectValue placeholder="All Stages">
                                 {(value: string | null) => {
                                     if (!value || value === "all") return "All Stages"
@@ -368,7 +369,7 @@ export default function SurrogatesPage() {
                             handleSourceChange(isSourceFilter(value) ? value : "all")
                         }
                     >
-                        <SelectTrigger className="w-[180px]">
+                        <SelectTrigger className="w-full sm:w-[180px]">
                             <SelectValue placeholder="All Sources">
                                 {(value: string | null) => {
                                     if (!value || value === "all") return "All Sources"
@@ -401,7 +402,7 @@ export default function SurrogatesPage() {
                     {/* Queue Filter (case_manager+ only) */}
                     {canSeeQueues && queues && queues.length > 0 && (
                         <Select value={queueFilter} onValueChange={(value) => handleQueueChange(value || "all")}>
-                            <SelectTrigger className="w-[180px]">
+                            <SelectTrigger className="w-full sm:w-[180px]">
                                 <UsersIcon className="h-4 w-4 mr-2" />
                                 <SelectValue placeholder="All Queues">
                                     {(value: string | null) => {
@@ -420,7 +421,7 @@ export default function SurrogatesPage() {
                         </Select>
                     )}
 
-                    <div className="relative ml-auto w-full max-w-sm">
+                    <div className="relative w-full sm:w-[280px]">
                         <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
                             placeholder="Search surrogates..."
@@ -440,7 +441,7 @@ export default function SurrogatesPage() {
             </div>
 
             {/* Scrollable Content Area */}
-            <div className="flex-1 overflow-auto p-6 pt-4">
+            <div className="flex-1 overflow-auto p-6">
 
                 {/* Error State */}
                 {isError && (

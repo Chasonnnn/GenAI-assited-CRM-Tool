@@ -101,7 +101,10 @@ export function ProposeMatchDialog({
                                 <SelectContent>
                                     {ipsData?.items.map((ip) => (
                                         <SelectItem key={ip.id} value={ip.id}>
-                                            {ip.full_name || ip.email || "Unknown"}
+                                            <span className="font-medium">{ip.full_name || ip.email || "Unknown"}</span>
+                                            {ip.intended_parent_number && (
+                                                <span className="text-muted-foreground ml-2">#{ip.intended_parent_number}</span>
+                                            )}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>

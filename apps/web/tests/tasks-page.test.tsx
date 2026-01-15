@@ -84,7 +84,7 @@ describe('TasksPage', () => {
                                 due_date: null,
                                 due_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24h from now
                                 surrogate_id: 's1',
-                                surrogate_number: 'SUR-12345',
+                                surrogate_number: 'S12345',
                                 owner_type: 'user',
                                 owner_id: 'u1', // Same as mockCurrentUser
                                 owner_name: 'Test User',
@@ -107,7 +107,7 @@ describe('TasksPage', () => {
                                 is_completed: false,
                                 due_date: null,
                                 surrogate_id: 's1',
-                                surrogate_number: 'SUR-12345',
+                                surrogate_number: 'S12345',
                                 owner_type: 'user',
                                 owner_id: 'u1',
                                 owner_name: 'Jane Doe',
@@ -161,7 +161,7 @@ describe('TasksPage', () => {
     it('shows surrogate links in approval and task items', () => {
         render(<TasksPage />)
 
-        const surrogateLinks = screen.getAllByText('Surrogate #SUR-12345')
+        const surrogateLinks = screen.getAllByText('Surrogate #S12345')
         expect(surrogateLinks).toHaveLength(2) // One in approvals, one in tasks
         surrogateLinks.forEach(link => {
             expect(link.closest('a')).toHaveAttribute('href', '/surrogates/s1')

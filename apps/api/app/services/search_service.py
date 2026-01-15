@@ -682,7 +682,7 @@ def _search_intended_parents(
     limit: int,
     offset: int,
 ) -> list[SearchResult]:
-    """Search intended parents by full_name and exact email/phone matches."""
+    """Search intended parents by name, number, and exact email/phone matches."""
     results: list[SearchResult] = []
     seen_ids: set[str] = set()
     ip_table = IntendedParent.__table__.alias("ip")
@@ -699,6 +699,7 @@ def _search_intended_parents(
             select(
                 ip_table.c.id,
                 ip_table.c.full_name,
+                ip_table.c.intended_parent_number,
                 literal(1.0).label("rank"),
             )
             .where(ip_table.c.organization_id == org_id, or_(*hash_clauses))
@@ -712,8 +713,8 @@ def _search_intended_parents(
                 SearchResult(
                     entity_type="intended_parent",
                     entity_id=str(row.id),
-                    title=row.full_name or "Intended Parent",
-                    snippet="",
+                    title=row.full_name or f"Intended Parent {row.intended_parent_number or ''}".strip(),
+                    snippet=row.intended_parent_number or "",
                     rank=float(row.rank),
                     surrogate_id=None,
                     surrogate_name=None,
@@ -725,7 +726,7 @@ def _search_intended_parents(
         tsquery = func.websearch_to_tsquery("simple", query)
         rank_expr = func.ts_rank(ip_table.c.search_vector, tsquery).label("rank")
         stmt = (
-            select(ip_table.c.id, ip_table.c.full_name, rank_expr)
+            select(ip_table.c.id, ip_table.c.full_name, ip_table.c.intended_parent_number, rank_expr)
             .where(
                 ip_table.c.organization_id == org_id,
                 ip_table.c.search_vector.op("@@")(tsquery),
@@ -744,8 +745,8 @@ def _search_intended_parents(
                 SearchResult(
                     entity_type="intended_parent",
                     entity_id=str(row.id),
-                    title=row.full_name or "Intended Parent",
-                    snippet="",
+                    title=row.full_name or f"Intended Parent {row.intended_parent_number or ''}".strip(),
+                    snippet=row.intended_parent_number or "",
                     rank=float(row.rank),
                     surrogate_id=None,
                     surrogate_name=None,
@@ -757,7 +758,12 @@ def _search_intended_parents(
             tsquery = func.plainto_tsquery("simple", query)
             rank_expr = func.ts_rank(ip_table.c.search_vector, tsquery).label("rank")
             stmt = (
-                select(ip_table.c.id, ip_table.c.full_name, rank_expr)
+                select(
+                    ip_table.c.id,
+                    ip_table.c.full_name,
+                    ip_table.c.intended_parent_number,
+                    rank_expr,
+                )
                 .where(
                     ip_table.c.organization_id == org_id,
                     ip_table.c.search_vector.op("@@")(tsquery),
@@ -774,8 +780,8 @@ def _search_intended_parents(
                     SearchResult(
                         entity_type="intended_parent",
                         entity_id=str(row.id),
-                        title=row.full_name or "Intended Parent",
-                        snippet="",
+                        title=row.full_name or f"Intended Parent {row.intended_parent_number or ''}".strip(),
+                        snippet=row.intended_parent_number or "",
                         rank=float(row.rank),
                         surrogate_id=None,
                         surrogate_name=None,

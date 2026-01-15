@@ -12,7 +12,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 // Sample data factories
 export const mockSurrogate = (overrides = {}) => ({
     id: '550e8400-e29b-41d4-a716-446655440001',
-    surrogate_number: 'SUR-2024-001',
+    surrogate_number: 'S10001',
     full_name: 'Jane Doe',
     email: 'jane@example.com',
     phone: '555-123-4567',
@@ -65,7 +65,7 @@ export const handlers = [
     // Surrogates
     http.get(`${API_BASE}/surrogates`, () => {
         return HttpResponse.json({
-            items: [mockSurrogate(), mockSurrogate({ id: '550e8400-e29b-41d4-a716-446655440002', surrogate_number: 'SUR-2024-002' })],
+            items: [mockSurrogate(), mockSurrogate({ id: '550e8400-e29b-41d4-a716-446655440002', surrogate_number: 'S10002' })],
             total: 2,
             page: 1,
             per_page: 25,

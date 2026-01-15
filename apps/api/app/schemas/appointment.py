@@ -187,7 +187,7 @@ class AppointmentRead(BaseModel):
     google_event_id: str | None
     # Linkage fields
     surrogate_id: UUID | None = None
-    surrogate_number: int | None = None
+    surrogate_number: str | None = None
     intended_parent_id: UUID | None = None
     intended_parent_name: str | None = None
     created_at: datetime
@@ -210,7 +210,7 @@ class AppointmentListItem(BaseModel):
     status: str
     # Linkage fields
     surrogate_id: UUID | None = None
-    surrogate_number: int | None = None
+    surrogate_number: str | None = None
     intended_parent_id: UUID | None = None
     intended_parent_name: str | None = None
     created_at: datetime

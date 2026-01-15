@@ -66,7 +66,7 @@ describe('NotificationsPage', () => {
                         due_date: yesterday.toISOString().split('T')[0],
                         owner_name: 'John Doe',
                         surrogate_id: 's1',
-                        surrogate_number: '00042',
+                        surrogate_number: 'S10042',
                     },
                 ],
             },

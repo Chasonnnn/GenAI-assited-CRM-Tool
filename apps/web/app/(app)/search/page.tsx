@@ -83,7 +83,7 @@ export default function SearchPage() {
             <div className="relative max-w-2xl">
                 <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                    placeholder="Search surrogates, notes, files..."
+                    placeholder="Search surrogates, intended parents, notes, files..."
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={handleKeyDown}
@@ -109,7 +109,7 @@ export default function SearchPage() {
                         <CardTitle className="text-sm font-medium">Search Tips</CardTitle>
                     </CardHeader>
                     <CardContent className="text-sm text-muted-foreground space-y-2">
-                        <p>• Search by name, email, phone, or surrogate number</p>
+                        <p>• Search by name, email, phone, or surrogate/intended parent number</p>
                         <p>• Use quotes for exact phrases: &quot;contract signed&quot;</p>
                         <p>• Results are ranked by relevance</p>
                     </CardContent>

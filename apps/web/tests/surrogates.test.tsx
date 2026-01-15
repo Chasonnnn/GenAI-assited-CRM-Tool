@@ -119,7 +119,7 @@ describe('SurrogatesPage', () => {
         const mockSurrogates = [
             {
                 id: '1',
-                surrogate_number: 'SUR-12345',
+                surrogate_number: 'S12345',
                 full_name: 'John Doe',
                 stage_id: 's1',
                 stage_slug: 'new_unread',
@@ -149,7 +149,7 @@ describe('SurrogatesPage', () => {
 
         render(<SurrogatesPage />)
         expect(screen.getByText('John Doe')).toBeInTheDocument()
-        expect(screen.getByText('#SUR-12345')).toBeInTheDocument()
+        expect(screen.getByText('#S12345')).toBeInTheDocument()
         expect(screen.getByText('john@example.com')).toBeInTheDocument()
     })
 })

@@ -56,7 +56,7 @@ async def test_ai_chat_returns_approval_id_per_action(
     # Minimal case required by /ai/chat contract
     email = f"case-{uuid.uuid4().hex[:8]}@test.com"
     case = Surrogate(
-        surrogate_number=f"C{uuid.uuid4().hex[:9]}",
+        surrogate_number=f"S{uuid.uuid4().int % 90000 + 10000:05d}",
         organization_id=test_auth.org.id,
         stage_id=default_stage.id,
         status_label=default_stage.label,

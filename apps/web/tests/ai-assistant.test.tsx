@@ -46,7 +46,7 @@ describe('AIAssistantPage', () => {
     beforeEach(() => {
         mockUseQuery.mockReturnValue({
             data: [
-                { id: 's1', surrogate_number: '12345', full_name: 'Jane Applicant' },
+                { id: 's1', surrogate_number: 'S12345', full_name: 'Jane Applicant' },
             ],
             isLoading: false,
         })

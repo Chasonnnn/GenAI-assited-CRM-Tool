@@ -137,7 +137,7 @@ async def test_create_zoom_meeting_returns_response_when_service_mocked(
     # Create a minimal surrogate in-org
     normalized_email = normalize_email("surrogate@example.com")
     surrogate = Surrogate(
-        surrogate_number="00001",
+        surrogate_number="S10001",
         organization_id=test_auth.org.id,
         stage_id=default_stage.id,
         status_label=default_stage.label,

@@ -16,7 +16,7 @@ def _create_surrogate(db, org_id, user_id, stage):
     surrogate = Surrogate(
         id=uuid.uuid4(),
         organization_id=org_id,
-        surrogate_number=f"C{uuid.uuid4().hex[:9]}",
+        surrogate_number=f"S{uuid.uuid4().int % 90000 + 10000:05d}",
         stage_id=stage.id,
         status_label=stage.label,
         owner_type="user",

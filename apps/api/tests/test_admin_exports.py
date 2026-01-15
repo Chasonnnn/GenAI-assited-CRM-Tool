@@ -99,7 +99,7 @@ class TestAdminExports:
         normalized_email = normalize_email(email)
         case = Surrogate(
             id=uuid.uuid4(),
-            surrogate_number=str(uuid.uuid4().int)[-5:],
+            surrogate_number=f"S{uuid.uuid4().int % 90000 + 10000:05d}",
             organization_id=test_org.id,
             created_by_user_id=test_user.id,
             owner_type=OwnerType.USER.value,

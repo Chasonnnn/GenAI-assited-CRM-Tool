@@ -519,7 +519,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                         <ThemeToggle />
                     </div>
                 </header>
-                <main className="flex-1">{children}</main>
+                <main className="flex-1 min-w-0 overflow-hidden">{children}</main>
             </SidebarInset>
 
             {/* Search Command Palette */}

@@ -499,6 +499,7 @@ function AppointmentDetailDialog({
                                             <SelectItem value="none">None</SelectItem>
                                             {ips.map((ip) => (
                                                 <SelectItem key={ip.id} value={ip.id}>
+                                                    {ip.intended_parent_number ? `#${ip.intended_parent_number} - ` : ""}
                                                     {ip.full_name}
                                                 </SelectItem>
                                             ))}

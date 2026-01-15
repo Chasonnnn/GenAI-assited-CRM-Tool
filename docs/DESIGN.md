@@ -7,7 +7,7 @@ This document describes the design decisions, patterns, and features implemented
 1. [Architecture Overview](#architecture-overview)
 2. [Authentication & Authorization](#authentication--authorization)
 3. [Multi-Tenancy](#multi-tenancy)
-4. [Cases Module](#cases-module)
+4. [Surrogates Module](#surrogates-module)
 5. [Data Normalization](#data-normalization)
 6. [Soft Delete & Archiving](#soft-delete--archiving)
 7. [Status History](#status-history)
@@ -111,50 +111,34 @@ ROLES_CAN_MANAGE = {ADMIN, DEVELOPER}
 ### Query Scoping
 ```python
 # In every service function:
-def list_cases(db, org_id, ...):
-    return db.query(Case).filter(
-        Case.organization_id == org_id
+def list_surrogates(db, org_id, ...):
+    return db.query(Surrogate).filter(
+        Surrogate.organization_id == org_id
     ).all()
 ```
 
 ---
 
-## Cases Module
+## Surrogates Module
 
 ### Terminology
-- **Cases** = Surrogate applicants (renamed from "Leads")
-- **Meta Leads** = Raw data from Meta Lead Ads, converted to Cases
+- **Surrogates** = Surrogate applicants (renamed from "Leads")
+- **Meta Leads** = Raw data from Meta Lead Ads, converted to Surrogates
 
-### Case Number Generation
-- Sequential per organization: `00001`, `00002`, etc.
-- 5-digit zero-padded string
-- Never reused (even for archived cases)
-- Unique constraint: `(organization_id, case_number)`
+### Surrogate Number Generation
+- Sequential per organization: `S10001`, `S10002`, etc.
+- 1-letter prefix + 5-digit zero-padded number
+- Never reused (even for archived surrogates)
+- Unique constraint: `(organization_id, surrogate_number)`
 
-### Case Status Flow
+### Surrogate Status Flow
 ```
-Stage A: Intake Pipeline
-├── new_unread (default)
-├── contacted
-├── qualified
-├── applied
-├── followup_scheduled
-├── application_submitted
-├── under_review
-├── approved ────────────┐
-├── pending_handoff      │
-└── disqualified         │
-                         │
-Stage B: Post-Approval   │
-├── pending_match ◄──────┘
-├── meds_started
-├── exam_passed
-├── embryo_transferred
-└── delivered
+new_unread → contacted → qualified → interview_scheduled → application_submitted
+→ under_review → approved → ready_to_match → matched → medical_clearance_passed
+→ legal_clearance_passed → transfer_cycle → second_hcg_confirmed → heartbeat_confirmed
+→ ob_care_established → anatomy_scanned → delivered
 
-Pseudo-statuses (for history only):
-├── archived
-└── restored
+Terminal (intake-only): lost, disqualified
 ```
 
 ### Source Tracking
@@ -294,13 +278,13 @@ Searches across multiple fields using `ILIKE`:
 - `full_name`
 - `email`
 - `phone`
-- `case_number`
+- `surrogate_number`
 
 ### Filters
-- `status` — Filter by CaseStatus enum
+- `status` — Filter by SurrogateStatus enum
 - `source` — Filter by CaseSource enum
 - `assigned_to` — Filter by user UUID
-- `include_archived` — Include archived cases (default: false)
+- `include_archived` — Include archived surrogates (default: false)
 
 ---
 
@@ -513,7 +497,7 @@ class Queue(Base):
 - **Manager/Developer**: Full access
 - **Queue-owned cases**: case_manager+ can access
 - **User-owned cases**: Owner, admins, or other case_managers can access
-- **Intake Specialists**: Can only access cases they own
+- **Intake Specialists**: Can only access surrogates they own
 - **Backward compat**: Falls back to status-based logic if `owner_type` is NULL
 
 ---
@@ -521,7 +505,7 @@ class Queue(Base):
 ## Matches Module (v0.14.00)
 
 ### Overview
-Matches pair Intended Parents with Surrogates (Cases), enabling coordinated case management with shared calendars, notes, and task tracking.
+Matches pair Intended Parents with Surrogates, enabling coordinated case management with shared calendars, notes, and task tracking.
 
 ### Data Model
 
@@ -529,8 +513,9 @@ Matches pair Intended Parents with Surrogates (Cases), enabling coordinated case
 ```sql
 id                   UUID PRIMARY KEY
 organization_id      UUID NOT NULL → organizations.id
-case_id              UUID NOT NULL → cases.id
-ip_id                UUID NOT NULL → intended_parents.id
+match_number         VARCHAR(10) NOT NULL  -- M10001+
+surrogate_id         UUID NOT NULL → surrogates.id
+intended_parent_id   UUID NOT NULL → intended_parents.id
 status               VARCHAR(50) NOT NULL  -- proposed, reviewing, accepted, rejected, cancelled
 compatibility_score  INTEGER  -- 0-100 percentage
 proposed_at          TIMESTAMP NOT NULL
@@ -574,7 +559,7 @@ proposed ──┬──→ reviewing ──┬──→ accepted
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/matches` | GET | List matches (org-scoped, filters: status, case_id, ip_id) |
+| `/matches` | GET | List matches (org-scoped, filters: status, surrogate_id, intended_parent_id) |
 | `/matches` | POST | Create match proposal |
 | `/matches/{id}` | GET | Get match by ID |
 | `/matches/{id}/accept` | POST | Accept a proposed match |
@@ -595,7 +580,7 @@ proposed ──┬──→ reviewing ──┬──→ accepted
 - Views: Month, Week, Day
 - Filters: All, Surrogate, IP
 - Color coding: Purple (Surrogate), Green (IP)
-- Fetches tasks by `case_id`
+- Fetches tasks by `surrogate_id`
 
 ---
 

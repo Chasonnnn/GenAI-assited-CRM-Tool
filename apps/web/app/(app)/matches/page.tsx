@@ -47,6 +47,9 @@ function MatchRow({ match }: { match: MatchListItem }) {
 
     return (
         <TableRow className="hover:bg-accent/50">
+            <TableCell className="text-muted-foreground text-sm">
+                {match.match_number || "—"}
+            </TableCell>
             <TableCell>
                 <div className="space-y-1">
                     <Link href={`/surrogates/${match.surrogate_id}`} className="font-medium text-teal-600 hover:underline">
@@ -58,9 +61,14 @@ function MatchRow({ match }: { match: MatchListItem }) {
                 </div>
             </TableCell>
             <TableCell>
-                <Link href={`/intended-parents/${match.intended_parent_id}`} className="font-medium text-teal-600 hover:underline">
-                    {match.ip_name || "Unknown IP"}
-                </Link>
+                <div className="space-y-1">
+                    <Link href={`/intended-parents/${match.intended_parent_id}`} className="font-medium text-teal-600 hover:underline">
+                        {match.ip_name || "Unknown IP"}
+                    </Link>
+                    {match.ip_number && (
+                        <p className="text-xs text-muted-foreground">{match.ip_number}</p>
+                    )}
+                </div>
             </TableCell>
             <TableCell>
                 <StatusBadge status={status} />
@@ -216,7 +224,10 @@ function NewMatchDialog({ open, onOpenChange, onSuccess }: NewMatchDialogProps) 
                                 <SelectContent className="max-h-[200px]">
                                     {ipsData?.items?.map((ip) => (
                                         <SelectItem key={ip.id} value={ip.id}>
-                                            {ip.full_name || ip.email || "Unknown"}
+                                            <span className="font-medium">{ip.full_name || ip.email || "Unknown"}</span>
+                                            {ip.intended_parent_number && (
+                                                <span className="text-muted-foreground ml-2">#{ip.intended_parent_number}</span>
+                                            )}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -293,6 +304,7 @@ function MatchTable({ status, search }: { status?: MatchStatus; search?: string 
         <Table>
             <TableHeader>
                 <TableRow>
+                    <TableHead>Match #</TableHead>
                     <TableHead>Surrogate</TableHead>
                     <TableHead>Intended Parent</TableHead>
                     <TableHead>Stage</TableHead>
@@ -382,7 +394,7 @@ export default function MatchesPage() {
                         <div className="relative w-full max-w-sm">
                             <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
-                                placeholder="Search surrogate or IP name..."
+                                placeholder="Search surrogate or IP name/number..."
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 className="pl-9"

@@ -416,7 +416,7 @@ def test_campaign_run_skips_existing_recipient(
         email=normalized_email,
         email_hash=hash_email(normalized_email),
         source="manual",
-        surrogate_number=f"C-{uuid4().hex[:6]}",
+        surrogate_number=f"S{uuid4().int % 90000 + 10000:05d}",
         owner_type="user",
         owner_id=test_user.id,
     )

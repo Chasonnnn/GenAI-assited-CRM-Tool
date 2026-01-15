@@ -83,11 +83,11 @@ export function SearchCommandDialog({ open, onOpenChange }: SearchCommandDialogP
             description="Search across surrogates, notes, files, and intended parents"
         >
             <Command shouldFilter={false}>
-                <CommandInput
-                    placeholder="Search surrogates, notes, files..."
-                    value={query}
-                    onValueChange={setQuery}
-                />
+            <CommandInput
+                placeholder="Search surrogates, intended parents, notes, files..."
+                value={query}
+                onValueChange={setQuery}
+            />
                 <CommandList>
                     {isLoading && debouncedQuery.length >= 2 && (
                         <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">

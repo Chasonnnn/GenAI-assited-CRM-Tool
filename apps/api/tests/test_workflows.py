@@ -283,7 +283,7 @@ def _create_surrogate_for_workflow(db, test_org, test_user, default_stage):
     surrogate = Surrogate(
         id=uuid4(),
         organization_id=test_org.id,
-        surrogate_number="SUR-1001",
+        surrogate_number="S10001",
         stage_id=default_stage.id,
         status_label=default_stage.label,
         owner_type=OwnerType.USER.value,

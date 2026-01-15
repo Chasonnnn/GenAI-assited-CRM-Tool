@@ -23,10 +23,10 @@ from app.utils.normalization import normalize_email, normalize_name, normalize_p
 
 def generate_surrogate_number(db: Session, org_id: UUID) -> str:
     """
-    Generate next sequential surrogatenumber for org (00001-99999).
+    Generate next sequential surrogate number for org (S10001+).
 
     Uses atomic INSERT...ON CONFLICT for race-condition-free counter increment.
-    Surrogatenumbers are unique per org and never reused (even for archived).
+    Surrogate numbers are unique per org and never reused (even for archived).
     """
     from sqlalchemy import text
 
@@ -34,7 +34,7 @@ def generate_surrogate_number(db: Session, org_id: UUID) -> str:
     result = db.execute(
         text("""
             INSERT INTO org_counters (organization_id, counter_type, current_value)
-            VALUES (:org_id, 'surrogate_number', 1)
+            VALUES (:org_id, 'surrogate_number', 10001)
             ON CONFLICT (organization_id, counter_type)
             DO UPDATE SET current_value = org_counters.current_value + 1,
                           updated_at = now()
@@ -43,9 +43,9 @@ def generate_surrogate_number(db: Session, org_id: UUID) -> str:
         {"org_id": org_id},
     ).scalar_one_or_none()
     if result is None:
-        raise RuntimeError("Failed to generate surrogatenumber")
+        raise RuntimeError("Failed to generate surrogate number")
 
-    return f"{result:05d}"
+    return f"S{result:05d}"
 
 
 def _is_surrogate_number_conflict(error: IntegrityError) -> bool:

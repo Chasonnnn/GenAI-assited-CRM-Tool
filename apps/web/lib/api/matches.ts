@@ -17,6 +17,7 @@ export interface MatchCreate {
 
 export interface MatchRead {
     id: string
+    match_number: string
     surrogate_id: string
     intended_parent_id: string
     status: string
@@ -32,6 +33,7 @@ export interface MatchRead {
     surrogate_number: string | null
     surrogate_name: string | null
     ip_name: string | null
+    ip_number: string | null
     // Surrogate stage info for status sync
     surrogate_stage_id: string | null
     surrogate_stage_slug: string | null
@@ -40,11 +42,13 @@ export interface MatchRead {
 
 export interface MatchListItem {
     id: string
+    match_number: string
     surrogate_id: string
     surrogate_number: string | null
     surrogate_name: string | null
     intended_parent_id: string
     ip_name: string | null
+    ip_number: string | null
     status: string
     compatibility_score: number | null
     proposed_at: string
@@ -89,7 +93,7 @@ export interface ListMatchesParams {
     status?: MatchStatus
     surrogate_id?: string
     intended_parent_id?: string
-    q?: string  // Search surrogate/IP names
+    q?: string  // Search match/surrogate/IP names or numbers
     page?: number
     per_page?: number
     sort_by?: string

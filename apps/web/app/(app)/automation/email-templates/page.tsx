@@ -429,7 +429,7 @@ export default function EmailTemplatesPage() {
             .replace(/\{\{full_name\}\}/g, "John Smith")
             .replace(/\{\{email\}\}/g, "john@example.com")
             .replace(/\{\{phone\}\}/g, "(555) 123-4567")
-            .replace(/\{\{surrogate_number\}\}/g, "CASE-2024-001")
+            .replace(/\{\{surrogate_number\}\}/g, "S10001")
             .replace(/\{\{status_label\}\}/g, "Qualified")
             .replace(/\{\{owner_name\}\}/g, "Sara Manager")
             .replace(/\{\{org_name\}\}/g, signatureData?.org_signature_company_name || "ABC Surrogacy")

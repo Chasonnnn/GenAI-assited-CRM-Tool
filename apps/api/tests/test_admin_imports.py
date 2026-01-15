@@ -187,7 +187,7 @@ class TestAdminImports:
             [
                 {
                     "id": str(surrogate_id),
-                    "surrogate_number": "00001",
+                    "surrogate_number": "S10001",
                     "status_label": default_stage.label,
                     "stage_id": str(default_stage.id),
                     "source": "import",

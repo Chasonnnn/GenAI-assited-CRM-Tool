@@ -121,7 +121,7 @@ describe('SurrogateDetailPage', () => {
         mockUseSurrogate.mockReturnValue({
             data: {
                 id: 'c1',
-                surrogate_number: 'SUR-12345',
+                surrogate_number: 'S12345',
                 full_name: 'Jane Applicant',
                 status_label: 'New Unread',
                 stage_id: 's1',
@@ -173,7 +173,7 @@ describe('SurrogateDetailPage', () => {
     it('renders surrogate header and allows copying email', () => {
         render(<SurrogateDetailPage />)
 
-        expect(screen.getByText('Surrogate #SUR-12345')).toBeInTheDocument()
+        expect(screen.getByText('Surrogate #S12345')).toBeInTheDocument()
         expect(screen.getByText('Jane Applicant')).toBeInTheDocument()
         expect(screen.getByText('jane@example.com')).toBeInTheDocument()
 
@@ -189,7 +189,7 @@ describe('SurrogateDetailPage', () => {
         mockUseSurrogate.mockReturnValueOnce({
             data: {
                 id: 'c1',
-                surrogate_number: 'SUR-12345',
+                surrogate_number: 'S12345',
                 full_name: 'Jane Applicant',
                 status_label: 'New Unread',
                 stage_id: 's1',

@@ -42,7 +42,7 @@ def test_surrogate(db, test_org, test_user, default_stage):
     surrogate = Surrogate(
         id=uuid4(),
         organization_id=test_org.id,
-        surrogate_number=f"C-{uuid4().hex[:6].upper()}",  # Max 10 chars
+        surrogate_number=f"S{uuid4().int % 90000 + 10000:05d}",  # Max 10 chars
         full_name="Test Surrogate",
         email=normalized,
         email_hash=hash_email(normalized),
@@ -163,12 +163,12 @@ class TestWorkflowActionPreview:
 
         # Mock entity with surrogate_number
         class MockCase:
-            surrogate_number = "1234"
+            surrogate_number = "S10001"
             id = uuid4()
 
         preview = build_action_preview(db, action, MockCase())
         assert "Assign" in preview
-        assert "Surrogate #1234" in preview
+        assert "Surrogate #S10001" in preview
 
     def test_preview_create_task(self, db, test_user, test_org):
         """Preview for create_task should show title and due days."""
@@ -180,7 +180,7 @@ class TestWorkflowActionPreview:
         }
 
         class MockCase:
-            surrogate_number = "5678"
+            surrogate_number = "S10002"
             id = uuid4()
             owner_type = "user"
             owner_id = test_user.id
