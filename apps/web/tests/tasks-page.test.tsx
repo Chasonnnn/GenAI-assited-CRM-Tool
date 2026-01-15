@@ -77,18 +77,18 @@ describe('TasksPage', () => {
                         items: [
                             {
                                 id: 'approval-1',
-                                title: 'Approve: Assign case to John',
+                                title: 'Approve: Assign surrogate to John',
                                 task_type: 'workflow_approval',
                                 status: 'pending',
                                 is_completed: false,
                                 due_date: null,
                                 due_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24h from now
-                                case_id: 'c1',
-                                case_number: '12345',
+                                surrogate_id: 's1',
+                                surrogate_number: 'SUR-12345',
                                 owner_type: 'user',
                                 owner_id: 'u1', // Same as mockCurrentUser
                                 owner_name: 'Test User',
-                                workflow_action_preview: 'Assign case to John Smith',
+                                workflow_action_preview: 'Assign surrogate to John Smith',
                             },
                         ],
                         total: 1,
@@ -103,11 +103,11 @@ describe('TasksPage', () => {
                         items: [
                             {
                                 id: 't1',
-                                title: 'Follow up with case',
+                                title: 'Follow up with surrogate',
                                 is_completed: false,
                                 due_date: null,
-                                case_id: 'c1',
-                                case_number: '12345',
+                                surrogate_id: 's1',
+                                surrogate_number: 'SUR-12345',
                                 owner_type: 'user',
                                 owner_id: 'u1',
                                 owner_name: 'Jane Doe',
@@ -128,7 +128,7 @@ describe('TasksPage', () => {
         render(<TasksPage />)
 
         expect(screen.getByText('Tasks')).toBeInTheDocument()
-        expect(screen.getByText('Follow up with case')).toBeInTheDocument()
+        expect(screen.getByText('Follow up with surrogate')).toBeInTheDocument()
 
         const checkbox = screen.getAllByRole('checkbox')[0]
         fireEvent.click(checkbox)
@@ -140,11 +140,11 @@ describe('TasksPage', () => {
         render(<TasksPage />)
 
         expect(screen.getByText('Pending Approvals')).toBeInTheDocument()
-        expect(screen.getByText('Approve: Assign case to John')).toBeInTheDocument()
-        expect(screen.getByText('Assign case to John Smith')).toBeInTheDocument()
+        expect(screen.getByText('Approve: Assign surrogate to John')).toBeInTheDocument()
+        expect(screen.getByText('Assign surrogate to John Smith')).toBeInTheDocument()
     })
 
-    it('shows approve and deny buttons for case owner', () => {
+    it('shows approve and deny buttons for surrogate owner', () => {
         render(<TasksPage />)
 
         expect(screen.getByRole('button', { name: /approve/i })).toBeInTheDocument()
@@ -158,13 +158,13 @@ describe('TasksPage', () => {
         expect(screen.getByText(/remaining/i)).toBeInTheDocument()
     })
 
-    it('shows case links in approval and task items', () => {
+    it('shows surrogate links in approval and task items', () => {
         render(<TasksPage />)
 
-        const caseLinks = screen.getAllByText('Case #12345')
-        expect(caseLinks).toHaveLength(2) // One in approvals, one in tasks
-        caseLinks.forEach(link => {
-            expect(link.closest('a')).toHaveAttribute('href', '/cases/c1')
+        const surrogateLinks = screen.getAllByText('Surrogate #SUR-12345')
+        expect(surrogateLinks).toHaveLength(2) // One in approvals, one in tasks
+        surrogateLinks.forEach(link => {
+            expect(link.closest('a')).toHaveAttribute('href', '/surrogates/s1')
         })
     })
 })

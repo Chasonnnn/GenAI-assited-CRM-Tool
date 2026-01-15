@@ -10,7 +10,7 @@ from httpx import AsyncClient, ASGITransport
 from app.core.deps import COOKIE_NAME, get_db
 from app.core.security import create_session_token
 from app.db.enums import Role
-from app.db.models import Membership, User, Case, MetaLead
+from app.db.models import Membership, User, Surrogate, MetaLead
 from app.main import app
 
 
@@ -78,7 +78,7 @@ def _build_config_zip(payload: dict[str, object]) -> bytes:
     return buffer.read()
 
 
-def _build_cases_csv(rows: list[dict]) -> bytes:
+def _build_surrogates_csv(rows: list[dict]) -> bytes:
     fieldnames = []
     for row in rows:
         for key in row.keys():
@@ -181,13 +181,13 @@ class TestAdminImports:
         self, authed_client, db, test_org, test_user, default_stage
     ):
         meta_lead_id = uuid.uuid4()
-        case_id = uuid.uuid4()
+        surrogate_id = uuid.uuid4()
         export_user_id = uuid.uuid4()
-        cases_csv = _build_cases_csv(
+        surrogates_csv = _build_surrogates_csv(
             [
                 {
-                    "id": str(case_id),
-                    "case_number": "00001",
+                    "id": str(surrogate_id),
+                    "surrogate_number": "00001",
                     "status_label": default_stage.label,
                     "stage_id": str(default_stage.id),
                     "source": "import",
@@ -202,20 +202,18 @@ class TestAdminImports:
                     "meta_lead_meta_created_time": "2024-01-01T00:00:00+00:00",
                     "meta_lead_received_at": "2024-01-01T01:00:00+00:00",
                     "meta_lead_field_data": json.dumps({"first_name": "Jane"}),
-                    "meta_lead_raw_payload": json.dumps(
-                        {"payload": {"id": "lead_123"}}
-                    ),
+                    "meta_lead_raw_payload": json.dumps({"payload": {"id": "lead_123"}}),
                 }
             ]
         )
 
         response = await authed_client.post(
-            "/admin/imports/cases",
-            files={"cases_csv": ("cases.csv", cases_csv, "text/csv")},
+            "/admin/imports/surrogates",
+            files={"surrogates_csv": ("cases.csv", surrogates_csv, "text/csv")},
         )
         assert response.status_code == 200
 
-        imported_case = db.query(Case).filter(Case.id == case_id).first()
+        imported_case = db.query(Surrogate).filter(Surrogate.id == surrogate_id).first()
         assert imported_case is not None
         assert imported_case.owner_id == test_user.id
 

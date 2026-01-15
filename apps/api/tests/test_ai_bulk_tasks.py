@@ -11,7 +11,7 @@ from app.core.deps import COOKIE_NAME, get_db
 from app.core.encryption import hash_email
 from app.core.security import create_session_token
 from app.db.enums import Role
-from app.db.models import Case, IntendedParent, Match, Membership, Task, User
+from app.db.models import Surrogate, IntendedParent, Match, Membership, Task, User
 from app.main import app
 from app.utils.normalization import normalize_email
 
@@ -19,10 +19,10 @@ from app.utils.normalization import normalize_email
 def _create_case(db, org_id, user_id, stage):
     email = f"bulk-task-{uuid.uuid4().hex[:8]}@example.com"
     normalized_email = normalize_email(email)
-    case = Case(
+    case = Surrogate(
         id=uuid.uuid4(),
         organization_id=org_id,
-        case_number=f"C{uuid.uuid4().hex[:9]}",
+        surrogate_number=f"C{uuid.uuid4().hex[:9]}",
         stage_id=stage.id,
         status_label=stage.label,
         owner_type="user",
@@ -58,7 +58,7 @@ def _create_match(db, org_id, user_id, stage):
     match = Match(
         id=uuid.uuid4(),
         organization_id=org_id,
-        case_id=case.id,
+        surrogate_id=case.id,
         intended_parent_id=ip.id,
         proposed_by_user_id=user_id,
     )
@@ -140,7 +140,7 @@ async def test_bulk_task_creation_allows_case_manager(
         "/ai/create-bulk-tasks",
         json={
             "request_id": str(uuid.uuid4()),
-            "case_id": str(case.id),
+            "surrogate_id": str(case.id),
             "tasks": [
                 {
                     "title": "Follow up with client",
@@ -187,7 +187,7 @@ async def test_bulk_task_creation_intended_parent_links_ip(
     created_task = db.query(Task).filter(Task.id == uuid.UUID(task_id)).first()
     assert created_task is not None
     assert created_task.intended_parent_id == ip.id
-    assert created_task.case_id is None
+    assert created_task.surrogate_id is None
 
 
 @pytest.mark.asyncio
@@ -221,5 +221,5 @@ async def test_bulk_task_creation_match_links_case_and_ip(
 
     created_task = db.query(Task).filter(Task.id == uuid.UUID(task_id)).first()
     assert created_task is not None
-    assert created_task.case_id == match.case_id
+    assert created_task.surrogate_id == match.surrogate_id
     assert created_task.intended_parent_id == match.intended_parent_id

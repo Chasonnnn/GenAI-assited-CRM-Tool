@@ -26,7 +26,7 @@ def test_workflow(db, test_org, test_user):
         organization_id=test_org.id,
         name="Test Workflow",
         description="A test workflow",
-        trigger_type="case_created",
+        trigger_type="surrogate_created",
         trigger_config={},
         conditions=[],
         condition_logic="AND",
@@ -133,13 +133,11 @@ def test_workflow_service_create(db, test_org, test_user):
 
     create_data = WorkflowCreate(
         name="New Service Workflow",
-        trigger_type=WorkflowTriggerType.CASE_CREATED,  # Use enum
+        trigger_type=WorkflowTriggerType.SURROGATE_CREATED,  # Use enum
         actions=[{"action_type": "add_note", "content": "Created!"}],
     )
 
-    workflow = workflow_service.create_workflow(
-        db, test_org.id, test_user.id, create_data
-    )
+    workflow = workflow_service.create_workflow(db, test_org.id, test_user.id, create_data)
 
     assert workflow is not None
     assert workflow.name == "New Service Workflow"
@@ -157,9 +155,7 @@ def test_workflow_service_update(db, test_org, test_user, test_workflow):
     )
 
     # Note: update_workflow takes (db, workflow, user_id, data)
-    workflow = workflow_service.update_workflow(
-        db, test_workflow, test_user.id, update_data
-    )
+    workflow = workflow_service.update_workflow(db, test_workflow, test_user.id, update_data)
 
     assert workflow is not None
     assert workflow.name == "Updated Workflow"
@@ -194,7 +190,7 @@ def test_ai_workflow_service_validation():
     # Valid workflow
     workflow = GeneratedWorkflow(
         name="Test AI Workflow",
-        trigger_type="case_created",
+        trigger_type="surrogate_created",
         actions=[{"action_type": "add_note", "content": "Hello!"}],
     )
 
@@ -208,7 +204,7 @@ def test_ai_workflow_service_triggers():
     from app.services.ai_workflow_service import AVAILABLE_TRIGGERS
 
     expected_triggers = [
-        "case_created",
+        "surrogate_created",
         "status_changed",
         "inactivity",
         "scheduled",
@@ -232,7 +228,7 @@ def test_ai_workflow_service_actions():
     expected_actions = [
         "send_email",
         "create_task",
-        "assign_case",
+        "assign_surrogate",
         "update_status",
         "add_note",
         "send_notification",
@@ -249,7 +245,7 @@ def test_generated_workflow_model():
     # Minimal valid workflow
     workflow = GeneratedWorkflow(
         name="Minimal Workflow",
-        trigger_type="case_created",
+        trigger_type="surrogate_created",
         actions=[{"action_type": "add_note", "content": "Test"}],
     )
     assert workflow.condition_logic == "AND"
@@ -279,37 +275,37 @@ def test_generated_workflow_model():
 # =============================================================================
 
 
-def _create_case_for_workflow(db, test_org, test_user, default_stage):
-    from app.db.models import Case
+def _create_surrogate_for_workflow(db, test_org, test_user, default_stage):
+    from app.db.models import Surrogate
     from app.db.enums import OwnerType
 
-    normalized_email = normalize_email("case@example.com")
-    case = Case(
+    normalized_email = normalize_email("surrogate@example.com")
+    surrogate = Surrogate(
         id=uuid4(),
         organization_id=test_org.id,
-        case_number="CASE-1001",
+        surrogate_number="SUR-1001",
         stage_id=default_stage.id,
         status_label=default_stage.label,
         owner_type=OwnerType.USER.value,
         owner_id=test_user.id,
-        full_name="Test Case",
+        full_name="Test Surrogate",
         email=normalized_email,
         email_hash=hash_email(normalized_email),
         created_by_user_id=test_user.id,
     )
-    db.add(case)
+    db.add(surrogate)
     db.flush()
-    return case
+    return surrogate
 
 
-def _create_task_for_workflow(db, test_org, test_user, case_id=None):
+def _create_task_for_workflow(db, test_org, test_user, surrogate_id=None):
     from app.db.models import Task
     from app.db.enums import OwnerType
 
     task = Task(
         id=uuid4(),
         organization_id=test_org.id,
-        case_id=case_id,
+        surrogate_id=surrogate_id,
         created_by_user_id=test_user.id,
         owner_type=OwnerType.USER.value,
         owner_id=test_user.id,
@@ -320,14 +316,14 @@ def _create_task_for_workflow(db, test_org, test_user, case_id=None):
     return task
 
 
-def test_task_triggered_workflow_maps_to_case(db, test_org, test_user, default_stage):
-    """Task-triggered actions should run against the task's case."""
+def test_task_triggered_workflow_maps_to_surrogate(db, test_org, test_user, default_stage):
+    """Task-triggered actions should run against the task's surrogate."""
     from app.db.models import AutomationWorkflow, EntityNote
     from app.db.enums import WorkflowTriggerType
     from app.services.workflow_engine import engine
 
-    case = _create_case_for_workflow(db, test_org, test_user, default_stage)
-    task = _create_task_for_workflow(db, test_org, test_user, case_id=case.id)
+    surrogate = _create_surrogate_for_workflow(db, test_org, test_user, default_stage)
+    task = _create_task_for_workflow(db, test_org, test_user, surrogate_id=surrogate.id)
 
     workflow = AutomationWorkflow(
         id=uuid4(),
@@ -350,7 +346,7 @@ def test_task_triggered_workflow_maps_to_case(db, test_org, test_user, default_s
         trigger_type=WorkflowTriggerType.TASK_DUE,
         entity_type="task",
         entity_id=task.id,
-        event_data={"task_id": str(task.id), "case_id": str(case.id)},
+        event_data={"task_id": str(task.id), "surrogate_id": str(surrogate.id)},
         org_id=test_org.id,
     )
 
@@ -358,7 +354,7 @@ def test_task_triggered_workflow_maps_to_case(db, test_org, test_user, default_s
         db.query(EntityNote)
         .filter(
             EntityNote.organization_id == test_org.id,
-            EntityNote.entity_id == case.id,
+            EntityNote.entity_id == surrogate.id,
         )
         .first()
     )
@@ -367,21 +363,19 @@ def test_task_triggered_workflow_maps_to_case(db, test_org, test_user, default_s
     assert "Task is due" in note.content
 
 
-def test_task_triggered_workflow_skips_without_case(
-    db, test_org, test_user, default_stage
-):
-    """Task-triggered actions should skip when no case is linked."""
+def test_task_triggered_workflow_skips_without_surrogate(db, test_org, test_user, default_stage):
+    """Task-triggered actions should skip when no surrogate is linked."""
     from app.db.models import AutomationWorkflow, EntityNote
     from app.db.enums import WorkflowTriggerType, WorkflowExecutionStatus
     from app.services.workflow_engine import engine
 
-    _create_case_for_workflow(db, test_org, test_user, default_stage)
-    task = _create_task_for_workflow(db, test_org, test_user, case_id=None)
+    _create_surrogate_for_workflow(db, test_org, test_user, default_stage)
+    task = _create_task_for_workflow(db, test_org, test_user, surrogate_id=None)
 
     workflow = AutomationWorkflow(
         id=uuid4(),
         organization_id=test_org.id,
-        name="Task Due -> Add Note (No Case)",
+        name="Task Due -> Add Note (No Surrogate)",
         trigger_type=WorkflowTriggerType.TASK_DUE.value,
         trigger_config={},
         conditions=[],
@@ -405,7 +399,7 @@ def test_task_triggered_workflow_skips_without_case(
 
     assert len(executions) == 1
     assert executions[0].status == WorkflowExecutionStatus.PARTIAL.value
-    assert "Task is not linked to a case" in (executions[0].error_message or "")
+    assert "Task is not linked to a surrogate" in (executions[0].error_message or "")
 
     note = (
         db.query(EntityNote)

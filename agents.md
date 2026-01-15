@@ -12,10 +12,10 @@
 cd apps/api && PYTHONPATH=. .venv/bin/python -m uvicorn app.main:app --reload
 
 # Run all tests
-cd apps/api && python -m pytest -v
+cd apps/api && .venv/bin/python -m pytest -v
 
 # Run specific test file
-cd apps/api && python -m pytest tests/test_auth.py -v
+cd apps/api && .venv/bin/python -m pytest tests/test_auth.py -v
 
 # Format & lint
 ruff check . --fix && ruff format .
@@ -28,7 +28,7 @@ alembic revision --autogenerate -m "description"
 
 # Migration naming convention: YYYYMMDD_HHMM_<slug>.py
 # Use a time-based rev-id + slug to match filename pattern
-alembic revision --autogenerate --rev-id 20260111_1420 -m "add_case_flags"
+alembic revision --autogenerate --rev-id 20260111_1420 -m "add_surrogate_flags"
 
 # Baseline reset (rare)
 # 1) Archive old versions/ to versions_archive/
@@ -38,7 +38,7 @@ alembic revision --autogenerate --rev-id 20260111_1420 -m "add_case_flags"
 # 4) Verify alembic upgrade head is a no-op
 
 # Bootstrap org (CLI)
-python -m app.cli create-org
+cd apps/api && .venv/bin/python -m app.cli create-org
 ```
 
 ### Frontend (apps/web)
@@ -63,6 +63,21 @@ docker compose up -d postgres
 
 # Connect to DB
 psql postgresql://user:pass@localhost:5432/crm_dev
+```
+
+### Utilities
+```bash
+# Ripgrep (fast search)
+rg -n "pattern" path
+rg --files
+
+# Python (system)
+python3 - <<'PY'
+print("inline script")
+PY
+
+# Regenerate frontend stage constants (build-time sync)
+apps/api/.venv/bin/python scripts/gen_stage_map.py
 ```
 
 ---
@@ -173,22 +188,22 @@ Accessibility compatibility is not required unless explicitly requested.
 ### Backend Patterns
 ```python
 # ✅ Thin routers, logic in services
-@router.post("/cases")
-async def create_case(
-    data: CaseCreate,
+@router.post("/surrogates")
+async def create_surrogate(
+    data: SurrogateCreate,
     session: Session = Depends(get_session),
     user: AuthenticatedUser = Depends(require_roles(["intake_specialist", "case_manager"]))
 ):
-    return case_service.create(session, data, user)
+    return surrogate_service.create(session, data, user)
 
 # ✅ Explicit transactions
 async with session.begin():
-    case = Case(**data.dict())
-    session.add(case)
-    session.add(CaseActivityLog(case_id=case.id, action="created"))
+    surrogate = Surrogate(**data.dict())
+    session.add(surrogate)
+    session.add(SurrogateActivityLog(surrogate_id=surrogate.id, action="created"))
 
 # ✅ Scoped by org
-query = select(Case).where(Case.organization_id == user.org_id)
+query = select(Surrogate).where(Surrogate.organization_id == user.org_id)
 
 # ✅ Timezone-aware UTC
 created_at: datetime = Column(DateTime(timezone=True), default=func.now())
@@ -197,8 +212,8 @@ created_at: datetime = Column(DateTime(timezone=True), default=func.now())
 ### Frontend Patterns
 ```typescript
 // ✅ Typed API client
-export async function createCase(data: CaseCreate): Promise<Case> {
-    const res = await fetch(`${API_BASE}/cases`, {
+export async function createSurrogate(data: SurrogateCreate): Promise<Surrogate> {
+    const res = await fetch(`${API_BASE}/surrogates`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
         credentials: "include",
@@ -209,16 +224,16 @@ export async function createCase(data: CaseCreate): Promise<Case> {
 }
 
 // ✅ React Query hook
-export function useCreateCase() {
+export function useCreateSurrogate() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: createCase,
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ["cases"] }),
+        mutationFn: createSurrogate,
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ["surrogates"] }),
     })
 }
 
 // ✅ TanStack Query for server data, Zustand for UI only
-const { data: cases } = useCases({ status: "active" })
+const { data: surrogates } = useSurrogates({ status: "active" })
 const sidebarOpen = useUIStore(s => s.sidebarOpen)
 ```
 
@@ -226,31 +241,34 @@ const sidebarOpen = useUIStore(s => s.sidebarOpen)
 
 ## 6) Testing
 
+### TDD Rule
+Write or update tests FIRST. Start with a failing test that captures the change, then implement code until it passes. If behavior changes, update tests in the same PR.
+
 ### Backend Tests
 ```python
-# tests/test_cases.py
-def test_create_case_requires_auth(client):
-    res = client.post("/cases", json={"name": "Test"})
+# tests/test_surrogates.py
+def test_create_surrogate_requires_auth(client):
+    res = client.post("/surrogates", json={"name": "Test"})
     assert res.status_code == 401
 
-def test_case_scoped_to_org(client, auth_headers_org1, auth_headers_org2):
-    # Create case in org1
-    res = client.post("/cases", json={...}, headers=auth_headers_org1)
-    case_id = res.json()["id"]
+def test_surrogate_scoped_to_org(client, auth_headers_org1, auth_headers_org2):
+    # Create surrogate in org1
+    res = client.post("/surrogates", json={...}, headers=auth_headers_org1)
+    surrogate_id = res.json()["id"]
     
     # Org2 cannot see it
-    res = client.get(f"/cases/{case_id}", headers=auth_headers_org2)
+    res = client.get(f"/surrogates/{surrogate_id}", headers=auth_headers_org2)
     assert res.status_code == 404
 ```
 
 ### Frontend Tests
 ```typescript
-// tests/cases.test.tsx
-describe("CasesPage", () => {
+// tests/surrogates.test.tsx
+describe("SurrogatesPage", () => {
     it("renders loading state", () => {
-        mockUseCases.mockReturnValue({ data: null, isLoading: true })
-        render(<CasesPage />)
-        expect(screen.getByText("Cases")).toBeInTheDocument()
+        mockUseSurrogates.mockReturnValue({ data: null, isLoading: true })
+        render(<SurrogatesPage />)
+        expect(screen.getByText("Surrogates")).toBeInTheDocument()
     })
 })
 ```
@@ -264,7 +282,7 @@ cd apps/api && python -m pytest -v
 cd apps/web && pnpm test --run
 
 # Frontend: run specific
-cd apps/web && pnpm test --run tests/cases.test.tsx
+cd apps/web && pnpm test --run tests/surrogates.test.tsx
 ```
 
 ---
@@ -279,7 +297,7 @@ cd apps/web && pnpm test --run tests/cases.test.tsx
 feat: Add bulk task completion endpoint
 fix: Resolve CSRF validation on file upload
 docs: Update agents.md with new commands
-refactor: Simplify case access checks
+refactor: Simplify surrogate access checks
 test: Add coverage for notification service
 ```
 
@@ -308,15 +326,15 @@ git add -A && git commit -m "feat: Description"
 
 Every domain entity includes `organization_id`:
 ```python
-class Case(Base):
+class Surrogate(Base):
     organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"))
 ```
 
 Every query scopes by org:
 ```python
-query = select(Case).where(
-    Case.organization_id == user.org_id,
-    Case.is_archived == False
+query = select(Surrogate).where(
+    Surrogate.organization_id == user.org_id,
+    Surrogate.is_archived == False
 )
 ```
 
@@ -349,7 +367,7 @@ if request.user.role == "admin":  # Don't do this
 fetch(url, { credentials: "include", headers: { "X-Requested-With": "XMLHttpRequest" } })
 
 # Backend: validate CSRF header on mutations
-@router.post("/cases", dependencies=[Depends(require_csrf_header)])
+@router.post("/surrogates", dependencies=[Depends(require_csrf_header)])
 ```
 
 ---
@@ -398,23 +416,26 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ### Core Entities
 - Organization, User, Membership
-- Case (with sequential case_number)
+- Surrogate (with sequential surrogate_number)
 - IntendedParent
-- Match (case ↔ IP)
+- Match (surrogate ↔ IP)
 - Task, Note, Attachment
 - Appointment, Notification
 
-### Case Status Flow
+### Surrogate Status Flow
 ```
-new_unread → contacted → qualified → applied → under_review → approved 
-→ pending_handoff → pending_match → meds_started → exam_passed 
-→ embryo_transferred → delivered
+new_unread → contacted → qualified → interview_scheduled → application_submitted
+→ under_review → approved → ready_to_match → matched → medical_clearance_passed
+→ legal_clearance_passed → transfer_cycle → second_hcg_confirmed → heartbeat_confirmed
+→ ob_care_established → anatomy_scanned → delivered
+
+Terminal: lost, disqualified
 ```
 
 ---
 
 ## 13) Current Status
 
-- **Version:** 0.15.00
-- **Completed:** Auth, cases, IPs, matches, tasks, notes, attachments, notifications, calendar, bulk operations, filter persistence, automation workflows, campaigns, queue management
+- **Version:** 0.16.0
+- **Completed:** Auth, surrogates, IPs, matches, tasks, notes, attachments, notifications, calendar, bulk operations, filter persistence, automation workflows, campaigns, queue management
 - **Stack:** Next.js 16, React 19, FastAPI, PostgreSQL, SQLAlchemy 2.0

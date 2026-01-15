@@ -171,7 +171,7 @@ def test_developer_bypass_ignores_explicit_revoke(db, org_a, developer_user):
         id=uuid.uuid4(),
         organization_id=org_a.id,
         user_id=developer_user.id,
-        permission="view_post_approval_cases",
+        permission="view_post_approval_surrogates",
         override_type="revoke",
     )
     db.add(override)
@@ -182,7 +182,7 @@ def test_developer_bypass_ignores_explicit_revoke(db, org_a, developer_user):
         org_a.id,
         developer_user.id,
         Role.DEVELOPER.value,
-        "view_post_approval_cases",
+        "view_post_approval_surrogates",
     )
     assert result is True, "Developer should bypass even explicit revokes"
 
@@ -192,16 +192,14 @@ def test_developer_bypass_ignores_explicit_revoke(db, org_a, developer_user):
 # =============================================================================
 
 
-def test_precedence_user_revoke_overrides_role_grant(
-    db, org_a, admin_user, developer_user
-):
+def test_precedence_user_revoke_overrides_role_grant(db, org_a, admin_user, developer_user):
     """User revoke should override role grant."""
     # Set role default to grant
     role_perm = RolePermission(
         id=uuid.uuid4(),
         organization_id=org_a.id,
         role=Role.ADMIN.value,
-        permission="view_post_approval_cases",
+        permission="view_post_approval_surrogates",
         is_granted=True,
     )
     db.add(role_perm)
@@ -209,7 +207,7 @@ def test_precedence_user_revoke_overrides_role_grant(
 
     # Verify role grants permission
     result = permission_service.check_permission(
-        db, org_a.id, admin_user.id, Role.ADMIN.value, "view_post_approval_cases"
+        db, org_a.id, admin_user.id, Role.ADMIN.value, "view_post_approval_surrogates"
     )
     assert result is True, "Role grant should work"
 
@@ -218,7 +216,7 @@ def test_precedence_user_revoke_overrides_role_grant(
         id=uuid.uuid4(),
         organization_id=org_a.id,
         user_id=admin_user.id,
-        permission="view_post_approval_cases",
+        permission="view_post_approval_surrogates",
         override_type="revoke",
     )
     db.add(override)
@@ -226,32 +224,30 @@ def test_precedence_user_revoke_overrides_role_grant(
 
     # Verify revoke overrides role grant
     result = permission_service.check_permission(
-        db, org_a.id, admin_user.id, Role.ADMIN.value, "view_post_approval_cases"
+        db, org_a.id, admin_user.id, Role.ADMIN.value, "view_post_approval_surrogates"
     )
     assert result is False, "User revoke should override role grant"
 
 
-def test_precedence_user_grant_overrides_role_deny(
-    db, org_a, intake_user, developer_user
-):
+def test_precedence_user_grant_overrides_role_deny(db, org_a, intake_user, developer_user):
     """User grant should override role deny (or missing)."""
-    # Intake specialist has no archive_cases by default
+    # Intake specialist has no archive_surrogates by default
     # Verify it's denied first
     result = permission_service.check_permission(
         db,
         org_a.id,
         intake_user.id,
         Role.INTAKE_SPECIALIST.value,
-        "archive_cases",
+        "archive_surrogates",
     )
-    assert result is False, "Intake should not have archive_cases access by default"
+    assert result is False, "Intake should not have archive_surrogates access by default"
 
     # Add user grant override
     override = UserPermissionOverride(
         id=uuid.uuid4(),
         organization_id=org_a.id,
         user_id=intake_user.id,
-        permission="archive_cases",
+        permission="archive_surrogates",
         override_type="grant",
     )
     db.add(override)
@@ -263,7 +259,7 @@ def test_precedence_user_grant_overrides_role_deny(
         org_a.id,
         intake_user.id,
         Role.INTAKE_SPECIALIST.value,
-        "archive_cases",
+        "archive_surrogates",
     )
     assert result is True, "User grant should override role denial"
 
@@ -332,7 +328,7 @@ def test_self_modification_guard(db, org_a, admin_user):
             org_id=org_a.id,
             target_user_id=admin_user.id,
             actor_user_id=admin_user.id,  # same as target
-            permission="view_post_approval_cases",
+            permission="view_post_approval_surrogates",
             override_type="grant",
         )
 
@@ -347,7 +343,7 @@ def test_org_scoping_overrides_isolated(
 ):
     """Overrides in org A should not affect users in org B."""
     # Use a permission that Admin does NOT have by default
-    # Admin already has view_post_approval_cases in ROLE_DEFAULTS
+    # Admin already has view_post_approval_surrogates in ROLE_DEFAULTS
     # So we test with a permission not in their defaults
 
     # Create a grant override for a custom permission in org A
@@ -372,14 +368,10 @@ def test_org_scoping_overrides_isolated(
     result_b = permission_service.check_permission(
         db, org_b.id, user_in_org_b.id, Role.ADMIN.value, "some_custom_permission_xyz"
     )
-    assert result_b is False, (
-        "User in org B should not have permission (no override/default)"
-    )
+    assert result_b is False, "User in org B should not have permission (no override/default)"
 
 
-def test_org_scoping_role_defaults_isolated(
-    db, org_a, org_b, admin_user, user_in_org_b
-):
+def test_org_scoping_role_defaults_isolated(db, org_a, org_b, admin_user, user_in_org_b):
     """Role defaults in org A should not affect org B."""
     # Create a role default in org A
     role_perm_a = RolePermission(
@@ -402,6 +394,4 @@ def test_org_scoping_role_defaults_isolated(
     result_b = permission_service.check_permission(
         db, org_b.id, user_in_org_b.id, Role.ADMIN.value, "some_custom_permission"
     )
-    assert result_b is False, (
-        "Org B admin should NOT have permission (no role default)"
-    )
+    assert result_b is False, "Org B admin should NOT have permission (no role default)"

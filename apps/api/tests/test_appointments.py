@@ -89,9 +89,7 @@ def booking_link(db, test_org, test_user):
 def confirmed_appointment(db, test_org, test_user, appointment_type):
     """Create a confirmed appointment for conflict testing."""
     now = datetime.now(timezone.utc)
-    scheduled_start = now.replace(
-        hour=10, minute=0, second=0, microsecond=0
-    ) + timedelta(days=1)
+    scheduled_start = now.replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
 
     appt = Appointment(
         id=uuid4(),
@@ -207,9 +205,7 @@ class TestConflictDetection:
                 scheduled_start=confirmed_appointment.scheduled_start,
             )
 
-    def test_existing_buffers_block_nearby_slots(
-        self, db, test_org, test_user, availability_rules
-    ):
+    def test_existing_buffers_block_nearby_slots(self, db, test_org, test_user, availability_rules):
         """Existing appointment buffers should block adjacent slots."""
         from app.db.models import AppointmentType, Appointment
         from app.db.enums import MeetingMode
@@ -239,9 +235,7 @@ class TestConflictDetection:
         target_date = today + timedelta(days=days_until_monday)
 
         user_tz = ZoneInfo("America/New_York")
-        existing_start_local = datetime.combine(
-            target_date, time(10, 0), tzinfo=user_tz
-        )
+        existing_start_local = datetime.combine(target_date, time(10, 0), tzinfo=user_tz)
         existing_start = existing_start_local.astimezone(timezone.utc)
         existing_end = existing_start + timedelta(minutes=30)
 
@@ -362,9 +356,7 @@ class TestTokens:
         """Should return None for invalid token."""
         from app.services.appointment_service import get_appointment_by_token
 
-        appt = get_appointment_by_token(
-            db, uuid4(), "invalid-token-12345", "reschedule"
-        )
+        appt = get_appointment_by_token(db, uuid4(), "invalid-token-12345", "reschedule")
         assert appt is None
 
 
@@ -546,9 +538,7 @@ class TestEmailTemplates:
         from app.db.enums import AppointmentEmailType
 
         for email_type in AppointmentEmailType:
-            assert email_type in DEFAULT_TEMPLATES, (
-                f"Missing template for {email_type.value}"
-            )
+            assert email_type in DEFAULT_TEMPLATES, f"Missing template for {email_type.value}"
             template = DEFAULT_TEMPLATES[email_type]
             assert "name" in template
             assert "subject" in template

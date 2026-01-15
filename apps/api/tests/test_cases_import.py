@@ -40,7 +40,7 @@ async def test_preview_import_success(authed_client: AsyncClient, test_org):
     )
 
     response = await authed_client.post(
-        "/cases/import/preview",
+        "/surrogates/import/preview",
         files={"file": ("test.csv", io.BytesIO(csv_data), "text/csv")},
     )
 
@@ -62,17 +62,17 @@ async def test_preview_import_detects_duplicates_in_db(
     authed_client: AsyncClient, db, test_org, test_user
 ):
     """Test preview detects existing cases in database."""
-    from app.services import case_service
-    from app.schemas.case import CaseCreate
-    from app.db.enums import CaseSource
+    from app.services import surrogate_service
+    from app.schemas.surrogate import SurrogateCreate
+    from app.db.enums import SurrogateSource
 
     # Create existing case using service
-    case_data = CaseCreate(
+    case_data = SurrogateCreate(
         full_name="Existing User",
         email="existing@test.com",
-        source=CaseSource.IMPORT,
+        source=SurrogateSource.IMPORT,
     )
-    case_service.create_case(db, test_org.id, test_user.id, case_data)
+    surrogate_service.create_surrogate(db, test_org.id, test_user.id, case_data)
 
     # Upload CSV with duplicate email
     csv_data = create_csv_content(
@@ -83,7 +83,7 @@ async def test_preview_import_detects_duplicates_in_db(
     )
 
     response = await authed_client.post(
-        "/cases/import/preview",
+        "/surrogates/import/preview",
         files={"file": ("test.csv", io.BytesIO(csv_data), "text/csv")},
     )
 
@@ -104,7 +104,7 @@ async def test_preview_import_detects_duplicates_in_csv(authed_client: AsyncClie
     )
 
     response = await authed_client.post(
-        "/cases/import/preview",
+        "/surrogates/import/preview",
         files={"file": ("test.csv", io.BytesIO(csv_data), "text/csv")},
     )
 
@@ -127,7 +127,7 @@ async def test_preview_import_detects_unmapped_columns(authed_client: AsyncClien
     )
 
     response = await authed_client.post(
-        "/cases/import/preview",
+        "/surrogates/import/preview",
         files={"file": ("test.csv", io.BytesIO(csv_data), "text/csv")},
     )
 
@@ -140,7 +140,7 @@ async def test_preview_import_detects_unmapped_columns(authed_client: AsyncClien
 async def test_preview_import_rejects_non_csv(authed_client: AsyncClient):
     """Test preview rejects non-CSV files."""
     response = await authed_client.post(
-        "/cases/import/preview",
+        "/surrogates/import/preview",
         files={"file": ("test.txt", io.BytesIO(b"not a csv"), "text/plain")},
     )
 
@@ -154,7 +154,7 @@ async def test_preview_import_without_auth_fails(client: AsyncClient):
     csv_data = create_csv_content([{"email": "alice@test.com"}])
 
     response = await client.post(
-        "/cases/import/preview",
+        "/surrogates/import/preview",
         files={"file": ("test.csv", io.BytesIO(csv_data), "text/csv")},
     )
 
@@ -164,7 +164,7 @@ async def test_preview_import_without_auth_fails(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_execute_import_success(authed_client: AsyncClient, db, test_org):
     """Test successful CSV import execution queues background job."""
-    from app.db.models import CaseImport, Job
+    from app.db.models import SurrogateImport, Job
     from app.db.enums import JobType
 
     csv_data = create_csv_content(
@@ -179,7 +179,7 @@ async def test_execute_import_success(authed_client: AsyncClient, db, test_org):
     )
 
     response = await authed_client.post(
-        "/cases/import/execute",
+        "/surrogates/import/execute",
         files={"file": ("import.csv", io.BytesIO(csv_data), "text/csv")},
     )
 
@@ -194,9 +194,7 @@ async def test_execute_import_success(authed_client: AsyncClient, db, test_org):
 
     # Verify import record created with pending status
     import_record = (
-        db.query(CaseImport)
-        .filter(CaseImport.id == uuid.UUID(data["import_id"]))
-        .first()
+        db.query(SurrogateImport).filter(SurrogateImport.id == uuid.UUID(data["import_id"])).first()
     )
     assert import_record is not None
     assert import_record.status == "pending"
@@ -216,22 +214,20 @@ async def test_execute_import_success(authed_client: AsyncClient, db, test_org):
 
 
 @pytest.mark.asyncio
-async def test_execute_import_skips_duplicates(
-    authed_client: AsyncClient, db, test_org, test_user
-):
+async def test_execute_import_skips_duplicates(authed_client: AsyncClient, db, test_org, test_user):
     """Test import queues job that will skip duplicate emails when processed."""
-    from app.db.models import CaseImport, Job
-    from app.services import case_service
-    from app.schemas.case import CaseCreate
-    from app.db.enums import CaseSource, JobType
+    from app.db.models import SurrogateImport, Job
+    from app.services import surrogate_service
+    from app.schemas.surrogate import SurrogateCreate
+    from app.db.enums import SurrogateSource, JobType
 
     # Create existing case using service
-    case_data = CaseCreate(
+    case_data = SurrogateCreate(
         full_name="Existing",
         email="existing@test.com",
-        source=CaseSource.IMPORT,
+        source=SurrogateSource.IMPORT,
     )
-    case_service.create_case(db, test_org.id, test_user.id, case_data)
+    surrogate_service.create_surrogate(db, test_org.id, test_user.id, case_data)
 
     # Import with duplicate
     csv_data = create_csv_content(
@@ -242,7 +238,7 @@ async def test_execute_import_skips_duplicates(
     )
 
     response = await authed_client.post(
-        "/cases/import/execute",
+        "/surrogates/import/execute",
         files={"file": ("import.csv", io.BytesIO(csv_data), "text/csv")},
     )
 
@@ -253,9 +249,7 @@ async def test_execute_import_skips_duplicates(
 
     # Verify import record created
     import_record = (
-        db.query(CaseImport)
-        .filter(CaseImport.id == uuid.UUID(data["import_id"]))
-        .first()
+        db.query(SurrogateImport).filter(SurrogateImport.id == uuid.UUID(data["import_id"])).first()
     )
     assert import_record is not None
     assert import_record.status == "pending"
@@ -277,7 +271,7 @@ async def test_execute_import_skips_duplicates(
 
 async def test_execute_import_handles_validation_errors(authed_client: AsyncClient, db):
     """Test import handles rows with validation errors."""
-    from app.db.models import CaseImport
+    from app.db.models import SurrogateImport
 
     csv_data = create_csv_content(
         [
@@ -287,7 +281,7 @@ async def test_execute_import_handles_validation_errors(authed_client: AsyncClie
     )
 
     response = await authed_client.post(
-        "/cases/import/execute",
+        "/surrogates/import/execute",
         files={"file": ("import.csv", io.BytesIO(csv_data), "text/csv")},
     )
 
@@ -296,7 +290,7 @@ async def test_execute_import_handles_validation_errors(authed_client: AsyncClie
 
     # Check import record
     import_record = (
-        db.query(CaseImport).filter(CaseImport.id == uuid.UUID(import_id)).first()
+        db.query(SurrogateImport).filter(SurrogateImport.id == uuid.UUID(import_id)).first()
     )
 
     # Check import record - may have errors but should have tried
@@ -305,14 +299,12 @@ async def test_execute_import_handles_validation_errors(authed_client: AsyncClie
 
 
 @pytest.mark.asyncio
-async def test_list_imports_returns_history(
-    authed_client: AsyncClient, db, test_org, test_user
-):
+async def test_list_imports_returns_history(authed_client: AsyncClient, db, test_org, test_user):
     """Test listing import history."""
-    from app.db.models import CaseImport
+    from app.db.models import SurrogateImport
 
     # Create import records
-    import1 = CaseImport(
+    import1 = SurrogateImport(
         organization_id=test_org.id,
         created_by_user_id=test_user.id,
         filename="import1.csv",
@@ -322,7 +314,7 @@ async def test_list_imports_returns_history(
         skipped_count=0,
         error_count=0,
     )
-    import2 = CaseImport(
+    import2 = SurrogateImport(
         organization_id=test_org.id,
         created_by_user_id=test_user.id,
         filename="import2.csv",
@@ -335,7 +327,7 @@ async def test_list_imports_returns_history(
     db.add_all([import1, import2])
     db.flush()
 
-    response = await authed_client.get("/cases/import")
+    response = await authed_client.get("/surrogates/import")
 
     assert response.status_code == 200
     data = response.json()
@@ -349,10 +341,10 @@ async def test_list_imports_returns_history(
 @pytest.mark.asyncio
 async def test_get_import_details(authed_client: AsyncClient, db, test_org, test_user):
     """Test getting detailed import information."""
-    from app.db.models import CaseImport
+    from app.db.models import SurrogateImport
 
     # Create import with errors
-    import_record = CaseImport(
+    import_record = SurrogateImport(
         organization_id=test_org.id,
         created_by_user_id=test_user.id,
         filename="detailed.csv",
@@ -366,7 +358,7 @@ async def test_get_import_details(authed_client: AsyncClient, db, test_org, test
     db.add(import_record)
     db.flush()
 
-    response = await authed_client.get(f"/cases/import/{import_record.id}")
+    response = await authed_client.get(f"/surrogates/import/{import_record.id}")
 
     assert response.status_code == 200
     data = response.json()
@@ -383,7 +375,7 @@ async def test_get_import_details(authed_client: AsyncClient, db, test_org, test
 async def test_get_import_details_not_found(authed_client: AsyncClient):
     """Test getting details for non-existent import."""
     fake_id = uuid.uuid4()
-    response = await authed_client.get(f"/cases/import/{fake_id}")
+    response = await authed_client.get(f"/surrogates/import/{fake_id}")
 
     assert response.status_code == 404
 
@@ -391,7 +383,7 @@ async def test_get_import_details_not_found(authed_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_imports_org_isolation(authed_client: AsyncClient, db, test_user):
     """Test imports are isolated per organization."""
-    from app.db.models import Organization, CaseImport
+    from app.db.models import Organization, SurrogateImport
 
     # Create second org
     org2 = Organization(
@@ -403,7 +395,7 @@ async def test_imports_org_isolation(authed_client: AsyncClient, db, test_user):
     db.flush()
 
     # Create import in org2
-    import2 = CaseImport(
+    import2 = SurrogateImport(
         organization_id=org2.id,
         created_by_user_id=test_user.id,
         filename="org2import.csv",
@@ -414,7 +406,7 @@ async def test_imports_org_isolation(authed_client: AsyncClient, db, test_user):
     db.flush()
 
     # Authed client (org1) should not see org2's imports
-    response = await authed_client.get("/cases/import")
+    response = await authed_client.get("/surrogates/import")
     assert response.status_code == 200
     data = response.json()
 
@@ -444,7 +436,7 @@ async def test_execute_import_requires_csrf(authed_client: AsyncClient, db):
         cookies=authed_client.cookies,
     ) as no_csrf_client:
         response = await no_csrf_client.post(
-            "/cases/import/execute",
+            "/surrogates/import/execute",
             files={"file": ("test.csv", io.BytesIO(csv_data), "text/csv")},
         )
         # Should fail due to missing CSRF
@@ -459,7 +451,7 @@ async def test_execute_import_empty_csv(authed_client: AsyncClient):
     csv_data = b"full_name,email\n"  # Just headers, no data
 
     response = await authed_client.post(
-        "/cases/import/execute",
+        "/surrogates/import/execute",
         files={"file": ("empty.csv", io.BytesIO(csv_data), "text/csv")},
     )
 

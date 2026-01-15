@@ -16,7 +16,7 @@ from decimal import Decimal
 import pytest
 
 from app.core.encryption import hash_email, hash_phone
-from app.db.models import Case, PipelineStage, MetaLead, MetaAdAccount, MetaDailySpend
+from app.db.models import Surrogate, PipelineStage, MetaLead, MetaAdAccount, MetaDailySpend
 from app.utils.normalization import normalize_email
 
 
@@ -56,8 +56,7 @@ def analytics_pipeline_stages(db, test_org):
         ("new_unread", "New Unread", 1, "#3B82F6"),
         ("contacted", "Contacted", 2, "#10B981"),
         ("qualified", "Qualified", 3, "#8B5CF6"),
-        ("applied", "Applied", 4, "#F59E0B"),
-        ("application_submitted", "Application Submitted", 5, "#8B5CF6"),
+        ("application_submitted", "Application Submitted", 4, "#8B5CF6"),
         ("approved", "Approved", 8, "#22C55E"),
     ]
 
@@ -65,9 +64,7 @@ def analytics_pipeline_stages(db, test_org):
     for slug, label, order, color in stages_data:
         stage = (
             db.query(PipelineStage)
-            .filter(
-                PipelineStage.pipeline_id == pipeline.id, PipelineStage.slug == slug
-            )
+            .filter(PipelineStage.pipeline_id == pipeline.id, PipelineStage.slug == slug)
             .first()
         )
 
@@ -110,7 +107,7 @@ def sample_cases(db, test_org, test_user, analytics_pipeline_stages):
             email = f"test{i}{j}@example.com"
             normalized_email = normalize_email(email)
             phone = "555-0100"
-            case = Case(
+            case = Surrogate(
                 id=uuid.uuid4(),
                 organization_id=test_org.id,
                 stage_id=stage.id,
@@ -121,7 +118,7 @@ def sample_cases(db, test_org, test_user, analytics_pipeline_stages):
                 phone=phone,
                 phone_hash=hash_phone(phone),
                 source="website",
-                case_number=f"C-{i:03d}-{j:03d}",
+                surrogate_number=f"C-{i:03d}-{j:03d}",
                 created_by_user_id=test_user.id,
                 owner_type="user",
                 owner_id=test_user.id,
@@ -145,9 +142,7 @@ def sample_meta_leads(db, test_org, sample_cases, analytics_pipeline_stages):
     approved_case = None
 
     for case in sample_cases:
-        stage = (
-            db.query(PipelineStage).filter(PipelineStage.id == case.stage_id).first()
-        )
+        stage = db.query(PipelineStage).filter(PipelineStage.id == case.stage_id).first()
         if stage.slug == "qualified" and not qualified_case:
             qualified_case = case
         if stage.slug == "application_submitted" and not converted_case:
@@ -179,7 +174,7 @@ def sample_meta_leads(db, test_org, sample_cases, analytics_pipeline_stages):
             meta_created_time=datetime.now(timezone.utc) - timedelta(days=3),
             received_at=datetime.now(timezone.utc) - timedelta(days=3),
             is_converted=True,
-            converted_case_id=qualified_case.id,
+            converted_surrogate_id=qualified_case.id,
             converted_at=datetime.now(timezone.utc) - timedelta(days=2),
             status="converted",
         )
@@ -196,7 +191,7 @@ def sample_meta_leads(db, test_org, sample_cases, analytics_pipeline_stages):
             meta_created_time=datetime.now(timezone.utc) - timedelta(days=4),
             received_at=datetime.now(timezone.utc) - timedelta(days=4),
             is_converted=True,
-            converted_case_id=converted_case.id,
+            converted_surrogate_id=converted_case.id,
             converted_at=datetime.now(timezone.utc) - timedelta(days=1),
             status="converted",
         )
@@ -213,7 +208,7 @@ def sample_meta_leads(db, test_org, sample_cases, analytics_pipeline_stages):
             meta_created_time=datetime.now(timezone.utc) - timedelta(days=7),
             received_at=datetime.now(timezone.utc) - timedelta(days=7),
             is_converted=True,
-            converted_case_id=approved_case.id,
+            converted_surrogate_id=approved_case.id,
             converted_at=datetime.now(timezone.utc) - timedelta(days=1),
             status="converted",
         )
@@ -239,17 +234,15 @@ class TestAnalyticsSummary:
         assert response.status_code == 200
 
         data = response.json()
-        assert "total_cases" in data
+        assert "total_surrogates" in data
         assert "new_this_period" in data
         assert "qualified_rate" in data
-        assert data["total_cases"] >= 0
+        assert data["total_surrogates"] >= 0
 
     @pytest.mark.asyncio
     async def test_summary_with_date_range(self, authed_client, sample_cases):
         """Summary respects date range filters."""
-        from_date = (datetime.now(timezone.utc) - timedelta(days=7)).strftime(
-            "%Y-%m-%d"
-        )
+        from_date = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
         to_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
         response = await authed_client.get(
@@ -258,7 +251,7 @@ class TestAnalyticsSummary:
         assert response.status_code == 200
 
         data = response.json()
-        assert "total_cases" in data
+        assert "total_surrogates" in data
 
     @pytest.mark.asyncio
     async def test_summary_requires_auth(self, client):
@@ -268,12 +261,12 @@ class TestAnalyticsSummary:
 
 
 class TestCasesByStatus:
-    """Tests for GET /analytics/cases/by-status"""
+    """Tests for GET /analytics/surrogates/by-status"""
 
     @pytest.mark.asyncio
-    async def test_get_cases_by_status(self, authed_client, sample_cases):
+    async def test_get_surrogates_by_status(self, authed_client, sample_cases):
         """Returns case counts grouped by status."""
-        response = await authed_client.get("/analytics/cases/by-status")
+        response = await authed_client.get("/analytics/surrogates/by-status")
         assert response.status_code == 200
 
         data = response.json()
@@ -287,12 +280,12 @@ class TestCasesByStatus:
 
 
 class TestCasesByAssignee:
-    """Tests for GET /analytics/cases/by-assignee"""
+    """Tests for GET /analytics/surrogates/by-assignee"""
 
     @pytest.mark.asyncio
-    async def test_get_cases_by_assignee(self, authed_client, sample_cases):
+    async def test_get_surrogates_by_assignee(self, authed_client, sample_cases):
         """Returns case counts grouped by assignee."""
-        response = await authed_client.get("/analytics/cases/by-assignee")
+        response = await authed_client.get("/analytics/surrogates/by-assignee")
         assert response.status_code == 200
 
         data = response.json()
@@ -305,12 +298,12 @@ class TestCasesByAssignee:
 
 
 class TestCasesTrend:
-    """Tests for GET /analytics/cases/trend"""
+    """Tests for GET /analytics/surrogates/trend"""
 
     @pytest.mark.asyncio
-    async def test_get_cases_trend(self, authed_client, sample_cases):
+    async def test_get_surrogates_trend(self, authed_client, sample_cases):
         """Returns case creation trend data."""
-        response = await authed_client.get("/analytics/cases/trend")
+        response = await authed_client.get("/analytics/surrogates/trend")
         assert response.status_code == 200
 
         data = response.json()
@@ -324,7 +317,7 @@ class TestCasesTrend:
     @pytest.mark.asyncio
     async def test_trend_with_period(self, authed_client, sample_cases):
         """Trend respects period parameter."""
-        response = await authed_client.get("/analytics/cases/trend?period=week")
+        response = await authed_client.get("/analytics/surrogates/trend?period=week")
         assert response.status_code == 200
 
         data = response.json()
@@ -362,13 +355,9 @@ class TestMetaPerformance:
         assert data["conversion_rate"] >= 0
 
     @pytest.mark.asyncio
-    async def test_meta_performance_with_date_range(
-        self, authed_client, sample_meta_leads
-    ):
+    async def test_meta_performance_with_date_range(self, authed_client, sample_meta_leads):
         """Meta performance respects date range."""
-        from_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime(
-            "%Y-%m-%d"
-        )
+        from_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
         to_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
         response = await authed_client.get(
@@ -388,9 +377,7 @@ class TestMetaPerformance:
         sample_meta_leads,
     ):
         """Meta performance filters by meta_created_time when available."""
-        from_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime(
-            "%Y-%m-%d"
-        )
+        from_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
         to_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         response = await authed_client.get(
             f"/analytics/meta/performance?from_date={from_date}&to_date={to_date}"
@@ -472,7 +459,7 @@ class TestAnalyticsKPIs:
         assert response.status_code == 200
 
         data = response.json()
-        assert "new_cases" in data
+        assert "new_surrogates" in data
         assert "total_active" in data
         assert "needs_attention" in data
         assert "period_days" in data
@@ -539,9 +526,9 @@ def performance_pipeline_stages(db, test_org):
         ("new_unread", "New Unread", 1, "#3B82F6"),
         ("contacted", "Contacted", 2, "#10B981"),
         ("qualified", "Qualified", 3, "#8B5CF6"),
-        ("pending_match", "Ready to Match", 4, "#F59E0B"),
+        ("ready_to_match", "Ready to Match", 4, "#F59E0B"),
         ("matched", "Matched", 5, "#22C55E"),
-        ("applied", "Applied", 6, "#8B5CF6"),
+        ("application_submitted", "Application Submitted", 6, "#8B5CF6"),
         ("lost", "Lost", 7, "#EF4444"),
     ]
 
@@ -549,9 +536,7 @@ def performance_pipeline_stages(db, test_org):
     for slug, label, order, color in stages_data:
         stage = (
             db.query(PipelineStage)
-            .filter(
-                PipelineStage.pipeline_id == pipeline.id, PipelineStage.slug == slug
-            )
+            .filter(PipelineStage.pipeline_id == pipeline.id, PipelineStage.slug == slug)
             .first()
         )
 
@@ -604,7 +589,7 @@ def second_test_user(db, test_org):
 @pytest.fixture
 def performance_cases(db, test_org, test_user, second_test_user, performance_pipeline_stages):
     """Create sample cases with status history for performance testing."""
-    from app.db.models import Case, CaseStatusHistory, Queue
+    from app.db.models import Surrogate, SurrogateStatusHistory, Queue
     from app.core.encryption import hash_email, hash_phone
     from app.utils.normalization import normalize_email
 
@@ -621,11 +606,11 @@ def performance_cases(db, test_org, test_user, second_test_user, performance_pip
     db.add(test_queue)
     db.flush()
 
-    # User 1: 3 cases - 2 reached applied, 1 lost
+    # User 1: 3 cases - 2 reached application_submitted, 1 lost
     for i in range(3):
         email = f"perf_user1_{i}@example.com"
         normalized_email = normalize_email(email)
-        case = Case(
+        case = Surrogate(
             id=uuid.uuid4(),
             organization_id=test_org.id,
             stage_id=stages["contacted"].id if i < 2 else stages["lost"].id,
@@ -636,7 +621,7 @@ def performance_cases(db, test_org, test_user, second_test_user, performance_pip
             phone="555-0100",
             phone_hash=hash_phone("555-0100"),
             source="website",
-            case_number=f"P1-{i:03d}",
+            surrogate_number=f"P1-{i:03d}",
             created_by_user_id=test_user.id,
             owner_type="user",
             owner_id=test_user.id,
@@ -647,34 +632,42 @@ def performance_cases(db, test_org, test_user, second_test_user, performance_pip
         cases.append(case)
 
         # Add status history for progression
-        if i < 2:  # Cases 0 and 1 reached applied
-            for stage_slug in ["contacted", "qualified", "pending_match", "matched", "applied"]:
-                history = CaseStatusHistory(
+        if i < 2:  # Cases 0 and 1 reached application_submitted
+            for stage_slug in [
+                "contacted",
+                "qualified",
+                "ready_to_match",
+                "matched",
+                "application_submitted",
+            ]:
+                history = SurrogateStatusHistory(
                     id=uuid.uuid4(),
-                    case_id=case.id,
+                    surrogate_id=case.id,
                     organization_id=test_org.id,
                     to_stage_id=stages[stage_slug].id,
                     changed_by_user_id=test_user.id,
-                    changed_at=datetime.now(timezone.utc) - timedelta(days=25 - list(stages.keys()).index(stage_slug)),
+                    changed_at=datetime.now(timezone.utc)
+                    - timedelta(days=25 - list(stages.keys()).index(stage_slug)),
                 )
                 db.add(history)
         else:  # Case 2 reached lost
             for stage_slug in ["contacted", "qualified", "lost"]:
-                history = CaseStatusHistory(
+                history = SurrogateStatusHistory(
                     id=uuid.uuid4(),
-                    case_id=case.id,
+                    surrogate_id=case.id,
                     organization_id=test_org.id,
                     to_stage_id=stages[stage_slug].id,
                     changed_by_user_id=test_user.id,
-                    changed_at=datetime.now(timezone.utc) - timedelta(days=25 - list(stages.keys()).index(stage_slug)),
+                    changed_at=datetime.now(timezone.utc)
+                    - timedelta(days=25 - list(stages.keys()).index(stage_slug)),
                 )
                 db.add(history)
 
-    # User 2: 2 cases - 1 reached matched only, 1 lost (but also reached applied, should NOT count as lost)
+    # User 2: 2 cases - 1 reached matched only, 1 lost (but also reached application_submitted, should NOT count as lost)
     for i in range(2):
         email = f"perf_user2_{i}@example.com"
         normalized_email = normalize_email(email)
-        case = Case(
+        case = Surrogate(
             id=uuid.uuid4(),
             organization_id=test_org.id,
             stage_id=stages["matched"].id if i == 0 else stages["lost"].id,
@@ -685,7 +678,7 @@ def performance_cases(db, test_org, test_user, second_test_user, performance_pip
             phone="555-0200",
             phone_hash=hash_phone("555-0200"),
             source="referral",
-            case_number=f"P2-{i:03d}",
+            surrogate_number=f"P2-{i:03d}",
             created_by_user_id=second_test_user.id,
             owner_type="user",
             owner_id=second_test_user.id,
@@ -696,32 +689,41 @@ def performance_cases(db, test_org, test_user, second_test_user, performance_pip
         cases.append(case)
 
         if i == 0:  # Case reached matched only
-            for stage_slug in ["contacted", "qualified", "pending_match", "matched"]:
-                history = CaseStatusHistory(
+            for stage_slug in ["contacted", "qualified", "ready_to_match", "matched"]:
+                history = SurrogateStatusHistory(
                     id=uuid.uuid4(),
-                    case_id=case.id,
+                    surrogate_id=case.id,
                     organization_id=test_org.id,
                     to_stage_id=stages[stage_slug].id,
                     changed_by_user_id=second_test_user.id,
-                    changed_at=datetime.now(timezone.utc) - timedelta(days=25 - list(stages.keys()).index(stage_slug)),
+                    changed_at=datetime.now(timezone.utc)
+                    - timedelta(days=25 - list(stages.keys()).index(stage_slug)),
                 )
                 db.add(history)
-        else:  # Case reached applied THEN lost (should NOT count as lost)
-            for stage_slug in ["contacted", "qualified", "pending_match", "matched", "applied", "lost"]:
-                history = CaseStatusHistory(
+        else:  # Case reached application_submitted THEN lost (should NOT count as lost)
+            for stage_slug in [
+                "contacted",
+                "qualified",
+                "ready_to_match",
+                "matched",
+                "application_submitted",
+                "lost",
+            ]:
+                history = SurrogateStatusHistory(
                     id=uuid.uuid4(),
-                    case_id=case.id,
+                    surrogate_id=case.id,
                     organization_id=test_org.id,
                     to_stage_id=stages[stage_slug].id,
                     changed_by_user_id=second_test_user.id,
-                    changed_at=datetime.now(timezone.utc) - timedelta(days=25 - list(stages.keys()).index(stage_slug)),
+                    changed_at=datetime.now(timezone.utc)
+                    - timedelta(days=25 - list(stages.keys()).index(stage_slug)),
                 )
                 db.add(history)
 
     # Unassigned case (queue-owned - counted as unassigned)
     email = "perf_unassigned@example.com"
     normalized_email = normalize_email(email)
-    unassigned_case = Case(
+    unassigned_case = Surrogate(
         id=uuid.uuid4(),
         organization_id=test_org.id,
         stage_id=stages["new_unread"].id,
@@ -732,7 +734,7 @@ def performance_cases(db, test_org, test_user, second_test_user, performance_pip
         phone="555-0300",
         phone_hash=hash_phone("555-0300"),
         source="website",
-        case_number="P-UNA-001",
+        surrogate_number="P-UNA-001",
         created_by_user_id=test_user.id,
         owner_type="queue",  # Queue-owned = unassigned
         owner_id=test_queue.id,  # Reference the queue
@@ -750,9 +752,7 @@ class TestPerformanceByUser:
     """Tests for GET /analytics/performance/by-user"""
 
     @pytest.mark.asyncio
-    async def test_get_performance_by_user_returns_data(
-        self, authed_client, performance_cases
-    ):
+    async def test_get_performance_by_user_returns_data(self, authed_client, performance_cases):
         """Returns performance data for all users."""
         response = await authed_client.get("/analytics/performance/by-user")
         assert response.status_code == 200
@@ -781,17 +781,17 @@ class TestPerformanceByUser:
                 break
 
         assert user_data is not None
-        assert user_data["total_cases"] == 3
+        assert user_data["total_surrogates"] == 3
         assert user_data["contacted"] == 3  # All 3 reached contacted
         assert user_data["qualified"] == 3  # All 3 reached qualified
-        assert user_data["applied"] == 2  # 2 reached applied
-        assert user_data["lost"] == 1  # 1 lost (without applied)
+        assert user_data["application_submitted"] == 2  # 2 reached application_submitted
+        assert user_data["lost"] == 1  # 1 lost (without application_submitted)
 
     @pytest.mark.asyncio
-    async def test_lost_excludes_applied(
+    async def test_lost_excludes_application_submitted(
         self, authed_client, performance_cases, second_test_user
     ):
-        """Lost count excludes cases that reached applied."""
+        """Lost count excludes cases that reached application_submitted."""
         response = await authed_client.get("/analytics/performance/by-user")
         assert response.status_code == 200
 
@@ -803,10 +803,10 @@ class TestPerformanceByUser:
                 break
 
         assert user2_data is not None
-        assert user2_data["total_cases"] == 2
-        # Case that went applied -> lost should NOT count as lost
-        assert user2_data["lost"] == 0  # The lost case had also reached applied
-        assert user2_data["applied"] == 1
+        assert user2_data["total_surrogates"] == 2
+        # Case that went application_submitted -> lost should NOT count as lost
+        assert user2_data["lost"] == 0  # The lost case had also reached application_submitted
+        assert user2_data["application_submitted"] == 1
 
     @pytest.mark.asyncio
     async def test_unassigned_bucket(self, authed_client, performance_cases):
@@ -816,12 +816,10 @@ class TestPerformanceByUser:
 
         data = response.json()
         unassigned = data["unassigned"]
-        assert unassigned["total_cases"] == 1
+        assert unassigned["total_surrogates"] == 1
 
     @pytest.mark.asyncio
-    async def test_conversion_rate_calculation(
-        self, authed_client, performance_cases, test_user
-    ):
+    async def test_conversion_rate_calculation(self, authed_client, performance_cases, test_user):
         """Conversion rate is calculated correctly."""
         response = await authed_client.get("/analytics/performance/by-user")
         assert response.status_code == 200
@@ -834,7 +832,7 @@ class TestPerformanceByUser:
                 break
 
         assert user_data is not None
-        # User 1: 2 applied out of 3 total = 66.67%
+        # User 1: 2 application_submitted out of 3 total = 66.67%
         expected_rate = (2 / 3) * 100
         assert abs(user_data["conversion_rate"] - expected_rate) < 0.1
 
@@ -862,8 +860,8 @@ class TestPerformanceByUser:
 
         data = response.json()
         # All cases were created 30 days ago, so none should match
-        total_cases = sum(user["total_cases"] for user in data["data"])
-        assert total_cases == 0
+        total_surrogates = sum(user["total_surrogates"] for user in data["data"])
+        assert total_surrogates == 0
 
     @pytest.mark.asyncio
     async def test_requires_auth(self, client):
@@ -907,4 +905,4 @@ class TestPerformanceByUser:
         assert str(inactive_user.id) in user_ids
 
         inactive_data = next(u for u in data["data"] if u["user_id"] == str(inactive_user.id))
-        assert inactive_data["total_cases"] == 0
+        assert inactive_data["total_surrogates"] == 0

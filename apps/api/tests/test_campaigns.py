@@ -198,9 +198,7 @@ def test_campaign_service_create(db, test_org, test_user, test_template):
         filter_criteria={},
     )
 
-    campaign = campaign_service.create_campaign(
-        db, test_org.id, test_user.id, create_data
-    )
+    campaign = campaign_service.create_campaign(db, test_org.id, test_user.id, create_data)
 
     assert campaign is not None
     assert campaign.name == "New Service Campaign"
@@ -213,10 +211,7 @@ def test_is_email_suppressed(db, test_org):
     from app.db.models import EmailSuppression
 
     # Not suppressed yet
-    assert (
-        campaign_service.is_email_suppressed(db, test_org.id, "test@example.com")
-        is False
-    )
+    assert campaign_service.is_email_suppressed(db, test_org.id, "test@example.com") is False
 
     # Add suppression
     suppression = EmailSuppression(
@@ -229,10 +224,7 @@ def test_is_email_suppressed(db, test_org):
     db.flush()
 
     # Now suppressed
-    assert (
-        campaign_service.is_email_suppressed(db, test_org.id, "test@example.com")
-        is True
-    )
+    assert campaign_service.is_email_suppressed(db, test_org.id, "test@example.com") is True
 
 
 def test_add_to_suppression(db, test_org, test_user):
@@ -362,9 +354,7 @@ def test_execute_campaign_run_function_exists():
     assert callable(campaign_service.execute_campaign_run)
 
 
-def test_execute_campaign_run_with_no_recipients(
-    db, test_org, test_user, test_template
-):
+def test_execute_campaign_run_with_no_recipients(db, test_org, test_user, test_template):
     """Executing campaign with no matching recipients should complete without errors."""
     from app.services import campaign_service
     from app.schemas.campaign import CampaignCreate
@@ -379,9 +369,7 @@ def test_execute_campaign_run_with_no_recipients(
         filter_criteria={"stage_ids": [str(uuid4())]},  # Non-existent stage
     )
 
-    campaign = campaign_service.create_campaign(
-        db, test_org.id, test_user.id, create_data
-    )
+    campaign = campaign_service.create_campaign(db, test_org.id, test_user.id, create_data)
 
     # Create a run
     run = CampaignRun(
@@ -414,12 +402,12 @@ def test_campaign_run_skips_existing_recipient(
     db, test_org, test_user, test_template, default_stage
 ):
     """Runs should be idempotent when a recipient already exists."""
-    from app.db.models import Case, CampaignRun, CampaignRecipient
+    from app.db.models import Surrogate, CampaignRun, CampaignRecipient
     from app.schemas.campaign import CampaignCreate
     from app.services import campaign_service
 
     normalized_email = normalize_email("idempotent@example.com")
-    case = Case(
+    case = Surrogate(
         id=uuid4(),
         organization_id=test_org.id,
         stage_id=default_stage.id,
@@ -428,7 +416,7 @@ def test_campaign_run_skips_existing_recipient(
         email=normalized_email,
         email_hash=hash_email(normalized_email),
         source="manual",
-        case_number=f"C-{uuid4().hex[:6]}",
+        surrogate_number=f"C-{uuid4().hex[:6]}",
         owner_type="user",
         owner_id=test_user.id,
     )
@@ -441,9 +429,7 @@ def test_campaign_run_skips_existing_recipient(
         recipient_type="case",
         filter_criteria={"stage_ids": [str(default_stage.id)]},
     )
-    campaign = campaign_service.create_campaign(
-        db, test_org.id, test_user.id, create_data
-    )
+    campaign = campaign_service.create_campaign(db, test_org.id, test_user.id, create_data)
 
     run = CampaignRun(
         id=uuid4(),

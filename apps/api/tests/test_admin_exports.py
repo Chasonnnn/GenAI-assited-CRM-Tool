@@ -6,8 +6,8 @@ from httpx import AsyncClient, ASGITransport
 from app.core.deps import COOKIE_NAME, get_db
 from app.core.security import create_session_token
 from app.core.encryption import hash_email
-from app.db.enums import Role, OwnerType, CaseSource
-from app.db.models import Case, Membership, User
+from app.db.enums import Role, OwnerType, SurrogateSource
+from app.db.models import Surrogate, Membership, User
 from app.main import app
 from app.services import job_service
 from app.worker import process_admin_export
@@ -71,13 +71,13 @@ async def non_dev_client(db, test_org):
 
 class TestAdminExports:
     @pytest.mark.asyncio
-    async def test_cases_export_requires_developer(self, non_dev_client):
-        response = await non_dev_client.post("/admin/exports/cases")
+    async def test_surrogates_export_requires_developer(self, non_dev_client):
+        response = await non_dev_client.post("/admin/exports/surrogates")
         assert response.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_cases_export_csv(self, authed_client, db, test_org):
-        response = await authed_client.post("/admin/exports/cases")
+    async def test_surrogates_export_csv(self, authed_client, db, test_org):
+        response = await authed_client.post("/admin/exports/surrogates")
         assert response.status_code == 202
         job_id = response.json()["job_id"]
 
@@ -89,24 +89,24 @@ class TestAdminExports:
         download = await authed_client.get(f"/admin/exports/jobs/{job_id}/file")
         assert download.status_code == 200
         assert download.headers["content-type"].startswith("text/csv")
-        assert "case_number" in download.text.splitlines()[0]
+        assert "surrogate_number" in download.text.splitlines()[0]
 
     @pytest.mark.asyncio
-    async def test_cases_export_csv_escapes_formula(
+    async def test_surrogates_export_csv_escapes_formula(
         self, authed_client, db, test_org, test_user, default_stage
     ):
         email = "=bad@example.com"
         normalized_email = normalize_email(email)
-        case = Case(
+        case = Surrogate(
             id=uuid.uuid4(),
-            case_number=str(uuid.uuid4().int)[-5:],
+            surrogate_number=str(uuid.uuid4().int)[-5:],
             organization_id=test_org.id,
             created_by_user_id=test_user.id,
             owner_type=OwnerType.USER.value,
             owner_id=test_user.id,
             stage_id=default_stage.id,
             status_label=default_stage.label,
-            source=CaseSource.IMPORT.value,
+            source=SurrogateSource.IMPORT.value,
             full_name="=HACK",
             email=normalized_email,
             email_hash=hash_email(normalized_email),
@@ -114,7 +114,7 @@ class TestAdminExports:
         db.add(case)
         db.commit()
 
-        response = await authed_client.post("/admin/exports/cases")
+        response = await authed_client.post("/admin/exports/surrogates")
         assert response.status_code == 202
         job_id = response.json()["job_id"]
 

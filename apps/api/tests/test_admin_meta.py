@@ -41,9 +41,7 @@ async def test_create_meta_page_success(authed_client: AsyncClient, db, test_org
 
 
 @pytest.mark.asyncio
-async def test_create_meta_page_encrypts_token(
-    authed_client: AsyncClient, db, test_org
-):
+async def test_create_meta_page_encrypts_token(authed_client: AsyncClient, db, test_org):
     """Test that access token is encrypted in database."""
     from app.db.models import MetaPageMapping
 
@@ -58,9 +56,7 @@ async def test_create_meta_page_encrypts_token(
     assert response.status_code == 201
 
     # Verify token is encrypted in DB (not plaintext)
-    page = (
-        db.query(MetaPageMapping).filter(MetaPageMapping.page_id == "999888777").first()
-    )
+    page = db.query(MetaPageMapping).filter(MetaPageMapping.page_id == "999888777").first()
     assert page is not None
     assert page.access_token_encrypted != "EAAsecret"
     assert len(page.access_token_encrypted) > 50  # Encrypted should be longer
@@ -173,9 +169,7 @@ async def test_update_meta_page_access_token(authed_client: AsyncClient, db):
     assert update_response.status_code == 200
 
     # Verify new token is encrypted
-    page = (
-        db.query(MetaPageMapping).filter(MetaPageMapping.page_id == "777888999").first()
-    )
+    page = db.query(MetaPageMapping).filter(MetaPageMapping.page_id == "777888999").first()
     decrypted = decrypt_token(page.access_token_encrypted)
     assert decrypted == "EAAnew"
 
@@ -197,9 +191,7 @@ async def test_delete_meta_page_success(authed_client: AsyncClient, db):
     assert delete_response.status_code == 204
 
     # Verify deleted from DB
-    page = (
-        db.query(MetaPageMapping).filter(MetaPageMapping.page_id == "delete123").first()
-    )
+    page = db.query(MetaPageMapping).filter(MetaPageMapping.page_id == "delete123").first()
     assert page is None
 
 

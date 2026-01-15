@@ -23,7 +23,7 @@ describe('MatchTasksCalendar', () => {
                 title: 'Medical Appointment',
                 description: 'Scheduled checkup',
                 task_type: 'medical_appointment',
-                case_id: 'case1',
+                surrogate_id: 'surrogate1',
                 due_date: format(new Date(), 'yyyy-MM-dd'),
                 due_time: '10:00:00',
                 is_completed: false,
@@ -36,7 +36,7 @@ describe('MatchTasksCalendar', () => {
                 title: 'Contract Review',
                 description: 'Review legal documents',
                 task_type: 'contract',
-                case_id: 'case1',
+                surrogate_id: 'surrogate1',
                 due_date: format(new Date(), 'yyyy-MM-dd'),
                 due_time: '14:00:00',
                 is_completed: false,
@@ -63,24 +63,24 @@ describe('MatchTasksCalendar', () => {
     })
 
     it('renders calendar header with current month', () => {
-        render(<MatchTasksCalendar caseId="case1" />)
+        render(<MatchTasksCalendar surrogateId="surrogate1" />)
         const currentMonthYear = format(new Date(), 'MMMM yyyy')
         expect(screen.getByText(currentMonthYear)).toBeInTheDocument()
     })
 
     it('renders navigation buttons', () => {
-        render(<MatchTasksCalendar caseId="case1" />)
+        render(<MatchTasksCalendar surrogateId="surrogate1" />)
         expect(screen.getByText('Today')).toBeInTheDocument()
     })
 
     it('renders filter buttons', () => {
-        render(<MatchTasksCalendar caseId="case1" />)
+        render(<MatchTasksCalendar surrogateId="surrogate1" />)
         expect(screen.getByText('All')).toBeInTheDocument()
         expect(screen.getByText('Surrogate')).toBeInTheDocument()
     })
 
     it('renders day of week headers in month view', () => {
-        render(<MatchTasksCalendar caseId="case1" />)
+        render(<MatchTasksCalendar surrogateId="surrogate1" />)
         expect(screen.getByText('Sun')).toBeInTheDocument()
         expect(screen.getByText('Mon')).toBeInTheDocument()
         expect(screen.getByText('Tue')).toBeInTheDocument()
@@ -91,7 +91,7 @@ describe('MatchTasksCalendar', () => {
     })
 
     it('renders legend with color indicators', () => {
-        render(<MatchTasksCalendar caseId="case1" />)
+        render(<MatchTasksCalendar surrogateId="surrogate1" />)
         expect(screen.getByText('Surrogate Tasks')).toBeInTheDocument()
         expect(screen.getByText('IP Tasks')).toBeInTheDocument()
     })
@@ -101,14 +101,14 @@ describe('MatchTasksCalendar', () => {
             data: null,
             isLoading: true,
         })
-        render(<MatchTasksCalendar caseId="case1" />)
+        render(<MatchTasksCalendar surrogateId="surrogate1" />)
         expect(document.querySelector('.animate-spin')).toBeInTheDocument()
     })
 
-    it('calls useTasks with correct case_id', () => {
-        render(<MatchTasksCalendar caseId="case1" />)
+    it('calls useTasks with correct surrogate_id', () => {
+        render(<MatchTasksCalendar surrogateId="surrogate1" />)
         expect(mockUseTasks).toHaveBeenCalledWith({
-            case_id: 'case1',
+            surrogate_id: 'surrogate1',
             is_completed: false,
             per_page: 100,
             exclude_approvals: true,
@@ -117,12 +117,12 @@ describe('MatchTasksCalendar', () => {
     })
 
     it('displays tasks on calendar', () => {
-        render(<MatchTasksCalendar caseId="case1" />)
+        render(<MatchTasksCalendar surrogateId="surrogate1" />)
         expect(screen.getByText(/Medical Appointment/)).toBeInTheDocument()
     })
 
     it('navigates to previous month', () => {
-        render(<MatchTasksCalendar caseId="case1" />)
+        render(<MatchTasksCalendar surrogateId="surrogate1" />)
         const prevButton = screen.getAllByRole('button')[0] // First button is prev
         fireEvent.click(prevButton)
         // Should now show previous month
@@ -131,7 +131,7 @@ describe('MatchTasksCalendar', () => {
     })
 
     it('navigates to next month', () => {
-        render(<MatchTasksCalendar caseId="case1" />)
+        render(<MatchTasksCalendar surrogateId="surrogate1" />)
         const buttons = screen.getAllByRole('button')
         const nextButton = buttons[1] // Second button is next
         fireEvent.click(nextButton)
@@ -141,7 +141,7 @@ describe('MatchTasksCalendar', () => {
     })
 
     it('returns to today when Today button clicked', () => {
-        render(<MatchTasksCalendar caseId="case1" />)
+        render(<MatchTasksCalendar surrogateId="surrogate1" />)
 
         // Navigate away first
         const nextButton = screen.getAllByRole('button')[1]
@@ -157,7 +157,7 @@ describe('MatchTasksCalendar', () => {
     })
 
     it('filters tasks when Surrogate filter is clicked', () => {
-        render(<MatchTasksCalendar caseId="case1" />)
+        render(<MatchTasksCalendar surrogateId="surrogate1" />)
 
         // Click Surrogate filter
         const surrogateButton = screen.getByText('Surrogate')
@@ -168,7 +168,7 @@ describe('MatchTasksCalendar', () => {
     })
 
     it('filters tasks when All filter is clicked', () => {
-        render(<MatchTasksCalendar caseId="case1" />)
+        render(<MatchTasksCalendar surrogateId="surrogate1" />)
 
         // First click surrogate, then All
         const surrogateButton = screen.getByText('Surrogate')
@@ -195,14 +195,14 @@ describe('MatchTasksCalendar with empty state', () => {
     })
 
     it('renders calendar even with no tasks', () => {
-        render(<MatchTasksCalendar caseId="case1" />)
+        render(<MatchTasksCalendar surrogateId="surrogate1" />)
         // Should still show day headers
         expect(screen.getByText('Sun')).toBeInTheDocument()
         expect(screen.getByText('Mon')).toBeInTheDocument()
     })
 
     it('still shows filter buttons when no tasks', () => {
-        render(<MatchTasksCalendar caseId="case1" />)
+        render(<MatchTasksCalendar surrogateId="surrogate1" />)
         expect(screen.getByText('All')).toBeInTheDocument()
         expect(screen.getByText('Surrogate')).toBeInTheDocument()
     })

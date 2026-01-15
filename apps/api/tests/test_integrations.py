@@ -47,9 +47,7 @@ async def test_zoom_callback_requires_state_cookie(authed_client: AsyncClient):
         follow_redirects=False,
     )
     assert response.status_code == 302
-    assert "/settings/integrations?error=invalid_state" in response.headers.get(
-        "location", ""
-    )
+    assert "/settings/integrations?error=invalid_state" in response.headers.get("location", "")
 
 
 @pytest.mark.asyncio
@@ -95,20 +93,20 @@ async def test_zoom_callback_happy_path_saves_integration(
 
 
 @pytest.mark.asyncio
-async def test_create_zoom_meeting_case_not_found_returns_404(
+async def test_create_zoom_meeting_surrogate_not_found_returns_404(
     authed_client: AsyncClient,
 ):
     response = await authed_client.post(
         "/integrations/zoom/meetings",
         json={
-            "entity_type": "case",
+            "entity_type": "surrogate",
             "entity_id": str(uuid.uuid4()),
             "topic": "Test Meeting",
             "duration": 30,
         },
     )
     assert response.status_code == 404
-    assert response.json().get("detail") == "Case not found"
+    assert response.json().get("detail") == "Surrogate not found"
 
 
 @pytest.mark.asyncio
@@ -133,23 +131,23 @@ async def test_create_zoom_meeting_returns_response_when_service_mocked(
     authed_client: AsyncClient, db, test_auth, default_stage, monkeypatch
 ):
     from app.db.enums import OwnerType
-    from app.db.models import Case, UserIntegration
+    from app.db.models import Surrogate, UserIntegration
     from app.services import zoom_service
 
-    # Create a minimal case in-org
-    normalized_email = normalize_email("case@example.com")
-    case = Case(
-        case_number="00001",
+    # Create a minimal surrogate in-org
+    normalized_email = normalize_email("surrogate@example.com")
+    surrogate = Surrogate(
+        surrogate_number="00001",
         organization_id=test_auth.org.id,
         stage_id=default_stage.id,
         status_label=default_stage.label,
         owner_type=OwnerType.USER.value,
         owner_id=test_auth.user.id,
-        full_name="Test Case",
+        full_name="Test Surrogate",
         email=normalized_email,
         email_hash=hash_email(normalized_email),
     )
-    db.add(case)
+    db.add(surrogate)
     db.flush()
 
     # Mark Zoom as connected for current user
@@ -179,15 +177,13 @@ async def test_create_zoom_meeting_returns_response_when_service_mocked(
             task_id=None,
         )
 
-    monkeypatch.setattr(
-        zoom_service, "schedule_zoom_meeting", fake_schedule_zoom_meeting
-    )
+    monkeypatch.setattr(zoom_service, "schedule_zoom_meeting", fake_schedule_zoom_meeting)
 
     response = await authed_client.post(
         "/integrations/zoom/meetings",
         json={
-            "entity_type": "case",
-            "entity_id": str(case.id),
+            "entity_type": "surrogate",
+            "entity_id": str(surrogate.id),
             "topic": "Call with Test Case",
             "duration": 30,
         },

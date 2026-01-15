@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import CaseDetailPage from '../app/(app)/cases/[id]/page'
+import SurrogateDetailPage from '../app/(app)/surrogates/[id]/page'
 
 const mockPush = vi.fn()
 const mockCreateZoomMeeting = vi.fn()
@@ -26,25 +26,25 @@ vi.mock('@/lib/hooks/use-user-integrations', () => ({
 }))
 
 const mockUseQueues = vi.fn()
-const mockClaimCase = vi.fn()
-const mockReleaseCase = vi.fn()
+const mockClaimSurrogate = vi.fn()
+const mockReleaseSurrogate = vi.fn()
 
 vi.mock('@/lib/hooks/use-queues', () => ({
     useQueues: () => mockUseQueues(),
-    useClaimCase: () => ({ mutateAsync: mockClaimCase, isPending: false }),
-    useReleaseCase: () => ({ mutateAsync: mockReleaseCase, isPending: false }),
+    useClaimSurrogate: () => ({ mutateAsync: mockClaimSurrogate, isPending: false }),
+    useReleaseSurrogate: () => ({ mutateAsync: mockReleaseSurrogate, isPending: false }),
 }))
 
-const mockUseCase = vi.fn()
-const mockUseCaseActivity = vi.fn()
+const mockUseSurrogate = vi.fn()
+const mockUseSurrogateActivity = vi.fn()
 const mockUseNotes = vi.fn()
 const mockUseTasks = vi.fn()
 
 const mockChangeStatus = vi.fn()
 const mockArchive = vi.fn()
 const mockRestore = vi.fn()
-const mockUpdateCase = vi.fn()
-const mockAssignCase = vi.fn()
+const mockUpdateSurrogate = vi.fn()
+const mockAssignSurrogate = vi.fn()
 const mockUseAssignees = vi.fn()
 const mockCreateNote = vi.fn()
 const mockDeleteNote = vi.fn()
@@ -54,22 +54,22 @@ const mockUpdateTask = vi.fn()
 const mockCreateTask = vi.fn()
 const mockDeleteTask = vi.fn()
 
-vi.mock('@/lib/hooks/use-cases', () => ({
-    useCase: (id: string) => mockUseCase(id),
-    useCaseActivity: (id: string) => mockUseCaseActivity(id),
-    useChangeStatus: () => ({ mutateAsync: mockChangeStatus }),
-    useArchiveCase: () => ({ mutateAsync: mockArchive }),
-    useRestoreCase: () => ({ mutateAsync: mockRestore }),
-    useUpdateCase: () => ({ mutateAsync: mockUpdateCase }),
-    useAssignCase: () => ({ mutateAsync: mockAssignCase }),
+vi.mock('@/lib/hooks/use-surrogates', () => ({
+    useSurrogate: (id: string) => mockUseSurrogate(id),
+    useSurrogateActivity: (id: string) => mockUseSurrogateActivity(id),
+    useChangeSurrogateStatus: () => ({ mutateAsync: mockChangeStatus }),
+    useArchiveSurrogate: () => ({ mutateAsync: mockArchive }),
+    useRestoreSurrogate: () => ({ mutateAsync: mockRestore }),
+    useUpdateSurrogate: () => ({ mutateAsync: mockUpdateSurrogate }),
+    useAssignSurrogate: () => ({ mutateAsync: mockAssignSurrogate }),
     useAssignees: () => mockUseAssignees(),
-    useSendCaseEmail: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useSendSurrogateEmail: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useCreateContactAttempt: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useContactAttempts: () => ({ data: null, isLoading: false }),
 }))
 
 vi.mock('@/lib/hooks/use-notes', () => ({
-    useNotes: (caseId: string) => mockUseNotes(caseId),
+    useNotes: (surrogateId: string) => mockUseNotes(surrogateId),
     useCreateNote: () => ({ mutateAsync: mockCreateNote }),
     useDeleteNote: () => ({ mutateAsync: mockDeleteNote }),
 }))
@@ -84,7 +84,7 @@ vi.mock('@/lib/hooks/use-tasks', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-ai', () => ({
-    useSummarizeCase: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useSummarizeSurrogate: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useDraftEmail: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useAISettings: () => ({ data: { is_enabled: false } }),
 }))
@@ -115,15 +115,18 @@ vi.mock('@/lib/hooks/use-matches', () => ({
     useCreateMatch: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
-describe('CaseDetailPage', () => {
+describe('SurrogateDetailPage', () => {
     beforeEach(() => {
         mockUseAssignees.mockReturnValue({ data: [] })
-        mockUseCase.mockReturnValue({
+        mockUseSurrogate.mockReturnValue({
             data: {
                 id: 'c1',
-                case_number: '12345',
+                surrogate_number: 'SUR-12345',
                 full_name: 'Jane Applicant',
-                status: 'new_unread',
+                status_label: 'New Unread',
+                stage_id: 's1',
+                stage_slug: 'new_unread',
+                stage_type: 'intake',
                 source: 'manual',
                 email: 'jane@example.com',
                 phone: null,
@@ -155,22 +158,22 @@ describe('CaseDetailPage', () => {
             error: null,
         })
 
-        mockUseCaseActivity.mockReturnValue({ data: { items: [] } })
+        mockUseSurrogateActivity.mockReturnValue({ data: { items: [] } })
         mockUseNotes.mockReturnValue({ data: [] })
         mockUseTasks.mockReturnValue({ data: { items: [] } })
         mockUseQueues.mockReturnValue({ data: [] })
 
         mockPush.mockReset()
-        mockClaimCase.mockReset()
-        mockReleaseCase.mockReset()
+        mockClaimSurrogate.mockReset()
+        mockReleaseSurrogate.mockReset()
         const clipboardWriteText = navigator.clipboard.writeText as unknown as { mockClear?: () => void }
         clipboardWriteText.mockClear?.()
     })
 
-    it('renders case header and allows copying email', () => {
-        render(<CaseDetailPage />)
+    it('renders surrogate header and allows copying email', () => {
+        render(<SurrogateDetailPage />)
 
-        expect(screen.getByText('Case #12345')).toBeInTheDocument()
+        expect(screen.getByText('Surrogate #SUR-12345')).toBeInTheDocument()
         expect(screen.getByText('Jane Applicant')).toBeInTheDocument()
         expect(screen.getByText('jane@example.com')).toBeInTheDocument()
 
@@ -182,13 +185,16 @@ describe('CaseDetailPage', () => {
         expect(navigator.clipboard.writeText).toHaveBeenCalledWith('jane@example.com')
     })
 
-    it('shows Claim Case for queue-owned cases', () => {
-        mockUseCase.mockReturnValueOnce({
+    it('shows Claim Surrogate for queue-owned surrogates', () => {
+        mockUseSurrogate.mockReturnValueOnce({
             data: {
                 id: 'c1',
-                case_number: '12345',
+                surrogate_number: 'SUR-12345',
                 full_name: 'Jane Applicant',
-                status: 'new_unread',
+                status_label: 'New Unread',
+                stage_id: 's1',
+                stage_slug: 'new_unread',
+                stage_type: 'intake',
                 source: 'manual',
                 email: 'jane@example.com',
                 phone: null,
@@ -220,9 +226,9 @@ describe('CaseDetailPage', () => {
             error: null,
         })
 
-        render(<CaseDetailPage />)
+        render(<SurrogateDetailPage />)
 
-        fireEvent.click(screen.getByRole('button', { name: 'Claim Case' }))
-        expect(mockClaimCase).toHaveBeenCalledWith('c1')
+        fireEvent.click(screen.getByRole('button', { name: 'Claim Surrogate' }))
+        expect(mockClaimSurrogate).toHaveBeenCalledWith('c1')
     })
 })

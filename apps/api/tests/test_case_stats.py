@@ -1,7 +1,7 @@
 """
 Tests for case statistics endpoint with period comparisons.
 
-Tests the /cases/stats endpoint including:
+Tests the /surrogates/stats endpoint including:
 - Basic stats (total, by_status, this_week, this_month)
 - Period comparisons (last_week, last_month, percentage changes)
 """
@@ -12,8 +12,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.core.encryption import hash_email
-from app.db.models import Case, PipelineStage, Pipeline
-from app.services import case_service
+from app.db.models import Surrogate, PipelineStage, Pipeline
+from app.services import surrogate_service
 from app.utils.normalization import normalize_email
 
 
@@ -48,9 +48,7 @@ def stats_pipeline(db, test_org):
     # Create stages
     stage = (
         db.query(PipelineStage)
-        .filter(
-            PipelineStage.pipeline_id == pipeline.id, PipelineStage.slug == "new_unread"
-        )
+        .filter(PipelineStage.pipeline_id == pipeline.id, PipelineStage.slug == "new_unread")
         .first()
     )
 
@@ -82,7 +80,7 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
     for i in range(3):
         email = f"thisweek{i}@test.com"
         normalized_email = normalize_email(email)
-        case = Case(
+        case = Surrogate(
             id=uuid.uuid4(),
             organization_id=test_org.id,
             stage_id=stage.id,
@@ -91,7 +89,7 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
             email=normalized_email,
             email_hash=hash_email(normalized_email),
             source="website",
-            case_number=f"TW-{i:03d}",
+            surrogate_number=f"TW-{i:03d}",
             created_by_user_id=test_user.id,
             owner_type="user",
             owner_id=test_user.id,
@@ -104,7 +102,7 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
     for i in range(5):
         email = f"lastweek{i}@test.com"
         normalized_email = normalize_email(email)
-        case = Case(
+        case = Surrogate(
             id=uuid.uuid4(),
             organization_id=test_org.id,
             stage_id=stage.id,
@@ -113,7 +111,7 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
             email=normalized_email,
             email_hash=hash_email(normalized_email),
             source="website",
-            case_number=f"LW-{i:03d}",
+            surrogate_number=f"LW-{i:03d}",
             created_by_user_id=test_user.id,
             owner_type="user",
             owner_id=test_user.id,
@@ -126,7 +124,7 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
     for i in range(4):
         email = f"thismonth{i}@test.com"
         normalized_email = normalize_email(email)
-        case = Case(
+        case = Surrogate(
             id=uuid.uuid4(),
             organization_id=test_org.id,
             stage_id=stage.id,
@@ -135,7 +133,7 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
             email=normalized_email,
             email_hash=hash_email(normalized_email),
             source="website",
-            case_number=f"TM-{i:03d}",
+            surrogate_number=f"TM-{i:03d}",
             created_by_user_id=test_user.id,
             owner_type="user",
             owner_id=test_user.id,
@@ -148,7 +146,7 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
     for i in range(2):
         email = f"lastmonth{i}@test.com"
         normalized_email = normalize_email(email)
-        case = Case(
+        case = Surrogate(
             id=uuid.uuid4(),
             organization_id=test_org.id,
             stage_id=stage.id,
@@ -157,7 +155,7 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
             email=normalized_email,
             email_hash=hash_email(normalized_email),
             source="website",
-            case_number=f"LM-{i:03d}",
+            surrogate_number=f"LM-{i:03d}",
             created_by_user_id=test_user.id,
             owner_type="user",
             owner_id=test_user.id,
@@ -176,11 +174,11 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
 
 
 class TestCaseStats:
-    """Tests for case_service.get_case_stats"""
+    """Tests for surrogate_service.get_surrogate_stats"""
 
     def test_get_stats_returns_all_fields(self, db, test_org, cases_for_stats):
         """Stats includes all expected fields including period comparisons."""
-        stats = case_service.get_case_stats(db, test_org.id)
+        stats = surrogate_service.get_surrogate_stats(db, test_org.id)
 
         # Basic fields
         assert "total" in stats
@@ -197,21 +195,21 @@ class TestCaseStats:
 
     def test_this_week_count(self, db, test_org, cases_for_stats):
         """This week count is accurate."""
-        stats = case_service.get_case_stats(db, test_org.id)
+        stats = surrogate_service.get_surrogate_stats(db, test_org.id)
 
         # We created 3 cases this week
         assert stats["this_week"] == 3
 
     def test_last_week_count(self, db, test_org, cases_for_stats):
         """Last week count is accurate."""
-        stats = case_service.get_case_stats(db, test_org.id)
+        stats = surrogate_service.get_surrogate_stats(db, test_org.id)
 
         # We created 5 cases last week (7-14 days ago)
         assert stats["last_week"] == 5
 
     def test_week_change_percentage(self, db, test_org, cases_for_stats):
         """Week-over-week percentage is calculated correctly."""
-        stats = case_service.get_case_stats(db, test_org.id)
+        stats = surrogate_service.get_surrogate_stats(db, test_org.id)
 
         # this_week=3, last_week=5
         # Change = ((3 - 5) / 5) * 100 = -40%
@@ -219,7 +217,7 @@ class TestCaseStats:
 
     def test_this_month_count(self, db, test_org, cases_for_stats):
         """This month count includes all cases in last 30 days."""
-        stats = case_service.get_case_stats(db, test_org.id)
+        stats = surrogate_service.get_surrogate_stats(db, test_org.id)
 
         # 3 (this week) + 5 (last week) + 4 (this month earlier) = 12
         # (Cases at 20-23 days ago are within 30 days)
@@ -227,14 +225,14 @@ class TestCaseStats:
 
     def test_last_month_count(self, db, test_org, cases_for_stats):
         """Last month count is accurate."""
-        stats = case_service.get_case_stats(db, test_org.id)
+        stats = surrogate_service.get_surrogate_stats(db, test_org.id)
 
         # We created 2 cases 35-36 days ago (in the 30-60 day window)
         assert stats["last_month"] == 2
 
     def test_month_change_percentage(self, db, test_org, cases_for_stats):
         """Month-over-month percentage is calculated correctly."""
-        stats = case_service.get_case_stats(db, test_org.id)
+        stats = surrogate_service.get_surrogate_stats(db, test_org.id)
 
         # this_month=12, last_month=2
         # Change = ((12 - 2) / 2) * 100 = 500%
@@ -243,7 +241,7 @@ class TestCaseStats:
     def test_empty_org_returns_zeros(self, db):
         """Empty org returns zero values with 0.0 for percentages."""
         empty_org_id = uuid.uuid4()
-        stats = case_service.get_case_stats(db, empty_org_id)
+        stats = surrogate_service.get_surrogate_stats(db, empty_org_id)
 
         assert stats["total"] == 0
         assert stats["this_week"] == 0
@@ -255,12 +253,12 @@ class TestCaseStats:
 
 
 class TestCaseStatsEndpoint:
-    """Tests for GET /cases/stats endpoint"""
+    """Tests for GET /surrogates/stats endpoint"""
 
     @pytest.mark.asyncio
     async def test_stats_endpoint_returns_200(self, authed_client, cases_for_stats):
         """Stats endpoint returns 200 with all fields."""
-        response = await authed_client.get("/cases/stats")
+        response = await authed_client.get("/surrogates/stats")
         assert response.status_code == 200
 
         data = response.json()
@@ -277,5 +275,5 @@ class TestCaseStatsEndpoint:
     @pytest.mark.asyncio
     async def test_stats_endpoint_requires_auth(self, client):
         """Stats endpoint requires authentication."""
-        response = await client.get("/cases/stats")
+        response = await client.get("/surrogates/stats")
         assert response.status_code == 401

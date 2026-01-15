@@ -12,7 +12,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.core.encryption import hash_email
-from app.db.models import AIActionApproval, AISettings, Case
+from app.db.models import AIActionApproval, AISettings, Surrogate
 from app.services import ai_settings_service
 from app.services.ai_provider import ChatResponse
 from app.utils.normalization import normalize_email
@@ -43,11 +43,7 @@ async def test_ai_consent_accept_contract(db, authed_client: AsyncClient, test_a
     assert data["accepted_by"] == str(test_auth.user.id)
     assert data["accepted_at"]
 
-    settings = (
-        db.query(AISettings)
-        .filter(AISettings.organization_id == test_auth.org.id)
-        .first()
-    )
+    settings = db.query(AISettings).filter(AISettings.organization_id == test_auth.org.id).first()
     assert settings is not None
     assert settings.consent_accepted_by == test_auth.user.id
     assert settings.consent_accepted_at is not None
@@ -59,8 +55,8 @@ async def test_ai_chat_returns_approval_id_per_action(
 ):
     # Minimal case required by /ai/chat contract
     email = f"case-{uuid.uuid4().hex[:8]}@test.com"
-    case = Case(
-        case_number=f"C{uuid.uuid4().hex[:9]}",
+    case = Surrogate(
+        surrogate_number=f"C{uuid.uuid4().hex[:9]}",
         organization_id=test_auth.org.id,
         stage_id=default_stage.id,
         status_label=default_stage.label,
@@ -87,9 +83,7 @@ async def test_ai_chat_returns_approval_id_per_action(
     class StubProvider:
         async def chat(self, messages):  # noqa: ARG002
             return ChatResponse(
-                content=(
-                    'Sure.\n<action>{"type":"add_note","content":"Test note"}</action>'
-                ),
+                content=('Sure.\n<action>{"type":"add_note","content":"Test note"}</action>'),
                 prompt_tokens=10,
                 completion_tokens=5,
                 total_tokens=15,
@@ -124,9 +118,7 @@ async def test_ai_chat_returns_approval_id_per_action(
     assert action["action_data"]["content"] == "Test note"
 
     approval_id = uuid.UUID(action["approval_id"])
-    approval = (
-        db.query(AIActionApproval).filter(AIActionApproval.id == approval_id).first()
-    )
+    approval = db.query(AIActionApproval).filter(AIActionApproval.id == approval_id).first()
     assert approval is not None
     assert approval.action_type == "add_note"
     assert approval.status == "pending"

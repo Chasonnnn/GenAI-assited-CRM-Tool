@@ -87,7 +87,7 @@ class MockIntersectionObserver {
 // @ts-expect-error - test environment polyfill
 globalThis.IntersectionObserver = globalThis.IntersectionObserver ?? MockIntersectionObserver
 
-// Clipboard is used in Case Detail page.
+// Clipboard is used in Surrogate Detail page.
 Object.defineProperty(navigator, 'clipboard', {
     value: navigator.clipboard ?? {
         writeText: vi.fn(),

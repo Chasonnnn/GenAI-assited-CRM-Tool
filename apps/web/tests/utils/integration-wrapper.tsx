@@ -37,8 +37,8 @@ export function createTestQueryClient() {
  * ```tsx
  * import { renderWithProviders } from '@/tests/utils/integration-wrapper'
  * 
- * test('loads cases', async () => {
- *   renderWithProviders(<CasesPage />)
+ * test('loads surrogates', async () => {
+ *   renderWithProviders(<SurrogatesPage />)
  *   await screen.findByText('Jane Doe')
  * })
  * ```

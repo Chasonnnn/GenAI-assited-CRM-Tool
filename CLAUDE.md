@@ -1,10 +1,10 @@
 # Surrogacy CRM Platform
 
-> **Version:** 0.16.00 | Multi-tenant CRM for surrogacy agencies
+> **Version:** 0.16.0 | Multi-tenant CRM for surrogacy agencies
 
 ## Project Guidelines
 
-See @docs/agents.md for complete coding guidelines.
+See agents.md for complete coding guidelines.
 See @docs/layouts.md for UI design system.
 
 ## Quick Reference
@@ -66,7 +66,7 @@ Build FULLY FUNCTIONAL, POLISHED features — not MVPs.
 ```bash
 # Backend
 cd apps/api && PYTHONPATH=. .venv/bin/python -m uvicorn app.main:app --reload
-cd apps/api && python -m pytest -v
+cd apps/api && .venv/bin/python -m pytest -v
 ruff check . --fix && ruff format .
 alembic upgrade head
 
@@ -74,6 +74,9 @@ alembic upgrade head
 cd apps/web && pnpm dev
 pnpm tsc --noEmit
 pnpm test --run
+
+# Build-time stage map (frontend constants)
+apps/api/.venv/bin/python scripts/gen_stage_map.py
 ```
 
 ### Core Rules
@@ -87,6 +90,6 @@ pnpm test --run
 
 ### Roles
 - `intake_specialist` — Lead intake
-- `case_manager` — Full case management
+- `case_manager` — Full surrogate management
 - `admin` — Administrative access
 - `developer` — Platform administration

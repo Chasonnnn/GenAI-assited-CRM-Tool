@@ -167,7 +167,9 @@ async def test_signature_photo_delete_no_existing_photo(authed_client: AsyncClie
 
 
 @pytest.mark.asyncio
-async def test_signature_preview_uses_override_values(authed_client: AsyncClient, db, test_user, test_org):
+async def test_signature_preview_uses_override_values(
+    authed_client: AsyncClient, db, test_user, test_org
+):
     """Signature preview uses override values when set."""
     test_org.signature_template = "minimal"
     test_user.display_name = "John Doe"
@@ -184,7 +186,9 @@ async def test_signature_preview_uses_override_values(authed_client: AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_signature_preview_falls_back_to_profile(authed_client: AsyncClient, db, test_user, test_org):
+async def test_signature_preview_falls_back_to_profile(
+    authed_client: AsyncClient, db, test_user, test_org
+):
     """Signature preview falls back to profile values when overrides are null."""
     test_org.signature_template = "minimal"
     test_user.display_name = "Jane Smith"

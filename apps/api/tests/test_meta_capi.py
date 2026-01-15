@@ -8,18 +8,17 @@ from app.services import meta_capi
     [
         ("contacted", meta_capi.META_STATUS_INTAKE),
         ("qualified", meta_capi.META_STATUS_INTAKE),
-        ("applied", meta_capi.META_STATUS_INTAKE),
-        ("followup_scheduled", meta_capi.META_STATUS_INTAKE),
+        ("interview_scheduled", meta_capi.META_STATUS_INTAKE),
         ("application_submitted", meta_capi.META_STATUS_QUALIFIED),
         ("approved", meta_capi.META_STATUS_QUALIFIED),
-        ("pending_match", meta_capi.META_STATUS_QUALIFIED),
+        ("ready_to_match", meta_capi.META_STATUS_QUALIFIED),
         ("delivered", meta_capi.META_STATUS_QUALIFIED),
         ("disqualified", meta_capi.META_STATUS_DISQUALIFIED),
         ("lost", meta_capi.META_STATUS_LOST),
     ],
 )
 def test_map_case_status_to_meta_status(status, expected):
-    assert meta_capi.map_case_status_to_meta_status(status) == expected
+    assert meta_capi.map_surrogate_status_to_meta_status(status) == expected
 
 
 @pytest.mark.parametrize(
@@ -27,7 +26,7 @@ def test_map_case_status_to_meta_status(status, expected):
     ["new_unread", "archived", "restored", ""],
 )
 def test_map_case_status_to_meta_status_unknown(status):
-    assert meta_capi.map_case_status_to_meta_status(status) is None
+    assert meta_capi.map_surrogate_status_to_meta_status(status) is None
 
 
 @pytest.mark.parametrize(
@@ -37,9 +36,9 @@ def test_map_case_status_to_meta_status_unknown(status):
         ("contacted", "qualified", False),
         ("qualified", "application_submitted", True),
         ("application_submitted", "under_review", False),
-        ("approved", "pending_handoff", False),
+        ("approved", "ready_to_match", False),
         ("contacted", "disqualified", True),
-        ("disqualified", "pending_match", True),
+        ("disqualified", "ready_to_match", True),
         ("", "contacted", True),
         ("archived", "restored", False),
     ],

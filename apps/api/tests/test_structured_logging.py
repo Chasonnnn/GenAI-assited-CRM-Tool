@@ -8,7 +8,7 @@ def test_build_log_context_includes_only_provided_fields():
         user_id="user-1",
         org_id="org-1",
         request_id="req-1",
-        route="/cases",
+        route="/surrogates",
         method="GET",
     )
 
@@ -16,7 +16,7 @@ def test_build_log_context_includes_only_provided_fields():
         "user_id": "user-1",
         "org_id": "org-1",
         "request_id": "req-1",
-        "route": "/cases",
+        "route": "/surrogates",
         "method": "GET",
     }
 

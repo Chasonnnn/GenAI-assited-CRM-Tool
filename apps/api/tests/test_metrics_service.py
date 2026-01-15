@@ -13,9 +13,7 @@ from app.services import metrics_service
 def test_record_request_dedupes_null_org(db, monkeypatch):
     """Null org metrics should upsert into a single rollup row."""
     fixed_bucket = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
-    monkeypatch.setattr(
-        metrics_service, "get_minute_bucket", lambda _=None: fixed_bucket
-    )
+    monkeypatch.setattr(metrics_service, "get_minute_bucket", lambda _=None: fixed_bucket)
 
     route = "/tests/metrics"
 

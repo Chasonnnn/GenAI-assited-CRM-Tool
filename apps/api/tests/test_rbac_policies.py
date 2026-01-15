@@ -88,7 +88,7 @@ async def test_policies_reference_known_permissions():
 @pytest.mark.parametrize(
     "method,path,permission",
     [
-        ("GET", "/cases", P.CASES_VIEW),
+        ("GET", "/surrogates", P.SURROGATES_VIEW),
         ("GET", "/intended-parents", P.INTENDED_PARENTS_VIEW),
         ("GET", "/matches/", P.MATCHES_VIEW),
         ("GET", "/tasks", P.TASKS_VIEW),
@@ -97,14 +97,14 @@ async def test_policies_reference_known_permissions():
         ("GET", "/templates", P.AUTOMATION_MANAGE),
         ("GET", "/workflows", P.AUTOMATION_MANAGE),
         ("GET", "/settings/pipelines", P.PIPELINES_MANAGE),
-        ("GET", "/queues", P.CASES_ASSIGN),
+        ("GET", "/queues", P.SURROGATES_ASSIGN),
         ("GET", "/settings/invites", P.TEAM_MANAGE),
         ("GET", "/settings/permissions/available", P.TEAM_MANAGE),
         ("GET", "/admin/meta-pages", P.META_LEADS_MANAGE),
         ("GET", "/ops/health", P.OPS_MANAGE),
         ("GET", "/jobs", P.JOBS_MANAGE),
         ("GET", "/audit/", P.AUDIT_VIEW),
-        ("GET", "/cases/import", P.CASES_IMPORT),
+        ("GET", "/surrogates/import", P.SURROGATES_IMPORT),
     ],
 )
 async def test_permission_guard_blocks_revoked(

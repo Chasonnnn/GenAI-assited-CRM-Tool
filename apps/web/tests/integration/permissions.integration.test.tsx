@@ -68,11 +68,11 @@ describe('Integration: Permissions', () => {
 
         // Wait for data to load
         await waitFor(() => {
-            expect(screen.getByText('View Cases')).toBeInTheDocument()
+            expect(screen.getByText('View Surrogates')).toBeInTheDocument()
         })
 
         // Verify all permissions are rendered
-        expect(screen.getByText('Edit Cases')).toBeInTheDocument()
+        expect(screen.getByText('Edit Surrogates')).toBeInTheDocument()
         expect(screen.getByText('View Tasks')).toBeInTheDocument()
     })
 

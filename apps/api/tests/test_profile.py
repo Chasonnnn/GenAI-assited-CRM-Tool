@@ -6,17 +6,17 @@ import uuid
 import pytest
 
 from app.core.encryption import hash_email
-from app.db.models import Case
+from app.db.models import Surrogate
 from app.utils.normalization import normalize_email
 
 
-def _create_case(db, org_id, user_id, stage):
+def _create_surrogate(db, org_id, user_id, stage):
     email = f"profile-test-{uuid.uuid4().hex[:8]}@example.com"
     normalized_email = normalize_email(email)
-    case = Case(
+    surrogate = Surrogate(
         id=uuid.uuid4(),
         organization_id=org_id,
-        case_number=f"C{uuid.uuid4().hex[:9]}",
+        surrogate_number=f"C{uuid.uuid4().hex[:9]}",
         stage_id=stage.id,
         status_label=stage.label,
         owner_type="user",
@@ -26,12 +26,12 @@ def _create_case(db, org_id, user_id, stage):
         email=normalized_email,
         email_hash=hash_email(normalized_email),
     )
-    db.add(case)
+    db.add(surrogate)
     db.flush()
-    return case
+    return surrogate
 
 
-async def _create_form_and_submission(authed_client, case_id, label, full_name):
+async def _create_form_and_submission(authed_client, surrogate_id, label, full_name):
     schema = {
         "pages": [
             {
@@ -64,7 +64,7 @@ async def _create_form_and_submission(authed_client, case_id, label, full_name):
 
     token_res = await authed_client.post(
         f"/forms/{form_id}/tokens",
-        json={"case_id": str(case_id), "expires_in_days": 7},
+        json={"surrogate_id": str(surrogate_id), "expires_in_days": 7},
     )
     assert token_res.status_code == 200
     token = token_res.json()["token"]
@@ -81,16 +81,16 @@ async def _create_form_and_submission(authed_client, case_id, label, full_name):
 async def test_profile_defaults_to_latest_submission(
     authed_client, db, test_org, test_user, default_stage
 ):
-    case = _create_case(db, test_org.id, test_user.id, default_stage)
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
 
     first_submission_id = await _create_form_and_submission(
-        authed_client, case.id, "One", "First Name"
+        authed_client, surrogate.id, "One", "First Name"
     )
     second_submission_id = await _create_form_and_submission(
-        authed_client, case.id, "Two", "Second Name"
+        authed_client, surrogate.id, "Two", "Second Name"
     )
 
-    profile_res = await authed_client.get(f"/cases/{case.id}/profile")
+    profile_res = await authed_client.get(f"/surrogates/{surrogate.id}/profile")
     assert profile_res.status_code == 200
     data = profile_res.json()
     assert data["base_submission_id"] == second_submission_id
@@ -101,57 +101,53 @@ async def test_profile_defaults_to_latest_submission(
 async def test_profile_sync_updates_base_submission(
     authed_client, db, test_org, test_user, default_stage
 ):
-    case = _create_case(db, test_org.id, test_user.id, default_stage)
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
 
     first_submission_id = await _create_form_and_submission(
-        authed_client, case.id, "One", "First Name"
+        authed_client, surrogate.id, "One", "First Name"
     )
     second_submission_id = await _create_form_and_submission(
-        authed_client, case.id, "Two", "Second Name"
+        authed_client, surrogate.id, "Two", "Second Name"
     )
 
-    sync_res = await authed_client.post(f"/cases/{case.id}/profile/sync")
+    sync_res = await authed_client.post(f"/surrogates/{surrogate.id}/profile/sync")
     assert sync_res.status_code == 200
     assert sync_res.json()["latest_submission_id"] == second_submission_id
 
     save_res = await authed_client.put(
-        f"/cases/{case.id}/profile/overrides",
+        f"/surrogates/{surrogate.id}/profile/overrides",
         json={"overrides": {}, "new_base_submission_id": second_submission_id},
     )
     assert save_res.status_code == 200
 
-    profile_res = await authed_client.get(f"/cases/{case.id}/profile")
+    profile_res = await authed_client.get(f"/surrogates/{surrogate.id}/profile")
     assert profile_res.status_code == 200
     assert profile_res.json()["base_submission_id"] == second_submission_id
     assert profile_res.json()["base_submission_id"] != first_submission_id
 
 
 @pytest.mark.asyncio
-async def test_profile_hidden_toggle(
-    authed_client, db, test_org, test_user, default_stage
-):
-    case = _create_case(db, test_org.id, test_user.id, default_stage)
+async def test_profile_hidden_toggle(authed_client, db, test_org, test_user, default_stage):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
 
-    await _create_form_and_submission(
-        authed_client, case.id, "One", "Hidden Name"
-    )
+    await _create_form_and_submission(authed_client, surrogate.id, "One", "Hidden Name")
 
     hide_res = await authed_client.post(
-        f"/cases/{case.id}/profile/hidden",
+        f"/surrogates/{surrogate.id}/profile/hidden",
         json={"field_key": "full_name", "hidden": True},
     )
     assert hide_res.status_code == 200
 
-    profile_res = await authed_client.get(f"/cases/{case.id}/profile")
+    profile_res = await authed_client.get(f"/surrogates/{surrogate.id}/profile")
     assert profile_res.status_code == 200
     assert "full_name" in profile_res.json()["hidden_fields"]
 
     unhide_res = await authed_client.post(
-        f"/cases/{case.id}/profile/hidden",
+        f"/surrogates/{surrogate.id}/profile/hidden",
         json={"field_key": "full_name", "hidden": False},
     )
     assert unhide_res.status_code == 200
 
-    profile_res = await authed_client.get(f"/cases/{case.id}/profile")
+    profile_res = await authed_client.get(f"/surrogates/{surrogate.id}/profile")
     assert profile_res.status_code == 200
     assert "full_name" not in profile_res.json()["hidden_fields"]

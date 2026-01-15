@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import CasesPage from '../app/(app)/cases/page'
+import SurrogatesPage from '../app/(app)/surrogates/page'
 
 // ============================================================================
 // Mocks
@@ -26,20 +26,20 @@ vi.mock('next/navigation', () => ({
 }))
 
 // Mock API hooks
-const mockUseCases = vi.fn()
-const mockUseArchiveCase = vi.fn()
-const mockUseRestoreCase = vi.fn()
-const mockUseUpdateCase = vi.fn()
+const mockUseSurrogates = vi.fn()
+const mockUseArchiveSurrogate = vi.fn()
+const mockUseRestoreSurrogate = vi.fn()
+const mockUseUpdateSurrogate = vi.fn()
 const mockUseAssignees = vi.fn()
 const mockUseBulkAssign = vi.fn()
 const mockUseBulkArchive = vi.fn()
 const mockUseQueues = vi.fn()
 
-vi.mock('@/lib/hooks/use-cases', () => ({
-    useCases: () => mockUseCases(),
-    useArchiveCase: () => mockUseArchiveCase(),
-    useRestoreCase: () => mockUseRestoreCase(),
-    useUpdateCase: () => mockUseUpdateCase(),
+vi.mock('@/lib/hooks/use-surrogates', () => ({
+    useSurrogates: () => mockUseSurrogates(),
+    useArchiveSurrogate: () => mockUseArchiveSurrogate(),
+    useRestoreSurrogate: () => mockUseRestoreSurrogate(),
+    useUpdateSurrogate: () => mockUseUpdateSurrogate(),
     useAssignees: () => mockUseAssignees(),
     useBulkAssign: () => mockUseBulkAssign(),
     useBulkArchive: () => mockUseBulkArchive(),
@@ -75,12 +75,12 @@ vi.mock('@/lib/hooks/use-pipelines', () => ({
 // Tests
 // ============================================================================
 
-describe('CasesPage', () => {
+describe('SurrogatesPage', () => {
     beforeEach(() => {
         // Reset mocks default return values
-        mockUseArchiveCase.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
-        mockUseRestoreCase.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
-        mockUseUpdateCase.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+        mockUseArchiveSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+        mockUseRestoreSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+        mockUseUpdateSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseAssignees.mockReturnValue({ data: [] })
         mockUseBulkAssign.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseBulkArchive.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
@@ -88,56 +88,68 @@ describe('CasesPage', () => {
     })
 
     it('renders loading state', () => {
-        mockUseCases.mockReturnValue({
+        mockUseSurrogates.mockReturnValue({
             data: null,
             isLoading: true,
             error: null,
         })
 
-        render(<CasesPage />)
+        render(<SurrogatesPage />)
         // We expect the loader icon (lucide-react) or a card with loading spinner
         // Since we can't easily query by icon, we'll check if the main content area is present
         // or check for implicit loading indicators.
         // In the code: <Loader2Icon /> is rendered.
-        // simpler check: "Cases" header should be present
-        expect(screen.getByText('Cases')).toBeInTheDocument()
+        // simpler check: "Surrogates" header should be present
+        expect(screen.getByText('Surrogates')).toBeInTheDocument()
     })
 
     it('renders empty state', () => {
-        mockUseCases.mockReturnValue({
+        mockUseSurrogates.mockReturnValue({
             data: { items: [], total: 0, pages: 0 },
             isLoading: false,
             error: null,
         })
 
-        render(<CasesPage />)
-        expect(screen.getByText('No cases yet')).toBeInTheDocument()
-        expect(screen.getByText('0 total cases')).toBeInTheDocument()
+        render(<SurrogatesPage />)
+        expect(screen.getByText('No surrogates yet')).toBeInTheDocument()
+        expect(screen.getByText('0 total surrogates')).toBeInTheDocument()
     })
 
-    it('renders cases list', () => {
-        const mockCases = [
+    it('renders surrogates list', () => {
+        const mockSurrogates = [
             {
                 id: '1',
-                case_number: '12345',
+                surrogate_number: 'SUR-12345',
                 full_name: 'John Doe',
-                status: 'new_unread',
+                stage_id: 's1',
+                stage_slug: 'new_unread',
+                stage_type: 'intake',
+                status_label: 'New Unread',
                 source: 'manual',
                 email: 'john@example.com',
+                phone: null,
+                state: null,
+                race: null,
+                owner_type: 'user',
+                owner_id: 'u1',
+                owner_name: 'Owner',
                 created_at: new Date().toISOString(),
                 is_priority: false,
+                is_archived: false,
+                age: null,
+                bmi: null,
             },
         ]
 
-        mockUseCases.mockReturnValue({
-            data: { items: mockCases, total: 1, pages: 1 },
+        mockUseSurrogates.mockReturnValue({
+            data: { items: mockSurrogates, total: 1, pages: 1 },
             isLoading: false,
             error: null,
         })
 
-        render(<CasesPage />)
+        render(<SurrogatesPage />)
         expect(screen.getByText('John Doe')).toBeInTheDocument()
-        expect(screen.getByText('#12345')).toBeInTheDocument()
+        expect(screen.getByText('#SUR-12345')).toBeInTheDocument()
         expect(screen.getByText('john@example.com')).toBeInTheDocument()
     })
 })
