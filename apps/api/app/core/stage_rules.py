@@ -1,7 +1,4 @@
-"""Stage visibility and mutation rules by role.
-
-These rules are used for build-time frontend generation and backend enforcement.
-"""
+"""Stage visibility and mutation rules by role."""
 
 ROLE_STAGE_VISIBILITY: dict[str, dict[str, list[str]]] = {
     "intake_specialist": {

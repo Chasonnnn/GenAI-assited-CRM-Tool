@@ -382,6 +382,8 @@ Format: **MAJOR.MINOR.PATCH** (SemVer)
 | MINOR | New features |
 | PATCH | Fixes and maintenance |
 
+Pre-1.0 policy: stay in `0.x` even for breaking changes (Release Please uses `bump-minor-pre-major`).
+
 Examples:
 - `0.16.0` → Pre-release, feature update
 - `1.2.5` → Stable release with patch fixes
@@ -429,7 +431,7 @@ new_unread → contacted → qualified → interview_scheduled → application_s
 → legal_clearance_passed → transfer_cycle → second_hcg_confirmed → heartbeat_confirmed
 → ob_care_established → anatomy_scanned → delivered
 
-Terminal: lost, disqualified
+Terminal (intake-only): lost, disqualified
 ```
 
 ---

@@ -324,6 +324,15 @@ def upgrade() -> None:
 
     # Convert workflow trigger_config from slugs to stage IDs (default pipelines only)
     op.execute("""
+        WITH workflow_targets AS (
+            SELECT
+                w.id,
+                w.organization_id,
+                w.trigger_config->>'to_stage_slug' AS to_stage_slug,
+                w.trigger_config->>'from_stage_slug' AS from_stage_slug
+            FROM automation_workflows w
+            WHERE (w.trigger_config ? 'to_stage_slug' OR w.trigger_config ? 'from_stage_slug')
+        )
         UPDATE automation_workflows w
         SET trigger_config = jsonb_strip_nulls(
             (w.trigger_config - 'to_stage_slug' - 'from_stage_slug') ||
@@ -332,16 +341,17 @@ def upgrade() -> None:
                 'from_stage_id', from_stage.id::text
             )
         )
-        FROM pipelines p
+        FROM workflow_targets wt
+        JOIN pipelines p
+            ON p.organization_id = wt.organization_id
+            AND p.is_default = true
         LEFT JOIN pipeline_stages to_stage
             ON to_stage.pipeline_id = p.id
-            AND to_stage.slug = w.trigger_config->>'to_stage_slug'
+            AND to_stage.slug = wt.to_stage_slug
         LEFT JOIN pipeline_stages from_stage
             ON from_stage.pipeline_id = p.id
-            AND from_stage.slug = w.trigger_config->>'from_stage_slug'
-        WHERE w.organization_id = p.organization_id
-          AND p.is_default = true
-          AND (w.trigger_config ? 'to_stage_slug' OR w.trigger_config ? 'from_stage_slug')
+            AND from_stage.slug = wt.from_stage_slug
+        WHERE w.id = wt.id
     """)
 
     # =========================================================================

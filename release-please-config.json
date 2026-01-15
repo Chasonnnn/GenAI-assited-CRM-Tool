@@ -7,7 +7,9 @@
       "extra-files": [
         "apps/api/app/core/config.py",
         "README.md"
-      ]
+      ],
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true
     }
   }
 }
