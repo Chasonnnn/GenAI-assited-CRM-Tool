@@ -46,7 +46,7 @@ describe('AIAssistantPage', () => {
     beforeEach(() => {
         mockUseQuery.mockReturnValue({
             data: [
-                { id: 'c1', case_number: '12345', full_name: 'Jane Applicant' },
+                { id: 's1', surrogate_number: '12345', full_name: 'Jane Applicant' },
             ],
             isLoading: false,
         })
@@ -73,16 +73,16 @@ describe('AIAssistantPage', () => {
     it('sends a message and can approve a proposed action', async () => {
         render(<AIAssistantPage />)
 
-        fireEvent.change(screen.getByTestId('select'), { target: { value: 'c1' } })
+        fireEvent.change(screen.getByTestId('select'), { target: { value: 's1' } })
 
         const input = screen.getByPlaceholderText('Type your message...')
-        fireEvent.change(input, { target: { value: 'Summarize this case' } })
+        fireEvent.change(input, { target: { value: 'Summarize this surrogate' } })
         fireEvent.keyDown(input, { key: 'Enter', shiftKey: false })
 
         expect(mockSendMessage).toHaveBeenCalledWith({
-            entity_type: 'case',
-            entity_id: 'c1',
-            message: 'Summarize this case',
+            entity_type: 'surrogate',
+            entity_id: 's1',
+            message: 'Summarize this surrogate',
         })
 
         expect(await screen.findByText('Here is a quick summary.')).toBeInTheDocument()

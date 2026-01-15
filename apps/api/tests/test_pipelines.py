@@ -138,8 +138,8 @@ async def test_create_pipeline_sets_is_intake_stage(authed_client, db):
                 "order": 1,
             },
             {
-                "slug": "pending_match",
-                "label": "Pending Match",
+                "slug": "ready_to_match",
+                "label": "Ready to Match",
                 "color": "#F59E0B",
                 "stage_type": "post_approval",
                 "order": 2,
@@ -148,7 +148,7 @@ async def test_create_pipeline_sets_is_intake_stage(authed_client, db):
                 "slug": "delivered",
                 "label": "Delivered",
                 "color": "#10B981",
-                "stage_type": "terminal",
+                "stage_type": "post_approval",
                 "order": 3,
             },
         ],
@@ -157,13 +157,9 @@ async def test_create_pipeline_sets_is_intake_stage(authed_client, db):
     assert response.status_code == 201, response.text
     pipeline_id = UUID(response.json()["id"])
 
-    stages = (
-        db.query(PipelineStage)
-        .filter(PipelineStage.pipeline_id == pipeline_id)
-        .all()
-    )
+    stages = db.query(PipelineStage).filter(PipelineStage.pipeline_id == pipeline_id).all()
     stage_by_slug = {stage.slug: stage for stage in stages}
 
     assert stage_by_slug["new_unread"].is_intake_stage is True
-    assert stage_by_slug["pending_match"].is_intake_stage is False
+    assert stage_by_slug["ready_to_match"].is_intake_stage is False
     assert stage_by_slug["delivered"].is_intake_stage is False

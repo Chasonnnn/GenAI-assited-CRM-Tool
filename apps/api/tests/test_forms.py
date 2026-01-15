@@ -6,17 +6,17 @@ import uuid
 import pytest
 
 from app.core.encryption import hash_email
-from app.db.models import Case
+from app.db.models import Surrogate
 from app.utils.normalization import normalize_email
 
 
-def _create_case(db, org_id, user_id, stage):
+def _create_surrogate(db, org_id, user_id, stage):
     email = f"form-test-{uuid.uuid4().hex[:8]}@example.com"
     normalized_email = normalize_email(email)
-    case = Case(
+    surrogate = Surrogate(
         id=uuid.uuid4(),
         organization_id=org_id,
-        case_number=f"C{uuid.uuid4().hex[:9]}",
+        surrogate_number=f"C{uuid.uuid4().hex[:9]}",
         stage_id=stage.id,
         status_label=stage.label,
         owner_type="user",
@@ -26,16 +26,16 @@ def _create_case(db, org_id, user_id, stage):
         email=normalized_email,
         email_hash=hash_email(normalized_email),
     )
-    db.add(case)
+    db.add(surrogate)
     db.flush()
-    return case
+    return surrogate
 
 
 @pytest.mark.asyncio
-async def test_form_submission_approval_updates_case(
+async def test_form_submission_approval_updates_surrogate(
     authed_client, db, test_org, test_user, default_stage
 ):
-    case = _create_case(db, test_org.id, test_user.id, default_stage)
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
 
     schema = {
         "pages": [
@@ -77,8 +77,8 @@ async def test_form_submission_approval_updates_case(
         f"/forms/{form_id}/mappings",
         json={
             "mappings": [
-                {"field_key": "full_name", "case_field": "full_name"},
-                {"field_key": "date_of_birth", "case_field": "date_of_birth"},
+                {"field_key": "full_name", "surrogate_field": "full_name"},
+                {"field_key": "date_of_birth", "surrogate_field": "date_of_birth"},
             ]
         },
     )
@@ -86,7 +86,7 @@ async def test_form_submission_approval_updates_case(
 
     token_res = await authed_client.post(
         f"/forms/{form_id}/tokens",
-        json={"case_id": str(case.id), "expires_in_days": 7},
+        json={"surrogate_id": str(surrogate.id), "expires_in_days": 7},
     )
     assert token_res.status_code == 200
     token = token_res.json()["token"]
@@ -105,11 +105,11 @@ async def test_form_submission_approval_updates_case(
     assert submission_res.status_code == 200
     submission_id = submission_res.json()["id"]
 
-    case_submission = await authed_client.get(
-        f"/forms/{form_id}/cases/{case.id}/submission"
+    surrogate_submission = await authed_client.get(
+        f"/forms/{form_id}/surrogates/{surrogate.id}/submission"
     )
-    assert case_submission.status_code == 200
-    assert case_submission.json()["status"] == "pending_review"
+    assert surrogate_submission.status_code == 200
+    assert surrogate_submission.json()["status"] == "pending_review"
 
     approve_res = await authed_client.post(
         f"/forms/submissions/{submission_id}/approve",
@@ -118,16 +118,16 @@ async def test_form_submission_approval_updates_case(
     assert approve_res.status_code == 200
     assert approve_res.json()["status"] == "approved"
 
-    db.refresh(case)
-    assert case.full_name == "Jane Doe"
-    assert str(case.date_of_birth) == "1990-01-01"
+    db.refresh(surrogate)
+    assert surrogate.full_name == "Jane Doe"
+    assert str(surrogate.date_of_birth) == "1990-01-01"
 
 
 @pytest.mark.asyncio
-async def test_form_submission_single_per_case(
+async def test_form_submission_single_per_surrogate(
     authed_client, db, test_org, test_user, default_stage
 ):
-    case = _create_case(db, test_org.id, test_user.id, default_stage)
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
 
     schema = {
         "pages": [
@@ -157,7 +157,7 @@ async def test_form_submission_single_per_case(
 
     token_res = await authed_client.post(
         f"/forms/{form_id}/tokens",
-        json={"case_id": str(case.id), "expires_in_days": 7},
+        json={"surrogate_id": str(surrogate.id), "expires_in_days": 7},
     )
     assert token_res.status_code == 200
     token = token_res.json()["token"]
@@ -170,16 +170,16 @@ async def test_form_submission_single_per_case(
 
     second_token_res = await authed_client.post(
         f"/forms/{form_id}/tokens",
-        json={"case_id": str(case.id), "expires_in_days": 7},
+        json={"surrogate_id": str(surrogate.id), "expires_in_days": 7},
     )
     assert second_token_res.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_update_submission_answers_syncs_case_fields(
+async def test_update_submission_answers_syncs_surrogate_fields(
     authed_client, db, test_org, test_user, default_stage
 ):
-    case = _create_case(db, test_org.id, test_user.id, default_stage)
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
 
     schema = {
         "pages": [
@@ -221,8 +221,8 @@ async def test_update_submission_answers_syncs_case_fields(
         f"/forms/{form_id}/mappings",
         json={
             "mappings": [
-                {"field_key": "full_name", "case_field": "full_name"},
-                {"field_key": "date_of_birth", "case_field": "date_of_birth"},
+                {"field_key": "full_name", "surrogate_field": "full_name"},
+                {"field_key": "date_of_birth", "surrogate_field": "date_of_birth"},
             ]
         },
     )
@@ -230,7 +230,7 @@ async def test_update_submission_answers_syncs_case_fields(
 
     token_res = await authed_client.post(
         f"/forms/{form_id}/tokens",
-        json={"case_id": str(case.id), "expires_in_days": 7},
+        json={"surrogate_id": str(surrogate.id), "expires_in_days": 7},
     )
     assert token_res.status_code == 200
     token = token_res.json()["token"]
@@ -259,8 +259,8 @@ async def test_update_submission_answers_syncs_case_fields(
         },
     )
     assert update_res.status_code == 200
-    assert "full_name" in update_res.json()["case_updates"]
+    assert "full_name" in update_res.json()["surrogate_updates"]
 
-    db.refresh(case)
-    assert case.full_name == "Jane Smith"
-    assert str(case.date_of_birth) == "1991-02-03"
+    db.refresh(surrogate)
+    assert surrogate.full_name == "Jane Smith"
+    assert str(surrogate.date_of_birth) == "1991-02-03"

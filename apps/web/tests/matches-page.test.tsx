@@ -24,9 +24,9 @@ describe('MatchesPage', () => {
         items: [
             {
                 id: 'match1',
-                case_id: 'case1',
-                case_name: 'Jane Doe',
-                case_number: 'CASE-001',
+                surrogate_id: 'surrogate1',
+                surrogate_name: 'Jane Doe',
+                surrogate_number: 'SUR-001',
                 ip_id: 'ip1',
                 ip_name: 'John Smith',
                 status: 'proposed' as const,
@@ -37,9 +37,9 @@ describe('MatchesPage', () => {
             },
             {
                 id: 'match2',
-                case_id: 'case2',
-                case_name: 'Mary Johnson',
-                case_number: 'CASE-002',
+                surrogate_id: 'surrogate2',
+                surrogate_name: 'Mary Johnson',
+                surrogate_number: 'SUR-002',
                 ip_id: 'ip2',
                 ip_name: 'Bob Williams',
                 status: 'accepted' as const,
@@ -80,20 +80,20 @@ describe('MatchesPage', () => {
         render(<MatchesPage />)
         // Table headers
         expect(screen.getByText('Surrogate')).toBeInTheDocument()
-        expect(screen.getByText('Case #')).toBeInTheDocument()
+        expect(screen.getByText('Surrogate #')).toBeInTheDocument()
         expect(screen.getByText('Intended Parents')).toBeInTheDocument()
         expect(screen.getByText('Compatibility')).toBeInTheDocument()
         expect(screen.getByText('Match Stage')).toBeInTheDocument()
-        expect(screen.getByText('Case Stage')).toBeInTheDocument()
+        expect(screen.getByText('Surrogate Stage')).toBeInTheDocument()
 
         // Match data
         expect(screen.getByText('Jane Doe')).toBeInTheDocument()
-        expect(screen.getByText('CASE-001')).toBeInTheDocument()
+        expect(screen.getByText('SUR-001')).toBeInTheDocument()
         expect(screen.getByText('John Smith')).toBeInTheDocument()
         expect(screen.getByText('85%')).toBeInTheDocument()
 
         expect(screen.getByText('Mary Johnson')).toBeInTheDocument()
-        expect(screen.getByText('CASE-002')).toBeInTheDocument()
+        expect(screen.getByText('SUR-002')).toBeInTheDocument()
         expect(screen.getByText('Bob Williams')).toBeInTheDocument()
         expect(screen.getByText('92%')).toBeInTheDocument()
     })

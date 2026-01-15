@@ -8,17 +8,17 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient
 
-from app.db.models import Attachment, Case, InterviewAttachment, Job
+from app.db.models import Attachment, Surrogate, InterviewAttachment, Job
 from app.db.enums import JobType
 from app.schemas.interview import InterviewCreate, InterviewNoteCreate
 from app.services import interview_note_service, interview_service
 
 
 @pytest.fixture
-def test_case(db, test_org, test_user, default_stage):
-    case = Case(
+def test_surrogate(db, test_org, test_user, default_stage):
+    surrogate = Surrogate(
         id=uuid4(),
-        case_number=uuid4().hex[:10],
+        surrogate_number=uuid4().hex[:10],
         organization_id=test_org.id,
         stage_id=default_stage.id,
         status_label="new_unread",
@@ -29,9 +29,9 @@ def test_case(db, test_org, test_user, default_stage):
         email="candidate@test.com",
         email_hash=uuid4().hex,
     )
-    db.add(case)
+    db.add(surrogate)
     db.flush()
-    return case
+    return surrogate
 
 
 def _default_transcript_json():
@@ -46,7 +46,7 @@ def _default_transcript_json():
 _DEFAULT_TRANSCRIPT = object()
 
 
-def _create_interview(db, org_id, case_id, user_id, transcript_json=_DEFAULT_TRANSCRIPT):
+def _create_interview(db, org_id, surrogate_id, user_id, transcript_json=_DEFAULT_TRANSCRIPT):
     if transcript_json is _DEFAULT_TRANSCRIPT:
         transcript_json = _default_transcript_json()
 
@@ -60,7 +60,7 @@ def _create_interview(db, org_id, case_id, user_id, transcript_json=_DEFAULT_TRA
     interview = interview_service.create_interview(
         db=db,
         org_id=org_id,
-        case_id=case_id,
+        surrogate_id=surrogate_id,
         user_id=user_id,
         data=data,
     )
@@ -70,9 +70,9 @@ def _create_interview(db, org_id, case_id, user_id, transcript_json=_DEFAULT_TRA
 
 @pytest.mark.asyncio
 async def test_list_interviews_includes_counts(
-    authed_client: AsyncClient, db, test_org, test_user, test_case
+    authed_client: AsyncClient, db, test_org, test_user, test_surrogate
 ):
-    interview = _create_interview(db, test_org.id, test_case.id, test_user.id)
+    interview = _create_interview(db, test_org.id, test_surrogate.id, test_user.id)
 
     note = interview_note_service.create_note(
         db=db,
@@ -86,10 +86,10 @@ async def test_list_interviews_includes_counts(
     attachment = Attachment(
         id=uuid4(),
         organization_id=test_org.id,
-        case_id=test_case.id,
+        surrogate_id=test_surrogate.id,
         uploaded_by_user_id=test_user.id,
         filename="audio.mp3",
-        storage_key=f"{test_org.id}/{test_case.id}/audio.mp3",
+        storage_key=f"{test_org.id}/{test_surrogate.id}/audio.mp3",
         content_type="audio/mpeg",
         file_size=1234,
         checksum_sha256=uuid4().hex * 2,
@@ -108,7 +108,7 @@ async def test_list_interviews_includes_counts(
     db.add(link)
     db.flush()
 
-    response = await authed_client.get(f"/cases/{test_case.id}/interviews")
+    response = await authed_client.get(f"/surrogates/{test_surrogate.id}/interviews")
     assert response.status_code == 200
 
     data = response.json()
@@ -122,17 +122,19 @@ async def test_list_interviews_includes_counts(
 
 @pytest.mark.asyncio
 async def test_request_transcription_enqueues_job(
-    authed_client: AsyncClient, db, test_org, test_user, test_case
+    authed_client: AsyncClient, db, test_org, test_user, test_surrogate
 ):
-    interview = _create_interview(db, test_org.id, test_case.id, test_user.id, transcript_json=None)
+    interview = _create_interview(
+        db, test_org.id, test_surrogate.id, test_user.id, transcript_json=None
+    )
 
     attachment = Attachment(
         id=uuid4(),
         organization_id=test_org.id,
-        case_id=test_case.id,
+        surrogate_id=test_surrogate.id,
         uploaded_by_user_id=test_user.id,
         filename="call.mp3",
-        storage_key=f"{test_org.id}/{test_case.id}/call.mp3",
+        storage_key=f"{test_org.id}/{test_surrogate.id}/call.mp3",
         content_type="audio/mpeg",
         file_size=2048,
         checksum_sha256=uuid4().hex * 2,
@@ -174,9 +176,9 @@ async def test_request_transcription_enqueues_job(
 
 @pytest.mark.asyncio
 async def test_interview_summary_requires_ai_enabled(
-    authed_client: AsyncClient, db, test_org, test_user, test_case
+    authed_client: AsyncClient, db, test_org, test_user, test_surrogate
 ):
-    interview = _create_interview(db, test_org.id, test_case.id, test_user.id)
+    interview = _create_interview(db, test_org.id, test_surrogate.id, test_user.id)
 
     response = await authed_client.post(f"/interviews/{interview.id}/ai/summarize")
     assert response.status_code == 403

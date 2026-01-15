@@ -30,13 +30,13 @@ vi.mock('@/components/ui/chart', () => ({
     ChartTooltipContent: () => <div />,
 }))
 
-const mockUseCaseStats = vi.fn()
+const mockUseSurrogateStats = vi.fn()
 const mockUseTasks = vi.fn()
-const mockUseCasesTrend = vi.fn()
-const mockUseCasesByStatus = vi.fn()
+const mockUseSurrogatesTrend = vi.fn()
+const mockUseSurrogatesByStatus = vi.fn()
 
-vi.mock('@/lib/hooks/use-cases', () => ({
-    useCaseStats: () => mockUseCaseStats(),
+vi.mock('@/lib/hooks/use-surrogates', () => ({
+    useSurrogateStats: () => mockUseSurrogateStats(),
 }))
 
 vi.mock('@/lib/hooks/use-tasks', () => ({
@@ -46,8 +46,8 @@ vi.mock('@/lib/hooks/use-tasks', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-analytics', () => ({
-    useCasesTrend: (params: unknown) => mockUseCasesTrend(params),
-    useCasesByStatus: () => mockUseCasesByStatus(),
+    useSurrogatesTrend: (params: unknown) => mockUseSurrogatesTrend(params),
+    useSurrogatesByStatus: () => mockUseSurrogatesByStatus(),
 }))
 
 vi.mock('@/lib/hooks/use-pipelines', () => ({
@@ -68,7 +68,7 @@ vi.mock('@/lib/hooks/use-dashboard-socket', () => ({
 
 describe('DashboardPage', () => {
     beforeEach(() => {
-        mockUseCaseStats.mockReturnValue({
+        mockUseSurrogateStats.mockReturnValue({
             data: {
                 total: 10,
                 this_week: 2,
@@ -84,23 +84,23 @@ describe('DashboardPage', () => {
             isLoading: false,
         })
 
-        mockUseCasesTrend.mockReturnValue({ data: [], isLoading: false })
-        mockUseCasesByStatus.mockReturnValue({ data: [], isLoading: false })
+        mockUseSurrogatesTrend.mockReturnValue({ data: [], isLoading: false })
+        mockUseSurrogatesByStatus.mockReturnValue({ data: [], isLoading: false })
     })
 
-    it('renders stats cards with case data', () => {
+    it('renders stats cards with surrogate data', () => {
         render(<DashboardPage />)
 
         // Check welcome header
         expect(screen.getByText(/Welcome back, Test/)).toBeInTheDocument()
 
         // Check stats cards
-        expect(screen.getByText('Active Cases')).toBeInTheDocument()
+        expect(screen.getByText('Active Surrogates')).toBeInTheDocument()
         expect(screen.getByText('10')).toBeInTheDocument()
         expect(screen.getByText('Pending Tasks')).toBeInTheDocument()
 
         // Check chart sections exist
-        expect(screen.getByText('Cases Trend')).toBeInTheDocument()
-        expect(screen.getByText('Cases by Stage')).toBeInTheDocument()
+        expect(screen.getByText('Surrogates Trend')).toBeInTheDocument()
+        expect(screen.getByText('Surrogates by Stage')).toBeInTheDocument()
     })
 })

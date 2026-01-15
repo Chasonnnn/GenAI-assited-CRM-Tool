@@ -29,7 +29,7 @@ describe('ApprovalTaskActions', () => {
 
         expect(screen.queryByRole('button', { name: /approve/i })).not.toBeInTheDocument()
         expect(screen.queryByRole('button', { name: /deny/i })).not.toBeInTheDocument()
-        expect(screen.getByText(/only the case owner/i)).toBeInTheDocument()
+        expect(screen.getByText(/only the surrogate owner/i)).toBeInTheDocument()
     })
 
     it('calls resolve with approve decision when approve clicked', async () => {

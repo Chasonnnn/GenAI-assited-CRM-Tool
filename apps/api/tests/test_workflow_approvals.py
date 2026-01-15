@@ -13,11 +13,10 @@ from app.db.enums import (
 )
 from app.db.models import (
     Task,
-    Case,
+    Surrogate,
     User,
     AutomationWorkflow,
     WorkflowExecution,
-    Queue,
 )
 from app.core.constants import SYSTEM_USER_ID
 from app.core.encryption import hash_email
@@ -37,14 +36,14 @@ from app.services.workflow_action_preview import build_action_preview, render_ac
 
 
 @pytest.fixture
-def test_case(db, test_org, test_user, default_stage):
-    """Create a test case owned by test_user."""
-    normalized = normalize_email("testcase@example.com")
-    case = Case(
+def test_surrogate(db, test_org, test_user, default_stage):
+    """Create a test surrogate owned by test_user."""
+    normalized = normalize_email("testsurrogate@example.com")
+    surrogate = Surrogate(
         id=uuid4(),
         organization_id=test_org.id,
-        case_number=f"C-{uuid4().hex[:6].upper()}",  # Max 10 chars
-        full_name="Test Case",
+        surrogate_number=f"C-{uuid4().hex[:6].upper()}",  # Max 10 chars
+        full_name="Test Surrogate",
         email=normalized,
         email_hash=hash_email(normalized),
         stage_id=default_stage.id,
@@ -52,9 +51,9 @@ def test_case(db, test_org, test_user, default_stage):
         owner_type=OwnerType.USER.value,
         owner_id=test_user.id,
     )
-    db.add(case)
+    db.add(surrogate)
     db.flush()
-    return case
+    return surrogate
 
 
 # =============================================================================
@@ -154,22 +153,22 @@ class TestBusinessHoursCalculator:
 class TestWorkflowActionPreview:
     """Test the action preview builder."""
 
-    def test_preview_assign_case(self, db, test_user, test_org):
-        """Preview for assign_case should show assignee name."""
+    def test_preview_assign_surrogate(self, db, test_user, test_org):
+        """Preview for assign_surrogate should show assignee name."""
         action = {
-            "action_type": "assign_case",
+            "action_type": "assign_surrogate",
             "owner_type": "user",
             "owner_id": str(test_user.id),
         }
 
-        # Mock entity with case_number
+        # Mock entity with surrogate_number
         class MockCase:
-            case_number = "1234"
+            surrogate_number = "1234"
             id = uuid4()
 
         preview = build_action_preview(db, action, MockCase())
         assert "Assign" in preview
-        assert "Case #1234" in preview
+        assert "Surrogate #1234" in preview
 
     def test_preview_create_task(self, db, test_user, test_org):
         """Preview for create_task should show title and due days."""
@@ -181,7 +180,7 @@ class TestWorkflowActionPreview:
         }
 
         class MockCase:
-            case_number = "5678"
+            surrogate_number = "5678"
             id = uuid4()
             owner_type = "user"
             owner_id = test_user.id
@@ -193,7 +192,7 @@ class TestWorkflowActionPreview:
     def test_render_action_payload(self):
         """Payload should include action config and entity context."""
         action = {
-            "action_type": "assign_case",
+            "action_type": "assign_surrogate",
             "owner_type": "user",
             "owner_id": "abc-123",
         }
@@ -203,7 +202,7 @@ class TestWorkflowActionPreview:
             organization_id = uuid4()
 
         payload = render_action_payload(action, MockEntity())
-        assert payload["action_type"] == "assign_case"
+        assert payload["action_type"] == "assign_surrogate"
         assert payload["owner_type"] == "user"
         assert "entity_id" in payload
         assert "organization_id" in payload
@@ -217,7 +216,7 @@ class TestWorkflowActionPreview:
 class TestWorkflowApprovalTaskService:
     """Test the task service workflow approval functions."""
 
-    def test_resolve_approval_approve(self, db, test_org, test_user, test_case):
+    def test_resolve_approval_approve(self, db, test_org, test_user, test_surrogate):
         """Approving should complete the task and queue resume job."""
         from app.services import task_service
 
@@ -228,7 +227,7 @@ class TestWorkflowApprovalTaskService:
             trigger_type=WorkflowTriggerType.STATUS_CHANGED.value,
             trigger_config={},
             conditions=[],
-            actions=[{"action_type": "assign_case", "requires_approval": True}],
+            actions=[{"action_type": "assign_surrogate", "requires_approval": True}],
             is_enabled=True,
             created_by_user_id=test_user.id,
             updated_by_user_id=test_user.id,
@@ -241,8 +240,8 @@ class TestWorkflowApprovalTaskService:
             workflow_id=workflow.id,
             event_id=uuid4(),  # Required for loop protection
             event_source="test",  # Required
-            entity_type="case",
-            entity_id=test_case.id,
+            entity_type="surrogate",
+            entity_id=test_surrogate.id,
             status=WorkflowExecutionStatus.PAUSED.value,
             trigger_event={"type": "status_changed"},
             matched_conditions=True,
@@ -254,18 +253,18 @@ class TestWorkflowApprovalTaskService:
         # Create approval task owned by test_user
         task = Task(
             organization_id=test_org.id,
-            case_id=test_case.id,
+            surrogate_id=test_surrogate.id,
             task_type=TaskType.WORKFLOW_APPROVAL.value,
-            title="Approve: Assign case",
+            title="Approve: Assign surrogate",
             status=TaskStatus.PENDING.value,
             owner_type=OwnerType.USER.value,
             owner_id=test_user.id,
             created_by_user_id=SYSTEM_USER_ID,
             workflow_execution_id=execution.id,
             workflow_action_index=0,
-            workflow_action_type="assign_case",
-            workflow_action_preview="Assign case to User",
-            workflow_action_payload={"action_type": "assign_case"},
+            workflow_action_type="assign_surrogate",
+            workflow_action_preview="Assign surrogate to User",
+            workflow_action_payload={"action_type": "assign_surrogate"},
             due_at=datetime.now(timezone.utc) + timedelta(hours=48),
         )
         db.add(task)
@@ -288,7 +287,7 @@ class TestWorkflowApprovalTaskService:
         assert result.status == TaskStatus.COMPLETED.value
         assert result.is_completed is True
 
-    def test_resolve_approval_deny(self, db, test_org, test_user, test_case):
+    def test_resolve_approval_deny(self, db, test_org, test_user, test_surrogate):
         """Denying should mark task as denied with reason."""
         from app.services import task_service
 
@@ -298,7 +297,7 @@ class TestWorkflowApprovalTaskService:
             trigger_type=WorkflowTriggerType.STATUS_CHANGED.value,
             trigger_config={},
             conditions=[],
-            actions=[{"action_type": "assign_case", "requires_approval": True}],
+            actions=[{"action_type": "assign_surrogate", "requires_approval": True}],
             is_enabled=True,
             created_by_user_id=test_user.id,
             updated_by_user_id=test_user.id,
@@ -311,8 +310,8 @@ class TestWorkflowApprovalTaskService:
             workflow_id=workflow.id,
             event_id=uuid4(),  # Required for loop protection
             event_source="test",  # Required
-            entity_type="case",
-            entity_id=test_case.id,
+            entity_type="surrogate",
+            entity_id=test_surrogate.id,
             status=WorkflowExecutionStatus.PAUSED.value,
             trigger_event={"type": "status_changed"},
             matched_conditions=True,
@@ -323,18 +322,18 @@ class TestWorkflowApprovalTaskService:
 
         task = Task(
             organization_id=test_org.id,
-            case_id=test_case.id,
+            surrogate_id=test_surrogate.id,
             task_type=TaskType.WORKFLOW_APPROVAL.value,
-            title="Approve: Assign case",
+            title="Approve: Assign surrogate",
             status=TaskStatus.PENDING.value,
             owner_type=OwnerType.USER.value,
             owner_id=test_user.id,
             created_by_user_id=SYSTEM_USER_ID,
             workflow_execution_id=execution.id,
             workflow_action_index=0,
-            workflow_action_type="assign_case",
-            workflow_action_preview="Assign case to User",
-            workflow_action_payload={"action_type": "assign_case"},
+            workflow_action_type="assign_surrogate",
+            workflow_action_preview="Assign surrogate to User",
+            workflow_action_payload={"action_type": "assign_surrogate"},
             due_at=datetime.now(timezone.utc) + timedelta(hours=48),
         )
         db.add(task)
@@ -350,13 +349,13 @@ class TestWorkflowApprovalTaskService:
             org_id=test_org.id,
             decision="deny",
             user_id=test_user.id,
-            reason="Not appropriate for this case",
+            reason="Not appropriate for this surrogate",
         )
 
         assert result.status == TaskStatus.DENIED.value
-        assert result.workflow_denial_reason == "Not appropriate for this case"
+        assert result.workflow_denial_reason == "Not appropriate for this surrogate"
 
-    def test_resolve_approval_wrong_user(self, db, test_org, test_user, test_case):
+    def test_resolve_approval_wrong_user(self, db, test_org, test_user, test_surrogate):
         """Non-owner should not be able to resolve approval."""
         from app.services import task_service
 
@@ -373,7 +372,7 @@ class TestWorkflowApprovalTaskService:
             trigger_type=WorkflowTriggerType.STATUS_CHANGED.value,
             trigger_config={},
             conditions=[],
-            actions=[{"action_type": "assign_case", "requires_approval": True}],
+            actions=[{"action_type": "assign_surrogate", "requires_approval": True}],
             is_enabled=True,
             created_by_user_id=test_user.id,
             updated_by_user_id=test_user.id,
@@ -386,8 +385,8 @@ class TestWorkflowApprovalTaskService:
             workflow_id=workflow.id,
             event_id=uuid4(),  # Required for loop protection
             event_source="test",  # Required
-            entity_type="case",
-            entity_id=test_case.id,
+            entity_type="surrogate",
+            entity_id=test_surrogate.id,
             status=WorkflowExecutionStatus.PAUSED.value,
             trigger_event={"type": "status_changed"},
             matched_conditions=True,
@@ -398,18 +397,18 @@ class TestWorkflowApprovalTaskService:
 
         task = Task(
             organization_id=test_org.id,
-            case_id=test_case.id,
+            surrogate_id=test_surrogate.id,
             task_type=TaskType.WORKFLOW_APPROVAL.value,
-            title="Approve: Assign case",
+            title="Approve: Assign surrogate",
             status=TaskStatus.PENDING.value,
             owner_type=OwnerType.USER.value,
             owner_id=test_user.id,  # Owned by test_user
             created_by_user_id=SYSTEM_USER_ID,
             workflow_execution_id=execution.id,
             workflow_action_index=0,
-            workflow_action_type="assign_case",
-            workflow_action_preview="Assign case to User",
-            workflow_action_payload={"action_type": "assign_case"},
+            workflow_action_type="assign_surrogate",
+            workflow_action_preview="Assign surrogate to User",
+            workflow_action_payload={"action_type": "assign_surrogate"},
             due_at=datetime.now(timezone.utc) + timedelta(hours=48),
         )
         db.add(task)
@@ -430,9 +429,9 @@ class TestWorkflowApprovalTaskService:
                 reason=None,
             )
 
-        assert "only the case owner" in str(exc_info.value).lower()
+        assert "only the surrogate owner" in str(exc_info.value).lower()
 
-    def test_expire_approval_task(self, db, test_org, test_user, test_case):
+    def test_expire_approval_task(self, db, test_org, test_user, test_surrogate):
         """Expiring should mark task as expired."""
         from app.services import task_service
 
@@ -442,7 +441,7 @@ class TestWorkflowApprovalTaskService:
             trigger_type=WorkflowTriggerType.STATUS_CHANGED.value,
             trigger_config={},
             conditions=[],
-            actions=[{"action_type": "assign_case", "requires_approval": True}],
+            actions=[{"action_type": "assign_surrogate", "requires_approval": True}],
             is_enabled=True,
             created_by_user_id=test_user.id,
             updated_by_user_id=test_user.id,
@@ -455,8 +454,8 @@ class TestWorkflowApprovalTaskService:
             workflow_id=workflow.id,
             event_id=uuid4(),  # Required for loop protection
             event_source="test",  # Required
-            entity_type="case",
-            entity_id=test_case.id,
+            entity_type="surrogate",
+            entity_id=test_surrogate.id,
             status=WorkflowExecutionStatus.PAUSED.value,
             trigger_event={"type": "status_changed"},
             matched_conditions=True,
@@ -467,18 +466,18 @@ class TestWorkflowApprovalTaskService:
 
         task = Task(
             organization_id=test_org.id,
-            case_id=test_case.id,
+            surrogate_id=test_surrogate.id,
             task_type=TaskType.WORKFLOW_APPROVAL.value,
-            title="Approve: Assign case",
+            title="Approve: Assign surrogate",
             status=TaskStatus.PENDING.value,
             owner_type=OwnerType.USER.value,
             owner_id=test_user.id,
             created_by_user_id=SYSTEM_USER_ID,
             workflow_execution_id=execution.id,
             workflow_action_index=0,
-            workflow_action_type="assign_case",
-            workflow_action_preview="Assign case to User",
-            workflow_action_payload={"action_type": "assign_case"},
+            workflow_action_type="assign_surrogate",
+            workflow_action_preview="Assign surrogate to User",
+            workflow_action_payload={"action_type": "assign_surrogate"},
             due_at=datetime.now(timezone.utc) - timedelta(hours=1),  # Past due
         )
         db.add(task)
@@ -504,7 +503,7 @@ class TestWorkflowApprovalEndpoint:
 
     @pytest.mark.asyncio
     async def test_resolve_endpoint_approve(
-        self, authed_client, db, test_org, test_user, test_case
+        self, authed_client, db, test_org, test_user, test_surrogate
     ):
         """POST /tasks/{id}/resolve with approve should complete task."""
         workflow = AutomationWorkflow(
@@ -513,7 +512,7 @@ class TestWorkflowApprovalEndpoint:
             trigger_type=WorkflowTriggerType.STATUS_CHANGED.value,
             trigger_config={},
             conditions=[],
-            actions=[{"action_type": "assign_case", "requires_approval": True}],
+            actions=[{"action_type": "assign_surrogate", "requires_approval": True}],
             is_enabled=True,
             created_by_user_id=test_user.id,
             updated_by_user_id=test_user.id,
@@ -526,8 +525,8 @@ class TestWorkflowApprovalEndpoint:
             workflow_id=workflow.id,
             event_id=uuid4(),  # Required for loop protection
             event_source="test",  # Required
-            entity_type="case",
-            entity_id=test_case.id,
+            entity_type="surrogate",
+            entity_id=test_surrogate.id,
             status=WorkflowExecutionStatus.PAUSED.value,
             trigger_event={"type": "status_changed"},
             matched_conditions=True,
@@ -538,18 +537,18 @@ class TestWorkflowApprovalEndpoint:
 
         task = Task(
             organization_id=test_org.id,
-            case_id=test_case.id,
+            surrogate_id=test_surrogate.id,
             task_type=TaskType.WORKFLOW_APPROVAL.value,
-            title="Approve: Assign case",
+            title="Approve: Assign surrogate",
             status=TaskStatus.PENDING.value,
             owner_type=OwnerType.USER.value,
             owner_id=test_user.id,
             created_by_user_id=SYSTEM_USER_ID,
             workflow_execution_id=execution.id,
             workflow_action_index=0,
-            workflow_action_type="assign_case",
-            workflow_action_preview="Assign case to User",
-            workflow_action_payload={"action_type": "assign_case"},
+            workflow_action_type="assign_surrogate",
+            workflow_action_preview="Assign surrogate to User",
+            workflow_action_payload={"action_type": "assign_surrogate"},
             due_at=datetime.now(timezone.utc) + timedelta(hours=48),
         )
         db.add(task)
@@ -571,7 +570,7 @@ class TestWorkflowApprovalEndpoint:
 
     @pytest.mark.asyncio
     async def test_resolve_endpoint_deny(
-        self, authed_client, db, test_org, test_user, test_case
+        self, authed_client, db, test_org, test_user, test_surrogate
     ):
         """POST /tasks/{id}/resolve with deny should mark as denied."""
         workflow = AutomationWorkflow(
@@ -580,7 +579,7 @@ class TestWorkflowApprovalEndpoint:
             trigger_type=WorkflowTriggerType.STATUS_CHANGED.value,
             trigger_config={},
             conditions=[],
-            actions=[{"action_type": "assign_case", "requires_approval": True}],
+            actions=[{"action_type": "assign_surrogate", "requires_approval": True}],
             is_enabled=True,
             created_by_user_id=test_user.id,
             updated_by_user_id=test_user.id,
@@ -593,8 +592,8 @@ class TestWorkflowApprovalEndpoint:
             workflow_id=workflow.id,
             event_id=uuid4(),  # Required for loop protection
             event_source="test",  # Required
-            entity_type="case",
-            entity_id=test_case.id,
+            entity_type="surrogate",
+            entity_id=test_surrogate.id,
             status=WorkflowExecutionStatus.PAUSED.value,
             trigger_event={"type": "status_changed"},
             matched_conditions=True,
@@ -605,18 +604,18 @@ class TestWorkflowApprovalEndpoint:
 
         task = Task(
             organization_id=test_org.id,
-            case_id=test_case.id,
+            surrogate_id=test_surrogate.id,
             task_type=TaskType.WORKFLOW_APPROVAL.value,
-            title="Approve: Assign case",
+            title="Approve: Assign surrogate",
             status=TaskStatus.PENDING.value,
             owner_type=OwnerType.USER.value,
             owner_id=test_user.id,
             created_by_user_id=SYSTEM_USER_ID,
             workflow_execution_id=execution.id,
             workflow_action_index=0,
-            workflow_action_type="assign_case",
-            workflow_action_preview="Assign case to User",
-            workflow_action_payload={"action_type": "assign_case"},
+            workflow_action_type="assign_surrogate",
+            workflow_action_preview="Assign surrogate to User",
+            workflow_action_payload={"action_type": "assign_surrogate"},
             due_at=datetime.now(timezone.utc) + timedelta(hours=48),
         )
         db.add(task)
@@ -638,14 +637,14 @@ class TestWorkflowApprovalEndpoint:
 
     @pytest.mark.asyncio
     async def test_complete_endpoint_blocks_approvals(
-        self, authed_client, db, test_org, test_user, test_case
+        self, authed_client, db, test_org, test_user, test_surrogate
     ):
         """POST /tasks/{id}/complete should reject workflow approvals."""
         task = Task(
             organization_id=test_org.id,
-            case_id=test_case.id,
+            surrogate_id=test_surrogate.id,
             task_type=TaskType.WORKFLOW_APPROVAL.value,
-            title="Approve: Assign case",
+            title="Approve: Assign surrogate",
             status=TaskStatus.PENDING.value,
             owner_type=OwnerType.USER.value,
             owner_id=test_user.id,
@@ -667,10 +666,10 @@ class TestWorkflowApprovalEndpoint:
 
 
 class TestOwnerChangeInvalidation:
-    """Test that changing case owner invalidates pending approvals."""
+    """Test that changing surrogate owner invalidates pending approvals."""
 
-    def test_owner_change_cancels_approval(self, db, test_org, test_user, test_case):
-        """Changing case owner should cancel pending approval."""
+    def test_owner_change_cancels_approval(self, db, test_org, test_user, test_surrogate):
+        """Changing surrogate owner should cancel pending approval."""
         from app.services import task_service
 
         other_user = User(
@@ -686,7 +685,7 @@ class TestOwnerChangeInvalidation:
             trigger_type=WorkflowTriggerType.STATUS_CHANGED.value,
             trigger_config={},
             conditions=[],
-            actions=[{"action_type": "assign_case", "requires_approval": True}],
+            actions=[{"action_type": "assign_surrogate", "requires_approval": True}],
             is_enabled=True,
             created_by_user_id=test_user.id,
             updated_by_user_id=test_user.id,
@@ -699,8 +698,8 @@ class TestOwnerChangeInvalidation:
             workflow_id=workflow.id,
             event_id=uuid4(),  # Required for loop protection
             event_source="test",  # Required
-            entity_type="case",
-            entity_id=test_case.id,
+            entity_type="surrogate",
+            entity_id=test_surrogate.id,
             status=WorkflowExecutionStatus.PAUSED.value,
             trigger_event={"type": "status_changed"},
             matched_conditions=True,
@@ -711,18 +710,18 @@ class TestOwnerChangeInvalidation:
 
         task = Task(
             organization_id=test_org.id,
-            case_id=test_case.id,
+            surrogate_id=test_surrogate.id,
             task_type=TaskType.WORKFLOW_APPROVAL.value,
-            title="Approve: Assign case",
+            title="Approve: Assign surrogate",
             status=TaskStatus.PENDING.value,
             owner_type=OwnerType.USER.value,
             owner_id=test_user.id,
             created_by_user_id=SYSTEM_USER_ID,
             workflow_execution_id=execution.id,
             workflow_action_index=0,
-            workflow_action_type="assign_case",
-            workflow_action_preview="Assign case to User",
-            workflow_action_payload={"action_type": "assign_case"},
+            workflow_action_type="assign_surrogate",
+            workflow_action_preview="Assign surrogate to User",
+            workflow_action_payload={"action_type": "assign_surrogate"},
             due_at=datetime.now(timezone.utc) + timedelta(hours=48),
         )
         db.add(task)
@@ -732,11 +731,11 @@ class TestOwnerChangeInvalidation:
         execution.paused_at_action_index = 0
         db.commit()
 
-        # Invalidate approvals for this case
-        count = task_service.invalidate_pending_approvals_for_case(
+        # Invalidate approvals for this surrogate
+        count = task_service.invalidate_pending_approvals_for_surrogate(
             db=db,
-            case_id=test_case.id,
-            reason="Case owner changed",
+            surrogate_id=test_surrogate.id,
+            reason="Surrogate owner changed",
             actor_user_id=other_user.id,
         )
 

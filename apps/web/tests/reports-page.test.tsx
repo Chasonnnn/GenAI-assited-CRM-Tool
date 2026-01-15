@@ -48,11 +48,12 @@ vi.mock('@/components/ui/date-range-picker', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-analytics', () => ({
-    useAnalyticsSummary: () => ({ data: { total_cases: 42, new_this_period: 5, qualified_rate: 10 }, isLoading: false }),
-    useCasesByStatus: () => ({ data: [{ status: 'new_unread', count: 1 }], isLoading: false }),
-    useCasesByAssignee: () => ({ data: [{ user_email: 'alice@example.com', count: 2 }], isLoading: false }),
-    useCasesTrend: () => ({ data: [{ date: '2025-01-01', count: 1 }], isLoading: false }),
+    useAnalyticsSummary: () => ({ data: { total_surrogates: 42, new_this_period: 5, qualified_rate: 10 }, isLoading: false }),
+    useSurrogatesByStatus: () => ({ data: [{ status: 'new_unread', count: 1 }], isLoading: false }),
+    useSurrogatesByAssignee: () => ({ data: [{ user_email: 'alice@example.com', count: 2 }], isLoading: false }),
+    useSurrogatesTrend: () => ({ data: [{ date: '2025-01-01', count: 1 }], isLoading: false }),
     useMetaPerformance: () => ({ data: { conversion_rate: 20, leads_converted: 2, leads_received: 10 }, isLoading: false }),
+    useMetaAdAccounts: () => ({ data: [{ id: 'ad-1', ad_account_name: 'Test Account' }], isLoading: false }),
     useSpendTotals: () => ({
         data: {
             total_spend: 1000,
@@ -66,10 +67,14 @@ vi.mock('@/lib/hooks/use-analytics', () => ({
         },
         isLoading: false,
     }),
+    useSpendByCampaign: () => ({ data: [], isLoading: false }),
+    useSpendByBreakdown: () => ({ data: [], isLoading: false }),
+    useSpendTrend: () => ({ data: [], isLoading: false }),
+    useFormPerformance: () => ({ data: [], isLoading: false }),
     useFunnelCompare: () => ({ data: null, isLoading: false }),
-    useCasesByStateCompare: () => ({ data: null, isLoading: false }),
+    useSurrogatesByStateCompare: () => ({ data: null, isLoading: false }),
     useCampaigns: () => ({ data: [], isLoading: false }),
-    usePerformanceByUser: () => ({ data: { data: [], unassigned: { total_cases: 0 } }, isLoading: false }),
+    usePerformanceByUser: () => ({ data: { data: [], unassigned: { total_surrogates: 0 } }, isLoading: false }),
 }))
 
 describe('ReportsPage', () => {
@@ -77,6 +82,6 @@ describe('ReportsPage', () => {
         render(<ReportsPage />)
         expect(screen.getByText('Reports')).toBeInTheDocument()
         expect(screen.getByText('42')).toBeInTheDocument()
-        expect(screen.getByText('$1,000')).toBeInTheDocument()
+        expect(screen.getAllByText('$1,000').length).toBeGreaterThan(0)
     })
 })

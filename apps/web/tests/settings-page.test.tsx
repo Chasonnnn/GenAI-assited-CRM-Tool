@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import SettingsPage from '../app/(app)/settings/page'
 
 const mockReplace = vi.fn()
@@ -41,9 +41,9 @@ vi.mock('@/lib/auth-context', () => ({
 vi.mock('@/lib/hooks/use-notifications', () => ({
     useNotificationSettings: () => ({
         data: {
-            case_assigned: true,
-            case_status_changed: true,
-            case_handoff: true,
+            surrogate_assigned: true,
+            surrogate_status_changed: true,
+            surrogate_claim_available: true,
             task_assigned: true,
             workflow_approvals: true,
         },

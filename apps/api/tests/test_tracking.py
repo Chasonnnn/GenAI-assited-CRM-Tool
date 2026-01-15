@@ -338,7 +338,5 @@ def test_record_click_creates_event(db, test_org, test_user):
 
 def test_record_click_invalid_token(db):
     """Test that invalid token returns None."""
-    result = tracking_service.record_click(
-        db, "invalid-token-xyz", "https://example.com"
-    )
+    result = tracking_service.record_click(db, "invalid-token-xyz", "https://example.com")
     assert result is None

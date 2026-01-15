@@ -57,16 +57,14 @@ vi.mock('@/lib/hooks/use-matches', () => ({
     matchKeys: { detail: (id: string) => ['matches', 'detail', id] },
 }))
 
-// Mock case hooks
-const mockUseCase = vi.fn()
-vi.mock('@/lib/hooks/use-cases', () => ({
-    useCase: (id: string) => mockUseCase(id),
-    useChangeStatus: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useCaseNotes: () => ({ data: [] }),
-    useCaseHistory: () => ({ data: [] }),
-    useCaseTasks: () => ({ data: { items: [], total: 0 } }),
-    useCaseActivity: () => ({ data: { items: [], total: 0 } }),
-    caseKeys: { detail: (id: string) => ['cases', 'detail', id], lists: () => ['cases', 'list'] },
+// Mock surrogate hooks
+const mockUseSurrogate = vi.fn()
+const mockUseSurrogateActivity = vi.fn()
+vi.mock('@/lib/hooks/use-surrogates', () => ({
+    useSurrogate: (id: string) => mockUseSurrogate(id),
+    useSurrogateActivity: (id: string) => mockUseSurrogateActivity(id),
+    useChangeSurrogateStatus: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    surrogateKeys: { detail: (id: string) => ['surrogates', 'detail', id], lists: () => ['surrogates', 'list'] },
 }))
 
 // Mock notes hook
@@ -108,9 +106,9 @@ vi.mock('@/lib/hooks/use-pipelines', () => ({
         data: {
             id: 'pipeline1',
             stages: [
-                { id: 'stage1', slug: 'pending_match', label: 'Pending Match', color: '#888', stage_type: 'intake' },
+                { id: 'stage1', slug: 'ready_to_match', label: 'Ready to Match', color: '#888', stage_type: 'post_approval' },
                 { id: 'stage2', slug: 'matched', label: 'Matched', color: '#22c55e', stage_type: 'post_approval' },
-                { id: 'stage3', slug: 'meds_started', label: 'Meds Started', color: '#3b82f6', stage_type: 'post_approval' },
+                { id: 'stage3', slug: 'medical_clearance_passed', label: 'Medical Clearance Passed', color: '#3b82f6', stage_type: 'post_approval' },
             ],
         },
         isLoading: false,
@@ -125,9 +123,9 @@ vi.mock('@/hooks/use-toast', () => ({
 describe('MatchDetailPage', () => {
     const mockMatch = {
         id: 'match1',
-        case_id: 'case1',
-        case_name: 'Jane Doe',
-        case_number: 'CASE-001',
+        surrogate_id: 'surrogate1',
+        surrogate_name: 'Jane Doe',
+        surrogate_number: 'SUR-001',
         ip_id: 'ip1',
         ip_name: 'John Smith',
         status: 'proposed' as const,
@@ -138,17 +136,29 @@ describe('MatchDetailPage', () => {
         notes_internal: 'Internal notes about the match',
     }
 
-    const mockCase = {
-        id: 'case1',
-        case_number: 'CASE-001',
-        surrogate_first_name: 'Jane',
-        surrogate_last_name: 'Doe',
-        surrogate_email: 'jane@example.com',
-        surrogate_phone: '555-1234',
-        surrogate_dob: '1990-05-15',
-        status: 'matched',
+    const mockSurrogate = {
+        id: 'surrogate1',
+        surrogate_number: 'SUR-001',
+        full_name: 'Jane Doe',
+        status_label: 'Matched',
+        stage_id: 'stage2',
+        stage_slug: 'matched',
+        stage_type: 'post_approval',
+        source: 'manual',
+        email: 'jane@example.com',
+        phone: '555-1234',
         state: 'CA',
+        date_of_birth: '1990-05-15',
+        race: null,
+        height_ft: null,
+        weight_lb: null,
+        is_priority: false,
         is_archived: false,
+        owner_type: 'user',
+        owner_id: 'user1',
+        owner_name: 'Test Admin',
+        age: null,
+        bmi: null,
         created_at: '2024-01-01T00:00:00Z',
         updated_at: '2024-01-15T00:00:00Z',
     }
@@ -175,10 +185,12 @@ describe('MatchDetailPage', () => {
             error: null,
         })
 
-        mockUseCase.mockReturnValue({
-            data: mockCase,
+        mockUseSurrogate.mockReturnValue({
+            data: mockSurrogate,
             isLoading: false,
         })
+
+        mockUseSurrogateActivity.mockReturnValue({ data: { items: [], total: 0 } })
 
         mockUseIntendedParent.mockReturnValue({
             data: mockIP,
@@ -227,8 +239,8 @@ describe('MatchDetailPage', () => {
 
     it('displays surrogate name when loaded', () => {
         render(<MatchDetailPage />)
-        // Should show case name (surrogate's full name from match data) - in the header which combines both names
-        expect(screen.getByText(/Jane Doe/)).toBeInTheDocument()
+        // Should show surrogate name (full name from match data) - in the header which combines both names
+        expect(screen.getAllByText(/Jane Doe/).length).toBeGreaterThan(0)
     })
 
     it('displays IP name when loaded', () => {
@@ -251,17 +263,37 @@ describe('MatchDetailPage', () => {
 
 describe('MatchDetailPage with different statuses', () => {
     beforeEach(() => {
-        mockUseCase.mockReturnValue({
+        mockUseSurrogate.mockReturnValue({
             data: {
-                id: 'case1',
-                case_number: 'CASE-001',
-                surrogate_first_name: 'Jane',
-                surrogate_last_name: 'Doe',
-                surrogate_email: 'jane@example.com',
-                status: 'matched',
+                id: 'surrogate1',
+                surrogate_number: 'SUR-001',
+                full_name: 'Jane Doe',
+                status_label: 'Matched',
+                stage_id: 'stage2',
+                stage_slug: 'matched',
+                stage_type: 'post_approval',
+                source: 'manual',
+                email: 'jane@example.com',
+                phone: '555-1234',
+                state: 'CA',
+                date_of_birth: '1990-05-15',
+                race: null,
+                height_ft: null,
+                weight_lb: null,
+                is_priority: false,
+                is_archived: false,
+                owner_type: 'user',
+                owner_id: 'user1',
+                owner_name: 'Test Admin',
+                age: null,
+                bmi: null,
+                created_at: '2024-01-01T00:00:00Z',
+                updated_at: '2024-01-15T00:00:00Z',
             },
             isLoading: false,
         })
+
+        mockUseSurrogateActivity.mockReturnValue({ data: { items: [], total: 0 } })
 
         mockUseIntendedParent.mockReturnValue({
             data: {
@@ -283,9 +315,9 @@ describe('MatchDetailPage with different statuses', () => {
         mockUseMatch.mockReturnValue({
             data: {
                 id: 'match1',
-                case_id: 'case1',
+                surrogate_id: 'surrogate1',
                 ip_id: 'ip1',
-                case_name: 'Jane Doe',
+                surrogate_name: 'Jane Doe',
                 ip_name: 'John Smith',
                 status: 'accepted',
                 compatibility_score: 90,
@@ -303,9 +335,9 @@ describe('MatchDetailPage with different statuses', () => {
         mockUseMatch.mockReturnValue({
             data: {
                 id: 'match1',
-                case_id: 'case1',
+                surrogate_id: 'surrogate1',
                 ip_id: 'ip1',
-                case_name: 'Jane Doe',
+                surrogate_name: 'Jane Doe',
                 ip_name: 'John Smith',
                 status: 'rejected',
                 compatibility_score: 70,

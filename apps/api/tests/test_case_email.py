@@ -8,9 +8,9 @@ from uuid import uuid4
 @pytest.mark.asyncio
 async def test_send_email_requires_auth(client: AsyncClient):
     """Test send email endpoint requires authentication."""
-    case_id = uuid4()
+    surrogate_id = uuid4()
     response = await client.post(
-        f"/cases/{case_id}/send-email",
+        f"/surrogates/{surrogate_id}/send-email",
         json={"template_id": str(uuid4())},
     )
     # Should fail with 403 (CSRF) or 401 (no auth)
@@ -20,34 +20,32 @@ async def test_send_email_requires_auth(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_send_email_case_not_found(authed_client: AsyncClient):
     """Test send email with non-existent case returns 404."""
-    case_id = uuid4()
+    surrogate_id = uuid4()
     response = await authed_client.post(
-        f"/cases/{case_id}/send-email",
+        f"/surrogates/{surrogate_id}/send-email",
         json={"template_id": str(uuid4())},
     )
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_send_email_template_not_found(
-    authed_client: AsyncClient, db, test_org, test_user
-):
+async def test_send_email_template_not_found(authed_client: AsyncClient, db, test_org, test_user):
     """Test send email with non-existent template returns 404."""
-    from app.services import case_service
-    from app.schemas.case import CaseCreate
-    from app.db.enums import CaseSource
+    from app.services import surrogate_service
+    from app.schemas.surrogate import SurrogateCreate
+    from app.db.enums import SurrogateSource
 
     # Create a case
-    case_data = CaseCreate(
+    case_data = SurrogateCreate(
         full_name="Test Case",
         email="test@example.com",
-        source=CaseSource.MANUAL,
+        source=SurrogateSource.MANUAL,
     )
-    case = case_service.create_case(db, test_org.id, test_user.id, case_data)
+    case = surrogate_service.create_surrogate(db, test_org.id, test_user.id, case_data)
 
     # Try to send with non-existent template
     response = await authed_client.post(
-        f"/cases/{case.id}/send-email",
+        f"/surrogates/{case.id}/send-email",
         json={"template_id": str(uuid4())},
     )
     assert response.status_code == 404
@@ -59,17 +57,17 @@ async def test_send_email_no_provider_returns_error(
     authed_client: AsyncClient, db, test_org, test_user, monkeypatch
 ):
     """Test send email when no provider available returns error."""
-    from app.services import case_service, email_service
-    from app.schemas.case import CaseCreate
-    from app.db.enums import CaseSource
+    from app.services import surrogate_service, email_service
+    from app.schemas.surrogate import SurrogateCreate
+    from app.db.enums import SurrogateSource
 
     # Create a case
-    case_data = CaseCreate(
+    case_data = SurrogateCreate(
         full_name="Test Case",
         email="test@example.com",
-        source=CaseSource.MANUAL,
+        source=SurrogateSource.MANUAL,
     )
-    case = case_service.create_case(db, test_org.id, test_user.id, case_data)
+    case = surrogate_service.create_surrogate(db, test_org.id, test_user.id, case_data)
 
     # Create a template
     template = email_service.create_template(
@@ -86,7 +84,7 @@ async def test_send_email_no_provider_returns_error(
 
     # Send with auto provider (no providers available)
     response = await authed_client.post(
-        f"/cases/{case.id}/send-email",
+        f"/surrogates/{case.id}/send-email",
         json={"template_id": str(template.id), "provider": "auto"},
     )
 

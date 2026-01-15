@@ -5,7 +5,7 @@ Tests for AI workflow generation and action execution.
 import uuid
 
 from app.core.encryption import hash_email
-from app.db.models import Case, EntityNote, Task, EmailTemplate, PipelineStage
+from app.db.models import Surrogate, EntityNote, Task, EmailTemplate, PipelineStage
 from app.services.ai_workflow_service import GeneratedWorkflow, validate_workflow
 from app.services.ai_action_executor import (
     AddNoteExecutor,
@@ -40,7 +40,7 @@ class TestWorkflowValidation:
         """Should pass with valid trigger type and action."""
         workflow = GeneratedWorkflow(
             name="Test Workflow",
-            trigger_type="case_created",
+            trigger_type="surrogate_created",
             actions=[{"action_type": "add_note", "content": "test note"}],
         )
         result = validate_workflow(db, test_org.id, workflow)
@@ -84,7 +84,7 @@ class TestWorkflowValidation:
         """Workflow must have at least one action."""
         workflow = GeneratedWorkflow(
             name="No Actions",
-            trigger_type="case_created",
+            trigger_type="surrogate_created",
             actions=[],
         )
         result = validate_workflow(db, test_org.id, workflow)
@@ -95,7 +95,7 @@ class TestWorkflowValidation:
         """Should fail with invalid action type."""
         workflow = GeneratedWorkflow(
             name="Invalid Action",
-            trigger_type="case_created",
+            trigger_type="surrogate_created",
             actions=[{"action_type": "invalid_action"}],
         )
         result = validate_workflow(db, test_org.id, workflow)
@@ -106,7 +106,7 @@ class TestWorkflowValidation:
         """Should fail when action missing required field."""
         workflow = GeneratedWorkflow(
             name="Missing Field",
-            trigger_type="case_created",
+            trigger_type="surrogate_created",
             actions=[{"action_type": "add_note"}],  # Missing content
         )
         result = validate_workflow(db, test_org.id, workflow)
@@ -117,10 +117,8 @@ class TestWorkflowValidation:
         """Should fail with invalid condition field."""
         workflow = GeneratedWorkflow(
             name="Invalid Condition",
-            trigger_type="case_created",
-            conditions=[
-                {"field": "invalid_field", "operator": "equals", "value": "test"}
-            ],
+            trigger_type="surrogate_created",
+            conditions=[{"field": "invalid_field", "operator": "equals", "value": "test"}],
             actions=[{"action_type": "add_note", "content": "test"}],
         )
         result = validate_workflow(db, test_org.id, workflow)
@@ -131,7 +129,7 @@ class TestWorkflowValidation:
         """Should fail with invalid condition logic."""
         workflow = GeneratedWorkflow(
             name="Invalid Logic",
-            trigger_type="case_created",
+            trigger_type="surrogate_created",
             condition_logic="INVALID",
             actions=[{"action_type": "add_note", "content": "test"}],
         )
@@ -143,7 +141,7 @@ class TestWorkflowValidation:
         """Should fail with non-existent template ID."""
         workflow = GeneratedWorkflow(
             name="Bad Template",
-            trigger_type="case_created",
+            trigger_type="surrogate_created",
             actions=[{"action_type": "send_email", "template_id": str(uuid.uuid4())}],
         )
         result = validate_workflow(db, test_org.id, workflow)
@@ -165,7 +163,7 @@ class TestWorkflowValidation:
 
         workflow = GeneratedWorkflow(
             name="Valid Template",
-            trigger_type="case_created",
+            trigger_type="surrogate_created",
             actions=[{"action_type": "send_email", "template_id": str(template.id)}],
         )
         result = validate_workflow(db, test_org.id, workflow)
@@ -190,24 +188,20 @@ class TestAddNoteExecutor:
     def test_validate_with_content(self, db, test_user, test_org):
         """Should pass with content."""
         executor = AddNoteExecutor()
-        valid, error = executor.validate(
-            {"content": "test note"}, db, test_user.id, test_org.id
-        )
+        valid, error = executor.validate({"content": "test note"}, db, test_user.id, test_org.id)
         assert valid
         assert error is None
 
     def test_validate_accepts_body_alias(self, db, test_user, test_org):
         """Should accept 'body' as alias for content."""
         executor = AddNoteExecutor()
-        valid, error = executor.validate(
-            {"body": "test note"}, db, test_user.id, test_org.id
-        )
+        valid, error = executor.validate({"body": "test note"}, db, test_user.id, test_org.id)
         assert valid
 
     def test_execute_creates_note(self, db, test_user, test_org, default_stage):
         """Should create a note on the case."""
         normalized_email = normalize_email("test@example.com")
-        case = Case(
+        case = Surrogate(
             id=uuid.uuid4(),
             organization_id=test_org.id,
             stage_id=default_stage.id,
@@ -216,7 +210,7 @@ class TestAddNoteExecutor:
             email=normalized_email,
             email_hash=hash_email(normalized_email),
             source="manual",
-            case_number=f"C-{uuid.uuid4().hex[:6]}",
+            surrogate_number=f"C-{uuid.uuid4().hex[:6]}",
             owner_type="user",
             owner_id=test_user.id,
         )
@@ -231,11 +225,7 @@ class TestAddNoteExecutor:
         assert result["success"]
         assert "note_id" in result
 
-        note = (
-            db.query(EntityNote)
-            .filter(EntityNote.id == uuid.UUID(result["note_id"]))
-            .first()
-        )
+        note = db.query(EntityNote).filter(EntityNote.id == uuid.UUID(result["note_id"])).first()
         assert note is not None
         assert "AI generated note" in note.content
 
@@ -253,15 +243,13 @@ class TestCreateTaskExecutor:
     def test_validate_with_title(self, db, test_user, test_org):
         """Should pass with title."""
         executor = CreateTaskExecutor()
-        valid, error = executor.validate(
-            {"title": "Follow up"}, db, test_user.id, test_org.id
-        )
+        valid, error = executor.validate({"title": "Follow up"}, db, test_user.id, test_org.id)
         assert valid
 
     def test_execute_creates_task(self, db, test_user, test_org, default_stage):
         """Should create a task for the case."""
         normalized_email = normalize_email("test@example.com")
-        case = Case(
+        case = Surrogate(
             id=uuid.uuid4(),
             organization_id=test_org.id,
             stage_id=default_stage.id,
@@ -270,7 +258,7 @@ class TestCreateTaskExecutor:
             email=normalized_email,
             email_hash=hash_email(normalized_email),
             source="manual",
-            case_number=f"C-{uuid.uuid4().hex[:6]}",
+            surrogate_number=f"C-{uuid.uuid4().hex[:6]}",
             owner_type="user",
             owner_id=test_user.id,
         )
@@ -292,7 +280,7 @@ class TestCreateTaskExecutor:
         task = db.query(Task).filter(Task.id == uuid.UUID(result["task_id"])).first()
         assert task is not None
         assert task.title == "Follow up call"
-        assert task.case_id == case.id
+        assert task.surrogate_id == case.id
 
 
 class TestUpdateStatusExecutor:
@@ -330,7 +318,7 @@ class TestUpdateStatusExecutor:
         db.flush()
 
         normalized_email = normalize_email("test@example.com")
-        case = Case(
+        case = Surrogate(
             id=uuid.uuid4(),
             organization_id=test_org.id,
             stage_id=default_stage.id,
@@ -339,7 +327,7 @@ class TestUpdateStatusExecutor:
             email=normalized_email,
             email_hash=hash_email(normalized_email),
             source="manual",
-            case_number=f"C-{uuid.uuid4().hex[:6]}",
+            surrogate_number=f"C-{uuid.uuid4().hex[:6]}",
             owner_type="user",
             owner_id=test_user.id,
         )
@@ -355,9 +343,7 @@ class TestUpdateStatusExecutor:
         assert result["new_stage_id"] == str(new_stage.id)
 
         # Check case in-memory before refresh
-        assert case.stage_id == new_stage.id, (
-            "In-memory stage_id mismatch. Case re-queried?"
-        )
+        assert case.stage_id == new_stage.id, "In-memory stage_id mismatch. Case re-queried?"
         assert case.status_label == "In Progress"
 
 
@@ -397,17 +383,17 @@ class TestActionPermissions:
     """Tests for action permission mapping."""
 
     def test_add_note_permission(self):
-        """add_note requires edit_case_notes."""
-        assert ACTION_PERMISSIONS["add_note"] == "edit_case_notes"
+        """add_note requires edit_surrogate_notes."""
+        assert ACTION_PERMISSIONS["add_note"] == "edit_surrogate_notes"
 
     def test_create_task_permission(self):
         """create_task requires create_tasks."""
         assert ACTION_PERMISSIONS["create_task"] == "create_tasks"
 
     def test_update_status_permission(self):
-        """update_status requires change_case_status."""
-        assert ACTION_PERMISSIONS["update_status"] == "change_case_status"
+        """update_status requires change_surrogate_status."""
+        assert ACTION_PERMISSIONS["update_status"] == "change_surrogate_status"
 
     def test_send_email_permission(self):
-        """send_email requires edit_cases."""
-        assert ACTION_PERMISSIONS["send_email"] == "edit_cases"
+        """send_email requires edit_surrogates."""
+        assert ACTION_PERMISSIONS["send_email"] == "edit_surrogates"

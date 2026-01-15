@@ -1,23 +1,23 @@
 # Surrogacy CRM Platform
 
-**Version:** 0.18.1 | **Last Updated:** January 13, 2026
+**Version:** 0.16.0 | **Last Updated:** January 15, 2026
 
-A modern, multi-tenant CRM platform purpose-built for surrogacy agencies. Manage cases from lead intake through delivery with customizable pipelines, intended parent matching, AI-powered assistance, and comprehensive automation.
+A modern, multi-tenant CRM platform purpose-built for surrogacy agencies. Manage surrogates from lead intake through delivery with customizable pipelines, intended parent matching, AI-powered assistance, and comprehensive automation.
 
 ---
 
 ## ✨ Key Features
 
-### Case Management
+### Surrogate Management
 - **Customizable Pipelines** — Define stages, colors, and workflows per organization
-- **Case Handoff Workflow** — Seamless intake-to-case-manager transitions
-- **Activity Logging** — Complete audit trail of all case actions
+- **Surrogate Claim Workflow** — Intake-to-case-manager claim flow via queues
+- **Activity Logging** — Complete audit trail of all surrogate actions
 - **Queue System** — Salesforce-style claim/release for workload distribution
 
 ### Form Builder
 - **Dynamic Forms** — Create multi-page application forms with drag-and-drop
 - **Secure Public Links** — Token-based form access for applicants
-- **Auto-Mapping** — Form submissions auto-populate case fields on approval
+- **Auto-Mapping** — Form submissions auto-populate surrogate fields on approval
 - **File Uploads** — Secure document collection with virus scanning
 
 ### Matching & Coordination
@@ -33,9 +33,9 @@ A modern, multi-tenant CRM platform purpose-built for surrogacy agencies. Manage
 
 ### AI Assistant (Optional)
 - **BYOK Model** — Bring your own API key (OpenAI, etc.)
-- **Case Summarization** — AI-generated case and interview summaries
+- **Surrogate Summarization** — AI-generated surrogate and interview summaries
 - **Schedule Parsing** — Extract meeting intent into tasks or appointments
-- **Smart Task Creation** — Suggest tasks from case and match context
+- **Smart Task Creation** — Suggest tasks from surrogate and match context
 - **Email Drafting** — Context-aware email composition
 - **Dashboard Insights** — Smart analytics recommendations
 
@@ -244,7 +244,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 | Category | Models |
 |----------|--------|
 | **Auth** | Organization, User, Membership, AuthIdentity, OrgInvite, RolePermission |
-| **Cases** | Case, CaseStatusHistory, CaseActivityLog, MetaLead, CaseImport |
+| **Surrogates** | Surrogate, SurrogateStatusHistory, SurrogateActivityLog, MetaLead, SurrogateImport |
 | **Relationships** | IntendedParent, Match, MatchEvent |
 | **Tasks** | Task, EntityNote, Attachment |
 | **Forms** | Form, FormSubmission, FormSubmissionToken, FormFieldMapping |
@@ -272,7 +272,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 | Role | Description |
 |------|-------------|
 | `intake_specialist` | Lead intake and initial processing |
-| `case_manager` | Full case management access |
+| `case_manager` | Full surrogate management access |
 | `admin` | Administrative access, analytics, team management |
 | `developer` | Platform administration, all permissions |
 

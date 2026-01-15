@@ -1,7 +1,7 @@
 import type { ReactNode, ButtonHTMLAttributes } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { CaseInterviewTab } from '../components/cases/interviews/CaseInterviewTab'
+import { SurrogateInterviewTab } from '../components/surrogates/interviews/SurrogateInterviewTab'
 
 const mockUseInterviews = vi.fn()
 const mockUseInterview = vi.fn()
@@ -28,7 +28,7 @@ vi.mock('@/components/rich-text-editor', () => ({
     ),
 }))
 
-vi.mock('@/components/cases/interviews/InterviewVersionHistory', () => ({
+vi.mock('@/components/surrogates/interviews/InterviewVersionHistory', () => ({
     InterviewVersionHistory: () => <div data-testid="interview-version-history" />,
 }))
 
@@ -77,7 +77,7 @@ vi.mock('@/components/ui/dialog', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-interviews', () => ({
-    useInterviews: (caseId: string) => mockUseInterviews(caseId),
+    useInterviews: (surrogateId: string) => mockUseInterviews(surrogateId),
     useInterview: (interviewId: string) => mockUseInterview(interviewId),
     useInterviewNotes: (interviewId: string) => mockUseInterviewNotes(interviewId),
     useInterviewAttachments: (interviewId: string) => mockUseInterviewAttachments(interviewId),
@@ -92,7 +92,7 @@ vi.mock('@/lib/hooks/use-interviews', () => ({
     useSummarizeInterview: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
-describe('CaseInterviewTab', () => {
+describe('SurrogateInterviewTab', () => {
     const now = new Date().toISOString()
     const interviewList = [
         {
@@ -112,7 +112,7 @@ describe('CaseInterviewTab', () => {
     ]
     const interviewDetail = {
         id: 'i1',
-        case_id: 'c1',
+        surrogate_id: 'c1',
         interview_type: 'phone',
         conducted_at: now,
         conducted_by_user_id: 'u1',
@@ -169,14 +169,14 @@ describe('CaseInterviewTab', () => {
     it('renders empty state when no interviews exist', () => {
         mockUseInterviews.mockReturnValue({ data: [], isLoading: false })
 
-        render(<CaseInterviewTab caseId="c1" />)
+        render(<SurrogateInterviewTab surrogateId="c1" />)
 
         expect(screen.getByText('No Interviews')).toBeDefined()
         expect(screen.getByRole('button', { name: /add interview/i })).toBeDefined()
     })
 
     it('requests transcription for audio attachments', async () => {
-        render(<CaseInterviewTab caseId="c1" />)
+        render(<SurrogateInterviewTab surrogateId="c1" />)
 
         fireEvent.click(screen.getAllByText('Phone')[0])
 

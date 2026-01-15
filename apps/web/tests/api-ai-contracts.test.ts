@@ -53,8 +53,8 @@ describe('AI API client contract', () => {
             status: 'completed',
             result: { content: 'ok', proposed_actions: [], tokens_used: { prompt: 0, completion: 0, total: 0 } },
         })
-        await sendChatMessage({ entity_type: 'case', entity_id: 'c1', message: 'hello' })
-        expect(api.post).toHaveBeenCalledWith('/ai/chat/async', { entity_type: 'case', entity_id: 'c1', message: 'hello' })
+        await sendChatMessage({ entity_type: 'surrogate', entity_id: 's1', message: 'hello' })
+        expect(api.post).toHaveBeenCalledWith('/ai/chat/async', { entity_type: 'surrogate', entity_id: 's1', message: 'hello' })
         expect(api.get).toHaveBeenCalledWith('/ai/chat/jobs/j1')
     })
 

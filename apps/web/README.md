@@ -30,7 +30,7 @@ pnpm build
 app/
 ├── (app)/           # Authenticated routes (sidebar layout)
 │   ├── dashboard/
-│   ├── cases/
+│   ├── surrogates/
 │   ├── intended-parents/
 │   ├── tasks/
 │   ├── reports/

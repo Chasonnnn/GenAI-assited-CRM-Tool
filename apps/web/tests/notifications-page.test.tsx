@@ -31,11 +31,11 @@ describe('NotificationsPage', () => {
                 items: [
                     {
                         id: 'n1',
-                        type: 'case_assigned',
-                        title: 'Case assigned',
-                        body: 'You have been assigned a case.',
-                        entity_type: 'case',
-                        entity_id: 'c1',
+                        type: 'surrogate_assigned',
+                        title: 'Surrogate assigned',
+                        body: 'You have been assigned a surrogate.',
+                        entity_type: 'surrogate',
+                        entity_id: 's1',
                         read_at: null,
                         created_at: new Date().toISOString(),
                     },
@@ -65,8 +65,8 @@ describe('NotificationsPage', () => {
                         title: 'Overdue task',
                         due_date: yesterday.toISOString().split('T')[0],
                         owner_name: 'John Doe',
-                        case_id: 'c1',
-                        case_number: '00042',
+                        surrogate_id: 's1',
+                        surrogate_number: '00042',
                     },
                 ],
             },
@@ -96,9 +96,9 @@ describe('NotificationsPage', () => {
 
     it('marks a notification as read and navigates', () => {
         render(<NotificationsPage />)
-        fireEvent.click(screen.getByText('Case assigned'))
+        fireEvent.click(screen.getByText('Surrogate assigned'))
         expect(mockMarkRead).toHaveBeenCalledWith('n1')
-        expect(mockPush).toHaveBeenCalledWith('/cases/c1')
+        expect(mockPush).toHaveBeenCalledWith('/surrogates/s1')
     })
 
     it('renders overdue tasks section', () => {

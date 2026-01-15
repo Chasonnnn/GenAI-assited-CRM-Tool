@@ -8,17 +8,17 @@ import pytest
 from httpx import AsyncClient
 
 from app.core.encryption import hash_email
-from app.db.models import Case, IntendedParent, Match
+from app.db.models import Surrogate, IntendedParent, Match
 from app.utils.normalization import normalize_email
 
 
 def _create_case(db, org_id, user_id, stage):
     email = f"case-{uuid.uuid4().hex[:8]}@example.com"
     normalized_email = normalize_email(email)
-    case = Case(
+    case = Surrogate(
         id=uuid.uuid4(),
         organization_id=org_id,
-        case_number=f"C{uuid.uuid4().hex[:9]}",
+        surrogate_number=f"C{uuid.uuid4().hex[:9]}",
         stage_id=stage.id,
         status_label=stage.label,
         owner_type="user",
@@ -54,7 +54,7 @@ def _create_match(db, org_id, user_id, stage):
     match = Match(
         id=uuid.uuid4(),
         organization_id=org_id,
-        case_id=case.id,
+        surrogate_id=case.id,
         intended_parent_id=ip.id,
         proposed_by_user_id=user_id,
     )

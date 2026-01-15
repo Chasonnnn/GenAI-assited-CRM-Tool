@@ -60,8 +60,7 @@ def test_export_job_redacts_phi(db, test_org, test_user, export_settings):
             "note": "Call me at 415-555-1234",
         },
         ip_address="10.20.30.40",
-        created_at=datetime.now(timezone.utc)
-        - timedelta(seconds=5),  # Earlier to ensure first
+        created_at=datetime.now(timezone.utc) - timedelta(seconds=5),  # Earlier to ensure first
     )
 
     start_date = datetime.now(timezone.utc) - timedelta(days=1)
@@ -102,10 +101,9 @@ def test_export_job_full_mode_keeps_values(db, test_org, test_user, export_setti
         db,
         test_org.id,
         test_user.id,
-        target_type="case",
+        target_type="surrogate",
         details={"email": "full@example.com"},
-        created_at=datetime.now(timezone.utc)
-        - timedelta(seconds=5),  # Earlier to ensure first
+        created_at=datetime.now(timezone.utc) - timedelta(seconds=5),  # Earlier to ensure first
     )
 
     start_date = datetime.now(timezone.utc) - timedelta(days=1)
@@ -146,7 +144,7 @@ def test_legal_hold_blocks_purge_preview(db, test_org, test_user):
 
     old_task = Task(
         organization_id=test_org.id,
-        case_id=None,
+        surrogate_id=None,
         created_by_user_id=test_user.id,
         owner_type="user",
         owner_id=test_user.id,
@@ -204,16 +202,16 @@ def test_export_empty_result(db, test_org, test_user, export_settings):
 
 
 def test_specific_entity_legal_hold_blocks_related(db, test_org, test_user):
-    """Legal hold on specific case blocks purge for that case only."""
-    from app.db.models import Case, Pipeline, PipelineStage
+    """Legal hold on specific surrogate blocks purge for that surrogate only."""
+    from app.db.models import Surrogate, Pipeline, PipelineStage
     import uuid
 
-    # Create retention policy for archived cases
+    # Create retention policy for archived surrogates
     compliance_service.upsert_retention_policy(
         db=db,
         org_id=test_org.id,
         user_id=test_user.id,
-        entity_type="cases",
+        entity_type="surrogates",
         retention_days=1,
         is_active=True,
     )
@@ -242,57 +240,57 @@ def test_specific_entity_legal_hold_blocks_related(db, test_org, test_user):
     db.add(stage)
     db.flush()
 
-    # Create two old archived cases
-    case1_email = normalize_email("case1@test.com")
-    case1 = Case(
+    # Create two old archived surrogates
+    surrogate1_email = normalize_email("surrogate1@test.com")
+    surrogate1 = Surrogate(
         organization_id=test_org.id,
-        case_number="TEST-001",
+        surrogate_number="TEST-001",
         stage_id=stage.id,
         status_label=stage.label,
-        full_name="Case One",
-        email=case1_email,
-        email_hash=hash_email(case1_email),
+        full_name="Surrogate One",
+        email=surrogate1_email,
+        email_hash=hash_email(surrogate1_email),
         source="manual",
         created_by_user_id=test_user.id,
         owner_type="user",
         owner_id=test_user.id,
         archived_at=datetime.now(timezone.utc) - timedelta(days=30),
     )
-    case2_email = normalize_email("case2@test.com")
-    case2 = Case(
+    surrogate2_email = normalize_email("surrogate2@test.com")
+    surrogate2 = Surrogate(
         organization_id=test_org.id,
-        case_number="TEST-002",
+        surrogate_number="TEST-002",
         stage_id=stage.id,
         status_label=stage.label,
-        full_name="Case Two",
-        email=case2_email,
-        email_hash=hash_email(case2_email),
+        full_name="Surrogate Two",
+        email=surrogate2_email,
+        email_hash=hash_email(surrogate2_email),
         source="manual",
         created_by_user_id=test_user.id,
         owner_type="user",
         owner_id=test_user.id,
         archived_at=datetime.now(timezone.utc) - timedelta(days=30),
     )
-    db.add_all([case1, case2])
+    db.add_all([surrogate1, surrogate2])
     db.commit()
-    db.refresh(case1)
-    db.refresh(case2)
+    db.refresh(surrogate1)
+    db.refresh(surrogate2)
 
-    # Create legal hold on case1 only
+    # Create legal hold on surrogate1 only
     compliance_service.create_legal_hold(
         db=db,
         org_id=test_org.id,
         user_id=test_user.id,
-        entity_type="case",
-        entity_id=case1.id,
+        entity_type="surrogate",
+        entity_id=surrogate1.id,
         reason="Litigation hold",
     )
 
-    # Preview should show 1 case (case2 is purgeable, case1 is protected)
+    # Preview should show 1 surrogate (surrogate2 is purgeable, surrogate1 is protected)
     results = compliance_service.preview_purge(db, test_org.id)
-    case_result = next((r for r in results if r.entity_type == "cases"), None)
-    assert case_result is not None
-    assert case_result.count == 1  # Only case2
+    surrogate_result = next((r for r in results if r.entity_type == "surrogates"), None)
+    assert surrogate_result is not None
+    assert surrogate_result.count == 1  # Only surrogate2
 
 
 def test_rate_limit_exceeded(db, test_org, test_user, export_settings):

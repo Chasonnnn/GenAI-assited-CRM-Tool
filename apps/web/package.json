@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "gen:stages": "cd ../.. && apps/api/.venv/bin/python scripts/gen_stage_map.py",
+    "prebuild": "pnpm run gen:stages",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
