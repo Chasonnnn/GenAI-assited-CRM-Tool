@@ -63,13 +63,11 @@ export default function AuditLogPage() {
     const perPage = 20
     const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
 
-    const EXPORT_FORMATS = ["csv", "json"] as const
-    type ExportFormat = (typeof EXPORT_FORMATS)[number]
+    type ExportFormat = "csv" | "json"
     const isExportFormat = (value: string | null): value is ExportFormat =>
         value === "csv" || value === "json"
 
-    const REDACT_MODES = ["redacted", "full"] as const
-    type RedactMode = (typeof REDACT_MODES)[number]
+    type RedactMode = "redacted" | "full"
     const isRedactMode = (value: string | null): value is RedactMode =>
         value === "redacted" || value === "full"
 

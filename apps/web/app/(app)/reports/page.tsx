@@ -13,7 +13,7 @@ import {
     ChartLegend,
     ChartLegendContent,
 } from "@/components/ui/chart"
-import { useAnalyticsSummary, useCasesByStatus, useCasesByAssignee, useCasesTrend, useMetaPerformance, useFunnelCompare, useCasesByStateCompare, useCampaigns, useSpendTotals, usePerformanceByUser } from "@/lib/hooks/use-analytics"
+import { useAnalyticsSummary, useSurrogatesByStatus, useSurrogatesByAssignee, useSurrogatesTrend, useMetaPerformance, useFunnelCompare, useSurrogatesByStateCompare, useCampaigns, useSpendTotals, usePerformanceByUser } from "@/lib/hooks/use-analytics"
 import { FunnelChart } from "@/components/charts/funnel-chart"
 import { USMapChart } from "@/components/charts/us-map-chart"
 import { TeamPerformanceTable } from "@/components/reports/TeamPerformanceTable"
@@ -27,16 +27,16 @@ import { toast } from "sonner"
 import { formatLocalDate } from "@/lib/utils/date"
 
 // Chart configs
-const casesOverviewConfig = {
-    count: { label: "Cases" },
+const surrogatesOverviewConfig = {
+    count: { label: "Surrogates" },
 }
 
 const monthlyTrendsConfig = {
-    count: { label: "Cases", color: "#3b82f6" },
+    count: { label: "Surrogates", color: "#3b82f6" },
 }
 
-const casesByAssigneeConfig = {
-    count: { label: "Cases" },
+const surrogatesByAssigneeConfig = {
+    count: { label: "Surrogates" },
 }
 
 // Color palette for charts
@@ -98,8 +98,7 @@ export default function ReportsPage() {
     })
     const [selectedCampaign, setSelectedCampaign] = useState<string>('')
     const [isExporting, setIsExporting] = useState(false)
-    const PERFORMANCE_MODES = ["cohort", "activity"] as const
-    type PerformanceMode = (typeof PERFORMANCE_MODES)[number]
+    type PerformanceMode = "cohort" | "activity"
     const isPerformanceMode = (value: string | null): value is PerformanceMode =>
         value === "cohort" || value === "activity"
 
@@ -149,9 +148,9 @@ export default function ReportsPage() {
     }
 
     const { data: summary, isLoading: summaryLoading, isError: summaryError } = useAnalyticsSummary(dateParams)
-    const { data: byStatus, isLoading: byStatusLoading, isError: byStatusError } = useCasesByStatus()
-    const { data: byAssignee, isLoading: byAssigneeLoading, isError: byAssigneeError } = useCasesByAssignee()
-    const { data: trend, isLoading: trendLoading, isError: trendError } = useCasesTrend(dateParams)
+    const { data: byStatus, isLoading: byStatusLoading, isError: byStatusError } = useSurrogatesByStatus()
+    const { data: byAssignee, isLoading: byAssigneeLoading, isError: byAssigneeError } = useSurrogatesByAssignee()
+    const { data: trend, isLoading: trendLoading, isError: trendError } = useSurrogatesTrend(dateParams)
     const { data: metaPerf, isLoading: metaLoading, isError: metaError } = useMetaPerformance(dateParams)
     const { data: spendTotals, isLoading: spendLoading, isError: spendError } = useSpendTotals(dateParams)
 
@@ -161,7 +160,7 @@ export default function ReportsPage() {
         ...dateParams,
         ...(selectedCampaign ? { ad_id: selectedCampaign } : {}),
     })
-    const { data: byState, isLoading: byStateLoading, isError: byStateError } = useCasesByStateCompare({
+    const { data: byState, isLoading: byStateLoading, isError: byStateError } = useSurrogatesByStateCompare({
         ...dateParams,
         ...(selectedCampaign ? { ad_id: selectedCampaign } : {}),
     })
@@ -219,7 +218,7 @@ export default function ReportsPage() {
         return assigneeChartData.reduce((max, item) => item.count > max.count ? item : max, first)
     }, [assigneeChartData])
 
-    const totalCasesInPeriod = useMemo(() => {
+    const totalSurrogatesInPeriod = useMemo(() => {
         return trendChartData.reduce((sum, d) => sum + d.count, 0)
     }, [trendChartData])
 
@@ -255,9 +254,9 @@ export default function ReportsPage() {
                 const dipDelta = (average - minPoint.count) / average
 
                 if (spikeDelta >= 0.6) {
-                    anomalyText = `Anomaly: spike on ${formatShortDate(maxPoint.date)} (${maxPoint.count} cases, +${Math.round(spikeDelta * 100)}% vs avg).`
+                    anomalyText = `Anomaly: spike on ${formatShortDate(maxPoint.date)} (${maxPoint.count} surrogates, +${Math.round(spikeDelta * 100)}% vs avg).`
                 } else if (dipDelta >= 0.6) {
-                    anomalyText = `Anomaly: dip on ${formatShortDate(minPoint.date)} (${minPoint.count} cases, -${Math.round(dipDelta * 100)}% vs avg).`
+                    anomalyText = `Anomaly: dip on ${formatShortDate(minPoint.date)} (${minPoint.count} surrogates, -${Math.round(dipDelta * 100)}% vs avg).`
                 } else {
                     anomalyText = "Anomalies: no major spikes or dips."
                 }
@@ -269,7 +268,7 @@ export default function ReportsPage() {
 
         const bottleneckText =
             topStatus && totalStatusCount > 0
-                ? `Bottleneck: ${topStatus.status} holds ${Math.round((topStatus.count / totalStatusCount) * 100)}% of active cases.`
+                ? `Bottleneck: ${topStatus.status} holds ${Math.round((topStatus.count / totalStatusCount) * 100)}% of active surrogates.`
                 : "Bottleneck: no dominant stage yet."
 
         return {
@@ -396,7 +395,7 @@ export default function ReportsPage() {
                 <div className="grid gap-4 md:grid-cols-4">
                     <Card className="animate-in fade-in-50 duration-500">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Cases</CardTitle>
+                            <CardTitle className="text-sm font-medium">Total Surrogates</CardTitle>
                             <TrendingUpIcon className="size-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
@@ -409,8 +408,8 @@ export default function ReportsPage() {
                                 </div>
                             ) : (
                                 <>
-                                    <div className="text-2xl font-bold">{summary?.total_cases ?? 0}</div>
-                                    <p className="text-xs text-muted-foreground">Active cases</p>
+                                    <div className="text-2xl font-bold">{summary?.total_surrogates ?? 0}</div>
+                                    <p className="text-xs text-muted-foreground">Active surrogates</p>
                                 </>
                             )}
                         </CardContent>
@@ -564,10 +563,10 @@ export default function ReportsPage() {
 
                 {/* Charts Grid */}
                 <div className="grid gap-6 md:grid-cols-2">
-                    {/* Cases by Stage */}
+                    {/* Surrogates by Stage */}
                     <Card className="animate-in fade-in-50 duration-500 delay-400">
                         <CardHeader>
-                            <CardTitle>Cases by Stage</CardTitle>
+                            <CardTitle>Surrogates by Stage</CardTitle>
                         </CardHeader>
                         <CardContent>
                             {byStatusLoading ? (
@@ -579,7 +578,7 @@ export default function ReportsPage() {
                                     <AlertCircleIcon className="mr-2 size-4" /> Unable to load data
                                 </div>
                             ) : statusChartData.length > 0 ? (
-                                <ChartContainer config={casesOverviewConfig} className="h-[300px] w-full">
+                                <ChartContainer config={surrogatesOverviewConfig} className="h-[300px] w-full">
                                     <BarChart data={statusChartData}>
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                         <XAxis dataKey="status" tickLine={false} axisLine={false} fontSize={12} />
@@ -597,7 +596,7 @@ export default function ReportsPage() {
                         <CardFooter className="flex-col items-start gap-2">
                             <div className="flex gap-2 leading-none font-medium">
                                 {aiEnabled && <SparklesIcon className="size-4 text-primary" />}
-                                {byStatusError ? 'Unable to load status data' : topStatus ? `${topStatus.status}: ${topStatus.count} cases` : 'No data yet'}
+                                {byStatusError ? 'Unable to load status data' : topStatus ? `${topStatus.status}: ${topStatus.count} surrogates` : 'No data yet'}
                             </div>
                             <div className="text-muted-foreground leading-none">
                                 {byStatusError ? 'Please try again later' : 'Current distribution by stage'}
@@ -605,10 +604,10 @@ export default function ReportsPage() {
                         </CardFooter>
                     </Card>
 
-                    {/* Cases Trend */}
+                    {/* Surrogates Trend */}
                     <Card className="animate-in fade-in-50 duration-500 delay-500">
                         <CardHeader>
-                            <CardTitle>Cases Trend</CardTitle>
+                            <CardTitle>Surrogates Trend</CardTitle>
                         </CardHeader>
                         <CardContent>
                             {trendLoading ? (
@@ -652,7 +651,7 @@ export default function ReportsPage() {
                                         {computeTrendPercentage >= 0 ? <TrendingUpIcon className="size-4" /> : <TrendingDownIcon className="size-4" />}
                                     </>
                                 ) : (
-                                    `${totalCasesInPeriod} cases in period`
+                                    `${totalSurrogatesInPeriod} surrogates in period`
                                 )}
                             </div>
                             <div className="text-muted-foreground leading-none">
@@ -676,7 +675,7 @@ export default function ReportsPage() {
                                     <AlertCircleIcon className="mr-2 size-4" /> Unable to load data
                                 </div>
                             ) : assigneeChartData.length > 0 ? (
-                                <ChartContainer config={casesByAssigneeConfig} className="h-[300px] w-full">
+                                <ChartContainer config={surrogatesByAssigneeConfig} className="h-[300px] w-full">
                                     <BarChart data={assigneeChartData} layout="vertical">
                                         <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                                         <XAxis type="number" tickLine={false} axisLine={false} />
@@ -687,14 +686,14 @@ export default function ReportsPage() {
                                 </ChartContainer>
                             ) : (
                                 <div className="flex h-[300px] items-center justify-center text-muted-foreground">
-                                    <AlertCircleIcon className="mr-2 size-4" /> No assigned cases
+                                    <AlertCircleIcon className="mr-2 size-4" /> No assigned surrogates
                                 </div>
                             )}
                         </CardContent>
                         <CardFooter className="flex-col items-start gap-2">
                             <div className="flex gap-2 leading-none font-medium">
                                 {aiEnabled && <SparklesIcon className="size-4 text-primary" />}
-                                {byAssigneeError ? 'Unable to load team data' : topPerformer ? `Top: ${topPerformer.member} (${topPerformer.count} cases)` : 'No assignments yet'}
+                                {byAssigneeError ? 'Unable to load team data' : topPerformer ? `Top: ${topPerformer.member} (${topPerformer.count} surrogates)` : 'No assignments yet'}
                                 {!byAssigneeError && topPerformer && <TrendingUpIcon className="size-4" />}
                             </div>
                             <div className="text-muted-foreground leading-none">
@@ -785,7 +784,7 @@ export default function ReportsPage() {
                         data={byState}
                         isLoading={byStateLoading}
                         isError={byStateError}
-                        title="Cases by State"
+                        title="Surrogates by State"
                     />
                 </div>
 
@@ -820,8 +819,8 @@ export default function ReportsPage() {
                     </div>
                     <p className="text-sm text-muted-foreground">
                         {performanceMode === 'cohort'
-                            ? 'Showing metrics for cases created within the selected date range, grouped by current owner.'
-                            : 'Showing metrics for cases with status transitions within the selected date range.'}
+                            ? 'Showing metrics for surrogates created within the selected date range, grouped by current owner.'
+                            : 'Showing metrics for surrogates with status transitions within the selected date range.'}
                     </p>
                     <div className="grid gap-6 lg:grid-cols-2">
                         <TeamPerformanceChart

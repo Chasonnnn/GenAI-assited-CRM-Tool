@@ -15,9 +15,9 @@ import {
 import { useMemo, useState } from "react"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis, Cell } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { useCaseStats } from "@/lib/hooks/use-cases"
+import { useSurrogateStats } from "@/lib/hooks/use-surrogates"
 import { useTasks } from "@/lib/hooks/use-tasks"
-import { useCasesTrend, useCasesByStatus } from "@/lib/hooks/use-analytics"
+import { useSurrogatesTrend, useSurrogatesByStatus } from "@/lib/hooks/use-analytics"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useAuth } from "@/lib/auth-context"
 import { useDashboardSocket } from "@/lib/hooks/use-dashboard-socket"
@@ -39,16 +39,15 @@ function getFirstName(displayName: string | undefined): string {
 
 export default function DashboardPage() {
   const { user } = useAuth()
-  const { data: stats, isLoading: statsLoading, isError: statsError, refetch: refetchStats } = useCaseStats()
+  const { data: stats, isLoading: statsLoading, isError: statsError, refetch: refetchStats } = useSurrogateStats()
   const { data: tasksData, isLoading: tasksLoading, isError: tasksError, refetch: refetchTasks } = useTasks({ my_tasks: true, is_completed: false, per_page: 5, exclude_approvals: true })
-  const TREND_PERIODS = ["day", "week", "month"] as const
-  type TrendPeriod = (typeof TREND_PERIODS)[number]
+  type TrendPeriod = "day" | "week" | "month"
   const isTrendPeriod = (value: string | null): value is TrendPeriod =>
     value === "day" || value === "week" || value === "month"
 
   const [trendPeriod, setTrendPeriod] = useState<TrendPeriod>('day')
-  const { data: trendData, isLoading: trendLoading, isError: trendError, refetch: refetchTrend } = useCasesTrend({ period: trendPeriod })
-  const { data: statusData, isLoading: statusLoading, isError: statusError, refetch: refetchStatus } = useCasesByStatus()
+  const { data: trendData, isLoading: trendLoading, isError: trendError, refetch: refetchTrend } = useSurrogatesTrend({ period: trendPeriod })
+  const { data: statusData, isLoading: statusLoading, isError: statusError, refetch: refetchStatus } = useSurrogatesByStatus()
   const { data: defaultPipeline } = useDefaultPipeline()
 
   // WebSocket for real-time updates (falls back to polling if disconnected)
@@ -71,7 +70,7 @@ export default function DashboardPage() {
   // Transform trend data for chart
   const chartTrendData = trendData?.map((item: { date: string; count: number }) => ({
     date: parseDateInput(item.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-    cases: item.count,
+    surrogates: item.count,
   })) || []
 
   const stageByLabel = useMemo(() => {
@@ -101,11 +100,11 @@ export default function DashboardPage() {
 
       {/* Stats Cards - 4 columns */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        {/* Active Cases */}
+        {/* Active Surrogates */}
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Active Cases</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Active Surrogates</CardTitle>
               {stats?.week_change_pct !== null && stats?.week_change_pct !== undefined && (
                 <div className={`flex items-center gap-1 text-xs font-medium ${(stats.week_change_pct || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {(stats.week_change_pct || 0) >= 0 ? <TrendingUpIcon className="h-3 w-3" /> : <TrendingDownIcon className="h-3 w-3" />}
@@ -275,13 +274,13 @@ export default function DashboardPage() {
 
       {/* Charts Section - Two horizontal */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Cases Trend Chart */}
+        {/* Surrogates Trend Chart */}
         <Card>
           <CardHeader className="pb-4 flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="text-lg">Cases Trend</CardTitle>
+              <CardTitle className="text-lg">Surrogates Trend</CardTitle>
               <CardDescription className="text-sm">
-                {trendPeriod === 'day' ? 'Daily' : trendPeriod === 'week' ? 'Weekly' : 'Monthly'} new cases
+                {trendPeriod === 'day' ? 'Daily' : trendPeriod === 'week' ? 'Weekly' : 'Monthly'} new surrogates
               </CardDescription>
             </div>
             <Select
@@ -329,8 +328,8 @@ export default function DashboardPage() {
             ) : (
               <ChartContainer
                 config={{
-                  cases: {
-                    label: "Cases",
+                  surrogates: {
+                    label: "Surrogates",
                     color: "var(--chart-1)",
                   },
                 }}
@@ -353,11 +352,11 @@ export default function DashboardPage() {
                     content={<ChartTooltipContent indicator="line" />}
                   />
                   <Area
-                    dataKey="cases"
+                    dataKey="surrogates"
                     type="natural"
-                    fill="var(--color-cases)"
+                    fill="var(--color-surrogates)"
                     fillOpacity={0.4}
-                    stroke="var(--color-cases)"
+                    stroke="var(--color-surrogates)"
                     strokeWidth={2}
                   />
                 </AreaChart>
@@ -366,10 +365,10 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Cases by Stage Chart */}
+        {/* Surrogates by Stage Chart */}
         <Card>
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg">Cases by Stage</CardTitle>
+            <CardTitle className="text-lg">Surrogates by Stage</CardTitle>
             <CardDescription className="text-sm">Current pipeline distribution</CardDescription>
           </CardHeader>
           <CardContent className="pb-4">
@@ -395,7 +394,7 @@ export default function DashboardPage() {
               <ChartContainer
                 config={{
                   count: {
-                    label: "Cases",
+                    label: "Surrogates",
                     color: "var(--chart-2)",
                   },
                 }}
