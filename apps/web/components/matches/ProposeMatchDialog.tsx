@@ -16,16 +16,16 @@ import { useIntendedParents } from "@/lib/hooks/use-intended-parents"
 interface ProposeMatchDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    caseId: string
-    caseName?: string
+    surrogateId: string
+    surrogateName?: string
     onSuccess?: () => void
 }
 
 export function ProposeMatchDialog({
     open,
     onOpenChange,
-    caseId,
-    caseName,
+    surrogateId,
+    surrogateName,
     onSuccess,
 }: ProposeMatchDialogProps) {
     const [selectedIpId, setSelectedIpId] = useState<string>("")
@@ -42,7 +42,7 @@ export function ProposeMatchDialog({
 
         try {
             await createMatch.mutateAsync({
-                case_id: caseId,
+                surrogate_id: surrogateId,
                 intended_parent_id: selectedIpId,
                 ...(compatibilityScore ? { compatibility_score: parseFloat(compatibilityScore) } : {}),
                 ...(notes.trim() ? { notes: notes.trim() } : {}),
@@ -75,7 +75,7 @@ export function ProposeMatchDialog({
                         Propose Match
                     </DialogTitle>
                     <DialogDescription>
-                        {caseName ? `Create a match proposal for ${caseName}` : "Create a match proposal for this surrogate"}
+                        {surrogateName ? `Create a match proposal for ${surrogateName}` : "Create a match proposal for this surrogate"}
                     </DialogDescription>
                 </DialogHeader>
 

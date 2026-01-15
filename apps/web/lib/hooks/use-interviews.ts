@@ -18,7 +18,7 @@ import type {
 export const interviewKeys = {
     all: ['interviews'] as const,
     lists: () => [...interviewKeys.all, 'list'] as const,
-    forCase: (caseId: string) => [...interviewKeys.lists(), caseId] as const,
+    forSurrogate: (surrogateId: string) => [...interviewKeys.lists(), surrogateId] as const,
     detail: (interviewId: string) => [...interviewKeys.all, 'detail', interviewId] as const,
     versions: (interviewId: string) => [...interviewKeys.detail(interviewId), 'versions'] as const,
     version: (interviewId: string, version: number) => [...interviewKeys.versions(interviewId), version] as const,
@@ -34,13 +34,13 @@ export const interviewKeys = {
 // ============================================================================
 
 /**
- * List interviews for a case.
+ * List interviews for a surrogate.
  */
-export function useInterviews(caseId: string) {
+export function useInterviews(surrogateId: string) {
     return useQuery({
-        queryKey: interviewKeys.forCase(caseId),
-        queryFn: () => interviewsApi.listInterviews(caseId),
-        enabled: !!caseId,
+        queryKey: interviewKeys.forSurrogate(surrogateId),
+        queryFn: () => interviewsApi.listInterviews(surrogateId),
+        enabled: !!surrogateId,
     });
 }
 
@@ -143,10 +143,10 @@ export function useCreateInterview() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ caseId, data }: { caseId: string; data: InterviewCreatePayload }) =>
-            interviewsApi.createInterview(caseId, data),
+        mutationFn: ({ surrogateId, data }: { surrogateId: string; data: InterviewCreatePayload }) =>
+            interviewsApi.createInterview(surrogateId, data),
         onSuccess: (interview) => {
-            queryClient.invalidateQueries({ queryKey: interviewKeys.forCase(interview.case_id) });
+            queryClient.invalidateQueries({ queryKey: interviewKeys.forSurrogate(interview.surrogate_id) });
         },
     });
 }
@@ -162,7 +162,7 @@ export function useUpdateInterview() {
             interviewsApi.updateInterview(interviewId, data),
         onSuccess: (interview) => {
             queryClient.invalidateQueries({ queryKey: interviewKeys.detail(interview.id) });
-            queryClient.invalidateQueries({ queryKey: interviewKeys.forCase(interview.case_id) });
+            queryClient.invalidateQueries({ queryKey: interviewKeys.forSurrogate(interview.surrogate_id) });
             queryClient.invalidateQueries({ queryKey: interviewKeys.versions(interview.id) });
             // Invalidate notes to get recalculated anchors
             queryClient.invalidateQueries({ queryKey: interviewKeys.notes(interview.id) });
@@ -177,10 +177,10 @@ export function useDeleteInterview() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ interviewId, caseId: _caseId }: { interviewId: string; caseId: string }) =>
+        mutationFn: ({ interviewId, surrogateId: _surrogateId }: { interviewId: string; surrogateId: string }) =>
             interviewsApi.deleteInterview(interviewId),
-        onSuccess: (_, { interviewId, caseId }) => {
-            queryClient.invalidateQueries({ queryKey: interviewKeys.forCase(caseId) });
+        onSuccess: (_, { interviewId, surrogateId }) => {
+            queryClient.invalidateQueries({ queryKey: interviewKeys.forSurrogate(surrogateId) });
             queryClient.removeQueries({ queryKey: interviewKeys.detail(interviewId) });
         },
     });
@@ -374,11 +374,11 @@ export function useSummarizeInterview() {
 }
 
 /**
- * Generate AI summary of all interviews for a case.
+ * Generate AI summary of all interviews for a surrogate.
  */
 export function useSummarizeAllInterviews() {
     return useMutation({
-        mutationFn: (caseId: string) => interviewsApi.summarizeAllInterviews(caseId),
+        mutationFn: (surrogateId: string) => interviewsApi.summarizeAllInterviews(surrogateId),
     });
 }
 

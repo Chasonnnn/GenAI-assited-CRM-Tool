@@ -6,8 +6,8 @@ from sqlalchemy import select, and_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
-from app.db.models import Queue, Case, QueueMember, User
-from app.db.enums import CaseActivityType
+from app.db.models import Queue, Surrogate, QueueMember, User
+from app.db.enums import SurrogateActivityType
 from app.db.enums import OwnerType
 from app.services import activity_service
 
@@ -24,20 +24,20 @@ class QueueNotFoundError(QueueServiceError):
     pass
 
 
-class CaseNotFoundError(QueueServiceError):
-    """Case not found."""
+class SurrogateNotFoundError(QueueServiceError):
+    """Surrogate not found."""
 
     pass
 
 
-class CaseAlreadyClaimedError(QueueServiceError):
-    """Case is already claimed by a user (not in a queue)."""
+class SurrogateAlreadyClaimedError(QueueServiceError):
+    """Surrogate is already claimed by a user (not in a queue)."""
 
     pass
 
 
-class CaseNotInQueueError(QueueServiceError):
-    """Case is not in a queue (cannot release)."""
+class SurrogateNotInQueueError(QueueServiceError):
+    """Surrogate is not in a queue (cannot release)."""
 
     pass
 
@@ -73,6 +73,7 @@ class QueueMemberUserNotFoundError(QueueServiceError):
 
 
 DEFAULT_QUEUE_NAME = "Unassigned"
+SURROGATE_POOL_QUEUE_NAME = "Surrogate Pool"
 
 
 # =============================================================================
@@ -162,7 +163,7 @@ def get_or_create_default_queue(db: Session, org_id: UUID) -> Queue:
     """
     Get the system default queue for an org, creating it if missing.
 
-    This is used for system-created/unassigned cases so every case always has an owner.
+    This is used for system-created/unassigned surrogates so every surrogate always has an owner.
     """
     queue = db.execute(
         select(Queue).where(
@@ -201,60 +202,128 @@ def get_or_create_default_queue(db: Session, org_id: UUID) -> Queue:
         raise
 
 
+def get_or_create_surrogate_pool_queue(db: Session, org_id: UUID) -> Queue:
+    """
+    Get the Surrogate Pool queue for an org, creating it if missing.
+
+    This queue holds approved surrogates waiting to be claimed by case managers.
+    All case_manager/admin/developer users are automatically members.
+    """
+    queue = db.execute(
+        select(Queue).where(
+            and_(
+                Queue.organization_id == org_id,
+                Queue.name == SURROGATE_POOL_QUEUE_NAME,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if queue:
+        if not queue.is_active:
+            queue.is_active = True
+            db.flush()
+        return queue
+
+    try:
+        queue = create_queue(
+            db=db,
+            org_id=org_id,
+            name=SURROGATE_POOL_QUEUE_NAME,
+            description="Approved surrogates waiting for case manager assignment",
+        )
+        db.flush()
+
+        # Auto-add all case_manager+ users as members
+        from app.db.models import Membership
+        from app.db.enums import Role
+
+        manager_roles = [Role.CASE_MANAGER.value, Role.ADMIN.value, Role.DEVELOPER.value]
+        memberships = (
+            db.query(Membership)
+            .filter(
+                Membership.organization_id == org_id,
+                Membership.role.in_(manager_roles),
+                Membership.is_active.is_(True),
+            )
+            .all()
+        )
+
+        for membership in memberships:
+            try:
+                add_queue_member(db, org_id, queue.id, membership.user_id)
+            except (QueueMemberExistsError, QueueMemberUserNotFoundError):
+                pass
+
+        return queue
+    except DuplicateQueueNameError:
+        # Race condition: another transaction created it
+        queue = db.execute(
+            select(Queue).where(
+                and_(
+                    Queue.organization_id == org_id,
+                    Queue.name == SURROGATE_POOL_QUEUE_NAME,
+                )
+            )
+        ).scalar_one_or_none()
+        if queue:
+            return queue
+        raise
+
+
 # =============================================================================
 # Claim / Release (Atomic with Audit)
 # =============================================================================
 
 
-def claim_case(
+def claim_surrogate(
     db: Session,
     org_id: UUID,
-    case_id: UUID,
+    surrogate_id: UUID,
     claimer_user_id: UUID,
-) -> Case:
+) -> Surrogate:
     """
-    Claim a case from a queue. Atomic operation.
+    Claim a surrogate from a queue. Atomic operation.
 
-    - Case must be owner_type="queue" (in a queue)
+    - Surrogate must be owner_type="queue" (in a queue)
     - Sets owner_type="user", owner_id=claimer
     - Logs activity for audit trail
     - Returns 409-style error if already claimed
     """
     # Lock row for update (atomic claim)
-    case = db.execute(
-        select(Case)
-        .where(and_(Case.id == case_id, Case.organization_id == org_id))
+    surrogate = db.execute(
+        select(Surrogate)
+        .where(and_(Surrogate.id == surrogate_id, Surrogate.organization_id == org_id))
         .with_for_update()
     ).scalar_one_or_none()
 
-    if not case:
-        raise CaseNotFoundError(f"Case {case_id} not found")
+    if not surrogate:
+        raise SurrogateNotFoundError(f"Surrogate {surrogate_id} not found")
 
-    if case.owner_type != OwnerType.QUEUE.value:
-        raise CaseAlreadyClaimedError("Case is already owned by a user, not in a queue")
+    if surrogate.owner_type != OwnerType.QUEUE.value:
+        raise SurrogateAlreadyClaimedError("Surrogate is already owned by a user, not in a queue")
 
     # Check if user is a member of the queue (if queue has members)
-    queue = db.query(Queue).filter(Queue.id == case.owner_id).first()
+    queue = db.query(Queue).filter(Queue.id == surrogate.owner_id).first()
     if queue and queue.members:
         is_member = any(m.user_id == claimer_user_id for m in queue.members)
         if not is_member:
             raise NotQueueMemberError(
-                f"You are not a member of queue '{queue.name}' and cannot claim cases from it"
+                f"You are not a member of queue '{queue.name}' and cannot claim surrogates from it"
             )
 
-    old_queue_id = case.owner_id
+    old_queue_id = surrogate.owner_id
 
     # Transfer ownership to user
-    case.owner_type = OwnerType.USER.value
-    case.owner_id = claimer_user_id
-    case.assigned_at = datetime.now(timezone.utc)
+    surrogate.owner_type = OwnerType.USER.value
+    surrogate.owner_id = claimer_user_id
+    surrogate.assigned_at = datetime.now(timezone.utc)
 
     # Log activity
     activity_service.log_activity(
         db=db,
-        case_id=case_id,
+        surrogate_id=surrogate_id,
         organization_id=org_id,
-        activity_type=CaseActivityType.CASE_CLAIMED,
+        activity_type=SurrogateActivityType.SURROGATE_CLAIMED,
         actor_user_id=claimer_user_id,
         details={
             "from_queue_id": str(old_queue_id) if old_queue_id else None,
@@ -262,20 +331,20 @@ def claim_case(
         },
     )
 
-    return case
+    return surrogate
 
 
-def release_case(
+def release_surrogate(
     db: Session,
     org_id: UUID,
-    case_id: UUID,
+    surrogate_id: UUID,
     queue_id: UUID,
     releaser_user_id: UUID,
-) -> Case:
+) -> Surrogate:
     """
-    Release a case back to a queue.
+    Release a surrogate back to a queue.
 
-    - Case must be owner_type="user"
+    - Surrogate must be owner_type="user"
     - Sets owner_type="queue", owner_id=queue_id
     - Logs activity for audit trail
     """
@@ -285,28 +354,28 @@ def release_case(
         raise QueueNotFoundError(f"Queue {queue_id} not found or inactive")
 
     # Lock row for update
-    case = db.execute(
-        select(Case)
-        .where(and_(Case.id == case_id, Case.organization_id == org_id))
+    surrogate = db.execute(
+        select(Surrogate)
+        .where(and_(Surrogate.id == surrogate_id, Surrogate.organization_id == org_id))
         .with_for_update()
     ).scalar_one_or_none()
 
-    if not case:
-        raise CaseNotFoundError(f"Case {case_id} not found")
+    if not surrogate:
+        raise SurrogateNotFoundError(f"Surrogate {surrogate_id} not found")
 
-    old_owner_id = case.owner_id
+    old_owner_id = surrogate.owner_id
 
     # Transfer ownership to queue
-    case.owner_type = OwnerType.QUEUE.value
-    case.owner_id = queue_id
-    case.assigned_at = None
+    surrogate.owner_type = OwnerType.QUEUE.value
+    surrogate.owner_id = queue_id
+    surrogate.assigned_at = None
 
     # Log activity
     activity_service.log_activity(
         db=db,
-        case_id=case_id,
+        surrogate_id=surrogate_id,
         organization_id=org_id,
-        activity_type=CaseActivityType.CASE_RELEASED,
+        activity_type=SurrogateActivityType.SURROGATE_RELEASED,
         actor_user_id=releaser_user_id,
         details={
             "from_user_id": str(old_owner_id) if old_owner_id else None,
@@ -314,48 +383,48 @@ def release_case(
         },
     )
 
-    return case
+    return surrogate
 
 
-def assign_to_queue(
+def assign_surrogate_to_queue(
     db: Session,
     org_id: UUID,
-    case_id: UUID,
+    surrogate_id: UUID,
     queue_id: UUID,
     assigner_user_id: UUID,
-) -> Case:
+) -> Surrogate:
     """
-    Assign a case to a queue (admin action).
-    Works whether case is currently user-owned or queue-owned.
+    Assign a surrogate to a queue (admin action).
+    Works whether surrogate is currently user-owned or queue-owned.
     """
     # Verify queue exists
     queue = get_queue(db, org_id, queue_id)
     if not queue or not queue.is_active:
         raise QueueNotFoundError(f"Queue {queue_id} not found or inactive")
 
-    case = db.execute(
-        select(Case)
-        .where(and_(Case.id == case_id, Case.organization_id == org_id))
+    surrogate = db.execute(
+        select(Surrogate)
+        .where(and_(Surrogate.id == surrogate_id, Surrogate.organization_id == org_id))
         .with_for_update()
     ).scalar_one_or_none()
 
-    if not case:
-        raise CaseNotFoundError(f"Case {case_id} not found")
+    if not surrogate:
+        raise SurrogateNotFoundError(f"Surrogate {surrogate_id} not found")
 
-    old_owner_type = case.owner_type
-    old_owner_id = case.owner_id
+    old_owner_type = surrogate.owner_type
+    old_owner_id = surrogate.owner_id
 
     # Assign to queue
-    case.owner_type = OwnerType.QUEUE.value
-    case.owner_id = queue_id
-    case.assigned_at = None
+    surrogate.owner_type = OwnerType.QUEUE.value
+    surrogate.owner_id = queue_id
+    surrogate.assigned_at = None
 
     # Log activity
     activity_service.log_activity(
         db=db,
-        case_id=case_id,
+        surrogate_id=surrogate_id,
         organization_id=org_id,
-        activity_type=CaseActivityType.CASE_ASSIGNED_TO_QUEUE,
+        activity_type=SurrogateActivityType.SURROGATE_ASSIGNED_TO_QUEUE,
         actor_user_id=assigner_user_id,
         details={
             "from_owner_type": old_owner_type,
@@ -364,7 +433,7 @@ def assign_to_queue(
         },
     )
 
-    return case
+    return surrogate
 
 
 def add_queue_member(

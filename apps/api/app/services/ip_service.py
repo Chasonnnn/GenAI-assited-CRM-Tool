@@ -123,9 +123,7 @@ def list_intended_parents(
     return items, total
 
 
-def get_intended_parent(
-    db: Session, ip_id: UUID, org_id: UUID
-) -> IntendedParent | None:
+def get_intended_parent(db: Session, ip_id: UUID, org_id: UUID) -> IntendedParent | None:
     """Get a single intended parent by ID, scoped to organization."""
     return (
         db.query(IntendedParent)
@@ -256,9 +254,7 @@ def update_ip_status(
     return ip
 
 
-def get_ip_status_history(
-    db: Session, ip_id: UUID
-) -> list[IntendedParentStatusHistory]:
+def get_ip_status_history(db: Session, ip_id: UUID) -> list[IntendedParentStatusHistory]:
     """Get status history for an intended parent."""
     return (
         db.query(IntendedParentStatusHistory)
@@ -310,8 +306,7 @@ def restore_intended_parent(
         db.query(IntendedParentStatusHistory)
         .filter(
             IntendedParentStatusHistory.intended_parent_id == ip.id,
-            IntendedParentStatusHistory.new_status
-            == IntendedParentStatus.ARCHIVED.value,
+            IntendedParentStatusHistory.new_status == IntendedParentStatus.ARCHIVED.value,
         )
         .order_by(IntendedParentStatusHistory.changed_at.desc())
         .first()
@@ -319,9 +314,7 @@ def restore_intended_parent(
 
     # Restore to previous status, or default to 'new' if not found
     previous_status = (
-        history.old_status
-        if history and history.old_status
-        else IntendedParentStatus.NEW.value
+        history.old_status if history and history.old_status else IntendedParentStatus.NEW.value
     )
 
     ip.is_archived = False

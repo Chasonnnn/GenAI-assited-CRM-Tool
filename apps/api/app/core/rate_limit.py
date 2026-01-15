@@ -13,9 +13,7 @@ from app.core.config import settings
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 IS_TESTING = os.getenv("TESTING", "").lower() in ("1", "true", "yes")
 DEFAULT_LIMITS = (
-    []
-    if IS_TESTING or settings.RATE_LIMIT_API <= 0
-    else [f"{settings.RATE_LIMIT_API}/minute"]
+    [] if IS_TESTING or settings.RATE_LIMIT_API <= 0 else [f"{settings.RATE_LIMIT_API}/minute"]
 )
 
 if IS_TESTING:

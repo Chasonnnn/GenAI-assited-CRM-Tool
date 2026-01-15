@@ -28,37 +28,37 @@ export function useAnalyticsSummary(params: DateRangeParams = {}) {
 }
 
 /**
- * Fetch cases by status.
+ * Fetch surrogates by status.
  * Auto-refreshes every 60 seconds for real-time updates.
  */
-export function useCasesByStatus() {
+export function useSurrogatesByStatus() {
     return useQuery({
         queryKey: analyticsKeys.byStatus(),
-        queryFn: analyticsApi.getCasesByStatus,
+        queryFn: analyticsApi.getSurrogatesByStatus,
         staleTime: 60 * 1000,
         refetchInterval: 60 * 1000, // Auto-refresh every 60 seconds
     });
 }
 
 /**
- * Fetch cases by assignee.
+ * Fetch surrogates by assignee.
  */
-export function useCasesByAssignee() {
+export function useSurrogatesByAssignee() {
     return useQuery({
         queryKey: analyticsKeys.byAssignee(),
-        queryFn: analyticsApi.getCasesByAssignee,
+        queryFn: analyticsApi.getSurrogatesByAssignee,
         staleTime: 60 * 1000,
     });
 }
 
 /**
- * Fetch cases trend over time.
+ * Fetch surrogates trend over time.
  * Auto-refreshes every 60 seconds for real-time updates.
  */
-export function useCasesTrend(params: TrendParams = {}) {
+export function useSurrogatesTrend(params: TrendParams = {}) {
     return useQuery({
         queryKey: analyticsKeys.trend(params),
-        queryFn: () => analyticsApi.getCasesTrend(params),
+        queryFn: () => analyticsApi.getSurrogatesTrend(params),
         staleTime: 60 * 1000,
         refetchInterval: 60 * 1000, // Auto-refresh every 60 seconds
     });
@@ -76,23 +76,23 @@ export function useMetaPerformance(params: DateRangeParams = {}) {
 }
 
 /**
- * Fetch cases by source.
+ * Fetch surrogates by source.
  */
-export function useCasesBySource(params: DateRangeParams = {}) {
+export function useSurrogatesBySource(params: DateRangeParams = {}) {
     return useQuery({
         queryKey: [...analyticsKeys.all, 'by-source', params] as const,
-        queryFn: () => analyticsApi.getCasesBySource(params),
+        queryFn: () => analyticsApi.getSurrogatesBySource(params),
         staleTime: 60 * 1000,
     });
 }
 
 /**
- * Fetch cases by state.
+ * Fetch surrogates by state.
  */
-export function useCasesByState(params: DateRangeParams = {}) {
+export function useSurrogatesByState(params: DateRangeParams = {}) {
     return useQuery({
         queryKey: [...analyticsKeys.all, 'by-state', params] as const,
-        queryFn: () => analyticsApi.getCasesByState(params),
+        queryFn: () => analyticsApi.getSurrogatesByState(params),
         staleTime: 60 * 1000,
     });
 }
@@ -146,12 +146,12 @@ export function useFunnelCompare(params: CompareParams = {}) {
 }
 
 /**
- * Fetch cases by state with campaign filter.
+ * Fetch surrogates by state with campaign filter.
  */
-export function useCasesByStateCompare(params: CompareParams = {}) {
+export function useSurrogatesByStateCompare(params: CompareParams = {}) {
     return useQuery({
         queryKey: [...analyticsKeys.all, 'by-state-compare', params] as const,
-        queryFn: () => analyticsApi.getCasesByStateCompare(params),
+        queryFn: () => analyticsApi.getSurrogatesByStateCompare(params),
         staleTime: 60 * 1000,
     });
 }
@@ -176,7 +176,7 @@ export function useActivityFeed(params: ActivityFeedParams = {}) {
 
 /**
  * Fetch individual performance by user.
- * Supports cohort mode (cases created in range) and activity mode (status changes in range).
+ * Supports cohort mode (surrogates created in range) and activity mode (status changes in range).
  */
 export function usePerformanceByUser(params: PerformanceByUserParams = {}) {
     return useQuery({

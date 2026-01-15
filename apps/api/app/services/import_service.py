@@ -1,8 +1,8 @@
-"""CSV Import service for bulk case creation.
+"""CSV Import service for bulk surrogate creation.
 
 Features:
 - Parse CSV with column mapping
-- Validate using same rules as CaseCreate
+- Validate using same rules as SurrogateCreate
 - Dedupe by email (against DB + within CSV)
 - Async execution via job queue
 - Progress tracking
@@ -18,10 +18,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.encryption import hash_email
-from app.db.enums import CaseSource
-from app.db.models import Case, CaseImport
-from app.schemas.case import CaseCreate
-from app.services import case_service
+from app.db.enums import SurrogateSource
+from app.db.models import Surrogate, SurrogateImport
+from app.schemas.surrogate import SurrogateCreate
+from app.services import surrogate_service
 
 
 # =============================================================================
@@ -139,9 +139,7 @@ def preview_import(
     # Map columns
     column_map = map_columns(headers)
     preview.detected_columns = list(set(column_map.values()))
-    preview.unmapped_columns = [
-        headers[i] for i in range(len(headers)) if i not in column_map
-    ]
+    preview.unmapped_columns = [headers[i] for i in range(len(headers)) if i not in column_map]
     preview.total_rows = len(rows)
 
     # Extract emails for dedupe check
@@ -168,15 +166,15 @@ def preview_import(
         seen_emails.add(email)
     preview.duplicate_emails_csv = len(duplicate_in_csv)
 
-    # Check for duplicates in DB (active cases only)
+    # Check for duplicates in DB (active surrogates only)
     if csv_emails:
         email_hashes = [hash_email(email) for email in csv_emails]
         existing = (
             db.execute(
-                select(Case.email_hash).where(
-                    Case.organization_id == org_id,
-                    Case.is_archived.is_(False),
-                    Case.email_hash.in_(email_hashes),
+                select(Surrogate.email_hash).where(
+                    Surrogate.organization_id == org_id,
+                    Surrogate.is_archived.is_(False),
+                    Surrogate.email_hash.in_(email_hashes),
                 )
             )
             .scalars()
@@ -209,18 +207,18 @@ def _row_to_dict(row: list[str], column_map: dict[int, str]) -> dict[str, str]:
     return result
 
 
-def _validate_row(row_data: dict[str, str]) -> CaseCreate:
+def _validate_row(row_data: dict[str, str]) -> SurrogateCreate:
     """
-    Validate row data using CaseCreate schema.
+    Validate row data using SurrogateCreate schema.
 
     Raises:
         ValidationError if invalid
     """
     # Set defaults for required fields not in CSV
     if "source" not in row_data:
-        row_data["source"] = CaseSource.IMPORT.value
+        row_data["source"] = SurrogateSource.IMPORT.value
 
-    return CaseCreate(**row_data)
+    return SurrogateCreate(**row_data)
 
 
 # =============================================================================
@@ -251,17 +249,17 @@ def execute_import(
     Args:
         dedupe_action: "skip" = skip duplicates, "update" = update existing (future)
 
-    Relies on case creation retry to avoid case_number collisions under concurrency.
+    Relies on case creation retry to avoid surrogate_number collisions under concurrency.
     """
     result = ImportResult()
 
     headers, rows = parse_csv_file(file_content)
     if not headers:
         import_record = (
-            db.query(CaseImport)
+            db.query(SurrogateImport)
             .filter(
-                CaseImport.id == import_id,
-                CaseImport.organization_id == org_id,
+                SurrogateImport.id == import_id,
+                SurrogateImport.organization_id == org_id,
             )
             .first()
         )
@@ -277,12 +275,12 @@ def execute_import(
 
     column_map = map_columns(headers)
 
-    # Get existing emails in org (active cases only)
+    # Get existing emails in org (active surrogates only)
     existing_emails = set(
         db.execute(
-            select(Case.email_hash).where(
-                Case.organization_id == org_id,
-                Case.is_archived.is_(False),
+            select(Surrogate.email_hash).where(
+                Surrogate.organization_id == org_id,
+                Surrogate.is_archived.is_(False),
             )
         )
         .scalars()
@@ -314,7 +312,7 @@ def execute_import(
 
         # Validate
         try:
-            case_data = _validate_row(row_data)
+            surrogate_data = _validate_row(row_data)
         except ValidationError as e:
             result.errors.append(
                 {
@@ -324,13 +322,13 @@ def execute_import(
             )
             continue
 
-        # Create case
+        # Create surrogate
         try:
-            case_service.create_case(
+            surrogate_service.create_surrogate(
                 db=db,
                 org_id=org_id,
                 user_id=user_id,
-                data=case_data,
+                data=surrogate_data,
             )
             result.imported += 1
 
@@ -347,10 +345,10 @@ def execute_import(
 
     # Update import record
     import_record = (
-        db.query(CaseImport)
+        db.query(SurrogateImport)
         .filter(
-            CaseImport.id == import_id,
-            CaseImport.organization_id == org_id,
+            SurrogateImport.id == import_id,
+            SurrogateImport.organization_id == org_id,
         )
         .first()
     )
@@ -378,9 +376,9 @@ def create_import_job(
     user_id: UUID,
     filename: str,
     total_rows: int,
-) -> CaseImport:
+) -> SurrogateImport:
     """Create an import job record."""
-    import_record = CaseImport(
+    import_record = SurrogateImport(
         organization_id=org_id,
         created_by_user_id=user_id,
         filename=filename,
@@ -393,13 +391,13 @@ def create_import_job(
     return import_record
 
 
-def get_import(db: Session, org_id: UUID, import_id: UUID) -> CaseImport | None:
+def get_import(db: Session, org_id: UUID, import_id: UUID) -> SurrogateImport | None:
     """Get import by ID (org-scoped)."""
     return (
-        db.query(CaseImport)
+        db.query(SurrogateImport)
         .filter(
-            CaseImport.id == import_id,
-            CaseImport.organization_id == org_id,
+            SurrogateImport.id == import_id,
+            SurrogateImport.organization_id == org_id,
         )
         .first()
     )
@@ -409,14 +407,14 @@ def list_imports(
     db: Session,
     org_id: UUID,
     limit: int = 20,
-) -> list[CaseImport]:
+) -> list[SurrogateImport]:
     """List recent imports for org."""
     return (
-        db.query(CaseImport)
+        db.query(SurrogateImport)
         .filter(
-            CaseImport.organization_id == org_id,
+            SurrogateImport.organization_id == org_id,
         )
-        .order_by(CaseImport.created_at.desc())
+        .order_by(SurrogateImport.created_at.desc())
         .limit(limit)
         .all()
     )

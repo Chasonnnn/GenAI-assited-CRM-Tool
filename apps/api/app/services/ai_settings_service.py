@@ -65,11 +65,7 @@ def _ai_settings_payload(ai_settings: AISettings) -> dict:
 
 def get_ai_settings(db: Session, organization_id: uuid.UUID) -> AISettings | None:
     """Get AI settings for an organization."""
-    return (
-        db.query(AISettings)
-        .filter(AISettings.organization_id == organization_id)
-        .first()
-    )
+    return db.query(AISettings).filter(AISettings.organization_id == organization_id).first()
 
 
 def get_or_create_ai_settings(
@@ -185,9 +181,7 @@ def is_consent_required(ai_settings: AISettings) -> bool:
     return ai_settings.is_enabled and ai_settings.consent_accepted_at is None
 
 
-def get_ai_provider_for_org(
-    db: Session, organization_id: uuid.UUID
-) -> AIProvider | None:
+def get_ai_provider_for_org(db: Session, organization_id: uuid.UUID) -> AIProvider | None:
     """Get a configured AI provider for an organization.
 
     Returns None if AI is not enabled or not configured.

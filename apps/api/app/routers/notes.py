@@ -1,6 +1,6 @@
-"""Notes router - API endpoints for case notes.
+"""Notes router - API endpoints for surrogate notes.
 
-Uses unified EntityNote model with entity_type='case'.
+Uses unified EntityNote model with entity_type='surrogate'.
 """
 
 from uuid import UUID
@@ -16,34 +16,34 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
-from app.core.case_access import check_case_access
+from app.core.surrogate_access import check_surrogate_access
 from app.schemas.auth import UserSession
 from app.db.enums import AuditEventType
 from app.schemas.note import NoteCreate, NoteRead
-from app.services import case_service, note_service
+from app.services import surrogate_service, note_service
 
 router = APIRouter(
-    dependencies=[Depends(require_permission(POLICIES["cases"].actions["notes_view"]))]
+    dependencies=[Depends(require_permission(POLICIES["surrogates"].actions["notes_view"]))]
 )
 
 
-@router.get("/cases/{case_id}/notes", response_model=list[NoteRead])
+@router.get("/surrogates/{surrogate_id}/notes", response_model=list[NoteRead])
 def list_notes(
-    case_id: UUID,
+    surrogate_id: UUID,
     request: Request,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """List notes for a case (respects role-based access)."""
-    # Verify case exists and belongs to org
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
+    """List notes for a surrogate (respects role-based access)."""
+    # Verify surrogate exists and belongs to org
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
 
     # Access control: checks ownership + post-approval permission
-    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
-    notes = note_service.list_notes(db, session.org_id, "case", case_id)
+    notes = note_service.list_notes(db, session.org_id, "surrogate", surrogate_id)
 
     from app.services import audit_service
 
@@ -52,8 +52,8 @@ def list_notes(
         org_id=session.org_id,
         event_type=AuditEventType.DATA_VIEW_NOTE,
         actor_user_id=session.user_id,
-        target_type="case",
-        target_id=case_id,
+        target_type="surrogate",
+        target_id=surrogate_id,
         details={"notes_count": len(notes)},
         request=request,
     )
@@ -61,8 +61,8 @@ def list_notes(
         db=db,
         org_id=session.org_id,
         user_id=session.user_id,
-        target_type="case",
-        target_id=case_id,
+        target_type="surrogate",
+        target_id=surrogate_id,
         request=request,
         details={"view": "notes", "notes_count": len(notes)},
     )
@@ -72,43 +72,43 @@ def list_notes(
 
 
 @router.post(
-    "/cases/{case_id}/notes",
+    "/surrogates/{surrogate_id}/notes",
     response_model=NoteRead,
     status_code=201,
     dependencies=[Depends(require_csrf_header)],
 )
 def create_note(
-    case_id: UUID,
+    surrogate_id: UUID,
     data: NoteCreate,
     session: UserSession = Depends(
-        require_permission(POLICIES["cases"].actions["notes_edit"])
+        require_permission(POLICIES["surrogates"].actions["notes_edit"])
     ),
     db: Session = Depends(get_db),
 ):
-    """Add a note to a case (respects role-based access)."""
-    # Verify case exists and belongs to org
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
+    """Add a note to a surrogate (respects role-based access)."""
+    # Verify surrogate exists and belongs to org
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
 
     # Access control: checks ownership + post-approval permission
-    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
     note = note_service.create_note(
         db=db,
         org_id=session.org_id,
-        entity_type="case",
-        entity_id=case_id,
+        entity_type="surrogate",
+        entity_id=surrogate_id,
         author_id=session.user_id,
         content=data.body,
     )
 
-    # Log to case activity
+    # Log to surrogate activity
     from app.services import activity_service
 
     activity_service.log_note_added(
         db=db,
-        case_id=case_id,
+        surrogate_id=surrogate_id,
         organization_id=session.org_id,
         actor_user_id=session.user_id,
         note_id=note.id,
@@ -119,13 +119,11 @@ def create_note(
     return note_service.to_note_read(note)
 
 
-@router.delete(
-    "/notes/{note_id}", status_code=204, dependencies=[Depends(require_csrf_header)]
-)
+@router.delete("/notes/{note_id}", status_code=204, dependencies=[Depends(require_csrf_header)])
 def delete_note(
     note_id: UUID,
     session: UserSession = Depends(
-        require_permission(POLICIES["cases"].actions["notes_edit"])
+        require_permission(POLICIES["surrogates"].actions["notes_edit"])
     ),
     db: Session = Depends(get_db),
 ):
@@ -133,33 +131,31 @@ def delete_note(
     Delete a note.
 
     Requires: author or admin+
-    Access: Respects role-based case access (intake can't delete on handed-off cases)
+    Access: Respects role-based surrogate access (intake can't delete on handed-off surrogates)
     """
     note = note_service.get_note(db, note_id, session.org_id)
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
 
-    # Access control: check case access if note is linked to a case
-    if note.entity_type == "case":
-        case = case_service.get_case(db, session.org_id, note.entity_id)
-        if case:
-            check_case_access(
-                case, session.role, session.user_id, db=db, org_id=session.org_id
+    # Access control: check surrogate access if note is linked to a surrogate
+    if note.entity_type == "surrogate":
+        surrogate = surrogate_service.get_surrogate(db, session.org_id, note.entity_id)
+        if surrogate:
+            check_surrogate_access(
+                surrogate, session.role, session.user_id, db=db, org_id=session.org_id
             )
 
     # Permission: author or admin+
     if not is_owner_or_can_manage(session, note.author_id):
-        raise HTTPException(
-            status_code=403, detail="Not authorized to delete this note"
-        )
+        raise HTTPException(status_code=403, detail="Not authorized to delete this note")
 
-    # Log to case activity before delete (only for case notes)
-    if note.entity_type == "case":
+    # Log to surrogate activity before delete (only for surrogate notes)
+    if note.entity_type == "surrogate":
         from app.services import activity_service
 
         activity_service.log_note_deleted(
             db=db,
-            case_id=note.entity_id,
+            surrogate_id=note.entity_id,
             organization_id=session.org_id,
             actor_user_id=session.user_id,
             note_id=note.id,

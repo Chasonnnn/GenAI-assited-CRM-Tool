@@ -18,7 +18,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.db.models import Pipeline, PipelineStage, Case
+from app.db.models import Pipeline, PipelineStage, Surrogate
 from app.services import version_service
 
 
@@ -28,20 +28,22 @@ DEFAULT_COLORS = {
     "new_unread": "#3B82F6",  # Blue
     "contacted": "#06B6D4",  # Cyan
     "qualified": "#10B981",  # Green
-    "applied": "#84CC16",  # Lime
-    "followup_scheduled": "#A855F7",  # Purple
+    "interview_scheduled": "#A855F7",  # Purple
     "application_submitted": "#8B5CF6",  # Violet
     "under_review": "#F59E0B",  # Amber
     "approved": "#22C55E",  # Green
-    "pending_handoff": "#F97316",  # Orange
     "disqualified": "#EF4444",  # Red
     "lost": "#EF4444",  # Red
     # Stage B: Post-Approval (darker shades)
-    "pending_match": "#0EA5E9",  # Sky
+    "ready_to_match": "#0EA5E9",  # Sky
     "matched": "#6366F1",  # Indigo
-    "meds_started": "#14B8A6",  # Teal
-    "exam_passed": "#059669",  # Emerald
-    "embryo_transferred": "#0D9488",  # Teal
+    "medical_clearance_passed": "#14B8A6",  # Teal
+    "legal_clearance_passed": "#059669",  # Emerald
+    "transfer_cycle": "#0D9488",  # Teal
+    "second_hcg_confirmed": "#10B981",  # Green
+    "heartbeat_confirmed": "#22C55E",  # Green
+    "ob_care_established": "#84CC16",  # Lime
+    "anatomy_scanned": "#16A34A",  # Green
     "delivered": "#16A34A",  # Green (success)
 }
 
@@ -52,37 +54,41 @@ STAGE_TYPE_MAP = {
     "new_unread": "intake",
     "contacted": "intake",
     "qualified": "intake",
-    "applied": "intake",
-    "followup_scheduled": "intake",
+    "interview_scheduled": "intake",
     "application_submitted": "intake",
     "under_review": "intake",
     "approved": "intake",
-    "pending_handoff": "intake",
-    "pending_match": "post_approval",
+    "ready_to_match": "post_approval",
     "matched": "post_approval",
-    "meds_started": "post_approval",
-    "exam_passed": "post_approval",
-    "embryo_transferred": "post_approval",
+    "medical_clearance_passed": "post_approval",
+    "legal_clearance_passed": "post_approval",
+    "transfer_cycle": "post_approval",
+    "second_hcg_confirmed": "post_approval",
+    "heartbeat_confirmed": "post_approval",
+    "ob_care_established": "post_approval",
+    "anatomy_scanned": "post_approval",
+    "delivered": "post_approval",
     "lost": "terminal",
     "disqualified": "terminal",
-    "delivered": "terminal",
 }
 
 DEFAULT_STAGE_ORDER = [
     "new_unread",
     "contacted",
     "qualified",
-    "applied",
-    "followup_scheduled",
+    "interview_scheduled",
     "application_submitted",
     "under_review",
     "approved",
-    "pending_handoff",
-    "pending_match",
+    "ready_to_match",
     "matched",
-    "meds_started",
-    "exam_passed",
-    "embryo_transferred",
+    "medical_clearance_passed",
+    "legal_clearance_passed",
+    "transfer_cycle",
+    "second_hcg_confirmed",
+    "heartbeat_confirmed",
+    "ob_care_established",
+    "anatomy_scanned",
     "lost",
     "disqualified",
     "delivered",
@@ -255,9 +261,7 @@ def sync_missing_stages(
         )
 
     db.flush()
-    _bump_pipeline_version(
-        db, pipeline, user_id, f"Added {len(missing)} missing stages"
-    )
+    _bump_pipeline_version(db, pipeline, user_id, f"Added {len(missing)} missing stages")
 
     db.commit()
     db.refresh(pipeline)
@@ -273,9 +277,7 @@ def update_pipeline_stages(
     comment: str | None = None,
 ) -> Pipeline:
     """Stage updates are handled via /stages endpoints in v2."""
-    raise ValueError(
-        "Stage updates must use /settings/pipelines/{id}/stages endpoints."
-    )
+    raise ValueError("Stage updates must use /settings/pipelines/{id}/stages endpoints.")
 
 
 def update_pipeline_name(
@@ -524,9 +526,7 @@ def get_stage_by_id(db: Session, stage_id: UUID) -> PipelineStage | None:
     return db.query(PipelineStage).filter(PipelineStage.id == stage_id).first()
 
 
-def get_stage_by_slug(
-    db: Session, pipeline_id: UUID, slug: str
-) -> PipelineStage | None:
+def get_stage_by_slug(db: Session, pipeline_id: UUID, slug: str) -> PipelineStage | None:
     """Get a stage by slug (unique per pipeline)."""
     return (
         db.query(PipelineStage)
@@ -637,7 +637,7 @@ def update_stage(
 
     # Sync case labels if label changed
     if label_changed:
-        sync_case_labels(db, stage.id, stage.label)
+        sync_surrogate_labels(db, stage.id, stage.label)
 
     return stage
 
@@ -668,12 +668,12 @@ def delete_stage(
 
     # Migrate cases
     migrated = (
-        db.query(Case)
-        .filter(Case.stage_id == stage.id)
+        db.query(Surrogate)
+        .filter(Surrogate.stage_id == stage.id)
         .update(
             {
-                Case.stage_id: migrate_to_stage_id,
-                Case.status_label: target.label,
+                Surrogate.stage_id: migrate_to_stage_id,
+                Surrogate.status_label: target.label,
             }
         )
     )
@@ -708,9 +708,7 @@ def reorder_stages(
     active_ids = set(stage_map.keys())
     ordered_ids = list(dict.fromkeys(ordered_stage_ids))
     if set(ordered_ids) != active_ids:
-        raise ValueError(
-            "ordered_stage_ids must include every active stage exactly once"
-        )
+        raise ValueError("ordered_stage_ids must include every active stage exactly once")
 
     # Validate all IDs are valid active stages
     for i, stage_id in enumerate(ordered_ids):
@@ -725,19 +723,19 @@ def reorder_stages(
     return get_stages(db, pipeline_id)
 
 
-def sync_case_labels(db: Session, stage_id: UUID, new_label: str) -> int:
+def sync_surrogate_labels(db: Session, stage_id: UUID, new_label: str) -> int:
     """
-    Sync Case.status_label when a stage's label changes.
+    Sync Surrogate.status_label when a stage's label changes.
 
     History snapshots are NOT updated (frozen at change time).
-    Returns number of cases updated.
+    Returns number of surrogates updated.
     """
     updated = (
-        db.query(Case)
-        .filter(Case.stage_id == stage_id)
+        db.query(Surrogate)
+        .filter(Surrogate.stage_id == stage_id)
         .update(
             {
-                Case.status_label: new_label,
+                Surrogate.status_label: new_label,
             }
         )
     )
@@ -745,7 +743,7 @@ def sync_case_labels(db: Session, stage_id: UUID, new_label: str) -> int:
     return updated
 
 
-def validate_case_stage(
+def validate_surrogate_stage(
     db: Session,
     pipeline_id: UUID,
     stage_id: UUID,

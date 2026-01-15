@@ -198,9 +198,7 @@ class SuppressionCreate(BaseModel):
     """Add an email to suppression list."""
 
     email: str = Field(..., min_length=1)
-    reason: str = Field(
-        default="opt_out", pattern="^(opt_out|bounced|archived|complaint)$"
-    )
+    reason: str = Field(default="opt_out", pattern="^(opt_out|bounced|archived|complaint)$")
 
 
 class SuppressionResponse(BaseModel):

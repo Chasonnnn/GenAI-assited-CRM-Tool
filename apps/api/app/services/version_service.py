@@ -11,7 +11,7 @@ Versioned entities:
 - Pipelines, email templates, AI settings, org settings
 - Integration configs (tokens redacted)
 
-NOT versioned: Cases, tasks, notes (use activity logs instead)
+NOT versioned: Surrogates, tasks, notes (use activity logs instead)
 """
 
 import hashlib
@@ -164,9 +164,7 @@ def create_version(
     """
 
     def is_version_conflict(error: IntegrityError) -> bool:
-        constraint_name = getattr(
-            getattr(error.orig, "diag", None), "constraint_name", None
-        )
+        constraint_name = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
         if constraint_name and "entity_versions" in constraint_name:
             return True
         message = str(error.orig) if error.orig else str(error)

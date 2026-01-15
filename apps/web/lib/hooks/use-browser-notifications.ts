@@ -76,8 +76,8 @@ export function useBrowserNotifications(hookOptions: UseBrowserNotificationsOpti
 
                 // Navigate to the entity if provided
                 if (options?.entityType && options?.entityId) {
-                    if (options.entityType === 'case') {
-                        router.push(`/cases/${options.entityId}`)
+                    if (options.entityType === 'surrogate') {
+                        router.push(`/surrogates/${options.entityId}`)
                     } else if (options.entityType === 'task') {
                         router.push(`/tasks`)
                     } else if (options.entityType === 'appointment') {

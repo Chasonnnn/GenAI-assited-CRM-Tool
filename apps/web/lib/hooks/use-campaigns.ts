@@ -89,7 +89,7 @@ export function usePreviewFilters() {
             filterCriteria,
             limit,
         }: {
-            recipientType: "case" | "intended_parent";
+            recipientType: "surrogate" | "intended_parent";
             filterCriteria: FilterCriteria;
             limit?: number;
         }) => previewFilters(recipientType, filterCriteria, limit),

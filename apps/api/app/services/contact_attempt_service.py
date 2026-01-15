@@ -6,49 +6,59 @@ from uuid import UUID
 from sqlalchemy import select, func, text
 from sqlalchemy.orm import Session
 
-from app.core.case_access import check_case_access
-from app.db.enums import CaseActivityType, ContactStatus, OwnerType
-from app.db.models import Case, CaseActivityLog, CaseContactAttempt, Organization, User
+from app.core.surrogate_access import check_surrogate_access
+from app.db.enums import SurrogateActivityType, ContactStatus, OwnerType
+from app.db.models import (
+    Surrogate,
+    SurrogateActivityLog,
+    SurrogateContactAttempt,
+    Organization,
+    User,
+)
 from app.schemas.auth import UserSession
-from app.schemas.case import ContactAttemptCreate, ContactAttemptResponse, ContactAttemptsSummary
-from app.services import case_service, pipeline_service
+from app.schemas.surrogate import (
+    ContactAttemptCreate,
+    ContactAttemptResponse,
+    ContactAttemptsSummary,
+)
+from app.services import surrogate_service, pipeline_service
 
 
 def create_contact_attempt(
     session: Session,
-    case_id: UUID,
+    surrogate_id: UUID,
     data: ContactAttemptCreate,
     user: UserSession,
 ) -> ContactAttemptResponse:
     """
-    Create a contact attempt for a case.
+    Create a contact attempt for a surrogate.
 
     Validates:
-    - User has access to case
+    - User has access to surrogate
     - attempted_at is not in future
-    - attempted_at is not before case.assigned_at
+    - attempted_at is not before surrogate.assigned_at
 
-    Updates case.contact_status if outcome='reached'.
+    Updates surrogate.contact_status if outcome='reached'.
     """
-    # Fetch case with organization for timezone
-    case = (
-        session.query(Case)
+    # Fetch surrogate with organization for timezone
+    surrogate = (
+        session.query(Surrogate)
         .filter(
-            Case.id == case_id,
-            Case.organization_id == user.org_id,
+            Surrogate.id == surrogate_id,
+            Surrogate.organization_id == user.org_id,
         )
         .first()
     )
 
-    if not case:
-        raise ValueError("Case not found or access denied")
+    if not surrogate:
+        raise ValueError("Surrogate not found or access denied")
 
-    check_case_access(case, user.role, user.user_id, db=session, org_id=user.org_id)
+    check_surrogate_access(surrogate, user.role, user.user_id, db=session, org_id=user.org_id)
 
-    if case.owner_type != OwnerType.USER.value:
-        raise ValueError("Cannot log attempts for unassigned cases")
+    if surrogate.owner_type != OwnerType.USER.value:
+        raise ValueError("Cannot log attempts for unassigned surrogates")
 
-    if not case.assigned_at:
+    if not surrogate.assigned_at:
         raise ValueError("Cannot log attempts before assignment")
 
     # Default attempted_at to now if not provided
@@ -58,21 +68,21 @@ def create_contact_attempt(
     if attempted_at > datetime.now(timezone.utc):
         raise ValueError("Cannot log future attempts")
 
-    if case.assigned_at and attempted_at < case.assigned_at:
+    if surrogate.assigned_at and attempted_at < surrogate.assigned_at:
         raise ValueError(
-            f"Cannot log attempt before assignment date ({case.assigned_at.isoformat()})"
+            f"Cannot log attempt before assignment date ({surrogate.assigned_at.isoformat()})"
         )
 
     # Create contact attempt
-    attempt = CaseContactAttempt(
-        case_id=case_id,
+    attempt = SurrogateContactAttempt(
+        surrogate_id=surrogate_id,
         organization_id=user.org_id,
         attempted_by_user_id=user.user_id,
         contact_methods=data.contact_methods,
         outcome=data.outcome,
         notes=data.notes,
         attempted_at=attempted_at,
-        case_owner_id_at_attempt=case.owner_id,
+        surrogate_owner_id_at_attempt=surrogate.owner_id,
     )
     session.add(attempt)
     session.flush()
@@ -80,24 +90,24 @@ def create_contact_attempt(
 
     is_backdated = attempted_at < attempt.created_at
 
-    # If reached, update case contact status
+    # If reached, update surrogate contact status
     if data.outcome == "reached":
-        case.contact_status = ContactStatus.REACHED.value
-        if not case.contacted_at:
-            case.contacted_at = attempted_at
-        case.last_contacted_at = attempted_at
-        case.last_contact_method = data.contact_methods[0]
+        surrogate.contact_status = ContactStatus.REACHED.value
+        if not surrogate.contacted_at:
+            surrogate.contacted_at = attempted_at
+        surrogate.last_contacted_at = attempted_at
+        surrogate.last_contact_method = data.contact_methods[0]
 
-        current_stage = pipeline_service.get_stage_by_id(session, case.stage_id)
+        current_stage = pipeline_service.get_stage_by_id(session, surrogate.stage_id)
         if current_stage and current_stage.stage_type == "intake":
             if current_stage.slug != "contacted":
                 contacted_stage = pipeline_service.get_stage_by_slug(
                     session, current_stage.pipeline_id, "contacted"
                 )
                 if contacted_stage:
-                    case_service.change_status(
+                    surrogate_service.change_status(
                         db=session,
-                        case=case,
+                        surrogate=surrogate,
                         new_stage_id=contacted_stage.id,
                         user_id=user.user_id,
                         user_role=user.role,
@@ -105,10 +115,10 @@ def create_contact_attempt(
                     )
 
     # Log in activity log
-    activity = CaseActivityLog(
-        case_id=case_id,
+    activity = SurrogateActivityLog(
+        surrogate_id=surrogate_id,
         organization_id=user.org_id,
-        activity_type=CaseActivityType.CONTACT_ATTEMPT.value,
+        activity_type=SurrogateActivityType.CONTACT_ATTEMPT.value,
         actor_user_id=user.user_id,
         details={
             "contact_methods": data.contact_methods,
@@ -121,13 +131,11 @@ def create_contact_attempt(
     session.add(activity)
 
     # Resolve user name
-    user_name = (
-        session.query(User.display_name).filter(User.id == user.user_id).scalar()
-    )
+    user_name = session.query(User.display_name).filter(User.id == user.user_id).scalar()
 
     return ContactAttemptResponse(
         id=attempt.id,
-        case_id=attempt.case_id,
+        surrogate_id=attempt.surrogate_id,
         attempted_by_user_id=attempt.attempted_by_user_id,
         attempted_by_name=user_name,
         contact_methods=attempt.contact_methods,
@@ -136,17 +144,17 @@ def create_contact_attempt(
         attempted_at=attempt.attempted_at,
         created_at=attempt.created_at,
         is_backdated=attempt.is_backdated,
-        case_owner_id_at_attempt=attempt.case_owner_id_at_attempt,
+        surrogate_owner_id_at_attempt=attempt.surrogate_owner_id_at_attempt,
     )
 
 
-def get_case_contact_attempts_summary(
+def get_surrogate_contact_attempts_summary(
     session: Session,
-    case_id: UUID,
+    surrogate_id: UUID,
     user: UserSession,
 ) -> ContactAttemptsSummary:
     """
-    Get summary of contact attempts for a case.
+    Get summary of contact attempts for a surrogate.
 
     Includes:
     - Total attempts (all history)
@@ -154,25 +162,25 @@ def get_case_contact_attempts_summary(
     - Distinct days in org timezone
     - Successful attempts
     """
-    # Fetch case and org timezone
-    case_stmt = (
-        select(Case, Organization.timezone)
-        .join(Organization, Case.organization_id == Organization.id)
-        .where(Case.id == case_id, Case.organization_id == user.org_id)
+    # Fetch surrogate and org timezone
+    surrogate_stmt = (
+        select(Surrogate, Organization.timezone)
+        .join(Organization, Surrogate.organization_id == Organization.id)
+        .where(Surrogate.id == surrogate_id, Surrogate.organization_id == user.org_id)
     )
-    case_result = session.execute(case_stmt)
-    case_row = case_result.one_or_none()
+    surrogate_result = session.execute(surrogate_stmt)
+    surrogate_row = surrogate_result.one_or_none()
 
-    if not case_row:
-        raise ValueError("Case not found or access denied")
+    if not surrogate_row:
+        raise ValueError("Surrogate not found or access denied")
 
-    case, org_tz = case_row
+    surrogate, org_tz = surrogate_row
 
     # Fetch all attempts
     attempts_stmt = (
-        select(CaseContactAttempt)
-        .where(CaseContactAttempt.case_id == case_id)
-        .order_by(CaseContactAttempt.attempted_at.desc())
+        select(SurrogateContactAttempt)
+        .where(SurrogateContactAttempt.surrogate_id == surrogate_id)
+        .order_by(SurrogateContactAttempt.attempted_at.desc())
     )
     attempts_result = session.execute(attempts_stmt)
     attempts = attempts_result.scalars().all()
@@ -180,7 +188,7 @@ def get_case_contact_attempts_summary(
     # Calculate stats
     total_attempts = len(attempts)
     current_assignment_attempts = sum(
-        1 for a in attempts if a.case_owner_id_at_attempt == case.owner_id
+        1 for a in attempts if a.surrogate_owner_id_at_attempt == surrogate.owner_id
     )
     successful_attempts = sum(1 for a in attempts if a.outcome == "reached")
 
@@ -189,16 +197,12 @@ def get_case_contact_attempts_summary(
         distinct_days_stmt = select(
             func.count(
                 func.distinct(
-                    func.date(
-                        func.timezone(
-                            org_tz, CaseContactAttempt.attempted_at
-                        )
-                    )
+                    func.date(func.timezone(org_tz, SurrogateContactAttempt.attempted_at))
                 )
             )
         ).where(
-            CaseContactAttempt.case_id == case_id,
-            CaseContactAttempt.case_owner_id_at_attempt == case.owner_id,
+            SurrogateContactAttempt.surrogate_id == surrogate_id,
+            SurrogateContactAttempt.surrogate_owner_id_at_attempt == surrogate.owner_id,
         )
         distinct_days_result = session.execute(distinct_days_stmt)
         distinct_days = distinct_days_result.scalar() or 0
@@ -228,7 +232,7 @@ def get_case_contact_attempts_summary(
     attempt_responses = [
         ContactAttemptResponse(
             id=a.id,
-            case_id=a.case_id,
+            surrogate_id=a.surrogate_id,
             attempted_by_user_id=a.attempted_by_user_id,
             attempted_by_name=user_names.get(a.attempted_by_user_id),
             contact_methods=a.contact_methods,
@@ -237,7 +241,7 @@ def get_case_contact_attempts_summary(
             attempted_at=a.attempted_at,
             created_at=a.created_at,
             is_backdated=a.is_backdated,
-            case_owner_id_at_attempt=a.case_owner_id_at_attempt,
+            surrogate_owner_id_at_attempt=a.surrogate_owner_id_at_attempt,
         )
         for a in attempts
     ]
@@ -253,13 +257,13 @@ def get_case_contact_attempts_summary(
     )
 
 
-def get_cases_needing_followup(
+def get_surrogates_needing_followup(
     session: Session,
     org_id: UUID,
     org_timezone: str,
 ) -> list[dict]:
     """
-    Find cases that need contact follow-up reminders.
+    Find surrogates that need contact follow-up reminders.
 
     Criteria:
     - owner_type = 'user' (not queue)
@@ -270,40 +274,40 @@ def get_cases_needing_followup(
         - No attempts yet AND today > assigned_day
         - OR distinct_days < 3 AND last_attempt_day < today
 
-    Returns list of dicts with case info for notification creation.
+    Returns list of dicts with surrogate info for notification creation.
     """
     # Build query with CTE
     query = text("""
-        WITH case_stats AS (
-            SELECT 
-                c.id,
-                c.case_number,
-                c.owner_id,
-                c.organization_id,
-                c.assigned_at,
-                c.contact_status,
+        WITH surrogate_stats AS (
+            SELECT
+                s.id,
+                s.surrogate_number,
+                s.owner_id,
+                s.organization_id,
+                s.assigned_at,
+                s.contact_status,
                 ps.is_intake_stage,
-                date(c.assigned_at AT TIME ZONE :org_tz) as assigned_day,
+                date(s.assigned_at AT TIME ZONE :org_tz) as assigned_day,
                 COUNT(DISTINCT date(ca.attempted_at AT TIME ZONE :org_tz)) FILTER (
-                    WHERE ca.case_owner_id_at_attempt = c.owner_id
+                    WHERE ca.surrogate_owner_id_at_attempt = s.owner_id
                 ) as distinct_attempt_days,
                 MAX(date(ca.attempted_at AT TIME ZONE :org_tz)) FILTER (
-                    WHERE ca.case_owner_id_at_attempt = c.owner_id
+                    WHERE ca.surrogate_owner_id_at_attempt = s.owner_id
                 ) as last_attempt_day,
                 date(now() AT TIME ZONE :org_tz) as today
-            FROM cases c
-            JOIN pipeline_stages ps ON ps.id = c.stage_id
-            LEFT JOIN case_contact_attempts ca ON ca.case_id = c.id
-            WHERE 
-                c.organization_id = :org_id
-                AND c.is_archived = FALSE
-                AND c.owner_type = 'user'
-                AND c.contact_status = 'unreached'
+            FROM surrogates s
+            JOIN pipeline_stages ps ON ps.id = s.stage_id
+            LEFT JOIN surrogate_contact_attempts ca ON ca.surrogate_id = s.id
+            WHERE
+                s.organization_id = :org_id
+                AND s.is_archived = FALSE
+                AND s.owner_type = 'user'
+                AND s.contact_status = 'unreached'
                 AND ps.is_intake_stage = true
-                AND c.assigned_at IS NOT NULL
-            GROUP BY c.id, ps.is_intake_stage
+                AND s.assigned_at IS NOT NULL
+            GROUP BY s.id, ps.is_intake_stage
         )
-        SELECT * FROM case_stats
+        SELECT * FROM surrogate_stats
         WHERE (
             -- No attempts yet, and at least 1 day has passed since assignment
             (distinct_attempt_days = 0 AND today > assigned_day)

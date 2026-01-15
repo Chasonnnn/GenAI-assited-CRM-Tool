@@ -32,9 +32,7 @@ def create_org(name: str, slug: str, admin_email: str):
         # Validate slug format
         slug = slug.lower().strip()
         if not slug.replace("-", "").replace("_", "").isalnum():
-            click.echo(
-                "❌ Slug must be alphanumeric (with optional hyphens/underscores)"
-            )
+            click.echo("❌ Slug must be alphanumeric (with optional hyphens/underscores)")
             return
 
         # Check if org already exists
@@ -46,9 +44,7 @@ def create_org(name: str, slug: str, admin_email: str):
         # Check for existing pending invite for this email
         existing_invite = (
             db.query(OrgInvite)
-            .filter(
-                OrgInvite.email == admin_email.lower(), OrgInvite.accepted_at.is_(None)
-            )
+            .filter(OrgInvite.email == admin_email.lower(), OrgInvite.accepted_at.is_(None))
             .first()
         )
         if existing_invite:
@@ -157,9 +153,7 @@ def update_meta_page_token(
     db = SessionLocal()
     try:
         # Find organization
-        org = (
-            db.query(Organization).filter(Organization.slug == org_slug.lower()).first()
-        )
+        org = db.query(Organization).filter(Organization.slug == org_slug.lower()).first()
         if not org:
             click.echo(f"❌ Organization not found: {org_slug}")
             return
@@ -169,9 +163,7 @@ def update_meta_page_token(
         expires_at = datetime.now(timezone.utc) + timedelta(days=expires_days)
 
         # Check for existing mapping
-        existing = (
-            db.query(MetaPageMapping).filter(MetaPageMapping.page_id == page_id).first()
-        )
+        existing = db.query(MetaPageMapping).filter(MetaPageMapping.page_id == page_id).first()
 
         if existing:
             # Update existing
@@ -223,9 +215,7 @@ def deactivate_meta_page(page_id: str):
 
     db = SessionLocal()
     try:
-        mapping = (
-            db.query(MetaPageMapping).filter(MetaPageMapping.page_id == page_id).first()
-        )
+        mapping = db.query(MetaPageMapping).filter(MetaPageMapping.page_id == page_id).first()
 
         if not mapping:
             click.echo(f"❌ Page mapping not found: {page_id}")

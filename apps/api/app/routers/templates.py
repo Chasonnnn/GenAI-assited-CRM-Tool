@@ -78,9 +78,7 @@ def get_template(
     return result
 
 
-@router.post(
-    "", response_model=TemplateRead, dependencies=[Depends(require_csrf_header)]
-)
+@router.post("", response_model=TemplateRead, dependencies=[Depends(require_csrf_header)])
 def create_template(
     data: TemplateCreate,
     db: Session = Depends(get_db),
@@ -97,10 +95,7 @@ def create_template(
             category=data.category,
             trigger_type=data.trigger_type,
             trigger_config=data.trigger_config,
-            conditions=[
-                c.model_dump() if hasattr(c, "model_dump") else c
-                for c in data.conditions
-            ],
+            conditions=[c.model_dump() if hasattr(c, "model_dump") else c for c in data.conditions],
             condition_logic=data.condition_logic,
             actions=data.actions,
             icon=data.icon,

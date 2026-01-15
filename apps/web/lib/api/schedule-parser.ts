@@ -18,7 +18,6 @@ export interface ProposedTask {
 export interface ParseScheduleRequest {
     text: string
     // At least one entity ID must be provided
-    case_id?: string
     surrogate_id?: string
     intended_parent_id?: string
     match_id?: string
@@ -44,7 +43,6 @@ export interface BulkTaskItem {
 export interface BulkTaskCreateRequest {
     request_id: string
     // At least one entity ID must be provided
-    case_id?: string
     surrogate_id?: string
     intended_parent_id?: string
     match_id?: string

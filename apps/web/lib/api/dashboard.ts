@@ -13,8 +13,8 @@ export interface UpcomingTask {
     type: 'task'
     title: string
     time: string | null  // HH:MM format or null for all-day
-    case_id: string | null
-    case_number: string | null
+    surrogate_id: string | null
+    surrogate_number: string | null
     date: string  // YYYY-MM-DD
     is_overdue: boolean
     task_type: string
@@ -25,8 +25,8 @@ export interface UpcomingMeeting {
     type: 'meeting'
     title: string
     time: string | null  // HH:MM format
-    case_id: string | null
-    case_number: string | null
+    surrogate_id: string | null
+    surrogate_number: string | null
     date: string  // YYYY-MM-DD
     is_overdue: boolean
     join_url: string

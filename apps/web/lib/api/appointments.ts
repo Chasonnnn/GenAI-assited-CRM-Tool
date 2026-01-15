@@ -134,8 +134,8 @@ export interface Appointment {
     zoom_join_url: string | null;
     google_event_id: string | null;
     // Linkage fields
-    case_id: string | null;
-    case_number: number | null;
+    surrogate_id: string | null;
+    surrogate_number: number | null;
     intended_parent_id: string | null;
     intended_parent_name: string | null;
     created_at: string;
@@ -155,8 +155,8 @@ export interface AppointmentListItem {
     meeting_mode: string;
     status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show' | 'expired';
     // Linkage fields
-    case_id: string | null;
-    case_number: number | null;
+    surrogate_id: string | null;
+    surrogate_number: number | null;
     intended_parent_id: string | null;
     intended_parent_name: string | null;
     created_at: string;
@@ -292,7 +292,7 @@ export function getAppointments(params: {
     status?: string;
     date_start?: string;
     date_end?: string;
-    case_id?: string;
+    surrogate_id?: string;
     intended_parent_id?: string;
 }): Promise<AppointmentListResponse> {
     const searchParams = new URLSearchParams();
@@ -301,7 +301,7 @@ export function getAppointments(params: {
     if (params.status) searchParams.append('status', params.status);
     if (params.date_start) searchParams.append('date_start', params.date_start);
     if (params.date_end) searchParams.append('date_end', params.date_end);
-    if (params.case_id) searchParams.append('case_id', params.case_id);
+    if (params.surrogate_id) searchParams.append('surrogate_id', params.surrogate_id);
     if (params.intended_parent_id) searchParams.append('intended_parent_id', params.intended_parent_id);
     const query = searchParams.toString() ? `?${searchParams}` : '';
     return api.get<AppointmentListResponse>(`/appointments${query}`);
@@ -332,7 +332,7 @@ export function cancelAppointment(
 }
 
 export interface AppointmentLinkUpdate {
-    case_id?: string | null;
+    surrogate_id?: string | null;
     intended_parent_id?: string | null;
 }
 

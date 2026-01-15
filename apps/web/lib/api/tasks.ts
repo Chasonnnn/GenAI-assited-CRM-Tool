@@ -29,8 +29,8 @@ export interface TaskListItem {
     title: string;
     description: string | null;
     task_type: TaskType;
-    case_id: string | null;
-    case_number: string | null;
+    surrogate_id: string | null;
+    surrogate_number: string | null;
     owner_type: 'user' | 'queue';
     owner_id: string;
     owner_name: string | null;
@@ -77,7 +77,7 @@ export interface TaskListParams {
     per_page?: number;
     q?: string;
     owner_id?: string;
-    case_id?: string;
+    surrogate_id?: string;
     intended_parent_id?: string;
     is_completed?: boolean;
     task_type?: TaskType;
@@ -93,7 +93,7 @@ export interface TaskCreatePayload {
     title: string;
     description?: string;
     task_type?: TaskType;
-    case_id?: string;
+    surrogate_id?: string;
     intended_parent_id?: string;
     owner_type?: 'user' | 'queue';
     owner_id?: string;
@@ -115,7 +115,7 @@ export function getTasks(params: TaskListParams = {}): Promise<TaskListResponse>
     if (params.per_page) searchParams.set('per_page', String(params.per_page));
     if (params.q) searchParams.set('q', params.q);
     if (params.owner_id) searchParams.set('owner_id', params.owner_id);
-    if (params.case_id) searchParams.set('case_id', params.case_id);
+    if (params.surrogate_id) searchParams.set('surrogate_id', params.surrogate_id);
     if (params.intended_parent_id) searchParams.set('intended_parent_id', params.intended_parent_id);
     if (params.is_completed !== undefined) searchParams.set('is_completed', String(params.is_completed));
     if (params.task_type) searchParams.set('task_type', params.task_type);

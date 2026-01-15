@@ -112,7 +112,7 @@ export default function IntendedParentDetailPage() {
     useSetAIContext(
         ip
             ? {
-                entityType: "case", // Use case type for now - global mode works
+                entityType: "intended-parent",
                 entityId: ip.id,
                 entityName: `Intended Parent: ${ip.full_name}`,
             }

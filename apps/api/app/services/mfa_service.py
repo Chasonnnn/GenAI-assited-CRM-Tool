@@ -133,9 +133,7 @@ def setup_totp_for_user(db: Session, user: User) -> Tuple[str, str]:
     return secret, uri
 
 
-def complete_totp_setup(
-    db: Session, user: User, code: str
-) -> Tuple[bool, list[str] | None]:
+def complete_totp_setup(db: Session, user: User, code: str) -> Tuple[bool, list[str] | None]:
     """
     Complete TOTP setup by verifying the initial code.
 
@@ -257,16 +255,10 @@ def get_mfa_status(user: User) -> dict:
     return {
         "mfa_enabled": user.mfa_enabled,
         "totp_enabled": user.totp_enabled_at is not None,
-        "totp_enabled_at": user.totp_enabled_at.isoformat()
-        if user.totp_enabled_at
-        else None,
+        "totp_enabled_at": user.totp_enabled_at.isoformat() if user.totp_enabled_at else None,
         "duo_enabled": user.duo_enrolled_at is not None,
-        "duo_enrolled_at": user.duo_enrolled_at.isoformat()
-        if user.duo_enrolled_at
-        else None,
-        "recovery_codes_remaining": len(user.mfa_recovery_codes)
-        if user.mfa_recovery_codes
-        else 0,
+        "duo_enrolled_at": user.duo_enrolled_at.isoformat() if user.duo_enrolled_at else None,
+        "recovery_codes_remaining": len(user.mfa_recovery_codes) if user.mfa_recovery_codes else 0,
         "mfa_required": True,  # Global requirement
     }
 

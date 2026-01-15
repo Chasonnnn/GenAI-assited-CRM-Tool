@@ -8,26 +8,21 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
     PlusIcon,
     PhoneIcon,
     VideoIcon,
     UsersIcon,
-    CalendarIcon,
     ClockIcon,
     FileTextIcon,
     MessageSquareIcon,
     PaperclipIcon,
     ChevronLeftIcon,
-    ChevronDownIcon,
     MoreVerticalIcon,
     TrashIcon,
     EditIcon,
     HistoryIcon,
     Loader2Icon,
-    AlertCircleIcon,
     SparklesIcon,
     Upload,
 } from "lucide-react"
@@ -68,8 +63,8 @@ import { useAuth } from "@/lib/auth-context"
 import { TranscriptEditor, isTranscriptEmpty } from "./TranscriptEditor"
 import { InterviewWithComments } from "./InterviewWithComments"
 
-interface CaseInterviewTabProps {
-    caseId: string
+interface SurrogateInterviewTabProps {
+    surrogateId: string
 }
 
 // Interview type icons
@@ -123,7 +118,7 @@ function formatInterviewType(type: InterviewType): string {
     return labels[type]
 }
 
-export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
+export function SurrogateInterviewTab({ surrogateId }: SurrogateInterviewTabProps) {
     const { user } = useAuth()
     const [selectedId, setSelectedId] = React.useState<string | null>(null)
     const [editorOpen, setEditorOpen] = React.useState(false)
@@ -141,7 +136,7 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
     const [formStatus, setFormStatus] = React.useState<InterviewStatus>("completed")
 
     // Fetch data
-    const { data: interviews, isLoading: interviewsLoading } = useInterviews(caseId)
+    const { data: interviews, isLoading: interviewsLoading } = useInterviews(surrogateId)
     const { data: selectedInterview, refetch: refetchInterview } = useInterview(selectedId || "")
     const { data: notes } = useInterviewNotes(selectedId || "")
     const { data: attachments } = useInterviewAttachments(selectedId || "")
@@ -218,7 +213,7 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
                 toast.success("Interview updated")
             } else {
                 const newInterview = await createInterviewMutation.mutateAsync({
-                    caseId,
+                    surrogateId,
                     data,
                 })
                 setSelectedId(newInterview.id)
@@ -226,7 +221,7 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
             }
             setEditorOpen(false)
             setEditingInterview(null)
-        } catch (error) {
+        } catch {
             toast.error(editingInterview ? "Failed to update interview" : "Failed to create interview")
         }
     }
@@ -236,7 +231,7 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
         try {
             await deleteInterviewMutation.mutateAsync({
                 interviewId: interviewToDelete.id,
-                caseId,
+                surrogateId,
             })
             setSelectedId(null)
             setDeleteDialogOpen(false)
@@ -445,7 +440,7 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
                     </CardHeader>
                     <div className="flex-1 overflow-auto">
                         {interviews.map((interview) => (
-                            <InterviewListItem
+                            <InterviewListItemComponent
                                 key={interview.id}
                                 interview={interview}
                                 isSelected={selectedId === interview.id}
@@ -553,7 +548,7 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
                         </CardHeader>
                         <CardContent className="p-0">
                             {interviews.map((interview) => (
-                                <InterviewListItem
+                                <InterviewListItemComponent
                                     key={interview.id}
                                     interview={interview}
                                     isSelected={false}
@@ -629,13 +624,13 @@ export function CaseInterviewTab({ caseId }: CaseInterviewTabProps) {
 // Sub-components
 // =============================================================================
 
-interface InterviewListItemProps {
+interface InterviewListItemComponentProps {
     interview: InterviewListItem
     isSelected: boolean
     onClick: () => void
 }
 
-function InterviewListItem({ interview, isSelected, onClick }: InterviewListItemProps) {
+function InterviewListItemComponent({ interview, isSelected, onClick }: InterviewListItemComponentProps) {
     const Icon = INTERVIEW_TYPE_ICONS[interview.interview_type as InterviewType]
     const colorClass = INTERVIEW_TYPE_COLORS[interview.interview_type as InterviewType]
 

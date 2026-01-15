@@ -42,8 +42,8 @@ def build_action_preview(
     if action_type == WorkflowActionType.CREATE_TASK.value:
         return _preview_create_task(db, action, entity)
 
-    if action_type == WorkflowActionType.ASSIGN_CASE.value:
-        return _preview_assign_case(db, action, entity)
+    if action_type == WorkflowActionType.ASSIGN_SURROGATE.value:
+        return _preview_assign_surrogate(db, action, entity)
 
     if action_type == WorkflowActionType.SEND_NOTIFICATION.value:
         return _preview_send_notification(db, action, entity)
@@ -101,14 +101,14 @@ def _preview_send_email(db: Session, action: dict, entity: Any) -> str:
     if template_id:
         from app.db.models import EmailTemplate
 
-        template = db.query(EmailTemplate).filter(
-            EmailTemplate.id == UUID(str(template_id))
-        ).first()
+        template = (
+            db.query(EmailTemplate).filter(EmailTemplate.id == UUID(str(template_id))).first()
+        )
         if template:
             template_name = template.name
 
-    case_ref = _get_case_ref(entity)
-    return f"Send '{template_name}' to {case_ref}"
+    surrogate_ref = _get_surrogate_ref(entity)
+    return f"Send '{template_name}' to {surrogate_ref}"
 
 
 def _preview_create_task(db: Session, action: dict, entity: Any) -> str:
@@ -121,14 +121,14 @@ def _preview_create_task(db: Session, action: dict, entity: Any) -> str:
     return f"Create task '{title}' due in {due_days} day(s), assigned to {assignee_desc}"
 
 
-def _preview_assign_case(db: Session, action: dict, entity: Any) -> str:
-    """Preview for assign_case action."""
+def _preview_assign_surrogate(db: Session, action: dict, entity: Any) -> str:
+    """Preview for assign_surrogate action."""
     owner_type = action.get("owner_type")
     owner_id = action.get("owner_id")
 
     assignee_name = _resolve_owner_name(db, owner_type, owner_id)
-    case_ref = _get_case_ref(entity)
-    return f"Assign {case_ref} to {assignee_name}"
+    surrogate_ref = _get_surrogate_ref(entity)
+    return f"Assign {surrogate_ref} to {assignee_name}"
 
 
 def _preview_send_notification(db: Session, action: dict, entity: Any) -> str:
@@ -147,20 +147,18 @@ def _preview_update_field(db: Session, action: dict, entity: Any) -> str:
 
     # Special handling for stage_id to show stage name
     if field == "stage_id" and value:
-        stage = db.query(PipelineStage).filter(
-            PipelineStage.id == UUID(str(value))
-        ).first()
+        stage = db.query(PipelineStage).filter(PipelineStage.id == UUID(str(value))).first()
         if stage:
             value = stage.label
 
-    case_ref = _get_case_ref(entity)
-    return f"Update {field} to '{value}' on {case_ref}"
+    surrogate_ref = _get_surrogate_ref(entity)
+    return f"Update {field} to '{value}' on {surrogate_ref}"
 
 
 def _preview_add_note(db: Session, action: dict, entity: Any) -> str:
     """Preview for add_note action."""
-    case_ref = _get_case_ref(entity)
-    return f"Add note to {case_ref}"
+    surrogate_ref = _get_surrogate_ref(entity)
+    return f"Add note to {surrogate_ref}"
 
 
 # =============================================================================
@@ -168,13 +166,13 @@ def _preview_add_note(db: Session, action: dict, entity: Any) -> str:
 # =============================================================================
 
 
-def _get_case_ref(entity: Any) -> str:
-    """Get a reference to the case without PII."""
-    if hasattr(entity, "case_number") and entity.case_number:
-        return f"Case #{entity.case_number}"
+def _get_surrogate_ref(entity: Any) -> str:
+    """Get a reference to the surrogate without PII."""
+    if hasattr(entity, "surrogate_number") and entity.surrogate_number:
+        return f"Surrogate #{entity.surrogate_number}"
     if hasattr(entity, "id"):
-        return f"Case {str(entity.id)[:8]}..."
-    return "Case"
+        return f"Surrogate {str(entity.id)[:8]}..."
+    return "Surrogate"
 
 
 def _resolve_owner_name(db: Session, owner_type: str, owner_id: str | UUID) -> str:
@@ -204,10 +202,10 @@ def _describe_assignee(db: Session, assignee: str, entity: Any) -> str:
     if assignee == "owner":
         if hasattr(entity, "owner_type") and hasattr(entity, "owner_id"):
             return _resolve_owner_name(db, entity.owner_type, entity.owner_id)
-        return "case owner"
+        return "surrogate owner"
 
     if assignee == "creator":
-        return "case creator"
+        return "surrogate creator"
 
     # Specific user ID
     if assignee:
@@ -219,9 +217,9 @@ def _describe_assignee(db: Session, assignee: str, entity: Any) -> str:
 def _describe_recipients(recipients: str | list) -> str:
     """Describe notification recipients."""
     if recipients == "owner":
-        return "case owner"
+        return "surrogate owner"
     if recipients == "creator":
-        return "case creator"
+        return "surrogate creator"
     if recipients == "all_admins":
         return "all admins"
     if isinstance(recipients, list):

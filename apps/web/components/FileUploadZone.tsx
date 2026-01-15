@@ -11,7 +11,7 @@ import { useUploadAttachment, useAttachments, useDownloadAttachment, useDeleteAt
 import type { Attachment } from "@/lib/api/attachments"
 
 interface FileUploadZoneProps {
-    caseId: string
+    surrogateId: string
     className?: string
 }
 
@@ -66,11 +66,11 @@ function getScanStatusBadge(status: string, quarantined: boolean) {
     }
 }
 
-export function FileUploadZone({ caseId, className }: FileUploadZoneProps) {
+export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) {
     const [uploadProgress, setUploadProgress] = useState<number | null>(null)
     const [error, setError] = useState<string | null>(null)
 
-    const { data: attachments = [], isLoading } = useAttachments(caseId)
+    const { data: attachments = [], isLoading } = useAttachments(surrogateId)
     const uploadMutation = useUploadAttachment()
     const downloadMutation = useDownloadAttachment()
     const deleteMutation = useDeleteAttachment()
@@ -95,7 +95,7 @@ export function FileUploadZone({ caseId, className }: FileUploadZoneProps) {
 
                 try {
                     setUploadProgress(0)
-                    await uploadMutation.mutateAsync({ caseId, file })
+                    await uploadMutation.mutateAsync({ surrogateId, file })
                     setUploadProgress(100)
                     setTimeout(() => setUploadProgress(null), 1000)
                 } catch (err) {
@@ -104,7 +104,7 @@ export function FileUploadZone({ caseId, className }: FileUploadZoneProps) {
                 }
             }
         },
-        [caseId, uploadMutation]
+        [surrogateId, uploadMutation]
     )
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -126,7 +126,7 @@ export function FileUploadZone({ caseId, className }: FileUploadZoneProps) {
 
     const handleDelete = (attachmentId: string) => {
         if (confirm("Delete this attachment?")) {
-            deleteMutation.mutate({ attachmentId, caseId })
+            deleteMutation.mutate({ attachmentId, surrogateId })
         }
     }
 

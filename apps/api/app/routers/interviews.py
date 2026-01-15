@@ -1,4 +1,4 @@
-"""Interviews router - API endpoints for case interviews.
+"""Interviews router - API endpoints for surrogate interviews.
 
 Endpoints:
 - Interview CRUD
@@ -16,7 +16,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
-from app.core.case_access import can_modify_case, check_case_access
+from app.core.surrogate_access import can_modify_surrogate, check_surrogate_access
 from app.core.deps import (
     get_current_session,
     get_db,
@@ -47,7 +47,7 @@ from app.db.enums import JobType
 from app.services import (
     attachment_service,
     ai_interview_service,
-    case_service,
+    surrogate_service,
     interview_attachment_service,
     interview_note_service,
     interview_service,
@@ -70,28 +70,26 @@ def _check_interview_access(
     interview_id: UUID,
     session: UserSession,
 ):
-    """Get interview and verify case access."""
+    """Get interview and verify surrogate access."""
     interview = interview_service.get_interview(db, org_id, interview_id)
     if not interview:
         raise HTTPException(status_code=404, detail="Interview not found")
 
-    # Check case access
-    case = interview.case
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
+    # Check surrogate access
+    surrogate = interview.surrogate
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
 
-    check_case_access(
-        case, session.role, session.user_id, db=db, org_id=session.org_id
-    )
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
-    return interview, case
+    return interview, surrogate
 
 
-def _check_can_modify_interview(case, session: UserSession):
-    """Check if user can create/edit interviews on this case."""
-    if not can_modify_case(case, session.user_id, session.role):
+def _check_can_modify_interview(surrogate, session: UserSession):
+    """Check if user can create/edit interviews on this surrogate."""
+    if not can_modify_surrogate(surrogate, session.user_id, session.role):
         raise HTTPException(
-            status_code=403, detail="You don't have permission to modify this case"
+            status_code=403, detail="You don't have permission to modify this surrogate"
         )
 
 
@@ -107,51 +105,47 @@ def _check_admin_only(session: UserSession):
 # =============================================================================
 
 
-@router.get("/cases/{case_id}/interviews", response_model=list[InterviewListItem])
+@router.get("/surrogates/{surrogate_id}/interviews", response_model=list[InterviewListItem])
 def list_interviews(
-    case_id: UUID,
+    surrogate_id: UUID,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """List all interviews for a case."""
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
+    """List all interviews for a surrogate."""
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
 
-    check_case_access(
-        case, session.role, session.user_id, db=db, org_id=session.org_id
-    )
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
-    return interview_service.list_interviews_with_counts(db, session.org_id, case_id)
+    return interview_service.list_interviews_with_counts(db, session.org_id, surrogate_id)
 
 
 @router.post(
-    "/cases/{case_id}/interviews",
+    "/surrogates/{surrogate_id}/interviews",
     response_model=InterviewRead,
     status_code=201,
     dependencies=[Depends(require_csrf_header)],
 )
 def create_interview(
-    case_id: UUID,
+    surrogate_id: UUID,
     data: InterviewCreate,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Create a new interview for a case."""
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
+    """Create a new interview for a surrogate."""
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
 
-    check_case_access(
-        case, session.role, session.user_id, db=db, org_id=session.org_id
-    )
-    _check_can_modify_interview(case, session)
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+    _check_can_modify_interview(surrogate, session)
 
     try:
         interview = interview_service.create_interview(
             db=db,
             org_id=session.org_id,
-            case_id=case_id,
+            surrogate_id=surrogate_id,
             user_id=session.user_id,
             data=data,
         )
@@ -184,9 +178,7 @@ def update_interview(
     db: Session = Depends(get_db),
 ):
     """Update an interview (with auto-versioning for transcript changes)."""
-    interview, case = _check_interview_access(
-        db, session.org_id, interview_id, session
-    )
+    interview, case = _check_interview_access(db, session.org_id, interview_id, session)
     _check_can_modify_interview(case, session)
 
     try:
@@ -258,9 +250,7 @@ def get_version(
     """Get specific version content."""
     interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
 
-    version_obj = interview_service.get_version(
-        db, session.org_id, interview_id, version
-    )
+    version_obj = interview_service.get_version(db, session.org_id, interview_id, version)
     if not version_obj:
         raise HTTPException(status_code=404, detail="Version not found")
 
@@ -285,9 +275,7 @@ def get_version_diff(
         raise HTTPException(status_code=400, detail="Versions must be different")
 
     try:
-        diff = interview_service.get_version_diff(
-            db, session.org_id, interview_id, v1, v2
-        )
+        diff = interview_service.get_version_diff(db, session.org_id, interview_id, v1, v2)
         return diff
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -305,9 +293,7 @@ def restore_version(
     db: Session = Depends(get_db),
 ):
     """Restore interview transcript to a previous version."""
-    interview, case = _check_interview_access(
-        db, session.org_id, interview_id, session
-    )
+    interview, case = _check_interview_access(db, session.org_id, interview_id, session)
     _check_can_modify_interview(case, session)
 
     try:
@@ -500,9 +486,7 @@ async def upload_attachment(
     db: Session = Depends(get_db),
 ):
     """Upload a new attachment and link it to the interview."""
-    interview, case = _check_interview_access(
-        db, session.org_id, interview_id, session
-    )
+    interview, case = _check_interview_access(db, session.org_id, interview_id, session)
     _check_can_modify_interview(case, session)
 
     # Read file content
@@ -521,7 +505,7 @@ async def upload_attachment(
             content_type=file.content_type or "application/octet-stream",
             file=file_obj,
             file_size=len(content),
-            case_id=case.id,
+            surrogate_id=case.id,
             allowed_extensions=interview_attachment_service.INTERVIEW_ALLOWED_EXTENSIONS,
             allowed_mime_types=interview_attachment_service.INTERVIEW_ALLOWED_MIME_TYPES,
         )
@@ -555,9 +539,7 @@ def link_existing_attachment(
     db: Session = Depends(get_db),
 ):
     """Link an existing attachment to the interview."""
-    interview, case = _check_interview_access(
-        db, session.org_id, interview_id, session
-    )
+    interview, case = _check_interview_access(db, session.org_id, interview_id, session)
     _check_can_modify_interview(case, session)
 
     try:
@@ -586,9 +568,7 @@ def unlink_attachment(
     db: Session = Depends(get_db),
 ):
     """Unlink an attachment from the interview (case_manager+ only)."""
-    interview, case = _check_interview_access(
-        db, session.org_id, interview_id, session
-    )
+    interview, case = _check_interview_access(db, session.org_id, interview_id, session)
 
     role_str = session.role.value if hasattr(session.role, "value") else session.role
     if role_str not in [
@@ -596,9 +576,7 @@ def unlink_attachment(
         Role.ADMIN.value,
         Role.DEVELOPER.value,
     ]:
-        raise HTTPException(
-            status_code=403, detail="Case manager or higher required"
-        )
+        raise HTTPException(status_code=403, detail="Case manager or higher required")
 
     success = interview_attachment_service.unlink_attachment(
         db, session.org_id, interview_id, attachment_id
@@ -628,9 +606,7 @@ def request_transcription(
     db: Session = Depends(get_db),
 ):
     """Request AI transcription for an audio/video attachment."""
-    interview, case = _check_interview_access(
-        db, session.org_id, interview_id, session
-    )
+    interview, case = _check_interview_access(db, session.org_id, interview_id, session)
     _check_can_modify_interview(case, session)
 
     link = interview_attachment_service.get_interview_attachment(
@@ -641,20 +617,14 @@ def request_transcription(
 
     # Check if audio/video
     if not interview_attachment_service.is_audio_video(link.attachment.content_type):
-        raise HTTPException(
-            status_code=400, detail="Only audio/video files can be transcribed"
-        )
+        raise HTTPException(status_code=400, detail="Only audio/video files can be transcribed")
 
     # Check if already processing
     if link.transcription_status in ["pending", "processing"]:
-        raise HTTPException(
-            status_code=400, detail="Transcription already in progress"
-        )
+        raise HTTPException(status_code=400, detail="Transcription already in progress")
 
     # Update status to pending
-    interview_attachment_service.update_transcription_status(
-        db, link, status="pending"
-    )
+    interview_attachment_service.update_transcription_status(db, link, status="pending")
     job_service.schedule_job(
         db=db,
         org_id=session.org_id,
@@ -736,28 +706,26 @@ async def summarize_interview(
 
 
 @router.post(
-    "/cases/{case_id}/interviews/ai/summarize-all",
+    "/surrogates/{surrogate_id}/interviews/ai/summarize-all",
     response_model=AllInterviewsSummaryResponse,
     dependencies=[Depends(require_csrf_header)],
 )
 async def summarize_all_interviews(
-    case_id: UUID,
+    surrogate_id: UUID,
     session: UserSession = Depends(require_permission(P.AI_USE)),
     db: Session = Depends(get_db),
 ):
-    """Generate AI summary of all interviews for a case."""
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
+    """Generate AI summary of all interviews for a surrogate."""
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
 
-    check_case_access(
-        case, session.role, session.user_id, db=db, org_id=session.org_id
-    )
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
     try:
         return await ai_interview_service.summarize_all_interviews(
             db=db,
-            case_id=case_id,
+            surrogate_id=surrogate_id,
             org_id=session.org_id,
             user_id=session.user_id,
         )
@@ -794,8 +762,10 @@ def export_interview(
                 status_code=403, detail="Case manager or higher required for JSON export"
             )
 
-    case = interview.case
-    case_name = case.full_name or f"Case #{case.case_number or case.id}"
+    surrogate = interview.surrogate
+    surrogate_name = (
+        surrogate.full_name or f"Surrogate #{surrogate.surrogate_number or surrogate.id}"
+    )
     org = org_service.get_org_by_id(db, session.org_id)
     org_name = org.name if org else ""
 
@@ -810,7 +780,7 @@ def export_interview(
         if not payload:
             raise HTTPException(status_code=404, detail="Interview not found")
 
-        filename = f"interview_{case.case_number or interview.id}.json"
+        filename = f"interview_{surrogate.surrogate_number or interview.id}.json"
         return JSONResponse(
             content=jsonable_encoder(payload),
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
@@ -820,11 +790,11 @@ def export_interview(
         db=db,
         org_id=session.org_id,
         interview=interview,
-        case_name=case_name,
+        surrogate_name=surrogate_name,
         org_name=org_name,
         current_user_id=session.user_id,
     )
-    filename = f"interview_{case.case_number or interview.id}.pdf"
+    filename = f"interview_{surrogate.surrogate_number or interview.id}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
@@ -832,27 +802,27 @@ def export_interview(
     )
 
 
-@router.get("/cases/{case_id}/interviews/export")
+@router.get("/surrogates/{surrogate_id}/interviews/export")
 def export_all_interviews(
-    case_id: UUID,
+    surrogate_id: UUID,
     format: str = Query("pdf", pattern="^(pdf|json)$"),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Export all interviews for a case as PDF or JSON."""
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
+    """Export all interviews for a surrogate as PDF or JSON."""
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
 
-    check_case_access(
-        case, session.role, session.user_id, db=db, org_id=session.org_id
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+
+    surrogate_name = (
+        surrogate.full_name or f"Surrogate #{surrogate.surrogate_number or surrogate.id}"
     )
-
-    case_name = case.full_name or f"Case #{case.case_number or case.id}"
     org = org_service.get_org_by_id(db, session.org_id)
     org_name = org.name if org else ""
 
-    interviews = interview_service.list_interviews(db, session.org_id, case_id)
+    interviews = interview_service.list_interviews(db, session.org_id, surrogate_id)
     if not interviews:
         raise HTTPException(status_code=404, detail="No interviews found")
 
@@ -864,17 +834,15 @@ def export_all_interviews(
             current_user_id=session.user_id,
         )
         payload = {
-            "case_id": case.id,
-            "case_number": case.case_number,
-            "case_name": case_name,
+            "surrogate_id": surrogate.id,
+            "surrogate_number": surrogate.surrogate_number,
+            "surrogate_name": surrogate_name,
             "interviews": [
-                exports[interview.id]
-                for interview in interviews
-                if interview.id in exports
+                exports[interview.id] for interview in interviews if interview.id in exports
             ],
         }
 
-        filename = f"interviews_{case.case_number or case.id}.json"
+        filename = f"interviews_{surrogate.surrogate_number or surrogate.id}.json"
         return JSONResponse(
             content=jsonable_encoder(payload),
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
@@ -884,11 +852,11 @@ def export_all_interviews(
         db=db,
         org_id=session.org_id,
         interviews=interviews,
-        case_name=case_name,
+        surrogate_name=surrogate_name,
         org_name=org_name,
         current_user_id=session.user_id,
     )
-    filename = f"interviews_{case.case_number or case.id}.pdf"
+    filename = f"interviews_{surrogate.surrogate_number or surrogate.id}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",

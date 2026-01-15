@@ -28,9 +28,7 @@ def _verify_dev_secret(x_dev_secret: str = Header(...)):
     beyond just the ENV check.
     """
     if settings.ENV not in ("dev", "test"):
-        raise HTTPException(
-            status_code=403, detail="Dev endpoints are only available in dev/test."
-        )
+        raise HTTPException(status_code=403, detail="Dev endpoints are only available in dev/test.")
     if not settings.DEV_SECRET:
         raise HTTPException(status_code=501, detail="DEV_SECRET not configured")
     if x_dev_secret != settings.DEV_SECRET:
@@ -126,12 +124,8 @@ def get_meta_lead_alerts(
                 "status": lead.status,
                 "fetch_error": lead.fetch_error,
                 "conversion_error": lead.conversion_error,
-                "received_at": lead.received_at.isoformat()
-                if lead.received_at
-                else None,
-                "field_data_preview": str(lead.field_data)[:200]
-                if lead.field_data
-                else None,
+                "received_at": lead.received_at.isoformat() if lead.received_at else None,
+                "field_data_preview": str(lead.field_data)[:200] if lead.field_data else None,
             }
             for lead in problem_leads
         ],
@@ -141,9 +135,7 @@ def get_meta_lead_alerts(
                 "page_name": page.page_name,
                 "is_active": page.is_active,
                 "last_error": page.last_error,
-                "last_error_at": page.last_error_at.isoformat()
-                if page.last_error_at
-                else None,
+                "last_error_at": page.last_error_at.isoformat() if page.last_error_at else None,
                 "last_success_at": page.last_success_at.isoformat()
                 if page.last_success_at
                 else None,
@@ -176,15 +168,13 @@ def get_all_meta_leads(
                 "meta_page_id": lead.meta_page_id,
                 "status": lead.status,
                 "is_converted": lead.is_converted,
-                "converted_case_id": str(lead.converted_case_id)
-                if lead.converted_case_id
+                "converted_surrogate_id": str(lead.converted_surrogate_id)
+                if lead.converted_surrogate_id
                 else None,
                 "fetch_error": lead.fetch_error,
                 "conversion_error": lead.conversion_error,
                 "field_data": lead.field_data,
-                "received_at": lead.received_at.isoformat()
-                if lead.received_at
-                else None,
+                "received_at": lead.received_at.isoformat() if lead.received_at else None,
             }
             for lead in leads
         ],

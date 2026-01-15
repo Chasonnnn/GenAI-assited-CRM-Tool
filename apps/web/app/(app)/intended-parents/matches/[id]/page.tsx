@@ -47,7 +47,7 @@ import { RejectMatchDialog } from "@/components/matches/RejectMatchDialog"
 import { AddNoteDialog } from "@/components/matches/AddNoteDialog"
 import { UploadFileDialog } from "@/components/matches/UploadFileDialog"
 import { AddTaskDialog, type TaskFormData } from "@/components/matches/AddTaskDialog"
-import { useCase, useChangeStatus, useCaseActivity, caseKeys } from "@/lib/hooks/use-cases"
+import { useSurrogate, useChangeSurrogateStatus, useSurrogateActivity, surrogateKeys } from "@/lib/hooks/use-surrogates"
 import { useNotes, useCreateNote } from "@/lib/hooks/use-notes"
 import { useIntendedParent, useIntendedParentNotes, useIntendedParentHistory, intendedParentKeys, useCreateIntendedParentNote } from "@/lib/hooks/use-intended-parents"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
@@ -77,12 +77,12 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 type TabType = "notes" | "files" | "tasks" | "activity"
-type DataSource = "case" | "ip" | "match"
+type DataSource = "surrogate" | "ip" | "match"
 type SourceFilter = "all" | DataSource
 
 const SOURCE_OPTIONS: { value: SourceFilter; label: string }[] = [
     { value: "all", label: "All Source" },
-    { value: "case", label: "Case" },
+    { value: "surrogate", label: "Surrogate" },
     { value: "ip", label: "Intended Parent" },
     { value: "match", label: "Match" },
 ]
@@ -93,9 +93,9 @@ const sourceLabel = (value: SourceFilter | null | undefined) =>
 const isTabType = (value: string | null): value is TabType =>
     value === "notes" || value === "files" || value === "tasks" || value === "activity"
 const isSourceFilter = (value: string | null): value is SourceFilter =>
-    value === "all" || value === "case" || value === "ip" || value === "match"
-const isDeletableSource = (value: DataSource): value is "case" | "ip" =>
-    value === "case" || value === "ip"
+    value === "all" || value === "surrogate" || value === "ip" || value === "match"
+const isDeletableSource = (value: DataSource): value is "surrogate" | "ip" =>
+    value === "surrogate" || value === "ip"
 
 export default function MatchDetailPage() {
     const params = useParams<{ id: string }>()
@@ -166,26 +166,26 @@ export default function MatchDetailPage() {
     const createTaskMutation = useCreateTask()
 
     // Set AI context for this page.
-    // NOTE: The chat API currently supports case/task/global. For match pages, we attach AI to the case.
-    const matchName = match ? `${match.case_name} & ${match.ip_name}` : ""
-    useSetAIContext(match?.case_id ? { entityType: "case", entityId: match.case_id, entityName: matchName } : null)
+    // NOTE: The chat API currently supports surrogate/task/global. For match pages, we attach AI to the surrogate.
+    const matchName = match ? `${match.surrogate_name} & ${match.ip_name}` : ""
+    useSetAIContext(match?.surrogate_id ? { entityType: "surrogate", entityId: match.surrogate_id, entityName: matchName } : null)
 
     // Fetch full profile data for both sides
-    const { data: caseData, isLoading: caseLoading } = useCase(match?.case_id || "")
+    const { data: surrogateData, isLoading: surrogateLoading } = useSurrogate(match?.surrogate_id || "")
     const { data: ipData, isLoading: ipLoading } = useIntendedParent(match?.intended_parent_id || "")
 
     // Fetch notes from all sources
-    const { data: caseNotes = [] } = useNotes(match?.case_id || "")
+    const { data: surrogateNotes = [] } = useNotes(match?.surrogate_id || "")
     const { data: ipNotes = [] } = useIntendedParentNotes(match?.intended_parent_id || "")
 
-    // Fetch files/attachments from Case and IP
-    const { data: caseFiles = [] } = useAttachments(match?.case_id || null)
+    // Fetch files/attachments from Surrogate and IP
+    const { data: surrogateFiles = [] } = useAttachments(match?.surrogate_id || null)
     const { data: ipFiles = [] } = useIPAttachments(match?.intended_parent_id || null)
 
-    // Fetch tasks from Case and IP
-    const { data: caseTasks } = useTasks(
-        match?.case_id ? { case_id: match.case_id, exclude_approvals: true } : { exclude_approvals: true },
-        { enabled: !!match?.case_id }
+    // Fetch tasks from Surrogate and IP
+    const { data: surrogateTasks } = useTasks(
+        match?.surrogate_id ? { surrogate_id: match.surrogate_id, exclude_approvals: true } : { exclude_approvals: true },
+        { enabled: !!match?.surrogate_id }
     )
     const { data: ipTasks } = useTasks(
         match?.intended_parent_id
@@ -194,13 +194,13 @@ export default function MatchDetailPage() {
         { enabled: !!match?.intended_parent_id }
     )
 
-    // Fetch activity from Case and IP
-    const { data: caseActivity } = useCaseActivity(match?.case_id || "", 1, 50)
+    // Fetch activity from Surrogate and IP
+    const { data: surrogateActivity } = useSurrogateActivity(match?.surrogate_id || "", 1, 50)
     const { data: ipHistory } = useIntendedParentHistory(match?.intended_parent_id || null)
 
     // Pipeline stages for status change dropdown
     const { data: defaultPipeline } = useDefaultPipeline()
-    const changeStatusMutation = useChangeStatus()
+    const changeStatusMutation = useChangeSurrogateStatus()
 
     // Filter to post-approval stages only (case managers can only move to post-approval)
     const postApprovalStages = useMemo(() => {
@@ -213,14 +213,14 @@ export default function MatchDetailPage() {
         id: string
         content: string
         created_at: string
-        source: 'case' | 'ip' | 'match'
+        source: 'surrogate' | 'ip' | 'match'
         author_name?: string
     }
     const combinedNotes = useMemo<CombinedNote[]>(() => {
         const notes: CombinedNote[] = []
-        // Case notes
-        for (const n of caseNotes) {
-            const note: CombinedNote = { id: n.id, content: n.body, created_at: n.created_at, source: 'case' }
+        // Surrogate notes
+        for (const n of surrogateNotes) {
+            const note: CombinedNote = { id: n.id, content: n.body, created_at: n.created_at, source: 'surrogate' }
             if (n.author_name) {
                 note.author_name = n.author_name
             }
@@ -242,7 +242,7 @@ export default function MatchDetailPage() {
         // Sort by created_at descending
         notes.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         return notes
-    }, [caseNotes, ipNotes, match])
+    }, [surrogateNotes, ipNotes, match])
 
     const filteredNotes = useMemo(() => {
         if (sourceFilter === 'all') return combinedNotes
@@ -255,13 +255,13 @@ export default function MatchDetailPage() {
         filename: string
         file_size: number
         created_at: string
-        source: 'case' | 'ip' | 'match'
+        source: 'surrogate' | 'ip' | 'match'
     }
     const combinedFiles = useMemo<CombinedFile[]>(() => {
         const files: CombinedFile[] = []
-        // Case files
-        for (const f of caseFiles) {
-            files.push({ id: f.id, filename: f.filename, file_size: f.file_size, created_at: f.created_at, source: 'case' })
+        // Surrogate files
+        for (const f of surrogateFiles) {
+            files.push({ id: f.id, filename: f.filename, file_size: f.file_size, created_at: f.created_at, source: 'surrogate' })
         }
         // IP files
         for (const f of ipFiles) {
@@ -269,7 +269,7 @@ export default function MatchDetailPage() {
         }
         files.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         return files
-    }, [caseFiles, ipFiles])
+    }, [surrogateFiles, ipFiles])
 
     const filteredFiles = useMemo(() => {
         if (sourceFilter === 'all') return combinedFiles
@@ -282,20 +282,20 @@ export default function MatchDetailPage() {
         title: string
         due_date: string | null
         is_completed: boolean
-        source: 'case' | 'ip' | 'match'
+        source: 'surrogate' | 'ip' | 'match'
     }
     const combinedTasks = useMemo<CombinedTask[]>(() => {
         const tasks: CombinedTask[] = []
-        // Case tasks
-        for (const t of caseTasks?.items || []) {
-            tasks.push({ id: t.id, title: t.title, due_date: t.due_date, is_completed: t.is_completed, source: 'case' })
+        // Surrogate tasks
+        for (const t of surrogateTasks?.items || []) {
+            tasks.push({ id: t.id, title: t.title, due_date: t.due_date, is_completed: t.is_completed, source: 'surrogate' })
         }
         // IP tasks
         for (const t of ipTasks?.items || []) {
             tasks.push({ id: t.id, title: t.title, due_date: t.due_date, is_completed: t.is_completed, source: 'ip' })
         }
         return tasks
-    }, [caseTasks, ipTasks])
+    }, [surrogateTasks, ipTasks])
 
     const filteredTasks = useMemo(() => {
         if (sourceFilter === 'all') return combinedTasks
@@ -309,12 +309,12 @@ export default function MatchDetailPage() {
         description: string
         actor_name: string | null
         created_at: string
-        source: 'case' | 'ip' | 'match'
+        source: 'surrogate' | 'ip' | 'match'
     }
     const combinedActivity = useMemo<CombinedActivity[]>(() => {
         const activities: CombinedActivity[] = []
-        // Case activity (includes actor_name)
-        for (const a of caseActivity?.items || []) {
+        // Surrogate activity (includes actor_name)
+        for (const a of surrogateActivity?.items || []) {
             const description =
                 typeof a.details?.description === "string" ? a.details.description : a.activity_type
             activities.push({
@@ -323,7 +323,7 @@ export default function MatchDetailPage() {
                 description,
                 actor_name: a.actor_name,
                 created_at: a.created_at,
-                source: 'case',
+                source: 'surrogate',
             })
         }
         // IP history
@@ -337,7 +337,7 @@ export default function MatchDetailPage() {
                 source: 'ip'
             })
         }
-        // Match proposed event only (accept/reject already appears in case activity)
+        // Match proposed event only (accept/reject already appears in surrogate activity)
         if (match?.proposed_at) {
             activities.push({
                 id: 'match-proposed',
@@ -351,14 +351,14 @@ export default function MatchDetailPage() {
         // Sort by created_at descending
         activities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         return activities
-    }, [caseActivity, ipHistory, match])
+    }, [surrogateActivity, ipHistory, match])
 
     const filteredActivity = useMemo(() => {
         if (sourceFilter === 'all') return combinedActivity
         return combinedActivity.filter(a => a.source === sourceFilter)
     }, [combinedActivity, sourceFilter])
 
-    // Check if user can change case status (case_manager+)
+    // Check if user can change surrogate status (case_manager+)
     const canChangeStatus = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
 
     const formatDate = (dateStr: string | null | undefined) => {
@@ -384,11 +384,11 @@ export default function MatchDetailPage() {
         })
     }
 
-    // Handle case status change from Match detail
-    const handleCaseStatusChange = async (newStageId: string) => {
-        if (!match?.case_id) return
-        await changeStatusMutation.mutateAsync({ caseId: match.case_id, data: { stage_id: newStageId } })
-        // Invalidate match query to refresh case_stage fields
+    // Handle surrogate status change from Match detail
+    const handleSurrogateStatusChange = async (newStageId: string) => {
+        if (!match?.surrogate_id) return
+        await changeStatusMutation.mutateAsync({ surrogateId: match.surrogate_id, data: { stage_id: newStageId } })
+        // Invalidate match query to refresh surrogate stage fields
         queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
     }
 
@@ -396,9 +396,9 @@ export default function MatchDetailPage() {
     const handleAcceptMatch = async () => {
         await acceptMatchMutation.mutateAsync({ matchId })
         // Invalidate all related queries to refresh UI
-        if (match?.case_id) {
-            queryClient.invalidateQueries({ queryKey: caseKeys.detail(match.case_id) })
-            queryClient.invalidateQueries({ queryKey: caseKeys.lists() })
+        if (match?.surrogate_id) {
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(match.surrogate_id) })
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
         }
         if (match?.intended_parent_id) {
             queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(match.intended_parent_id) })
@@ -411,8 +411,8 @@ export default function MatchDetailPage() {
     const handleRejectMatch = async (reason: string) => {
         await rejectMatchMutation.mutateAsync({ matchId, data: { rejection_reason: reason } })
         // Refresh related data after rejection
-        if (match?.case_id) {
-            queryClient.invalidateQueries({ queryKey: caseKeys.detail(match.case_id) })
+        if (match?.surrogate_id) {
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(match.surrogate_id) })
         }
         if (match?.intended_parent_id) {
             queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(match.intended_parent_id) })
@@ -422,10 +422,10 @@ export default function MatchDetailPage() {
     }
 
     // Handle Add Note
-    const handleAddNote = async (target: "case" | "ip", content: string) => {
+    const handleAddNote = async (target: "surrogate" | "ip", content: string) => {
         try {
-            if (target === "case" && match?.case_id) {
-                await createNoteMutation.mutateAsync({ caseId: match.case_id, body: content })
+            if (target === "surrogate" && match?.surrogate_id) {
+                await createNoteMutation.mutateAsync({ surrogateId: match.surrogate_id, body: content })
             } else if (target === "ip" && match?.intended_parent_id) {
                 await createIPNoteMutation.mutateAsync({ id: match.intended_parent_id, data: { content } })
             }
@@ -436,10 +436,10 @@ export default function MatchDetailPage() {
     }
 
     // Handle File Upload
-    const handleUploadFile = async (target: "case" | "ip", file: File) => {
+    const handleUploadFile = async (target: "surrogate" | "ip", file: File) => {
         try {
-            if (target === "case" && match?.case_id) {
-                await uploadAttachmentMutation.mutateAsync({ caseId: match.case_id, file })
+            if (target === "surrogate" && match?.surrogate_id) {
+                await uploadAttachmentMutation.mutateAsync({ surrogateId: match.surrogate_id, file })
             } else if (target === "ip" && match?.intended_parent_id) {
                 await uploadIPAttachmentMutation.mutateAsync({ ipId: match.intended_parent_id, file })
             }
@@ -450,14 +450,14 @@ export default function MatchDetailPage() {
     }
 
     // Handle Delete File
-    const handleDeleteFile = async (attachmentId: string, source: "case" | "ip") => {
+    const handleDeleteFile = async (attachmentId: string, source: "surrogate" | "ip") => {
         if (!confirm("Are you sure you want to delete this file?")) return
         try {
-            const caseId = source === "case" ? match?.case_id : undefined
-            await deleteAttachmentMutation.mutateAsync({ attachmentId, caseId: caseId || "" })
+            const surrogateId = source === "surrogate" ? match?.surrogate_id : undefined
+            await deleteAttachmentMutation.mutateAsync({ attachmentId, surrogateId: surrogateId || "" })
             // Invalidate the appropriate query based on source
-            if (source === "case" && match?.case_id) {
-                queryClient.invalidateQueries({ queryKey: ["attachments", match.case_id] })
+            if (source === "surrogate" && match?.surrogate_id) {
+                queryClient.invalidateQueries({ queryKey: ["attachments", match.surrogate_id] })
             } else if (source === "ip" && match?.intended_parent_id) {
                 queryClient.invalidateQueries({ queryKey: ["ip-attachments", match.intended_parent_id] })
             }
@@ -468,13 +468,13 @@ export default function MatchDetailPage() {
     }
 
     // Handle Add Task
-    const handleAddTask = async (target: "case" | "ip", data: TaskFormData) => {
+    const handleAddTask = async (target: "surrogate" | "ip", data: TaskFormData) => {
         try {
-            if (target === "case" && match?.case_id) {
+            if (target === "surrogate" && match?.surrogate_id) {
                 await createTaskMutation.mutateAsync({
                     title: data.title,
                     task_type: data.task_type,
-                    case_id: match.case_id,
+                    surrogate_id: match.surrogate_id,
                     ...(data.description ? { description: data.description } : {}),
                     ...(data.due_date ? { due_date: data.due_date } : {}),
                 })
@@ -530,12 +530,12 @@ export default function MatchDetailPage() {
                         </Link>
                         <div className="flex-1 flex items-center gap-2">
                             <h1 className="text-xl font-semibold">
-                                {match.case_name || "Surrogate"} ↔ {match.ip_name || "Intended Parents"}
+                                {match.surrogate_name || "Surrogate"} ↔ {match.ip_name || "Intended Parents"}
                             </h1>
-                            {/* Case Stage Badge */}
-                            {match.case_stage_label && (
+                        {/* Surrogate Stage Badge */}
+                            {match.surrogate_stage_label && (
                                 <Badge variant="secondary" className="text-xs">
-                                    {match.case_stage_label}
+                                    {match.surrogate_stage_label}
                                 </Badge>
                             )}
                         </div>
@@ -578,8 +578,8 @@ export default function MatchDetailPage() {
                                     {postApprovalStages.map((stage) => (
                                         <DropdownMenuItem
                                             key={stage.id}
-                                            onClick={() => handleCaseStatusChange(stage.id)}
-                                            disabled={stage.id === caseData?.stage_id}
+                                            onClick={() => handleSurrogateStatusChange(stage.id)}
+                                            disabled={stage.id === surrogateData?.stage_id}
                                         >
                                             <span
                                                 className="mr-2 size-2 rounded-full"
@@ -625,24 +625,24 @@ export default function MatchDetailPage() {
                                         <h2 className="text-sm font-semibold text-purple-500">Surrogate</h2>
                                     </div>
 
-                                    {caseLoading ? (
+                                    {surrogateLoading ? (
                                         <div className="flex items-center justify-center h-32">
                                             <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
                                         </div>
-                                    ) : caseData ? (
+                                    ) : surrogateData ? (
                                         <div className="space-y-3">
                                             {/* Profile Header */}
                                             <div className="flex items-start gap-3">
                                                 <Avatar className="h-10 w-10">
                                                     <AvatarFallback className="bg-purple-500/10 text-purple-500 text-sm">
-                                                        {(caseData.full_name || "S").charAt(0).toUpperCase()}
+                                                        {(surrogateData.full_name || "S").charAt(0).toUpperCase()}
                                                     </AvatarFallback>
                                                 </Avatar>
                                                 <div className="flex-1 min-w-0">
-                                                    <h3 className="text-base font-semibold truncate">{caseData.full_name}</h3>
+                                                    <h3 className="text-base font-semibold truncate">{surrogateData.full_name}</h3>
                                                     <div className="flex items-center gap-1 mt-0.5">
-                                                        <Badge variant="outline" className="text-xs px-1.5 py-0">#{caseData.case_number}</Badge>
-                                                        <Badge variant="secondary" className="text-xs px-1.5 py-0">{caseData.status_label}</Badge>
+                                                        <Badge variant="outline" className="text-xs px-1.5 py-0">#{surrogateData.surrogate_number}</Badge>
+                                                        <Badge variant="secondary" className="text-xs px-1.5 py-0">{surrogateData.status_label}</Badge>
                                                     </div>
                                                 </div>
                                             </div>
@@ -653,19 +653,19 @@ export default function MatchDetailPage() {
                                             <div className="space-y-2 text-sm">
                                                 <div className="flex items-center gap-2">
                                                     <MailIcon className="size-3.5 text-muted-foreground flex-shrink-0" />
-                                                    <span className="truncate">{caseData.email || "—"}</span>
+                                                    <span className="truncate">{surrogateData.email || "—"}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <PhoneIcon className="size-3.5 text-muted-foreground flex-shrink-0" />
-                                                    <span>{caseData.phone || "—"}</span>
+                                                    <span>{surrogateData.phone || "—"}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <MapPinIcon className="size-3.5 text-muted-foreground flex-shrink-0" />
-                                                    <span>{caseData.state || "—"}</span>
+                                                    <span>{surrogateData.state || "—"}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <CakeIcon className="size-3.5 text-muted-foreground flex-shrink-0" />
-                                                    <span>{formatDate(caseData.date_of_birth)}</span>
+                                                    <span>{formatDate(surrogateData.date_of_birth)}</span>
                                                 </div>
                                             </div>
 
@@ -675,13 +675,13 @@ export default function MatchDetailPage() {
                                             <div>
                                                 <p className="text-xs text-muted-foreground mb-1">Demographics</p>
                                                 <div className="grid grid-cols-3 gap-1 text-xs">
-                                                    <div><span className="text-muted-foreground">Race:</span> {caseData.race || "—"}</div>
-                                                    <div><span className="text-muted-foreground">Ht:</span> {caseData.height_ft ? `${caseData.height_ft}ft` : "—"}</div>
-                                                    <div><span className="text-muted-foreground">Wt:</span> {caseData.weight_lb ? `${caseData.weight_lb}lb` : "—"}</div>
+                                                    <div><span className="text-muted-foreground">Race:</span> {surrogateData.race || "—"}</div>
+                                                    <div><span className="text-muted-foreground">Ht:</span> {surrogateData.height_ft ? `${surrogateData.height_ft}ft` : "—"}</div>
+                                                    <div><span className="text-muted-foreground">Wt:</span> {surrogateData.weight_lb ? `${surrogateData.weight_lb}lb` : "—"}</div>
                                                 </div>
                                             </div>
 
-                                            <Link href={`/cases/${caseData.id}`}>
+                                            <Link href={`/surrogates/${surrogateData.id}`}>
                                                 <Button variant="outline" size="sm" className="w-full text-xs h-7">View Full Profile</Button>
                                             </Link>
                                         </div>
@@ -858,12 +858,12 @@ export default function MatchDetailPage() {
                                                                 <div className="flex items-center gap-1.5 mb-2">
                                                                     <Badge
                                                                         variant="outline"
-                                                                        className={`text-[10px] px-1.5 py-0 ${note.source === 'case' ? 'border-green-500/50 text-green-600 bg-green-500/5' :
+                                                                        className={`text-[10px] px-1.5 py-0 ${note.source === 'surrogate' ? 'border-green-500/50 text-green-600 bg-green-500/5' :
                                                                             note.source === 'ip' ? 'border-blue-500/50 text-blue-600 bg-blue-500/5' :
                                                                                 'border-purple-500/50 text-purple-600 bg-purple-500/5'
                                                                             }`}
                                                                     >
-                                                                        {note.source === 'case' ? 'Case' :
+                                                                        {note.source === 'surrogate' ? 'Surrogate' :
                                                                             note.source === 'ip' ? 'IP' : 'Match'}
                                                                     </Badge>
                                                                     {note.author_name && (
@@ -912,12 +912,12 @@ export default function MatchDetailPage() {
                                                                     <div className="flex items-center gap-1 mb-0.5">
                                                                         <Badge
                                                                             variant="outline"
-                                                                            className={`text-[10px] px-1 py-0 ${file.source === 'case' ? 'border-green-500 text-green-600' :
+                                                                            className={`text-[10px] px-1 py-0 ${file.source === 'surrogate' ? 'border-green-500 text-green-600' :
                                                                                 file.source === 'ip' ? 'border-blue-500 text-blue-600' :
                                                                                     'border-purple-500 text-purple-600'
                                                                                 }`}
                                                                         >
-                                                                            {file.source === 'case' ? 'Case' :
+                                                                            {file.source === 'surrogate' ? 'Surrogate' :
                                                                                 file.source === 'ip' ? 'IP' : 'Match'}
                                                                         </Badge>
                                                                     </div>
@@ -972,12 +972,12 @@ export default function MatchDetailPage() {
                                                                 <div className="flex items-center gap-1 mb-0.5">
                                                                     <Badge
                                                                         variant="outline"
-                                                                        className={`text-[10px] px-1 py-0 ${task.source === 'case' ? 'border-green-500 text-green-600' :
+                                                                        className={`text-[10px] px-1 py-0 ${task.source === 'surrogate' ? 'border-green-500 text-green-600' :
                                                                             task.source === 'ip' ? 'border-blue-500 text-blue-600' :
                                                                                 'border-purple-500 text-purple-600'
                                                                             }`}
                                                                     >
-                                                                        {task.source === 'case' ? 'Case' :
+                                                                        {task.source === 'surrogate' ? 'Surrogate' :
                                                                             task.source === 'ip' ? 'IP' : 'Match'}
                                                                     </Badge>
                                                                     {task.is_completed && (
@@ -1011,7 +1011,7 @@ export default function MatchDetailPage() {
                                                 {filteredActivity.length > 0 ? (
                                                     filteredActivity.map((activity) => (
                                                         <div key={activity.id} className="flex gap-2">
-                                                            <div className={`h-2 w-2 rounded-full mt-1.5 flex-shrink-0 ${activity.source === 'case' ? 'bg-green-500' :
+                                                            <div className={`h-2 w-2 rounded-full mt-1.5 flex-shrink-0 ${activity.source === 'surrogate' ? 'bg-green-500' :
                                                                 activity.source === 'ip' ? 'bg-blue-500' :
                                                                     'bg-purple-500'
                                                                 }`}></div>
@@ -1019,12 +1019,12 @@ export default function MatchDetailPage() {
                                                                 <div className="flex items-center gap-1 mb-0.5">
                                                                     <Badge
                                                                         variant="outline"
-                                                                        className={`text-[10px] px-1 py-0 ${activity.source === 'case' ? 'border-green-500 text-green-600' :
+                                                                        className={`text-[10px] px-1 py-0 ${activity.source === 'surrogate' ? 'border-green-500 text-green-600' :
                                                                             activity.source === 'ip' ? 'border-blue-500 text-blue-600' :
                                                                                 'border-purple-500 text-purple-600'
                                                                             }`}
                                                                     >
-                                                                        {activity.source === 'case' ? 'Case' :
+                                                                        {activity.source === 'surrogate' ? 'Surrogate' :
                                                                             activity.source === 'ip' ? 'IP' : 'Match'}
                                                                     </Badge>
                                                                 </div>
@@ -1055,7 +1055,7 @@ export default function MatchDetailPage() {
                         <TabsContent value="calendar" className="h-[calc(100vh-145px)]">
                             {match && (
                                 <MatchTasksCalendar
-                                    caseId={match.case_id}
+                                    surrogateId={match.surrogate_id}
                                     ipId={match.intended_parent_id}
                                     onAddTask={() => setAddTaskDialogOpen(true)}
                                 />
@@ -1079,7 +1079,7 @@ export default function MatchDetailPage() {
                 onOpenChange={setAddNoteDialogOpen}
                 onSubmit={handleAddNote}
                 isPending={createNoteMutation.isPending || createIPNoteMutation.isPending}
-                caseName={caseData?.full_name || "Surrogate Case"}
+                surrogateName={surrogateData?.full_name || "Surrogate"}
                 ipName={ipData?.full_name || "Intended Parent"}
             />
 
@@ -1089,7 +1089,7 @@ export default function MatchDetailPage() {
                 onOpenChange={setUploadFileDialogOpen}
                 onUpload={handleUploadFile}
                 isPending={uploadAttachmentMutation.isPending || uploadIPAttachmentMutation.isPending}
-                caseName={caseData?.full_name || "Surrogate Case"}
+                surrogateName={surrogateData?.full_name || "Surrogate"}
                 ipName={ipData?.full_name || "Intended Parent"}
             />
 
@@ -1099,7 +1099,7 @@ export default function MatchDetailPage() {
                 onOpenChange={setAddTaskDialogOpen}
                 onSubmit={handleAddTask}
                 isPending={createTaskMutation.isPending}
-                caseName={caseData?.full_name || "Surrogate Case"}
+                surrogateName={surrogateData?.full_name || "Surrogate"}
                 ipName={ipData?.full_name || "Intended Parent"}
             />
 

@@ -34,9 +34,7 @@ router = APIRouter(prefix="/internal/scheduled", tags=["internal"])
 
 def verify_internal_secret(x_internal_secret: str = Header(...)):
     """Verify the internal secret header."""
-    expected = (
-        settings.INTERNAL_SECRET if hasattr(settings, "INTERNAL_SECRET") else None
-    )
+    expected = settings.INTERNAL_SECRET if hasattr(settings, "INTERNAL_SECRET") else None
     if not expected:
         raise HTTPException(status_code=501, detail="INTERNAL_SECRET not configured")
     if x_internal_secret != expected:
@@ -203,9 +201,7 @@ class WorkflowApprovalExpiryResponse(BaseModel):
     jobs_created: int
 
 
-@router.post(
-    "/workflow-approval-expiry", response_model=WorkflowApprovalExpiryResponse
-)
+@router.post("/workflow-approval-expiry", response_model=WorkflowApprovalExpiryResponse)
 def workflow_approval_expiry(x_internal_secret: str = Header(...)):
     """
     Schedule workflow approval expiry sweeps for all organizations.
@@ -330,7 +326,7 @@ def task_notifications_sweep(x_internal_secret: str = Header(...)):
                     org_id=task.organization_id,
                     assignee_id=task.owner_id,
                     due_date=task.due_date.strftime("%Y-%m-%d"),
-                    case_number=task.case.case_number if task.case else None,
+                    surrogate_number=task.case.surrogate_number if task.case else None,
                 )
                 notifications_created += 1
 
@@ -350,7 +346,7 @@ def task_notifications_sweep(x_internal_secret: str = Header(...)):
                     org_id=task.organization_id,
                     assignee_id=task.owner_id,
                     due_date=task.due_date.strftime("%Y-%m-%d"),
-                    case_number=task.case.case_number if task.case else None,
+                    surrogate_number=task.case.surrogate_number if task.case else None,
                 )
                 notifications_created += 1
 
@@ -388,11 +384,7 @@ def meta_hierarchy_sync(x_internal_secret: str = Header(...)):
 
     with SessionLocal() as db:
         # Get all active ad accounts across all orgs
-        ad_accounts = (
-            db.query(MetaAdAccount)
-            .filter(MetaAdAccount.is_active.is_(True))
-            .all()
-        )
+        ad_accounts = db.query(MetaAdAccount).filter(MetaAdAccount.is_active.is_(True)).all()
 
         for ad_account in ad_accounts:
             job_service.schedule_job(
@@ -442,11 +434,7 @@ def meta_spend_sync(
     jobs_created = 0
 
     with SessionLocal() as db:
-        ad_accounts = (
-            db.query(MetaAdAccount)
-            .filter(MetaAdAccount.is_active.is_(True))
-            .all()
-        )
+        ad_accounts = db.query(MetaAdAccount).filter(MetaAdAccount.is_active.is_(True)).all()
 
         for ad_account in ad_accounts:
             job_service.schedule_job(

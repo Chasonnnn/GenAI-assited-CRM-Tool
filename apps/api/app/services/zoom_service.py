@@ -122,9 +122,7 @@ async def create_zoom_meeting(
         else:
             local_dt = start_time.astimezone(tz)
 
-        meeting_data["start_time"] = local_dt.replace(
-            tzinfo=None, microsecond=0
-        ).isoformat()
+        meeting_data["start_time"] = local_dt.replace(tzinfo=None, microsecond=0).isoformat()
 
     async with httpx.AsyncClient() as client:
         response = await client.post(
@@ -167,9 +165,7 @@ async def get_user_zoom_token(
     """
     integration = oauth_service.get_user_integration(db, user_id, "zoom")
     if not integration:
-        raise ValueError(
-            "Zoom not connected. Please connect in Settings → Integrations."
-        )
+        raise ValueError("Zoom not connected. Please connect in Settings → Integrations.")
 
     access_token = await oauth_service.get_access_token_async(db, user_id, "zoom")
     if not access_token:
@@ -223,9 +219,7 @@ async def schedule_zoom_meeting(
     meeting_start_time = None
     if meeting.start_time:
         try:
-            meeting_start_time = datetime.fromisoformat(
-                meeting.start_time.replace("Z", "+00:00")
-            )
+            meeting_start_time = datetime.fromisoformat(meeting.start_time.replace("Z", "+00:00"))
         except ValueError:
             meeting_start_time = start_time
 
@@ -287,7 +281,7 @@ async def schedule_zoom_meeting(
 
         activity_service.log_note_added(
             db=db,
-            case_id=entity_id,
+            surrogate_id=entity_id,
             organization_id=org_id,
             actor_user_id=user_id,
             note_id=note.id,
@@ -306,7 +300,7 @@ async def schedule_zoom_meeting(
         owner_type=OwnerType.USER.value,
         owner_id=user_id,
         created_by_user_id=user_id,
-        case_id=entity_id if entity_type == EntityType.CASE else None,
+        surrogate_id=entity_id if entity_type == EntityType.CASE else None,
         # Note: intended_parent_id would need to be added to Task model
     )
     db.add(task)
@@ -317,10 +311,8 @@ async def schedule_zoom_meeting(
     zoom_meeting_record = ZoomMeetingModel(
         organization_id=org_id,
         user_id=user_id,
-        case_id=entity_id if entity_type == EntityType.CASE else None,
-        intended_parent_id=entity_id
-        if entity_type == EntityType.INTENDED_PARENT
-        else None,
+        surrogate_id=entity_id if entity_type == EntityType.CASE else None,
+        intended_parent_id=entity_id if entity_type == EntityType.INTENDED_PARENT else None,
         zoom_meeting_id=str(meeting.id),
         topic=meeting.topic,
         start_time=meeting_start_time,
@@ -411,7 +403,7 @@ def send_meeting_invite(
     meeting: ZoomMeeting,
     contact_name: str,
     host_name: str,
-    case_id: uuid.UUID | None = None,
+    surrogate_id: uuid.UUID | None = None,
 ) -> uuid.UUID | None:
     """Send a Zoom meeting invite email using the org's template.
 
@@ -443,7 +435,7 @@ def send_meeting_invite(
         template_id=template_id,
         recipient_email=recipient_email,
         variables=variables,
-        case_id=case_id,
+        surrogate_id=surrogate_id,
     )
 
     if result:

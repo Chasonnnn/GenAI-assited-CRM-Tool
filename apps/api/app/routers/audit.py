@@ -74,12 +74,8 @@ def list_audit_logs(
     per_page: int = Query(50, ge=1, le=100),
     event_type: str | None = Query(None, description="Filter by event type"),
     actor_user_id: UUID | None = Query(None, description="Filter by actor"),
-    start_date: datetime | None = Query(
-        None, description="Filter events after this date"
-    ),
-    end_date: datetime | None = Query(
-        None, description="Filter events before this date"
-    ),
+    start_date: datetime | None = Query(None, description="Filter events after this date"),
+    end_date: datetime | None = Query(None, description="Filter events before this date"),
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
 ) -> AuditLogListResponse:
@@ -105,9 +101,7 @@ def list_audit_logs(
             id=log.id,
             event_type=log.event_type,
             actor_user_id=log.actor_user_id,
-            actor_name=actor_names.get(log.actor_user_id)
-            if log.actor_user_id
-            else None,
+            actor_name=actor_names.get(log.actor_user_id) if log.actor_user_id else None,
             target_type=log.target_type,
             target_id=log.target_id,
             details=log.details,
@@ -135,9 +129,7 @@ def list_event_types(
 
 @router.get("/ai-activity", response_model=AuditAIActivityResponse)
 def get_ai_activity(
-    hours: int = Query(
-        24, ge=1, le=720, description="Hours to look back for counts (default 24)"
-    ),
+    hours: int = Query(24, ge=1, le=720, description="Hours to look back for counts (default 24)"),
     limit: int = Query(6, ge=1, le=50),
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
@@ -155,9 +147,7 @@ def get_ai_activity(
             id=log.id,
             event_type=log.event_type,
             actor_user_id=log.actor_user_id,
-            actor_name=actor_names.get(log.actor_user_id)
-            if log.actor_user_id
-            else None,
+            actor_name=actor_names.get(log.actor_user_id) if log.actor_user_id else None,
             target_type=log.target_type,
             target_id=log.target_id,
             details=log.details,
@@ -177,9 +167,7 @@ def get_ai_activity(
 def list_audit_exports(
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
-    session: UserSession = Depends(
-        require_permission(POLICIES["audit"].actions["export"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["audit"].actions["export"])),
 ) -> ExportJobListResponse:
     """List recent audit exports for the organization."""
     jobs = compliance_service.list_export_jobs(db, session.org_id, limit=limit)
@@ -213,20 +201,14 @@ def list_audit_exports(
 def create_audit_export(
     payload: ExportJobCreate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(
-        require_permission(POLICIES["audit"].actions["export"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["audit"].actions["export"])),
 ) -> ExportJobRead:
     """Request an async audit export job."""
     if payload.redact_mode == "full":
         if session.role != Role.DEVELOPER:
-            raise HTTPException(
-                status_code=403, detail="Full exports require Developer role"
-            )
+            raise HTTPException(status_code=403, detail="Full exports require Developer role")
         if not payload.acknowledgment or not payload.acknowledgment.strip():
-            raise HTTPException(
-                status_code=400, detail="Acknowledgment required for full exports"
-            )
+            raise HTTPException(status_code=400, detail="Acknowledgment required for full exports")
     try:
         job = compliance_service.create_export_job(
             db=db,
@@ -262,18 +244,14 @@ def create_audit_export(
 def get_audit_export(
     export_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(
-        require_permission(POLICIES["audit"].actions["export"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["audit"].actions["export"])),
 ) -> ExportJobRead:
     """Get audit export job status."""
     job = compliance_service.get_export_job(db, session.org_id, export_id)
     if not job:
         raise HTTPException(status_code=404, detail="Export job not found")
     if job.redact_mode == "full" and session.role != Role.DEVELOPER:
-        raise HTTPException(
-            status_code=403, detail="Full exports require Developer role"
-        )
+        raise HTTPException(status_code=403, detail="Full exports require Developer role")
     download_url = (
         f"/audit/exports/{job.id}/download"
         if job.status == compliance_service.EXPORT_STATUS_COMPLETED
@@ -299,9 +277,7 @@ def get_audit_export(
 def download_audit_export(
     export_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(
-        require_permission(POLICIES["audit"].actions["export"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["audit"].actions["export"])),
 ):
     """Download an export file via signed URL or local file."""
     job = compliance_service.get_export_job(db, session.org_id, export_id)
@@ -310,9 +286,7 @@ def download_audit_export(
     if job.status != compliance_service.EXPORT_STATUS_COMPLETED or not job.file_path:
         raise HTTPException(status_code=409, detail="Export not ready")
     if job.redact_mode == "full" and session.role != Role.DEVELOPER:
-        raise HTTPException(
-            status_code=403, detail="Full exports require Developer role"
-        )
+        raise HTTPException(status_code=403, detail="Full exports require Developer role")
 
     audit_service.log_compliance_export_downloaded(
         db=db,

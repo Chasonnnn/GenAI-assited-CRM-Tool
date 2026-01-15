@@ -71,8 +71,8 @@ export function NotificationBell() {
         }
 
         // Navigate to entity
-        if (notification.entity_type === "case" && notification.entity_id) {
-            router.push(`/cases/${notification.entity_id}`)
+        if (notification.entity_type === "surrogate" && notification.entity_id) {
+            router.push(`/surrogates/${notification.entity_id}`)
         } else if (notification.entity_type === "task" && notification.entity_id) {
             router.push(`/tasks`)
         } else if (notification.entity_type === "appointment") {

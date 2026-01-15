@@ -138,9 +138,7 @@ async def receive_meta_webhook(
             except IntegrityError:
                 db.rollback()
                 jobs_skipped += 1
-                logger.info(
-                    f"Meta webhook: duplicate job skipped for leadgen_id={leadgen_id}"
-                )
+                logger.info(f"Meta webhook: duplicate job skipped for leadgen_id={leadgen_id}")
 
     return {
         "status": "ok",

@@ -25,7 +25,7 @@ interface TeamPerformanceTableProps {
     asOf?: string
 }
 
-type SortKey = "user_name" | "total_cases" | "contacted" | "qualified" | "pending_match" | "matched" | "applied" | "lost" | "conversion_rate" | "avg_days_to_match" | "avg_days_to_apply"
+type SortKey = "user_name" | "total_surrogates" | "contacted" | "qualified" | "ready_to_match" | "matched" | "application_submitted" | "lost" | "conversion_rate" | "avg_days_to_match" | "avg_days_to_application_submitted"
 type SortDirection = "asc" | "desc"
 
 export function TeamPerformanceTable({
@@ -36,7 +36,7 @@ export function TeamPerformanceTable({
     title = "Individual Performance",
     asOf,
 }: TeamPerformanceTableProps) {
-    const [sortKey, setSortKey] = useState<SortKey>("total_cases")
+    const [sortKey, setSortKey] = useState<SortKey>("total_surrogates")
     const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
 
     const handleSort = (key: SortKey) => {
@@ -175,10 +175,10 @@ export function TeamPerformanceTable({
                                     variant="ghost"
                                     size="sm"
                                     className="h-8 px-2 hover:bg-transparent"
-                                    onClick={() => handleSort("total_cases")}
+                                    onClick={() => handleSort("total_surrogates")}
                                 >
-                                    Cases
-                                    <SortIcon columnKey="total_cases" />
+                                    Surrogates
+                                    <SortIcon columnKey="total_surrogates" />
                                 </Button>
                             </TableHead>
                             <TableHead className="text-center">
@@ -208,10 +208,10 @@ export function TeamPerformanceTable({
                                     variant="ghost"
                                     size="sm"
                                     className="h-8 px-2 hover:bg-transparent"
-                                    onClick={() => handleSort("pending_match")}
+                                    onClick={() => handleSort("ready_to_match")}
                                 >
                                     Ready to Match
-                                    <SortIcon columnKey="pending_match" />
+                                    <SortIcon columnKey="ready_to_match" />
                                 </Button>
                             </TableHead>
                             <TableHead className="text-center">
@@ -230,10 +230,10 @@ export function TeamPerformanceTable({
                                     variant="ghost"
                                     size="sm"
                                     className="h-8 px-2 hover:bg-transparent"
-                                    onClick={() => handleSort("applied")}
+                                    onClick={() => handleSort("application_submitted")}
                                 >
-                                    Applied
-                                    <SortIcon columnKey="applied" />
+                                    Application Submitted
+                                    <SortIcon columnKey="application_submitted" />
                                 </Button>
                             </TableHead>
                             <TableHead className="text-center">
@@ -274,10 +274,10 @@ export function TeamPerformanceTable({
                                     variant="ghost"
                                     size="sm"
                                     className="h-8 px-2 hover:bg-transparent"
-                                    onClick={() => handleSort("avg_days_to_apply")}
+                                    onClick={() => handleSort("avg_days_to_application_submitted")}
                                 >
-                                    Avg to Apply
-                                    <SortIcon columnKey="avg_days_to_apply" />
+                                    Avg to Application Submitted
+                                    <SortIcon columnKey="avg_days_to_application_submitted" />
                                 </Button>
                             </TableHead>
                         </TableRow>
@@ -294,7 +294,7 @@ export function TeamPerformanceTable({
                                     )}
                                 </TableCell>
                                 <TableCell className="text-center font-medium">
-                                    {user.total_cases}
+                                    {user.total_surrogates}
                                 </TableCell>
                                 <TableCell className="text-center">
                                     {user.contacted}
@@ -303,14 +303,14 @@ export function TeamPerformanceTable({
                                     {user.qualified}
                                 </TableCell>
                                 <TableCell className="text-center">
-                                    {user.pending_match}
+                                    {user.ready_to_match}
                                 </TableCell>
                                 <TableCell className="text-center">
                                     {user.matched}
                                 </TableCell>
                                 <TableCell className="text-center">
                                     <span className="text-green-600 font-medium">
-                                        {user.applied}
+                                        {user.application_submitted}
                                     </span>
                                 </TableCell>
                                 <TableCell className="text-center">
@@ -335,13 +335,13 @@ export function TeamPerformanceTable({
                                     {formatDays(user.avg_days_to_match)}
                                 </TableCell>
                                 <TableCell className="text-center text-muted-foreground">
-                                    {formatDays(user.avg_days_to_apply)}
+                                    {formatDays(user.avg_days_to_application_submitted)}
                                 </TableCell>
                             </TableRow>
                         ))}
 
                         {/* Unassigned row */}
-                        {unassigned && unassigned.total_cases > 0 && (
+                        {unassigned && unassigned.total_surrogates > 0 && (
                             <TableRow className="bg-muted/30">
                                 <TableCell className="font-medium text-muted-foreground">
                                     Unassigned
@@ -352,7 +352,7 @@ export function TeamPerformanceTable({
                                     )}
                                 </TableCell>
                                 <TableCell className="text-center font-medium text-muted-foreground">
-                                    {unassigned.total_cases}
+                                    {unassigned.total_surrogates}
                                 </TableCell>
                                 <TableCell className="text-center text-muted-foreground">
                                     {unassigned.contacted}
@@ -361,13 +361,13 @@ export function TeamPerformanceTable({
                                     {unassigned.qualified}
                                 </TableCell>
                                 <TableCell className="text-center text-muted-foreground">
-                                    {unassigned.pending_match}
+                                    {unassigned.ready_to_match}
                                 </TableCell>
                                 <TableCell className="text-center text-muted-foreground">
                                     {unassigned.matched}
                                 </TableCell>
                                 <TableCell className="text-center text-muted-foreground">
-                                    {unassigned.applied}
+                                    {unassigned.application_submitted}
                                 </TableCell>
                                 <TableCell className="text-center text-muted-foreground">
                                     {unassigned.lost}

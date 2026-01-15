@@ -3,7 +3,7 @@
 /**
  * ApprovalTaskActions - Approve/Deny buttons for workflow approval tasks.
  *
- * Only shown to the task owner (case owner). Others see a disabled state.
+ * Only shown to the task owner (surrogate owner). Others see a disabled state.
  */
 
 import { useState } from "react"
@@ -63,7 +63,7 @@ export function ApprovalTaskActions({
     if (!isOwner) {
         return (
             <div className="text-sm text-muted-foreground italic">
-                Only the case owner can approve or deny
+                Only the surrogate owner can approve or deny
             </div>
         )
     }

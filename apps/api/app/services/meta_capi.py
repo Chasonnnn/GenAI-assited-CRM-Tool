@@ -40,23 +40,25 @@ META_STATUS_QUALIFIED = "Qualified/Converted"
 META_STATUS_DISQUALIFIED = "Not qualified/Lost"
 META_STATUS_LOST = "Lost"
 
-# Case status mapping (slug -> Meta status bucket)
+# Surrogate status mapping (slug -> Meta status bucket)
 META_INTAKE_STATUSES = {
     "contacted",
     "qualified",
-    "applied",
-    "followup_scheduled",
+    "interview_scheduled",
 }
 META_CONVERTED_STATUSES = {
     "application_submitted",
     "under_review",
     "approved",
-    "pending_handoff",
-    "pending_match",
+    "ready_to_match",
     "matched",
-    "meds_started",
-    "exam_passed",
-    "embryo_transferred",
+    "medical_clearance_passed",
+    "legal_clearance_passed",
+    "transfer_cycle",
+    "second_hcg_confirmed",
+    "heartbeat_confirmed",
+    "ob_care_established",
+    "anatomy_scanned",
     "delivered",
 }
 META_DISQUALIFIED_STATUSES = {"disqualified"}
@@ -103,9 +105,7 @@ async def send_lead_event(
         return False, "META_PIXEL_ID not configured"
 
     if settings.META_TEST_MODE:
-        logger.info(
-            f"[TEST MODE] Would send CAPI event: {event_name} for lead {lead_id}"
-        )
+        logger.info(f"[TEST MODE] Would send CAPI event: {event_name} for lead {lead_id}")
         return True, None
 
     # Use provided token or system token from config
@@ -174,17 +174,17 @@ async def send_lead_event(
         return False, f"Meta CAPI error: {str(e)[:200]}"
 
 
-def map_case_status_to_meta_status(case_status: str) -> str | None:
+def map_surrogate_status_to_meta_status(surrogate_status: str) -> str | None:
     """Map internal case status slug to Meta Ads CRM status label."""
-    if not case_status:
+    if not surrogate_status:
         return None
-    if case_status in META_LOST_STATUSES:
+    if surrogate_status in META_LOST_STATUSES:
         return META_STATUS_LOST
-    if case_status in META_DISQUALIFIED_STATUSES:
+    if surrogate_status in META_DISQUALIFIED_STATUSES:
         return META_STATUS_DISQUALIFIED
-    if case_status in META_CONVERTED_STATUSES:
+    if surrogate_status in META_CONVERTED_STATUSES:
         return META_STATUS_QUALIFIED
-    if case_status in META_INTAKE_STATUSES:
+    if surrogate_status in META_INTAKE_STATUSES:
         return META_STATUS_INTAKE
     return None
 
@@ -196,7 +196,7 @@ def _normalize_event_id_value(value: str) -> str:
 
 async def send_status_event(
     meta_lead_id: str,
-    case_status: str,
+    surrogate_status: str,
     meta_status: str,
     email: str | None = None,
     phone: str | None = None,
@@ -207,7 +207,7 @@ async def send_status_event(
 
     Args:
         meta_lead_id: Original Meta leadgen_id
-        case_status: The CRM status that triggered this
+        surrogate_status: The CRM status that triggered this
         meta_status: Meta Ads CRM status label
         email: Optional email for hashed matching
         phone: Optional phone for hashed matching
@@ -233,7 +233,7 @@ async def send_status_event(
         user_data=user_data,
         custom_data={
             "lead_status": meta_status,
-            "crm_status": case_status,
+            "crm_status": surrogate_status,
         },
         access_token=access_token,
         event_id=event_id,
@@ -247,8 +247,8 @@ def should_send_capi_event(from_status: str, to_status: str) -> bool:
     Triggers on:
     - Any transition into a different Meta status bucket
     """
-    from_meta = map_case_status_to_meta_status(from_status)
-    to_meta = map_case_status_to_meta_status(to_status)
+    from_meta = map_surrogate_status_to_meta_status(from_status)
+    to_meta = map_surrogate_status_to_meta_status(to_status)
     if not to_meta:
         return False
     return from_meta != to_meta
@@ -376,7 +376,7 @@ async def send_lead_event_for_account(
 async def send_status_event_for_account(
     meta_lead_id: str,
     ad_account: "MetaAdAccount",
-    case_status: str,
+    surrogate_status: str,
     meta_status: str,
     email: str | None = None,
     phone: str | None = None,
@@ -387,7 +387,7 @@ async def send_status_event_for_account(
     Args:
         meta_lead_id: Original Meta leadgen_id
         ad_account: MetaAdAccount with CAPI configuration
-        case_status: The CRM status that triggered this
+        surrogate_status: The CRM status that triggered this
         meta_status: Meta Ads CRM status label
         email: Optional email for hashed matching
         phone: Optional phone for hashed matching
@@ -410,7 +410,7 @@ async def send_status_event_for_account(
         user_data=user_data,
         custom_data={
             "lead_status": meta_status,
-            "crm_status": case_status,
+            "crm_status": surrogate_status,
         },
         event_id=event_id,
     )

@@ -78,9 +78,7 @@ def list_integrations(
                 integration_type=i.integration_type,
                 connected=True,
                 account_email=i.account_email,
-                expires_at=i.token_expires_at.isoformat()
-                if i.token_expires_at
-                else None,
+                expires_at=i.token_expires_at.isoformat() if i.token_expires_at else None,
             )
             for i in integrations
         ]
@@ -98,9 +96,7 @@ def disconnect_integration(
     from app.db.enums import AuditEventType
     from app.services import audit_service
 
-    integration = oauth_service.get_user_integration(
-        db, session.user_id, integration_type
-    )
+    integration = oauth_service.get_user_integration(db, session.user_id, integration_type)
     if not integration:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -193,7 +189,9 @@ async def gmail_callback(
     try:
         stored_payload = parse_oauth_state_payload(state_cookie)
     except Exception as e:
-        logger.warning(f"Gmail OAuth state parse failed for user={session.user_id} org={session.org_id}: {e}")
+        logger.warning(
+            f"Gmail OAuth state parse failed for user={session.user_id} org={session.org_id}: {e}"
+        )
         return error_response
 
     user_agent = request.headers.get("user-agent", "")
@@ -234,9 +232,7 @@ async def gmail_callback(
             target_id=integration.id if integration else None,
             details={
                 "integration_type": "gmail",
-                "account_email": audit_service.hash_email(
-                    user_info.get("email", "") or ""
-                ),
+                "account_email": audit_service.hash_email(user_info.get("email", "") or ""),
             },
             request=request,
         )
@@ -249,7 +245,9 @@ async def gmail_callback(
         success.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
         return success
     except Exception as e:
-        logger.exception(f"Gmail OAuth callback failed for user={session.user_id} org={session.org_id}: {e}")
+        logger.exception(
+            f"Gmail OAuth callback failed for user={session.user_id} org={session.org_id}: {e}"
+        )
         error = RedirectResponse(
             f"{settings.FRONTEND_URL}/settings/integrations?error=gmail_failed",
             status_code=302,
@@ -445,7 +443,9 @@ async def zoom_callback(
     try:
         stored_payload = parse_oauth_state_payload(state_cookie)
     except Exception as e:
-        logger.warning(f"Zoom OAuth state parse failed for user={session.user_id} org={session.org_id}: {e}")
+        logger.warning(
+            f"Zoom OAuth state parse failed for user={session.user_id} org={session.org_id}: {e}"
+        )
         return error_response
 
     user_agent = request.headers.get("user-agent", "")
@@ -486,9 +486,7 @@ async def zoom_callback(
             target_id=integration.id if integration else None,
             details={
                 "integration_type": "zoom",
-                "account_email": audit_service.hash_email(
-                    user_info.get("email", "") or ""
-                ),
+                "account_email": audit_service.hash_email(user_info.get("email", "") or ""),
             },
             request=request,
         )
@@ -501,7 +499,9 @@ async def zoom_callback(
         success.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
         return success
     except Exception as e:
-        logger.exception(f"Zoom OAuth callback failed for user={session.user_id} org={session.org_id}: {e}")
+        logger.exception(
+            f"Zoom OAuth callback failed for user={session.user_id} org={session.org_id}: {e}"
+        )
         error = RedirectResponse(
             f"{settings.FRONTEND_URL}/settings/integrations?error=zoom_failed",
             status_code=302,
@@ -518,7 +518,7 @@ async def zoom_callback(
 class CreateMeetingRequest(BaseModel):
     """Request to create a Zoom meeting."""
 
-    entity_type: str  # "case" or "intended_parent"
+    entity_type: str  # "surrogate" or "intended_parent"
     entity_id: uuid.UUID
     topic: str
     start_time: str | None = None  # ISO format datetime
@@ -548,7 +548,7 @@ async def create_zoom_meeting(
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
 ) -> CreateMeetingResponse:
-    """Create a Zoom meeting for a case or intended parent.
+    """Create a Zoom meeting for a surrogate or intended parent.
 
     Automatically:
     - Creates meeting via Zoom API
@@ -557,19 +557,19 @@ async def create_zoom_meeting(
     """
     from datetime import datetime as dt
     from app.db.enums import EntityType
-    from app.core.case_access import check_case_access
+    from app.core.surrogate_access import check_surrogate_access
     from app.services import zoom_service
-    from app.services import case_service, ip_service
+    from app.services import surrogate_service, ip_service
 
     # Parse entity type
-    if request.entity_type == "case":
-        entity_type = EntityType.CASE
+    if request.entity_type == "surrogate":
+        entity_type = EntityType.SURROGATE
     elif request.entity_type == "intended_parent":
         entity_type = EntityType.INTENDED_PARENT
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid entity_type: {request.entity_type}. Must be 'case' or 'intended_parent'.",
+            detail=f"Invalid entity_type: {request.entity_type}. Must be 'surrogate' or 'intended_parent'.",
         )
 
     # Parse start time
@@ -586,14 +586,12 @@ async def create_zoom_meeting(
     timezone_name = request.timezone or "UTC"
 
     # Validate entity exists and user has access (prevents cross-tenant/task leakage)
-    if entity_type == EntityType.CASE:
-        case = case_service.get_case(db, session.org_id, request.entity_id)
-        if not case:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Case not found"
-            )
-        check_case_access(
-            case, session.role, session.user_id, db=db, org_id=session.org_id
+    if entity_type == EntityType.SURROGATE:
+        surrogate = surrogate_service.get_surrogate(db, session.org_id, request.entity_id)
+        if not surrogate:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Surrogate not found")
+        check_surrogate_access(
+            surrogate, session.role, session.user_id, db=db, org_id=session.org_id
         )
     else:
         ip = ip_service.get_intended_parent(db, request.entity_id, session.org_id)
@@ -671,7 +669,7 @@ class ZoomMeetingRead(BaseModel):
     start_time: str | None
     duration: int
     join_url: str
-    case_id: str | None
+    surrogate_id: str | None
     intended_parent_id: str | None
     created_at: str
 
@@ -697,10 +695,8 @@ def list_zoom_meetings(
             start_time=m.start_time.isoformat() if m.start_time else None,
             duration=m.duration,
             join_url=m.join_url,
-            case_id=str(m.case_id) if m.case_id else None,
-            intended_parent_id=str(m.intended_parent_id)
-            if m.intended_parent_id
-            else None,
+            surrogate_id=str(m.surrogate_id) if m.surrogate_id else None,
+            intended_parent_id=str(m.intended_parent_id) if m.intended_parent_id else None,
             created_at=m.created_at.isoformat(),
         )
         for m in meetings
@@ -718,7 +714,7 @@ class SendMeetingInviteRequest(BaseModel):
     duration: int = 30
     password: str | None = None
     contact_name: str
-    case_id: str | None = None
+    surrogate_id: str | None = None
 
 
 class SendMeetingInviteResponse(BaseModel):
@@ -764,29 +760,29 @@ def send_zoom_meeting_invite(
         password=request.password,
     )
 
-    # Parse case_id (best-effort; ignore if invalid or not authorized)
-    case_id = None
-    if request.case_id:
+    # Parse surrogate_id (best-effort; ignore if invalid or not authorized)
+    surrogate_id = None
+    if request.surrogate_id:
         try:
-            parsed_case_id = uuid.UUID(request.case_id)
-            from app.services import case_service
-            from app.core.case_access import check_case_access
+            parsed_surrogate_id = uuid.UUID(request.surrogate_id)
+            from app.services import surrogate_service
+            from app.core.surrogate_access import check_surrogate_access
 
-            case = case_service.get_case(db, session.org_id, parsed_case_id)
-            if case:
+            surrogate = surrogate_service.get_surrogate(db, session.org_id, parsed_surrogate_id)
+            if surrogate:
                 try:
-                    check_case_access(
-                        case,
+                    check_surrogate_access(
+                        surrogate,
                         session.role,
                         session.user_id,
                         db=db,
                         org_id=session.org_id,
                     )
-                    case_id = parsed_case_id
+                    surrogate_id = parsed_surrogate_id
                 except HTTPException:
-                    case_id = None
+                    surrogate_id = None
         except ValueError:
-            case_id = None
+            surrogate_id = None
 
     # Send invite
     email_log_id = zoom_service.send_meeting_invite(
@@ -797,7 +793,7 @@ def send_zoom_meeting_invite(
         meeting=meeting,
         contact_name=request.contact_name,
         host_name=host_name,
-        case_id=case_id,
+        surrogate_id=surrogate_id,
     )
 
     if not email_log_id:

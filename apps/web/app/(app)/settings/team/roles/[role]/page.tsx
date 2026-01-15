@@ -15,7 +15,7 @@ import { toast } from "sonner"
 
 const CATEGORY_ORDER = [
     "Navigation",
-    "Cases",
+    "Surrogates",
     "Intended Parents",
     "Tasks",
     "Team",

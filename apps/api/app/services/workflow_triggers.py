@@ -5,118 +5,118 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.db.models import Case, Task, Match, Attachment, EntityNote, Appointment
+from app.db.models import Surrogate, Task, Match, Attachment, EntityNote, Appointment
 from app.db.enums import WorkflowTriggerType, WorkflowEventSource, TaskType
 from app.services.workflow_engine import engine
 
 
 # =============================================================================
-# Case Triggers (called from case_service.py)
+# Surrogate Triggers (called from surrogate_service.py)
 # =============================================================================
 
 
-def trigger_case_created(db: Session, case: Case) -> None:
-    """Trigger workflows when a new case is created."""
+def trigger_surrogate_created(db: Session, surrogate: Surrogate) -> None:
+    """Trigger workflows when a new surrogate is created."""
     from app.services import pipeline_service
 
-    stage = pipeline_service.get_stage_by_id(db, case.stage_id)
+    stage = pipeline_service.get_stage_by_id(db, surrogate.stage_id)
     stage_slug = stage.slug if stage else None
     engine.trigger(
         db=db,
-        trigger_type=WorkflowTriggerType.CASE_CREATED,
-        entity_type="case",
-        entity_id=case.id,
+        trigger_type=WorkflowTriggerType.SURROGATE_CREATED,
+        entity_type="surrogate",
+        entity_id=surrogate.id,
         event_data={
-            "case_id": str(case.id),
-            "case_number": case.case_number,
-            "source": case.source,
-            "stage_id": str(case.stage_id),
+            "surrogate_id": str(surrogate.id),
+            "surrogate_number": surrogate.surrogate_number,
+            "source": surrogate.source,
+            "stage_id": str(surrogate.stage_id),
             "stage_slug": stage_slug,
-            "status_label": case.status_label,
+            "status_label": surrogate.status_label,
         },
-        org_id=case.organization_id,
+        org_id=surrogate.organization_id,
         source=WorkflowEventSource.USER,
     )
 
 
 def trigger_status_changed(
     db: Session,
-    case: Case,
+    surrogate: Surrogate,
     old_stage_id: UUID | None,
     new_stage_id: UUID | None,
     old_stage_slug: str | None,
     new_stage_slug: str | None,
 ) -> None:
-    """Trigger workflows when case status changes."""
+    """Trigger workflows when surrogate status changes."""
     if old_stage_id == new_stage_id:
         return
 
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.STATUS_CHANGED,
-        entity_type="case",
-        entity_id=case.id,
+        entity_type="surrogate",
+        entity_id=surrogate.id,
         event_data={
-            "case_id": str(case.id),
+            "surrogate_id": str(surrogate.id),
             "old_stage_id": str(old_stage_id) if old_stage_id else None,
             "new_stage_id": str(new_stage_id) if new_stage_id else None,
             "old_status": old_stage_slug,
             "new_status": new_stage_slug,
         },
-        org_id=case.organization_id,
+        org_id=surrogate.organization_id,
         source=WorkflowEventSource.USER,
     )
 
 
-def trigger_case_assigned(
+def trigger_surrogate_assigned(
     db: Session,
-    case: Case,
+    surrogate: Surrogate,
     old_owner_id: UUID | None,
     new_owner_id: UUID | None,
     old_owner_type: str | None = None,
     new_owner_type: str | None = None,
 ) -> None:
-    """Trigger workflows when case is assigned."""
+    """Trigger workflows when surrogate is assigned."""
     engine.trigger(
         db=db,
-        trigger_type=WorkflowTriggerType.CASE_ASSIGNED,
-        entity_type="case",
-        entity_id=case.id,
+        trigger_type=WorkflowTriggerType.SURROGATE_ASSIGNED,
+        entity_type="surrogate",
+        entity_id=surrogate.id,
         event_data={
-            "case_id": str(case.id),
+            "surrogate_id": str(surrogate.id),
             "old_owner_id": str(old_owner_id) if old_owner_id else None,
             "new_owner_id": str(new_owner_id) if new_owner_id else None,
             "old_owner_type": old_owner_type,
             "new_owner_type": new_owner_type,
         },
-        org_id=case.organization_id,
+        org_id=surrogate.organization_id,
         source=WorkflowEventSource.USER,
     )
 
 
-def trigger_case_updated(
+def trigger_surrogate_updated(
     db: Session,
-    case: Case,
+    surrogate: Surrogate,
     changed_fields: list[str],
     old_values: dict,
     new_values: dict,
 ) -> None:
-    """Trigger workflows when specific case fields change."""
+    """Trigger workflows when specific surrogate fields change."""
     if not changed_fields:
         return
 
     engine.trigger(
         db=db,
-        trigger_type=WorkflowTriggerType.CASE_UPDATED,
-        entity_type="case",
-        entity_id=case.id,
+        trigger_type=WorkflowTriggerType.SURROGATE_UPDATED,
+        entity_type="surrogate",
+        entity_id=surrogate.id,
         event_data={
-            "case_id": str(case.id),
+            "surrogate_id": str(surrogate.id),
             "changed_fields": changed_fields,
             "old_values": old_values,
             "new_values": new_values,
         },
-        org_id=case.organization_id,
+        org_id=surrogate.organization_id,
         source=WorkflowEventSource.USER,
     )
 
@@ -128,11 +128,11 @@ def trigger_case_updated(
 
 def trigger_task_due(db: Session, task: Task) -> None:
     """Trigger workflows when a task is about to be due."""
-    case = task.case if hasattr(task, "case") else None
+    surrogate = task.surrogate if hasattr(task, "surrogate") else None
     org_id = (
         task.organization_id
         if hasattr(task, "organization_id")
-        else (case.organization_id if case else None)
+        else (surrogate.organization_id if surrogate else None)
     )
 
     if not org_id:
@@ -147,7 +147,7 @@ def trigger_task_due(db: Session, task: Task) -> None:
             "task_id": str(task.id),
             "task_title": task.title,
             "due_date": str(task.due_date) if task.due_date else None,
-            "case_id": str(task.case_id) if task.case_id else None,
+            "surrogate_id": str(task.surrogate_id) if task.surrogate_id else None,
         },
         org_id=org_id,
         source=WorkflowEventSource.SYSTEM,
@@ -156,11 +156,11 @@ def trigger_task_due(db: Session, task: Task) -> None:
 
 def trigger_task_overdue(db: Session, task: Task) -> None:
     """Trigger workflows when a task is overdue."""
-    case = task.case if hasattr(task, "case") else None
+    surrogate = task.surrogate if hasattr(task, "surrogate") else None
     org_id = (
         task.organization_id
         if hasattr(task, "organization_id")
-        else (case.organization_id if case else None)
+        else (surrogate.organization_id if surrogate else None)
     )
 
     if not org_id:
@@ -175,7 +175,7 @@ def trigger_task_overdue(db: Session, task: Task) -> None:
             "task_id": str(task.id),
             "task_title": task.title,
             "due_date": str(task.due_date) if task.due_date else None,
-            "case_id": str(task.case_id) if task.case_id else None,
+            "surrogate_id": str(task.surrogate_id) if task.surrogate_id else None,
         },
         org_id=org_id,
         source=WorkflowEventSource.SYSTEM,
@@ -212,12 +212,12 @@ def trigger_scheduled_workflows(db: Session, org_id: UUID) -> None:
         # Simple cron matching (for daily/weekly schedules)
         # Full cron parsing would require croniter library
         if _should_run_cron(cron, now, tz):
-            for case in _iter_cases(db, org_id):
+            for surrogate in _iter_surrogates(db, org_id):
                 engine.trigger(
                     db=db,
                     trigger_type=WorkflowTriggerType.SCHEDULED,
-                    entity_type="case",
-                    entity_id=case.id,
+                    entity_type="surrogate",
+                    entity_id=surrogate.id,
                     event_data={
                         "schedule_time": now.isoformat(),
                         "cron": cron,
@@ -228,7 +228,7 @@ def trigger_scheduled_workflows(db: Session, org_id: UUID) -> None:
 
 
 def trigger_inactivity_workflows(db: Session, org_id: UUID) -> None:
-    """Trigger inactivity workflows for cases with no recent activity."""
+    """Trigger inactivity workflows for surrogates with no recent activity."""
     from datetime import datetime, timezone, timedelta
     from app.db.models import AutomationWorkflow
 
@@ -248,18 +248,18 @@ def trigger_inactivity_workflows(db: Session, org_id: UUID) -> None:
         days = workflow.trigger_config.get("days", 7)
         threshold = now - timedelta(days=days)
 
-        # Find cases with no activity since threshold
+        # Find surrogates with no activity since threshold
         # Using updated_at as proxy for activity
-        for case in _iter_cases(db, org_id, updated_before=threshold):
+        for surrogate in _iter_surrogates(db, org_id, updated_before=threshold):
             engine.trigger(
                 db=db,
                 trigger_type=WorkflowTriggerType.INACTIVITY,
-                entity_type="case",
-                entity_id=case.id,
+                entity_type="surrogate",
+                entity_id=surrogate.id,
                 event_data={
                     "days_inactive": days,
-                    "last_activity": case.updated_at.isoformat()
-                    if case.updated_at
+                    "last_activity": surrogate.updated_at.isoformat()
+                    if surrogate.updated_at
                     else None,
                 },
                 org_id=org_id,
@@ -267,30 +267,30 @@ def trigger_inactivity_workflows(db: Session, org_id: UUID) -> None:
             )
 
 
-def _iter_cases(
+def _iter_surrogates(
     db: Session,
     org_id: UUID,
     updated_before: datetime | None = None,
     batch_size: int = 500,
 ):
-    """Iterate through active cases in batches to avoid truncating large orgs."""
-    from app.db.models import Case
+    """Iterate through active surrogates in batches to avoid truncating large orgs."""
+    from app.db.models import Surrogate
 
     last_id = None
     while True:
-        query = db.query(Case).filter(
-            Case.organization_id == org_id,
-            Case.is_archived.is_(False),
+        query = db.query(Surrogate).filter(
+            Surrogate.organization_id == org_id,
+            Surrogate.is_archived.is_(False),
         )
         if updated_before is not None:
-            query = query.filter(Case.updated_at < updated_before)
+            query = query.filter(Surrogate.updated_at < updated_before)
         if last_id:
-            query = query.filter(Case.id > last_id)
-        batch = query.order_by(Case.id).limit(batch_size).all()
+            query = query.filter(Surrogate.id > last_id)
+        batch = query.order_by(Surrogate.id).limit(batch_size).all()
         if not batch:
             break
-        for case in batch:
-            yield case
+        for surrogate in batch:
+            yield surrogate
         last_id = batch[-1].id
 
 
@@ -298,7 +298,7 @@ def trigger_task_due_sweep(db: Session, org_id: UUID) -> None:
     """Find and trigger task_due workflows for tasks due soon."""
     from datetime import datetime, timedelta
     from zoneinfo import ZoneInfo
-    from app.db.models import AutomationWorkflow, Task, Case, Organization
+    from app.db.models import AutomationWorkflow, Task, Surrogate, Organization
 
     org = db.query(Organization).filter(Organization.id == org_id).first()
     tz_name = org.timezone if org and org.timezone else "UTC"
@@ -326,9 +326,9 @@ def trigger_task_due_sweep(db: Session, org_id: UUID) -> None:
         # Find tasks due within the window
         tasks = (
             db.query(Task)
-            .join(Case)
+            .join(Surrogate)
             .filter(
-                Case.organization_id == org_id,
+                Surrogate.organization_id == org_id,
                 Task.due_date.isnot(None),
                 Task.is_completed.is_(False),
                 Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
@@ -351,7 +351,7 @@ def trigger_task_overdue_sweep(db: Session, org_id: UUID) -> None:
     """Find and trigger task_overdue workflows for overdue tasks."""
     from datetime import datetime
     from zoneinfo import ZoneInfo
-    from app.db.models import Task, Case, Organization
+    from app.db.models import Task, Surrogate, Organization
 
     org = db.query(Organization).filter(Organization.id == org_id).first()
     tz_name = org.timezone if org and org.timezone else "UTC"
@@ -364,9 +364,9 @@ def trigger_task_overdue_sweep(db: Session, org_id: UUID) -> None:
 
     overdue_tasks = (
         db.query(Task)
-        .join(Case)
+        .join(Surrogate)
         .filter(
-            Case.organization_id == org_id,
+            Surrogate.organization_id == org_id,
             Task.due_date.isnot(None),
             Task.due_date < today,
             Task.is_completed.is_(False),
@@ -393,7 +393,7 @@ def trigger_match_proposed(db: Session, match: Match) -> None:
         entity_id=match.id,
         event_data={
             "match_id": str(match.id),
-            "case_id": str(match.case_id),
+            "surrogate_id": str(match.surrogate_id),
             "intended_parent_id": str(match.intended_parent_id)
             if match.intended_parent_id
             else None,
@@ -413,7 +413,7 @@ def trigger_match_accepted(db: Session, match: Match) -> None:
         entity_id=match.id,
         event_data={
             "match_id": str(match.id),
-            "case_id": str(match.case_id),
+            "surrogate_id": str(match.surrogate_id),
             "intended_parent_id": str(match.intended_parent_id)
             if match.intended_parent_id
             else None,
@@ -434,7 +434,7 @@ def trigger_match_rejected(db: Session, match: Match) -> None:
         entity_id=match.id,
         event_data={
             "match_id": str(match.id),
-            "case_id": str(match.case_id),
+            "surrogate_id": str(match.surrogate_id),
             "intended_parent_id": str(match.intended_parent_id)
             if match.intended_parent_id
             else None,
@@ -459,20 +459,16 @@ def trigger_document_uploaded(db: Session, attachment: Attachment) -> None:
     """
     # Get org_id from the related entity
     org_id = None
-    case_id = None
+    surrogate_id = None
 
-    if attachment.case_id:
-        case = db.query(Case).filter(Case.id == attachment.case_id).first()
-        if case:
-            org_id = case.organization_id
-            case_id = case.id
+    if attachment.surrogate_id:
+        surrogate = db.query(Surrogate).filter(Surrogate.id == attachment.surrogate_id).first()
+        if surrogate:
+            org_id = surrogate.organization_id
+            surrogate_id = surrogate.id
 
     # Fallback: check intended_parent_id for IP attachments
-    if (
-        not org_id
-        and hasattr(attachment, "intended_parent_id")
-        and attachment.intended_parent_id
-    ):
+    if not org_id and hasattr(attachment, "intended_parent_id") and attachment.intended_parent_id:
         from app.db.models import IntendedParent
 
         ip = (
@@ -495,7 +491,7 @@ def trigger_document_uploaded(db: Session, attachment: Attachment) -> None:
             "attachment_id": str(attachment.id),
             "filename": attachment.filename,
             "content_type": attachment.content_type,
-            "case_id": str(case_id) if case_id else None,
+            "surrogate_id": str(surrogate_id) if surrogate_id else None,
             "uploaded_by": str(attachment.uploaded_by_user_id)
             if attachment.uploaded_by_user_id
             else None,
@@ -548,7 +544,7 @@ def trigger_appointment_scheduled(db: Session, appointment: Appointment) -> None
         entity_id=appointment.id,
         event_data={
             "appointment_id": str(appointment.id),
-            "case_id": str(appointment.case_id) if appointment.case_id else None,
+            "surrogate_id": str(appointment.surrogate_id) if appointment.surrogate_id else None,
             "intended_parent_id": str(appointment.intended_parent_id)
             if appointment.intended_parent_id
             else None,
@@ -578,7 +574,7 @@ def trigger_appointment_completed(db: Session, appointment: Appointment) -> None
         entity_id=appointment.id,
         event_data={
             "appointment_id": str(appointment.id),
-            "case_id": str(appointment.case_id) if appointment.case_id else None,
+            "surrogate_id": str(appointment.surrogate_id) if appointment.surrogate_id else None,
             "intended_parent_id": str(appointment.intended_parent_id)
             if appointment.intended_parent_id
             else None,

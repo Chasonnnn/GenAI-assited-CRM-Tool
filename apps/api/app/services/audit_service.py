@@ -65,9 +65,7 @@ def canonical_json(obj: dict | None) -> str:
     """
     import json as json_module
 
-    return json_module.dumps(
-        obj or {}, sort_keys=True, separators=(",", ":"), default=str
-    )
+    return json_module.dumps(obj or {}, sort_keys=True, separators=(",", ":"), default=str)
 
 
 def get_user_agent(request: Request | None) -> str | None:
@@ -215,9 +213,7 @@ def list_audit_logs(
 
     total = query.count()
     offset = (page - 1) * per_page
-    logs = (
-        query.order_by(AuditLog.created_at.desc()).offset(offset).limit(per_page).all()
-    )
+    logs = query.order_by(AuditLog.created_at.desc()).offset(offset).limit(per_page).all()
 
     actor_ids = {log.actor_user_id for log in logs if log.actor_user_id}
     actor_names = _get_actor_names(db, actor_ids)
@@ -754,9 +750,7 @@ def log_compliance_purge_executed(
     request: Request | None = None,
 ) -> AuditLog:
     """Log purge execution."""
-    formatted = [
-        {"entity_type": result.entity_type, "count": result.count} for result in results
-    ]
+    formatted = [{"entity_type": result.entity_type, "count": result.count} for result in results]
     return log_event(
         db=db,
         org_id=org_id,

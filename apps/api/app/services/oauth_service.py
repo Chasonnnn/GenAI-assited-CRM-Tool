@@ -110,9 +110,7 @@ def save_integration(
             user_id=user_id,
             integration_type=integration_type,
             access_token_encrypted=encrypt_token(access_token),
-            refresh_token_encrypted=encrypt_token(refresh_token)
-            if refresh_token
-            else None,
+            refresh_token_encrypted=encrypt_token(refresh_token) if refresh_token else None,
             token_expires_at=token_expires_at,
             account_email=account_email,
         )
@@ -133,9 +131,7 @@ def delete_integration(db: Session, user_id: uuid.UUID, integration_type: str) -
     return False
 
 
-def get_access_token(
-    db: Session, user_id: uuid.UUID, integration_type: str
-) -> str | None:
+def get_access_token(db: Session, user_id: uuid.UUID, integration_type: str) -> str | None:
     """Get decrypted access token, refreshing if expired."""
     integration = get_user_integration(db, user_id, integration_type)
     if not integration:
@@ -340,17 +336,13 @@ async def refresh_zoom_token(refresh_token: str) -> JsonObject | None:
 # =============================================================================
 
 
-def _log_token_refresh(
-    db: Session, integration: UserIntegration, integration_type: str
-) -> None:
+def _log_token_refresh(db: Session, integration: UserIntegration, integration_type: str) -> None:
     """Best-effort audit log for token refresh events."""
     try:
         from app.db.enums import AuditEventType
         from app.services import audit_service, membership_service
 
-        membership = membership_service.get_membership_by_user_id(
-            db, integration.user_id
-        )
+        membership = membership_service.get_membership_by_user_id(db, integration.user_id)
         if not membership:
             return
 
@@ -372,9 +364,7 @@ def _log_token_refresh(
 # ============================================================================
 
 
-def refresh_token(
-    db: Session, integration: UserIntegration, integration_type: str
-) -> bool:
+def refresh_token(db: Session, integration: UserIntegration, integration_type: str) -> bool:
     """Refresh an expired token. Returns True if successful.
 
     Note: This function creates a new event loop if needed, or uses an existing one.
@@ -414,9 +404,7 @@ def refresh_token(
         if "refresh_token" in result:
             integration.refresh_token_encrypted = encrypt_token(result["refresh_token"])
         if "expires_in" in result:
-            integration.token_expires_at = _now_utc() + timedelta(
-                seconds=result["expires_in"]
-            )
+            integration.token_expires_at = _now_utc() + timedelta(seconds=result["expires_in"])
         integration.updated_at = _now_utc()
         _log_token_refresh(db, integration, integration_type)
         db.commit()
@@ -452,9 +440,7 @@ async def refresh_token_async(
         if "refresh_token" in result:
             integration.refresh_token_encrypted = encrypt_token(result["refresh_token"])
         if "expires_in" in result:
-            integration.token_expires_at = _now_utc() + timedelta(
-                seconds=result["expires_in"]
-            )
+            integration.token_expires_at = _now_utc() + timedelta(seconds=result["expires_in"])
         integration.updated_at = _now_utc()
         _log_token_refresh(db, integration, integration_type)
         db.commit()

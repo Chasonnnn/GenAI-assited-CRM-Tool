@@ -14,18 +14,18 @@ class ResourcePolicy:
 
 
 POLICIES: dict[str, ResourcePolicy] = {
-    "cases": ResourcePolicy(
-        default=P.CASES_VIEW,
+    "surrogates": ResourcePolicy(
+        default=P.SURROGATES_VIEW,
         actions={
-            "edit": P.CASES_EDIT,
-            "delete": P.CASES_DELETE,
-            "archive": P.CASES_ARCHIVE,
-            "assign": P.CASES_ASSIGN,
-            "change_status": P.CASES_CHANGE_STATUS,
-            "view_post_approval": P.CASES_VIEW_POST_APPROVAL,
-            "notes_view": P.CASES_VIEW_NOTES,
-            "notes_edit": P.CASES_EDIT_NOTES,
-            "import": P.CASES_IMPORT,
+            "edit": P.SURROGATES_EDIT,
+            "delete": P.SURROGATES_DELETE,
+            "archive": P.SURROGATES_ARCHIVE,
+            "assign": P.SURROGATES_ASSIGN,
+            "change_status": P.SURROGATES_CHANGE_STATUS,
+            "view_post_approval": P.SURROGATES_VIEW_POST_APPROVAL,
+            "notes_view": P.SURROGATES_VIEW_NOTES,
+            "notes_edit": P.SURROGATES_EDIT_NOTES,
+            "import": P.SURROGATES_IMPORT,
         },
     ),
     "intended_parents": ResourcePolicy(

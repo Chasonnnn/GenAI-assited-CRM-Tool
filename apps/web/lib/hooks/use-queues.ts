@@ -4,7 +4,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
-import { caseKeys } from './use-cases';
+import { surrogateKeys } from './use-surrogates';
 
 // =============================================================================
 // Types
@@ -63,16 +63,16 @@ async function deleteQueue(queueId: string): Promise<void> {
     return api.delete(`/queues/${queueId}`);
 }
 
-async function claimCase(caseId: string): Promise<{ message: string; case_id: string }> {
-    return api.post(`/queues/cases/${caseId}/claim`);
+async function claimSurrogate(surrogateId: string): Promise<{ message: string; surrogate_id: string }> {
+    return api.post(`/queues/surrogates/${surrogateId}/claim`);
 }
 
-async function releaseCase(caseId: string, queueId: string): Promise<{ message: string; case_id: string }> {
-    return api.post(`/queues/cases/${caseId}/release`, { queue_id: queueId });
+async function releaseSurrogate(surrogateId: string, queueId: string): Promise<{ message: string; surrogate_id: string }> {
+    return api.post(`/queues/surrogates/${surrogateId}/release`, { queue_id: queueId });
 }
 
-async function assignCaseToQueue(caseId: string, queueId: string): Promise<{ message: string; case_id: string }> {
-    return api.post(`/queues/cases/${caseId}/assign`, { queue_id: queueId });
+async function assignSurrogateToQueue(surrogateId: string, queueId: string): Promise<{ message: string; surrogate_id: string }> {
+    return api.post(`/queues/surrogates/${surrogateId}/assign`, { queue_id: queueId });
 }
 
 // =============================================================================
@@ -158,51 +158,51 @@ export function useDeleteQueue() {
 }
 
 /**
- * Claim a case from a queue.
+ * Claim a surrogate from a queue.
  * Transfers ownership from queue to current user.
  */
-export function useClaimCase() {
+export function useClaimSurrogate() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: claimCase,
-        onSuccess: (_, caseId) => {
-            queryClient.invalidateQueries({ queryKey: caseKeys.detail(caseId) });
-            queryClient.invalidateQueries({ queryKey: caseKeys.lists() });
+        mutationFn: claimSurrogate,
+        onSuccess: (_, surrogateId) => {
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
             queryClient.invalidateQueries({ queryKey: queueKeys.all });
         },
     });
 }
 
 /**
- * Release a case back to a queue.
+ * Release a surrogate back to a queue.
  */
-export function useReleaseCase() {
+export function useReleaseSurrogate() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ caseId, queueId }: { caseId: string; queueId: string }) =>
-            releaseCase(caseId, queueId),
-        onSuccess: (_, { caseId }) => {
-            queryClient.invalidateQueries({ queryKey: caseKeys.detail(caseId) });
-            queryClient.invalidateQueries({ queryKey: caseKeys.lists() });
+        mutationFn: ({ surrogateId, queueId }: { surrogateId: string; queueId: string }) =>
+            releaseSurrogate(surrogateId, queueId),
+        onSuccess: (_, { surrogateId }) => {
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
             queryClient.invalidateQueries({ queryKey: queueKeys.all });
         },
     });
 }
 
 /**
- * Assign a case to a queue (admin action).
+ * Assign a surrogate to a queue (admin action).
  */
 export function useAssignToQueue() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ caseId, queueId }: { caseId: string; queueId: string }) =>
-            assignCaseToQueue(caseId, queueId),
-        onSuccess: (_, { caseId }) => {
-            queryClient.invalidateQueries({ queryKey: caseKeys.detail(caseId) });
-            queryClient.invalidateQueries({ queryKey: caseKeys.lists() });
+        mutationFn: ({ surrogateId, queueId }: { surrogateId: string; queueId: string }) =>
+            assignSurrogateToQueue(surrogateId, queueId),
+        onSuccess: (_, { surrogateId }) => {
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
             queryClient.invalidateQueries({ queryKey: queueKeys.all });
         },
     });

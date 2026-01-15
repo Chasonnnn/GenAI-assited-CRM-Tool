@@ -65,7 +65,7 @@ ALLOWED_EMAIL_VARIABLES = {
     "full_name",
     "email",
     "phone",
-    "case_number",
+    "surrogate_number",
     "status_label",
     "state",
     "owner_name",
@@ -89,9 +89,7 @@ class Condition(BaseModel):
     @classmethod
     def validate_field(cls, v: str) -> str:
         if v not in ALLOWED_CONDITION_FIELDS:
-            raise ValueError(
-                f"Field '{v}' is not allowed. Allowed: {ALLOWED_CONDITION_FIELDS}"
-            )
+            raise ValueError(f"Field '{v}' is not allowed. Allowed: {ALLOWED_CONDITION_FIELDS}")
         return v
 
 
@@ -126,8 +124,8 @@ class InactivityTriggerConfig(BaseModel):
     days: int = Field(ge=1, le=90, default=7)
 
 
-class CaseUpdatedTriggerConfig(BaseModel):
-    """Config for case_updated trigger."""
+class SurrogateUpdatedTriggerConfig(BaseModel):
+    """Config for surrogate_updated trigger."""
 
     fields: list[str] = Field(min_length=1)
 
@@ -140,8 +138,8 @@ class CaseUpdatedTriggerConfig(BaseModel):
         return v
 
 
-class CaseAssignedTriggerConfig(BaseModel):
-    """Config for case_assigned trigger."""
+class SurrogateAssignedTriggerConfig(BaseModel):
+    """Config for surrogate_assigned trigger."""
 
     to_user_id: UUID | None = None  # Optional: only trigger for specific user
 
@@ -168,10 +166,10 @@ class CreateTaskActionConfig(BaseModel):
     assignee: Literal["owner", "creator", "admin"] | UUID = "owner"
 
 
-class AssignCaseActionConfig(BaseModel):
-    """Config for assign_case action."""
+class AssignSurrogateActionConfig(BaseModel):
+    """Config for assign_surrogate action."""
 
-    action_type: Literal["assign_case"] = "assign_case"
+    action_type: Literal["assign_surrogate"] = "assign_surrogate"
     owner_type: OwnerType
     owner_id: UUID
 
@@ -213,7 +211,7 @@ class AddNoteActionConfig(BaseModel):
 ActionConfig = (
     SendEmailActionConfig
     | CreateTaskActionConfig
-    | AssignCaseActionConfig
+    | AssignSurrogateActionConfig
     | SendNotificationActionConfig
     | UpdateFieldActionConfig
     | AddNoteActionConfig

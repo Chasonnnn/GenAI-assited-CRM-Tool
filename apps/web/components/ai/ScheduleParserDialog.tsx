@@ -52,7 +52,7 @@ interface EditableTask extends ProposedTask {
     id: string // Local ID for React key
 }
 
-export type EntityType = "case" | "surrogate" | "intended_parent" | "match"
+export type EntityType = "surrogate" | "intended_parent" | "match"
 
 interface ScheduleParserDialogProps {
     open: boolean
@@ -91,7 +91,6 @@ export function ScheduleParserDialog({
     // Build entity ID payload based on type
     const getEntityPayload = () => {
         switch (entityType) {
-            case "case": return { case_id: entityId }
             case "surrogate": return { surrogate_id: entityId }
             case "intended_parent": return { intended_parent_id: entityId }
             case "match": return { match_id: entityId }

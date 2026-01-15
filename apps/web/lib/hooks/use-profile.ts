@@ -13,24 +13,22 @@ import type { JsonObject } from '@/lib/types/json'
 
 export const profileKeys = {
     all: ['profile'] as const,
-    detail: (caseId: string) => [...profileKeys.all, caseId] as const,
+    detail: (surrogateId: string) => [...profileKeys.all, surrogateId] as const,
 }
 
-export function useProfile(caseId: string | null) {
+export function useProfile(surrogateId: string | null) {
     return useQuery({
-        queryKey: profileKeys.detail(caseId || ''),
-        queryFn: () => getProfile(caseId!),
-        enabled: !!caseId,
+        queryKey: profileKeys.detail(surrogateId || ''),
+        queryFn: () => getProfile(surrogateId!),
+        enabled: !!surrogateId,
         retry: false,
     })
 }
 
 export function useSyncProfile() {
-    const queryClient = useQueryClient()
-
     return useMutation({
-        mutationFn: (caseId: string) => syncProfile(caseId),
-        onSuccess: (_, caseId) => {
+        mutationFn: (surrogateId: string) => syncProfile(surrogateId),
+        onSuccess: () => {
             // Don't invalidate - sync returns staged changes, not persisted
         },
     })
@@ -41,16 +39,16 @@ export function useSaveProfileOverrides() {
 
     return useMutation({
         mutationFn: ({
-            caseId,
+            surrogateId,
             overrides,
             newBaseSubmissionId,
         }: {
-            caseId: string
+            surrogateId: string
             overrides: JsonObject
             newBaseSubmissionId?: string | null
-        }) => saveProfileOverrides(caseId, overrides, newBaseSubmissionId),
-        onSuccess: (_, { caseId }) => {
-            queryClient.invalidateQueries({ queryKey: profileKeys.detail(caseId) })
+        }) => saveProfileOverrides(surrogateId, overrides, newBaseSubmissionId),
+        onSuccess: (_, { surrogateId }) => {
+            queryClient.invalidateQueries({ queryKey: profileKeys.detail(surrogateId) })
         },
     })
 }
@@ -60,16 +58,16 @@ export function useToggleProfileHidden() {
 
     return useMutation({
         mutationFn: ({
-            caseId,
+            surrogateId,
             fieldKey,
             hidden,
         }: {
-            caseId: string
+            surrogateId: string
             fieldKey: string
             hidden: boolean
-        }) => toggleProfileHiddenField(caseId, fieldKey, hidden),
-        onSuccess: (_, { caseId }) => {
-            queryClient.invalidateQueries({ queryKey: profileKeys.detail(caseId) })
+        }) => toggleProfileHiddenField(surrogateId, fieldKey, hidden),
+        onSuccess: (_, { surrogateId }) => {
+            queryClient.invalidateQueries({ queryKey: profileKeys.detail(surrogateId) })
         },
     })
 }

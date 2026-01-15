@@ -127,8 +127,8 @@ async function fetchWorkflows(): Promise<{ id: string; name: string }[]> {
 
 function getEntityLink(entityType: string, entityId: string): string | null {
     switch (entityType.toLowerCase()) {
-        case "case":
-            return `/cases/${entityId}`
+        case "surrogate":
+            return `/surrogates/${entityId}`
         case "intended_parent":
             return `/intended-parents/${entityId}`
         case "match":

@@ -37,9 +37,7 @@ def _should_sample() -> bool:
     return random.random() < rate
 
 
-def _build_user_context(
-    request: Any | None, request_id: str | None = None
-) -> str | None:
+def _build_user_context(request: Any | None, request_id: str | None = None) -> str | None:
     if request is None:
         return None
 

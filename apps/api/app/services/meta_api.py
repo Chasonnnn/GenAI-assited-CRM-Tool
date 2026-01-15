@@ -43,9 +43,7 @@ def verify_signature(payload: bytes, signature: str) -> bool:
     if not settings.META_APP_SECRET:
         return False
 
-    expected = hmac.new(
-        settings.META_APP_SECRET.encode(), payload, hashlib.sha256
-    ).hexdigest()
+    expected = hmac.new(settings.META_APP_SECRET.encode(), payload, hashlib.sha256).hexdigest()
 
     return hmac.compare_digest(f"sha256={expected}", signature)
 
@@ -264,9 +262,7 @@ async def fetch_ad_account_insights(
     try:
         async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
             while url and pages_fetched < max_pages:
-                resp = await client.get(
-                    url, params=params if pages_fetched == 0 else None
-                )
+                resp = await client.get(url, params=params if pages_fetched == 0 else None)
 
                 if resp.status_code != 200:
                     error_body = resp.text[:500]
@@ -570,9 +566,7 @@ async def _fetch_paginated(
     try:
         async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
             while url and pages_fetched < max_pages:
-                resp = await client.get(
-                    url, params=params if pages_fetched == 0 else None
-                )
+                resp = await client.get(url, params=params if pages_fetched == 0 else None)
 
                 if resp.status_code != 200:
                     error_body = resp.text[:500]

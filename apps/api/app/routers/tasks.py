@@ -28,21 +28,19 @@ from app.schemas.task import (
 from app.services import dashboard_service, task_service, ip_service
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 
-router = APIRouter(
-    dependencies=[Depends(require_permission(POLICIES["tasks"].default))]
-)
+router = APIRouter(dependencies=[Depends(require_permission(POLICIES["tasks"].default))])
 
 
-def _check_task_case_access(task, session: "UserSession", db: Session) -> None:
-    """Check case access for a task linked to a case."""
-    from app.core.case_access import check_case_access
-    from app.services import case_service
+def _check_task_surrogate_access(task, session: "UserSession", db: Session) -> None:
+    """Check surrogate access for a task linked to a surrogate."""
+    from app.core.surrogate_access import check_surrogate_access
+    from app.services import surrogate_service
 
-    if task.case_id:
-        case = case_service.get_case(db, session.org_id, task.case_id)
-        if case:
-            check_case_access(
-                case, session.role, session.user_id, db=db, org_id=session.org_id
+    if task.surrogate_id:
+        surrogate = surrogate_service.get_surrogate(db, session.org_id, task.surrogate_id)
+        if surrogate:
+            check_surrogate_access(
+                surrogate, session.role, session.user_id, db=db, org_id=session.org_id
             )
 
 
@@ -55,13 +53,11 @@ def list_tasks(
     per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
     q: str | None = Query(None, description="Search in title and description"),
     owner_id: UUID | None = None,
-    case_id: UUID | None = None,
+    surrogate_id: UUID | None = None,
     intended_parent_id: UUID | None = None,
     is_completed: bool | None = None,
     task_type: TaskType | None = None,
-    status: str | None = Query(
-        None, description="Filter by task status (comma-separated)"
-    ),
+    status: str | None = Query(None, description="Filter by task status (comma-separated)"),
     due_before: str | None = Query(None, description="Due date before (YYYY-MM-DD)"),
     due_after: str | None = Query(None, description="Due date after (YYYY-MM-DD)"),
     my_tasks: bool = False,
@@ -71,17 +67,17 @@ def list_tasks(
     List tasks.
 
     - my_tasks=true: Filter to tasks created by or owned by current user
-    - If case_id is specified, role-based access is checked
+    - If surrogate_id is specified, role-based access is checked
     """
-    # If filtering by case_id, check access first
-    if case_id:
-        from app.core.case_access import check_case_access
-        from app.services import case_service
+    # If filtering by surrogate_id (surrogate_id parameter), check access first
+    if surrogate_id:
+        from app.core.surrogate_access import check_surrogate_access
+        from app.services import surrogate_service
 
-        case = case_service.get_case(db, session.org_id, case_id)
-        if case:
-            check_case_access(
-                case, session.role, session.user_id, db=db, org_id=session.org_id
+        surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+        if surrogate:
+            check_surrogate_access(
+                surrogate, session.role, session.user_id, db=db, org_id=session.org_id
             )
 
     # If filtering by intended_parent_id, verify existence
@@ -98,7 +94,7 @@ def list_tasks(
         per_page=per_page,
         q=q,
         owner_id=owner_id,
-        case_id=case_id,
+        surrogate_id=surrogate_id,
         intended_parent_id=intended_parent_id,
         is_completed=is_completed,
         task_type=task_type,
@@ -133,10 +129,8 @@ def list_tasks(
             "page": page,
             "per_page": per_page,
             "owner_id": str(owner_id) if owner_id else None,
-            "case_id": str(case_id) if case_id else None,
-            "intended_parent_id": str(intended_parent_id)
-            if intended_parent_id
-            else None,
+            "surrogate_id": str(surrogate_id) if surrogate_id else None,
+            "intended_parent_id": str(intended_parent_id) if intended_parent_id else None,
             "is_completed": is_completed,
             "task_type": task_type.value if task_type else None,
             "status": status,
@@ -167,24 +161,22 @@ def list_tasks(
 )
 def create_task(
     data: TaskCreate,
-    session: UserSession = Depends(
-        require_permission(POLICIES["tasks"].actions["create"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["create"])),
     db: Session = Depends(get_db),
 ):
-    """Create a new task (respects case access control)."""
-    from app.core.case_access import check_case_access
+    """Create a new task (respects surrogate access control)."""
+    from app.core.surrogate_access import check_surrogate_access
 
-    # Verify case belongs to org if specified
-    if data.case_id:
-        from app.services import case_service
+    # Verify surrogate belongs to org if specified
+    if data.surrogate_id:
+        from app.services import surrogate_service
 
-        case = case_service.get_case(db, session.org_id, data.case_id)
-        if not case:
-            raise HTTPException(status_code=400, detail="Case not found")
+        surrogate = surrogate_service.get_surrogate(db, session.org_id, data.surrogate_id)
+        if not surrogate:
+            raise HTTPException(status_code=400, detail="Surrogate not found")
         # Access control: checks ownership + post-approval permission
-        check_case_access(
-            case, session.role, session.user_id, db=db, org_id=session.org_id
+        check_surrogate_access(
+            surrogate, session.role, session.user_id, db=db, org_id=session.org_id
         )
 
     # Verify owner belongs to org if specified
@@ -223,7 +215,7 @@ def get_task(
         raise HTTPException(status_code=404, detail="Task not found")
 
     # Access control: check case access if task is linked to a case
-    _check_task_case_access(task, session, db)
+    _check_task_surrogate_access(task, session, db)
 
     from app.services import audit_service
 
@@ -236,10 +228,8 @@ def get_task(
         request=request,
         details={
             "view": "task_detail",
-            "case_id": str(task.case_id) if task.case_id else None,
-            "intended_parent_id": str(task.intended_parent_id)
-            if task.intended_parent_id
-            else None,
+            "surrogate_id": str(task.surrogate_id) if task.surrogate_id else None,
+            "intended_parent_id": str(task.intended_parent_id) if task.intended_parent_id else None,
         },
     )
     db.commit()
@@ -248,15 +238,11 @@ def get_task(
     return task_service.to_task_read(task, context)
 
 
-@router.patch(
-    "/{task_id}", response_model=TaskRead, dependencies=[Depends(require_csrf_header)]
-)
+@router.patch("/{task_id}", response_model=TaskRead, dependencies=[Depends(require_csrf_header)])
 def update_task(
     task_id: UUID,
     data: TaskUpdate,
-    session: UserSession = Depends(
-        require_permission(POLICIES["tasks"].actions["edit"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["edit"])),
     db: Session = Depends(get_db),
 ):
     """
@@ -269,15 +255,13 @@ def update_task(
         raise HTTPException(status_code=404, detail="Task not found")
 
     # Access control: check case access if task is linked to a case
-    _check_task_case_access(task, session, db)
+    _check_task_surrogate_access(task, session, db)
 
     # Permission: creator, owner, or admin+
     if not is_owner_or_assignee_or_admin(
         session, task.created_by_user_id, task.owner_type, task.owner_id
     ):
-        raise HTTPException(
-            status_code=403, detail="Not authorized to update this task"
-        )
+        raise HTTPException(status_code=403, detail="Not authorized to update this task")
 
     update_fields = data.model_dump(exclude_unset=True)
     if "owner_type" in update_fields or "owner_id" in update_fields:
@@ -300,9 +284,7 @@ def update_task(
 )
 def complete_task(
     task_id: UUID,
-    session: UserSession = Depends(
-        require_permission(POLICIES["tasks"].actions["edit"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["edit"])),
     db: Session = Depends(get_db),
 ):
     """
@@ -315,7 +297,7 @@ def complete_task(
         raise HTTPException(status_code=404, detail="Task not found")
 
     # Access control: check case access if task is linked to a case
-    _check_task_case_access(task, session, db)
+    _check_task_surrogate_access(task, session, db)
 
     if not is_owner_or_assignee_or_admin(
         session, task.created_by_user_id, task.owner_type, task.owner_id
@@ -341,9 +323,7 @@ def complete_task(
 )
 def uncomplete_task(
     task_id: UUID,
-    session: UserSession = Depends(
-        require_permission(POLICIES["tasks"].actions["edit"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["edit"])),
     db: Session = Depends(get_db),
 ):
     """Mark task as not completed (respects role-based case access)."""
@@ -352,7 +332,7 @@ def uncomplete_task(
         raise HTTPException(status_code=404, detail="Task not found")
 
     # Access control: check case access if task is linked to a case
-    _check_task_case_access(task, session, db)
+    _check_task_surrogate_access(task, session, db)
 
     if not is_owner_or_assignee_or_admin(
         session, task.created_by_user_id, task.owner_type, task.owner_id
@@ -378,9 +358,7 @@ def uncomplete_task(
 )
 def bulk_complete_tasks(
     data: BulkTaskComplete,
-    session: UserSession = Depends(
-        require_permission(POLICIES["tasks"].actions["edit"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["edit"])),
     db: Session = Depends(get_db),
 ):
     """
@@ -397,14 +375,12 @@ def bulk_complete_tasks(
         try:
             task = task_service.get_task(db, task_id, session.org_id)
             if not task:
-                results["failed"].append(
-                    {"task_id": str(task_id), "reason": "Task not found"}
-                )
+                results["failed"].append({"task_id": str(task_id), "reason": "Task not found"})
                 continue
 
             # Access control: check case access if task is linked to a case
             try:
-                _check_task_case_access(task, session, db)
+                _check_task_surrogate_access(task, session, db)
             except HTTPException as e:
                 results["failed"].append({"task_id": str(task_id), "reason": e.detail})
                 continue
@@ -413,9 +389,7 @@ def bulk_complete_tasks(
             if not is_owner_or_assignee_or_admin(
                 session, task.created_by_user_id, task.owner_type, task.owner_id
             ):
-                results["failed"].append(
-                    {"task_id": str(task_id), "reason": "Not authorized"}
-                )
+                results["failed"].append({"task_id": str(task_id), "reason": "Not authorized"})
                 continue
 
             if task.task_type == TaskType.WORKFLOW_APPROVAL.value:
@@ -448,20 +422,14 @@ def bulk_complete_tasks(
     db.commit()
     dashboard_service.push_dashboard_stats(db, session.org_id)
 
-    return BulkCompleteResponse(
-        completed=results["completed"], failed=results["failed"]
-    )
+    return BulkCompleteResponse(completed=results["completed"], failed=results["failed"])
 
 
-@router.delete(
-    "/{task_id}", status_code=204, dependencies=[Depends(require_csrf_header)]
-)
+@router.delete("/{task_id}", status_code=204, dependencies=[Depends(require_csrf_header)])
 def delete_task(
     task_id: UUID,
     request: Request,
-    session: UserSession = Depends(
-        require_permission(POLICIES["tasks"].actions["delete"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["delete"])),
     db: Session = Depends(get_db),
 ):
     """
@@ -475,20 +443,18 @@ def delete_task(
         raise HTTPException(status_code=404, detail="Task not found")
 
     # Access control: check case access if task is linked to a case
-    _check_task_case_access(task, session, db)
+    _check_task_surrogate_access(task, session, db)
 
     # Permission: creator or admin+ only (not assignee)
     if not is_owner_or_can_manage(session, task.created_by_user_id):
-        raise HTTPException(
-            status_code=403, detail="Not authorized to delete this task"
-        )
+        raise HTTPException(status_code=403, detail="Not authorized to delete this task")
 
-    if task.case_id:
+    if task.surrogate_id:
         from app.services import activity_service
 
         activity_service.log_task_deleted(
             db=db,
-            case_id=task.case_id,
+            surrogate_id=task.surrogate_id,
             organization_id=session.org_id,
             actor_user_id=session.user_id,
             task_id=task.id,
@@ -507,7 +473,9 @@ def delete_task(
             target_id=task.id,
             details={
                 "task_type": task.task_type,
-                "intended_parent_id": str(task.intended_parent_id) if task.intended_parent_id else None,
+                "intended_parent_id": str(task.intended_parent_id)
+                if task.intended_parent_id
+                else None,
                 "owner_id": str(task.owner_id),
                 "owner_type": task.owner_type,
             },
@@ -533,7 +501,7 @@ def resolve_workflow_approval(
     """
     Approve or deny a workflow approval task.
 
-    Only the case owner (the user to whom the task is assigned) can resolve.
+    Only the surrogate owner (the user to whom the task is assigned) can resolve.
     This endpoint is only valid for tasks with task_type='workflow_approval'.
 
     - **decision**: "approve" or "deny"
@@ -555,7 +523,7 @@ def resolve_workflow_approval(
         # Map specific errors to HTTP status codes
         if "not found" in str(e).lower():
             raise HTTPException(status_code=404, detail=str(e))
-        elif "forbidden" in str(e).lower() or "only the case owner" in str(e).lower():
+        elif "forbidden" in str(e).lower() or "only the surrogate owner" in str(e).lower():
             raise HTTPException(status_code=403, detail=str(e))
         elif "already resolved" in str(e).lower() or "not waiting" in str(e).lower():
             raise HTTPException(status_code=400, detail=str(e))

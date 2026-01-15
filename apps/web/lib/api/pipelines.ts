@@ -124,8 +124,8 @@ export async function deleteStage(
     stageId: string,
     migrateToStageId: string,
     expectedVersion?: number,
-): Promise<{ deleted: boolean; migrated_cases: number }> {
-    return api.delete<{ deleted: boolean; migrated_cases: number }>(
+): Promise<{ deleted: boolean; migrated_surrogates: number }> {
+    return api.delete<{ deleted: boolean; migrated_surrogates: number }>(
         `/settings/pipelines/${pipelineId}/stages/${stageId}`,
         { body: { migrate_to_stage_id: migrateToStageId, expected_version: expectedVersion } }
     );

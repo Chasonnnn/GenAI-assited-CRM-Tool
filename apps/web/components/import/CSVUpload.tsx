@@ -152,7 +152,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                 <h3 className="mb-2 text-lg font-semibold">
                                     {isDragging ? "Drop CSV file here" : "Drag CSV here or click to browse"}
                                 </h3>
-                                <p className="text-sm text-muted-foreground">Upload a CSV file to import cases</p>
+                                <p className="text-sm text-muted-foreground">Upload a CSV file to import surrogates</p>
                             </>
                         )}
 
@@ -288,7 +288,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                     Importing...
                                 </>
                             ) : (
-                                `Import ${preview.total_rows} Cases`
+                                `Import ${preview.total_rows} Surrogates`
                             )}
                         </Button>
                     </div>

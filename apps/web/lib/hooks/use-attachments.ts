@@ -1,17 +1,17 @@
 /**
- * React Query hooks for case attachments
+ * React Query hooks for surrogate attachments
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { attachmentsApi } from "../api/attachments"
 import { toast } from "sonner"
-import { caseKeys } from "./use-cases"
+import { surrogateKeys } from "./use-surrogates"
 
-export function useAttachments(caseId: string | null) {
+export function useAttachments(surrogateId: string | null) {
     return useQuery({
-        queryKey: ["attachments", caseId],
-        queryFn: () => attachmentsApi.list(caseId!),
-        enabled: !!caseId,
+        queryKey: ["attachments", surrogateId],
+        queryFn: () => attachmentsApi.list(surrogateId!),
+        enabled: !!surrogateId,
     })
 }
 
@@ -19,13 +19,13 @@ export function useUploadAttachment() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: ({ caseId, file }: { caseId: string; file: File }) =>
-            attachmentsApi.upload(caseId, file),
+        mutationFn: ({ surrogateId, file }: { surrogateId: string; file: File }) =>
+            attachmentsApi.upload(surrogateId, file),
         onSuccess: (data, variables) => {
-            queryClient.invalidateQueries({ queryKey: ["attachments", variables.caseId] })
+            queryClient.invalidateQueries({ queryKey: ["attachments", variables.surrogateId] })
             // Invalidate history/activity cache to show attachment_added immediately
             queryClient.invalidateQueries({
-                queryKey: [...caseKeys.detail(variables.caseId), 'activity'],
+                queryKey: [...surrogateKeys.detail(variables.surrogateId), 'activity'],
                 exact: false,
             })
         },
@@ -52,13 +52,13 @@ export function useDeleteAttachment() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: ({ attachmentId, caseId: _caseId }: { attachmentId: string; caseId: string }) =>
+        mutationFn: ({ attachmentId, surrogateId: _surrogateId }: { attachmentId: string; surrogateId: string }) =>
             attachmentsApi.delete(attachmentId),
         onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({ queryKey: ["attachments", variables.caseId] })
+            queryClient.invalidateQueries({ queryKey: ["attachments", variables.surrogateId] })
             // Invalidate history/activity cache to show attachment_deleted immediately
             queryClient.invalidateQueries({
-                queryKey: [...caseKeys.detail(variables.caseId), 'activity'],
+                queryKey: [...surrogateKeys.detail(variables.surrogateId), 'activity'],
                 exact: false,
             })
         },

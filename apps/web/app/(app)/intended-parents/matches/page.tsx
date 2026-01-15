@@ -191,11 +191,11 @@ export default function MatchesPage() {
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Surrogate</TableHead>
-                                        <TableHead>Case #</TableHead>
+                                        <TableHead>Surrogate #</TableHead>
                                         <TableHead>Intended Parents</TableHead>
                                         <TableHead>Compatibility</TableHead>
                                         <TableHead>Match Stage</TableHead>
-                                        <TableHead>Case Stage</TableHead>
+                                        <TableHead>Surrogate Stage</TableHead>
                                         <TableHead>Proposed</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -207,11 +207,11 @@ export default function MatchesPage() {
                                                     href={`/intended-parents/matches/${match.id}`}
                                                     className="font-medium hover:text-primary hover:underline"
                                                 >
-                                                    {match.case_name || "—"}
+                                                    {match.surrogate_name || "—"}
                                                 </Link>
                                             </TableCell>
                                             <TableCell className="text-muted-foreground">
-                                                {match.case_number || "—"}
+                                                {match.surrogate_number || "—"}
                                             </TableCell>
                                             <TableCell className="text-muted-foreground">
                                                 {match.ip_name || "—"}
@@ -234,9 +234,9 @@ export default function MatchesPage() {
                                                 })()}
                                             </TableCell>
                                             <TableCell>
-                                                {match.case_stage_label ? (
+                                                {match.surrogate_stage_label ? (
                                                     <Badge variant="outline" className="text-xs">
-                                                        {match.case_stage_label}
+                                                        {match.surrogate_stage_label}
                                                     </Badge>
                                                 ) : (
                                                     <span className="text-muted-foreground">—</span>

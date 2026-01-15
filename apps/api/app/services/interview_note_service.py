@@ -7,7 +7,7 @@ import nh3
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import CaseInterview, InterviewNote
+from app.db.models import SurrogateInterview, InterviewNote
 from app.schemas.interview import InterviewNoteCreate, InterviewNoteUpdate
 
 # Allowed HTML tags for note content (same as note_service)
@@ -43,7 +43,7 @@ def sanitize_html(html: str) -> str:
 def create_note(
     db: Session,
     org_id: UUID,
-    interview: CaseInterview,
+    interview: SurrogateInterview,
     user_id: UUID,
     data: InterviewNoteCreate,
 ) -> InterviewNote:
@@ -131,7 +131,9 @@ def list_notes(
                 InterviewNote.parent_id.is_(None),  # Only top-level notes
             )
             .order_by(InterviewNote.created_at.desc())
-        ).unique().all()
+        )
+        .unique()
+        .all()
     )
 
 

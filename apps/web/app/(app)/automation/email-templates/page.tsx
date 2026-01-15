@@ -254,7 +254,7 @@ function SignaturePhotoField({
 // =============================================================================
 
 function SignaturePreviewComponent() {
-    const { data: preview, isLoading, refetch } = useSignaturePreview()
+    const { data: preview, isLoading } = useSignaturePreview()
 
     if (isLoading) {
         return (
@@ -294,9 +294,9 @@ const TEMPLATE_VARIABLES = [
     { name: "full_name", description: "Contact full name" },
     { name: "email", description: "Contact email" },
     { name: "phone", description: "Contact phone" },
-    { name: "case_number", description: "Case number" },
+    { name: "surrogate_number", description: "Surrogate number" },
     { name: "status_label", description: "Current status" },
-    { name: "owner_name", description: "Case owner name" },
+    { name: "owner_name", description: "Surrogate owner name" },
     { name: "org_name", description: "Organization name" },
     { name: "appointment_date", description: "Appointment date" },
     { name: "appointment_time", description: "Appointment time" },
@@ -429,7 +429,7 @@ export default function EmailTemplatesPage() {
             .replace(/\{\{full_name\}\}/g, "John Smith")
             .replace(/\{\{email\}\}/g, "john@example.com")
             .replace(/\{\{phone\}\}/g, "(555) 123-4567")
-            .replace(/\{\{case_number\}\}/g, "CASE-2024-001")
+            .replace(/\{\{surrogate_number\}\}/g, "CASE-2024-001")
             .replace(/\{\{status_label\}\}/g, "Qualified")
             .replace(/\{\{owner_name\}\}/g, "Sara Manager")
             .replace(/\{\{org_name\}\}/g, signatureData?.org_signature_company_name || "ABC Surrogacy")

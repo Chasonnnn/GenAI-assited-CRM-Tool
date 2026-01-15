@@ -22,20 +22,20 @@ export interface AttachmentDownload {
 
 export const attachmentsApi = {
     /**
-     * List attachments for a case
+     * List attachments for a surrogate
      */
-    list: (caseId: string) =>
-        api.get<Attachment[]>(`/attachments/cases/${caseId}/attachments`),
+    list: (surrogateId: string) =>
+        api.get<Attachment[]>(`/attachments/surrogates/${surrogateId}/attachments`),
 
     /**
      * Upload a file attachment
      */
-    upload: async (caseId: string, file: File): Promise<Attachment> => {
+    upload: async (surrogateId: string, file: File): Promise<Attachment> => {
         const formData = new FormData()
         formData.append("file", file)
 
         return api.upload<Attachment>(
-            `/attachments/cases/${caseId}/attachments`,
+            `/attachments/surrogates/${surrogateId}/attachments`,
             formData
         )
     },

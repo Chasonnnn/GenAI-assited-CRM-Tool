@@ -12,7 +12,7 @@ from app.db.models import (
     CampaignRecipient,
     EmailSuppression,
     EmailTemplate,
-    Case,
+    Surrogate,
     IntendedParent,
     Job,
     PipelineStage,
@@ -53,9 +53,7 @@ def list_campaigns(
 
     total = query.count()
 
-    campaigns = (
-        query.order_by(Campaign.created_at.desc()).offset(offset).limit(limit).all()
-    )
+    campaigns = query.order_by(Campaign.created_at.desc()).offset(offset).limit(limit).all()
 
     # Get latest run stats for each campaign
     result = []
@@ -97,9 +95,7 @@ def get_campaign(db: Session, org_id: UUID, campaign_id: UUID) -> Campaign | Non
     )
 
 
-def create_campaign(
-    db: Session, org_id: UUID, user_id: UUID, data: CampaignCreate
-) -> Campaign:
+def create_campaign(db: Session, org_id: UUID, user_id: UUID, data: CampaignCreate) -> Campaign:
     """Create a new campaign."""
     # Verify template exists
     template = (
@@ -120,9 +116,7 @@ def create_campaign(
         description=data.description,
         email_template_id=data.email_template_id,
         recipient_type=data.recipient_type,
-        filter_criteria=data.filter_criteria.model_dump()
-        if data.filter_criteria
-        else {},
+        filter_criteria=data.filter_criteria.model_dump() if data.filter_criteria else {},
         scheduled_at=data.scheduled_at,
         status=CampaignStatus.DRAFT.value,
         created_by_user_id=user_id,
@@ -198,26 +192,20 @@ def delete_campaign(db: Session, org_id: UUID, campaign_id: UUID) -> bool:
 # =============================================================================
 
 
-def _build_recipient_query(
-    db: Session, org_id: UUID, recipient_type: str, filter_criteria: dict
-):
+def _build_recipient_query(db: Session, org_id: UUID, recipient_type: str, filter_criteria: dict):
     """Build SQLAlchemy query for recipients based on filter criteria."""
-    criteria = (
-        FilterCriteria(**filter_criteria) if filter_criteria else FilterCriteria()
-    )
+    criteria = FilterCriteria(**filter_criteria) if filter_criteria else FilterCriteria()
 
     if recipient_type == "case":
-        query = db.query(Case).filter(
-            Case.organization_id == org_id,
-            Case.is_archived.is_(False),
-            Case.email.isnot(None),
-            Case.email != "",
+        query = db.query(Surrogate).filter(
+            Surrogate.organization_id == org_id,
+            Surrogate.is_archived.is_(False),
+            Surrogate.email.isnot(None),
+            Surrogate.email != "",
         )
 
         if criteria.stage_ids:
-            query = query.filter(
-                Case.stage_id.in_([UUID(s) for s in criteria.stage_ids])
-            )
+            query = query.filter(Surrogate.stage_id.in_([UUID(s) for s in criteria.stage_ids]))
 
         if criteria.stage_slugs:
             # IMPORTANT: Scope stages to org's pipelines to prevent cross-tenant leakage
@@ -232,22 +220,22 @@ def _build_recipient_query(
                 )
                 .all()
             )
-            query = query.filter(Case.stage_id.in_([s.id for s in stage_ids]))
+            query = query.filter(Surrogate.stage_id.in_([s.id for s in stage_ids]))
 
         if criteria.states:
-            query = query.filter(Case.state.in_(criteria.states))
+            query = query.filter(Surrogate.state.in_(criteria.states))
 
         if criteria.created_after:
-            query = query.filter(Case.created_at >= criteria.created_after)
+            query = query.filter(Surrogate.created_at >= criteria.created_after)
 
         if criteria.created_before:
-            query = query.filter(Case.created_at <= criteria.created_before)
+            query = query.filter(Surrogate.created_at <= criteria.created_before)
 
         if criteria.source:
-            query = query.filter(Case.source == criteria.source)
+            query = query.filter(Surrogate.source == criteria.source)
 
         if criteria.is_priority is not None:
-            query = query.filter(Case.is_priority == criteria.is_priority)
+            query = query.filter(Surrogate.is_priority == criteria.is_priority)
 
         return query
 
@@ -285,9 +273,7 @@ def preview_recipients(
 
     # Get suppressed emails for this org (handle SA 2.0 Row objects)
     suppression_rows = (
-        db.query(EmailSuppression.email)
-        .filter(EmailSuppression.organization_id == org_id)
-        .all()
+        db.query(EmailSuppression.email).filter(EmailSuppression.organization_id == org_id).all()
     )
     suppressed = {row[0].lower() for row in suppression_rows if row[0]}
 
@@ -298,11 +284,7 @@ def preview_recipients(
             continue  # Skip suppressed
 
         if recipient_type == "case":
-            stage = (
-                db.query(PipelineStage)
-                .filter(PipelineStage.id == entity.stage_id)
-                .first()
-            )
+            stage = db.query(PipelineStage).filter(PipelineStage.id == entity.stage_id).first()
             recipients.append(
                 RecipientPreview(
                     entity_type="case",
@@ -323,9 +305,7 @@ def preview_recipients(
                 )
             )
 
-    return CampaignPreviewResponse(
-        total_count=total_count, sample_recipients=recipients[:limit]
-    )
+    return CampaignPreviewResponse(total_count=total_count, sample_recipients=recipients[:limit])
 
 
 # =============================================================================
@@ -496,12 +476,7 @@ def list_run_recipients(
     if status:
         query = query.filter(CampaignRecipient.status == status)
 
-    return (
-        query.order_by(CampaignRecipient.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    return query.order_by(CampaignRecipient.created_at.desc()).offset(offset).limit(limit).all()
 
 
 def get_latest_run_for_campaign(
@@ -573,17 +548,10 @@ def list_suppressions(
     db: Session, org_id: UUID, limit: int = 100, offset: int = 0
 ) -> tuple[list[EmailSuppression], int]:
     """List suppressed emails for an organization."""
-    query = db.query(EmailSuppression).filter(
-        EmailSuppression.organization_id == org_id
-    )
+    query = db.query(EmailSuppression).filter(EmailSuppression.organization_id == org_id)
 
     total = query.count()
-    items = (
-        query.order_by(EmailSuppression.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    items = query.order_by(EmailSuppression.created_at.desc()).offset(offset).limit(limit).all()
 
     return items, total
 
@@ -652,9 +620,7 @@ def execute_campaign_run(
 
     # Get template
     template = (
-        db.query(EmailTemplate)
-        .filter(EmailTemplate.id == campaign.email_template_id)
-        .first()
+        db.query(EmailTemplate).filter(EmailTemplate.id == campaign.email_template_id).first()
     )
 
     if not template:
@@ -809,9 +775,7 @@ def execute_campaign_run(
         # Inject tracking pixel and wrap links
         from app.services import tracking_service
 
-        tracked_body = tracking_service.prepare_email_for_tracking(
-            body, cr.tracking_token
-        )
+        tracked_body = tracking_service.prepare_email_for_tracking(body, cr.tracking_token)
 
         try:
             # Queue email (actual send happens in background job)
@@ -857,9 +821,7 @@ def execute_campaign_run(
     campaign.total_recipients = run.total_count
     if pending_count == 0:
         campaign.status = (
-            CampaignStatus.COMPLETED.value
-            if run.failed_count == 0
-            else CampaignStatus.FAILED.value
+            CampaignStatus.COMPLETED.value if run.failed_count == 0 else CampaignStatus.FAILED.value
         )
     else:
         campaign.status = CampaignStatus.SENDING.value

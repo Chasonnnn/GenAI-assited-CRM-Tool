@@ -8,19 +8,17 @@ Handles:
 Note: Requires calendar.readonly and calendar.events scopes.
 """
 
-import logging
-
-import httpx
-
-logger = logging.getLogger(__name__)
 from datetime import datetime, timezone
+import logging
 from typing import TypedDict
 from uuid import UUID
 
+import httpx
 from sqlalchemy.orm import Session
 
 from app.services import oauth_service
 
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Types
@@ -158,9 +156,7 @@ async def get_google_events(
                     "singleEvents": "true",  # Expand recurring events
                     "showDeleted": "false",
                     "orderBy": "startTime",
-                    "maxResults": str(
-                        min(max_results_per_page, max_total_results - len(events))
-                    ),
+                    "maxResults": str(min(max_results_per_page, max_total_results - len(events))),
                 }
                 if page_token:
                     params["pageToken"] = page_token
@@ -195,9 +191,7 @@ async def get_google_events(
                             start_dt = datetime.fromisoformat(start_str).replace(
                                 tzinfo=timezone.utc
                             )
-                            end_dt = datetime.fromisoformat(end_str).replace(
-                                tzinfo=timezone.utc
-                            )
+                            end_dt = datetime.fromisoformat(end_str).replace(tzinfo=timezone.utc)
                         except ValueError:
                             continue
                     else:
@@ -205,12 +199,8 @@ async def get_google_events(
                         start_str = start_data.get("dateTime", "")
                         end_str = end_data.get("dateTime", "")
                         try:
-                            start_dt = datetime.fromisoformat(
-                                start_str.replace("Z", "+00:00")
-                            )
-                            end_dt = datetime.fromisoformat(
-                                end_str.replace("Z", "+00:00")
-                            )
+                            start_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+                            end_dt = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
                         except ValueError:
                             continue
 
@@ -409,7 +399,9 @@ async def update_google_event(
                     html_link=data.get("htmlLink", ""),
                 )
     except Exception as e:
-        logger.exception(f"Google Calendar event update failed for calendar={calendar_id} event={event_id}: {e}")
+        logger.exception(
+            f"Google Calendar event update failed for calendar={calendar_id} event={event_id}: {e}"
+        )
 
     return None
 
@@ -433,7 +425,9 @@ async def delete_google_event(
             )
             return response.status_code in [200, 204, 410]  # 410 = already deleted
     except Exception as e:
-        logger.exception(f"Google Calendar event deletion failed for calendar={calendar_id} event={event_id}: {e}")
+        logger.exception(
+            f"Google Calendar event deletion failed for calendar={calendar_id} event={event_id}: {e}"
+        )
         return False
 
 

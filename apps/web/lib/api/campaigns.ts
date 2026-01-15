@@ -22,7 +22,7 @@ export interface CampaignCreate {
     name: string
     description?: string
     email_template_id: string
-    recipient_type: "case" | "intended_parent"
+    recipient_type: "surrogate" | "intended_parent"
     filter_criteria?: FilterCriteria
     scheduled_at?: string
 }
@@ -31,7 +31,7 @@ export interface CampaignUpdate {
     name?: string
     description?: string
     email_template_id?: string
-    recipient_type?: "case" | "intended_parent"
+    recipient_type?: "surrogate" | "intended_parent"
     filter_criteria?: FilterCriteria
     scheduled_at?: string
 }
@@ -165,7 +165,7 @@ export async function duplicateCampaign(id: string): Promise<Campaign> {
     const payload: CampaignCreate = {
         name: `${original.name} (Copy)`,
         email_template_id: original.email_template_id,
-        recipient_type: original.recipient_type as "case" | "intended_parent",
+        recipient_type: original.recipient_type as "surrogate" | "intended_parent",
         filter_criteria: original.filter_criteria,
     }
     if (original.description) {
@@ -189,7 +189,7 @@ export async function previewRecipients(
  * Use this in Step 4 of campaign creation to show recipient count.
  */
 export async function previewFilters(
-    recipientType: "case" | "intended_parent",
+    recipientType: "surrogate" | "intended_parent",
     filterCriteria: FilterCriteria,
     limit?: number
 ): Promise<CampaignPreview> {

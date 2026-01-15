@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * AddTaskDialog - Dialog for creating tasks for Case or IP from Match detail page
+ * AddTaskDialog - Dialog for creating tasks for Surrogate or IP from Match detail page
  */
 
 import { useState } from "react"
@@ -29,9 +29,9 @@ import {
 interface AddTaskDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    onSubmit: (target: "case" | "ip", data: TaskFormData) => Promise<void>
+    onSubmit: (target: "surrogate" | "ip", data: TaskFormData) => Promise<void>
     isPending: boolean
-    caseName: string
+    surrogateName: string
     ipName: string
 }
 
@@ -55,10 +55,10 @@ export function AddTaskDialog({
     onOpenChange,
     onSubmit,
     isPending,
-    caseName,
+    surrogateName,
     ipName,
 }: AddTaskDialogProps) {
-    const [target, setTarget] = useState<"case" | "ip">("case")
+    const [target, setTarget] = useState<"surrogate" | "ip">("surrogate")
     const [title, setTitle] = useState("")
     const [description, setDescription] = useState("")
     const [taskType, setTaskType] = useState<TaskFormData["task_type"]>("other")
@@ -80,7 +80,7 @@ export function AddTaskDialog({
         setDescription("")
         setTaskType("other")
         setDueDate("")
-        setTarget("case")
+        setTarget("surrogate")
         onOpenChange(false)
     }
 
@@ -90,7 +90,7 @@ export function AddTaskDialog({
             setDescription("")
             setTaskType("other")
             setDueDate("")
-            setTarget("case")
+            setTarget("surrogate")
         }
         onOpenChange(isOpen)
     }
@@ -101,7 +101,7 @@ export function AddTaskDialog({
                 <DialogHeader>
                     <DialogTitle>Add Task</DialogTitle>
                     <DialogDescription>
-                        Create a new task for the Case or Intended Parent.
+                        Create a new task for the Surrogate or Intended Parent.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -111,13 +111,13 @@ export function AddTaskDialog({
                         <Label>Assign to</Label>
                         <RadioGroup
                             value={target}
-                            onValueChange={(v) => setTarget(v as "case" | "ip")}
+                            onValueChange={(v) => setTarget(v as "surrogate" | "ip")}
                             className="flex gap-4"
                         >
                             <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="case" id="task-target-case" />
-                                <Label htmlFor="task-target-case" className="font-normal cursor-pointer">
-                                    {caseName} (Case)
+                                <RadioGroupItem value="surrogate" id="task-target-surrogate" />
+                                <Label htmlFor="task-target-surrogate" className="font-normal cursor-pointer">
+                                    {surrogateName} (Surrogate)
                                 </Label>
                             </div>
                             <div className="flex items-center space-x-2">

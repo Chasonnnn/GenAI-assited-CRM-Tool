@@ -10,7 +10,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import CaseInterview, InterviewNote
+from app.db.models import SurrogateInterview, InterviewNote
 from app.services.ai_provider import ChatMessage, get_provider
 from app.services.ai_settings_service import (
     get_ai_settings,
@@ -109,7 +109,7 @@ def _strip_html(content: str) -> str:
 
 async def summarize_interview(
     db: Session,
-    interview: CaseInterview,
+    interview: SurrogateInterview,
     org_id: UUID,
     user_id: UUID,
 ) -> dict:
@@ -148,9 +148,7 @@ async def summarize_interview(
             InterviewNote.organization_id == org_id,
         )
     ).all()
-    notes_text = (
-        "\n".join([_strip_html(n.content) for n in notes]) if notes else "No notes"
-    )
+    notes_text = "\n".join([_strip_html(n.content) for n in notes]) if notes else "No notes"
 
     # Build prompt
     prompt = INTERVIEW_SUMMARY_PROMPT.format(
@@ -208,16 +206,16 @@ async def summarize_interview(
 
 async def summarize_all_interviews(
     db: Session,
-    case_id: UUID,
+    surrogate_id: UUID,
     org_id: UUID,
     user_id: UUID,
 ) -> dict:
     """
-    Generate AI summary for all interviews of a case.
+    Generate AI summary for all interviews of a surrogate.
 
     Args:
         db: Database session
-        case_id: Case ID
+        surrogate_id: Surrogate ID
         org_id: Organization ID
         user_id: User requesting the summary
 
@@ -235,18 +233,18 @@ async def summarize_all_interviews(
     if not api_key:
         raise AIInterviewError("AI API key not configured")
 
-    # Get all interviews for the case
+    # Get all interviews for the surrogate
     interviews = db.scalars(
-        select(CaseInterview)
+        select(SurrogateInterview)
         .where(
-            CaseInterview.case_id == case_id,
-            CaseInterview.organization_id == org_id,
+            SurrogateInterview.surrogate_id == surrogate_id,
+            SurrogateInterview.organization_id == org_id,
         )
-        .order_by(CaseInterview.conducted_at)
+        .order_by(SurrogateInterview.conducted_at)
     ).all()
 
     if not interviews:
-        raise AIInterviewError("No interviews found for this case")
+        raise AIInterviewError("No interviews found for this surrogate")
 
     # Build content for all interviews
     interviews_content = []
@@ -258,15 +256,13 @@ async def summarize_all_interviews(
                 InterviewNote.organization_id == org_id,
             )
         ).all()
-        notes_text = (
-            "\n".join([_strip_html(n.content) for n in notes]) if notes else "No notes"
-        )
+        notes_text = "\n".join([_strip_html(n.content) for n in notes]) if notes else "No notes"
 
         interviews_content.append(
             f"""--- Interview {len(interviews_content) + 1} ---
-Date: {interview.conducted_at.strftime('%Y-%m-%d')}
+Date: {interview.conducted_at.strftime("%Y-%m-%d")}
 Type: {interview.interview_type}
-Duration: {interview.duration_minutes or 'unknown'} minutes
+Duration: {interview.duration_minutes or "unknown"} minutes
 
 Transcript:
 {_truncate_text(transcript, 10000)}
@@ -321,7 +317,7 @@ Notes:
         )
 
         return {
-            "case_id": str(case_id),
+            "surrogate_id": str(surrogate_id),
             "interview_count": len(interviews),
             "overall_summary": result.get("overall_summary", ""),
             "timeline": result.get("timeline", []),

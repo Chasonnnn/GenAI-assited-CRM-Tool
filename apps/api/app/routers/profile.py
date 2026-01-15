@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.case_access import check_case_access
+from app.core.surrogate_access import check_surrogate_access
 from app.core.deps import (
     get_current_session,
     get_db,
@@ -16,9 +16,9 @@ from app.core.deps import (
 from app.db.enums import Role
 from app.db.models import FormSubmission
 from app.schemas.auth import UserSession
-from app.services import case_service, org_service, profile_service
+from app.services import surrogate_service, org_service, profile_service
 
-router = APIRouter(prefix="/cases", tags=["profile"])
+router = APIRouter(prefix="/surrogates", tags=["profile"])
 
 
 # Case manager+ role check
@@ -28,10 +28,7 @@ CASE_MANAGER_ROLES = {Role.CASE_MANAGER.value, Role.ADMIN.value, Role.DEVELOPER.
 def _require_case_manager(session: UserSession) -> None:
     """Check if user has case_manager+ role."""
     if session.role not in CASE_MANAGER_ROLES:
-        raise HTTPException(
-            status_code=403,
-            detail="Profile card requires case_manager+ role"
-        )
+        raise HTTPException(status_code=403, detail="Profile card requires case_manager+ role")
 
 
 # =============================================================================
@@ -41,6 +38,7 @@ def _require_case_manager(session: UserSession) -> None:
 
 class ProfileDataResponse(BaseModel):
     """Response for profile data."""
+
     base_submission_id: UUID | None
     base_answers: dict[str, Any]
     overrides: dict[str, Any]
@@ -51,6 +49,7 @@ class ProfileDataResponse(BaseModel):
 
 class SyncDiffItem(BaseModel):
     """Single field diff from sync."""
+
     field_key: str
     old_value: Any
     new_value: Any
@@ -58,18 +57,21 @@ class SyncDiffItem(BaseModel):
 
 class SyncDiffResponse(BaseModel):
     """Response for sync diff."""
+
     staged_changes: list[SyncDiffItem]
     latest_submission_id: UUID | None
 
 
 class ProfileOverridesUpdate(BaseModel):
     """Update request for profile overrides."""
+
     overrides: dict[str, Any]
     new_base_submission_id: UUID | None = None
 
 
 class ProfileHiddenUpdate(BaseModel):
     """Toggle hidden state for a field."""
+
     field_key: str = Field(..., min_length=1, max_length=255)
     hidden: bool
 
@@ -80,51 +82,51 @@ class ProfileHiddenUpdate(BaseModel):
 
 
 @router.get(
-    "/{case_id}/profile",
+    "/{surrogate_id}/profile",
     response_model=ProfileDataResponse,
 )
 def get_profile(
-    case_id: UUID,
+    surrogate_id: UUID,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Get profile data for a case (case_manager+ only)."""
+    """Get profile data for a surrogate (case_manager+ only)."""
     _require_case_manager(session)
 
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
-    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
-    data = profile_service.get_profile_data(db, session.org_id, case_id)
+    data = profile_service.get_profile_data(db, session.org_id, surrogate_id)
     return ProfileDataResponse(**data)
 
 
 @router.post(
-    "/{case_id}/profile/sync",
+    "/{surrogate_id}/profile/sync",
     response_model=SyncDiffResponse,
     dependencies=[Depends(require_csrf_header)],
 )
 def sync_profile(
-    case_id: UUID,
+    surrogate_id: UUID,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """Get staged diff from latest submission (requires Save to persist)."""
     _require_case_manager(session)
 
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
-    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
-    staged_changes = profile_service.get_sync_diff(db, session.org_id, case_id)
+    staged_changes = profile_service.get_sync_diff(db, session.org_id, surrogate_id)
 
     # Get latest submission ID
     submission = (
         db.query(FormSubmission)
         .filter(
-            FormSubmission.case_id == case_id,
+            FormSubmission.surrogate_id == surrogate_id,
             FormSubmission.organization_id == session.org_id,
         )
         .order_by(FormSubmission.submitted_at.desc())
@@ -138,11 +140,11 @@ def sync_profile(
 
 
 @router.put(
-    "/{case_id}/profile/overrides",
+    "/{surrogate_id}/profile/overrides",
     dependencies=[Depends(require_csrf_header)],
 )
 def save_profile_overrides(
-    case_id: UUID,
+    surrogate_id: UUID,
     body: ProfileOverridesUpdate,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
@@ -150,16 +152,16 @@ def save_profile_overrides(
     """Save profile overrides (and optionally update base submission ID after sync)."""
     _require_case_manager(session)
 
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
-    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
     try:
         profile_service.save_profile_overrides(
             db=db,
             org_id=session.org_id,
-            case_id=case_id,
+            surrogate_id=surrogate_id,
             user_id=session.user_id,
             overrides=body.overrides,
             new_base_submission_id=body.new_base_submission_id,
@@ -170,11 +172,11 @@ def save_profile_overrides(
 
 
 @router.post(
-    "/{case_id}/profile/hidden",
+    "/{surrogate_id}/profile/hidden",
     dependencies=[Depends(require_csrf_header)],
 )
 def toggle_hidden_field(
-    case_id: UUID,
+    surrogate_id: UUID,
     body: ProfileHiddenUpdate,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
@@ -182,15 +184,15 @@ def toggle_hidden_field(
     """Toggle hidden state for a profile field."""
     _require_case_manager(session)
 
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
-    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
     profile_service.set_field_hidden(
         db=db,
         org_id=session.org_id,
-        case_id=case_id,
+        surrogate_id=surrogate_id,
         user_id=session.user_id,
         field_key=body.field_key,
         hidden=body.hidden,
@@ -199,10 +201,10 @@ def toggle_hidden_field(
 
 
 @router.get(
-    "/{case_id}/profile/export",
+    "/{surrogate_id}/profile/export",
 )
 def export_profile_pdf(
-    case_id: UUID,
+    surrogate_id: UUID,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
@@ -212,30 +214,32 @@ def export_profile_pdf(
 
     _require_case_manager(session)
 
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
-    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
     # Get org name for header
     org = org_service.get_org_by_id(db, session.org_id)
     org_name = org.name if org else ""
 
-    # Case display name
-    case_name = case.full_name or f"Case #{case.case_number or case.id}"
+    # Surrogate display name
+    surrogate_name = (
+        surrogate.full_name or f"Surrogate #{surrogate.surrogate_number or surrogate.id}"
+    )
 
     try:
         pdf_bytes = pdf_export_service.export_profile_pdf(
             db=db,
             org_id=session.org_id,
-            case_id=case_id,
-            case_name=case_name,
+            surrogate_id=surrogate_id,
+            surrogate_name=surrogate_name,
             org_name=org_name,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    filename = f"profile_{case.case_number or case_id}.pdf"
+    filename = f"profile_{surrogate.surrogate_number or surrogate_id}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",

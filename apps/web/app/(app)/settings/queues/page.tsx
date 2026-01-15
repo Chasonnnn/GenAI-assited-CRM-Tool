@@ -443,7 +443,7 @@ export default function QueuesSettingsPage() {
 
                         {/* Help text */}
                         <p className="text-xs text-muted-foreground">
-                            When a queue has members, only those members can claim cases from it.
+                            When a queue has members, only those members can claim surrogates from it.
                             If no members are assigned, any case manager can claim from the queue.
                         </p>
                     </div>

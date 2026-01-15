@@ -34,7 +34,7 @@ interface Task {
     due_date: string | null
     due_time: string | null
     is_completed: boolean
-    case_id: string | null
+    surrogate_id: string | null
 }
 
 interface TaskEditModalProps {

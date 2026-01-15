@@ -16,7 +16,7 @@ class NoteRead(BaseModel):
     """Note response."""
 
     id: UUID
-    case_id: UUID
+    surrogate_id: UUID
     author_id: UUID
     author_name: str | None = None
     body: str

@@ -20,11 +20,10 @@ import {
     FileTextIcon,
     ClockIcon,
 } from "lucide-react"
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Line, LineChart, Area, AreaChart, ResponsiveContainer, Cell } from "recharts"
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Area, AreaChart, Cell } from "recharts"
 import {
     ChartContainer,
     ChartTooltip,
-    ChartTooltipContent,
 } from "@/components/ui/chart"
 import {
     useMetaAdAccounts,
@@ -316,12 +315,10 @@ function BreakdownChart({
     data,
     loading,
     error,
-    title,
 }: {
     data: Array<{ breakdown_value: string; spend: number; leads: number; cost_per_lead: number | null }> | undefined
     loading: boolean
     error: boolean
-    title: string
 }) {
     if (loading) {
         return (
@@ -394,7 +391,7 @@ function FormPerformanceTable({
         form_external_id: string
         form_name: string
         lead_count: number
-        case_count: number
+        surrogate_count: number
         qualified_count: number
         conversion_rate: number
         qualified_rate: number
@@ -436,7 +433,7 @@ function FormPerformanceTable({
                     <tr className="border-b border-border/50 bg-muted/30">
                         <th className="px-4 py-3 text-left font-medium text-muted-foreground">Form</th>
                         <th className="px-4 py-3 text-right font-medium text-muted-foreground">Leads</th>
-                        <th className="px-4 py-3 text-right font-medium text-muted-foreground">Cases</th>
+                        <th className="px-4 py-3 text-right font-medium text-muted-foreground">Surrogates</th>
                         <th className="px-4 py-3 text-right font-medium text-muted-foreground hidden sm:table-cell">Qualified</th>
                         <th className="px-4 py-3 text-right font-medium text-muted-foreground">Conv. %</th>
                         <th className="px-4 py-3 text-right font-medium text-muted-foreground hidden md:table-cell">Qual. %</th>
@@ -458,7 +455,7 @@ function FormPerformanceTable({
                                 {formatNumber(form.lead_count)}
                             </td>
                             <td className="px-4 py-3 text-right">
-                                {formatNumber(form.case_count)}
+                                {formatNumber(form.surrogate_count)}
                             </td>
                             <td className="px-4 py-3 text-right text-emerald-600 hidden sm:table-cell">
                                 {formatNumber(form.qualified_count)}
@@ -697,7 +694,6 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
                                         data={breakdown}
                                         loading={breakdownLoading}
                                         error={breakdownError}
-                                        title={breakdownTab}
                                     />
                                 </TabsContent>
                             </Tabs>

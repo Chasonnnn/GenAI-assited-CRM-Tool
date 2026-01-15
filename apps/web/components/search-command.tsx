@@ -17,22 +17,22 @@ import { globalSearch, type SearchResult, type SearchResponse } from "@/lib/api/
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
 
 const ENTITY_CONFIG = {
-    case: {
+    surrogate: {
         icon: FileText,
-        label: "Case",
-        getUrl: (result: SearchResult) => `/cases/${result.entity_id}`,
+        label: "Surrogate",
+        getUrl: (result: SearchResult) => `/surrogates/${result.entity_id}`,
     },
     note: {
         icon: FileText,
         label: "Note",
         getUrl: (result: SearchResult) =>
-            result.case_id ? `/cases/${result.case_id}` : "#",
+            result.surrogate_id ? `/surrogates/${result.surrogate_id}` : "#",
     },
     attachment: {
         icon: Paperclip,
         label: "File",
         getUrl: (result: SearchResult) =>
-            result.case_id ? `/cases/${result.case_id}` : "#",
+            result.surrogate_id ? `/surrogates/${result.surrogate_id}` : "#",
     },
     intended_parent: {
         icon: Users,
@@ -80,11 +80,11 @@ export function SearchCommandDialog({ open, onOpenChange }: SearchCommandDialogP
             open={open}
             onOpenChange={onOpenChange}
             title="Search"
-            description="Search across cases, notes, files, and intended parents"
+            description="Search across surrogates, notes, files, and intended parents"
         >
             <Command shouldFilter={false}>
                 <CommandInput
-                    placeholder="Search cases, notes, files..."
+                    placeholder="Search surrogates, notes, files..."
                     value={query}
                     onValueChange={setQuery}
                 />
@@ -123,8 +123,8 @@ export function SearchCommandDialog({ open, onOpenChange }: SearchCommandDialogP
                                             <span>{result.title}</span>
                                             <span className="text-xs text-muted-foreground">
                                                 {config.label}
-                                                {result.case_name && result.entity_type !== "case" && (
-                                                    <> · {result.case_name}</>
+                                                {result.surrogate_name && result.entity_type !== "surrogate" && (
+                                                    <> · {result.surrogate_name}</>
                                                 )}
                                             </span>
                                         </div>

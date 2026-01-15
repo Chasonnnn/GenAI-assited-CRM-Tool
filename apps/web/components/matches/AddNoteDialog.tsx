@@ -24,9 +24,9 @@ import { Loader2Icon } from "lucide-react"
 interface AddNoteDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    onSubmit: (target: "case" | "ip", content: string) => Promise<void>
+    onSubmit: (target: "surrogate" | "ip", content: string) => Promise<void>
     isPending?: boolean
-    caseName?: string
+    surrogateName?: string
     ipName?: string
 }
 
@@ -35,30 +35,30 @@ export function AddNoteDialog({
     onOpenChange,
     onSubmit,
     isPending = false,
-    caseName = "Surrogate Case",
+    surrogateName = "Surrogate",
     ipName = "Intended Parent",
 }: AddNoteDialogProps) {
-    const [target, setTarget] = useState<"case" | "ip">("case")
+    const [target, setTarget] = useState<"surrogate" | "ip">("surrogate")
     const [content, setContent] = useState("")
 
     const handleSubmit = async () => {
         if (!content.trim()) return
         await onSubmit(target, content.trim())
         setContent("")
-        setTarget("case")
+        setTarget("surrogate")
         onOpenChange(false)
     }
 
     const handleCancel = () => {
         setContent("")
-        setTarget("case")
+        setTarget("surrogate")
         onOpenChange(false)
     }
 
     const handleOpenChange = (isOpen: boolean) => {
         if (!isOpen) {
             setContent("")
-            setTarget("case")
+            setTarget("surrogate")
         }
         onOpenChange(isOpen)
     }
@@ -69,18 +69,18 @@ export function AddNoteDialog({
                 <DialogHeader>
                     <DialogTitle>Add Note</DialogTitle>
                     <DialogDescription>
-                        Add a note to the case or intended parent record.
+                        Add a note to the surrogate or intended parent record.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
                         <Label htmlFor="target">Add note to</Label>
-                        <Select value={target} onValueChange={(v) => setTarget(v as "case" | "ip")}>
+                        <Select value={target} onValueChange={(v) => setTarget(v as "surrogate" | "ip")}>
                             <SelectTrigger id="target">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="case">{caseName}</SelectItem>
+                                <SelectItem value="surrogate">{surrogateName}</SelectItem>
                                 <SelectItem value="ip">{ipName}</SelectItem>
                             </SelectContent>
                         </Select>

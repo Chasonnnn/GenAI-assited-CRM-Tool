@@ -31,37 +31,41 @@ class AuthProvider(str, Enum):
     MICROSOFT = "microsoft"  # Future
 
 
-class CaseStatus(str, Enum):
+class SurrogateStatus(str, Enum):
     """
-    Case status enum covering Intake (Stage A) and Post-approval (Stage B).
+    Surrogate status enum covering Intake (Stage A) and Post-approval (Stage B).
 
     Stage A (Intake Pipeline):
-        new_unread → contacted → qualified → applied → followup_scheduled
-        → application_submitted → under_review → approved → pending_handoff → lost/disqualified
+        new_unread → contacted → qualified → interview_scheduled
+        → application_submitted → under_review → approved → lost/disqualified
 
     Stage B (Post-Approval, Case Manager only):
-        pending_match → matched → meds_started → exam_passed → embryo_transferred → delivered
+        ready_to_match → matched → medical_clearance_passed → legal_clearance_passed
+        → transfer_cycle → second_hcg_confirmed → heartbeat_confirmed
+        → ob_care_established → anatomy_scanned → delivered
     """
 
     # Stage A: Intake Pipeline
     NEW_UNREAD = "new_unread"
     CONTACTED = "contacted"
     QUALIFIED = "qualified"  # Intake confirmed info, applicant is qualified
-    APPLIED = "applied"  # Applicant submitted full application form
-    FOLLOWUP_SCHEDULED = "followup_scheduled"
+    INTERVIEW_SCHEDULED = "interview_scheduled"  # Interview scheduled with applicant
     APPLICATION_SUBMITTED = "application_submitted"
     UNDER_REVIEW = "under_review"
     APPROVED = "approved"
-    PENDING_HANDOFF = "pending_handoff"  # Awaiting case manager review
     LOST = "lost"
     DISQUALIFIED = "disqualified"
 
     # Stage B: Post-Approval (Case Manager only)
-    PENDING_MATCH = "pending_match"
+    READY_TO_MATCH = "ready_to_match"  # Ready for matching with intended parents
     MATCHED = "matched"
-    MEDS_STARTED = "meds_started"
-    EXAM_PASSED = "exam_passed"
-    EMBRYO_TRANSFERRED = "embryo_transferred"
+    MEDICAL_CLEARANCE_PASSED = "medical_clearance_passed"  # Medical exams completed
+    LEGAL_CLEARANCE_PASSED = "legal_clearance_passed"  # Legal contracts finalized
+    TRANSFER_CYCLE = "transfer_cycle"  # Embryo transfer cycle
+    SECOND_HCG_CONFIRMED = "second_hcg_confirmed"  # Second HCG test confirmed
+    HEARTBEAT_CONFIRMED = "heartbeat_confirmed"  # Fetal heartbeat confirmed
+    OB_CARE_ESTABLISHED = "ob_care_established"  # OB care established
+    ANATOMY_SCANNED = "anatomy_scanned"  # Anatomy scan completed
     DELIVERED = "delivered"
 
     # Archive pseudo-status (for history tracking)
@@ -75,36 +79,33 @@ class CaseStatus(str, Enum):
             cls.NEW_UNREAD.value,
             cls.CONTACTED.value,
             cls.QUALIFIED.value,
-            cls.APPLIED.value,
-            cls.FOLLOWUP_SCHEDULED.value,
+            cls.INTERVIEW_SCHEDULED.value,
             cls.APPLICATION_SUBMITTED.value,
             cls.UNDER_REVIEW.value,
             cls.APPROVED.value,
-            cls.PENDING_HANDOFF.value,
             cls.LOST.value,
             cls.DISQUALIFIED.value,
         ]
 
     @classmethod
-    def case_manager_only(cls) -> list[str]:
+    def surrogate_manager_only(cls) -> list[str]:
         """Statuses only accessible by case_manager+ (Stage B)."""
         return [
-            cls.PENDING_MATCH.value,
+            cls.READY_TO_MATCH.value,
             cls.MATCHED.value,
-            cls.MEDS_STARTED.value,
-            cls.EXAM_PASSED.value,
-            cls.EMBRYO_TRANSFERRED.value,
+            cls.MEDICAL_CLEARANCE_PASSED.value,
+            cls.LEGAL_CLEARANCE_PASSED.value,
+            cls.TRANSFER_CYCLE.value,
+            cls.SECOND_HCG_CONFIRMED.value,
+            cls.HEARTBEAT_CONFIRMED.value,
+            cls.OB_CARE_ESTABLISHED.value,
+            cls.ANATOMY_SCANNED.value,
             cls.DELIVERED.value,
         ]
 
-    @classmethod
-    def handoff_queue(cls) -> list[str]:
-        """Statuses awaiting case manager review."""
-        return [cls.PENDING_HANDOFF.value]
 
-
-class CaseSource(str, Enum):
-    """How the case was created."""
+class SurrogateSource(str, Enum):
+    """How the surrogate record was created."""
 
     MANUAL = "manual"
     META = "meta"
@@ -113,29 +114,27 @@ class CaseSource(str, Enum):
     IMPORT = "import"  # CSV bulk import
 
 
-class CaseActivityType(str, Enum):
-    """Types of activities logged in case history."""
+class SurrogateActivityType(str, Enum):
+    """Types of activities logged in surrogate history."""
 
-    CASE_CREATED = "case_created"
+    SURROGATE_CREATED = "surrogate_created"
     INFO_EDITED = "info_edited"
     STATUS_CHANGED = "status_changed"
     ASSIGNED = "assigned"
     UNASSIGNED = "unassigned"
-    CASE_ASSIGNED_TO_QUEUE = "case_assigned_to_queue"
-    CASE_CLAIMED = "case_claimed"
-    CASE_RELEASED = "case_released"
+    SURROGATE_ASSIGNED_TO_QUEUE = "surrogate_assigned_to_queue"
+    SURROGATE_CLAIMED = "surrogate_claimed"
+    SURROGATE_RELEASED = "surrogate_released"
     PRIORITY_CHANGED = "priority_changed"
     ARCHIVED = "archived"
     RESTORED = "restored"
-    HANDOFF_ACCEPTED = "handoff_accepted"
-    HANDOFF_DENIED = "handoff_denied"
     NOTE_ADDED = "note_added"
     NOTE_DELETED = "note_deleted"
     ATTACHMENT_ADDED = "attachment_added"
     ATTACHMENT_DELETED = "attachment_deleted"
-    EMAIL_SENT = "email_sent"  # Email sent to case contact
-    TASK_CREATED = "task_created"  # Task created for case
-    TASK_DELETED = "task_deleted"  # Task deleted for case
+    EMAIL_SENT = "email_sent"  # Email sent to surrogate contact
+    TASK_CREATED = "task_created"  # Task created for surrogate
+    TASK_DELETED = "task_deleted"  # Task deleted for surrogate
     MATCH_PROPOSED = "match_proposed"  # New match proposed
     MATCH_REVIEWING = "match_reviewing"  # Match entered review
     MATCH_ACCEPTED = "match_accepted"  # Match accepted
@@ -145,13 +144,17 @@ class CaseActivityType(str, Enum):
     PROFILE_EDITED = "profile_edited"
     PROFILE_HIDDEN = "profile_hidden"
     CONTACT_ATTEMPT = "contact_attempt"  # Contact attempt logged
-    WORKFLOW_APPROVAL_RESOLVED = "workflow_approval_resolved"  # Workflow approval approved/denied/expired
-    WORKFLOW_APPROVAL_INVALIDATED = "workflow_approval_invalidated"  # Approval invalidated (owner change)
+    WORKFLOW_APPROVAL_RESOLVED = (
+        "workflow_approval_resolved"  # Workflow approval approved/denied/expired
+    )
+    WORKFLOW_APPROVAL_INVALIDATED = (
+        "workflow_approval_invalidated"  # Approval invalidated (owner change)
+    )
 
 
 class MatchStatus(str, Enum):
     """
-    Status of a match between surrogate (Case) and intended parent.
+    Status of a match between surrogate and intended parent.
 
     Workflow: proposed → reviewing → accepted/rejected
     A cancelled status marks withdrawn proposals.
@@ -199,12 +202,10 @@ class MatchEventPerson(str, Enum):
 class NotificationType(str, Enum):
     """Types of in-app notifications."""
 
-    # Case notifications
-    CASE_ASSIGNED = "case_assigned"
-    CASE_STATUS_CHANGED = "case_status_changed"
-    CASE_HANDOFF_READY = "case_handoff_ready"
-    CASE_HANDOFF_ACCEPTED = "case_handoff_accepted"
-    CASE_HANDOFF_DENIED = "case_handoff_denied"
+    # Surrogate notifications
+    SURROGATE_ASSIGNED = "surrogate_assigned"
+    SURROGATE_STATUS_CHANGED = "surrogate_status_changed"
+    SURROGATE_CLAIM_AVAILABLE = "surrogate_claim_available"
 
     # Task notifications
     TASK_ASSIGNED = "task_assigned"
@@ -231,7 +232,7 @@ class NotificationType(str, Enum):
     ATTACHMENT_INFECTED = "attachment_infected"
 
 
-# Note: is_priority is a boolean field on Case model, not an enum
+# Note: is_priority is a boolean field on Surrogate model, not an enum
 # Default: False (normal), True (priority - shown with gold styling in UI)
 
 
@@ -328,12 +329,12 @@ class IntendedParentStatus(str, Enum):
 class EntityType(str, Enum):
     """Entity types for polymorphic relationships (e.g., notes)."""
 
-    CASE = "case"
+    SURROGATE = "surrogate"
     INTENDED_PARENT = "intended_parent"
 
 
 class OwnerType(str, Enum):
-    """Owner type for cases - Salesforce-style single owner model."""
+    """Owner type for surrogates - Salesforce-style single owner model."""
 
     USER = "user"
     QUEUE = "queue"
@@ -343,8 +344,8 @@ class OwnerType(str, Enum):
 # Centralized Defaults (keep models, services, migrations in sync)
 # =============================================================================
 
-DEFAULT_CASE_STATUS = CaseStatus.NEW_UNREAD
-DEFAULT_CASE_SOURCE = CaseSource.MANUAL
+DEFAULT_SURROGATE_STATUS = SurrogateStatus.NEW_UNREAD
+DEFAULT_SURROGATE_SOURCE = SurrogateSource.MANUAL
 DEFAULT_TASK_TYPE = TaskType.OTHER
 DEFAULT_JOB_STATUS = JobStatus.PENDING
 DEFAULT_EMAIL_STATUS = EmailStatus.PENDING
@@ -447,10 +448,10 @@ class AlertStatus(str, Enum):
 class WorkflowTriggerType(str, Enum):
     """Events that can trigger a workflow."""
 
-    CASE_CREATED = "case_created"
+    SURROGATE_CREATED = "surrogate_created"
     STATUS_CHANGED = "status_changed"
-    CASE_ASSIGNED = "case_assigned"
-    CASE_UPDATED = "case_updated"
+    SURROGATE_ASSIGNED = "surrogate_assigned"
+    SURROGATE_UPDATED = "surrogate_updated"
     TASK_DUE = "task_due"
     TASK_OVERDUE = "task_overdue"
     SCHEDULED = "scheduled"
@@ -480,7 +481,7 @@ class WorkflowActionType(str, Enum):
 
     SEND_EMAIL = "send_email"
     CREATE_TASK = "create_task"
-    ASSIGN_CASE = "assign_case"
+    ASSIGN_SURROGATE = "assign_surrogate"
     SEND_NOTIFICATION = "send_notification"
     UPDATE_FIELD = "update_field"
     ADD_NOTE = "add_note"
@@ -571,10 +572,10 @@ class SuppressionReason(str, Enum):
 # Role Permission Helpers (avoid string literals, use enum values)
 # =============================================================================
 
-# Roles that can assign cases to other users
+# Roles that can assign surrogates to other users
 ROLES_CAN_ASSIGN = {Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER}
 
-# Roles that can archive/restore cases (all roles can archive their own cases)
+# Roles that can archive/restore surrogates (all roles can archive their own surrogates)
 ROLES_CAN_ARCHIVE = {
     Role.INTAKE_SPECIALIST,
     Role.CASE_MANAGER,
@@ -582,7 +583,7 @@ ROLES_CAN_ARCHIVE = {
     Role.DEVELOPER,
 }
 
-# Roles that can hard-delete cases (requires is_archived=true)
+# Roles that can hard-delete surrogates (requires is_archived=true)
 ROLES_CAN_HARD_DELETE = {Role.ADMIN, Role.DEVELOPER}
 
 # Roles that can manage org settings
@@ -637,10 +638,10 @@ class AuditEventType(str, Enum):
     CONFIG_ROLLED_BACK = "config_rolled_back"
 
     # Data operations
-    DATA_EXPORT_CASES = "data_export_cases"
+    DATA_EXPORT_SURROGATES = "data_export_surrogates"
     DATA_EXPORT_ANALYTICS = "data_export_analytics"
     DATA_EXPORT_CONFIG = "data_export_config"
-    DATA_VIEW_CASE = "data_view_case"
+    DATA_VIEW_SURROGATE = "data_view_surrogate"
     DATA_VIEW_NOTE = "data_view_note"
     PHI_VIEWED = "phi_viewed"
     DATA_IMPORT_STARTED = "data_import_started"
@@ -755,7 +756,7 @@ class ContactOutcome(str, Enum):
 
 
 class ContactStatus(str, Enum):
-    """Case-level contact status for reminder logic."""
+    """Surrogate-level contact status for reminder logic."""
 
     UNREACHED = "unreached"
     REACHED = "reached"

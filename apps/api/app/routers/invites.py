@@ -70,18 +70,14 @@ def _invite_to_read(invite) -> InviteRead:
         cooldown_end = invite.last_resent_at + timedelta(
             minutes=invite_service.INVITE_RESEND_COOLDOWN_MINUTES
         )
-        cooldown_seconds = max(
-            0, int((cooldown_end - datetime.now(timezone.utc)).total_seconds())
-        )
+        cooldown_seconds = max(0, int((cooldown_end - datetime.now(timezone.utc)).total_seconds()))
 
     return InviteRead(
         id=str(invite.id),
         email=invite.email,
         role=invite.role,
         status=status,
-        invited_by_user_id=str(invite.invited_by_user_id)
-        if invite.invited_by_user_id
-        else None,
+        invited_by_user_id=str(invite.invited_by_user_id) if invite.invited_by_user_id else None,
         expires_at=invite.expires_at.isoformat() if invite.expires_at else None,
         resend_count=invite.resend_count,
         can_resend=can_resend,
@@ -166,9 +162,7 @@ async def create_invite(
                 # Log but don't fail - invite is created
                 import logging
 
-                logging.warning(
-                    f"Failed to send invite email: {email_result.get('error')}"
-                )
+                logging.warning(f"Failed to send invite email: {email_result.get('error')}")
         except Exception as e:
             import logging
 
@@ -200,9 +194,7 @@ async def resend_invite(
             if not email_result.get("success"):
                 import logging
 
-                logging.warning(
-                    f"Failed to resend invite email: {email_result.get('error')}"
-                )
+                logging.warning(f"Failed to resend invite email: {email_result.get('error')}")
         except Exception as e:
             import logging
 

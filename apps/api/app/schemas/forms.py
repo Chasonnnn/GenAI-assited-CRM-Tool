@@ -105,7 +105,7 @@ class FormTokenCreate(BaseModel):
 
 
 class FormTokenRequest(BaseModel):
-    case_id: UUID
+    surrogate_id: UUID
     expires_in_days: int = Field(14, ge=1, le=60)
 
 
@@ -154,7 +154,7 @@ class FormSubmissionFileDownloadResponse(BaseModel):
 class FormSubmissionRead(BaseModel):
     id: UUID
     form_id: UUID
-    case_id: UUID
+    surrogate_id: UUID
     status: str
     submitted_at: datetime
     reviewed_at: datetime | None
@@ -176,7 +176,7 @@ class FormSubmissionStatusUpdate(BaseModel):
 
 class FormFieldMappingItem(BaseModel):
     field_key: str = Field(..., min_length=1, max_length=100)
-    case_field: str = Field(..., min_length=1, max_length=100)
+    surrogate_field: str = Field(..., min_length=1, max_length=100)
 
 
 class FormFieldMappingsUpdate(BaseModel):
@@ -185,16 +185,19 @@ class FormFieldMappingsUpdate(BaseModel):
 
 class FormSubmissionAnswerUpdate(BaseModel):
     """Single field update in a submission."""
+
     field_key: str = Field(..., min_length=1, max_length=100)
     value: object
 
 
 class FormSubmissionAnswersUpdate(BaseModel):
     """Batch update for submission answers."""
+
     updates: list[FormSubmissionAnswerUpdate]
 
 
 class FormSubmissionAnswersUpdateResponse(BaseModel):
     """Response for submission answer updates."""
+
     submission: FormSubmissionRead
-    case_updates: list[str]  # List of case fields that were updated
+    surrogate_updates: list[str]  # List of surrogate fields that were updated

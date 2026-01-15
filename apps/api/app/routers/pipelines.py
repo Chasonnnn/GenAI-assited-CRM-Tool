@@ -174,9 +174,7 @@ def get_default_pipeline(
 
     Requires: Authenticated user
     """
-    pipeline = pipeline_service.get_or_create_default_pipeline(
-        db, session.org_id, session.user_id
-    )
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, session.org_id, session.user_id)
 
     return PipelineRead(
         id=pipeline.id,
@@ -262,9 +260,7 @@ def sync_default_pipeline_stages(
     Useful when the stage definitions have been expanded.
     Requires: Manager+ role
     """
-    pipeline = pipeline_service.get_or_create_default_pipeline(
-        db, session.org_id, session.user_id
-    )
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, session.org_id, session.user_id)
     added_count = pipeline_service.sync_missing_stages(db, pipeline, session.user_id)
 
     return {
@@ -299,9 +295,7 @@ def update_pipeline(
     # Check optimistic locking for any update
     if data.expected_version is not None:
         try:
-            version_service.check_version(
-                pipeline.current_version, data.expected_version
-            )
+            version_service.check_version(pipeline.current_version, data.expected_version)
         except version_service.VersionConflictError as e:
             raise HTTPException(
                 status_code=409,
@@ -331,9 +325,7 @@ def update_pipeline(
     )
 
 
-@router.delete(
-    "/{pipeline_id}", status_code=204, dependencies=[Depends(require_csrf_header)]
-)
+@router.delete("/{pipeline_id}", status_code=204, dependencies=[Depends(require_csrf_header)])
 def delete_pipeline(
     pipeline_id: UUID,
     db: Session = Depends(get_db),
@@ -351,9 +343,7 @@ def delete_pipeline(
         raise HTTPException(status_code=404, detail="Pipeline not found")
 
     if pipeline.is_default:
-        raise HTTPException(
-            status_code=400, detail="Cannot delete the default pipeline"
-        )
+        raise HTTPException(status_code=400, detail="Cannot delete the default pipeline")
 
     pipeline_service.delete_pipeline(db, pipeline)
     return None
@@ -381,9 +371,7 @@ def get_pipeline_versions(
     if not pipeline:
         raise HTTPException(status_code=404, detail="Pipeline not found")
 
-    versions = pipeline_service.get_pipeline_versions(
-        db, session.org_id, pipeline_id, limit
-    )
+    versions = pipeline_service.get_pipeline_versions(db, session.org_id, pipeline_id, limit)
 
     return [
         PipelineVersionRead(
@@ -503,9 +491,7 @@ async def create_stage(
         raise HTTPException(404, "Pipeline not found")
     if data.expected_version is not None:
         try:
-            version_service.check_version(
-                pipeline.current_version, data.expected_version
-            )
+            version_service.check_version(pipeline.current_version, data.expected_version)
         except version_service.VersionConflictError as e:
             raise HTTPException(
                 status_code=409,
@@ -578,9 +564,7 @@ async def update_stage(
         raise HTTPException(404, "Pipeline not found")
     if data.expected_version is not None:
         try:
-            version_service.check_version(
-                pipeline.current_version, data.expected_version
-            )
+            version_service.check_version(pipeline.current_version, data.expected_version)
         except version_service.VersionConflictError as e:
             raise HTTPException(
                 status_code=409,
@@ -624,9 +608,7 @@ async def delete_stage(
         raise HTTPException(404, "Pipeline not found")
     if data.expected_version is not None:
         try:
-            version_service.check_version(
-                pipeline.current_version, data.expected_version
-            )
+            version_service.check_version(pipeline.current_version, data.expected_version)
         except version_service.VersionConflictError as e:
             raise HTTPException(
                 status_code=409,
@@ -651,6 +633,6 @@ async def delete_stage(
             migrate_to_stage_id=data.migrate_to_stage_id,
             user_id=session.user_id,
         )
-        return {"deleted": True, "migrated_cases": migrated}
+        return {"deleted": True, "migrated_surrogates": migrated}
     except ValueError as e:
         raise HTTPException(400, str(e))

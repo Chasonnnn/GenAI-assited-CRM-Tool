@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import (
     Attachment,
-    CaseInterview,
+    SurrogateInterview,
     InterviewAttachment,
     InterviewNote,
     InterviewTranscriptVersion,
@@ -108,10 +108,10 @@ def _get_retention_policy(
 def create_interview(
     db: Session,
     org_id: UUID,
-    case_id: UUID,
+    surrogate_id: UUID,
     user_id: UUID,
     data: InterviewCreate,
-) -> CaseInterview:
+) -> SurrogateInterview:
     """
     Create a new interview.
 
@@ -147,12 +147,10 @@ def create_interview(
     if retention_policy and retention_policy.retention_days:
         from datetime import timedelta
 
-        expires_at = datetime.now(timezone.utc) + timedelta(
-            days=retention_policy.retention_days
-        )
+        expires_at = datetime.now(timezone.utc) + timedelta(days=retention_policy.retention_days)
 
-    interview = CaseInterview(
-        case_id=case_id,
+    interview = SurrogateInterview(
+        surrogate_id=surrogate_id,
         organization_id=org_id,
         interview_type=data.interview_type,
         conducted_at=data.conducted_at,
@@ -195,17 +193,17 @@ def get_interview(
     db: Session,
     org_id: UUID,
     interview_id: UUID,
-) -> CaseInterview | None:
+) -> SurrogateInterview | None:
     """Get interview by ID with relationships loaded."""
     return db.scalar(
-        select(CaseInterview)
+        select(SurrogateInterview)
         .options(
-            joinedload(CaseInterview.conducted_by),
-            joinedload(CaseInterview.case),
+            joinedload(SurrogateInterview.conducted_by),
+            joinedload(SurrogateInterview.surrogate),
         )
         .where(
-            CaseInterview.id == interview_id,
-            CaseInterview.organization_id == org_id,
+            SurrogateInterview.id == interview_id,
+            SurrogateInterview.organization_id == org_id,
         )
     )
 
@@ -213,18 +211,18 @@ def get_interview(
 def list_interviews(
     db: Session,
     org_id: UUID,
-    case_id: UUID,
-) -> list[CaseInterview]:
+    surrogate_id: UUID,
+) -> list[SurrogateInterview]:
     """List all interviews for a case, newest first."""
     return list(
         db.scalars(
-            select(CaseInterview)
-            .options(joinedload(CaseInterview.conducted_by))
+            select(SurrogateInterview)
+            .options(joinedload(SurrogateInterview.conducted_by))
             .where(
-                CaseInterview.case_id == case_id,
-                CaseInterview.organization_id == org_id,
+                SurrogateInterview.surrogate_id == surrogate_id,
+                SurrogateInterview.organization_id == org_id,
             )
-            .order_by(CaseInterview.conducted_at.desc())
+            .order_by(SurrogateInterview.conducted_at.desc())
         ).all()
     )
 
@@ -232,30 +230,30 @@ def list_interviews(
 def list_interviews_with_counts(
     db: Session,
     org_id: UUID,
-    case_id: UUID,
+    surrogate_id: UUID,
 ) -> list[dict]:
     """List interviews with aggregated note/attachment counts (optimized for list views)."""
     rows = db.execute(
         select(
-            CaseInterview.id,
-            CaseInterview.interview_type,
-            CaseInterview.conducted_at,
-            CaseInterview.conducted_by_user_id,
-            CaseInterview.duration_minutes,
-            CaseInterview.status,
-            CaseInterview.transcript_version,
-            CaseInterview.transcript_storage_key,
-            CaseInterview.created_at,
+            SurrogateInterview.id,
+            SurrogateInterview.interview_type,
+            SurrogateInterview.conducted_at,
+            SurrogateInterview.conducted_by_user_id,
+            SurrogateInterview.duration_minutes,
+            SurrogateInterview.status,
+            SurrogateInterview.transcript_version,
+            SurrogateInterview.transcript_storage_key,
+            SurrogateInterview.created_at,
             User.display_name.label("conducted_by_name"),
             User.email.label("conducted_by_email"),
         )
-        .select_from(CaseInterview)
-        .outerjoin(User, User.id == CaseInterview.conducted_by_user_id)
+        .select_from(SurrogateInterview)
+        .outerjoin(User, User.id == SurrogateInterview.conducted_by_user_id)
         .where(
-            CaseInterview.case_id == case_id,
-            CaseInterview.organization_id == org_id,
+            SurrogateInterview.surrogate_id == surrogate_id,
+            SurrogateInterview.organization_id == org_id,
         )
-        .order_by(CaseInterview.conducted_at.desc())
+        .order_by(SurrogateInterview.conducted_at.desc())
     ).all()
 
     if not rows:
@@ -318,10 +316,10 @@ def list_interviews_with_counts(
 def update_interview(
     db: Session,
     org_id: UUID,
-    interview: CaseInterview,
+    interview: SurrogateInterview,
     user_id: UUID,
     data: InterviewUpdate,
-) -> CaseInterview:
+) -> SurrogateInterview:
     """
     Update interview with automatic versioning.
 
@@ -401,7 +399,7 @@ def update_interview(
 
 def delete_interview(
     db: Session,
-    interview: CaseInterview,
+    interview: SurrogateInterview,
 ) -> None:
     """Delete interview and all related data (cascade)."""
     db.delete(interview)
@@ -410,11 +408,11 @@ def delete_interview(
 
 async def update_transcript(
     db: Session,
-    interview: CaseInterview,
+    interview: SurrogateInterview,
     new_transcript_json: JsonObject,
     user_id: UUID,
     source: str = "manual",
-) -> CaseInterview:
+) -> SurrogateInterview:
     """
     Update interview transcript with automatic versioning.
 
@@ -431,8 +429,8 @@ async def update_transcript(
     Returns:
         Updated interview
     """
-    transcript_json, transcript_html, transcript_text, transcript_size = (
-        _build_transcript_content(new_transcript_json)
+    transcript_json, transcript_html, transcript_text, transcript_size = _build_transcript_content(
+        new_transcript_json
     )
     if transcript_json is None:
         raise ValueError("Invalid transcript JSON")
@@ -521,10 +519,10 @@ def get_version(
 def restore_version(
     db: Session,
     org_id: UUID,
-    interview: CaseInterview,
+    interview: SurrogateInterview,
     target_version: int,
     user_id: UUID,
-) -> CaseInterview:
+) -> SurrogateInterview:
     """
     Restore interview transcript to a previous version.
 
@@ -644,29 +642,38 @@ def get_version_diff(
 
 def get_notes_count(db: Session, interview_id: UUID) -> int:
     """Get count of notes for an interview."""
-    return db.scalar(
-        select(func.count())
-        .select_from(InterviewNote)
-        .where(InterviewNote.interview_id == interview_id)
-    ) or 0
+    return (
+        db.scalar(
+            select(func.count())
+            .select_from(InterviewNote)
+            .where(InterviewNote.interview_id == interview_id)
+        )
+        or 0
+    )
 
 
 def get_attachments_count(db: Session, interview_id: UUID) -> int:
     """Get count of attachments for an interview."""
-    return db.scalar(
-        select(func.count())
-        .select_from(InterviewAttachment)
-        .where(InterviewAttachment.interview_id == interview_id)
-    ) or 0
+    return (
+        db.scalar(
+            select(func.count())
+            .select_from(InterviewAttachment)
+            .where(InterviewAttachment.interview_id == interview_id)
+        )
+        or 0
+    )
 
 
 def get_versions_count(db: Session, interview_id: UUID) -> int:
     """Get count of versions for an interview."""
-    return db.scalar(
-        select(func.count())
-        .select_from(InterviewTranscriptVersion)
-        .where(InterviewTranscriptVersion.interview_id == interview_id)
-    ) or 0
+    return (
+        db.scalar(
+            select(func.count())
+            .select_from(InterviewTranscriptVersion)
+            .where(InterviewTranscriptVersion.interview_id == interview_id)
+        )
+        or 0
+    )
 
 
 # =============================================================================
@@ -677,7 +684,7 @@ def get_versions_count(db: Session, interview_id: UUID) -> int:
 def build_interview_exports(
     db: Session,
     org_id: UUID,
-    interviews: list[CaseInterview],
+    interviews: list[SurrogateInterview],
     current_user_id: UUID,
 ) -> dict[UUID, dict]:
     """Build export payloads for interviews with notes, attachments, and versions."""
@@ -752,38 +759,28 @@ def build_interview_exports(
         notes_by_interview[note.interview_id].append(note)
 
     attachments_by_interview: dict[UUID, list[InterviewAttachment]] = defaultdict(list)
-    attachments = (
-        db.scalars(
-            select(InterviewAttachment)
-            .options(
-                joinedload(InterviewAttachment.attachment).joinedload(
-                    Attachment.uploaded_by
-                )
-            )
-            .where(
-                InterviewAttachment.organization_id == org_id,
-                InterviewAttachment.interview_id.in_(interview_ids),
-            )
-            .order_by(InterviewAttachment.created_at.desc())
+    attachments = db.scalars(
+        select(InterviewAttachment)
+        .options(joinedload(InterviewAttachment.attachment).joinedload(Attachment.uploaded_by))
+        .where(
+            InterviewAttachment.organization_id == org_id,
+            InterviewAttachment.interview_id.in_(interview_ids),
         )
-        .all()
-    )
+        .order_by(InterviewAttachment.created_at.desc())
+    ).all()
     for link in attachments:
         attachments_by_interview[link.interview_id].append(link)
 
     versions_by_interview: dict[UUID, list[InterviewTranscriptVersion]] = defaultdict(list)
-    versions = (
-        db.scalars(
-            select(InterviewTranscriptVersion)
-            .options(joinedload(InterviewTranscriptVersion.author))
-            .where(
-                InterviewTranscriptVersion.organization_id == org_id,
-                InterviewTranscriptVersion.interview_id.in_(interview_ids),
-            )
-            .order_by(InterviewTranscriptVersion.version.desc())
+    versions = db.scalars(
+        select(InterviewTranscriptVersion)
+        .options(joinedload(InterviewTranscriptVersion.author))
+        .where(
+            InterviewTranscriptVersion.organization_id == org_id,
+            InterviewTranscriptVersion.interview_id.in_(interview_ids),
         )
-        .all()
-    )
+        .order_by(InterviewTranscriptVersion.version.desc())
+    ).all()
     for version in versions:
         versions_by_interview[version.interview_id].append(version)
 
@@ -791,13 +788,11 @@ def build_interview_exports(
     for interview in interviews:
         conducted_by_name = "Unknown"
         if interview.conducted_by:
-            conducted_by_name = (
-                interview.conducted_by.display_name or interview.conducted_by.email
-            )
+            conducted_by_name = interview.conducted_by.display_name or interview.conducted_by.email
 
         interview_payload = {
             "id": interview.id,
-            "case_id": interview.case_id,
+            "surrogate_id": interview.surrogate_id,
             "interview_type": interview.interview_type,
             "conducted_at": interview.conducted_at,
             "conducted_by_user_id": interview.conducted_by_user_id,
@@ -843,9 +838,7 @@ def build_interview_exports(
 # =============================================================================
 
 
-def to_interview_list_item(
-    db: Session, interview: CaseInterview
-) -> dict:
+def to_interview_list_item(db: Session, interview: SurrogateInterview) -> dict:
     """Convert interview to list item response."""
     conducted_by_name = "Unknown"
     if interview.conducted_by:
@@ -868,9 +861,7 @@ def to_interview_list_item(
     }
 
 
-def to_interview_read(
-    db: Session, interview: CaseInterview
-) -> dict:
+def to_interview_read(db: Session, interview: SurrogateInterview) -> dict:
     """Convert interview to full response."""
     conducted_by_name = "Unknown"
     if interview.conducted_by:
@@ -878,7 +869,7 @@ def to_interview_read(
 
     return {
         "id": interview.id,
-        "case_id": interview.case_id,
+        "surrogate_id": interview.surrogate_id,
         "interview_type": interview.interview_type,
         "conducted_at": interview.conducted_at,
         "conducted_by_user_id": interview.conducted_by_user_id,

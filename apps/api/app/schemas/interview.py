@@ -5,7 +5,7 @@ from typing import Literal
 from uuid import UUID
 
 import nh3
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 # Allowed HTML tags for transcript/notes (same as note_service)
 ALLOWED_TAGS = {
@@ -138,7 +138,7 @@ class InterviewRead(BaseModel):
     """Full interview detail response."""
 
     id: UUID
-    case_id: UUID
+    surrogate_id: UUID
     interview_type: str
     conducted_at: datetime
     conducted_by_user_id: UUID
@@ -299,7 +299,7 @@ class InterviewSummaryResponse(BaseModel):
 class AllInterviewsSummaryResponse(BaseModel):
     """AI summary of all interviews for a case."""
 
-    case_id: UUID
+    surrogate_id: UUID
     interview_count: int
     overall_summary: str
     timeline: list[dict]  # [{date, type, key_point}]

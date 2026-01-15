@@ -60,10 +60,10 @@ import type { JsonObject, JsonValue } from "@/lib/types/json"
 
 // Icon mapping for trigger types
 const triggerIcons: Record<string, React.ElementType> = {
-    case_created: FileTextIcon,
+    surrogate_created: FileTextIcon,
     status_changed: ZapIcon,
-    case_assigned: UserIcon,
-    case_updated: FileTextIcon,
+    surrogate_assigned: UserIcon,
+    surrogate_updated: FileTextIcon,
     task_due: ClockIcon,
     task_overdue: AlertCircleIcon,
     scheduled: CalendarIcon,
@@ -71,10 +71,10 @@ const triggerIcons: Record<string, React.ElementType> = {
 }
 
 const triggerLabels: Record<string, string> = {
-    case_created: "Case Created",
+    surrogate_created: "Surrogate Created",
     status_changed: "Status Changed",
-    case_assigned: "Case Assigned",
-    case_updated: "Field Updated",
+    surrogate_assigned: "Surrogate Assigned",
+    surrogate_updated: "Field Updated",
     task_due: "Task Due",
     task_overdue: "Task Overdue",
     scheduled: "Scheduled",
@@ -132,7 +132,7 @@ export default function AutomationPage() {
     // Test workflow state
     const [showTestModal, setShowTestModal] = useState(false)
     const [testWorkflowId, setTestWorkflowId] = useState<string | null>(null)
-    const [testCaseId, setTestCaseId] = useState("")
+    const [testSurrogateId, setTestSurrogateId] = useState("")
     const [testResult, setTestResult] = useState<WorkflowTestResponse | null>(null)
 
     // Form state
@@ -235,15 +235,15 @@ export default function AutomationPage() {
 
     const handleTest = (id: string) => {
         setTestWorkflowId(id)
-        setTestCaseId("")
+        setTestSurrogateId("")
         setTestResult(null)
         setShowTestModal(true)
     }
 
     const handleRunTest = () => {
-        if (!testWorkflowId || !testCaseId) return
+        if (!testWorkflowId || !testSurrogateId) return
         testWorkflowMutation.mutate(
-            { id: testWorkflowId, entityId: testCaseId },
+            { id: testWorkflowId, entityId: testSurrogateId },
             { onSuccess: (result) => setTestResult(result) }
         )
     }
@@ -620,7 +620,7 @@ export default function AutomationPage() {
                                 <div>
                                     <Label>Workflow Name *</Label>
                                     <Input
-                                        placeholder="e.g., Welcome New Cases"
+                                        placeholder="e.g., Welcome New Surrogates"
                                         className="mt-1.5"
                                         value={workflowName}
                                         onChange={(e) => setWorkflowName(e.target.value)}
@@ -857,7 +857,7 @@ export default function AutomationPage() {
                                                                 Requires Approval
                                                             </Label>
                                                             <span className="text-xs text-muted-foreground">
-                                                                Case owner must approve before this action runs
+                                                                Surrogate owner must approve before this action runs
                                                             </span>
                                                         </div>
                                                         <Switch
@@ -1085,11 +1085,11 @@ export default function AutomationPage() {
 
                     <div className="space-y-4 py-4">
                         <div className="space-y-2">
-                            <Label>Case ID</Label>
+                            <Label>Surrogate ID</Label>
                             <Input
                                 placeholder="Enter case UUID..."
-                                value={testCaseId}
-                                onChange={(e) => setTestCaseId(e.target.value)}
+                                value={testSurrogateId}
+                                onChange={(e) => setTestSurrogateId(e.target.value)}
                             />
                         </div>
 
@@ -1145,7 +1145,7 @@ export default function AutomationPage() {
                         </Button>
                         <Button
                             onClick={handleRunTest}
-                            disabled={!testCaseId || testWorkflowMutation.isPending}
+                            disabled={!testSurrogateId || testWorkflowMutation.isPending}
                         >
                             {testWorkflowMutation.isPending ? (
                                 <Loader2Icon className="mr-2 size-4 animate-spin" />

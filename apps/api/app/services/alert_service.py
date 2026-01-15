@@ -116,12 +116,7 @@ def list_alerts(
     if severity:
         query = query.filter(SystemAlert.severity == severity.value)
 
-    return (
-        query.order_by(SystemAlert.last_seen_at.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    return query.order_by(SystemAlert.last_seen_at.desc()).offset(offset).limit(limit).all()
 
 
 def count_alerts(

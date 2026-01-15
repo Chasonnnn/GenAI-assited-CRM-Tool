@@ -1,5 +1,5 @@
 /**
- * Notes API client - typed functions for case notes endpoints.
+ * Notes API client - typed functions for surrogate notes endpoints.
  */
 
 import api from './index';
@@ -7,7 +7,7 @@ import api from './index';
 // Note response
 export interface NoteRead {
     id: string;
-    case_id: string;
+    surrogate_id: string;
     author_id: string | null;
     author_name: string | null;
     body: string;
@@ -20,17 +20,17 @@ export interface NoteCreatePayload {
 }
 
 /**
- * List notes for a case.
+ * List notes for a surrogate.
  */
-export function getNotes(caseId: string): Promise<NoteRead[]> {
-    return api.get<NoteRead[]>(`/cases/${caseId}/notes`);
+export function getNotes(surrogateId: string): Promise<NoteRead[]> {
+    return api.get<NoteRead[]>(`/surrogates/${surrogateId}/notes`);
 }
 
 /**
- * Create a note for a case.
+ * Create a note for a surrogate.
  */
-export function createNote(caseId: string, body: string): Promise<NoteRead> {
-    return api.post<NoteRead>(`/cases/${caseId}/notes`, { body });
+export function createNote(surrogateId: string, body: string): Promise<NoteRead> {
+    return api.post<NoteRead>(`/surrogates/${surrogateId}/notes`, { body });
 }
 
 /**

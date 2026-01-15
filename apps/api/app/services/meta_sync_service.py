@@ -13,12 +13,12 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.encryption import decrypt_token
 from app.db.models import (
-    Case,
+    Surrogate,
     MetaAd,
     MetaAdAccount,
     MetaAdSet,
@@ -216,7 +216,9 @@ def _upsert_adset(
             campaign_id = campaign.id
             campaign_map[campaign_external_id] = campaign_id
         else:
-            logger.warning(f"AdSet {external_id} references unknown campaign {campaign_external_id}")
+            logger.warning(
+                f"AdSet {external_id} references unknown campaign {campaign_external_id}"
+            )
             return None
 
     adset = db.scalar(
@@ -343,44 +345,41 @@ def _upsert_ad(
     return ad
 
 
-def link_cases_to_campaigns(db: Session, org_id: UUID) -> int:
+def link_surrogates_to_campaigns(db: Session, org_id: UUID) -> int:
     """
-    Backfill campaign/adset external IDs on cases.
+    Backfill campaign/adset external IDs on surrogates.
 
-    Joins Case.meta_ad_external_id → MetaAd → campaign/adset.
-    Only updates cases where campaign_external_id is NULL.
+    Joins Surrogate.meta_ad_external_id → MetaAd → campaign/adset.
+    Only updates surrogates where campaign_external_id is NULL.
 
-    Returns: Number of cases updated
+    Returns: Number of surrogates updated
     """
-    # Find cases needing backfill
-    cases_query = (
-        select(Case)
-        .where(
-            Case.organization_id == org_id,
-            Case.meta_ad_external_id.isnot(None),
-            Case.meta_campaign_external_id.is_(None),
-        )
+    # Find surrogates needing backfill
+    surrogates_query = select(Surrogate).where(
+        Surrogate.organization_id == org_id,
+        Surrogate.meta_ad_external_id.isnot(None),
+        Surrogate.meta_campaign_external_id.is_(None),
     )
 
-    cases = db.scalars(cases_query).all()
+    surrogates = db.scalars(surrogates_query).all()
     updated = 0
 
-    for case in cases:
+    for surrogate in surrogates:
         # Find the ad
         ad = db.scalar(
             select(MetaAd).where(
                 MetaAd.organization_id == org_id,
-                MetaAd.ad_external_id == case.meta_ad_external_id,
+                MetaAd.ad_external_id == surrogate.meta_ad_external_id,
             )
         )
         if ad:
-            case.meta_campaign_external_id = ad.campaign_external_id
-            case.meta_adset_external_id = ad.adset_external_id
+            surrogate.meta_campaign_external_id = ad.campaign_external_id
+            surrogate.meta_adset_external_id = ad.adset_external_id
             updated += 1
 
     if updated > 0:
         db.commit()
-        logger.info(f"Backfilled campaign info for {updated} cases in org {org_id}")
+        logger.info(f"Backfilled campaign info for {updated} surrogates in org {org_id}")
 
     return updated
 
@@ -452,9 +451,7 @@ async def sync_spend(
 
         # Upsert spend rows
         for row in insights or []:
-            spend_row = _upsert_spend_row(
-                db, ad_account, org_id, row, breakdown_type
-            )
+            spend_row = _upsert_spend_row(db, ad_account, org_id, row, breakdown_type)
             if spend_row:
                 result["rows_synced"] += 1
                 campaign_set.add(row.get("campaign_id"))
@@ -637,9 +634,7 @@ async def sync_forms(
             continue
 
         # Fetch forms
-        forms_data, error = await meta_api.fetch_page_leadgen_forms(
-            page.page_id, access_token
-        )
+        forms_data, error = await meta_api.fetch_page_leadgen_forms(page.page_id, access_token)
 
         if error:
             logger.error(f"Form fetch failed for page {page.page_id}: {error}")
@@ -649,9 +644,7 @@ async def sync_forms(
 
         # Process forms
         for form_data in forms_data or []:
-            form, version_created = _upsert_form(
-                db, org_id, page.page_id, form_data
-            )
+            form, version_created = _upsert_form(db, org_id, page.page_id, form_data)
             if form:
                 result["forms_synced"] += 1
                 if version_created:
@@ -729,11 +722,14 @@ def _upsert_form(
 
     if not existing_version:
         # New schema version
-        max_version = db.scalar(
-            select(func.max(MetaFormVersion.version_number)).where(
-                MetaFormVersion.form_id == form.id
+        max_version = (
+            db.scalar(
+                select(func.max(MetaFormVersion.version_number)).where(
+                    MetaFormVersion.form_id == form.id
+                )
             )
-        ) or 0
+            or 0
+        )
 
         new_version = MetaFormVersion(
             form_id=form.id,

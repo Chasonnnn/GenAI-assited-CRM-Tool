@@ -12,7 +12,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.models import CaseInterview, FormSubmission
+from app.db.models import SurrogateInterview, FormSubmission
 from app.services import form_service, interview_service, profile_service, tiptap_service
 
 
@@ -48,7 +48,11 @@ async def _render_html_to_pdf(html_content: str) -> bytes:
 
 def _load_file_bytes(storage_key: str) -> tuple[bytes | None, str | None]:
     """Load file bytes from configured storage backend."""
-    from app.services.attachment_service import _get_local_storage_path, _get_s3_client, _get_storage_backend
+    from app.services.attachment_service import (
+        _get_local_storage_path,
+        _get_s3_client,
+        _get_storage_backend,
+    )
 
     backend = _get_storage_backend()
     if backend == "s3":
@@ -113,7 +117,7 @@ def _build_file_section(
 
 def _generate_submission_html(
     title: str,
-    case_name: str,
+    surrogate_name: str,
     org_name: str,
     schema: dict[str, Any],
     answers: dict[str, Any],
@@ -174,7 +178,7 @@ def _generate_submission_html(
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>{html.escape(title)} - {html.escape(case_name)}</title>
+    <title>{html.escape(title)} - {html.escape(surrogate_name)}</title>
     <style>
         * {{
             box-sizing: border-box;
@@ -274,7 +278,7 @@ def _generate_submission_html(
 </head>
 <body>
     <div class="header">
-        <h1>{html.escape(case_name)}</h1>
+        <h1>{html.escape(surrogate_name)}</h1>
         <div class="subtitle">{html.escape(title)} • {datetime.now().strftime("%B %d, %Y")}{" • " + html.escape(org_name) if org_name else ""}</div>
     </div>
     
@@ -354,12 +358,12 @@ def _build_attachments_html(attachments: list[dict[str, Any]]) -> str:
         filename = html.escape(attachment.get("filename") or "Unknown file")
         size = _format_file_size(int(attachment.get("file_size") or 0))
         items += f"<li>{filename} • {size}</li>"
-    return f"<ul class=\"attachment-list\">{items}</ul>"
+    return f'<ul class="attachment-list">{items}</ul>'
 
 
 def _generate_interview_export_html(
     title: str,
-    case_name: str,
+    surrogate_name: str,
     org_name: str,
     exports: list[dict[str, Any]],
 ) -> str:
@@ -424,7 +428,7 @@ def _generate_interview_export_html(
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>{html.escape(title)} - {html.escape(case_name)}</title>
+    <title>{html.escape(title)} - {html.escape(surrogate_name)}</title>
     <style>
         * {{
             box-sizing: border-box;
@@ -543,7 +547,7 @@ def _generate_interview_export_html(
 <body>
     <div class="header">
         <h1>{html.escape(title)}</h1>
-        <div class="subtitle">{html.escape(org_name)} • {html.escape(case_name)}</div>
+        <div class="subtitle">{html.escape(org_name)} • {html.escape(surrogate_name)}</div>
     </div>
 
     {sections_html}
@@ -559,15 +563,15 @@ def _format_value(value: Any) -> str:
     """Format a value for HTML display."""
     if value is None or value == "":
         return '<span style="color: #94a3b8;">—</span>'
-    
+
     if isinstance(value, bool):
         return "Yes" if value else "No"
-    
+
     if isinstance(value, list):
         if not value:
             return '<span style="color: #94a3b8;">—</span>'
         return html.escape(", ".join(str(v) for v in value))
-    
+
     return html.escape(str(value))
 
 
@@ -608,7 +612,7 @@ def export_submission_pdf(
     db: Session,
     submission_id: uuid.UUID,
     org_id: uuid.UUID,
-    case_name: str,
+    surrogate_name: str,
     org_name: str = "",
 ) -> bytes:
     """Export a form submission as PDF."""
@@ -629,7 +633,7 @@ def export_submission_pdf(
 
     html_content = _generate_submission_html(
         title="Application Export",
-        case_name=case_name,
+        surrogate_name=surrogate_name,
         org_name=org_name,
         schema=schema,
         answers=submission.answers_json or {},
@@ -648,25 +652,25 @@ def export_submission_pdf(
 def export_profile_pdf(
     db: Session,
     org_id: uuid.UUID,
-    case_id: uuid.UUID,
-    case_name: str,
+    surrogate_id: uuid.UUID,
+    surrogate_name: str,
     org_name: str = "",
 ) -> bytes:
     """
     Export a case profile as PDF.
-    
+
     Args:
         db: Database session
         org_id: Organization ID
-        case_id: Case ID
-        case_name: Display name for the case
+        surrogate_id: Surrogate ID
+        surrogate_name: Display name for the case
         org_name: Organization name for header
-        
+
     Returns:
         PDF file content as bytes
     """
     # Get profile data
-    profile_data = profile_service.get_profile_data(db, org_id, case_id)
+    profile_data = profile_service.get_profile_data(db, org_id, surrogate_id)
     hidden_fields = set(profile_data.get("hidden_fields") or [])
 
     base_submission_id = profile_data.get("base_submission_id")
@@ -690,7 +694,7 @@ def export_profile_pdf(
 
     html_content = _generate_submission_html(
         title="Profile Card Export",
-        case_name=case_name,
+        surrogate_name=surrogate_name,
         org_name=org_name,
         schema=schema,
         answers=profile_data.get("merged_view") or {},
@@ -711,8 +715,8 @@ def export_profile_pdf(
 def export_interview_pdf(
     db: Session,
     org_id: uuid.UUID,
-    interview: CaseInterview,
-    case_name: str,
+    interview: SurrogateInterview,
+    surrogate_name: str,
     org_name: str,
     current_user_id: uuid.UUID,
 ) -> bytes:
@@ -729,7 +733,7 @@ def export_interview_pdf(
 
     html_content = _generate_interview_export_html(
         title="Interview Export",
-        case_name=case_name,
+        surrogate_name=surrogate_name,
         org_name=org_name,
         exports=[payload],
     )
@@ -746,8 +750,8 @@ def export_interview_pdf(
 def export_interviews_pdf(
     db: Session,
     org_id: uuid.UUID,
-    interviews: list[CaseInterview],
-    case_name: str,
+    interviews: list[SurrogateInterview],
+    surrogate_name: str,
     org_name: str,
     current_user_id: uuid.UUID,
 ) -> bytes:
@@ -761,17 +765,13 @@ def export_interviews_pdf(
         interviews=interviews,
         current_user_id=current_user_id,
     )
-    ordered_exports = [
-        exports[interview.id]
-        for interview in interviews
-        if interview.id in exports
-    ]
+    ordered_exports = [exports[interview.id] for interview in interviews if interview.id in exports]
     if not ordered_exports:
         raise ValueError("No interviews found")
 
     html_content = _generate_interview_export_html(
         title="Interview Export",
-        case_name=case_name,
+        surrogate_name=surrogate_name,
         org_name=org_name,
         exports=ordered_exports,
     )
@@ -831,8 +831,8 @@ def _generate_horizontal_bar_chart_svg(
 
     return f'''
         <svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-            <text x="{width/2}" y="20" text-anchor="middle" font-weight="600" font-size="13" fill="#0f172a">{html.escape(title)}</text>
-            {''.join(bars)}
+            <text x="{width / 2}" y="20" text-anchor="middle" font-weight="600" font-size="13" fill="#0f172a">{html.escape(title)}</text>
+            {"".join(bars)}
         </svg>
     '''
 
@@ -845,7 +845,7 @@ def _generate_vertical_bar_chart_svg(
     width: int = 500,
     height: int = 280,
 ) -> str:
-    """Generate SVG vertical bar chart (for Cases by Stage)."""
+    """Generate SVG vertical bar chart (for Surrogates by Stage)."""
     if not data:
         return ""
 
@@ -868,8 +868,12 @@ def _generate_vertical_bar_chart_svg(
     for i in range(5):
         y = margin["top"] + (i / 4) * chart_height
         val = int(max_value * (1 - i / 4))
-        grid_lines.append(f'<line x1="{margin["left"]}" y1="{y}" x2="{width - margin["right"]}" y2="{y}" stroke="#e2e8f0" stroke-width="1"/>')
-        grid_lines.append(f'<text x="{margin["left"] - 8}" y="{y + 4}" text-anchor="end" font-size="10" fill="#94a3b8">{val}</text>')
+        grid_lines.append(
+            f'<line x1="{margin["left"]}" y1="{y}" x2="{width - margin["right"]}" y2="{y}" stroke="#e2e8f0" stroke-width="1"/>'
+        )
+        grid_lines.append(
+            f'<text x="{margin["left"] - 8}" y="{y + 4}" text-anchor="end" font-size="10" fill="#94a3b8">{val}</text>'
+        )
 
     bars = []
     for i, (label, value) in enumerate(zip(labels, values)):
@@ -880,14 +884,14 @@ def _generate_vertical_bar_chart_svg(
 
         bars.append(f'''
             <rect x="{x}" y="{y}" width="{bar_width}" height="{bar_height_px}" fill="{color}" rx="4"/>
-            <text x="{x + bar_width/2}" y="{height - margin["bottom"] + 15}" text-anchor="middle" font-size="9" fill="#64748b" transform="rotate(-30 {x + bar_width/2} {height - margin["bottom"] + 15})">{html.escape(label)}</text>
+            <text x="{x + bar_width / 2}" y="{height - margin["bottom"] + 15}" text-anchor="middle" font-size="9" fill="#64748b" transform="rotate(-30 {x + bar_width / 2} {height - margin["bottom"] + 15})">{html.escape(label)}</text>
         ''')
 
     return f'''
         <svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-            <text x="{width/2}" y="20" text-anchor="middle" font-weight="600" font-size="13" fill="#0f172a">{html.escape(title)}</text>
-            {''.join(grid_lines)}
-            {''.join(bars)}
+            <text x="{width / 2}" y="20" text-anchor="middle" font-weight="600" font-size="13" fill="#0f172a">{html.escape(title)}</text>
+            {"".join(grid_lines)}
+            {"".join(bars)}
         </svg>
     '''
 
@@ -932,7 +936,9 @@ def _generate_line_chart_svg(
     grid_lines = []
     for i in range(5):
         y = margin["top"] + (i / 4) * chart_height
-        grid_lines.append(f'<line x1="{margin["left"]}" y1="{y}" x2="{width - margin["right"]}" y2="{y}" stroke="#e2e8f0" stroke-width="1"/>')
+        grid_lines.append(
+            f'<line x1="{margin["left"]}" y1="{y}" x2="{width - margin["right"]}" y2="{y}" stroke="#e2e8f0" stroke-width="1"/>'
+        )
 
     # Dots and x-axis labels
     dots = []
@@ -942,15 +948,17 @@ def _generate_line_chart_svg(
         dots.append(f'<circle cx="{x}" cy="{y}" r="2" fill="white"/>')
         # Show every other label if many points
         if i % 2 == 0 or len(values) <= 7:
-            labels.append(f'<text x="{x}" y="{height - 12}" text-anchor="middle" font-size="9" fill="#64748b">{date}</text>')
+            labels.append(
+                f'<text x="{x}" y="{height - 12}" text-anchor="middle" font-size="9" fill="#64748b">{date}</text>'
+            )
 
     return f'''
         <svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-            <text x="{width/2}" y="20" text-anchor="middle" font-weight="600" font-size="13" fill="#0f172a">{html.escape(title)}</text>
-            {''.join(grid_lines)}
+            <text x="{width / 2}" y="20" text-anchor="middle" font-weight="600" font-size="13" fill="#0f172a">{html.escape(title)}</text>
+            {"".join(grid_lines)}
             {path}
-            {''.join(dots)}
-            {''.join(labels)}
+            {"".join(dots)}
+            {"".join(labels)}
         </svg>
     '''
 
@@ -1018,9 +1026,9 @@ def _generate_pie_chart_svg(
 
     return f'''
         <svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-            <text x="{width/2}" y="20" text-anchor="middle" font-weight="600" font-size="13" fill="#0f172a">{html.escape(title)}</text>
-            {''.join(slices)}
-            {''.join(legend)}
+            <text x="{width / 2}" y="20" text-anchor="middle" font-weight="600" font-size="13" fill="#0f172a">{html.escape(title)}</text>
+            {"".join(slices)}
+            {"".join(legend)}
         </svg>
     '''
 
@@ -1030,7 +1038,7 @@ def _generate_pie_chart_svg(
 # =============================================================================
 
 
-def _compute_insights(trend_data: list, cases_by_status: list) -> dict:
+def _compute_insights(trend_data: list, surrogates_by_status: list) -> dict:
     """Compute AI insights from trend and status data (mirrors frontend logic)."""
     insights = {
         "trend": "Trend: not enough data yet.",
@@ -1068,23 +1076,29 @@ def _compute_insights(trend_data: list, cases_by_status: list) -> dict:
 
             if spike_delta >= 0.6:
                 date = max_point.get("date", "")[-5:]
-                insights["anomaly"] = f"Anomaly: spike on {date} ({max_point.get('count', 0)} cases, +{round(spike_delta * 100)}% vs avg)."
+                insights["anomaly"] = (
+                    f"Anomaly: spike on {date} ({max_point.get('count', 0)} surrogates, +{round(spike_delta * 100)}% vs avg)."
+                )
             elif dip_delta >= 0.6:
                 date = min_point.get("date", "")[-5:]
-                insights["anomaly"] = f"Anomaly: dip on {date} ({min_point.get('count', 0)} cases, -{round(dip_delta * 100)}% vs avg)."
+                insights["anomaly"] = (
+                    f"Anomaly: dip on {date} ({min_point.get('count', 0)} surrogates, -{round(dip_delta * 100)}% vs avg)."
+                )
             else:
                 insights["anomaly"] = "Anomalies: no major spikes or dips."
         else:
             insights["anomaly"] = "Anomalies: no volume yet."
 
     # Bottleneck detection
-    if cases_by_status:
-        total = sum(item.get("count", 0) for item in cases_by_status)
+    if surrogates_by_status:
+        total = sum(item.get("count", 0) for item in surrogates_by_status)
         if total > 0:
-            top = max(cases_by_status, key=lambda x: x.get("count", 0))
+            top = max(surrogates_by_status, key=lambda x: x.get("count", 0))
             top_pct = round((top.get("count", 0) / total) * 100)
             status_name = top.get("status", "Unknown").replace("_", " ").title()
-            insights["bottleneck"] = f"Bottleneck: {status_name} holds {top_pct}% of active cases."
+            insights["bottleneck"] = (
+                f"Bottleneck: {status_name} holds {top_pct}% of active surrogates."
+            )
 
     return insights
 
@@ -1120,7 +1134,7 @@ def _generate_funnel_svg(
     shapes = []
     for i, stage in enumerate(stages):
         count = stage.get("count", 0)
-        label = stage.get("stage", stage.get("label", f"Stage {i+1}"))
+        label = stage.get("stage", stage.get("label", f"Stage {i + 1}"))
         pct = stage.get("percentage", (count / max_count * 100) if max_count > 0 else 0)
 
         # Calculate trapezoid widths (narrowing as we go down)
@@ -1137,20 +1151,20 @@ def _generate_funnel_svg(
         shapes.append(f'''
             <polygon points="{top_x},{y} {top_x + top_width},{y} {bottom_x + bottom_width},{y + stage_height} {bottom_x},{y + stage_height}"
                      fill="{color}" stroke="white" stroke-width="2"/>
-            <text x="{margin['left'] + chart_width / 2}" y="{y + stage_height / 2 + 5}"
+            <text x="{margin["left"] + chart_width / 2}" y="{y + stage_height / 2 + 5}"
                   text-anchor="middle" font-size="12" fill="white" font-weight="600">{count}</text>
         ''')
 
         # Label on the right
         shapes.append(f'''
-            <text x="{width - margin['right'] + 10}" y="{y + stage_height / 2 + 5}"
+            <text x="{width - margin["right"] + 10}" y="{y + stage_height / 2 + 5}"
                   font-size="10" fill="#64748b">{html.escape(str(label)[:20])} ({pct:.0f}%)</text>
         ''')
 
     return f'''
         <svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-            <text x="{width/2}" y="20" text-anchor="middle" font-weight="600" font-size="13" fill="#0f172a">{html.escape(title)}</text>
-            {''.join(shapes)}
+            <text x="{width / 2}" y="20" text-anchor="middle" font-weight="600" font-size="13" fill="#0f172a">{html.escape(title)}</text>
+            {"".join(shapes)}
         </svg>
     '''
 
@@ -1161,25 +1175,63 @@ def _generate_funnel_svg(
 
 # Simplified US state paths (centroids for circles instead of full paths for simplicity)
 US_STATE_POSITIONS = {
-    "AL": (530, 340), "AK": (135, 445), "AZ": (195, 320), "AR": (455, 310),
-    "CA": (105, 250), "CO": (270, 250), "CT": (620, 175), "DE": (605, 220),
-    "FL": (570, 400), "GA": (550, 340), "HI": (230, 445), "ID": (175, 145),
-    "IL": (480, 230), "IN": (510, 230), "IA": (430, 195), "KS": (360, 265),
-    "KY": (525, 270), "LA": (455, 375), "ME": (645, 105), "MD": (590, 225),
-    "MA": (635, 165), "MI": (515, 165), "MN": (410, 135), "MS": (490, 345),
-    "MO": (440, 265), "MT": (220, 105), "NE": (350, 210), "NV": (150, 220),
-    "NH": (630, 140), "NJ": (610, 200), "NM": (250, 320), "NY": (595, 165),
-    "NC": (575, 290), "ND": (350, 110), "OH": (540, 225), "OK": (375, 310),
-    "OR": (120, 130), "PA": (575, 200), "RI": (635, 175), "SC": (565, 320),
-    "SD": (350, 155), "TN": (515, 295), "TX": (340, 380), "UT": (205, 230),
-    "VT": (620, 130), "VA": (575, 255), "WA": (135, 85), "WV": (555, 250),
-    "WI": (460, 155), "WY": (260, 175), "DC": (595, 235),
+    "AL": (530, 340),
+    "AK": (135, 445),
+    "AZ": (195, 320),
+    "AR": (455, 310),
+    "CA": (105, 250),
+    "CO": (270, 250),
+    "CT": (620, 175),
+    "DE": (605, 220),
+    "FL": (570, 400),
+    "GA": (550, 340),
+    "HI": (230, 445),
+    "ID": (175, 145),
+    "IL": (480, 230),
+    "IN": (510, 230),
+    "IA": (430, 195),
+    "KS": (360, 265),
+    "KY": (525, 270),
+    "LA": (455, 375),
+    "ME": (645, 105),
+    "MD": (590, 225),
+    "MA": (635, 165),
+    "MI": (515, 165),
+    "MN": (410, 135),
+    "MS": (490, 345),
+    "MO": (440, 265),
+    "MT": (220, 105),
+    "NE": (350, 210),
+    "NV": (150, 220),
+    "NH": (630, 140),
+    "NJ": (610, 200),
+    "NM": (250, 320),
+    "NY": (595, 165),
+    "NC": (575, 290),
+    "ND": (350, 110),
+    "OH": (540, 225),
+    "OK": (375, 310),
+    "OR": (120, 130),
+    "PA": (575, 200),
+    "RI": (635, 175),
+    "SC": (565, 320),
+    "SD": (350, 155),
+    "TN": (515, 295),
+    "TX": (340, 380),
+    "UT": (205, 230),
+    "VT": (620, 130),
+    "VA": (575, 255),
+    "WA": (135, 85),
+    "WV": (555, 250),
+    "WI": (460, 155),
+    "WY": (260, 175),
+    "DC": (595, 235),
 }
 
 
 def _generate_us_map_svg(
     data: list,
-    title: str = "Cases by State",
+    title: str = "Surrogates by State",
     width: int = 700,
     height: int = 480,
 ) -> str:
@@ -1194,7 +1246,7 @@ def _generate_us_map_svg(
     # Color scale from light to dark blue
     def get_color(count: int) -> str:
         if count == 0:
-            return "#f1f5f9"  # Light gray for no cases
+            return "#f1f5f9"  # Light gray for no surrogates
         intensity = count / max_count
         if intensity < 0.25:
             return "#bfdbfe"  # blue-200
@@ -1217,7 +1269,7 @@ def _generate_us_map_svg(
         ''')
 
     # Legend
-    legend = f'''
+    legend = f"""
         <g transform="translate(580, 400)">
             <text x="0" y="0" font-size="10" fill="#64748b" font-weight="600">Legend</text>
             <circle cx="10" cy="20" r="8" fill="#f1f5f9" stroke="#e2e8f0"/>
@@ -1227,12 +1279,12 @@ def _generate_us_map_svg(
             <circle cx="10" cy="60" r="8" fill="#3b82f6"/>
             <text x="25" y="64" font-size="9" fill="#64748b">{int(max_count * 0.5)}-{max_count}</text>
         </g>
-    '''
+    """
 
     return f'''
         <svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-            <text x="{width/2}" y="25" text-anchor="middle" font-weight="600" font-size="14" fill="#0f172a">{html.escape(title)}</text>
-            {''.join(circles)}
+            <text x="{width / 2}" y="25" text-anchor="middle" font-weight="600" font-size="14" fill="#0f172a">{html.escape(title)}</text>
+            {"".join(circles)}
             {legend}
         </svg>
     '''
@@ -1245,8 +1297,8 @@ def _generate_us_map_svg(
 
 def _generate_analytics_html(
     summary: dict,
-    cases_by_status: list,
-    cases_by_assignee: list,
+    surrogates_by_status: list,
+    surrogates_by_assignee: list,
     trend_data: list,
     meta_performance: dict | None,
     org_name: str,
@@ -1265,7 +1317,7 @@ def _generate_analytics_html(
         total_spend = meta_spend.get("total_spend", 0)
         cost_per_lead = meta_spend.get("cost_per_lead")
         cpl_display = f"${cost_per_lead:.2f}" if cost_per_lead else "N/A"
-        ad_spend_cards = f'''
+        ad_spend_cards = f"""
         <div class="metric-card">
             <div class="metric-value">${total_spend:,.0f}</div>
             <div class="metric-label">Total Ad Spend</div>
@@ -1274,13 +1326,13 @@ def _generate_analytics_html(
             <div class="metric-value">{cpl_display}</div>
             <div class="metric-label">Cost Per Lead</div>
         </div>
-        '''
+        """
 
-    metrics_html = f'''
+    metrics_html = f"""
     <div class="metrics-grid">
         <div class="metric-card">
-            <div class="metric-value">{summary.get("total_cases", 0)}</div>
-            <div class="metric-label">Total Cases</div>
+            <div class="metric-value">{summary.get("total_surrogates", 0)}</div>
+            <div class="metric-label">Total Surrogates</div>
         </div>
         <div class="metric-card">
             <div class="metric-value">{summary.get("new_this_period", 0)}</div>
@@ -1300,11 +1352,11 @@ def _generate_analytics_html(
         </div>
         {ad_spend_cards}
     </div>
-    '''
+    """
 
     # AI Insights section
-    insights = _compute_insights(trend_data, cases_by_status)
-    insights_html = f'''
+    insights = _compute_insights(trend_data, surrogates_by_status)
+    insights_html = f"""
     <div class="insights-box">
         <div class="insight-item">
             <span class="insight-icon">📈</span>
@@ -1319,64 +1371,61 @@ def _generate_analytics_html(
             <span>{html.escape(insights.get("bottleneck", ""))}</span>
         </div>
     </div>
-    '''
+    """
 
-    # Cases by Stage section (vertical bar chart like frontend)
+    # Surrogates by Stage section (vertical bar chart like frontend)
     status_section = ""
-    if cases_by_status:
+    if surrogates_by_status:
         # Format status labels like frontend does
         formatted_status = [
             {
                 "status": item.get("status", "Unknown").replace("_", " ").title(),
-                "count": item.get("count", 0)
+                "count": item.get("count", 0),
             }
-            for item in cases_by_status
+            for item in surrogates_by_status
         ]
         status_chart = _generate_vertical_bar_chart_svg(
-            formatted_status, "status", "count", "Cases by Stage"
+            formatted_status, "status", "count", "Surrogates by Stage"
         )
 
-        status_section = f'''
+        status_section = f"""
         <div class="section">
-            <h2>Cases by Stage</h2>
+            <h2>Surrogates by Stage</h2>
             <div class="chart-container">{status_chart}</div>
         </div>
-        '''
+        """
 
-    # Cases Trend section
+    # Surrogates Trend section
     trend_section = ""
     if trend_data and len(trend_data) >= 2:
-        trend_chart = _generate_line_chart_svg(trend_data, "New Cases Over Time")
-        trend_section = f'''
+        trend_chart = _generate_line_chart_svg(trend_data, "New Surrogates Over Time")
+        trend_section = f"""
         <div class="section">
-            <h2>Cases Trend</h2>
+            <h2>Surrogates Trend</h2>
             <div class="chart-container">{trend_chart}</div>
         </div>
-        '''
+        """
 
     # Team Performance section (horizontal bar chart like frontend)
     team_section = ""
-    if cases_by_assignee:
+    if surrogates_by_assignee:
         # Format assignee labels like frontend (use email prefix or name)
         formatted_assignees = []
-        for item in cases_by_assignee[:5]:
+        for item in surrogates_by_assignee[:5]:
             email = item.get("user_email") or ""
             name = email.split("@")[0] if email else item.get("display_name") or "Unassigned"
-            formatted_assignees.append({
-                "member": name,
-                "count": item.get("count", 0)
-            })
+            formatted_assignees.append({"member": name, "count": item.get("count", 0)})
 
         team_chart = _generate_horizontal_bar_chart_svg(
             formatted_assignees, "member", "count", "Team Performance"
         )
 
-        team_section = f'''
+        team_section = f"""
         <div class="section">
             <h2>Team Performance</h2>
             <div class="chart-container">{team_chart}</div>
         </div>
-        '''
+        """
 
     # Meta Performance section (pie/donut chart like frontend)
     meta_section = ""
@@ -1399,14 +1448,19 @@ def _generate_analytics_html(
         meta_pie_data = [d for d in meta_pie_data if d["value"] > 0]
 
         meta_chart = _generate_pie_chart_svg(
-            meta_pie_data, "name", "value", "Meta Lead Ads Performance",
-            colors=["#94a3b8", "#3b82f6", "#22c55e"]
+            meta_pie_data,
+            "name",
+            "value",
+            "Meta Lead Ads Performance",
+            colors=["#94a3b8", "#3b82f6", "#22c55e"],
         )
 
         avg_hours = meta_performance.get("avg_time_to_convert_hours")
-        avg_text = f"Avg {int(avg_hours / 24)} days to convert" if avg_hours else "No conversion data yet"
+        avg_text = (
+            f"Avg {int(avg_hours / 24)} days to convert" if avg_hours else "No conversion data yet"
+        )
 
-        meta_section = f'''
+        meta_section = f"""
         <div class="section">
             <h2>Meta Lead Ads Performance</h2>
             <div class="chart-container">{meta_chart}</div>
@@ -1415,18 +1469,18 @@ def _generate_analytics_html(
                 <p class="meta-note">{avg_text}</p>
             </div>
         </div>
-        '''
+        """
 
     # Conversion Funnel section
     funnel_section = ""
     if funnel_data:
         funnel_chart = _generate_funnel_svg(funnel_data, "Conversion Funnel")
-        funnel_section = f'''
+        funnel_section = f"""
         <div class="section">
             <h2>Conversion Funnel</h2>
             <div class="chart-container">{funnel_chart}</div>
         </div>
-        '''
+        """
 
     # Individual Performance Table section
     performance_section = ""
@@ -1434,52 +1488,52 @@ def _generate_analytics_html(
         perf_rows = ""
         for user in performance_data["data"]:
             user_name = html.escape(user.get("user_name", "Unknown"))
-            total = user.get("total_cases", 0)
+            total = user.get("total_surrogates", 0)
             contacted = user.get("contacted", 0)
             qualified = user.get("qualified", 0)
             matched = user.get("matched", 0)
-            applied = user.get("applied", 0)
+            application_submitted = user.get("application_submitted", 0)
             lost = user.get("lost", 0)
             conv_rate = user.get("conversion_rate", 0)
             avg_match = user.get("avg_days_to_match")
             avg_match_str = f"{avg_match:.1f}" if avg_match else "—"
-            avg_apply = user.get("avg_days_to_apply")
+            avg_apply = user.get("avg_days_to_application_submitted")
             avg_apply_str = f"{avg_apply:.1f}" if avg_apply else "—"
 
-            perf_rows += f'''
+            perf_rows += f"""
             <tr>
                 <td>{user_name}</td>
                 <td class="text-center">{total}</td>
                 <td class="text-center">{contacted}</td>
                 <td class="text-center">{qualified}</td>
                 <td class="text-center">{matched}</td>
-                <td class="text-center">{applied}</td>
+                <td class="text-center">{application_submitted}</td>
                 <td class="text-center">{lost}</td>
                 <td class="text-center">{conv_rate:.1f}%</td>
                 <td class="text-center">{avg_match_str}</td>
                 <td class="text-center">{avg_apply_str}</td>
             </tr>
-            '''
+            """
 
-        # Add unassigned row if there are unassigned cases
+        # Add unassigned row if there are unassigned surrogates
         unassigned = performance_data.get("unassigned", {})
-        if unassigned.get("total_cases", 0) > 0:
-            perf_rows += f'''
+        if unassigned.get("total_surrogates", 0) > 0:
+            perf_rows += f"""
             <tr class="unassigned-row">
                 <td>Unassigned</td>
-                <td class="text-center">{unassigned.get("total_cases", 0)}</td>
+                <td class="text-center">{unassigned.get("total_surrogates", 0)}</td>
                 <td class="text-center">{unassigned.get("contacted", 0)}</td>
                 <td class="text-center">{unassigned.get("qualified", 0)}</td>
                 <td class="text-center">{unassigned.get("matched", 0)}</td>
-                <td class="text-center">{unassigned.get("applied", 0)}</td>
+                <td class="text-center">{unassigned.get("application_submitted", 0)}</td>
                 <td class="text-center">{unassigned.get("lost", 0)}</td>
                 <td class="text-center">—</td>
                 <td class="text-center">—</td>
                 <td class="text-center">—</td>
             </tr>
-            '''
+            """
 
-        performance_section = f'''
+        performance_section = f"""
         <div class="section page-break-before">
             <h2>Individual Performance</h2>
             <table class="data-table">
@@ -1490,7 +1544,7 @@ def _generate_analytics_html(
                         <th class="text-center">Contacted</th>
                         <th class="text-center">Qualified</th>
                         <th class="text-center">Matched</th>
-                        <th class="text-center">Applied</th>
+                        <th class="text-center">Application Submitted</th>
                         <th class="text-center">Lost</th>
                         <th class="text-center">Conv %</th>
                         <th class="text-center">Days to Match</th>
@@ -1502,20 +1556,20 @@ def _generate_analytics_html(
                 </tbody>
             </table>
         </div>
-        '''
+        """
 
     # US Map section
     map_section = ""
     if state_data:
-        map_chart = _generate_us_map_svg(state_data, "Cases by State")
-        map_section = f'''
+        map_chart = _generate_us_map_svg(state_data, "Surrogates by State")
+        map_section = f"""
         <div class="section">
             <h2>Geographic Distribution</h2>
             <div class="chart-container map-container">{map_chart}</div>
         </div>
-        '''
+        """
 
-    return f'''<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1695,7 +1749,7 @@ def _generate_analytics_html(
         This report was automatically generated by the CRM system.
     </div>
 </body>
-</html>'''
+</html>"""
 
 
 async def export_analytics_pdf_async(
@@ -1739,8 +1793,8 @@ async def export_analytics_pdf_async(
     # Generate HTML
     html_content = _generate_analytics_html(
         summary=export_data["summary"],
-        cases_by_status=export_data["cases_by_status"],
-        cases_by_assignee=export_data["cases_by_assignee"],
+        surrogates_by_status=export_data["surrogates_by_status"],
+        surrogates_by_assignee=export_data["surrogates_by_assignee"],
         trend_data=export_data["trend_data"],
         meta_performance=export_data["meta_performance"],
         org_name=export_data["org_name"],

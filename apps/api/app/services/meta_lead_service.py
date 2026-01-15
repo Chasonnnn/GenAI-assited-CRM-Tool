@@ -1,4 +1,4 @@
-"""Meta Lead service - ingestion and conversion to cases."""
+"""Meta Lead service - ingestion and conversion to surrogates."""
 
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -6,10 +6,10 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.db.enums import CaseSource
-from app.db.models import Case, MetaLead
-from app.schemas.case import CaseCreate
-from app.services import case_service
+from app.db.enums import SurrogateSource
+from app.db.models import MetaLead, Surrogate
+from app.schemas.surrogate import SurrogateCreate
+from app.services import surrogate_service
 from app.utils.normalization import normalize_phone, normalize_state
 
 
@@ -76,13 +76,13 @@ def store_meta_lead(
     return lead, None
 
 
-def convert_to_case(
+def convert_to_surrogate(
     db: Session,
     meta_lead: MetaLead,
     user_id: UUID | None = None,
-) -> tuple[Case | None, str | None]:
+) -> tuple[Surrogate | None, str | None]:
     """
-    Convert a Meta lead to a normalized case.
+    Convert a Meta lead to a normalized surrogate.
 
     Lenient conversion: handles missing/invalid data by using placeholders
     rather than rejecting the lead outright.
@@ -93,7 +93,7 @@ def convert_to_case(
         user_id: Optional user ID for created_by (None for auto-conversion)
 
     Returns:
-        (case, error) - case is None if error
+        (surrogate, error) - surrogate is None if error
     """
     import re
 
@@ -101,8 +101,8 @@ def convert_to_case(
     if meta_lead.is_converted:
         return None, "Meta lead already converted"
 
-    if meta_lead.converted_case_id:
-        return None, "Meta lead already has a linked case"
+    if meta_lead.converted_surrogate_id:
+        return None, "Meta lead already has a linked surrogate"
 
     fields = meta_lead.field_data or {}
 
@@ -138,9 +138,9 @@ def convert_to_case(
     except ValueError:
         normalized_state = None  # Log but don't fail
 
-    # Create case
+    # Create surrogate
     try:
-        case_data = CaseCreate(
+        surrogate_data = SurrogateCreate(
             full_name=full_name,
             email=email,
             phone=normalized_phone,
@@ -175,38 +175,36 @@ def convert_to_case(
                 or fields.get("have_you_been_a_surrogate_before?")
             ),
             num_deliveries=_parse_int(
-                fields.get("num_deliveries")
-                or fields.get("how_many_deliveries_have_you_had?")
+                fields.get("num_deliveries") or fields.get("how_many_deliveries_have_you_had?")
             ),
             num_csections=_parse_int(
-                fields.get("num_csections")
-                or fields.get("How many C-sections have you had？")
+                fields.get("num_csections") or fields.get("How many C-sections have you had？")
             ),
-            source=CaseSource.META,
+            source=SurrogateSource.META,
         )
 
-        case = case_service.create_case(
+        surrogate = surrogate_service.create_surrogate(
             db=db,
             org_id=meta_lead.organization_id,
             user_id=user_id,
-            data=case_data,
+            data=surrogate_data,
         )
 
-        # Link case back to meta lead and add campaign tracking
-        case.meta_lead_id = meta_lead.id
-        case.meta_form_id = meta_lead.meta_form_id
+        # Link surrogate back to meta lead and add campaign tracking
+        surrogate.meta_lead_id = meta_lead.id
+        surrogate.meta_form_id = meta_lead.meta_form_id
         # Get ad_id from field_data if available (stored during fetch)
-        case.meta_ad_external_id = fields.get("meta_ad_id")
+        surrogate.meta_ad_external_id = fields.get("meta_ad_id")
 
         # Update meta lead
         meta_lead.is_converted = True
-        meta_lead.converted_case_id = case.id
+        meta_lead.converted_surrogate_id = surrogate.id
         meta_lead.converted_at = datetime.now(timezone.utc)
         meta_lead.conversion_error = None
 
         db.commit()
 
-        return case, None
+        return surrogate, None
 
     except Exception as e:
         meta_lead.conversion_error = str(e)[:500]
@@ -323,9 +321,7 @@ def count_meta_leads(db: Session) -> int:
 def count_failed_meta_leads(db: Session) -> int:
     """Count Meta leads with failed statuses."""
     return (
-        db.query(MetaLead)
-        .filter(MetaLead.status.in_(["fetch_failed", "convert_failed"]))
-        .count()
+        db.query(MetaLead).filter(MetaLead.status.in_(["fetch_failed", "convert_failed"])).count()
     )
 
 

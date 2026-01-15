@@ -206,9 +206,7 @@ def normalize_phone(phone: Optional[str]) -> Optional[str]:
     elif len(digits) == 11 and digits.startswith("1"):
         return f"+{digits}"
 
-    raise ValueError(
-        f"Invalid phone number '{phone}'. Use 10-digit US format (e.g., 5551234567)."
-    )
+    raise ValueError(f"Invalid phone number '{phone}'. Use 10-digit US format (e.g., 5551234567).")
 
 
 def normalize_email(email: Optional[str]) -> Optional[str]:

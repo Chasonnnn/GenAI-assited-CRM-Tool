@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * UploadFileDialog - Dialog for uploading files to Case or IP from Match detail page
+ * UploadFileDialog - Dialog for uploading files to Surrogate or IP from Match detail page
  */
 
 import { useState, useRef } from "react"
@@ -21,9 +21,9 @@ import { UploadIcon, FileIcon, XIcon } from "lucide-react"
 interface UploadFileDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    onUpload: (target: "case" | "ip", file: File) => Promise<void>
+    onUpload: (target: "surrogate" | "ip", file: File) => Promise<void>
     isPending: boolean
-    caseName: string
+    surrogateName: string
     ipName: string
 }
 
@@ -32,10 +32,10 @@ export function UploadFileDialog({
     onOpenChange,
     onUpload,
     isPending,
-    caseName,
+    surrogateName,
     ipName,
 }: UploadFileDialogProps) {
-    const [target, setTarget] = useState<"case" | "ip">("case")
+    const [target, setTarget] = useState<"surrogate" | "ip">("surrogate")
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -44,7 +44,7 @@ export function UploadFileDialog({
 
         await onUpload(target, selectedFile)
         setSelectedFile(null)
-        setTarget("case")
+        setTarget("surrogate")
         onOpenChange(false)
     }
 
@@ -65,7 +65,7 @@ export function UploadFileDialog({
     const handleClose = (isOpen: boolean) => {
         if (!isOpen) {
             setSelectedFile(null)
-            setTarget("case")
+            setTarget("surrogate")
         }
         onOpenChange(isOpen)
     }
@@ -82,7 +82,7 @@ export function UploadFileDialog({
                 <DialogHeader>
                     <DialogTitle>Upload File</DialogTitle>
                     <DialogDescription>
-                        Upload a file to the Case or Intended Parent record.
+                        Upload a file to the Surrogate or Intended Parent record.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -92,13 +92,13 @@ export function UploadFileDialog({
                         <Label>Upload to</Label>
                         <RadioGroup
                             value={target}
-                            onValueChange={(v) => setTarget(v as "case" | "ip")}
+                            onValueChange={(v) => setTarget(v as "surrogate" | "ip")}
                             className="flex gap-4"
                         >
                             <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="case" id="target-case" />
-                                <Label htmlFor="target-case" className="font-normal cursor-pointer">
-                                    {caseName} (Case)
+                                <RadioGroupItem value="surrogate" id="target-surrogate" />
+                                <Label htmlFor="target-surrogate" className="font-normal cursor-pointer">
+                                    {surrogateName} (Surrogate)
                                 </Label>
                             </div>
                             <div className="flex items-center space-x-2">

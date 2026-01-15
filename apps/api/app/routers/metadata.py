@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db
-from app.db.enums import CaseSource, TaskType, IntendedParentStatus, Role
+from app.db.enums import SurrogateSource, TaskType, IntendedParentStatus, Role
 from app.services import pipeline_service
 from app.schemas.auth import UserSession
 
@@ -12,19 +12,17 @@ router = APIRouter()
 
 
 @router.get("/statuses")
-def list_case_statuses(
+def list_surrogate_statuses(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """
-    Get all case statuses with metadata.
+    Get all surrogate statuses with metadata.
 
     Returns list of {value, label, stage} for populating dropdowns.
     """
     statuses = []
-    pipeline = pipeline_service.get_or_create_default_pipeline(
-        db, session.org_id, session.user_id
-    )
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, session.org_id, session.user_id)
     stages = pipeline_service.get_stages(db, pipeline.id, include_inactive=False)
     for stage in stages:
         statuses.append(
@@ -40,17 +38,17 @@ def list_case_statuses(
 
 
 @router.get("/sources")
-def list_case_sources(
+def list_surrogate_sources(
     session: UserSession = Depends(get_current_session),
 ):
     """
-    Get all case sources.
+    Get all surrogate sources.
 
     Returns list of {value, label} for populating dropdowns.
     """
     sources = [
         {"value": source.value, "label": source.value.replace("_", " ").title()}
-        for source in CaseSource
+        for source in SurrogateSource
     ]
     return {"sources": sources}
 
@@ -65,8 +63,7 @@ def list_task_types(
     Returns list of {value, label} for populating dropdowns.
     """
     task_types = [
-        {"value": tt.value, "label": tt.value.replace("_", " ").title()}
-        for tt in TaskType
+        {"value": tt.value, "label": tt.value.replace("_", " ").title()} for tt in TaskType
     ]
     return {"task_types": task_types}
 
@@ -105,8 +102,5 @@ def list_roles(
 
     Returns list of {value, label} for populating dropdowns.
     """
-    roles = [
-        {"value": role.value, "label": role.value.replace("_", " ").title()}
-        for role in Role
-    ]
+    roles = [{"value": role.value, "label": role.value.replace("_", " ").title()} for role in Role]
     return {"roles": roles}

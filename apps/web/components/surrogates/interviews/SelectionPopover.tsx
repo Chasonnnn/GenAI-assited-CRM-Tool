@@ -173,7 +173,7 @@ export function SelectionPopover({
             document.removeEventListener("mousedown", handleMouseDown)
             document.removeEventListener("mouseup", handleMouseUp)
         }
-    }, [])
+    }, [handleSelectionChange])
 
     const handleAddComment = useCallback(() => {
         if (!selectedText || !selectedRange) return
