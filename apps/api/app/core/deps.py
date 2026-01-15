@@ -225,7 +225,7 @@ def require_permission(permission: str | PermissionKey):
     - Developer always has all permissions
 
     Usage:
-        @router.get("/cases", dependencies=[Depends(require_permission("view_cases"))])
+        @router.get("/surrogates", dependencies=[Depends(require_permission("view_surrogates"))])
     """
 
     def dependency(request: Request, db: Session = Depends(get_db)):
@@ -237,9 +237,7 @@ def require_permission(permission: str | PermissionKey):
         if not permission_service.check_permission(
             db, session.org_id, session.user_id, session.role.value, permission_key
         ):
-            raise HTTPException(
-                status_code=403, detail=f"Missing permission: {permission_key}"
-            )
+            raise HTTPException(status_code=403, detail=f"Missing permission: {permission_key}")
         return session
 
     return dependency
@@ -388,8 +386,4 @@ def is_owner_or_assignee_or_admin(
     from app.db.enums import ROLES_CAN_ARCHIVE, OwnerType
 
     is_owner = owner_type == OwnerType.USER.value and owner_id == session.user_id
-    return (
-        session.user_id == created_by_user_id
-        or is_owner
-        or session.role in ROLES_CAN_ARCHIVE
-    )
+    return session.user_id == created_by_user_id or is_owner or session.role in ROLES_CAN_ARCHIVE

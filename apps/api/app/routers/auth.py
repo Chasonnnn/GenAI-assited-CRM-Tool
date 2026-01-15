@@ -7,7 +7,16 @@ from urllib.parse import urlencode, urlparse
 from uuid import UUID as UUIDType
 
 import boto3
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.responses import RedirectResponse
 from PIL import Image
 from pydantic import BaseModel, field_validator
@@ -77,9 +86,7 @@ def google_login(request: Request, login_hint: str | None = None):
     }
     if login_hint and "@" in login_hint:
         params["login_hint"] = login_hint
-    google_auth_url = (
-        f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
-    )
+    google_auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
 
     response = RedirectResponse(url=google_auth_url, status_code=302)
 
@@ -116,9 +123,7 @@ async def google_callback(
     6. Set session cookie and redirect
     """
     # Prepare error response (always cleans up state cookie)
-    error_response = RedirectResponse(
-        url=_get_error_redirect("auth_failed"), status_code=302
-    )
+    error_response = RedirectResponse(url=_get_error_redirect("auth_failed"), status_code=302)
     error_response.delete_cookie(OAUTH_STATE_COOKIE, path="/auth")
 
     # Check for error from Google
@@ -153,16 +158,12 @@ async def google_callback(
     try:
         tokens = await exchange_code_for_tokens(code)
     except Exception:
-        error_response.headers["location"] = _get_error_redirect(
-            "token_exchange_failed"
-        )
+        error_response.headers["location"] = _get_error_redirect("token_exchange_failed")
         return error_response
 
     # Verify ID token
     try:
-        google_user = verify_id_token(
-            tokens["id_token"], expected_nonce=stored_payload["nonce"]
-        )
+        google_user = verify_id_token(tokens["id_token"], expected_nonce=stored_payload["nonce"])
     except ValueError:
         error_response.headers["location"] = _get_error_redirect("token_invalid")
         return error_response
@@ -175,9 +176,7 @@ async def google_callback(
         return error_response
 
     # Resolve user and create session (delegated to service layer)
-    session_token, error_code = resolve_user_and_create_session(
-        db, google_user, request=request
-    )
+    session_token, error_code = resolve_user_and_create_session(db, google_user, request=request)
 
     if error_code:
         error_response.headers["location"] = _get_error_redirect(error_code)
@@ -322,9 +321,7 @@ def revoke_session(
     Cannot revoke the current session - use /logout instead.
     """
     # Check if trying to revoke current session
-    target_session = session_service.get_session_by_token_hash(
-        db, session.token_hash or ""
-    )
+    target_session = session_service.get_session_by_token_hash(db, session.token_hash or "")
     if target_session and target_session.id == session_id:
         raise HTTPException(
             status_code=400,
@@ -404,6 +401,7 @@ def _delete_old_avatar(avatar_url: str):
 
     try:
         from app.core.config import settings as app_settings
+
         # Extract key from URL
         key = avatar_url.split("/avatars/")[-1]
         key = f"avatars/{key}"
@@ -468,7 +466,11 @@ async def upload_avatar(
     from app.core.config import settings as app_settings
 
     file_id = str(uuid_module.uuid4())
-    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
+    ext = (
+        file.filename.rsplit(".", 1)[-1].lower()
+        if file.filename and "." in file.filename
+        else "jpg"
+    )
     key = f"avatars/{session.org_id}/{session.user_id}/{file_id}.{ext}"
 
     s3 = boto3.client(
@@ -798,6 +800,7 @@ def get_my_signature_preview(
 
 class SignaturePhotoResponse(BaseModel):
     """Response for signature photo upload/delete."""
+
     signature_photo_url: str | None
 
 
@@ -808,6 +811,7 @@ def _delete_old_signature_photo(photo_url: str):
 
     try:
         from app.core.config import settings as app_settings
+
         # Extract key from URL
         key = photo_url.split("/signatures/")[-1]
         key = f"signatures/{key}"
@@ -869,7 +873,11 @@ async def upload_signature_photo(
     from app.core.config import settings as app_settings
 
     file_id = str(uuid_module.uuid4())
-    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
+    ext = (
+        file.filename.rsplit(".", 1)[-1].lower()
+        if file.filename and "." in file.filename
+        else "jpg"
+    )
     key = f"signatures/{session.org_id}/{session.user_id}/{file_id}.{ext}"
 
     s3 = boto3.client(

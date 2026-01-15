@@ -1,6 +1,6 @@
 """Note service - unified EntityNote for all entity types.
 
-Per "No Backward Compatibility" rule, CaseNote has been removed.
+Per "No Backward Compatibility" rule, SurrogateNote has been removed.
 All notes use the polymorphic EntityNote model with entity_type field.
 """
 
@@ -140,7 +140,7 @@ def to_note_read(note: EntityNote) -> NoteRead:
     author_name = note.author.display_name if note.author else None
     return NoteRead(
         id=note.id,
-        case_id=note.entity_id,
+        surrogate_id=note.entity_id,
         author_id=note.author_id,
         author_name=author_name,
         body=note.content,

@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Loader2Icon, UsersIcon, CheckCircleIcon, XCircleIcon, ArrowRightIcon, PlusIcon, SearchIcon, AlertCircleIcon } from "lucide-react"
 import { useMatches, useCreateMatch, type MatchStatus, type MatchListItem } from "@/lib/hooks/use-matches"
-import { useCases } from "@/lib/hooks/use-cases"
+import { useSurrogates } from "@/lib/hooks/use-surrogates"
 import { useIntendedParents } from "@/lib/hooks/use-intended-parents"
 import { formatDistanceToNow } from "date-fns"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -49,11 +49,11 @@ function MatchRow({ match }: { match: MatchListItem }) {
         <TableRow className="hover:bg-accent/50">
             <TableCell>
                 <div className="space-y-1">
-                    <Link href={`/cases/${match.case_id}`} className="font-medium text-teal-600 hover:underline">
-                        {match.case_name || "Unknown Surrogate"}
+                    <Link href={`/surrogates/${match.surrogate_id}`} className="font-medium text-teal-600 hover:underline">
+                        {match.surrogate_name || "Unknown Surrogate"}
                     </Link>
-                    {match.case_number && (
-                        <p className="text-xs text-muted-foreground">{match.case_number}</p>
+                    {match.surrogate_number && (
+                        <p className="text-xs text-muted-foreground">{match.surrogate_number}</p>
                     )}
                 </div>
             </TableCell>
@@ -98,31 +98,31 @@ interface NewMatchDialogProps {
 }
 
 function NewMatchDialog({ open, onOpenChange, onSuccess }: NewMatchDialogProps) {
-    const [selectedCaseId, setSelectedCaseId] = useState("")
+    const [selectedSurrogateId, setSelectedSurrogateId] = useState("")
     const [selectedIpId, setSelectedIpId] = useState("")
     const [notes, setNotes] = useState("")
     const [error, setError] = useState<string | null>(null)
 
     const queryClient = useQueryClient()
-    const { data: casesData, isLoading: casesLoading } = useCases({ per_page: 100 })
+    const { data: surrogatesData, isLoading: surrogatesLoading } = useSurrogates({ per_page: 100 })
     const { data: ipsData, isLoading: ipsLoading } = useIntendedParents({ per_page: 100 })
     const createMatch = useCreateMatch()
 
-    // Filter cases to pending_match status
-    const eligibleCases = casesData?.items?.filter((c) => {
-        if (c.stage_slug) {
-            return c.stage_slug === "pending_match"
+    // Filter surrogates to ready_to_match status
+    const eligibleSurrogates = surrogatesData?.items?.filter((s) => {
+        if (s.stage_slug) {
+            return s.stage_slug === "ready_to_match"
         }
-        return c.status_label?.toLowerCase() === "pending match"
+        return s.status_label?.toLowerCase() === "ready to match"
     }) || []
 
     const handleSubmit = async () => {
-        if (!selectedCaseId || !selectedIpId) return
+        if (!selectedSurrogateId || !selectedIpId) return
         setError(null)
 
         try {
             await createMatch.mutateAsync({
-                case_id: selectedCaseId,
+                surrogate_id: selectedSurrogateId,
                 intended_parent_id: selectedIpId,
                 ...(notes.trim() ? { notes: notes.trim() } : {}),
             })
@@ -138,7 +138,7 @@ function NewMatchDialog({ open, onOpenChange, onSuccess }: NewMatchDialogProps) 
     }
 
     const resetForm = () => {
-        setSelectedCaseId("")
+        setSelectedSurrogateId("")
         setSelectedIpId("")
         setNotes("")
         setError(null)
@@ -170,29 +170,29 @@ function NewMatchDialog({ open, onOpenChange, onSuccess }: NewMatchDialogProps) 
                         </Alert>
                     )}
 
-                    {/* Case/Surrogate Selector */}
+                    {/* Surrogate Selector */}
                     <div className="space-y-2">
-                        <Label>Surrogate (Pending Match Only)</Label>
-                        {casesLoading ? (
+                        <Label>Surrogate (Ready to Match Only)</Label>
+                        {surrogatesLoading ? (
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <Loader2Icon className="size-4 animate-spin" />
                                 Loading surrogates...
                             </div>
-                        ) : eligibleCases.length === 0 ? (
+                        ) : eligibleSurrogates.length === 0 ? (
                             <div className="text-sm text-muted-foreground p-3 border rounded-md bg-muted/30">
-                                No surrogates are currently in "Pending Match" status.
+                                No surrogates are currently in "Ready to Match" status.
                             </div>
                         ) : (
-                            <Select value={selectedCaseId} onValueChange={(v) => setSelectedCaseId(v || "")}>
+                            <Select value={selectedSurrogateId} onValueChange={(v) => setSelectedSurrogateId(v || "")}>
                                 <SelectTrigger>
                                     <SelectValue placeholder="Select a surrogate" />
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[200px]">
-                                    {eligibleCases.map((c) => (
-                                        <SelectItem key={c.id} value={c.id}>
-                                            <span className="font-medium">{c.full_name || "Unknown"}</span>
-                                            <span className="text-muted-foreground ml-2">#{c.case_number}</span>
-                                            {c.state && <span className="text-muted-foreground ml-2">• {c.state}</span>}
+                                    {eligibleSurrogates.map((s) => (
+                                        <SelectItem key={s.id} value={s.id}>
+                                            <span className="font-medium">{s.full_name || "Unknown"}</span>
+                                            <span className="text-muted-foreground ml-2">#{s.surrogate_number}</span>
+                                            {s.state && <span className="text-muted-foreground ml-2">• {s.state}</span>}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -242,7 +242,7 @@ function NewMatchDialog({ open, onOpenChange, onSuccess }: NewMatchDialogProps) 
                     </Button>
                     <Button
                         onClick={handleSubmit}
-                        disabled={!selectedCaseId || !selectedIpId || createMatch.isPending}
+                        disabled={!selectedSurrogateId || !selectedIpId || createMatch.isPending}
                     >
                         {createMatch.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
                         Create Match
@@ -382,7 +382,7 @@ export default function MatchesPage() {
                         <div className="relative w-full max-w-sm">
                             <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
-                                placeholder="Search case or IP name..."
+                                placeholder="Search surrogate or IP name..."
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 className="pl-9"

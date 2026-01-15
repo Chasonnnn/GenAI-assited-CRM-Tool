@@ -7,19 +7,19 @@ from sqlalchemy import asc, desc, func, and_, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.enums import MatchStatus
-from app.db.models import Case, IntendedParent, Match, MatchEvent
+from app.db.models import Surrogate, IntendedParent, Match, MatchEvent
 
 
-def get_case_with_stage(
+def get_surrogate_with_stage(
     db: Session,
-    case_id: UUID,
+    surrogate_id: UUID,
     org_id: UUID | None = None,
-) -> Case | None:
-    """Get case with stage loaded, optionally org-scoped."""
-    filters = [Case.id == case_id]
+) -> Surrogate | None:
+    """Get surrogate with stage loaded, optionally org-scoped."""
+    filters = [Surrogate.id == surrogate_id]
     if org_id:
-        filters.append(Case.organization_id == org_id)
-    return db.query(Case).options(joinedload(Case.stage)).filter(*filters).first()
+        filters.append(Surrogate.organization_id == org_id)
+    return db.query(Surrogate).options(joinedload(Surrogate.stage)).filter(*filters).first()
 
 
 def get_intended_parent(
@@ -53,32 +53,32 @@ def get_match(
 def get_existing_match(
     db: Session,
     org_id: UUID,
-    case_id: UUID,
+    surrogate_id: UUID,
     intended_parent_id: UUID,
 ) -> Match | None:
-    """Find an existing match for a case/IP in org."""
+    """Find an existing match for a surrogate/IP in org."""
     return (
         db.query(Match)
         .filter(
             Match.organization_id == org_id,
-            Match.case_id == case_id,
+            Match.surrogate_id == surrogate_id,
             Match.intended_parent_id == intended_parent_id,
         )
         .first()
     )
 
 
-def get_accepted_match_for_case(
+def get_accepted_match_for_surrogate(
     db: Session,
     org_id: UUID,
-    case_id: UUID,
+    surrogate_id: UUID,
 ) -> Match | None:
-    """Get accepted match for a case (org-scoped)."""
+    """Get accepted match for a surrogate (org-scoped)."""
     return (
         db.query(Match)
         .filter(
             Match.organization_id == org_id,
-            Match.case_id == case_id,
+            Match.surrogate_id == surrogate_id,
             Match.status == MatchStatus.ACCEPTED.value,
         )
         .first()
@@ -89,7 +89,7 @@ def list_matches(
     db: Session,
     org_id: UUID,
     status_filter: str | None = None,
-    case_id: UUID | None = None,
+    surrogate_id: UUID | None = None,
     intended_parent_id: UUID | None = None,
     q: str | None = None,
     page: int = 1,
@@ -102,15 +102,15 @@ def list_matches(
 
     if status_filter:
         query = query.filter(Match.status == status_filter)
-    if case_id:
-        query = query.filter(Match.case_id == case_id)
+    if surrogate_id:
+        query = query.filter(Match.surrogate_id == surrogate_id)
     if intended_parent_id:
         query = query.filter(Match.intended_parent_id == intended_parent_id)
 
     if q:
         search_term = f"%{q}%"
         query = (
-            query.join(Case, Match.case_id == Case.id, isouter=True)
+            query.join(Surrogate, Match.surrogate_id == Surrogate.id, isouter=True)
             .join(
                 IntendedParent,
                 Match.intended_parent_id == IntendedParent.id,
@@ -118,8 +118,8 @@ def list_matches(
             )
             .filter(
                 or_(
-                    Case.full_name.ilike(search_term),
-                    Case.case_number.ilike(search_term),
+                    Surrogate.full_name.ilike(search_term),
+                    Surrogate.surrogate_number.ilike(search_term),
                     IntendedParent.full_name.ilike(search_term),
                 )
             )
@@ -144,24 +144,24 @@ def list_matches(
     return matches, total
 
 
-def get_cases_with_stage_by_ids(
+def get_surrogates_with_stage_by_ids(
     db: Session,
     org_id: UUID,
-    case_ids: set[UUID],
-) -> dict[UUID, Case]:
-    """Batch load cases with stages for match list."""
-    if not case_ids:
+    surrogate_ids: set[UUID],
+) -> dict[UUID, Surrogate]:
+    """Batch load surrogates with stages for match list."""
+    if not surrogate_ids:
         return {}
-    cases = (
-        db.query(Case)
-        .options(joinedload(Case.stage))
+    surrogates = (
+        db.query(Surrogate)
+        .options(joinedload(Surrogate.stage))
         .filter(
-            Case.organization_id == org_id,
-            Case.id.in_(case_ids),
+            Surrogate.organization_id == org_id,
+            Surrogate.id.in_(surrogate_ids),
         )
         .all()
     )
-    return {case.id: case for case in cases}
+    return {surrogate.id: surrogate for surrogate in surrogates}
 
 
 def get_intended_parents_by_ids(
@@ -203,14 +203,14 @@ def get_match_stats(
     return total, counts
 
 
-def list_pending_matches_for_case(
+def list_pending_matches_for_surrogate(
     db: Session,
-    case_id: UUID,
+    surrogate_id: UUID,
     exclude_match_id: UUID | None = None,
 ) -> list[Match]:
-    """List proposed/reviewing matches for a case, excluding one."""
+    """List proposed/reviewing matches for a surrogate, excluding one."""
     query = db.query(Match).filter(
-        Match.case_id == case_id,
+        Match.surrogate_id == surrogate_id,
         Match.status.in_([MatchStatus.PROPOSED.value, MatchStatus.REVIEWING.value]),
     )
     if exclude_match_id:

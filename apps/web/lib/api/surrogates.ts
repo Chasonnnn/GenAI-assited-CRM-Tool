@@ -1,21 +1,21 @@
 /**
- * Cases API client - typed functions for case management endpoints.
+ * Surrogates API client - typed functions for surrogate management endpoints.
  */
 
 import api from './index';
 import type { JsonObject } from '../types/json';
 import type {
-    CaseListResponse,
-    CaseRead,
-    CaseSource,
-} from '../types/case';
+    SurrogateListResponse,
+    SurrogateRead,
+    SurrogateSource,
+} from '../types/surrogate';
 
-// Query params for listing cases
-export interface CaseListParams {
+// Query params for listing surrogates
+export interface SurrogateListParams {
     page?: number;
     per_page?: number;
     stage_id?: string;
-    source?: CaseSource;
+    source?: SurrogateSource;
     owner_id?: string;
     q?: string;
     include_archived?: boolean;
@@ -27,8 +27,8 @@ export interface CaseListParams {
     sort_order?: 'asc' | 'desc';  // Sort direction
 }
 
-// Stats response from /cases/stats with period comparisons
-export interface CaseStats {
+// Stats response from /surrogates/stats with period comparisons
+export interface SurrogateStats {
     total: number;
     by_status: Record<string, number>;
     this_week: number;
@@ -41,7 +41,7 @@ export interface CaseStats {
 }
 
 // Status history entry
-export interface CaseStatusHistory {
+export interface SurrogateStatusHistory {
     id: string;
     from_stage_id: string | null;
     to_stage_id: string | null;
@@ -53,8 +53,8 @@ export interface CaseStatusHistory {
     changed_at: string;
 }
 
-// Create case payload
-export interface CaseCreatePayload {
+// Create surrogate payload
+export interface SurrogateCreatePayload {
     full_name: string;
     email: string;
     phone?: string;
@@ -70,14 +70,14 @@ export interface CaseCreatePayload {
     has_surrogate_experience?: boolean;
     num_deliveries?: number;
     num_csections?: number;
-    source?: CaseSource;
+    source?: SurrogateSource;
     is_priority?: boolean;
 }
 
-// Update case payload (partial; mirrors backend CaseUpdate schema)
+// Update surrogate payload (partial; mirrors backend SurrogateUpdate schema)
 // - Omitted fields are not changed
 // - `null` clears the value for nullable fields (phone/state/demographics/eligibility)
-export interface CaseUpdatePayload {
+export interface SurrogateUpdatePayload {
     full_name?: string;
     email?: string;
     phone?: string | null;
@@ -97,25 +97,25 @@ export interface CaseUpdatePayload {
 }
 
 // Status change payload
-export interface CaseStatusChangePayload {
+export interface SurrogateStatusChangePayload {
     stage_id: string;
     reason?: string;
 }
 
-// Assign case payload
-export interface CaseAssignPayload {
+// Assign surrogate payload
+export interface SurrogateAssignPayload {
     owner_type: 'user' | 'queue';
     owner_id: string;
 }
 
-export interface CaseSendEmailPayload {
+export interface SurrogateSendEmailPayload {
     template_id: string;
     subject?: string;
     body?: string;
     provider?: 'auto' | 'gmail' | 'resend';
 }
 
-export interface CaseSendEmailResponse {
+export interface SurrogateSendEmailResponse {
     success: boolean;
     email_log_id?: string | null;
     message_id?: string | null;
@@ -124,13 +124,13 @@ export interface CaseSendEmailResponse {
 }
 
 /**
- * Get case statistics for dashboard.
+ * Get surrogate statistics for dashboard.
  */
-export function getCaseStats(): Promise<CaseStats> {
-    return api.get<CaseStats>('/cases/stats');
+export function getSurrogateStats(): Promise<SurrogateStats> {
+    return api.get<SurrogateStats>('/surrogates/stats');
 }
 
-export function getCases(params: CaseListParams = {}): Promise<CaseListResponse> {
+export function getSurrogates(params: SurrogateListParams = {}): Promise<SurrogateListResponse> {
     const searchParams = new URLSearchParams();
 
     if (params.page) searchParams.set('page', String(params.page));
@@ -148,112 +148,77 @@ export function getCases(params: CaseListParams = {}): Promise<CaseListResponse>
     if (params.sort_order) searchParams.set('sort_order', params.sort_order);
 
     const query = searchParams.toString();
-    return api.get<CaseListResponse>(`/cases${query ? `?${query}` : ''}`);
+    return api.get<SurrogateListResponse>(`/surrogates${query ? `?${query}` : ''}`);
 }
 
 /**
- * Get single case by ID.
+ * Get single surrogate by ID.
  */
-export function getCase(caseId: string): Promise<CaseRead> {
-    return api.get<CaseRead>(`/cases/${caseId}`);
+export function getSurrogate(surrogateId: string): Promise<SurrogateRead> {
+    return api.get<SurrogateRead>(`/surrogates/${surrogateId}`);
 }
 
 /**
- * Create a new case.
+ * Create a new surrogate.
  */
-export function createCase(data: CaseCreatePayload): Promise<CaseRead> {
-    return api.post<CaseRead>('/cases', data);
+export function createSurrogate(data: SurrogateCreatePayload): Promise<SurrogateRead> {
+    return api.post<SurrogateRead>('/surrogates', data);
 }
 
 /**
- * Update case fields.
+ * Update surrogate fields.
  */
-export function updateCase(caseId: string, data: CaseUpdatePayload): Promise<CaseRead> {
-    return api.patch<CaseRead>(`/cases/${caseId}`, data);
+export function updateSurrogate(surrogateId: string, data: SurrogateUpdatePayload): Promise<SurrogateRead> {
+    return api.patch<SurrogateRead>(`/surrogates/${surrogateId}`, data);
 }
 
 /**
- * Change case status.
+ * Change surrogate status.
  */
-export function changeCaseStatus(caseId: string, data: CaseStatusChangePayload): Promise<CaseRead> {
-    return api.patch<CaseRead>(`/cases/${caseId}/status`, data);
+export function changeSurrogateStatus(surrogateId: string, data: SurrogateStatusChangePayload): Promise<SurrogateRead> {
+    return api.patch<SurrogateRead>(`/surrogates/${surrogateId}/status`, data);
 }
 
 /**
- * Assign case to a user (or unassign with null).
+ * Assign surrogate to a user (or unassign with null).
  */
-export function assignCase(caseId: string, data: CaseAssignPayload): Promise<CaseRead> {
-    return api.patch<CaseRead>(`/cases/${caseId}/assign`, data);
+export function assignSurrogate(surrogateId: string, data: SurrogateAssignPayload): Promise<SurrogateRead> {
+    return api.patch<SurrogateRead>(`/surrogates/${surrogateId}/assign`, data);
 }
 
 /**
- * Send an email to a case contact using a template.
+ * Send an email to a surrogate contact using a template.
  */
-export function sendCaseEmail(caseId: string, data: CaseSendEmailPayload): Promise<CaseSendEmailResponse> {
-    return api.post<CaseSendEmailResponse>(`/cases/${caseId}/send-email`, data);
+export function sendSurrogateEmail(surrogateId: string, data: SurrogateSendEmailPayload): Promise<SurrogateSendEmailResponse> {
+    return api.post<SurrogateSendEmailResponse>(`/surrogates/${surrogateId}/send-email`, data);
 }
 
 /**
- * Archive (soft-delete) a case.
+ * Archive (soft-delete) a surrogate.
  */
-export function archiveCase(caseId: string): Promise<CaseRead> {
-    return api.post<CaseRead>(`/cases/${caseId}/archive`);
+export function archiveSurrogate(surrogateId: string): Promise<SurrogateRead> {
+    return api.post<SurrogateRead>(`/surrogates/${surrogateId}/archive`);
 }
 
 /**
- * Restore an archived case.
+ * Restore an archived surrogate.
  */
-export function restoreCase(caseId: string): Promise<CaseRead> {
-    return api.post<CaseRead>(`/cases/${caseId}/restore`);
+export function restoreSurrogate(surrogateId: string): Promise<SurrogateRead> {
+    return api.post<SurrogateRead>(`/surrogates/${surrogateId}/restore`);
 }
 
 /**
- * Permanently delete a case (must be archived first).
+ * Permanently delete a surrogate (must be archived first).
  */
-export function deleteCase(caseId: string): Promise<void> {
-    return api.delete(`/cases/${caseId}`);
+export function deleteSurrogate(surrogateId: string): Promise<void> {
+    return api.delete(`/surrogates/${surrogateId}`);
 }
 
 /**
- * Get status change history for a case.
+ * Get status change history for a surrogate.
  */
-export function getCaseHistory(caseId: string): Promise<CaseStatusHistory[]> {
-    return api.get<CaseStatusHistory[]>(`/cases/${caseId}/history`);
-}
-
-// =============================================================================
-// Handoff Workflow (Case Manager+ only)
-// =============================================================================
-
-export interface HandoffQueueParams {
-    page?: number;
-    per_page?: number;
-}
-
-/**
- * Get cases in pending_handoff status (case_manager+ only).
- */
-export function getHandoffQueue(params: HandoffQueueParams = {}): Promise<CaseListResponse> {
-    const searchParams = new URLSearchParams();
-    if (params.page) searchParams.set('page', String(params.page));
-    if (params.per_page) searchParams.set('per_page', String(params.per_page));
-
-    const query = searchParams.toString();
-    return api.get<CaseListResponse>(`/cases/handoff-queue${query ? `?${query}` : ''}`);
-}
-
-/**
- * Accept a pending_handoff case → transitions to pending_match.
- */
-export function acceptHandoff(caseId: string): Promise<CaseRead> {
-    return api.post<CaseRead>(`/cases/${caseId}/accept`);
-}
-
-/**
- * Deny a pending_handoff case → reverts to under_review.
- */
-export function denyHandoff(caseId: string, reason?: string): Promise<CaseRead> {
-    return api.post<CaseRead>(`/cases/${caseId}/deny`, { reason });
+export function getSurrogateHistory(surrogateId: string): Promise<SurrogateStatusHistory[]> {
+    return api.get<SurrogateStatusHistory[]>(`/surrogates/${surrogateId}/history`);
 }
 
 // =============================================================================
@@ -267,39 +232,39 @@ export interface Assignee {
 }
 
 /**
- * Get list of org members who can be assigned cases.
+ * Get list of org members who can be assigned surrogates.
  */
 export function getAssignees(): Promise<Assignee[]> {
-    return api.get<Assignee[]>('/cases/assignees');
+    return api.get<Assignee[]>('/surrogates/assignees');
 }
 
 export interface BulkAssignPayload {
-    case_ids: string[];
+    surrogate_ids: string[];
     owner_type: 'user' | 'queue';
     owner_id: string;
 }
 
 export interface BulkAssignResult {
     assigned: number;
-    failed: { case_id: string; reason: string }[];
+    failed: { surrogate_id: string; reason: string }[];
 }
 
 /**
- * Bulk assign multiple cases to a user.
+ * Bulk assign multiple surrogates to a user.
  */
-export function bulkAssignCases(data: BulkAssignPayload): Promise<BulkAssignResult> {
-    return api.post<BulkAssignResult>('/cases/bulk-assign', data);
+export function bulkAssignSurrogates(data: BulkAssignPayload): Promise<BulkAssignResult> {
+    return api.post<BulkAssignResult>('/surrogates/bulk-assign', data);
 }
 
 /**
- * Bulk archive multiple cases.
+ * Bulk archive multiple surrogates.
  */
-export function bulkArchiveCases(caseIds: string[]): Promise<{ archived: number; failed: string[] }> {
-    // Archive cases one by one - backend doesn't have bulk archive yet
-    return Promise.all(caseIds.map(id => archiveCase(id).catch(() => null)))
+export function bulkArchiveSurrogates(surrogateIds: string[]): Promise<{ archived: number; failed: string[] }> {
+    // Archive surrogates one by one - backend doesn't have bulk archive yet
+    return Promise.all(surrogateIds.map(id => archiveSurrogate(id).catch(() => null)))
         .then(results => ({
             archived: results.filter(r => r !== null).length,
-            failed: caseIds.filter((_, i) => results[i] === null),
+            failed: surrogateIds.filter((_, i) => results[i] === null),
         }));
 }
 
@@ -307,7 +272,7 @@ export function bulkArchiveCases(caseIds: string[]): Promise<{ archived: number;
 // Activity Log
 // =============================================================================
 
-export interface CaseActivity {
+export interface SurrogateActivity {
     id: string;
     activity_type: string;
     actor_user_id: string | null;
@@ -316,25 +281,25 @@ export interface CaseActivity {
     created_at: string;
 }
 
-export interface CaseActivityResponse {
-    items: CaseActivity[];
+export interface SurrogateActivityResponse {
+    items: SurrogateActivity[];
     total: number;
     page: number;
     pages: number;
 }
 
 /**
- * Get comprehensive activity log for a case (paginated).
+ * Get comprehensive activity log for a surrogate (paginated).
  */
-export function getCaseActivity(
-    caseId: string,
+export function getSurrogateActivity(
+    surrogateId: string,
     page: number = 1,
     perPage: number = 20
-): Promise<CaseActivityResponse> {
+): Promise<SurrogateActivityResponse> {
     const searchParams = new URLSearchParams();
     searchParams.set('page', String(page));
     searchParams.set('per_page', String(perPage));
-    return api.get<CaseActivityResponse>(`/cases/${caseId}/activity?${searchParams.toString()}`);
+    return api.get<SurrogateActivityResponse>(`/surrogates/${surrogateId}/activity?${searchParams.toString()}`);
 }
 
 // =============================================================================
@@ -353,7 +318,7 @@ export interface ContactAttemptCreatePayload {
 
 export interface ContactAttemptResponse {
     id: string;
-    case_id: string;
+    surrogate_id: string;
     attempted_by_user_id: string | null;
     attempted_by_name: string | null;
     contact_methods: string[];
@@ -362,7 +327,7 @@ export interface ContactAttemptResponse {
     attempted_at: string;
     created_at: string;
     is_backdated: boolean;
-    case_owner_id_at_attempt: string;
+    surrogate_owner_id_at_attempt: string;
 }
 
 export interface ContactAttemptsSummary {
@@ -376,18 +341,18 @@ export interface ContactAttemptsSummary {
 }
 
 /**
- * Log a contact attempt for a case.
+ * Log a contact attempt for a surrogate.
  */
 export function createContactAttempt(
-    caseId: string,
+    surrogateId: string,
     data: ContactAttemptCreatePayload
 ): Promise<ContactAttemptResponse> {
-    return api.post<ContactAttemptResponse>(`/cases/${caseId}/contact-attempts`, data);
+    return api.post<ContactAttemptResponse>(`/surrogates/${surrogateId}/contact-attempts`, data);
 }
 
 /**
- * Get contact attempts summary for a case.
+ * Get contact attempts summary for a surrogate.
  */
-export function getContactAttempts(caseId: string): Promise<ContactAttemptsSummary> {
-    return api.get<ContactAttemptsSummary>(`/cases/${caseId}/contact-attempts`);
+export function getContactAttempts(surrogateId: string): Promise<ContactAttemptsSummary> {
+    return api.get<ContactAttemptsSummary>(`/surrogates/${surrogateId}/contact-attempts`);
 }

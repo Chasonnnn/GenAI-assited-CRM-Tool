@@ -11,7 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2Icon, HeartHandshakeIcon, AlertCircleIcon } from "lucide-react"
 import { toast } from "sonner"
 import { useCreateMatch } from "@/lib/hooks/use-matches"
-import { useCases } from "@/lib/hooks/use-cases"
+import { useSurrogates } from "@/lib/hooks/use-surrogates"
 
 interface ProposeMatchFromIPDialogProps {
     open: boolean
@@ -28,42 +28,42 @@ export function ProposeMatchFromIPDialog({
     ipName,
     onSuccess,
 }: ProposeMatchFromIPDialogProps) {
-    const [selectedCaseId, setSelectedCaseId] = useState<string>("")
+    const [selectedSurrogateId, setSelectedSurrogateId] = useState<string>("")
     const [compatibilityScore, setCompatibilityScore] = useState<string>("")
     const [notes, setNotes] = useState("")
     const [error, setError] = useState<string | null>(null)
 
-    // Only fetch cases in pending_match status
-    const { data: casesData, isLoading: casesLoading } = useCases({
+    // Only fetch surrogates in ready_to_match status
+    const { data: surrogatesData, isLoading: surrogatesLoading } = useSurrogates({
         per_page: 100
     })
     const createMatch = useCreateMatch()
 
-    // Filter to only pending_match cases (prefer stage_slug when available)
-    const eligibleCases = useMemo(() => {
-        if (!casesData?.items) return []
-        return casesData.items.filter((c) => {
-            if (c.stage_slug) {
-                return c.stage_slug === "pending_match"
+    // Filter to only ready_to_match surrogates (prefer stage_slug when available)
+    const eligibleSurrogates = useMemo(() => {
+        if (!surrogatesData?.items) return []
+        return surrogatesData.items.filter((s) => {
+            if (s.stage_slug) {
+                return s.stage_slug === "ready_to_match"
             }
-            return c.status_label?.toLowerCase() === "pending match"
+            return s.status_label?.toLowerCase() === "ready to match"
         })
-    }, [casesData])
+    }, [surrogatesData])
 
     const handleSubmit = async () => {
-        if (!selectedCaseId) return
+        if (!selectedSurrogateId) return
         setError(null)
 
         try {
             await createMatch.mutateAsync({
-                case_id: selectedCaseId,
+                surrogate_id: selectedSurrogateId,
                 intended_parent_id: intendedParentId,
                 ...(compatibilityScore ? { compatibility_score: parseFloat(compatibilityScore) } : {}),
                 ...(notes.trim() ? { notes: notes.trim() } : {}),
             })
             toast.success("Match proposed successfully!")
             onOpenChange(false)
-            setSelectedCaseId("")
+            setSelectedSurrogateId("")
             setCompatibilityScore("")
             setNotes("")
             onSuccess?.()
@@ -75,7 +75,7 @@ export function ProposeMatchFromIPDialog({
 
     const handleClose = () => {
         onOpenChange(false)
-        setSelectedCaseId("")
+        setSelectedSurrogateId("")
         setCompatibilityScore("")
         setNotes("")
         setError(null)
@@ -103,27 +103,27 @@ export function ProposeMatchFromIPDialog({
                     )}
 
                     <div className="space-y-2">
-                        <Label htmlFor="case-select">Surrogate (Pending Match Only)</Label>
-                        {casesLoading ? (
+                        <Label htmlFor="surrogate-select">Surrogate (Ready to Match Only)</Label>
+                        {surrogatesLoading ? (
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <Loader2Icon className="size-4 animate-spin" />
                                 Loading available surrogates...
                             </div>
-                        ) : eligibleCases.length === 0 ? (
+                        ) : eligibleSurrogates.length === 0 ? (
                             <div className="text-sm text-muted-foreground p-3 border rounded-md bg-muted/30">
-                                No surrogates are currently in "Pending Match" status.
+                                No surrogates are currently in "Ready to Match" status.
                             </div>
                         ) : (
-                            <Select value={selectedCaseId} onValueChange={(v) => setSelectedCaseId(v || "")}>
+                            <Select value={selectedSurrogateId} onValueChange={(v) => setSelectedSurrogateId(v || "")}>
                                 <SelectTrigger className="w-full">
                                     <SelectValue placeholder="Select a surrogate" />
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[300px]">
-                                    {eligibleCases.map((c) => (
-                                        <SelectItem key={c.id} value={c.id} className="py-2">
-                                            <span className="font-medium">{c.full_name || "Unknown"}</span>
-                                            <span className="text-muted-foreground ml-2">#{c.case_number}</span>
-                                            {c.state && <span className="text-muted-foreground ml-2">• {c.state}</span>}
+                                    {eligibleSurrogates.map((s) => (
+                                        <SelectItem key={s.id} value={s.id} className="py-2">
+                                            <span className="font-medium">{s.full_name || "Unknown"}</span>
+                                            <span className="text-muted-foreground ml-2">#{s.surrogate_number}</span>
+                                            {s.state && <span className="text-muted-foreground ml-2">• {s.state}</span>}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -163,7 +163,7 @@ export function ProposeMatchFromIPDialog({
                     </Button>
                     <Button
                         onClick={handleSubmit}
-                        disabled={!selectedCaseId || createMatch.isPending}
+                        disabled={!selectedSurrogateId || createMatch.isPending}
                         className="bg-teal-600 hover:bg-teal-700"
                     >
                         {createMatch.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}

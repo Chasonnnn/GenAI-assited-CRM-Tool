@@ -15,7 +15,7 @@ class TaskCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
     description: str | None = Field(None, max_length=2000)
     task_type: TaskType = TaskType.OTHER
-    case_id: UUID | None = None
+    surrogate_id: UUID | None = None
     intended_parent_id: UUID | None = None
     # New owner model
     owner_type: str | None = Field(None, description="'user' or 'queue'")
@@ -44,8 +44,8 @@ class TaskRead(BaseModel):
     """Full task response."""
 
     id: UUID
-    case_id: UUID | None
-    case_number: str | None = None
+    surrogate_id: UUID | None
+    surrogate_number: str | None = None
     # Owner (new model)
     owner_type: str
     owner_id: UUID
@@ -90,8 +90,8 @@ class TaskListItem(BaseModel):
     """Compact task for list views."""
 
     id: UUID
-    case_id: UUID | None
-    case_number: str | None = None
+    surrogate_id: UUID | None
+    surrogate_number: str | None = None
     title: str
     task_type: TaskType
     owner_type: str

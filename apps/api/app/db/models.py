@@ -1,4 +1,4 @@
-"""SQLAlchemy ORM models for authentication, tenant management, and cases."""
+"""SQLAlchemy ORM models for authentication, tenant management, and surrogates."""
 
 import uuid
 from datetime import date, datetime, time, timezone
@@ -27,7 +27,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.db.enums import (
-    DEFAULT_CASE_SOURCE,
+    DEFAULT_SURROGATE_SOURCE,
     DEFAULT_JOB_STATUS,
     DEFAULT_EMAIL_STATUS,
     DEFAULT_IP_STATUS,
@@ -60,12 +60,8 @@ class Organization(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     timezone: Mapped[str] = mapped_column(
         String(50),
         server_default=text("'America/Los_Angeles'"),
@@ -82,23 +78,26 @@ class Organization(Base):
 
     # Email signature branding (org-level, admin-controlled)
     signature_template: Mapped[str | None] = mapped_column(
-        String(50), nullable=True  # 'classic', 'modern', 'minimal', 'professional', 'creative'
+        String(50),
+        nullable=True,  # 'classic', 'modern', 'minimal', 'professional', 'creative'
     )
     signature_logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     signature_primary_color: Mapped[str | None] = mapped_column(
-        String(7), nullable=True  # Hex color e.g. '#0066cc'
+        String(7),
+        nullable=True,  # Hex color e.g. '#0066cc'
     )
     signature_company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     signature_address: Mapped[str | None] = mapped_column(String(500), nullable=True)
     signature_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     signature_website: Mapped[str | None] = mapped_column(String(255), nullable=True)
     signature_social_links: Mapped[list | None] = mapped_column(
-        JSONB, nullable=True, server_default=text("'[]'::jsonb"),
-        comment="Array of {platform, url} objects for org social links"
+        JSONB,
+        nullable=True,
+        server_default=text("'[]'::jsonb"),
+        comment="Array of {platform, url} objects for org social links",
     )
     signature_disclaimer: Mapped[str | None] = mapped_column(
-        Text, nullable=True,
-        comment="Optional compliance footer for email signatures"
+        Text, nullable=True, comment="Optional compliance footer for email signatures"
     )
 
     # Relationships
@@ -108,7 +107,7 @@ class Organization(Base):
     invites: Mapped[list["OrgInvite"]] = relationship(
         back_populates="organization", cascade="all, delete-orphan"
     )
-    cases: Mapped[list["Case"]] = relationship(
+    surrogates: Mapped[list["Surrogate"]] = relationship(
         back_populates="organization", cascade="all, delete-orphan"
     )
 
@@ -129,19 +128,11 @@ class User(Base):
     email: Mapped[str] = mapped_column(CITEXT, unique=True, nullable=False)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
     avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    token_version: Mapped[int] = mapped_column(
-        Integer, server_default=text("1"), nullable=False
-    )
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("true"), nullable=False
-    )
+    token_version: Mapped[int] = mapped_column(Integer, server_default=text("1"), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"), nullable=False)
     last_login_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Email signature social links (user-editable)
     signature_linkedin: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -154,7 +145,9 @@ class User(Base):
 
     # Signature override fields (NULL = use profile value)
     signature_name: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="Override display_name in signature (NULL = use profile)"
+        String(255),
+        nullable=True,
+        comment="Override display_name in signature (NULL = use profile)",
     )
     signature_title: Mapped[str | None] = mapped_column(
         String(100), nullable=True, comment="Override title in signature (NULL = use profile)"
@@ -167,16 +160,18 @@ class User(Base):
     )
 
     # MFA fields
-    mfa_enabled: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("false"), nullable=False
-    )
+    mfa_enabled: Mapped[bool] = mapped_column(Boolean, server_default=text("false"), nullable=False)
     totp_secret: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True,  # Encrypted TOTP secret
     )
-    totp_enabled_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    totp_enabled_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
     duo_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    duo_enrolled_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    duo_enrolled_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
     mfa_recovery_codes: Mapped[list | None] = mapped_column(
         JSONB,
         nullable=True,  # Hashed recovery codes
@@ -220,12 +215,8 @@ class Membership(Base):
         nullable=False,
     )
     role: Mapped[str] = mapped_column(String(50), nullable=False)
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("true"), nullable=False
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="membership")
@@ -261,15 +252,9 @@ class RolePermission(Base):
     )
     role: Mapped[str] = mapped_column(String(50), nullable=False)
     permission: Mapped[str] = mapped_column(String(100), nullable=False)
-    is_granted: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("true"), nullable=False
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    is_granted: Mapped[bool] = mapped_column(Boolean, server_default=text("true"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
 
 class UserPermissionOverride(Base):
@@ -288,9 +273,7 @@ class UserPermissionOverride(Base):
             "permission",
             name="uq_user_overrides_org_user_perm",
         ),
-        CheckConstraint(
-            "override_type IN ('grant', 'revoke')", name="ck_override_type_valid"
-        ),
+        CheckConstraint("override_type IN ('grant', 'revoke')", name="ck_override_type_valid"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -305,15 +288,9 @@ class UserPermissionOverride(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     permission: Mapped[str] = mapped_column(String(100), nullable=False)
-    override_type: Mapped[str] = mapped_column(
-        String(10), nullable=False
-    )  # 'grant' or 'revoke'
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    override_type: Mapped[str] = mapped_column(String(10), nullable=False)  # 'grant' or 'revoke'
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
 
 class AuthIdentity(Base):
@@ -336,9 +313,7 @@ class AuthIdentity(Base):
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
     provider_subject: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str] = mapped_column(CITEXT, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="auth_identities")
@@ -379,27 +354,22 @@ class UserSession(Base):
         UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
     )
     session_token_hash: Mapped[str] = mapped_column(
-        String(64), unique=True, nullable=False,
-        comment="SHA256 hash of JWT token for revocation lookup"
+        String(64),
+        unique=True,
+        nullable=False,
+        comment="SHA256 hash of JWT token for revocation lookup",
     )
     device_info: Mapped[str | None] = mapped_column(
-        String(500), nullable=True,
-        comment="Parsed device name from user agent"
+        String(500), nullable=True, comment="Parsed device name from user agent"
     )
     ip_address: Mapped[str | None] = mapped_column(
-        String(45), nullable=True,
-        comment="IPv4 or IPv6 address"
+        String(45), nullable=True, comment="IPv4 or IPv6 address"
     )
     user_agent: Mapped[str | None] = mapped_column(
-        String(500), nullable=True,
-        comment="Raw user agent string"
+        String(500), nullable=True, comment="Raw user agent string"
     )
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    last_active_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    last_active_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(nullable=False)
 
     # Relationships
@@ -441,14 +411,10 @@ class OrgInvite(Base):
     )
     expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
     accepted_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Resend throttling
-    resend_count: Mapped[int] = mapped_column(
-        Integer, server_default=text("0"), nullable=False
-    )
+    resend_count: Mapped[int] = mapped_column(Integer, server_default=text("0"), nullable=False)
     last_resent_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     # Revocation tracking
@@ -492,12 +458,8 @@ class Queue(Base):
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("TRUE"), nullable=False
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"), onupdate=datetime.now, nullable=False
     )
@@ -533,9 +495,7 @@ class QueueMember(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     queue: Mapped["Queue"] = relationship(back_populates="members")
@@ -543,13 +503,13 @@ class QueueMember(Base):
 
 
 # =============================================================================
-# Case Management Models
+# Surrogate Management Models
 # =============================================================================
 
 
-class Case(Base):
+class Surrogate(Base):
     """
-    Primary entity for surrogate applicants/cases.
+    Primary entity for surrogate applicants.
 
     Includes soft-delete (is_archived) for data safety.
     Hard delete requires is_archived=true and admin+ role.
@@ -561,53 +521,53 @@ class Case(Base):
     - Claiming sets owner_type="user", owner_id=claimer
     """
 
-    __tablename__ = "cases"
+    __tablename__ = "surrogates"
     __table_args__ = (
-        # Case number unique per org (even archived)
-        UniqueConstraint("organization_id", "case_number", name="uq_case_number"),
-        # Email unique per org for active cases only
+        # Surrogate number unique per org (even archived)
+        UniqueConstraint("organization_id", "surrogate_number", name="uq_surrogate_number"),
+        # Email unique per org for active surrogates only
         Index(
-            "uq_case_email_hash_active",
+            "uq_surrogate_email_hash_active",
             "organization_id",
             "email_hash",
             unique=True,
             postgresql_where=text("is_archived = FALSE"),
         ),
         # Query optimization indexes
-        Index("idx_cases_stage", "stage_id"),  # Single-column for FK lookups
-        Index("idx_cases_org_stage", "organization_id", "stage_id"),
-        Index("idx_cases_org_owner", "organization_id", "owner_type", "owner_id"),
-        Index("idx_cases_org_status_label", "organization_id", "status_label"),
-        Index("idx_cases_org_created", "organization_id", "created_at"),
-        Index("idx_cases_org_updated", "organization_id", "updated_at"),
+        Index("idx_surrogates_stage", "stage_id"),  # Single-column for FK lookups
+        Index("idx_surrogates_org_stage", "organization_id", "stage_id"),
+        Index("idx_surrogates_org_owner", "organization_id", "owner_type", "owner_id"),
+        Index("idx_surrogates_org_status_label", "organization_id", "status_label"),
+        Index("idx_surrogates_org_created", "organization_id", "created_at"),
+        Index("idx_surrogates_org_updated", "organization_id", "updated_at"),
         Index(
-            "idx_cases_org_active",
+            "idx_surrogates_org_active",
             "organization_id",
             postgresql_where=text("is_archived = FALSE"),
         ),
         Index(
-            "idx_cases_meta_ad",
+            "idx_surrogates_meta_ad",
             "organization_id",
             "meta_ad_external_id",
             postgresql_where=text("meta_ad_external_id IS NOT NULL"),
         ),
         Index(
-            "idx_cases_meta_form",
+            "idx_surrogates_meta_form",
             "organization_id",
             "meta_form_id",
             postgresql_where=text("meta_form_id IS NOT NULL"),
         ),
         # GIN index for full-text search
         Index(
-            "ix_cases_search_vector",
+            "ix_surrogates_search_vector",
             "search_vector",
             postgresql_using="gin",
         ),
         # PII hash index for phone lookups
-        Index("idx_cases_org_phone_hash", "organization_id", "phone_hash"),
+        Index("idx_surrogates_org_phone_hash", "organization_id", "phone_hash"),
         # Contact reminder check index for efficient daily job queries
         Index(
-            "idx_cases_reminder_check",
+            "idx_surrogates_reminder_check",
             "organization_id",
             "owner_type",
             "contact_status",
@@ -618,7 +578,7 @@ class Case(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    case_number: Mapped[str] = mapped_column(String(10), nullable=False)
+    surrogate_number: Mapped[str] = mapped_column(String(10), nullable=False)
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
@@ -635,12 +595,10 @@ class Case(Base):
 
     source: Mapped[str] = mapped_column(
         String(20),
-        server_default=text(f"'{DEFAULT_CASE_SOURCE.value}'"),
+        server_default=text(f"'{DEFAULT_SURROGATE_SOURCE.value}'"),
         nullable=False,
     )
-    is_priority: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("FALSE"), nullable=False
-    )
+    is_priority: Mapped[bool] = mapped_column(Boolean, server_default=text("FALSE"), nullable=False)
 
     # Ownership (Salesforce-style single owner model)
     # owner_type="user" + owner_id=user_id, or owner_type="queue" + owner_id=queue_id
@@ -659,12 +617,8 @@ class Case(Base):
     meta_ad_external_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     meta_form_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # Additional campaign hierarchy tracking (captured at conversion time)
-    meta_campaign_external_id: Mapped[str | None] = mapped_column(
-        String(100), nullable=True
-    )
-    meta_adset_external_id: Mapped[str | None] = mapped_column(
-        String(100), nullable=True
-    )
+    meta_campaign_external_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    meta_adset_external_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # Contact (normalized: E.164 phone, 2-letter state)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -685,16 +639,12 @@ class Case(Base):
     is_citizen_or_pr: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     has_child: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     is_non_smoker: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    has_surrogate_experience: Mapped[bool | None] = mapped_column(
-        Boolean, nullable=True
-    )
+    has_surrogate_experience: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     num_deliveries: Mapped[int | None] = mapped_column(Integer, nullable=True)
     num_csections: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Soft delete
-    is_archived: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("FALSE"), nullable=False
-    )
+    is_archived: Mapped[bool] = mapped_column(Boolean, server_default=text("FALSE"), nullable=False)
     archived_at: Mapped[datetime | None] = mapped_column(nullable=True)
     archived_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -718,9 +668,7 @@ class Case(Base):
     )  # When first successful contact
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"), onupdate=text("now()"), nullable=False
     )
@@ -729,11 +677,9 @@ class Case(Base):
     search_vector = mapped_column(TSVECTOR, nullable=True)
 
     # Relationships
-    organization: Mapped["Organization"] = relationship(back_populates="cases")
+    organization: Mapped["Organization"] = relationship(back_populates="surrogates")
     created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
-    archived_by: Mapped["User | None"] = relationship(
-        foreign_keys=[archived_by_user_id]
-    )
+    archived_by: Mapped["User | None"] = relationship(foreign_keys=[archived_by_user_id])
     stage: Mapped["PipelineStage"] = relationship(foreign_keys=[stage_id])
 
     # Owner relationships for eager loading (fixes N+1 query)
@@ -742,44 +688,44 @@ class Case(Base):
     owner_user: Mapped["User | None"] = relationship(
         "User",
         foreign_keys=[owner_id],
-        primaryjoin="and_(Case.owner_id==User.id, Case.owner_type=='user')",
+        primaryjoin="and_(Surrogate.owner_id==User.id, Surrogate.owner_type=='user')",
         viewonly=True,
         lazy="selectin",
     )
     owner_queue: Mapped["Queue | None"] = relationship(
         "Queue",
         foreign_keys=[owner_id],
-        primaryjoin="and_(Case.owner_id==Queue.id, Case.owner_type=='queue')",
+        primaryjoin="and_(Surrogate.owner_id==Queue.id, Surrogate.owner_type=='queue')",
         viewonly=True,
         lazy="selectin",
     )
 
-    # Notes use EntityNote with entity_type='case' - no direct relationship
-    status_history: Mapped[list["CaseStatusHistory"]] = relationship(
-        back_populates="case", cascade="all, delete-orphan"
+    # Notes use EntityNote with entity_type='surrogate' - no direct relationship
+    status_history: Mapped[list["SurrogateStatusHistory"]] = relationship(
+        back_populates="surrogate", cascade="all, delete-orphan"
     )
-    contact_attempts: Mapped[list["CaseContactAttempt"]] = relationship(
-        back_populates="case",
+    contact_attempts: Mapped[list["SurrogateContactAttempt"]] = relationship(
+        back_populates="surrogate",
         cascade="all, delete-orphan",
-        order_by="desc(CaseContactAttempt.attempted_at)",
+        order_by="desc(SurrogateContactAttempt.attempted_at)",
     )
 
 
-class CaseStatusHistory(Base):
+class SurrogateStatusHistory(Base):
     """
-    Tracks all status changes on cases for audit and timeline.
+    Tracks all status changes on surrogates for audit and timeline.
 
     Also records archive/restore operations.
     """
 
-    __tablename__ = "case_status_history"
-    __table_args__ = (Index("idx_case_history_case", "case_id", "changed_at"),)
+    __tablename__ = "surrogate_status_history"
+    __table_args__ = (Index("idx_surrogate_history_surrogate", "surrogate_id", "changed_at"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    case_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False
+    surrogate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="CASCADE"), nullable=False
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -804,30 +750,28 @@ class CaseStatusHistory(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    changed_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    changed_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    case: Mapped["Case"] = relationship(back_populates="status_history")
+    surrogate: Mapped["Surrogate"] = relationship(back_populates="status_history")
 
 
-class CaseActivityLog(Base):
+class SurrogateActivityLog(Base):
     """
-    Comprehensive activity log for all case changes.
+    Comprehensive activity log for all surrogate changes.
 
     Tracks: create, edit, status change, assign, archive, notes, etc.
     Stores new values for changed fields. Actor names resolved at read-time.
     """
 
-    __tablename__ = "case_activity_log"
-    __table_args__ = (Index("idx_case_activity_case_time", "case_id", "created_at"),)
+    __tablename__ = "surrogate_activity_log"
+    __table_args__ = (Index("idx_surrogate_activity_surrogate_time", "surrogate_id", "created_at"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    case_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False
+    surrogate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="CASCADE"), nullable=False
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -839,22 +783,20 @@ class CaseActivityLog(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    case: Mapped["Case"] = relationship()
+    surrogate: Mapped["Surrogate"] = relationship()
     actor: Mapped["User | None"] = relationship(foreign_keys=[actor_user_id])
 
 
-# NOTE: CaseNote model removed (migrated to EntityNote with entity_type='case')
+# NOTE: SurrogateNote model removed (migrated to EntityNote with entity_type='surrogate')
 # See migration 0013_migrate_casenotes.py
 
 
-class CaseContactAttempt(Base):
+class SurrogateContactAttempt(Base):
     """
-    Track individual contact attempts for cases.
+    Track individual contact attempts for surrogates.
 
     Supports:
     - Multi-method attempts per entry
@@ -862,9 +804,9 @@ class CaseContactAttempt(Base):
     - Assignment tracking for reminder logic
     """
 
-    __tablename__ = "case_contact_attempts"
+    __tablename__ = "surrogate_contact_attempts"
     __table_args__ = (
-        Index("idx_contact_attempts_case", "case_id", "attempted_at"),
+        Index("idx_contact_attempts_surrogate", "surrogate_id", "attempted_at"),
         Index(
             "idx_contact_attempts_org_pending",
             "organization_id",
@@ -873,9 +815,9 @@ class CaseContactAttempt(Base):
             postgresql_where=text("outcome != 'reached'"),
         ),
         Index(
-            "idx_contact_attempts_case_owner",
-            "case_id",
-            "case_owner_id_at_attempt",
+            "idx_contact_attempts_surrogate_owner",
+            "surrogate_id",
+            "surrogate_owner_id_at_attempt",
             "attempted_at",
         ),
         CheckConstraint(
@@ -894,8 +836,8 @@ class CaseContactAttempt(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    case_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False
+    surrogate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="CASCADE"), nullable=False
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -923,12 +865,12 @@ class CaseContactAttempt(Base):
     )  # When it was logged
 
     # Denormalized for performance: which assignment does this attempt belong to?
-    case_owner_id_at_attempt: Mapped[uuid.UUID] = mapped_column(
+    surrogate_owner_id_at_attempt: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), nullable=False
-    )  # cases.owner_id at time of attempt
+    )  # surrogates.owner_id at time of attempt
 
     # Relationships
-    case: Mapped["Case"] = relationship(back_populates="contact_attempts")
+    surrogate: Mapped["Surrogate"] = relationship(back_populates="contact_attempts")
     attempted_by: Mapped["User | None"] = relationship()
 
     @property
@@ -992,8 +934,8 @@ class Task(Base):
         ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False,
     )
-    case_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("cases.id", ondelete="CASCADE"), nullable=True
+    surrogate_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="CASCADE"), nullable=True
     )
     intended_parent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -1025,9 +967,7 @@ class Task(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"), onupdate=text("now()"), nullable=False
     )
@@ -1063,20 +1003,18 @@ class Task(Base):
 
     # Status for workflow approvals (richer than is_completed boolean)
     status: Mapped[str | None] = mapped_column(
-        String(20), nullable=True, comment="For workflow approvals: pending, completed, denied, expired"
+        String(20),
+        nullable=True,
+        comment="For workflow approvals: pending, completed, denied, expired",
     )
 
     # Due datetime with time precision (for approval deadlines)
-    due_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
-    case: Mapped["Case | None"] = relationship()
+    surrogate: Mapped["Surrogate | None"] = relationship()
     created_by: Mapped["User"] = relationship(foreign_keys=[created_by_user_id])
-    completed_by: Mapped["User | None"] = relationship(
-        foreign_keys=[completed_by_user_id]
-    )
+    completed_by: Mapped["User | None"] = relationship(foreign_keys=[completed_by_user_id])
     workflow_triggered_by: Mapped["User | None"] = relationship(
         foreign_keys=[workflow_triggered_by_user_id]
     )
@@ -1131,18 +1069,16 @@ class MetaLead(Base):
     is_converted: Mapped[bool] = mapped_column(
         Boolean, server_default=text("FALSE"), nullable=False
     )
-    converted_case_id: Mapped[uuid.UUID | None] = mapped_column(
+    converted_surrogate_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("cases.id", ondelete="SET NULL", use_alter=True),
+        ForeignKey("surrogates.id", ondelete="SET NULL", use_alter=True),
         nullable=True,
     )
     conversion_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Timestamps
     meta_created_time: Mapped[datetime | None] = mapped_column(nullable=True)
-    received_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    received_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     converted_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     # Processing status (for observability)
@@ -1184,9 +1120,7 @@ class MetaPageMapping(Base):
     token_expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     # Status
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("TRUE"), nullable=False
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
 
     # Observability
     last_success_at: Mapped[datetime | None] = mapped_column(nullable=True)
@@ -1194,17 +1128,11 @@ class MetaPageMapping(Base):
     last_error_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     # Form sync watermark (forms sync uses page tokens, not ad account tokens)
-    forms_synced_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    forms_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
@@ -1219,9 +1147,7 @@ class MetaAdAccount(Base):
 
     __tablename__ = "meta_ad_accounts"
     __table_args__ = (
-        UniqueConstraint(
-            "organization_id", "ad_account_external_id", name="uq_meta_ad_account"
-        ),
+        UniqueConstraint("organization_id", "ad_account_external_id", name="uq_meta_ad_account"),
         Index("idx_meta_ad_account_org", "organization_id"),
     )
 
@@ -1255,28 +1181,18 @@ class MetaAdAccount(Base):
     hierarchy_synced_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    spend_synced_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    spend_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     spend_sync_cursor: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Status (soft-delete to preserve historical data)
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("true"), nullable=False
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"), nullable=False)
 
     # Observability
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    last_error_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
@@ -1329,15 +1245,9 @@ class MetaCampaign(Base):
     status: Mapped[str] = mapped_column(String(50), nullable=False)
 
     # Meta's updated_time for delta sync
-    updated_time: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    synced_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    updated_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    synced_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
@@ -1395,23 +1305,15 @@ class MetaAdSet(Base):
     targeting_geo: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     status: Mapped[str] = mapped_column(String(50), nullable=False)
-    updated_time: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    synced_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    updated_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    synced_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
     ad_account: Mapped["MetaAdAccount"] = relationship(back_populates="adsets")
     campaign: Mapped["MetaCampaign"] = relationship(back_populates="adsets")
-    ads: Mapped[list["MetaAd"]] = relationship(
-        back_populates="adset", cascade="all, delete-orphan"
-    )
+    ads: Mapped[list["MetaAd"]] = relationship(back_populates="adset", cascade="all, delete-orphan")
 
 
 class MetaAd(Base):
@@ -1465,15 +1367,9 @@ class MetaAd(Base):
     campaign_external_id: Mapped[str] = mapped_column(String(100), nullable=False)
 
     status: Mapped[str] = mapped_column(String(50), nullable=False)
-    updated_time: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    synced_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    updated_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    synced_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
@@ -1533,25 +1429,13 @@ class MetaDailySpend(Base):
 
     # Metrics
     spend: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)
-    impressions: Mapped[int] = mapped_column(
-        BigInteger, server_default=text("0"), nullable=False
-    )
-    reach: Mapped[int] = mapped_column(
-        BigInteger, server_default=text("0"), nullable=False
-    )
-    clicks: Mapped[int] = mapped_column(
-        BigInteger, server_default=text("0"), nullable=False
-    )
-    leads: Mapped[int] = mapped_column(
-        BigInteger, server_default=text("0"), nullable=False
-    )
+    impressions: Mapped[int] = mapped_column(BigInteger, server_default=text("0"), nullable=False)
+    reach: Mapped[int] = mapped_column(BigInteger, server_default=text("0"), nullable=False)
+    clicks: Mapped[int] = mapped_column(BigInteger, server_default=text("0"), nullable=False)
+    leads: Mapped[int] = mapped_column(BigInteger, server_default=text("0"), nullable=False)
 
-    synced_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    synced_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
@@ -1567,9 +1451,7 @@ class MetaForm(Base):
 
     __tablename__ = "meta_forms"
     __table_args__ = (
-        UniqueConstraint(
-            "organization_id", "page_id", "form_external_id", name="uq_meta_form"
-        ),
+        UniqueConstraint("organization_id", "page_id", "form_external_id", name="uq_meta_form"),
         Index("idx_meta_form_page", "organization_id", "page_id"),
     )
 
@@ -1593,18 +1475,10 @@ class MetaForm(Base):
         nullable=True,
     )
 
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("true"), nullable=False
-    )
-    synced_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"), nullable=False)
+    synced_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
@@ -1642,17 +1516,11 @@ class MetaFormVersion(Base):
     field_schema: Mapped[list] = mapped_column(JSONB, nullable=False)
     schema_hash: Mapped[str] = mapped_column(String(64), nullable=False)
 
-    detected_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    detected_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    form: Mapped["MetaForm"] = relationship(
-        back_populates="versions", foreign_keys=[form_id]
-    )
+    form: Mapped["MetaForm"] = relationship(back_populates="versions", foreign_keys=[form_id])
 
 
 # =============================================================================
@@ -1696,23 +1564,15 @@ class Job(Base):
 
     job_type: Mapped[str] = mapped_column(String(50), nullable=False)
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    run_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    run_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     status: Mapped[str] = mapped_column(
         String(20), server_default=text(f"'{DEFAULT_JOB_STATUS.value}'"), nullable=False
     )
-    attempts: Mapped[int] = mapped_column(
-        Integer, server_default=text("0"), nullable=False
-    )
-    max_attempts: Mapped[int] = mapped_column(
-        Integer, server_default=text("3"), nullable=False
-    )
+    attempts: Mapped[int] = mapped_column(Integer, server_default=text("0"), nullable=False)
+    max_attempts: Mapped[int] = mapped_column(Integer, server_default=text("3"), nullable=False)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     # Idempotency key for deduplication (unique constraint in migration)
@@ -1747,9 +1607,7 @@ class EmailTemplate(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     subject: Mapped[str] = mapped_column(String(200), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("TRUE"), nullable=False
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
 
     # System template fields (idempotent seeding/upgrades)
     is_system_template: Mapped[bool] = mapped_column(
@@ -1765,9 +1623,7 @@ class EmailTemplate(Base):
     # Version control
     current_version: Mapped[int] = mapped_column(default=1, nullable=False)
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"), onupdate=text("now()"), nullable=False
     )
@@ -1780,13 +1636,13 @@ class EmailLog(Base):
     """
     Log of all outbound emails for audit and debugging.
 
-    Links to job, template, and optionally case.
+    Links to job, template, and optionally surrogate.
     """
 
     __tablename__ = "email_logs"
     __table_args__ = (
         Index("idx_email_logs_org", "organization_id", "created_at"),
-        Index("idx_email_logs_case", "case_id", "created_at"),
+        Index("idx_email_logs_surrogate", "surrogate_id", "created_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -1805,8 +1661,8 @@ class EmailLog(Base):
         ForeignKey("email_templates.id", ondelete="SET NULL"),
         nullable=True,
     )
-    case_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("cases.id", ondelete="SET NULL"), nullable=True
+    surrogate_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="SET NULL"), nullable=True
     )
 
     recipient_email: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -1821,14 +1677,12 @@ class EmailLog(Base):
     sent_at: Mapped[datetime | None] = mapped_column(nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     job: Mapped["Job | None"] = relationship()
     template: Mapped["EmailTemplate | None"] = relationship()
-    case: Mapped["Case | None"] = relationship()
+    surrogate: Mapped["Surrogate | None"] = relationship()
 
 
 # =============================================================================
@@ -1840,7 +1694,7 @@ class IntendedParent(Base):
     """
     Prospective parents seeking surrogacy services.
 
-    Mirrors Case patterns: org-scoped, soft-delete, status history.
+    Mirrors Surrogate patterns: org-scoped, soft-delete, status history.
     """
 
     __tablename__ = "intended_parents"
@@ -1899,25 +1753,17 @@ class IntendedParent(Base):
 
     # Owner model (user or queue)
     owner_type: Mapped[str | None] = mapped_column(String(10), nullable=True)
-    owner_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True
-    )
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
     # Soft delete
-    is_archived: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("FALSE"), nullable=False
-    )
+    is_archived: Mapped[bool] = mapped_column(Boolean, server_default=text("FALSE"), nullable=False)
     archived_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     # Activity tracking
-    last_activity: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    last_activity: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"),
         onupdate=lambda: datetime.now(timezone.utc),
@@ -1954,14 +1800,10 @@ class IntendedParentStatusHistory(Base):
     old_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     new_status: Mapped[str] = mapped_column(String(50), nullable=False)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    changed_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    changed_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    intended_parent: Mapped["IntendedParent"] = relationship(
-        back_populates="status_history"
-    )
+    intended_parent: Mapped["IntendedParent"] = relationship(back_populates="status_history")
 
 
 # =============================================================================
@@ -2008,13 +1850,9 @@ class EntityNote(Base):
     author_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
-    content: Mapped[str] = mapped_column(
-        Text, nullable=False
-    )  # HTML allowed, sanitized
+    content: Mapped[str] = mapped_column(Text, nullable=False)  # HTML allowed, sanitized
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Full-text search vector (managed by trigger)
     search_vector = mapped_column(TSVECTOR, nullable=True)
@@ -2061,12 +1899,8 @@ class Notification(Base):
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Entity reference (for click-through)
-    entity_type: Mapped[str | None] = mapped_column(
-        String(50), nullable=True
-    )  # "case", "task"
-    entity_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True
-    )
+    entity_type: Mapped[str | None] = mapped_column(String(50), nullable=True)  # "case", "task"
+    entity_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
     # Dedupe key: {type}:{entity_id}:{user_id} - prevents duplicate notifications
     dedupe_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -2074,9 +1908,7 @@ class Notification(Base):
     # Read status
     read_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     user: Mapped["User"] = relationship()
@@ -2102,21 +1934,15 @@ class UserNotificationSettings(Base):
     )
 
     # In-app notification toggles (all default TRUE)
-    case_assigned: Mapped[bool] = mapped_column(
+    surrogate_assigned: Mapped[bool] = mapped_column(default=True, server_default=text("true"))
+    surrogate_status_changed: Mapped[bool] = mapped_column(
         default=True, server_default=text("true")
     )
-    case_status_changed: Mapped[bool] = mapped_column(
+    surrogate_claim_available: Mapped[bool] = mapped_column(
         default=True, server_default=text("true")
     )
-    case_handoff: Mapped[bool] = mapped_column(
-        default=True, server_default=text("true")
-    )
-    task_assigned: Mapped[bool] = mapped_column(
-        default=True, server_default=text("true")
-    )
-    workflow_approvals: Mapped[bool] = mapped_column(
-        default=True, server_default=text("true")
-    )
+    task_assigned: Mapped[bool] = mapped_column(default=True, server_default=text("true"))
+    workflow_approvals: Mapped[bool] = mapped_column(default=True, server_default=text("true"))
     task_reminders: Mapped[bool] = mapped_column(
         default=True, server_default=text("true")
     )  # Due soon/overdue
@@ -2170,12 +1996,8 @@ class IntegrationHealth(Base):
     last_success_at: Mapped[datetime | None] = mapped_column(nullable=True)
     last_error_at: Mapped[datetime | None] = mapped_column(nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     __table_args__ = (
         Index("ix_integration_health_org_type", "organization_id", "integration_type"),
@@ -2216,13 +2038,9 @@ class IntegrationErrorRollup(Base):
     integration_type: Mapped[str] = mapped_column(String(50), nullable=False)
     integration_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     period_start: Mapped[datetime] = mapped_column(nullable=False)  # Hour bucket
-    error_count: Mapped[int] = mapped_column(
-        Integer, default=0, server_default=text("0")
-    )
+    error_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     __table_args__ = (
         Index(
@@ -2273,18 +2091,10 @@ class SystemAlert(Base):
     severity: Mapped[str] = mapped_column(
         String(20), default="error", server_default=text("'error'")
     )
-    status: Mapped[str] = mapped_column(
-        String(20), default="open", server_default=text("'open'")
-    )
-    first_seen_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    last_seen_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    occurrence_count: Mapped[int] = mapped_column(
-        Integer, default=1, server_default=text("1")
-    )
+    status: Mapped[str] = mapped_column(String(20), default="open", server_default=text("'open'"))
+    first_seen_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    occurrence_count: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     message: Mapped[str | None] = mapped_column(Text, nullable=True)
     details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
@@ -2296,9 +2106,7 @@ class SystemAlert(Base):
 
     __table_args__ = (
         Index("ix_system_alerts_org_status", "organization_id", "status", "severity"),
-        UniqueConstraint(
-            "organization_id", "dedupe_key", name="uq_system_alerts_dedupe"
-        ),
+        UniqueConstraint("organization_id", "dedupe_key", name="uq_system_alerts_dedupe"),
     )
 
     # Relationships
@@ -2328,21 +2136,11 @@ class RequestMetricsRollup(Base):
     )
     route: Mapped[str] = mapped_column(String(100), nullable=False)
     method: Mapped[str] = mapped_column(String(10), nullable=False)
-    status_2xx: Mapped[int] = mapped_column(
-        Integer, default=0, server_default=text("0")
-    )
-    status_4xx: Mapped[int] = mapped_column(
-        Integer, default=0, server_default=text("0")
-    )
-    status_5xx: Mapped[int] = mapped_column(
-        Integer, default=0, server_default=text("0")
-    )
-    total_duration_ms: Mapped[int] = mapped_column(
-        Integer, default=0, server_default=text("0")
-    )
-    request_count: Mapped[int] = mapped_column(
-        Integer, default=0, server_default=text("0")
-    )
+    status_2xx: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    status_4xx: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    status_5xx: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    total_duration_ms: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    request_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
 
     __table_args__ = (
         Index("ix_request_metrics_period", "period_start", "period_type"),
@@ -2378,9 +2176,7 @@ class AnalyticsSnapshot(Base):
 
     __tablename__ = "analytics_snapshots"
     __table_args__ = (
-        UniqueConstraint(
-            "organization_id", "snapshot_key", name="uq_analytics_snapshot_key"
-        ),
+        UniqueConstraint("organization_id", "snapshot_key", name="uq_analytics_snapshot_key"),
         Index("idx_analytics_snapshot_org_type", "organization_id", "snapshot_type"),
         Index("idx_analytics_snapshot_expires", "expires_at"),
     )
@@ -2398,9 +2194,7 @@ class AnalyticsSnapshot(Base):
     payload: Mapped[dict | list] = mapped_column(JSONB, nullable=False)
     range_start: Mapped[datetime | None] = mapped_column(nullable=True)
     range_end: Mapped[datetime | None] = mapped_column(nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     organization: Mapped["Organization"] = relationship()
@@ -2430,9 +2224,7 @@ class AISettings(Base):
         unique=True,
         nullable=False,
     )
-    is_enabled: Mapped[bool] = mapped_column(
-        Boolean, default=False, server_default=text("false")
-    )
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     provider: Mapped[str] = mapped_column(
         String(20), default="openai", server_default=text("'openai'")
     )
@@ -2448,22 +2240,14 @@ class AISettings(Base):
     )
     # Privacy settings
     consent_accepted_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    consent_accepted_by: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True
-    )
-    anonymize_pii: Mapped[bool] = mapped_column(
-        Boolean, default=True, server_default=text("true")
-    )
+    consent_accepted_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    anonymize_pii: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
 
     # Version control
     current_version: Mapped[int] = mapped_column(default=1, nullable=False)
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
@@ -2492,12 +2276,8 @@ class AIConversation(Base):
     )
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)  # 'case'
     entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
@@ -2507,9 +2287,7 @@ class AIConversation(Base):
     )
 
     __table_args__ = (
-        Index(
-            "ix_ai_conversations_entity", "organization_id", "entity_type", "entity_id"
-        ),
+        Index("ix_ai_conversations_entity", "organization_id", "entity_type", "entity_id"),
         Index("ix_ai_conversations_user", "user_id", "entity_type", "entity_id"),
         UniqueConstraint(
             "organization_id",
@@ -2542,19 +2320,13 @@ class AIMessage(Base):
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     proposed_actions: Mapped[list[dict] | None] = mapped_column(JSONB, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     conversation: Mapped["AIConversation"] = relationship(back_populates="messages")
-    action_approvals: Mapped[list["AIActionApproval"]] = relationship(
-        back_populates="message"
-    )
+    action_approvals: Mapped[list["AIActionApproval"]] = relationship(back_populates="message")
 
-    __table_args__ = (
-        Index("ix_ai_messages_conversation", "conversation_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_ai_messages_conversation", "conversation_id", "created_at"),)
 
 
 class AIActionApproval(Base):
@@ -2583,9 +2355,7 @@ class AIActionApproval(Base):
     )
     executed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     message: Mapped["AIMessage"] = relationship(back_populates="action_approvals")
@@ -2609,16 +2379,12 @@ class AIEntitySummary(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    organization_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), nullable=False
-    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
     entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     summary_text: Mapped[str] = mapped_column(Text, nullable=False)
     notes_plain_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     __table_args__ = (UniqueConstraint("organization_id", "entity_type", "entity_id"),)
 
@@ -2652,16 +2418,10 @@ class AIUsageLog(Base):
     prompt_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
     completion_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
     total_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
-    estimated_cost_usd: Mapped[Decimal | None] = mapped_column(
-        Numeric(10, 6), nullable=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    estimated_cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
-    __table_args__ = (
-        Index("ix_ai_usage_log_org_date", "organization_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_ai_usage_log_org_date", "organization_id", "created_at"),)
 
 
 class UserIntegration(Base):
@@ -2687,12 +2447,8 @@ class UserIntegration(Base):
     refresh_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     token_expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
     account_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     # Version control
     current_version: Mapped[int] = mapped_column(
         default=1, server_default=text("1"), nullable=False
@@ -2726,9 +2482,7 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
     __table_args__ = (
         Index("idx_audit_org_created", "organization_id", "created_at"),
-        Index(
-            "idx_audit_org_event_created", "organization_id", "event_type", "created_at"
-        ),
+        Index("idx_audit_org_event_created", "organization_id", "event_type", "created_at"),
         Index(
             "idx_audit_org_actor_created",
             "organization_id",
@@ -2752,39 +2506,27 @@ class AuditLog(Base):
     )
 
     # Event classification
-    event_type: Mapped[str] = mapped_column(
-        String(50), nullable=False
-    )  # AuditEventType
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False)  # AuditEventType
 
     # Target entity (optional)
     target_type: Mapped[str | None] = mapped_column(
         String(50), nullable=True
     )  # 'user', 'case', 'ai_action', etc.
-    target_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True
-    )
+    target_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
     # Event details (redacted - no secrets, hashed PII)
     details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     # Request metadata
-    ip_address: Mapped[str | None] = mapped_column(
-        String(45), nullable=True
-    )  # IPv6 max length
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)  # IPv6 max length
     user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # Request correlation (for grouping related audit events)
-    request_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True
-    )
+    request_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
     # Tamper-evident hash chain
-    prev_hash: Mapped[str | None] = mapped_column(
-        String(64), nullable=True
-    )  # SHA256 hex
-    entry_hash: Mapped[str | None] = mapped_column(
-        String(64), nullable=True
-    )  # SHA256 hex
+    prev_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)  # SHA256 hex
+    entry_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)  # SHA256 hex
 
     # Version control links (for config change auditing)
     before_version_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -2798,9 +2540,7 @@ class AuditLog(Base):
         nullable=True,
     )
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
@@ -2841,13 +2581,9 @@ class ExportJob(Base):
     status: Mapped[str] = mapped_column(
         String(20), nullable=False
     )  # pending, processing, completed, failed
-    export_type: Mapped[str] = mapped_column(
-        String(30), nullable=False
-    )  # audit, cases, analytics
+    export_type: Mapped[str] = mapped_column(String(30), nullable=False)  # audit, cases, analytics
     format: Mapped[str] = mapped_column(String(10), nullable=False)  # csv, json
-    redact_mode: Mapped[str] = mapped_column(
-        String(10), nullable=False
-    )  # redacted, full
+    redact_mode: Mapped[str] = mapped_column(String(10), nullable=False)  # redacted, full
 
     date_range_start: Mapped[datetime] = mapped_column(nullable=False)
     date_range_end: Mapped[datetime] = mapped_column(nullable=False)
@@ -2857,9 +2593,7 @@ class ExportJob(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     acknowledgment: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     # Relationships
@@ -2895,9 +2629,7 @@ class LegalHold(Base):
         nullable=False,
     )
     entity_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    entity_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True
-    )
+    entity_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
 
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -2907,17 +2639,13 @@ class LegalHold(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     released_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
     created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
-    released_by: Mapped["User | None"] = relationship(
-        foreign_keys=[released_by_user_id]
-    )
+    released_by: Mapped["User | None"] = relationship(foreign_keys=[released_by_user_id])
 
 
 class DataRetentionPolicy(Base):
@@ -2929,9 +2657,7 @@ class DataRetentionPolicy(Base):
 
     __tablename__ = "data_retention_policies"
     __table_args__ = (
-        UniqueConstraint(
-            "organization_id", "entity_type", name="uq_retention_policy_org_entity"
-        ),
+        UniqueConstraint("organization_id", "entity_type", name="uq_retention_policy_org_entity"),
         Index("idx_retention_policy_org_active", "organization_id", "is_active"),
     )
 
@@ -2945,16 +2671,12 @@ class DataRetentionPolicy(Base):
     )
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
     retention_days: Mapped[int] = mapped_column(Integer, nullable=False)
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("TRUE"), nullable=False
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
 
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"), onupdate=text("now()"), nullable=False
     )
@@ -2979,9 +2701,7 @@ class OrgCounter(Base):
         primary_key=True,
     )
     counter_type: Mapped[str] = mapped_column(String(50), primary_key=True)
-    current_value: Mapped[int] = mapped_column(
-        BigInteger, server_default=text("0"), nullable=False
-    )
+    current_value: Mapped[int] = mapped_column(BigInteger, server_default=text("0"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"), onupdate=text("now()"), nullable=False
     )
@@ -2992,21 +2712,19 @@ class OrgCounter(Base):
 # =============================================================================
 
 
-class CaseImport(Base):
+class SurrogateImport(Base):
     """
-    Tracks CSV import jobs for cases.
+    Tracks CSV import jobs for surrogates.
 
     Flow: upload → preview → confirm (async job) → complete
 
     Dedupe:
-    - Matches by email against all cases (including archived)
+    - Matches by email against all surrogates (including archived)
     - Also checks for duplicates within the CSV itself
     """
 
-    __tablename__ = "case_imports"
-    __table_args__ = (
-        Index("idx_case_imports_org_created", "organization_id", "created_at"),
-    )
+    __tablename__ = "surrogate_imports"
+    __table_args__ = (Index("idx_surrogate_imports_org_created", "organization_id", "created_at"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
@@ -3036,9 +2754,7 @@ class CaseImport(Base):
     errors: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     # Relationships
@@ -3057,7 +2773,7 @@ class Pipeline(Base):
 
     v2 (Full CRUD):
     - PipelineStage rows define custom stages
-    - Cases reference stage_id (FK)
+    - Surrogates reference stage_id (FK)
     - Stages have immutable slugs, editable labels/colors
     """
 
@@ -3079,12 +2795,8 @@ class Pipeline(Base):
     # Version control
     current_version: Mapped[int] = mapped_column(default=1, nullable=False)
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
@@ -3102,7 +2814,7 @@ class PipelineStage(Base):
     - slug: Immutable after creation, unique per pipeline
     - stage_type: Immutable, controls role access (intake/post_approval/terminal)
     - Soft-delete via is_active + deleted_at
-    - Cases reference stage_id (FK)
+    - Surrogates reference stage_id (FK)
     """
 
     __tablename__ = "pipeline_stages"
@@ -3133,9 +2845,7 @@ class PipelineStage(Base):
     order: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # Soft-delete
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("TRUE"), nullable=False
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
 
     # Contact attempts UI gating
@@ -3171,7 +2881,7 @@ class EntityVersion(Base):
     - Integration configs (tokens redacted)
     - Membership/role changes
 
-    NOT used for: Cases, tasks, notes (use activity logs instead)
+    NOT used for: Surrogates, tasks, notes (use activity logs instead)
 
     Security:
     - payload_encrypted: Fernet-encrypted JSON
@@ -3222,9 +2932,7 @@ class EntityVersion(Base):
     payload_encrypted: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
 
     # Integrity verification
-    checksum: Mapped[str] = mapped_column(
-        String(64), nullable=False
-    )  # SHA256 of decrypted payload
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA256 of decrypted payload
 
     # Audit trail
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(
@@ -3234,9 +2942,7 @@ class EntityVersion(Base):
         String(500), nullable=True
     )  # "Updated stages", "Rollback from v3"
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
@@ -3262,9 +2968,7 @@ class AutomationWorkflow(Base):
         Index("idx_wf_org_enabled", "organization_id", "is_enabled"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
@@ -3279,9 +2983,7 @@ class AutomationWorkflow(Base):
 
     # Trigger
     trigger_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    trigger_config: Mapped[dict] = mapped_column(
-        JSONB, default=dict, server_default="{}"
-    )
+    trigger_config: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
 
     # Conditions
     conditions: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
@@ -3339,12 +3041,8 @@ class AutomationWorkflow(Base):
     updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
@@ -3379,9 +3077,7 @@ class WorkflowExecution(Base):
         ),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
@@ -3408,18 +3104,14 @@ class WorkflowExecution(Base):
 
     # Execution
     matched_conditions: Mapped[bool] = mapped_column(default=True)
-    actions_executed: Mapped[list] = mapped_column(
-        JSONB, default=list, server_default="[]"
-    )
+    actions_executed: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
 
     # Result
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(nullable=True)
 
-    executed_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    executed_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # ==========================================================================
     # Workflow Approval Pause State
@@ -3447,13 +3139,9 @@ class UserWorkflowPreference(Base):
     """
 
     __tablename__ = "user_workflow_preferences"
-    __table_args__ = (
-        UniqueConstraint("user_id", "workflow_id", name="uq_user_workflow"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "workflow_id", name="uq_user_workflow"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
@@ -3463,15 +3151,11 @@ class UserWorkflowPreference(Base):
         nullable=False,
     )
     is_opted_out: Mapped[bool] = mapped_column(default=False)
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     user: Mapped["User"] = relationship()
-    workflow: Mapped["AutomationWorkflow"] = relationship(
-        back_populates="user_preferences"
-    )
+    workflow: Mapped["AutomationWorkflow"] = relationship(back_populates="user_preferences")
 
 
 class WorkflowResumeJob(Base):
@@ -3509,9 +3193,7 @@ class WorkflowResumeJob(Base):
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default=text("'pending'")
     )
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     processed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -3540,9 +3222,7 @@ class WorkflowTemplate(Base):
         Index("idx_template_category", "category"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
     # Metadata
     name: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -3554,9 +3234,7 @@ class WorkflowTemplate(Base):
 
     # Workflow configuration (template content)
     trigger_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    trigger_config: Mapped[dict] = mapped_column(
-        JSONB, default=dict, server_default="{}"
-    )
+    trigger_config: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
     conditions: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
     condition_logic: Mapped[str] = mapped_column(String(10), default="AND")
     actions: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
@@ -3578,12 +3256,8 @@ class WorkflowTemplate(Base):
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     organization: Mapped["Organization | None"] = relationship()
@@ -3606,13 +3280,11 @@ class ZoomMeeting(Base):
     __tablename__ = "zoom_meetings"
     __table_args__ = (
         Index("ix_zoom_meetings_user_id", "user_id"),
-        Index("ix_zoom_meetings_case_id", "case_id"),
+        Index("ix_zoom_meetings_surrogate_id", "surrogate_id"),
         Index("ix_zoom_meetings_org_created", "organization_id", "created_at"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
@@ -3623,8 +3295,8 @@ class ZoomMeeting(Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,  # Allow null if user deleted
     )
-    case_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("cases.id", ondelete="SET NULL"), nullable=True
+    surrogate_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="SET NULL"), nullable=True
     )
     intended_parent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -3644,14 +3316,12 @@ class ZoomMeeting(Base):
     start_url: Mapped[str] = mapped_column(Text, nullable=False)  # Can be very long
     password: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
     user: Mapped["User"] = relationship()
-    case: Mapped["Case"] = relationship()
+    surrogate: Mapped["Surrogate"] = relationship()
     intended_parent: Mapped["IntendedParent"] = relationship()
 
 
@@ -3662,29 +3332,29 @@ class ZoomMeeting(Base):
 
 class Match(Base):
     """
-    Proposed match between a surrogate (Case) and intended parent.
+    Proposed match between a surrogate and intended parent.
 
     Tracks the matching workflow from proposal through acceptance/rejection.
-    Only one accepted match is allowed per case.
+    Only one accepted match is allowed per surrogate.
     """
 
     __tablename__ = "matches"
     __table_args__ = (
         UniqueConstraint(
             "organization_id",
-            "case_id",
+            "surrogate_id",
             "intended_parent_id",
-            name="uq_match_org_case_ip",
+            name="uq_match_org_surrogate_ip",
         ),
-        # Only one accepted match allowed per case per org
+        # Only one accepted match allowed per surrogate per org
         Index(
-            "uq_one_accepted_match_per_case",
+            "uq_one_accepted_match_per_surrogate",
             "organization_id",
-            "case_id",
+            "surrogate_id",
             unique=True,
             postgresql_where=text("status = 'accepted'"),
         ),
-        Index("ix_matches_case_id", "case_id"),
+        Index("ix_matches_surrogate_id", "surrogate_id"),
         Index("ix_matches_ip_id", "intended_parent_id"),
         Index("ix_matches_status", "status"),
         Index("idx_matches_org_status", "organization_id", "status"),
@@ -3692,16 +3362,14 @@ class Match(Base):
         Index("idx_matches_org_updated", "organization_id", "updated_at"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False,
     )
-    case_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False
+    surrogate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="CASCADE"), nullable=False
     )
     intended_parent_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -3720,9 +3388,7 @@ class Match(Base):
     proposed_by_user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    proposed_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    proposed_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Review details
     reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -3734,16 +3400,12 @@ class Match(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
-    case: Mapped["Case"] = relationship()
+    surrogate: Mapped["Surrogate"] = relationship()
     intended_parent: Mapped["IntendedParent"] = relationship()
     proposed_by: Mapped["User"] = relationship(foreign_keys=[proposed_by_user_id])
     reviewed_by: Mapped["User"] = relationship(foreign_keys=[reviewed_by_user_id])
@@ -3773,9 +3435,7 @@ class MatchEvent(Base):
         Index("ix_match_events_org_starts", "organization_id", "starts_at"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
@@ -3802,9 +3462,7 @@ class MatchEvent(Base):
     # Timezone-aware datetime (for timed events)
     starts_at: Mapped[datetime | None] = mapped_column(nullable=True)
     ends_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    timezone: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="America/Los_Angeles"
-    )
+    timezone: Mapped[str] = mapped_column(String(50), nullable=False, default="America/Los_Angeles")
 
     # All-day events (date only, no timezone conversion)
     all_day: Mapped[bool] = mapped_column(nullable=False, default=False)
@@ -3815,12 +3473,8 @@ class MatchEvent(Base):
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
@@ -3846,11 +3500,11 @@ class Attachment(Base):
 
     __tablename__ = "attachments"
     __table_args__ = (
-        Index("idx_attachments_case", "case_id"),
+        Index("idx_attachments_surrogate", "surrogate_id"),
         Index("idx_attachments_org_scan", "organization_id", "scan_status"),
         Index(
             "idx_attachments_active",
-            "case_id",
+            "surrogate_id",
             postgresql_where=text("deleted_at IS NULL AND quarantined = FALSE"),
         ),
         Index("idx_attachments_intended_parent", "intended_parent_id"),
@@ -3870,8 +3524,8 @@ class Attachment(Base):
         ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False,
     )
-    case_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("cases.id", ondelete="CASCADE"), nullable=True
+    surrogate_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="CASCADE"), nullable=True
     )
     intended_parent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -3894,9 +3548,7 @@ class Attachment(Base):
         String(20), server_default=text("'pending'"), nullable=False
     )  # pending | clean | infected | error
     scanned_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    quarantined: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("TRUE"), nullable=False
-    )
+    quarantined: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
 
     # Soft-delete
     deleted_at: Mapped[datetime | None] = mapped_column(nullable=True)
@@ -3904,19 +3556,15 @@ class Attachment(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Full-text search vector (managed by trigger)
     search_vector = mapped_column(TSVECTOR, nullable=True)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
-    case: Mapped["Case"] = relationship()
-    uploaded_by: Mapped["User | None"] = relationship(
-        foreign_keys=[uploaded_by_user_id]
-    )
+    surrogate: Mapped["Surrogate"] = relationship()
+    uploaded_by: Mapped["User | None"] = relationship(foreign_keys=[uploaded_by_user_id])
     deleted_by: Mapped["User | None"] = relationship(foreign_keys=[deleted_by_user_id])
 
 
@@ -4021,7 +3669,7 @@ class FormFieldMapping(Base):
     __tablename__ = "form_field_mappings"
     __table_args__ = (
         UniqueConstraint("form_id", "field_key", name="uq_form_field_key"),
-        UniqueConstraint("form_id", "case_field", name="uq_form_case_field"),
+        UniqueConstraint("form_id", "surrogate_field", name="uq_form_surrogate_field"),
         Index("idx_form_mappings_form", "form_id"),
     )
 
@@ -4034,7 +3682,7 @@ class FormFieldMapping(Base):
         nullable=False,
     )
     field_key: Mapped[str] = mapped_column(String(100), nullable=False)
-    case_field: Mapped[str] = mapped_column(String(100), nullable=False)
+    surrogate_field: Mapped[str] = mapped_column(String(100), nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(), server_default=text("now()"), nullable=False
@@ -4048,7 +3696,7 @@ class FormSubmissionToken(Base):
     __table_args__ = (
         Index("idx_form_tokens_org", "organization_id"),
         Index("idx_form_tokens_form", "form_id"),
-        Index("idx_form_tokens_case", "case_id"),
+        Index("idx_form_tokens_surrogate", "surrogate_id"),
         UniqueConstraint("token", name="uq_form_submission_token"),
     )
 
@@ -4065,8 +3713,8 @@ class FormSubmissionToken(Base):
         ForeignKey("forms.id", ondelete="CASCADE"),
         nullable=False,
     )
-    case_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False
+    surrogate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="CASCADE"), nullable=False
     )
     token: Mapped[str] = mapped_column(String(255), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(TIMESTAMP(), nullable=False)
@@ -4090,10 +3738,10 @@ class FormSubmission(Base):
 
     __tablename__ = "form_submissions"
     __table_args__ = (
-        UniqueConstraint("form_id", "case_id", name="uq_form_submission_case"),
+        UniqueConstraint("form_id", "surrogate_id", name="uq_form_submission_surrogate"),
         Index("idx_form_submissions_org", "organization_id"),
         Index("idx_form_submissions_form", "form_id"),
-        Index("idx_form_submissions_case", "case_id"),
+        Index("idx_form_submissions_surrogate", "surrogate_id"),
         Index("idx_form_submissions_status", "status"),
     )
 
@@ -4110,8 +3758,8 @@ class FormSubmission(Base):
         ForeignKey("forms.id", ondelete="CASCADE"),
         nullable=False,
     )
-    case_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False
+    surrogate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="CASCADE"), nullable=False
     )
     token_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -4142,7 +3790,7 @@ class FormSubmission(Base):
     )
 
     form: Mapped["Form"] = relationship()
-    case: Mapped["Case"] = relationship()
+    surrogate: Mapped["Surrogate"] = relationship()
 
 
 class FormSubmissionFile(Base):
@@ -4175,9 +3823,7 @@ class FormSubmissionFile(Base):
     scan_status: Mapped[str] = mapped_column(
         String(20), server_default=text("'pending'"), nullable=False
     )
-    quarantined: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("TRUE"), nullable=False
-    )
+    quarantined: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(), server_default=text("now()"), nullable=False
@@ -4186,25 +3832,25 @@ class FormSubmissionFile(Base):
     submission: Mapped["FormSubmission"] = relationship()
 
 
-class CaseProfileOverride(Base):
+class SurrogateProfileOverride(Base):
     """
-    Override values for profile card (independent of submission/case fields).
+    Override values for profile card (independent of submission/surrogate fields).
 
     Used by case_manager+ to customize profile view without modifying
-    the original submission or case fields.
+    the original submission or surrogate fields.
     """
 
-    __tablename__ = "case_profile_overrides"
+    __tablename__ = "surrogate_profile_overrides"
     __table_args__ = (
-        UniqueConstraint("case_id", "field_key", name="uq_case_profile_override_field"),
-        Index("idx_profile_overrides_case", "case_id"),
+        UniqueConstraint("surrogate_id", "field_key", name="uq_surrogate_profile_override_field"),
+        Index("idx_profile_overrides_surrogate", "surrogate_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    case_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False
+    surrogate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="CASCADE"), nullable=False
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -4216,34 +3862,32 @@ class CaseProfileOverride(Base):
     updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    case: Mapped["Case"] = relationship()
+    surrogate: Mapped["Surrogate"] = relationship()
     organization: Mapped["Organization"] = relationship()
     updated_by: Mapped["User | None"] = relationship()
 
 
-class CaseProfileState(Base):
+class SurrogateProfileState(Base):
     """
-    Tracks the base submission used for a case profile card.
+    Tracks the base submission used for a surrogate profile card.
 
     Allows Sync + Save to pin the profile base to a new submission.
     """
 
-    __tablename__ = "case_profile_states"
+    __tablename__ = "surrogate_profile_states"
     __table_args__ = (
-        UniqueConstraint("case_id", name="uq_case_profile_state_case"),
-        Index("idx_profile_state_case", "case_id"),
+        UniqueConstraint("surrogate_id", name="uq_surrogate_profile_state_surrogate"),
+        Index("idx_profile_state_surrogate", "surrogate_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    case_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False
+    surrogate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="CASCADE"), nullable=False
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -4258,34 +3902,32 @@ class CaseProfileState(Base):
     updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
-    case: Mapped["Case"] = relationship()
+    surrogate: Mapped["Surrogate"] = relationship()
     organization: Mapped["Organization"] = relationship()
     updated_by: Mapped["User | None"] = relationship()
 
 
-class CaseProfileHiddenField(Base):
+class SurrogateProfileHiddenField(Base):
     """
-    Tracks hidden fields in case profile card.
+    Tracks hidden fields in surrogate profile card.
 
     Hidden fields show as masked values ('*' or '-') in profile exports.
     case_manager+ can toggle visibility.
     """
 
-    __tablename__ = "case_profile_hidden_fields"
+    __tablename__ = "surrogate_profile_hidden_fields"
     __table_args__ = (
-        UniqueConstraint("case_id", "field_key", name="uq_case_profile_hidden_field"),
-        Index("idx_profile_hidden_case", "case_id"),
+        UniqueConstraint("surrogate_id", "field_key", name="uq_surrogate_profile_hidden_field"),
+        Index("idx_profile_hidden_surrogate", "surrogate_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    case_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False
+    surrogate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="CASCADE"), nullable=False
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -4296,12 +3938,10 @@ class CaseProfileHiddenField(Base):
     hidden_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    hidden_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    hidden_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    case: Mapped["Case"] = relationship()
+    surrogate: Mapped["Surrogate"] = relationship()
     organization: Mapped["Organization"] = relationship()
     hidden_by: Mapped["User | None"] = relationship()
 
@@ -4340,19 +3980,13 @@ class AppointmentType(Base):
 
     # Type details
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    slug: Mapped[str] = mapped_column(
-        String(100), nullable=False
-    )  # URL-safe identifier
+    slug: Mapped[str] = mapped_column(String(100), nullable=False)  # URL-safe identifier
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Scheduling
     duration_minutes: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
-    buffer_before_minutes: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False
-    )
-    buffer_after_minutes: Mapped[int] = mapped_column(
-        Integer, default=5, nullable=False
-    )
+    buffer_before_minutes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    buffer_after_minutes: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
 
     # Meeting mode
     meeting_mode: Mapped[str] = mapped_column(
@@ -4360,18 +3994,12 @@ class AppointmentType(Base):
     )
 
     # Notifications
-    reminder_hours_before: Mapped[int] = mapped_column(
-        Integer, default=24, nullable=False
-    )
+    reminder_hours_before: Mapped[int] = mapped_column(Integer, default=24, nullable=False)
 
     # Status
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("TRUE"), nullable=False
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"), onupdate=text("now()"), nullable=False
     )
@@ -4393,9 +4021,7 @@ class AvailabilityRule(Base):
     __table_args__ = (
         Index("idx_availability_rules_user", "user_id"),
         Index("idx_availability_rules_org", "organization_id"),
-        CheckConstraint(
-            "day_of_week >= 0 AND day_of_week <= 6", name="ck_valid_day_of_week"
-        ),
+        CheckConstraint("day_of_week >= 0 AND day_of_week <= 6", name="ck_valid_day_of_week"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -4418,13 +4044,9 @@ class AvailabilityRule(Base):
     end_time: Mapped[time] = mapped_column(Time, nullable=False)
 
     # User's timezone for interpretation
-    timezone: Mapped[str] = mapped_column(
-        String(50), default="America/Los_Angeles", nullable=False
-    )
+    timezone: Mapped[str] = mapped_column(String(50), default="America/Los_Angeles", nullable=False)
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"), onupdate=text("now()"), nullable=False
     )
@@ -4443,9 +4065,7 @@ class AvailabilityOverride(Base):
 
     __tablename__ = "availability_overrides"
     __table_args__ = (
-        UniqueConstraint(
-            "user_id", "override_date", name="uq_availability_override_date"
-        ),
+        UniqueConstraint("user_id", "override_date", name="uq_availability_override_date"),
         Index("idx_availability_overrides_user", "user_id"),
         Index("idx_availability_overrides_org", "organization_id"),
     )
@@ -4475,9 +4095,7 @@ class AvailabilityOverride(Base):
     # Reason (optional, e.g., "Holiday", "Vacation")
     reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
@@ -4515,13 +4133,9 @@ class BookingLink(Base):
     public_slug: Mapped[str] = mapped_column(String(32), nullable=False)
 
     # Status
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("TRUE"), nullable=False
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"), onupdate=text("now()"), nullable=False
     )
@@ -4547,7 +4161,7 @@ class Appointment(Base):
         Index("idx_appointments_org_created", "organization_id", "created_at"),
         Index("idx_appointments_org_updated", "organization_id", "updated_at"),
         Index("idx_appointments_type", "appointment_type_id"),
-        Index("idx_appointments_case", "case_id"),
+        Index("idx_appointments_surrogate", "surrogate_id"),
         Index("idx_appointments_ip", "intended_parent_id"),
         Index(
             "idx_appointments_pending_expiry",
@@ -4576,9 +4190,9 @@ class Appointment(Base):
         nullable=True,
     )
 
-    # Optional link to case/IP for match-scoped filtering
-    case_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("cases.id", ondelete="SET NULL"), nullable=True
+    # Optional link to surrogate/IP for match-scoped filtering
+    surrogate_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="SET NULL"), nullable=True
     )
     intended_parent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -4594,12 +4208,8 @@ class Appointment(Base):
     client_timezone: Mapped[str] = mapped_column(String(50), nullable=False)
 
     # Scheduling (stored in UTC)
-    scheduled_start: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=False
-    )
-    scheduled_end: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=False
-    )
+    scheduled_start: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    scheduled_end: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     buffer_before_minutes: Mapped[int] = mapped_column(
         Integer, default=0, server_default=text("0"), nullable=False
@@ -4624,17 +4234,13 @@ class Appointment(Base):
     )
 
     # Approval tracking
-    approved_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
+    approved_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
     # Cancellation tracking
-    cancelled_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
+    cancelled_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     cancelled_by_client: Mapped[bool] = mapped_column(
         Boolean, server_default=text("FALSE"), nullable=False
     )
@@ -4658,9 +4264,7 @@ class Appointment(Base):
     # Idempotency (prevent duplicate bookings)
     idempotency_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"), onupdate=text("now()"), nullable=False
     )
@@ -4669,9 +4273,7 @@ class Appointment(Base):
     organization: Mapped["Organization"] = relationship()
     user: Mapped["User"] = relationship(foreign_keys=[user_id])
     appointment_type: Mapped["AppointmentType | None"] = relationship()
-    approved_by: Mapped["User | None"] = relationship(
-        foreign_keys=[approved_by_user_id]
-    )
+    approved_by: Mapped["User | None"] = relationship(foreign_keys=[approved_by_user_id])
     email_logs: Mapped[list["AppointmentEmailLog"]] = relationship(
         back_populates="appointment", cascade="all, delete-orphan"
     )
@@ -4713,17 +4315,13 @@ class AppointmentEmailLog(Base):
     status: Mapped[str] = mapped_column(
         String(20), server_default=text("'pending'"), nullable=False
     )  # pending, sent, failed
-    sent_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
+    sent_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # External ID from email service
     external_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
@@ -4779,9 +4377,7 @@ class Campaign(Base):
     )  # {stage_id, state, created_after, tags, etc.}
 
     # Scheduling
-    scheduled_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
+    scheduled_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     # Status
     status: Mapped[str] = mapped_column(
@@ -4792,9 +4388,7 @@ class Campaign(Base):
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"), onupdate=text("now()"), nullable=False
     )
@@ -4841,9 +4435,7 @@ class CampaignRun(Base):
     started_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
+    completed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     # Status
     status: Mapped[str] = mapped_column(
@@ -4879,9 +4471,7 @@ class CampaignRecipient(Base):
         Index("idx_campaign_recipients_run", "run_id"),
         Index("idx_campaign_recipients_entity", "entity_type", "entity_id"),
         Index("idx_campaign_recipients_tracking_token", "tracking_token", unique=True),
-        UniqueConstraint(
-            "run_id", "entity_type", "entity_id", name="uq_campaign_recipient"
-        ),
+        UniqueConstraint("run_id", "entity_type", "entity_id", name="uq_campaign_recipient"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -4909,27 +4499,19 @@ class CampaignRecipient(Base):
     skip_reason: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # Timing
-    sent_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
+    sent_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     # External ID from email service
     external_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Tracking - unique index 'idx_campaign_recipients_tracking_token' created by migration c3e9f2a1b8d4
     tracking_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    opened_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
+    opened_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     open_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    clicked_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
+    clicked_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     click_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     run: Mapped["CampaignRun"] = relationship(back_populates="recipients")
@@ -4971,13 +4553,9 @@ class EmailSuppression(Base):
 
     # Optional source reference
     source_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    source_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True
-    )
+    source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
@@ -5007,27 +4585,19 @@ class CampaignTrackingEvent(Base):
     )
 
     # Event type
-    event_type: Mapped[str] = mapped_column(
-        String(10), nullable=False
-    )  # 'open' | 'click'
+    event_type: Mapped[str] = mapped_column(String(10), nullable=False)  # 'open' | 'click'
 
     # For clicks: the URL that was clicked
     url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Analytics data
-    ip_address: Mapped[str | None] = mapped_column(
-        String(45), nullable=True
-    )  # IPv6 max length
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)  # IPv6 max length
     user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    recipient: Mapped["CampaignRecipient"] = relationship(
-        back_populates="tracking_events"
-    )
+    recipient: Mapped["CampaignRecipient"] = relationship(back_populates="tracking_events")
 
 
 # =============================================================================
@@ -5035,20 +4605,20 @@ class CampaignTrackingEvent(Base):
 # =============================================================================
 
 
-class CaseInterview(Base):
+class SurrogateInterview(Base):
     """
-    Interview record for a case.
+    Interview record for a surrogate.
 
-    Supports multiple interviews per case with versioned transcripts.
+    Supports multiple interviews per surrogate with versioned transcripts.
     Transcripts > 100KB are offloaded to S3 (text kept inline for search).
     """
 
-    __tablename__ = "case_interviews"
+    __tablename__ = "surrogate_interviews"
     __table_args__ = (
-        Index("ix_case_interviews_case_id", "case_id"),
-        Index("ix_case_interviews_org_conducted", "organization_id", "conducted_at"),
+        Index("ix_surrogate_interviews_surrogate_id", "surrogate_id"),
+        Index("ix_surrogate_interviews_org_conducted", "organization_id", "conducted_at"),
         Index(
-            "ix_case_interviews_search_vector",
+            "ix_surrogate_interviews_search_vector",
             "search_vector",
             postgresql_using="gin",
         ),
@@ -5057,9 +4627,9 @@ class CaseInterview(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    case_id: Mapped[uuid.UUID] = mapped_column(
+    surrogate_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("cases.id", ondelete="CASCADE"),
+        ForeignKey("surrogates.id", ondelete="CASCADE"),
         nullable=False,
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -5072,9 +4642,7 @@ class CaseInterview(Base):
     interview_type: Mapped[str] = mapped_column(
         String(20), nullable=False
     )  # 'phone', 'video', 'in_person'
-    conducted_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=False
-    )
+    conducted_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     conducted_by_user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
@@ -5111,23 +4679,17 @@ class CaseInterview(Base):
         ForeignKey("data_retention_policies.id"),
         nullable=True,
     )
-    expires_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
+    expires_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Full-text search vector (managed by trigger)
     search_vector = mapped_column(TSVECTOR, nullable=True)
 
     # Relationships
-    case: Mapped["Case"] = relationship()
+    surrogate: Mapped["Surrogate"] = relationship()
     organization: Mapped["Organization"] = relationship()
     conducted_by: Mapped["User"] = relationship()
     versions: Mapped[list["InterviewTranscriptVersion"]] = relationship(
@@ -5162,7 +4724,7 @@ class InterviewTranscriptVersion(Base):
     )
     interview_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("case_interviews.id", ondelete="CASCADE"),
+        ForeignKey("surrogate_interviews.id", ondelete="CASCADE"),
         nullable=False,
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -5185,12 +4747,10 @@ class InterviewTranscriptVersion(Base):
         String(30), nullable=False
     )  # 'manual', 'ai_transcription', 'restore'
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    interview: Mapped["CaseInterview"] = relationship(back_populates="versions")
+    interview: Mapped["SurrogateInterview"] = relationship(back_populates="versions")
     organization: Mapped["Organization"] = relationship()
     author: Mapped["User"] = relationship()
 
@@ -5220,7 +4780,7 @@ class InterviewNote(Base):
     )
     interview_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("case_interviews.id", ondelete="CASCADE"),
+        ForeignKey("surrogate_interviews.id", ondelete="CASCADE"),
         nullable=False,
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -5253,22 +4813,16 @@ class InterviewNote(Base):
     )
 
     # Resolve support
-    resolved_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
+    resolved_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     resolved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    interview: Mapped["CaseInterview"] = relationship(back_populates="notes")
+    interview: Mapped["SurrogateInterview"] = relationship(back_populates="notes")
     organization: Mapped["Organization"] = relationship()
     author: Mapped["User"] = relationship(foreign_keys=[author_user_id])
     resolved_by: Mapped["User | None"] = relationship(foreign_keys=[resolved_by_user_id])
@@ -5305,7 +4859,7 @@ class InterviewAttachment(Base):
     )
     interview_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("case_interviews.id", ondelete="CASCADE"),
+        ForeignKey("surrogate_interviews.id", ondelete="CASCADE"),
         nullable=False,
     )
     attachment_id: Mapped[uuid.UUID] = mapped_column(
@@ -5327,11 +4881,9 @@ class InterviewAttachment(Base):
         TIMESTAMP(timezone=True), nullable=True
     )
 
-    created_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Relationships
-    interview: Mapped["CaseInterview"] = relationship(back_populates="interview_attachments")
+    interview: Mapped["SurrogateInterview"] = relationship(back_populates="interview_attachments")
     attachment: Mapped["Attachment"] = relationship()
     organization: Mapped["Organization"] = relationship()

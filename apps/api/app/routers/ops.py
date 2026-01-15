@@ -119,9 +119,7 @@ def get_alerts_summary(
 @router.get("/alerts", response_model=AlertsListResponse)
 def list_alerts(
     status: Optional[AlertStatusParam] = Query(None, description="Filter by status"),
-    severity: Optional[AlertSeverityParam] = Query(
-        None, description="Filter by severity"
-    ),
+    severity: Optional[AlertSeverityParam] = Query(None, description="Filter by severity"),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     session: UserSession = Depends(get_current_session),
@@ -175,7 +173,13 @@ def get_workflow_sli(
 ):
     """Get SLI/SLO rollups for core workflows."""
     workflow_prefixes = {
-        "cases": ["/cases", "/intended-parents", "/matches", "/notes", "/attachments"],
+        "surrogates": [
+            "/surrogates",
+            "/intended-parents",
+            "/matches",
+            "/notes",
+            "/attachments",
+        ],
         "tasks": ["/tasks"],
         "dashboard": ["/dashboard", "/analytics"],
         "automation": ["/workflows", "/campaigns"],
@@ -190,8 +194,7 @@ def get_workflow_sli(
             window_minutes=window_minutes,
         )
         meets_slo = rollup["success_rate"] >= settings.SLO_SUCCESS_RATE and (
-            rollup["avg_latency_ms"] <= settings.SLO_AVG_LATENCY_MS
-            or rollup["request_count"] == 0
+            rollup["avg_latency_ms"] <= settings.SLO_AVG_LATENCY_MS or rollup["request_count"] == 0
         )
         results.append(
             WorkflowSliResponse(
@@ -228,9 +231,7 @@ def resolve_alert(
     return {"status": "resolved", "alert_id": str(alert_id)}
 
 
-@router.post(
-    "/alerts/{alert_id}/acknowledge", dependencies=[Depends(require_csrf_header)]
-)
+@router.post("/alerts/{alert_id}/acknowledge", dependencies=[Depends(require_csrf_header)])
 def acknowledge_alert(
     alert_id: UUID,
     session: UserSession = Depends(get_current_session),

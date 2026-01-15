@@ -26,9 +26,7 @@ class EmailTemplateUpdate(BaseModel):
     subject: str | None = Field(None, min_length=1, max_length=200)
     body: str | None = Field(None, min_length=1, max_length=50000)
     is_active: bool | None = None
-    expected_version: int | None = Field(
-        None, description="Required for optimistic locking"
-    )
+    expected_version: int | None = Field(None, description="Required for optimistic locking")
 
 
 class EmailTemplateRead(BaseModel):
@@ -72,7 +70,7 @@ class EmailSendRequest(BaseModel):
     template_id: UUID
     recipient_email: EmailStr
     variables: dict[str, str] = {}
-    case_id: UUID | None = None
+    surrogate_id: UUID | None = None
     schedule_at: datetime | None = None
 
 
@@ -85,7 +83,7 @@ class EmailLogRead(BaseModel):
     organization_id: UUID
     job_id: UUID | None
     template_id: UUID | None
-    case_id: UUID | None
+    surrogate_id: UUID | None
     recipient_email: str
     subject: str
     body: str
@@ -102,7 +100,7 @@ class EmailLogListItem(BaseModel):
 
     id: UUID
     template_id: UUID | None
-    case_id: UUID | None
+    surrogate_id: UUID | None
     recipient_email: str
     subject: str
     status: str

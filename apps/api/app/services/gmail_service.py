@@ -43,9 +43,7 @@ async def send_email(
     import uuid
 
     # Get access token
-    access_token = await oauth_service.get_access_token_async(
-        db, uuid.UUID(user_id), "gmail"
-    )
+    access_token = await oauth_service.get_access_token_async(db, uuid.UUID(user_id), "gmail")
     if not access_token:
         return {"success": False, "error": "Gmail not connected"}
 

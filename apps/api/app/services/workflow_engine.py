@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.db.models import (
     AutomationWorkflow,
     WorkflowExecution,
-    Case,
+    Surrogate,
     Task,
     User,
     Organization,
@@ -77,9 +77,7 @@ class WorkflowEngine:
         """
         # Loop protection
         if depth >= MAX_DEPTH:
-            logger.warning(
-                f"Max workflow depth ({MAX_DEPTH}) reached for event {event_id}"
-            )
+            logger.warning(f"Max workflow depth ({MAX_DEPTH}) reached for event {event_id}")
             return []
 
         # Ignore workflow-triggered events at depth > 1
@@ -149,24 +147,22 @@ class WorkflowEngine:
 
             if to_stage_id and str(event_data.get("new_stage_id")) != str(to_stage_id):
                 return False
-            if from_stage_id and str(event_data.get("old_stage_id")) != str(
-                from_stage_id
-            ):
+            if from_stage_id and str(event_data.get("old_stage_id")) != str(from_stage_id):
                 return False
             return True
 
-        if trigger_type == WorkflowTriggerType.CASE_ASSIGNED:
+        if trigger_type == WorkflowTriggerType.SURROGATE_ASSIGNED:
             to_user_id = config.get("to_user_id")
             if to_user_id and str(event_data.get("new_owner_id")) != str(to_user_id):
                 return False
             return True
 
-        if trigger_type == WorkflowTriggerType.CASE_UPDATED:
+        if trigger_type == WorkflowTriggerType.SURROGATE_UPDATED:
             required_fields = set(config.get("fields", []))
             changed_fields = set(event_data.get("changed_fields", []))
             return bool(required_fields & changed_fields)
 
-        # For case_created, task_due, task_overdue, scheduled, inactivity
+        # For surrogate_created, task_due, task_overdue, scheduled, inactivity
         # No trigger-level filtering needed (conditions handle it)
         return True
 
@@ -229,9 +225,7 @@ class WorkflowEngine:
         # Check user opt-out (for owner of entity)
         user_opted_out = False
         if hasattr(entity, "owner_id") and entity.owner_type == OwnerType.USER.value:
-            user_opted_out = workflow_service.is_user_opted_out(
-                db, entity.owner_id, workflow.id
-            )
+            user_opted_out = workflow_service.is_user_opted_out(db, entity.owner_id, workflow.id)
 
         if not conditions_matched or user_opted_out:
             execution = WorkflowExecution(
@@ -255,18 +249,16 @@ class WorkflowEngine:
             return execution
 
         # =====================================================================
-        # FAIL FAST: Workflows require user-owned cases at trigger time
+        # FAIL FAST: Workflows require user-owned surrogates at trigger time
         # (after conditions match to avoid false failures)
         # =====================================================================
-        has_approval_actions = any(
-            action.get("requires_approval") for action in workflow.actions
-        )
-        case = self._get_related_case(db, entity_type, entity)
-        case_owner = None
+        has_approval_actions = any(action.get("requires_approval") for action in workflow.actions)
+        surrogate = self._get_related_surrogate(db, entity_type, entity)
+        surrogate_owner = None
 
-        if case:
-            # Validate case has a user owner (not queue/null)
-            if case.owner_type != OwnerType.USER.value or not case.owner_id:
+        if surrogate:
+            # Validate surrogate has a user owner (not queue/null)
+            if surrogate.owner_type != OwnerType.USER.value or not surrogate.owner_id:
                 execution = WorkflowExecution(
                     organization_id=workflow.organization_id,
                     workflow_id=workflow.id,
@@ -280,7 +272,7 @@ class WorkflowEngine:
                     matched_conditions=True,
                     actions_executed=[],
                     status=WorkflowExecutionStatus.FAILED.value,
-                    error_message="Workflow requires case owner to be a user",
+                    error_message="Workflow requires surrogate owner to be a user",
                     duration_ms=int((time.time() - start_time) * 1000),
                 )
                 db.add(execution)
@@ -288,8 +280,8 @@ class WorkflowEngine:
                 return execution
 
             # Verify owner exists
-            case_owner = db.query(User).filter(User.id == case.owner_id).first()
-            if not case_owner:
+            surrogate_owner = db.query(User).filter(User.id == surrogate.owner_id).first()
+            if not surrogate_owner:
                 execution = WorkflowExecution(
                     organization_id=workflow.organization_id,
                     workflow_id=workflow.id,
@@ -303,7 +295,7 @@ class WorkflowEngine:
                     matched_conditions=True,
                     actions_executed=[],
                     status=WorkflowExecutionStatus.FAILED.value,
-                    error_message="Workflow requires case owner but owner not found",
+                    error_message="Workflow requires surrogate owner but owner not found",
                     duration_ms=int((time.time() - start_time) * 1000),
                 )
                 db.add(execution)
@@ -323,7 +315,7 @@ class WorkflowEngine:
                 matched_conditions=True,
                 actions_executed=[],
                 status=WorkflowExecutionStatus.FAILED.value,
-                error_message="Workflow requires approval but entity has no related case",
+                error_message="Workflow requires approval but entity has no related surrogate",
                 duration_ms=int((time.time() - start_time) * 1000),
             )
             db.add(execution)
@@ -355,7 +347,7 @@ class WorkflowEngine:
         for idx, action in enumerate(workflow.actions):
             # Check if this action requires approval
             if action.get("requires_approval"):
-                # Get the case for approval task
+                # Get the surrogate for approval task
                 # Create approval task and pause execution
                 task = self._create_approval_task(
                     db=db,
@@ -364,8 +356,8 @@ class WorkflowEngine:
                     action=action,
                     action_index=idx,
                     entity=entity,
-                    case=case,
-                    owner=case_owner,
+                    surrogate=surrogate,
+                    owner=surrogate_owner,
                     triggered_by_user_id=event_data.get("triggered_by_user_id"),
                 )
 
@@ -414,8 +406,8 @@ class WorkflowEngine:
         # Update workflow stats
         workflow.run_count += 1
         workflow.last_run_at = datetime.now(timezone.utc)
-        workflow.last_error = None if all_success else (
-            action_results[-1].get("error") if action_results else None
+        workflow.last_error = (
+            None if all_success else (action_results[-1].get("error") if action_results else None)
         )
 
         # Update execution record
@@ -425,25 +417,25 @@ class WorkflowEngine:
             if all_success
             else WorkflowExecutionStatus.PARTIAL.value
         )
-        execution.error_message = None if all_success else (
-            action_results[-1].get("error") if action_results else None
+        execution.error_message = (
+            None if all_success else (action_results[-1].get("error") if action_results else None)
         )
         execution.duration_ms = int((time.time() - start_time) * 1000)
         db.commit()
 
         return execution
 
-    def _get_related_case(
+    def _get_related_surrogate(
         self,
         db: Session,
         entity_type: str,
         entity: Any,
-    ) -> Case | None:
-        """Get the case related to an entity."""
-        if entity_type == "case":
+    ) -> Surrogate | None:
+        """Get the surrogate related to an entity."""
+        if entity_type == "surrogate":
             return entity
-        if hasattr(entity, "case_id") and entity.case_id:
-            return db.query(Case).filter(Case.id == entity.case_id).first()
+        if hasattr(entity, "surrogate_id") and entity.surrogate_id:
+            return db.query(Surrogate).filter(Surrogate.id == entity.surrogate_id).first()
         return None
 
     def _create_approval_task(
@@ -454,7 +446,7 @@ class WorkflowEngine:
         action: dict,
         action_index: int,
         entity: Any,
-        case: Case,
+        surrogate: Surrogate,
         owner: User,
         triggered_by_user_id: UUID | None,
     ) -> Task | None:
@@ -464,9 +456,7 @@ class WorkflowEngine:
         Returns the task if created or already exists (idempotency).
         """
         # Get organization for timezone fallback
-        org = db.query(Organization).filter(
-            Organization.id == case.organization_id
-        ).first()
+        org = db.query(Organization).filter(Organization.id == surrogate.organization_id).first()
 
         # Build sanitized preview (no PII)
         preview = build_action_preview(db, action, entity)
@@ -485,7 +475,7 @@ class WorkflowEngine:
 
         task = Task(
             organization_id=execution.organization_id,
-            case_id=case.id,
+            surrogate_id=surrogate.id,
             task_type=TaskType.WORKFLOW_APPROVAL.value,
             title=f"Approve: {preview}",
             description=f"Workflow '{workflow.name}' requires your approval to proceed.",
@@ -513,9 +503,9 @@ class WorkflowEngine:
                 db=db,
                 task_id=task.id,
                 task_title=task.title,
-                org_id=case.organization_id,
+                org_id=surrogate.organization_id,
                 assignee_id=owner.id,
-                case_number=case.case_number,
+                surrogate_number=surrogate.surrogate_number,
             )
 
             return task
@@ -523,13 +513,15 @@ class WorkflowEngine:
         except IntegrityError:
             # Idempotency: task already exists for this execution+action
             db.rollback()
-            existing = db.query(Task).filter(
-                Task.workflow_execution_id == execution.id,
-                Task.workflow_action_index == action_index,
-            ).first()
-            logger.info(
-                f"Approval task already exists: {existing.id if existing else 'unknown'}"
+            existing = (
+                db.query(Task)
+                .filter(
+                    Task.workflow_execution_id == execution.id,
+                    Task.workflow_action_index == action_index,
+                )
+                .first()
             )
+            logger.info(f"Approval task already exists: {existing.id if existing else 'unknown'}")
             return existing
 
     def continue_execution(
@@ -563,9 +555,11 @@ class WorkflowEngine:
             )
             return
 
-        workflow = db.query(AutomationWorkflow).filter(
-            AutomationWorkflow.id == execution.workflow_id
-        ).first()
+        workflow = (
+            db.query(AutomationWorkflow)
+            .filter(AutomationWorkflow.id == execution.workflow_id)
+            .first()
+        )
 
         if not workflow:
             logger.error(f"Workflow {execution.workflow_id} not found for resume")
@@ -594,11 +588,13 @@ class WorkflowEngine:
             action = task.workflow_action_payload
             if not action:
                 logger.error(f"No action payload found for task {task.id}")
-                action_results.append({
-                    "success": False,
-                    "action_type": task.workflow_action_type,
-                    "error": "No action payload",
-                })
+                action_results.append(
+                    {
+                        "success": False,
+                        "action_type": task.workflow_action_type,
+                        "error": "No action payload",
+                    }
+                )
                 execution.actions_executed = action_results
                 execution.status = WorkflowExecutionStatus.FAILED.value
                 db.commit()
@@ -616,26 +612,30 @@ class WorkflowEngine:
             action_results.append(result)
 
             # Continue with remaining actions
-            remaining_actions = workflow.actions[action_index + 1:]
+            remaining_actions = workflow.actions[action_index + 1 :]
             for idx, next_action in enumerate(remaining_actions):
                 actual_idx = action_index + 1 + idx
 
                 if next_action.get("requires_approval"):
                     # Need another approval - pause again
-                    case = self._get_related_case(db, execution.entity_type, entity)
-                    owner = db.query(User).filter(User.id == case.owner_id).first() if case else None
+                    surrogate = self._get_related_surrogate(db, execution.entity_type, entity)
+                    owner = (
+                        db.query(User).filter(User.id == surrogate.owner_id).first()
+                        if surrogate
+                        else None
+                    )
 
-                    if not case or not owner:
+                    if not surrogate or not owner:
                         action_results.append(
                             {
                                 "success": False,
                                 "action_type": next_action.get("action_type"),
-                                "error": "Case or owner not found for approval",
+                                "error": "Surrogate or owner not found for approval",
                             }
                         )
                         execution.actions_executed = action_results
                         execution.status = WorkflowExecutionStatus.FAILED.value
-                        execution.error_message = "Workflow requires case owner to be a user"
+                        execution.error_message = "Workflow requires surrogate owner to be a user"
                         db.commit()
                         return
 
@@ -646,7 +646,7 @@ class WorkflowEngine:
                         action=next_action,
                         action_index=actual_idx,
                         entity=entity,
-                        case=case,
+                        surrogate=surrogate,
                         owner=owner,
                         triggered_by_user_id=task.workflow_triggered_by_user_id,
                     )
@@ -657,9 +657,7 @@ class WorkflowEngine:
                         execution.paused_task_id = new_task.id
                         execution.actions_executed = action_results
                         db.commit()
-                        logger.info(
-                            f"Workflow {workflow.id} paused again at action {actual_idx}"
-                        )
+                        logger.info(f"Workflow {workflow.id} paused again at action {actual_idx}")
                         return
 
                 # Execute non-approval action
@@ -690,25 +688,31 @@ class WorkflowEngine:
 
         elif task.status == TaskStatus.DENIED.value:
             # DENIED: Mark execution as canceled
-            action_results.append({
-                "success": False,
-                "action_type": task.workflow_action_type,
-                "skipped": True,
-                "reason": "denied",
-            })
+            action_results.append(
+                {
+                    "success": False,
+                    "action_type": task.workflow_action_type,
+                    "skipped": True,
+                    "reason": "denied",
+                }
+            )
             execution.status = WorkflowExecutionStatus.CANCELED.value
-            execution.error_message = f"Approval denied: {task.workflow_denial_reason or 'No reason given'}"
+            execution.error_message = (
+                f"Approval denied: {task.workflow_denial_reason or 'No reason given'}"
+            )
             execution.actions_executed = action_results
             db.commit()
 
         elif task.status == TaskStatus.EXPIRED.value:
             # EXPIRED: Mark execution as expired
-            action_results.append({
-                "success": False,
-                "action_type": task.workflow_action_type,
-                "skipped": True,
-                "reason": "expired",
-            })
+            action_results.append(
+                {
+                    "success": False,
+                    "action_type": task.workflow_action_type,
+                    "skipped": True,
+                    "reason": "expired",
+                }
+            )
             execution.status = WorkflowExecutionStatus.EXPIRED.value
             execution.error_message = "Approval timed out"
             execution.actions_executed = action_results
@@ -738,9 +742,7 @@ class WorkflowEngine:
     def _is_duplicate(self, db: Session, dedupe_key: str) -> bool:
         """Check if this execution would be a duplicate."""
         existing = (
-            db.query(WorkflowExecution)
-            .filter(WorkflowExecution.dedupe_key == dedupe_key)
-            .first()
+            db.query(WorkflowExecution).filter(WorkflowExecution.dedupe_key == dedupe_key).first()
         )
         return existing is not None
 
@@ -799,8 +801,8 @@ class WorkflowEngine:
 
     def _get_entity(self, db: Session, entity_type: str, entity_id: UUID) -> Any:
         """Get entity by type and ID."""
-        if entity_type == "case":
-            return db.query(Case).filter(Case.id == entity_id).first()
+        if entity_type == "surrogate":
+            return db.query(Surrogate).filter(Surrogate.id == entity_id).first()
         if entity_type == "task":
             return db.query(Task).filter(Task.id == entity_id).first()
         if entity_type == "match":
@@ -883,11 +885,11 @@ class WorkflowEngine:
 
         return False
 
-    # Actions that require the entity to be a Case
-    CASE_ONLY_ACTIONS = {
+    # Actions that require the entity to be a Surrogate
+    SURROGATE_ONLY_ACTIONS = {
         WorkflowActionType.SEND_EMAIL.value,
         WorkflowActionType.CREATE_TASK.value,
-        WorkflowActionType.ASSIGN_CASE.value,
+        WorkflowActionType.ASSIGN_SURROGATE.value,
         WorkflowActionType.UPDATE_FIELD.value,
         WorkflowActionType.ADD_NOTE.value,
     }
@@ -905,27 +907,27 @@ class WorkflowEngine:
         action_type = action.get("action_type")
         action_entity = entity
 
-        # Validate entity type for Case-only actions, map tasks to cases when possible
-        if action_type in self.CASE_ONLY_ACTIONS:
+        # Validate entity type for Surrogate-only actions, map tasks to surrogates when possible
+        if action_type in self.SURROGATE_ONLY_ACTIONS:
             if entity_type == "task":
-                case_id = getattr(entity, "case_id", None)
-                if not case_id:
+                surrogate_id = getattr(entity, "surrogate_id", None)
+                if not surrogate_id:
                     return {
                         "success": False,
-                        "error": "Task is not linked to a case",
+                        "error": "Task is not linked to a surrogate",
                         "skipped": True,
                     }
-                action_entity = db.query(Case).filter(Case.id == case_id).first()
+                action_entity = db.query(Surrogate).filter(Surrogate.id == surrogate_id).first()
                 if not action_entity:
                     return {
                         "success": False,
-                        "error": "Case not found for task",
+                        "error": "Surrogate not found for task",
                         "skipped": True,
                     }
-            elif entity_type != "case":
+            elif entity_type != "surrogate":
                 return {
                     "success": False,
-                    "error": f"Action '{action_type}' only supports Case entities, got '{entity_type}'",
+                    "error": f"Action '{action_type}' only supports Surrogate entities, got '{entity_type}'",
                     "skipped": True,
                 }
 
@@ -936,18 +938,14 @@ class WorkflowEngine:
             if action_type == WorkflowActionType.CREATE_TASK.value:
                 return self._action_create_task(db, action, action_entity)
 
-            if action_type == WorkflowActionType.ASSIGN_CASE.value:
-                return self._action_assign_case(
-                    db, action, action_entity, event_id, depth
-                )
+            if action_type == WorkflowActionType.ASSIGN_SURROGATE.value:
+                return self._action_assign_surrogate(db, action, action_entity, event_id, depth)
 
             if action_type == WorkflowActionType.SEND_NOTIFICATION.value:
                 return self._action_send_notification(db, action, entity)
 
             if action_type == WorkflowActionType.UPDATE_FIELD.value:
-                return self._action_update_field(
-                    db, action, action_entity, event_id, depth
-                )
+                return self._action_update_field(db, action, action_entity, event_id, depth)
 
             if action_type == WorkflowActionType.ADD_NOTE.value:
                 return self._action_add_note(db, action, action_entity)
@@ -985,7 +983,7 @@ class WorkflowEngine:
         self,
         db: Session,
         action: dict,
-        entity: Case,
+        entity: Surrogate,
         event_id: UUID,
     ) -> dict:
         """Queue an email using template."""
@@ -1006,7 +1004,7 @@ class WorkflowEngine:
                 "template_id": str(template_id),
                 "recipient_email": entity.email,
                 "variables": variables,
-                "case_id": str(entity.id),
+                "surrogate_id": str(entity.id),
                 "event_id": str(event_id),
             },
         )
@@ -1022,9 +1020,9 @@ class WorkflowEngine:
         self,
         db: Session,
         action: dict,
-        entity: Case,
+        entity: Surrogate,
     ) -> dict:
-        """Create a task on the case."""
+        """Create a task on the surrogate."""
         from app.services import task_service
         from datetime import timedelta
         from app.schemas.task import TaskCreate
@@ -1044,9 +1042,7 @@ class WorkflowEngine:
         elif assignee == "creator":
             owner_type = OwnerType.USER.value
             owner_id = entity.created_by_user_id
-        elif isinstance(assignee, str) and assignee.startswith(
-            ("admin", "owner", "creator")
-        ):
+        elif isinstance(assignee, str) and assignee.startswith(("admin", "owner", "creator")):
             owner_type = entity.owner_type
             owner_id = entity.owner_id
         else:
@@ -1068,7 +1064,7 @@ class WorkflowEngine:
             title=title,
             description=description,
             task_type=TaskType.FOLLOW_UP,
-            case_id=entity.id,
+            surrogate_id=entity.id,
             owner_type=owner_type,
             owner_id=owner_id,
             due_date=due_date.date(),
@@ -1086,15 +1082,15 @@ class WorkflowEngine:
             "description": f"Created task: {title}",
         }
 
-    def _action_assign_case(
+    def _action_assign_surrogate(
         self,
         db: Session,
         action: dict,
-        entity: Case,
+        entity: Surrogate,
         event_id: UUID,
         depth: int,
     ) -> dict:
-        """Assign case to user or queue."""
+        """Assign surrogate to user or queue."""
         owner_type = action.get("owner_type")
         owner_id = action.get("owner_id")
 
@@ -1107,11 +1103,11 @@ class WorkflowEngine:
 
         db.commit()
 
-        # Trigger case_assigned workflow (with increased depth to prevent loops)
+        # Trigger surrogate_assigned workflow (with increased depth to prevent loops)
         self.trigger(
             db=db,
-            trigger_type=WorkflowTriggerType.CASE_ASSIGNED,
-            entity_type="case",
+            trigger_type=WorkflowTriggerType.SURROGATE_ASSIGNED,
+            entity_type="surrogate",
             entity_id=entity.id,
             event_data={
                 "old_owner_type": old_owner_type,
@@ -1127,14 +1123,14 @@ class WorkflowEngine:
 
         return {
             "success": True,
-            "description": f"Assigned case to {owner_type}:{owner_id}",
+            "description": f"Assigned surrogate to {owner_type}:{owner_id}",
         }
 
     def _action_send_notification(
         self,
         db: Session,
         action: dict,
-        entity: Case,
+        entity: Surrogate,
     ) -> dict:
         """Send in-app notification."""
         from app.db.enums import NotificationType
@@ -1172,10 +1168,10 @@ class WorkflowEngine:
                 db=db,
                 org_id=entity.organization_id,
                 user_id=user_id,
-                type=NotificationType.CASE_STATUS_CHANGED,  # Generic type
+                type=NotificationType.SURROGATE_STATUS_CHANGED,  # Generic type
                 title=title,
                 body=body if body else None,
-                entity_type="case",
+                entity_type="surrogate",
                 entity_id=entity.id,
             )
 
@@ -1189,11 +1185,11 @@ class WorkflowEngine:
         self,
         db: Session,
         action: dict,
-        entity: Case,
+        entity: Surrogate,
         event_id: UUID,
         depth: int,
     ) -> dict:
-        """Update a case field."""
+        """Update a surrogate field."""
         field = action.get("field")
         value = action.get("value")
 
@@ -1204,7 +1200,7 @@ class WorkflowEngine:
 
         if field == "stage_id":
             from app.services import pipeline_service
-            from app.db.models import CaseStatusHistory
+            from app.db.models import SurrogateStatusHistory
 
             new_stage_id = UUID(value) if isinstance(value, str) else value
             if new_stage_id == entity.stage_id:
@@ -1212,37 +1208,27 @@ class WorkflowEngine:
 
             stage = pipeline_service.get_stage_by_id(db, new_stage_id)
             current_stage = (
-                pipeline_service.get_stage_by_id(db, entity.stage_id)
-                if entity.stage_id
-                else None
+                pipeline_service.get_stage_by_id(db, entity.stage_id) if entity.stage_id else None
             )
-            case_pipeline_id = current_stage.pipeline_id if current_stage else None
-            if not case_pipeline_id:
-                case_pipeline_id = pipeline_service.get_or_create_default_pipeline(
+            surrogate_pipeline_id = current_stage.pipeline_id if current_stage else None
+            if not surrogate_pipeline_id:
+                surrogate_pipeline_id = pipeline_service.get_or_create_default_pipeline(
                     db,
                     entity.organization_id,
                 ).id
-            if (
-                not stage
-                or not stage.is_active
-                or stage.pipeline_id != case_pipeline_id
-            ):
-                return {"success": False, "error": "Invalid stage for case pipeline"}
+            if not stage or not stage.is_active or stage.pipeline_id != surrogate_pipeline_id:
+                return {"success": False, "error": "Invalid stage for surrogate pipeline"}
 
             old_stage_id = entity.stage_id
             old_label = entity.status_label
-            old_stage = (
-                pipeline_service.get_stage_by_id(db, old_stage_id)
-                if old_stage_id
-                else None
-            )
+            old_stage = pipeline_service.get_stage_by_id(db, old_stage_id) if old_stage_id else None
             old_slug = old_stage.slug if old_stage else None
             entity.stage_id = stage.id
             entity.status_label = stage.label
             entity.updated_at = datetime.now(timezone.utc)
 
-            history = CaseStatusHistory(
-                case_id=entity.id,
+            history = SurrogateStatusHistory(
+                surrogate_id=entity.id,
                 organization_id=entity.organization_id,
                 from_stage_id=old_stage_id,
                 to_stage_id=stage.id,
@@ -1258,10 +1244,10 @@ class WorkflowEngine:
             self.trigger(
                 db=db,
                 trigger_type=WorkflowTriggerType.STATUS_CHANGED,
-                entity_type="case",
+                entity_type="surrogate",
                 entity_id=entity.id,
                 event_data={
-                    "case_id": str(entity.id),
+                    "surrogate_id": str(entity.id),
                     "old_stage_id": str(old_stage_id) if old_stage_id else None,
                     "new_stage_id": str(stage.id),
                     "old_status": old_slug,
@@ -1277,17 +1263,15 @@ class WorkflowEngine:
             entity.updated_at = datetime.now(timezone.utc)
             db.commit()
 
-        # Trigger case_updated workflow
+        # Trigger surrogate_updated workflow
         self.trigger(
             db=db,
-            trigger_type=WorkflowTriggerType.CASE_UPDATED,
-            entity_type="case",
+            trigger_type=WorkflowTriggerType.SURROGATE_UPDATED,
+            entity_type="surrogate",
             entity_id=entity.id,
             event_data={
                 "changed_fields": [field],
-                "old_values": {
-                    field: str(old_value) if old_value is not None else None
-                },
+                "old_values": {field: str(old_value) if old_value is not None else None},
                 "new_values": {field: str(value)},
             },
             org_id=entity.organization_id,
@@ -1305,9 +1289,9 @@ class WorkflowEngine:
         self,
         db: Session,
         action: dict,
-        entity: Case,
+        entity: Surrogate,
     ) -> dict:
-        """Add a note to the case."""
+        """Add a note to the surrogate."""
         content = action.get("content", "")
 
         # Determine author (prefer owner, fall back to creator)
@@ -1325,7 +1309,7 @@ class WorkflowEngine:
 
         note = EntityNote(
             organization_id=entity.organization_id,
-            entity_type=EntityType.CASE.value,
+            entity_type=EntityType.SURROGATE.value,
             entity_id=entity.id,
             content=content,
             author_id=author_id,
@@ -1339,11 +1323,11 @@ class WorkflowEngine:
             "description": f"Added note: {content[:50]}...",
         }
 
-    def _resolve_email_variables(self, db: Session, case: Case) -> dict:
-        """Resolve email template variables from case context."""
+    def _resolve_email_variables(self, db: Session, surrogate: Surrogate) -> dict:
+        """Resolve email template variables from surrogate context."""
         from app.services import email_service
 
-        return email_service.build_case_template_variables(db, case)
+        return email_service.build_surrogate_template_variables(db, surrogate)
 
 
 # Singleton instance

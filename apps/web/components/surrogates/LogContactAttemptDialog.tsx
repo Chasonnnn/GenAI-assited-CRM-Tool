@@ -23,15 +23,15 @@ import {
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Loader2Icon, PhoneIcon, MailIcon, MessageSquareIcon, CalendarIcon } from "lucide-react"
-import { useCreateContactAttempt } from "@/lib/hooks/use-cases"
+import { useCreateContactAttempt } from "@/lib/hooks/use-surrogates"
 import { toast } from "sonner"
-import type { ContactMethod, ContactOutcome } from "@/lib/api/cases"
+import type { ContactMethod, ContactOutcome } from "@/lib/api/surrogates"
 
 interface LogContactAttemptDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    caseId: string
-    caseName?: string
+    surrogateId: string
+    surrogateName?: string
 }
 
 const CONTACT_METHODS: { value: ContactMethod; label: string; icon: React.ReactNode }[] = [
@@ -51,8 +51,8 @@ const CONTACT_OUTCOMES: { value: ContactOutcome; label: string; description: str
 export function LogContactAttemptDialog({
     open,
     onOpenChange,
-    caseId,
-    caseName = "Case",
+    surrogateId,
+    surrogateName = "Surrogate",
 }: LogContactAttemptDialogProps) {
     const [selectedMethods, setSelectedMethods] = useState<ContactMethod[]>([])
     const [outcome, setOutcome] = useState<ContactOutcome | "">("")
@@ -88,7 +88,7 @@ export function LogContactAttemptDialog({
 
         try {
             await createContactAttempt.mutateAsync({
-                caseId,
+                surrogateId,
                 data: {
                     contact_methods: selectedMethods,
                     outcome: outcome,
@@ -99,7 +99,7 @@ export function LogContactAttemptDialog({
 
             toast.success(
                 outcome === "reached"
-                    ? "Case has been marked as contacted."
+                    ? "Surrogate has been marked as contacted."
                     : "Contact attempt logged"
             )
 
@@ -132,7 +132,7 @@ export function LogContactAttemptDialog({
                 <DialogHeader>
                     <DialogTitle>Log Contact Attempt</DialogTitle>
                     <DialogDescription>
-                        Record your attempt to contact {caseName}.
+                        Record your attempt to contact {surrogateName}.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">

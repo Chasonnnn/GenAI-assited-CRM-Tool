@@ -55,10 +55,10 @@ The {{org_name}} Team""",
         "system_key": "document_request",
         "category": "request",
         "name": "Document Request",
-        "subject": "Documents Needed - {{case_number}}",
+        "subject": "Documents Needed - {{surrogate_number}}",
         "body": """Hi {{full_name}},
 
-We're making progress on your case ({{case_number}}) and need a few additional documents to move forward.
+We're making progress on your case ({{surrogate_number}}) and need a few additional documents to move forward.
 
 Please submit the following at your earliest convenience:
 - [Document 1]
@@ -111,10 +111,10 @@ The {{org_name}} Team""",
         "system_key": "status_update",
         "category": "status",
         "name": "Status Update",
-        "subject": "Update on Your Application - {{case_number}}",
+        "subject": "Update on Your Application - {{surrogate_number}}",
         "body": """Hi {{full_name}},
 
-We wanted to give you a quick update on your case ({{case_number}}).
+We wanted to give you a quick update on your case ({{surrogate_number}}).
 
 Your status has been updated to: {{new_status}}
 
@@ -275,10 +275,10 @@ The {{org_name}} Team""",
         "system_key": "missing_information_request",
         "category": "request",
         "name": "Missing Information Request",
-        "subject": "Additional Information Needed - {{case_number}}",
+        "subject": "Additional Information Needed - {{surrogate_number}}",
         "body": """Hi {{full_name}},
 
-We're reviewing your case ({{case_number}}) and need a few additional details to proceed:
+We're reviewing your case ({{surrogate_number}}) and need a few additional details to proceed:
 
 - [Item 1]
 - [Item 2]
@@ -301,7 +301,7 @@ SYSTEM_WORKFLOWS = [
         "name": "New Lead Welcome",
         "description": "Sends a welcome email when a new case is created",
         "icon": "mail",
-        "trigger_type": "case_created",
+        "trigger_type": "surrogate_created",
         "trigger_config": {},
         "conditions": [],
         "condition_logic": "AND",
@@ -313,15 +313,13 @@ SYSTEM_WORKFLOWS = [
     {
         "system_key": "application_followup",
         "name": "Application Follow-up",
-        "description": "Sends next steps email when status changes to Applied",
+        "description": "Sends next steps email when status changes to Application Submitted",
         "icon": "file-text",
         "trigger_type": "status_changed",
-        "trigger_config": {"to_stage_slug": "applied"},
+        "trigger_config": {"to_stage_slug": "application_submitted"},
         "conditions": [],
         "condition_logic": "AND",
-        "actions": [
-            {"action_type": "send_email", "template_key": "application_next_steps"}
-        ],
+        "actions": [{"action_type": "send_email", "template_key": "application_next_steps"}],
         "is_enabled": False,
         "requires_review": True,
         "recurrence_mode": "one_time",
@@ -384,13 +382,9 @@ SYSTEM_WORKFLOWS = [
         "icon": "repeat",
         "trigger_type": "scheduled",
         "trigger_config": {"interval": "weekly", "day_of_week": 1},  # Monday
-        "conditions": [
-            {"field": "status", "operator": "not_in", "value": ["matched", "closed"]}
-        ],
+        "conditions": [{"field": "status", "operator": "not_in", "value": ["matched", "closed"]}],
         "condition_logic": "AND",
-        "actions": [
-            {"action_type": "send_notification", "title": "Weekly nurture email sent"}
-        ],
+        "actions": [{"action_type": "send_notification", "title": "Weekly nurture email sent"}],
         "is_enabled": False,
         "requires_review": True,
         "recurrence_mode": "recurring",
@@ -401,7 +395,7 @@ SYSTEM_WORKFLOWS = [
         "name": "New Lead Outreach Task",
         "description": "Creates an outreach task and notifies the owner when a new case is created",
         "icon": "task",
-        "trigger_type": "case_created",
+        "trigger_type": "surrogate_created",
         "trigger_config": {},
         "conditions": [],
         "condition_logic": "AND",
@@ -590,9 +584,7 @@ def seed_system_templates(db: Session, org_id: UUID) -> int:
     return created_count
 
 
-def seed_system_workflows(
-    db: Session, org_id: UUID, user_id: UUID | None = None
-) -> int:
+def seed_system_workflows(db: Session, org_id: UUID, user_id: UUID | None = None) -> int:
     """
     Seed system automation workflows for an organization.
 

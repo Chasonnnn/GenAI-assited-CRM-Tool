@@ -1,7 +1,7 @@
 """
 Notification Service - handles in-app notifications.
 
-Provides CRUD for notifications and trigger functions for case/task events.
+Provides CRUD for notifications and trigger functions for surrogate/task events.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -17,7 +17,7 @@ from app.db.enums import NotificationType, Role, OwnerType
 from app.db.models import (
     Notification,
     UserNotificationSettings,
-    Case,
+    Surrogate,
     Attachment,
     Membership,
 )
@@ -51,9 +51,9 @@ def get_user_settings(
 
     if settings:
         return {
-            "case_assigned": settings.case_assigned,
-            "case_status_changed": settings.case_status_changed,
-            "case_handoff": settings.case_handoff,
+            "surrogate_assigned": settings.surrogate_assigned,
+            "surrogate_status_changed": settings.surrogate_status_changed,
+            "surrogate_claim_available": settings.surrogate_claim_available,
             "task_assigned": settings.task_assigned,
             "workflow_approvals": settings.workflow_approvals,
             "task_reminders": settings.task_reminders,
@@ -63,9 +63,9 @@ def get_user_settings(
 
     # Defaults (all ON)
     return {
-        "case_assigned": True,
-        "case_status_changed": True,
-        "case_handoff": True,
+        "surrogate_assigned": True,
+        "surrogate_status_changed": True,
+        "surrogate_claim_available": True,
         "task_assigned": True,
         "workflow_approvals": True,
         "task_reminders": True,
@@ -110,9 +110,9 @@ def update_user_settings(
     db.refresh(settings)
 
     return {
-        "case_assigned": settings.case_assigned,
-        "case_status_changed": settings.case_status_changed,
-        "case_handoff": settings.case_handoff,
+        "surrogate_assigned": settings.surrogate_assigned,
+        "surrogate_status_changed": settings.surrogate_status_changed,
+        "surrogate_claim_available": settings.surrogate_claim_available,
         "task_assigned": settings.task_assigned,
         "workflow_approvals": settings.workflow_approvals,
         "task_reminders": settings.task_reminders,
@@ -163,9 +163,7 @@ def create_notification(
             Notification.user_id == user_id,
         )
         if dedupe_window_hours is not None:
-            window_start = datetime.now(timezone.utc) - timedelta(
-                hours=dedupe_window_hours
-            )
+            window_start = datetime.now(timezone.utc) - timedelta(hours=dedupe_window_hours)
             query = query.filter(Notification.created_at > window_start)
         existing = query.first()
 
@@ -213,9 +211,7 @@ def get_notifications(
     if notification_types:
         query = query.filter(Notification.type.in_(notification_types))
 
-    return (
-        query.order_by(Notification.created_at.desc()).offset(offset).limit(limit).all()
-    )
+    return query.order_by(Notification.created_at.desc()).offset(offset).limit(limit).all()
 
 
 def get_unread_count(
@@ -303,9 +299,7 @@ def _schedule_ws_send(coro: asyncio.Future) -> None:
     threading.Thread(target=_runner, daemon=True).start()
 
 
-async def _send_ws_updates(
-    user_id: UUID, notification: Notification, unread_count: int
-) -> None:
+async def _send_ws_updates(user_id: UUID, notification: Notification, unread_count: int) -> None:
     """Send realtime notification + unread count to websocket clients."""
     payload = {
         "id": str(notification.id),
@@ -346,88 +340,88 @@ async def _send_ws_count_update(user_id: UUID, unread_count: int) -> None:
 
 
 # =============================================================================
-# Notification Triggers (called from case/task services)
+# Notification Triggers (called from surrogate/task services)
 # =============================================================================
 
 
-def notify_case_assigned(
+def notify_surrogate_assigned(
     db: Session,
-    case: Case,
+    surrogate: Surrogate,
     assignee_id: UUID,
     actor_name: str,
 ) -> None:
-    """Notify user when a case is assigned to them."""
+    """Notify user when a surrogate is assigned to them."""
     if not assignee_id:
         return
 
-    if not should_notify(db, assignee_id, case.organization_id, "case_assigned"):
+    if not should_notify(db, assignee_id, surrogate.organization_id, "surrogate_assigned"):
         return
 
-    dedupe_key = f"case_assigned:{case.id}:{assignee_id}"
+    dedupe_key = f"surrogate_assigned:{surrogate.id}:{assignee_id}"
     create_notification(
         db=db,
-        org_id=case.organization_id,
+        org_id=surrogate.organization_id,
         user_id=assignee_id,
-        type=NotificationType.CASE_ASSIGNED,
-        title=f"Case #{case.case_number} assigned to you",
-        body=f"{actor_name} assigned case {case.full_name} to you",
-        entity_type="case",
-        entity_id=case.id,
+        type=NotificationType.SURROGATE_ASSIGNED,
+        title=f"Surrogate #{surrogate.surrogate_number} assigned to you",
+        body=f"{actor_name} assigned surrogate {surrogate.full_name} to you",
+        entity_type="surrogate",
+        entity_id=surrogate.id,
         dedupe_key=dedupe_key,
     )
 
 
-def notify_case_status_changed(
+def notify_surrogate_status_changed(
     db: Session,
-    case: Case,
+    surrogate: Surrogate,
     from_status: str,
     to_status: str,
     actor_id: UUID,
     actor_name: str,
 ) -> None:
-    """Notify assignee and creator when case status changes."""
+    """Notify assignee and creator when surrogate status changes."""
     recipients = set()
 
     # Add owner if owned by user
     if (
-        case.owner_type == OwnerType.USER.value
-        and case.owner_id
-        and case.owner_id != actor_id
+        surrogate.owner_type == OwnerType.USER.value
+        and surrogate.owner_id
+        and surrogate.owner_id != actor_id
     ):
-        recipients.add(case.owner_id)
+        recipients.add(surrogate.owner_id)
 
     # Add creator (if different from assignee and actor)
-    if case.created_by_user_id and case.created_by_user_id != actor_id:
-        recipients.add(case.created_by_user_id)
+    if surrogate.created_by_user_id and surrogate.created_by_user_id != actor_id:
+        recipients.add(surrogate.created_by_user_id)
 
     for user_id in recipients:
-        if not should_notify(db, user_id, case.organization_id, "case_status_changed"):
+        if not should_notify(db, user_id, surrogate.organization_id, "surrogate_status_changed"):
             continue
 
-        dedupe_key = f"case_status:{case.id}:{to_status}:{user_id}"
+        dedupe_key = f"surrogate_status:{surrogate.id}:{to_status}:{user_id}"
         create_notification(
             db=db,
-            org_id=case.organization_id,
+            org_id=surrogate.organization_id,
             user_id=user_id,
-            type=NotificationType.CASE_STATUS_CHANGED,
-            title=f"Case #{case.case_number} status changed",
+            type=NotificationType.SURROGATE_STATUS_CHANGED,
+            title=f"Surrogate #{surrogate.surrogate_number} status changed",
             body=f"{actor_name} changed status from {from_status} to {to_status}",
-            entity_type="case",
-            entity_id=case.id,
+            entity_type="surrogate",
+            entity_id=surrogate.id,
             dedupe_key=dedupe_key,
         )
 
 
-def notify_case_handoff_ready(
+def notify_surrogate_ready_for_claim(
     db: Session,
-    case: Case,
+    surrogate: Surrogate,
 ) -> None:
-    """Notify all case_manager+ when a case is ready for handoff."""
+    """Notify all case_manager+ when a surrogate is approved and ready for claiming."""
     # Get all case_manager+ in org
     managers = (
         db.query(Membership)
         .filter(
-            Membership.organization_id == case.organization_id,
+            Membership.organization_id == surrogate.organization_id,
             Membership.role.in_([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER]),
             Membership.is_active.is_(True),
         )
@@ -436,83 +430,22 @@ def notify_case_handoff_ready(
 
     for membership in managers:
         if not should_notify(
-            db, membership.user_id, case.organization_id, "case_handoff"
+            db, membership.user_id, surrogate.organization_id, "surrogate_claim_available"
         ):
             continue
 
-        dedupe_key = f"case_handoff_ready:{case.id}:{membership.user_id}"
+        dedupe_key = f"surrogate_ready_for_claim:{surrogate.id}:{membership.user_id}"
         create_notification(
             db=db,
-            org_id=case.organization_id,
+            org_id=surrogate.organization_id,
             user_id=membership.user_id,
-            type=NotificationType.CASE_HANDOFF_READY,
-            title=f"Case #{case.case_number} ready for handoff",
-            body=f"Case {case.full_name} is pending handoff approval",
-            entity_type="case",
-            entity_id=case.id,
+            type=NotificationType.SURROGATE_CLAIM_AVAILABLE,
+            title=f"Surrogate #{surrogate.surrogate_number} ready for claiming",
+            body=f"Surrogate {surrogate.full_name} is approved and waiting to be claimed",
+            entity_type="surrogate",
+            entity_id=surrogate.id,
             dedupe_key=dedupe_key,
         )
-
-
-def notify_case_handoff_accepted(
-    db: Session,
-    case: Case,
-    actor_name: str,
-) -> None:
-    """Notify case creator when handoff is accepted."""
-    if not case.created_by_user_id:
-        return
-
-    if not should_notify(
-        db, case.created_by_user_id, case.organization_id, "case_handoff"
-    ):
-        return
-
-    dedupe_key = f"case_handoff_accepted:{case.id}:{case.created_by_user_id}"
-    create_notification(
-        db=db,
-        org_id=case.organization_id,
-        user_id=case.created_by_user_id,
-        type=NotificationType.CASE_HANDOFF_ACCEPTED,
-        title=f"Case #{case.case_number} handoff accepted",
-        body=f"{actor_name} accepted the handoff for case {case.full_name}",
-        entity_type="case",
-        entity_id=case.id,
-        dedupe_key=dedupe_key,
-    )
-
-
-def notify_case_handoff_denied(
-    db: Session,
-    case: Case,
-    actor_name: str,
-    reason: Optional[str] = None,
-) -> None:
-    """Notify case creator when handoff is denied."""
-    if not case.created_by_user_id:
-        return
-
-    if not should_notify(
-        db, case.created_by_user_id, case.organization_id, "case_handoff"
-    ):
-        return
-
-    body = f"{actor_name} denied the handoff for case {case.full_name}"
-    if reason:
-        body += f": {reason}"
-
-    dedupe_key = f"case_handoff_denied:{case.id}:{case.created_by_user_id}"
-    create_notification(
-        db=db,
-        org_id=case.organization_id,
-        user_id=case.created_by_user_id,
-        type=NotificationType.CASE_HANDOFF_DENIED,
-        title=f"Case #{case.case_number} handoff denied",
-        body=body,
-        entity_type="case",
-        entity_id=case.id,
-        dedupe_key=dedupe_key,
-    )
 
 
 def notify_task_assigned(
@@ -522,7 +455,7 @@ def notify_task_assigned(
     org_id: UUID,
     assignee_id: UUID,
     actor_name: str,
-    case_number: Optional[str] = None,
+    surrogate_number: Optional[str] = None,
 ) -> None:
     """Notify user when a task is assigned to them."""
     if not assignee_id:
@@ -533,8 +466,8 @@ def notify_task_assigned(
 
     title = f"Task assigned: {task_title[:50]}"
     body = f"{actor_name} assigned you a task"
-    if case_number:
-        body += f" for case #{case_number}"
+    if surrogate_number:
+        body += f" for surrogate #{surrogate_number}"
 
     dedupe_key = f"task_assigned:{task_id}:{assignee_id}"
     create_notification(
@@ -556,7 +489,7 @@ def notify_workflow_approval_requested(
     task_title: str,
     org_id: UUID,
     assignee_id: UUID,
-    case_number: Optional[str] = None,
+    surrogate_number: Optional[str] = None,
 ) -> None:
     """Notify user when a workflow approval is requested."""
     if not assignee_id:
@@ -567,8 +500,8 @@ def notify_workflow_approval_requested(
 
     title = f"Approval needed: {task_title[:50]}"
     body = "A workflow action requires your approval"
-    if case_number:
-        body += f" for case #{case_number}"
+    if surrogate_number:
+        body += f" for surrogate #{surrogate_number}"
 
     dedupe_key = f"workflow_approval:{task_id}:{assignee_id}"
     create_notification(
@@ -591,7 +524,7 @@ def notify_task_due_soon(
     org_id: UUID,
     assignee_id: UUID,
     due_date: str,
-    case_number: Optional[str] = None,
+    surrogate_number: Optional[str] = None,
 ) -> None:
     """Notify user when a task is due soon (within 24h). One-time notification."""
     if not assignee_id:
@@ -603,8 +536,8 @@ def notify_task_due_soon(
 
     title = f"Task due soon: {task_title[:50]}"
     body = f"Due: {due_date}"
-    if case_number:
-        body += f" (Case #{case_number})"
+    if surrogate_number:
+        body += f" (Surrogate #{surrogate_number})"
 
     # One-time dedupe (no time bucket - dedupe forever)
     dedupe_key = f"task:{task_id}:due_soon"
@@ -629,7 +562,7 @@ def notify_task_overdue(
     org_id: UUID,
     assignee_id: UUID,
     due_date: str,
-    case_number: Optional[str] = None,
+    surrogate_number: Optional[str] = None,
 ) -> None:
     """Notify user when a task is overdue. One-time notification."""
     if not assignee_id:
@@ -641,8 +574,8 @@ def notify_task_overdue(
 
     title = f"Task overdue: {task_title[:50]}"
     body = f"Was due: {due_date}"
-    if case_number:
-        body += f" (Case #{case_number})"
+    if surrogate_number:
+        body += f" (Surrogate #{surrogate_number})"
 
     # One-time dedupe (no time bucket - dedupe forever)
     dedupe_key = f"task:{task_id}:overdue"
@@ -774,28 +707,30 @@ def notify_appointment_cancelled(
 
 def notify_form_submission_received(
     db: Session,
-    case: Case,
+    surrogate: Surrogate,
     submission_id: UUID,
 ) -> None:
-    """Notify case owner when application form is submitted."""
-    # Only notify if case is owned by a user
-    if case.owner_type != OwnerType.USER.value or not case.owner_id:
+    """Notify surrogate owner when application form is submitted."""
+    # Only notify if surrogate is owned by a user
+    if surrogate.owner_type != OwnerType.USER.value or not surrogate.owner_id:
         return
 
-    # Respect user settings (using case_status_changed as proxy for now)
-    if not should_notify(db, case.owner_id, case.organization_id, "case_status_changed"):
+    # Respect user settings (using surrogate_status_changed as proxy for now)
+    if not should_notify(
+        db, surrogate.owner_id, surrogate.organization_id, "surrogate_status_changed"
+    ):
         return
 
-    dedupe_key = f"form_submission:{submission_id}:{case.owner_id}"
+    dedupe_key = f"form_submission:{submission_id}:{surrogate.owner_id}"
     create_notification(
         db=db,
-        org_id=case.organization_id,
-        user_id=case.owner_id,
+        org_id=surrogate.organization_id,
+        user_id=surrogate.owner_id,
         type=NotificationType.FORM_SUBMISSION_RECEIVED,
-        title=f"Application submitted for Case #{case.case_number}",
-        body=f"{case.full_name} submitted their application",
-        entity_type="case",
-        entity_id=case.id,
+        title=f"Application submitted for Surrogate #{surrogate.surrogate_number}",
+        body=f"{surrogate.full_name} submitted their application",
+        entity_type="surrogate",
+        entity_id=surrogate.id,
         dedupe_key=dedupe_key,
     )
 
@@ -813,7 +748,7 @@ def notify_attachment_infected(
     if not attachment.uploaded_by_user_id:
         return
 
-    case_id = attachment.case_id
+    surrogate_id = attachment.surrogate_id
     title = "Attachment quarantined"
     body = f"{attachment.filename} failed the virus scan and was quarantined."
     dedupe_key = f"attachment_infected:{attachment.id}"
@@ -825,8 +760,8 @@ def notify_attachment_infected(
         type=NotificationType.ATTACHMENT_INFECTED,
         title=title,
         body=body,
-        entity_type="case" if case_id else None,
-        entity_id=case_id,
+        entity_type="surrogate" if surrogate_id else None,
+        entity_id=surrogate_id,
         dedupe_key=dedupe_key,
         dedupe_window_hours=None,
     )

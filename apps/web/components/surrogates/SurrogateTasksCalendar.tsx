@@ -1,10 +1,10 @@
 "use client"
 
 /**
- * CaseTasksCalendar - List/Calendar view for case-specific tasks.
+ * SurrogateTasksCalendar - List/Calendar view for surrogate-specific tasks.
  *
  * Features:
- * - Toggle between list and calendar views (persisted per-case)
+ * - Toggle between list and calendar views (persisted per-surrogate)
  * - List view groups tasks by: Overdue, Today, Upcoming, No Date
  * - Calendar view reuses UnifiedCalendar (same as My Tasks)
  */
@@ -29,8 +29,8 @@ import { cn } from "@/lib/utils"
 import { UnifiedCalendar } from "@/components/appointments"
 import type { TaskListItem } from "@/lib/api/tasks"
 
-interface CaseTasksCalendarProps {
-    caseId: string
+interface SurrogateTasksCalendarProps {
+    surrogateId: string
     tasks: TaskListItem[]
     isLoading?: boolean
     onTaskToggle: (taskId: string, completed: boolean) => void
@@ -50,8 +50,8 @@ interface TaskGroup {
     tasks: TaskListItem[]
 }
 
-function getStorageKey(caseId: string): string {
-    return `case-tasks-view-${caseId}`
+function getStorageKey(surrogateId: string): string {
+    return `surrogate-tasks-view-${surrogateId}`
 }
 
 function formatDueLabel(task: TaskListItem): string {
@@ -75,36 +75,34 @@ function formatDueLabel(task: TaskListItem): string {
     return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
 }
 
-export function CaseTasksCalendar({
-    caseId,
+export function SurrogateTasksCalendar({
+    surrogateId,
     tasks,
     isLoading = false,
     onTaskToggle,
     onAddTask,
     onTaskClick,
-}: CaseTasksCalendarProps) {
+}: SurrogateTasksCalendarProps) {
     const [viewMode, setViewMode] = useState<ViewMode>("list")
     const [mounted, setMounted] = useState(false)
 
     // Load persisted view preference
     useEffect(() => {
         setMounted(true)
-        const stored = localStorage.getItem(getStorageKey(caseId))
+        const stored = localStorage.getItem(getStorageKey(surrogateId))
         if (stored === "calendar" || stored === "list") {
             setViewMode(stored)
         }
-    }, [caseId])
+    }, [surrogateId])
 
     // Persist view preference
     const handleViewChange = (mode: ViewMode) => {
         setViewMode(mode)
-        localStorage.setItem(getStorageKey(caseId), mode)
+        localStorage.setItem(getStorageKey(surrogateId), mode)
     }
 
     // Group tasks by due status
     const taskGroups = useMemo<TaskGroup[]>(() => {
-        const today = startOfDay(new Date())
-
         const overdue: TaskListItem[] = []
         const todayTasks: TaskListItem[] = []
         const upcoming: TaskListItem[] = []
@@ -227,7 +225,7 @@ export function CaseTasksCalendar({
                         No tasks yet
                     </p>
                     <p className="text-xs text-muted-foreground/70 mb-4">
-                        Create a task to track work for this case
+                        Create a task to track work for this surrogate
                     </p>
                     <Button size="sm" variant="outline" onClick={onAddTask}>
                         <PlusIcon className="size-4 mr-1.5" />
@@ -350,7 +348,7 @@ export function CaseTasksCalendar({
                 </Card>
             ) : (
                 <UnifiedCalendar
-                    taskFilter={{ case_id: caseId }}
+                    taskFilter={{ surrogate_id: surrogateId }}
                     includeAppointments={false}
                     includeGoogleEvents={false}
                     {...(onTaskClick ? { onTaskClick } : {})}

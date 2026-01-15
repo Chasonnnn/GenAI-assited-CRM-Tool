@@ -10,7 +10,7 @@ from uuid import UUID
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.db.models import EmailTemplate, EmailLog, Job, Case
+from app.db.models import EmailTemplate, EmailLog, Job, Surrogate
 from app.db.enums import EmailStatus, JobType
 from app.services.job_service import schedule_job
 from app.services import version_service
@@ -237,28 +237,28 @@ def render_template(
     return rendered_subject, rendered_body
 
 
-def build_case_template_variables(db: Session, case: Case) -> dict[str, str]:
-    """Build flat template variables for a case context."""
+def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dict[str, str]:
+    """Build flat template variables for a surrogate context."""
     from app.db.enums import OwnerType
     from app.db.models import Organization, Queue, User
 
-    org = db.query(Organization).filter(Organization.id == case.organization_id).first()
+    org = db.query(Organization).filter(Organization.id == surrogate.organization_id).first()
 
     owner_name = ""
-    if case.owner_type == OwnerType.USER.value and case.owner_id:
-        owner = db.query(User).filter(User.id == case.owner_id).first()
+    if surrogate.owner_type == OwnerType.USER.value and surrogate.owner_id:
+        owner = db.query(User).filter(User.id == surrogate.owner_id).first()
         owner_name = owner.display_name if owner else ""
-    elif case.owner_type == OwnerType.QUEUE.value and case.owner_id:
-        queue = db.query(Queue).filter(Queue.id == case.owner_id).first()
+    elif surrogate.owner_type == OwnerType.QUEUE.value and surrogate.owner_id:
+        queue = db.query(Queue).filter(Queue.id == surrogate.owner_id).first()
         owner_name = queue.name if queue else ""
 
     return {
-        "full_name": case.full_name or "",
-        "email": case.email or "",
-        "phone": case.phone or "",
-        "case_number": case.case_number or "",
-        "status_label": case.status_label or "",
-        "state": case.state or "",
+        "full_name": surrogate.full_name or "",
+        "email": surrogate.email or "",
+        "phone": surrogate.phone or "",
+        "surrogate_number": surrogate.surrogate_number or "",
+        "status_label": surrogate.status_label or "",
+        "state": surrogate.state or "",
         "owner_name": owner_name,
         "org_name": org.name if org else "",
     }
@@ -267,7 +267,7 @@ def build_case_template_variables(db: Session, case: Case) -> dict[str, str]:
 def build_appointment_template_variables(
     db: Session,
     appointment,
-    case: Case | None = None,
+    surrogate: Surrogate | None = None,
 ) -> dict[str, str]:
     """
     Build template variables for an appointment context.
@@ -279,11 +279,7 @@ def build_appointment_template_variables(
     from app.db.models import Organization
 
     # Get org for fallback timezone
-    org = (
-        db.query(Organization)
-        .filter(Organization.id == appointment.organization_id)
-        .first()
-    )
+    org = db.query(Organization).filter(Organization.id == appointment.organization_id).first()
 
     # Use appointment's client_timezone, fall back to org timezone
     tz_name = getattr(appointment, "client_timezone", None) or (
@@ -298,9 +294,7 @@ def build_appointment_template_variables(
     local_start = appointment.scheduled_start.astimezone(local_tz)
 
     # Format date and time in user-friendly format
-    appointment_date = local_start.strftime(
-        "%A, %B %d, %Y"
-    )  # "Monday, December 25, 2024"
+    appointment_date = local_start.strftime("%A, %B %d, %Y")  # "Monday, December 25, 2024"
     appointment_time = local_start.strftime("%I:%M %p %Z")  # "2:30 PM PST"
 
     # Get location (virtual link or physical address)
@@ -319,10 +313,10 @@ def build_appointment_template_variables(
         "org_name": org.name if org else "",
     }
 
-    # Merge in case variables if provided
-    if case:
-        case_vars = build_case_template_variables(db, case)
-        variables.update(case_vars)
+    # Merge in surrogate variables if provided
+    if surrogate:
+        surrogate_vars = build_surrogate_template_variables(db, surrogate)
+        variables.update(surrogate_vars)
 
     return variables
 
@@ -334,7 +328,7 @@ def send_email(
     recipient_email: str,
     subject: str,
     body: str,
-    case_id: UUID | None = None,
+    surrogate_id: UUID | None = None,
     schedule_at: datetime | None = None,
 ) -> tuple[EmailLog, Job]:
     """
@@ -347,7 +341,7 @@ def send_email(
     email_log = EmailLog(
         organization_id=org_id,
         template_id=template_id,
-        case_id=case_id,
+        surrogate_id=surrogate_id,
         recipient_email=recipient_email,
         subject=subject,
         body=body,
@@ -379,7 +373,7 @@ def send_from_template(
     template_id: UUID,
     recipient_email: str,
     variables: dict[str, str],
-    case_id: UUID | None = None,
+    surrogate_id: UUID | None = None,
     schedule_at: datetime | None = None,
 ) -> tuple[EmailLog, Job] | None:
     """
@@ -400,7 +394,7 @@ def send_from_template(
         recipient_email=recipient_email,
         subject=subject,
         body=body,
-        case_id=case_id,
+        surrogate_id=surrogate_id,
         schedule_at=schedule_at,
     )
 
@@ -441,14 +435,14 @@ def get_email_log(db: Session, email_id: UUID, org_id: UUID) -> EmailLog | None:
 def list_email_logs(
     db: Session,
     org_id: UUID,
-    case_id: UUID | None = None,
+    surrogate_id: UUID | None = None,
     status: EmailStatus | None = None,
     limit: int = 50,
 ) -> list[EmailLog]:
     """List email logs for an organization with optional filters."""
     query = db.query(EmailLog).filter(EmailLog.organization_id == org_id)
-    if case_id:
-        query = query.filter(EmailLog.case_id == case_id)
+    if surrogate_id:
+        query = query.filter(EmailLog.surrogate_id == surrogate_id)
     if status:
         query = query.filter(EmailLog.status == status.value)
     return query.order_by(EmailLog.created_at.desc()).limit(limit).all()

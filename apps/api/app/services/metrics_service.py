@@ -100,9 +100,7 @@ def get_request_metrics(
     from sqlalchemy import text
 
     if from_time is None:
-        from_time = datetime.now(timezone.utc).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
+        from_time = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     if to_time is None:
         to_time = datetime.now(timezone.utc)
 
@@ -187,9 +185,7 @@ def get_sli_rollup(
 ) -> dict[str, int | float]:
     """Aggregate SLI metrics for a set of route prefixes."""
     from_time = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
-    prefix_filters = [
-        RequestMetricsRollup.route.like(f"{prefix}%") for prefix in prefixes
-    ]
+    prefix_filters = [RequestMetricsRollup.route.like(f"{prefix}%") for prefix in prefixes]
     if not prefix_filters:
         return {
             "request_count": 0,

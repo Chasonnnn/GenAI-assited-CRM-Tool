@@ -45,7 +45,7 @@ import {
 } from "lucide-react"
 import { useAppointments, useRescheduleAppointment, useGoogleCalendarEvents, useUpdateAppointmentLink } from "@/lib/hooks/use-appointments"
 import { useTasks } from "@/lib/hooks/use-tasks"
-import { useCases } from "@/lib/hooks/use-cases"
+import { useSurrogates } from "@/lib/hooks/use-surrogates"
 import { useIntendedParents } from "@/lib/hooks/use-intended-parents"
 import type { AppointmentListItem, GoogleCalendarEvent } from "@/lib/api/appointments"
 import type { TaskListItem } from "@/lib/api/tasks"
@@ -137,8 +137,8 @@ function TaskItem({
                 {task.title}
             </p>
             {time && <p className="text-xs text-muted-foreground">{time}</p>}
-            {task.case_number && (
-                <p className="text-xs text-muted-foreground">Case #{task.case_number}</p>
+            {task.surrogate_number && (
+                <p className="text-xs text-muted-foreground">Surrogate #{task.surrogate_number}</p>
             )}
         </div>
     )
@@ -262,22 +262,22 @@ function AppointmentDetailDialog({
     onOpenChange: (open: boolean) => void
 }) {
     const [showLinkSection, setShowLinkSection] = useState(false)
-    const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null)
+    const [selectedSurrogateId, setSelectedSurrogateId] = useState<string | null>(null)
     const [selectedIpId, setSelectedIpId] = useState<string | null>(null)
 
     const updateLinkMutation = useUpdateAppointmentLink()
 
-    // Fetch cases and IPs for linking
-    const { data: casesData } = useCases({ per_page: 100 })
+    // Fetch surrogates and IPs for linking
+    const { data: surrogatesData } = useSurrogates({ per_page: 100 })
     const { data: ipsData } = useIntendedParents({ per_page: 100 })
 
-    const cases = casesData?.items || []
+    const surrogates = surrogatesData?.items || []
     const ips = ipsData?.items || []
 
     // Reset selected values when dialog opens with new appointment
     useEffect(() => {
         if (appointment && open) {
-            setSelectedCaseId(appointment.case_id)
+            setSelectedSurrogateId(appointment.surrogate_id)
             setSelectedIpId(appointment.intended_parent_id)
             setShowLinkSection(false)
         }
@@ -308,14 +308,14 @@ function AppointmentDetailDialog({
     const ModeIcon = MEETING_MODE_ICONS[appointment.meeting_mode as keyof typeof MEETING_MODE_ICONS] || VideoIcon
     const statusColor = STATUS_COLORS[appointment.status as keyof typeof STATUS_COLORS] || "bg-gray-500"
 
-    const hasLink = appointment.case_id || appointment.intended_parent_id
+    const hasLink = appointment.surrogate_id || appointment.intended_parent_id
 
     const handleSaveLink = () => {
         updateLinkMutation.mutate(
             {
                 appointmentId: appointment.id,
                 data: {
-                    case_id: selectedCaseId,
+                    surrogate_id: selectedSurrogateId,
                     intended_parent_id: selectedIpId,
                 },
             },
@@ -327,10 +327,10 @@ function AppointmentDetailDialog({
         )
     }
 
-    const handleUnlinkCase = () => {
+    const handleUnlinkSurrogate = () => {
         updateLinkMutation.mutate({
             appointmentId: appointment.id,
-            data: { case_id: null },
+            data: { surrogate_id: null },
         })
     }
 
@@ -428,16 +428,16 @@ function AppointmentDetailDialog({
 
                         {!showLinkSection ? (
                             <div className="space-y-2">
-                                {appointment.case_id && appointment.case_number ? (
+                                {appointment.surrogate_id && appointment.surrogate_number ? (
                                     <div className="flex items-center justify-between p-2 rounded-md bg-muted/50">
                                         <span className="text-sm">
-                                            <Badge variant="outline" className="mr-2">Case</Badge>
-                                            #{appointment.case_number}
+                                            <Badge variant="outline" className="mr-2">Surrogate</Badge>
+                                            #{appointment.surrogate_number}
                                         </span>
                                         <Button
                                             variant="ghost"
                                             size="sm"
-                                            onClick={handleUnlinkCase}
+                                            onClick={handleUnlinkSurrogate}
                                             disabled={updateLinkMutation.isPending}
                                         >
                                             <XIcon className="size-4" />
@@ -461,25 +461,25 @@ function AppointmentDetailDialog({
                                     </div>
                                 ) : null}
                                 {!hasLink && (
-                                    <p className="text-sm text-muted-foreground">Not linked to any case or IP</p>
+                                    <p className="text-sm text-muted-foreground">Not linked to any surrogate or IP</p>
                                 )}
                             </div>
                         ) : (
                             <div className="space-y-3">
                                 <div>
-                                    <label className="text-xs text-muted-foreground">Link to Case</label>
+                                    <label className="text-xs text-muted-foreground">Link to Surrogate</label>
                                     <Select
-                                        value={selectedCaseId || "none"}
-                                        onValueChange={(val) => setSelectedCaseId(val === "none" ? null : val)}
+                                        value={selectedSurrogateId || "none"}
+                                        onValueChange={(val) => setSelectedSurrogateId(val === "none" ? null : val)}
                                     >
                                         <SelectTrigger className="mt-1">
-                                            <SelectValue placeholder="Select a case..." />
+                                            <SelectValue placeholder="Select a surrogate..." />
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="none">None</SelectItem>
-                                            {cases.map((c) => (
-                                                <SelectItem key={c.id} value={c.id}>
-                                                    #{c.case_number} - {c.full_name}
+                                            {surrogates.map((s) => (
+                                                <SelectItem key={s.id} value={s.id}>
+                                                    #{s.surrogate_number} - {s.full_name}
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
@@ -526,7 +526,7 @@ function AppointmentDetailDialog({
                                         size="sm"
                                         onClick={() => {
                                             setShowLinkSection(false)
-                                            setSelectedCaseId(appointment.case_id)
+                                            setSelectedSurrogateId(appointment.surrogate_id)
                                             setSelectedIpId(appointment.intended_parent_id)
                                         }}
                                     >
@@ -990,7 +990,7 @@ export function UnifiedCalendar({
     includeGoogleEvents = true,
     onTaskClick,
 }: {
-    taskFilter?: { my_tasks?: boolean; case_id?: string }
+    taskFilter?: { my_tasks?: boolean; surrogate_id?: string }
     includeAppointments?: boolean
     includeGoogleEvents?: boolean
     onTaskClick?: (task: TaskListItem) => void
@@ -1051,7 +1051,7 @@ export function UnifiedCalendar({
         due_before: dateRange.date_end,
         exclude_approvals: true,
         ...(taskFilter?.my_tasks ? { my_tasks: true } : {}),
-        ...(taskFilter?.case_id ? { case_id: taskFilter.case_id } : {}),
+        ...(taskFilter?.surrogate_id ? { surrogate_id: taskFilter.surrogate_id } : {}),
     }
     const { data: tasksData, isLoading: tasksLoading } = useTasks(taskParams)
     const tasks = tasksData?.items || []

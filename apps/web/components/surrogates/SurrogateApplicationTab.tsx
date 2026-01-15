@@ -40,7 +40,7 @@ import {
 import { toast } from "sonner"
 import {
     useApproveFormSubmission,
-    useCaseFormSubmission,
+    useSurrogateFormSubmission,
     useCreateFormToken,
     useRejectFormSubmission,
     useUpdateSubmissionAnswers,
@@ -51,8 +51,8 @@ import { exportSubmissionPdf, getSubmissionFileDownloadUrl, type FormSchema } fr
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { cn } from "@/lib/utils"
 
-interface CaseApplicationTabProps {
-    caseId: string
+interface SurrogateApplicationTabProps {
+    surrogateId: string
     formId: string
 }
 
@@ -75,10 +75,10 @@ function formatDateTime(dateString: string): string {
     })
 }
 
-export function CaseApplicationTab({
-    caseId,
+export function SurrogateApplicationTab({
+    surrogateId,
     formId,
-}: CaseApplicationTabProps) {
+}: SurrogateApplicationTabProps) {
     const [baseUrl, setBaseUrl] = React.useState("")
 
     React.useEffect(() => {
@@ -91,7 +91,7 @@ export function CaseApplicationTab({
         data: submission,
         isLoading,
         error: submissionError,
-    } = useCaseFormSubmission(formId, caseId)
+    } = useSurrogateFormSubmission(formId, surrogateId)
     const createTokenMutation = useCreateFormToken()
     const approveMutation = useApproveFormSubmission()
     const rejectMutation = useRejectFormSubmission()
@@ -155,7 +155,7 @@ export function CaseApplicationTab({
                 submissionId: submission.id,
                 reviewNotes: approveNotes.trim() || null,
             })
-            toast.success("Application approved and case updated")
+            toast.success("Application approved and surrogate updated")
             setApproveModalOpen(false)
             setApproveNotes("")
         } catch {
@@ -188,7 +188,7 @@ export function CaseApplicationTab({
         try {
             const token = await createTokenMutation.mutateAsync({
                 formId,
-                caseId,
+                surrogateId,
                 expiresInDays: 14,
             })
             const link = baseUrl ? `${baseUrl}/apply/${token.token}` : `/apply/${token.token}`
@@ -216,8 +216,8 @@ export function CaseApplicationTab({
                 updates,
             })
             toast.success(
-                result.case_updates.length > 0
-                    ? `Saved changes (updated ${result.case_updates.length} case fields)`
+                result.surrogate_updates.length > 0
+                    ? `Saved changes (updated ${result.surrogate_updates.length} surrogate fields)`
                     : "Saved changes"
             )
             setEditedValues({})
@@ -271,7 +271,7 @@ export function CaseApplicationTab({
                 submissionId: submission.id,
                 file,
                 formId: submission.form_id,
-                caseId: submission.case_id,
+                surrogateId: submission.surrogate_id,
             })
             toast.success(`Uploaded: ${file.name}`)
         } catch {
@@ -292,7 +292,7 @@ export function CaseApplicationTab({
                 submissionId: submission.id,
                 fileId,
                 formId: submission.form_id,
-                caseId: submission.case_id,
+                surrogateId: submission.surrogate_id,
             })
             toast.success(`Deleted: ${filename}`)
         } catch {
@@ -464,7 +464,7 @@ export function CaseApplicationTab({
                                 <div className="flex items-start gap-2 text-sm text-muted-foreground">
                                     <AlertTriangleIcon className="h-4 w-4 mt-0.5 shrink-0" />
                                     <p>
-                                        This link is unique to this case and expires in 14 days. The candidate can save their progress
+                                        This link is unique to this surrogate and expires in 14 days. The candidate can save their progress
                                         and return later.
                                     </p>
                                 </div>
@@ -855,7 +855,7 @@ export function CaseApplicationTab({
                             onClick={() => setApproveModalOpen(true)}
                         >
                             <ClipboardCheckIcon className="h-4 w-4 mr-2" />
-                            Approve & Update Case
+                            Approve & Update Surrogate
                         </Button>
                     </div>
                 </div>
@@ -900,14 +900,14 @@ export function CaseApplicationTab({
                     <DialogHeader>
                         <DialogTitle>Approve Application</DialogTitle>
                         <DialogDescription>
-                            The following Case fields will be updated with information from this application:
+                            The following Surrogate fields will be updated with information from this application:
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
                         <div className="rounded-lg border p-4 space-y-2 text-sm">
                             {previewFields.length === 0 ? (
                                 <p className="text-muted-foreground">
-                                    Case fields will be updated based on configured mappings.
+                                    Surrogate fields will be updated based on configured mappings.
                                 </p>
                             ) : (
                                 previewFields.map((field) => (

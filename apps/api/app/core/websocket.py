@@ -39,9 +39,7 @@ class ConnectionManager:
         """Schedule local WebSocket cleanup for a revoked session."""
         if not token_hash or not self._loop:
             return
-        self._loop.call_soon_threadsafe(
-            asyncio.create_task, self.close_by_token_hash(token_hash)
-        )
+        self._loop.call_soon_threadsafe(asyncio.create_task, self.close_by_token_hash(token_hash))
 
     async def connect(
         self,

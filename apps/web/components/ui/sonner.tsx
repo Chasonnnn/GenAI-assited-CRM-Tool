@@ -12,7 +12,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
     return "system"
   }
   const appliedTheme = resolveTheme(theme)
-  const { theme: _ignoredTheme, ...rest } = props
+  const { theme: ignoredTheme, ...rest } = props
+  void ignoredTheme
 
   return (
     <Sonner

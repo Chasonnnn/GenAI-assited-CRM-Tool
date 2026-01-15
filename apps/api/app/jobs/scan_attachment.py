@@ -45,9 +45,7 @@ def _download_to_temp(attachment: Attachment) -> str:
             return tmp.name
     else:
         # Local storage - file already on disk
-        return os.path.join(
-            attachment_service._get_local_storage_path(), attachment.storage_key
-        )
+        return os.path.join(attachment_service._get_local_storage_path(), attachment.storage_key)
 
 
 def _run_clamav_scan(file_path: str) -> tuple[bool, str]:

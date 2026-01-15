@@ -54,9 +54,9 @@ class UnreadCountResponse(BaseModel):
 class NotificationSettingsRead(BaseModel):
     """User notification settings."""
 
-    case_assigned: bool
-    case_status_changed: bool
-    case_handoff: bool
+    surrogate_assigned: bool
+    surrogate_status_changed: bool
+    surrogate_claim_available: bool
     task_assigned: bool
     workflow_approvals: bool
     task_reminders: bool
@@ -67,9 +67,9 @@ class NotificationSettingsRead(BaseModel):
 class NotificationSettingsUpdate(BaseModel):
     """Update notification settings."""
 
-    case_assigned: bool | None = None
-    case_status_changed: bool | None = None
-    case_handoff: bool | None = None
+    surrogate_assigned: bool | None = None
+    surrogate_status_changed: bool | None = None
+    surrogate_claim_available: bool | None = None
     task_assigned: bool | None = None
     workflow_approvals: bool | None = None
     task_reminders: bool | None = None
@@ -85,9 +85,7 @@ class NotificationSettingsUpdate(BaseModel):
 @router.get("/notifications", response_model=NotificationListResponse)
 def list_notifications(
     unread_only: bool = Query(False),
-    notification_types: str | None = Query(
-        None, description="Comma-separated notification types"
-    ),
+    notification_types: str | None = Query(None, description="Comma-separated notification types"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     session: UserSession = Depends(get_current_session),

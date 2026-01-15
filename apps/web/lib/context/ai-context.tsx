@@ -7,14 +7,14 @@ import { useAuth } from "@/lib/auth-context"
 
 // Types
 export interface EntityContext {
-    entityType: "case" | "intended-parent" | "dashboard" | "task" | "match"
+    entityType: "surrogate" | "intended-parent" | "dashboard" | "task" | "match"
     entityId: string
     entityName: string
 }
 
 interface AIContextValue {
     // Current entity context
-    entityType: "case" | "intended-parent" | "dashboard" | "task" | "match" | null
+    entityType: "surrogate" | "intended-parent" | "dashboard" | "task" | "match" | null
     entityId: string | null
     entityName: string | null
 
@@ -40,7 +40,7 @@ export function AIContextProvider({ children }: { children: React.ReactNode }) {
     const pathname = usePathname()
 
     // Context state
-    const [entityType, setEntityType] = useState<"case" | "intended-parent" | "dashboard" | "task" | "match" | null>(null)
+    const [entityType, setEntityType] = useState<"surrogate" | "intended-parent" | "dashboard" | "task" | "match" | null>(null)
     const [entityId, setEntityId] = useState<string | null>(null)
     const [entityName, setEntityName] = useState<string | null>(null)
 
@@ -56,7 +56,7 @@ export function AIContextProvider({ children }: { children: React.ReactNode }) {
     // Clear context on route change if navigating away from entity pages
     useEffect(() => {
         const isEntityPage =
-            pathname.includes("/cases/") ||
+            pathname.includes("/surrogates/") ||
             pathname.includes("/intended-parents/") ||
             pathname.includes("/matches/")
 

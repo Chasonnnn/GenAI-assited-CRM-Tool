@@ -1,6 +1,6 @@
 """Analytics service for Reports dashboard.
 
-Provides query functions for case trends, status distributions, and geographic data.
+Provides query functions for surrogate trends, status distributions, and geographic data.
 Works without AI - purely script-generated aggregations.
 """
 
@@ -14,12 +14,11 @@ from sqlalchemy import func, text, exists, and_, select, case, literal, or_
 from sqlalchemy.orm import Session, aliased
 
 from app.core.config import settings
-from decimal import Decimal
 
 from app.db.models import (
     AnalyticsSnapshot,
-    Case,
-    CaseStatusHistory,
+    Surrogate,
+    SurrogateStatusHistory,
     MetaAdAccount,
     MetaCampaign,
     MetaDailySpend,
@@ -33,16 +32,16 @@ from app.db.enums import OwnerType
 
 
 # ============================================================================
-# Cases Trend (Time Series)
+# Surrogates Trend (Time Series)
 # ============================================================================
 
 FUNNEL_SLUGS = [
     "new_unread",
     "contacted",
     "qualified",
-    "pending_match",
+    "ready_to_match",
     "matched",
-    "meds_started",
+    "medical_clearance_passed",
 ]
 
 
@@ -171,9 +170,7 @@ async def _get_or_compute_snapshot_async(
     return payload
 
 
-def _get_default_pipeline_stages(
-    db: Session, organization_id: uuid.UUID
-) -> list[PipelineStage]:
+def _get_default_pipeline_stages(db: Session, organization_id: uuid.UUID) -> list[PipelineStage]:
     """Get active stages for the default pipeline."""
     from app.services import pipeline_service
 
@@ -230,23 +227,23 @@ def get_analytics_summary(
     """Get high-level analytics summary."""
     from app.services import pipeline_service
 
-    total_cases = (
-        db.query(func.count(Case.id))
+    total_surrogates = (
+        db.query(func.count(Surrogate.id))
         .filter(
-            Case.organization_id == organization_id,
-            Case.is_archived.is_(False),
+            Surrogate.organization_id == organization_id,
+            Surrogate.is_archived.is_(False),
         )
         .scalar()
         or 0
     )
 
     new_this_period = (
-        db.query(func.count(Case.id))
+        db.query(func.count(Surrogate.id))
         .filter(
-            Case.organization_id == organization_id,
-            Case.is_archived.is_(False),
-            Case.created_at >= start,
-            Case.created_at < end,
+            Surrogate.organization_id == organization_id,
+            Surrogate.is_archived.is_(False),
+            Surrogate.created_at >= start,
+            Surrogate.created_at < end,
         )
         .scalar()
         or 0
@@ -261,31 +258,29 @@ def get_analytics_summary(
         ]
     else:
         qualified_stage_ids = [
-            s.id
-            for s in stages
-            if s.stage_type in ("post_approval", "terminal") and s.is_active
+            s.id for s in stages if s.stage_type in ("post_approval", "terminal") and s.is_active
         ]
 
     qualified_count = (
-        db.query(func.count(Case.id))
+        db.query(func.count(Surrogate.id))
         .filter(
-            Case.organization_id == organization_id,
-            Case.is_archived.is_(False),
-            Case.stage_id.in_(qualified_stage_ids),
+            Surrogate.organization_id == organization_id,
+            Surrogate.is_archived.is_(False),
+            Surrogate.stage_id.in_(qualified_stage_ids),
         )
         .scalar()
         or 0
     )
 
-    qualified_rate = (qualified_count / total_cases * 100) if total_cases > 0 else 0.0
+    qualified_rate = (qualified_count / total_surrogates * 100) if total_surrogates > 0 else 0.0
 
     avg_time_to_qualified_hours = None
     if qualified_stage:
         result = db.execute(
             text("""
                 SELECT AVG(EXTRACT(EPOCH FROM (csh.changed_at - c.created_at)) / 3600) as avg_hours
-                FROM cases c
-                JOIN case_status_history csh ON c.id = csh.case_id
+                FROM surrogates c
+                JOIN surrogate_status_history csh ON c.id = csh.surrogate_id
                 WHERE c.organization_id = :org_id
                   AND c.is_archived = false
                   AND csh.to_stage_id = :qualified_stage_id
@@ -300,19 +295,17 @@ def get_analytics_summary(
             },
         )
         row = result.fetchone()
-        avg_time_to_qualified_hours = (
-            float(round(row[0], 1)) if row and row[0] else None
-        )
+        avg_time_to_qualified_hours = float(round(row[0], 1)) if row and row[0] else None
 
     return {
-        "total_cases": total_cases,
+        "total_surrogates": total_surrogates,
         "new_this_period": new_this_period,
         "qualified_rate": round(qualified_rate, 1),
         "avg_time_to_qualified_hours": avg_time_to_qualified_hours,
     }
 
 
-def get_cases_trend(
+def get_surrogates_trend(
     db: Session,
     organization_id: uuid.UUID,
     start: datetime | None = None,
@@ -321,7 +314,7 @@ def get_cases_trend(
     owner_id: uuid.UUID | None = None,
     group_by: str = "day",  # day, week, month
 ) -> list[dict[str, Any]]:
-    """Get new cases created over time."""
+    """Get new surrogates created over time."""
     if not end:
         end = datetime.now(timezone.utc)
     if not start:
@@ -329,28 +322,28 @@ def get_cases_trend(
 
     # Group by time period
     if group_by == "week":
-        date_trunc = func.date_trunc("week", Case.created_at)
+        date_trunc = func.date_trunc("week", Surrogate.created_at)
     elif group_by == "month":
-        date_trunc = func.date_trunc("month", Case.created_at)
+        date_trunc = func.date_trunc("month", Surrogate.created_at)
     else:
-        date_trunc = func.date(Case.created_at)
+        date_trunc = func.date(Surrogate.created_at)
 
     results = db.query(
         date_trunc.label("period"),
-        func.count(Case.id).label("count"),
+        func.count(Surrogate.id).label("count"),
     ).filter(
-        Case.organization_id == organization_id,
-        Case.is_archived.is_(False),
-        Case.created_at >= start,
-        Case.created_at < end,
+        Surrogate.organization_id == organization_id,
+        Surrogate.is_archived.is_(False),
+        Surrogate.created_at >= start,
+        Surrogate.created_at < end,
     )
 
     if source:
-        results = results.filter(Case.source == source)
+        results = results.filter(Surrogate.source == source)
     if owner_id:
         results = results.filter(
-            Case.owner_type == OwnerType.USER.value,
-            Case.owner_id == owner_id,
+            Surrogate.owner_type == OwnerType.USER.value,
+            Surrogate.owner_id == owner_id,
         )
 
     results = results.group_by(date_trunc).order_by(date_trunc).all()
@@ -368,7 +361,7 @@ def get_cases_trend(
     return trend
 
 
-def get_cached_cases_trend(
+def get_cached_surrogates_trend(
     db: Session,
     organization_id: uuid.UUID,
     start: datetime,
@@ -383,11 +376,9 @@ def get_cached_cases_trend(
     return _get_or_compute_snapshot(
         db,
         organization_id,
-        "cases_trend",
+        "surrogates_trend",
         params,
-        lambda: get_cases_trend(
-            db, organization_id, start=start, end=end, group_by=group_by
-        ),
+        lambda: get_surrogates_trend(db, organization_id, start=start, end=end, group_by=group_by),
         range_start=start,
         range_end=end,
     )
@@ -398,7 +389,7 @@ def get_cached_cases_trend(
 # ============================================================================
 
 
-def get_cases_by_status(
+def get_surrogates_by_status(
     db: Session,
     organization_id: uuid.UUID,
     start_date: date | None = None,
@@ -407,28 +398,26 @@ def get_cases_by_status(
 ) -> list[dict[str, Any]]:
     """Get current case count by status."""
     query = db.query(
-        Case.status_label.label("status"),
-        func.count(Case.id).label("count"),
+        Surrogate.status_label.label("status"),
+        func.count(Surrogate.id).label("count"),
     ).filter(
-        Case.organization_id == organization_id,
-        Case.is_archived.is_(False),
+        Surrogate.organization_id == organization_id,
+        Surrogate.is_archived.is_(False),
     )
 
     if start_date:
-        query = query.filter(func.date(Case.created_at) >= start_date)
+        query = query.filter(func.date(Surrogate.created_at) >= start_date)
     if end_date:
-        query = query.filter(func.date(Case.created_at) <= end_date)
+        query = query.filter(func.date(Surrogate.created_at) <= end_date)
     if source:
-        query = query.filter(Case.source == source)
+        query = query.filter(Surrogate.source == source)
 
-    results = (
-        query.group_by(Case.status_label).order_by(func.count(Case.id).desc()).all()
-    )
+    results = query.group_by(Surrogate.status_label).order_by(func.count(Surrogate.id).desc()).all()
 
     return [{"status": r.status, "count": r.count} for r in results]
 
 
-def get_cached_cases_by_status(
+def get_cached_surrogates_by_status(
     db: Session,
     organization_id: uuid.UUID,
     start_date: date | None = None,
@@ -446,16 +435,14 @@ def get_cached_cases_by_status(
         else None
     )
     range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
-        if end_date
-        else None
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
     )
     return _get_or_compute_snapshot(
         db,
         organization_id,
-        "cases_by_status",
+        "surrogates_by_status",
         params,
-        lambda: get_cases_by_status(
+        lambda: get_surrogates_by_status(
             db,
             organization_id,
             start_date=start_date,
@@ -482,22 +469,22 @@ def get_status_trend(
     # Get status changes over time
     results = (
         db.query(
-            func.date(CaseStatusHistory.changed_at).label("date"),
-            func.coalesce(CaseStatusHistory.to_label_snapshot, "unknown").label(
+            func.date(SurrogateStatusHistory.changed_at).label("date"),
+            func.coalesce(SurrogateStatusHistory.to_label_snapshot, "unknown").label(
                 "status_label"
             ),
-            func.count(CaseStatusHistory.id).label("count"),
+            func.count(SurrogateStatusHistory.id).label("count"),
         )
         .filter(
-            CaseStatusHistory.organization_id == organization_id,
-            CaseStatusHistory.changed_at >= start_date,
-            CaseStatusHistory.changed_at <= end_date,
+            SurrogateStatusHistory.organization_id == organization_id,
+            SurrogateStatusHistory.changed_at >= start_date,
+            SurrogateStatusHistory.changed_at <= end_date,
         )
         .group_by(
-            func.date(CaseStatusHistory.changed_at),
-            func.coalesce(CaseStatusHistory.to_label_snapshot, "unknown"),
+            func.date(SurrogateStatusHistory.changed_at),
+            func.coalesce(SurrogateStatusHistory.to_label_snapshot, "unknown"),
         )
-        .order_by(func.date(CaseStatusHistory.changed_at))
+        .order_by(func.date(SurrogateStatusHistory.changed_at))
         .all()
     )
 
@@ -517,7 +504,7 @@ def get_status_trend(
 # ============================================================================
 
 
-def get_cases_by_state(
+def get_surrogates_by_state(
     db: Session,
     organization_id: uuid.UUID,
     start_date: date | None = None,
@@ -526,27 +513,27 @@ def get_cases_by_state(
 ) -> list[dict[str, Any]]:
     """Get case count by US state."""
     query = db.query(
-        Case.state,
-        func.count(Case.id).label("count"),
+        Surrogate.state,
+        func.count(Surrogate.id).label("count"),
     ).filter(
-        Case.organization_id == organization_id,
-        Case.is_archived.is_(False),
-        Case.state.isnot(None),
+        Surrogate.organization_id == organization_id,
+        Surrogate.is_archived.is_(False),
+        Surrogate.state.isnot(None),
     )
 
     if start_date:
-        query = query.filter(func.date(Case.created_at) >= start_date)
+        query = query.filter(func.date(Surrogate.created_at) >= start_date)
     if end_date:
-        query = query.filter(func.date(Case.created_at) <= end_date)
+        query = query.filter(func.date(Surrogate.created_at) <= end_date)
     if source:
-        query = query.filter(Case.source == source)
+        query = query.filter(Surrogate.source == source)
 
-    results = query.group_by(Case.state).order_by(func.count(Case.id).desc()).all()
+    results = query.group_by(Surrogate.state).order_by(func.count(Surrogate.id).desc()).all()
 
     return [{"state": r.state, "count": r.count} for r in results]
 
 
-def get_cached_cases_by_state(
+def get_cached_surrogates_by_state(
     db: Session,
     organization_id: uuid.UUID,
     start_date: date | None = None,
@@ -564,16 +551,14 @@ def get_cached_cases_by_state(
         else None
     )
     range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
-        if end_date
-        else None
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
     )
     return _get_or_compute_snapshot(
         db,
         organization_id,
-        "cases_by_state",
+        "surrogates_by_state",
         params,
-        lambda: get_cases_by_state(
+        lambda: get_surrogates_by_state(
             db,
             organization_id,
             start_date=start_date,
@@ -590,7 +575,7 @@ def get_cached_cases_by_state(
 # ============================================================================
 
 
-def get_cases_by_source(
+def get_surrogates_by_source(
     db: Session,
     organization_id: uuid.UUID,
     start_date: date | None = None,
@@ -598,24 +583,24 @@ def get_cases_by_source(
 ) -> list[dict[str, Any]]:
     """Get case count by lead source."""
     query = db.query(
-        Case.source,
-        func.count(Case.id).label("count"),
+        Surrogate.source,
+        func.count(Surrogate.id).label("count"),
     ).filter(
-        Case.organization_id == organization_id,
-        Case.is_archived.is_(False),
+        Surrogate.organization_id == organization_id,
+        Surrogate.is_archived.is_(False),
     )
 
     if start_date:
-        query = query.filter(func.date(Case.created_at) >= start_date)
+        query = query.filter(func.date(Surrogate.created_at) >= start_date)
     if end_date:
-        query = query.filter(func.date(Case.created_at) <= end_date)
+        query = query.filter(func.date(Surrogate.created_at) <= end_date)
 
-    results = query.group_by(Case.source).order_by(func.count(Case.id).desc()).all()
+    results = query.group_by(Surrogate.source).order_by(func.count(Surrogate.id).desc()).all()
 
     return [{"source": r.source, "count": r.count} for r in results]
 
 
-def get_cached_cases_by_source(
+def get_cached_surrogates_by_source(
     db: Session,
     organization_id: uuid.UUID,
     start_date: date | None = None,
@@ -631,16 +616,14 @@ def get_cached_cases_by_source(
         else None
     )
     range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
-        if end_date
-        else None
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
     )
     return _get_or_compute_snapshot(
         db,
         organization_id,
-        "cases_by_source",
+        "surrogates_by_source",
         params,
-        lambda: get_cases_by_source(
+        lambda: get_surrogates_by_source(
             db,
             organization_id,
             start_date=start_date,
@@ -656,37 +639,37 @@ def get_cached_cases_by_source(
 # ============================================================================
 
 
-def get_cases_by_user(
+def get_surrogates_by_user(
     db: Session,
     organization_id: uuid.UUID,
     start_date: date | None = None,
     end_date: date | None = None,
 ) -> list[dict[str, Any]]:
-    """Get case count by owner (user-owned cases only)."""
+    """Get surrogate count by owner (user-owned surrogates only)."""
     from app.db.models import User
 
     query = (
         db.query(
-            Case.owner_id,
+            Surrogate.owner_id,
             User.full_name,
-            func.count(Case.id).label("count"),
+            func.count(Surrogate.id).label("count"),
         )
-        .outerjoin(User, Case.owner_id == User.id)
+        .outerjoin(User, Surrogate.owner_id == User.id)
         .filter(
-            Case.organization_id == organization_id,
-            Case.owner_type == OwnerType.USER.value,
-            Case.is_archived.is_(False),
+            Surrogate.organization_id == organization_id,
+            Surrogate.owner_type == OwnerType.USER.value,
+            Surrogate.is_archived.is_(False),
         )
     )
 
     if start_date:
-        query = query.filter(func.date(Case.created_at) >= start_date)
+        query = query.filter(func.date(Surrogate.created_at) >= start_date)
     if end_date:
-        query = query.filter(func.date(Case.created_at) <= end_date)
+        query = query.filter(func.date(Surrogate.created_at) <= end_date)
 
     results = (
-        query.group_by(Case.owner_id, User.full_name)
-        .order_by(func.count(Case.id).desc())
+        query.group_by(Surrogate.owner_id, User.full_name)
+        .order_by(func.count(Surrogate.id).desc())
         .all()
     )
 
@@ -700,14 +683,14 @@ def get_cases_by_user(
     ]
 
 
-def get_cases_by_assignee(
+def get_surrogates_by_assignee(
     db: Session,
     organization_id: uuid.UUID,
     start_date: date | None = None,
     end_date: date | None = None,
     label: str = "email",
 ) -> list[dict[str, Any]]:
-    """Get case count by assignee (user-owned cases only)."""
+    """Get surrogate count by assignee (user-owned surrogates only)."""
     from app.db.models import User
 
     label_column = User.email if label == "email" else User.display_name
@@ -715,26 +698,26 @@ def get_cases_by_assignee(
 
     query = (
         db.query(
-            Case.owner_id,
+            Surrogate.owner_id,
             label_column.label("label"),
-            func.count(Case.id).label("count"),
+            func.count(Surrogate.id).label("count"),
         )
-        .outerjoin(User, Case.owner_id == User.id)
+        .outerjoin(User, Surrogate.owner_id == User.id)
         .filter(
-            Case.organization_id == organization_id,
-            Case.owner_type == OwnerType.USER.value,
-            Case.is_archived.is_(False),
+            Surrogate.organization_id == organization_id,
+            Surrogate.owner_type == OwnerType.USER.value,
+            Surrogate.is_archived.is_(False),
         )
     )
 
     if start_date:
-        query = query.filter(func.date(Case.created_at) >= start_date)
+        query = query.filter(func.date(Surrogate.created_at) >= start_date)
     if end_date:
-        query = query.filter(func.date(Case.created_at) <= end_date)
+        query = query.filter(func.date(Surrogate.created_at) <= end_date)
 
     results = (
-        query.group_by(Case.owner_id, label_column)
-        .order_by(func.count(Case.id).desc())
+        query.group_by(Surrogate.owner_id, label_column)
+        .order_by(func.count(Surrogate.id).desc())
         .all()
     )
 
@@ -754,7 +737,7 @@ def get_cases_by_assignee(
     return payload
 
 
-def get_cached_cases_by_assignee(
+def get_cached_surrogates_by_assignee(
     db: Session,
     organization_id: uuid.UUID,
     start_date: date | None = None,
@@ -772,16 +755,14 @@ def get_cached_cases_by_assignee(
         else None
     )
     range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
-        if end_date
-        else None
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
     )
     return _get_or_compute_snapshot(
         db,
         organization_id,
-        "cases_by_assignee",
+        "surrogates_by_assignee",
         params,
-        lambda: get_cases_by_assignee(
+        lambda: get_surrogates_by_assignee(
             db,
             organization_id,
             start_date=start_date,
@@ -807,28 +788,24 @@ def get_conversion_funnel(
     """Get conversion funnel data."""
     stages = _get_default_pipeline_stages(db, organization_id)
     stage_by_slug = {s.slug: s for s in stages if s.is_active}
-    funnel_stages = [
-        stage_by_slug[slug] for slug in FUNNEL_SLUGS if slug in stage_by_slug
-    ]
+    funnel_stages = [stage_by_slug[slug] for slug in FUNNEL_SLUGS if slug in stage_by_slug]
     if not funnel_stages:
-        funnel_stages = sorted(
-            [s for s in stages if s.is_active], key=lambda s: s.order
-        )[:5]
+        funnel_stages = sorted([s for s in stages if s.is_active], key=lambda s: s.order)[:5]
 
-    query = db.query(Case).filter(
-        Case.organization_id == organization_id,
-        Case.is_archived.is_(False),
+    query = db.query(Surrogate).filter(
+        Surrogate.organization_id == organization_id,
+        Surrogate.is_archived.is_(False),
     )
 
     if start_date:
-        query = query.filter(func.date(Case.created_at) >= start_date)
+        query = query.filter(func.date(Surrogate.created_at) >= start_date)
     if end_date:
-        query = query.filter(func.date(Case.created_at) <= end_date)
+        query = query.filter(func.date(Surrogate.created_at) <= end_date)
 
     active_stages = [s for s in stages if s.is_active]
     counts_by_stage = dict(
-        query.with_entities(Case.stage_id, func.count(Case.id))
-        .group_by(Case.stage_id)
+        query.with_entities(Surrogate.stage_id, func.count(Surrogate.id))
+        .group_by(Surrogate.stage_id)
         .all()
     )
     total = sum(counts_by_stage.values())
@@ -836,9 +813,7 @@ def get_conversion_funnel(
     funnel_data = []
     for stage in funnel_stages:
         eligible_stage_ids = [s.id for s in active_stages if s.order >= stage.order]
-        count = sum(
-            counts_by_stage.get(stage_id, 0) for stage_id in eligible_stage_ids
-        )
+        count = sum(counts_by_stage.get(stage_id, 0) for stage_id in eligible_stage_ids)
         funnel_data.append(
             {
                 "stage": stage.slug,
@@ -867,9 +842,7 @@ def get_cached_conversion_funnel(
         else None
     )
     range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
-        if end_date
-        else None
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
     )
     return _get_or_compute_snapshot(
         db,
@@ -911,12 +884,12 @@ def get_summary_kpis(
 
     # Current period
     current = (
-        db.query(func.count(Case.id))
+        db.query(func.count(Surrogate.id))
         .filter(
-            Case.organization_id == organization_id,
-            Case.is_archived.is_(False),
-            func.date(Case.created_at) >= start_date,
-            func.date(Case.created_at) <= end_date,
+            Surrogate.organization_id == organization_id,
+            Surrogate.is_archived.is_(False),
+            func.date(Surrogate.created_at) >= start_date,
+            func.date(Surrogate.created_at) <= end_date,
         )
         .scalar()
         or 0
@@ -924,12 +897,12 @@ def get_summary_kpis(
 
     # Previous period
     previous = (
-        db.query(func.count(Case.id))
+        db.query(func.count(Surrogate.id))
         .filter(
-            Case.organization_id == organization_id,
-            Case.is_archived.is_(False),
-            func.date(Case.created_at) >= prev_start,
-            func.date(Case.created_at) <= prev_end,
+            Surrogate.organization_id == organization_id,
+            Surrogate.is_archived.is_(False),
+            func.date(Surrogate.created_at) >= prev_start,
+            func.date(Surrogate.created_at) <= prev_end,
         )
         .scalar()
         or 0
@@ -941,12 +914,12 @@ def get_summary_kpis(
     else:
         change_pct = 100 if current > 0 else 0
 
-    # Total active cases
+    # Total active surrogates
     total_active = (
-        db.query(func.count(Case.id))
+        db.query(func.count(Surrogate.id))
         .filter(
-            Case.organization_id == organization_id,
-            Case.is_archived.is_(False),
+            Surrogate.organization_id == organization_id,
+            Surrogate.is_archived.is_(False),
         )
         .scalar()
         or 0
@@ -968,20 +941,20 @@ def get_summary_kpis(
         attention_stage_ids = [s.id for s in sorted(stages, key=lambda s: s.order)[:2]]
 
     needs_attention = (
-        db.query(func.count(Case.id))
+        db.query(func.count(Surrogate.id))
         .filter(
-            Case.organization_id == organization_id,
-            Case.is_archived.is_(False),
-            Case.stage_id.in_(attention_stage_ids),
-            (Case.last_contacted_at.is_(None)) | (Case.last_contacted_at < stale_date),
+            Surrogate.organization_id == organization_id,
+            Surrogate.is_archived.is_(False),
+            Surrogate.stage_id.in_(attention_stage_ids),
+            (Surrogate.last_contacted_at.is_(None)) | (Surrogate.last_contacted_at < stale_date),
         )
         .scalar()
         or 0
     )
 
     return {
-        "new_cases": current,
-        "new_cases_change_pct": change_pct,
+        "new_surrogates": current,
+        "new_surrogates_change_pct": change_pct,
         "total_active": total_active,
         "needs_attention": needs_attention,
         "period_days": period_days,
@@ -1004,9 +977,7 @@ def get_cached_summary_kpis(
         else None
     )
     range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
-        if end_date
-        else None
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
     )
     return _get_or_compute_snapshot(
         db,
@@ -1036,9 +1007,7 @@ def get_meta_performance(
     pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
     stages = pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
     qualified_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "qualified")
-    converted_stage = pipeline_service.get_stage_by_slug(
-        db, pipeline.id, "application_submitted"
-    )
+    converted_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "application_submitted")
 
     qualified_or_later_ids = []
     converted_or_later_ids = []
@@ -1069,7 +1038,7 @@ def get_meta_performance(
                 text("""
                 SELECT COUNT(*)
                 FROM meta_leads ml
-                JOIN cases c ON ml.converted_case_id = c.id
+                JOIN surrogates c ON ml.converted_surrogate_id = c.id
                 WHERE ml.organization_id = :org_id
                   AND COALESCE(ml.meta_created_time, ml.received_at) >= :start
                   AND COALESCE(ml.meta_created_time, ml.received_at) < :end
@@ -1093,7 +1062,7 @@ def get_meta_performance(
                 text("""
                 SELECT COUNT(*)
                 FROM meta_leads ml
-                JOIN cases c ON ml.converted_case_id = c.id
+                JOIN surrogates c ON ml.converted_surrogate_id = c.id
                 WHERE ml.organization_id = :org_id
                   AND COALESCE(ml.meta_created_time, ml.received_at) >= :start
                   AND COALESCE(ml.meta_created_time, ml.received_at) < :end
@@ -1110,12 +1079,8 @@ def get_meta_performance(
             or 0
         )
 
-    qualification_rate = (
-        (leads_qualified / leads_received * 100) if leads_received > 0 else 0.0
-    )
-    conversion_rate = (
-        (leads_converted / leads_received * 100) if leads_received > 0 else 0.0
-    )
+    qualification_rate = (leads_qualified / leads_received * 100) if leads_received > 0 else 0.0
+    conversion_rate = (leads_converted / leads_received * 100) if leads_received > 0 else 0.0
 
     avg_hours = None
     if converted_stage:
@@ -1123,8 +1088,8 @@ def get_meta_performance(
             text("""
                 SELECT AVG(EXTRACT(EPOCH FROM (csh.changed_at - COALESCE(ml.meta_created_time, ml.received_at))) / 3600) as avg_hours
                 FROM meta_leads ml
-                JOIN cases c ON ml.converted_case_id = c.id
-                JOIN case_status_history csh ON c.id = csh.case_id AND csh.to_stage_id = :converted_stage_id
+                JOIN surrogates c ON ml.converted_surrogate_id = c.id
+                JOIN surrogate_status_history csh ON c.id = csh.surrogate_id AND csh.to_stage_id = :converted_stage_id
                 WHERE ml.organization_id = :org_id
                   AND COALESCE(ml.meta_created_time, ml.received_at) >= :start
                   AND COALESCE(ml.meta_created_time, ml.received_at) < :end
@@ -1181,19 +1146,19 @@ def get_campaigns(
     organization_id: uuid.UUID,
 ) -> list[dict[str, Any]]:
     """Get unique meta_ad_external_id values for campaign filter dropdown."""
-    # Get from cases table where meta_ad_external_id is set
+    # Get from surrogates table where meta_ad_external_id is set
     results = (
         db.query(
-            Case.meta_ad_external_id,
-            func.count(Case.id).label("case_count"),
+            Surrogate.meta_ad_external_id,
+            func.count(Surrogate.id).label("surrogate_count"),
         )
         .filter(
-            Case.organization_id == organization_id,
-            Case.meta_ad_external_id.isnot(None),
-            Case.is_archived.is_(False),
+            Surrogate.organization_id == organization_id,
+            Surrogate.meta_ad_external_id.isnot(None),
+            Surrogate.is_archived.is_(False),
         )
-        .group_by(Case.meta_ad_external_id)
-        .order_by(func.count(Case.id).desc())
+        .group_by(Surrogate.meta_ad_external_id)
+        .order_by(func.count(Surrogate.id).desc())
         .all()
     )
 
@@ -1203,7 +1168,7 @@ def get_campaigns(
             "ad_name": f"Campaign {r.meta_ad_external_id[:8]}..."
             if len(r.meta_ad_external_id) > 8
             else r.meta_ad_external_id,
-            "lead_count": r.case_count,
+            "lead_count": r.surrogate_count,
         }
         for r in results
     ]
@@ -1232,30 +1197,26 @@ def get_funnel_with_filter(
     """Get conversion funnel data with optional campaign filter."""
     stages = _get_default_pipeline_stages(db, organization_id)
     stage_by_slug = {s.slug: s for s in stages if s.is_active}
-    funnel_stages = [
-        stage_by_slug[slug] for slug in FUNNEL_SLUGS if slug in stage_by_slug
-    ]
+    funnel_stages = [stage_by_slug[slug] for slug in FUNNEL_SLUGS if slug in stage_by_slug]
     if not funnel_stages:
-        funnel_stages = sorted(
-            [s for s in stages if s.is_active], key=lambda s: s.order
-        )[:5]
+        funnel_stages = sorted([s for s in stages if s.is_active], key=lambda s: s.order)[:5]
 
-    query = db.query(Case).filter(
-        Case.organization_id == organization_id,
-        Case.is_archived.is_(False),
+    query = db.query(Surrogate).filter(
+        Surrogate.organization_id == organization_id,
+        Surrogate.is_archived.is_(False),
     )
 
     if start_date:
-        query = query.filter(func.date(Case.created_at) >= start_date)
+        query = query.filter(func.date(Surrogate.created_at) >= start_date)
     if end_date:
-        query = query.filter(func.date(Case.created_at) <= end_date)
+        query = query.filter(func.date(Surrogate.created_at) <= end_date)
     if ad_id:
-        query = query.filter(Case.meta_ad_external_id == ad_id)
+        query = query.filter(Surrogate.meta_ad_external_id == ad_id)
 
     active_stages = [s for s in stages if s.is_active]
     counts_by_stage = dict(
-        query.with_entities(Case.stage_id, func.count(Case.id))
-        .group_by(Case.stage_id)
+        query.with_entities(Surrogate.stage_id, func.count(Surrogate.id))
+        .group_by(Surrogate.stage_id)
         .all()
     )
     total = sum(counts_by_stage.values())
@@ -1263,9 +1224,7 @@ def get_funnel_with_filter(
     funnel_data = []
     for stage in funnel_stages:
         eligible_stage_ids = [s.id for s in active_stages if s.order >= stage.order]
-        count = sum(
-            counts_by_stage.get(stage_id, 0) for stage_id in eligible_stage_ids
-        )
+        count = sum(counts_by_stage.get(stage_id, 0) for stage_id in eligible_stage_ids)
         funnel_data.append(
             {
                 "stage": stage.slug,
@@ -1296,9 +1255,7 @@ def get_cached_funnel_with_filter(
         else None
     )
     range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
-        if end_date
-        else None
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
     )
     return _get_or_compute_snapshot(
         db,
@@ -1317,7 +1274,7 @@ def get_cached_funnel_with_filter(
     )
 
 
-def get_cases_by_state_with_filter(
+def get_surrogates_by_state_with_filter(
     db: Session,
     organization_id: uuid.UUID,
     start_date: date | None = None,
@@ -1326,27 +1283,27 @@ def get_cases_by_state_with_filter(
 ) -> list[dict[str, Any]]:
     """Get case count by US state with optional campaign filter."""
     query = db.query(
-        Case.state,
-        func.count(Case.id).label("count"),
+        Surrogate.state,
+        func.count(Surrogate.id).label("count"),
     ).filter(
-        Case.organization_id == organization_id,
-        Case.is_archived.is_(False),
-        Case.state.isnot(None),
+        Surrogate.organization_id == organization_id,
+        Surrogate.is_archived.is_(False),
+        Surrogate.state.isnot(None),
     )
 
     if start_date:
-        query = query.filter(func.date(Case.created_at) >= start_date)
+        query = query.filter(func.date(Surrogate.created_at) >= start_date)
     if end_date:
-        query = query.filter(func.date(Case.created_at) <= end_date)
+        query = query.filter(func.date(Surrogate.created_at) <= end_date)
     if ad_id:
-        query = query.filter(Case.meta_ad_external_id == ad_id)
+        query = query.filter(Surrogate.meta_ad_external_id == ad_id)
 
-    results = query.group_by(Case.state).order_by(func.count(Case.id).desc()).all()
+    results = query.group_by(Surrogate.state).order_by(func.count(Surrogate.id).desc()).all()
 
     return [{"state": r.state, "count": r.count} for r in results]
 
 
-def get_cached_cases_by_state_with_filter(
+def get_cached_surrogates_by_state_with_filter(
     db: Session,
     organization_id: uuid.UUID,
     start_date: date | None = None,
@@ -1364,16 +1321,14 @@ def get_cached_cases_by_state_with_filter(
         else None
     )
     range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
-        if end_date
-        else None
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
     )
     return _get_or_compute_snapshot(
         db,
         organization_id,
-        "cases_by_state_compare",
+        "surrogates_by_state_compare",
         params,
-        lambda: get_cases_by_state_with_filter(
+        lambda: get_surrogates_by_state_with_filter(
             db,
             organization_id,
             start_date=start_date,
@@ -1460,9 +1415,7 @@ async def get_meta_spend_summary(
     total_impressions = 0
     total_leads = 0
     time_series: dict[tuple[str, str], dict[str, float | int]] = {}
-    breakdown_totals: dict[
-        tuple[str, ...], dict[str, float | int | dict[str, str]]
-    ] = {}
+    breakdown_totals: dict[tuple[str, ...], dict[str, float | int | dict[str, str]]] = {}
 
     for insight in insights:
         spend = safe_float(insight.get("spend"))
@@ -1492,9 +1445,7 @@ async def get_meta_spend_summary(
             }
             campaigns_by_id[campaign_id] = campaign_totals
         campaign_totals["spend"] = float(campaign_totals["spend"]) + spend
-        campaign_totals["impressions"] = (
-            int(campaign_totals["impressions"]) + impressions
-        )
+        campaign_totals["impressions"] = int(campaign_totals["impressions"]) + impressions
         campaign_totals["reach"] = int(campaign_totals["reach"]) + reach
         campaign_totals["clicks"] = int(campaign_totals["clicks"]) + clicks
         campaign_totals["leads"] = int(campaign_totals["leads"]) + leads
@@ -1524,12 +1475,8 @@ async def get_meta_spend_summary(
             point["leads"] = int(point["leads"]) + leads
 
         if breakdowns:
-            breakdown_values = {
-                key: str(insight.get(key, "unknown")) for key in breakdowns
-            }
-            breakdown_key = tuple(
-                breakdown_values.get(key, "unknown") for key in breakdowns
-            )
+            breakdown_values = {key: str(insight.get(key, "unknown")) for key in breakdowns}
+            breakdown_key = tuple(breakdown_values.get(key, "unknown") for key in breakdowns)
             breakdown = breakdown_totals.get(breakdown_key)
             if not breakdown:
                 breakdown = {
@@ -1592,9 +1539,7 @@ async def get_meta_spend_summary(
             breakdown_spend = float(breakdown["spend"])
             breakdown_leads = int(breakdown["leads"])
             breakdown_cpl = (
-                round(breakdown_spend / breakdown_leads, 2)
-                if breakdown_leads > 0
-                else None
+                round(breakdown_spend / breakdown_leads, 2) if breakdown_leads > 0 else None
             )
             breakdown_points.append(
                 {
@@ -1662,32 +1607,32 @@ def get_activity_feed(
     user_id: str | None = None,
 ) -> tuple[list[dict[str, Any]], bool]:
     """Get org-wide activity feed entries."""
-    from app.db.models import CaseActivityLog, User
+    from app.db.models import SurrogateActivityLog, User
     from sqlalchemy import desc
 
     query = (
         db.query(
-            CaseActivityLog,
-            Case.case_number,
-            Case.full_name.label("case_name"),
+            SurrogateActivityLog,
+            Surrogate.surrogate_number,
+            Surrogate.full_name.label("surrogate_name"),
             User.display_name.label("actor_name"),
         )
-        .join(Case, CaseActivityLog.case_id == Case.id)
-        .outerjoin(User, CaseActivityLog.actor_user_id == User.id)
-        .filter(CaseActivityLog.organization_id == organization_id)
+        .join(Surrogate, SurrogateActivityLog.surrogate_id == Surrogate.id)
+        .outerjoin(User, SurrogateActivityLog.actor_user_id == User.id)
+        .filter(SurrogateActivityLog.organization_id == organization_id)
     )
 
     if activity_type:
-        query = query.filter(CaseActivityLog.activity_type == activity_type)
+        query = query.filter(SurrogateActivityLog.activity_type == activity_type)
 
     if user_id:
         try:
             parsed_id = uuid.UUID(user_id)
-            query = query.filter(CaseActivityLog.actor_user_id == parsed_id)
+            query = query.filter(SurrogateActivityLog.actor_user_id == parsed_id)
         except ValueError:
             pass
 
-    query = query.order_by(desc(CaseActivityLog.created_at))
+    query = query.order_by(desc(SurrogateActivityLog.created_at))
     query = query.offset(offset).limit(limit + 1)
 
     results = query.all()
@@ -1697,14 +1642,14 @@ def get_activity_feed(
     return (
         [
             {
-                "id": str(row.CaseActivityLog.id),
-                "activity_type": row.CaseActivityLog.activity_type,
-                "case_id": str(row.CaseActivityLog.case_id),
-                "case_number": row.case_number,
-                "case_name": row.case_name,
+                "id": str(row.SurrogateActivityLog.id),
+                "activity_type": row.SurrogateActivityLog.activity_type,
+                "surrogate_id": str(row.SurrogateActivityLog.surrogate_id),
+                "surrogate_number": row.surrogate_number,
+                "surrogate_name": row.surrogate_name,
                 "actor_name": row.actor_name,
-                "details": row.CaseActivityLog.details,
-                "created_at": row.CaseActivityLog.created_at.isoformat(),
+                "details": row.SurrogateActivityLog.details,
+                "created_at": row.SurrogateActivityLog.created_at.isoformat(),
             }
             for row in items
         ],
@@ -1728,19 +1673,19 @@ def get_pdf_export_data(
     from app.db.enums import TaskType
     from app.services import pipeline_service, org_service
 
-    date_filter = Case.is_archived.is_(False)
+    date_filter = Surrogate.is_archived.is_(False)
     if start_dt:
-        date_filter = date_filter & (Case.created_at >= start_dt)
+        date_filter = date_filter & (Surrogate.created_at >= start_dt)
     if end_dt:
-        date_filter = date_filter & (Case.created_at <= end_dt)
+        date_filter = date_filter & (Surrogate.created_at <= end_dt)
 
     org = org_service.get_org_by_id(db, organization_id)
     org_name = org.name if org else "Organization"
 
-    total_cases = (
-        db.query(func.count(Case.id))
+    total_surrogates = (
+        db.query(func.count(Surrogate.id))
         .filter(
-            Case.organization_id == organization_id,
+            Surrogate.organization_id == organization_id,
             date_filter,
         )
         .scalar()
@@ -1749,11 +1694,11 @@ def get_pdf_export_data(
 
     period_start = (end_dt or datetime.now(timezone.utc)) - timedelta(days=7)
     new_this_period = (
-        db.query(func.count(Case.id))
+        db.query(func.count(Surrogate.id))
         .filter(
-            Case.organization_id == organization_id,
-            Case.is_archived.is_(False),
-            Case.created_at >= period_start,
+            Surrogate.organization_id == organization_id,
+            Surrogate.is_archived.is_(False),
+            Surrogate.created_at >= period_start,
         )
         .scalar()
         or 0
@@ -1763,23 +1708,23 @@ def get_pdf_export_data(
     qualified_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "qualified")
 
     qualified_rate = 0.0
-    if qualified_stage and total_cases > 0:
+    if qualified_stage and total_surrogates > 0:
         qualified_stage_ids = db.query(PipelineStage.id).filter(
             PipelineStage.pipeline_id == pipeline.id,
             PipelineStage.order >= qualified_stage.order,
             PipelineStage.is_active.is_(True),
         )
         qualified_count = (
-            db.query(func.count(Case.id))
+            db.query(func.count(Surrogate.id))
             .filter(
-                Case.organization_id == organization_id,
-                Case.is_archived.is_(False),
-                Case.stage_id.in_(qualified_stage_ids),
+                Surrogate.organization_id == organization_id,
+                Surrogate.is_archived.is_(False),
+                Surrogate.stage_id.in_(qualified_stage_ids),
             )
             .scalar()
             or 0
         )
-        qualified_rate = (qualified_count / total_cases) * 100
+        qualified_rate = (qualified_count / total_surrogates) * 100
 
     pending_tasks = (
         db.query(func.count(Task.id))
@@ -1805,18 +1750,18 @@ def get_pdf_export_data(
     )
 
     summary = {
-        "total_cases": total_cases,
+        "total_surrogates": total_surrogates,
         "new_this_period": new_this_period,
         "qualified_rate": qualified_rate,
         "pending_tasks": pending_tasks,
         "overdue_tasks": overdue_tasks,
     }
 
-    cases_by_status = get_cases_by_status(db, organization_id)
-    cases_by_assignee = get_cases_by_assignee(db, organization_id, label="display_name")
+    surrogates_by_status = get_surrogates_by_status(db, organization_id)
+    surrogates_by_assignee = get_surrogates_by_assignee(db, organization_id, label="display_name")
 
     trend_start = datetime.now(timezone.utc) - timedelta(days=30)
-    trend_data = get_cases_trend(
+    trend_data = get_surrogates_trend(
         db,
         organization_id,
         start=trend_start,
@@ -1836,7 +1781,7 @@ def get_pdf_export_data(
     )
 
     # Get state data for US map
-    state_data = get_cases_by_state_with_filter(
+    state_data = get_surrogates_by_state_with_filter(
         db, organization_id, start_date=start_date, end_date=end_date
     )
 
@@ -1847,8 +1792,8 @@ def get_pdf_export_data(
 
     return {
         "summary": summary,
-        "cases_by_status": cases_by_status,
-        "cases_by_assignee": cases_by_assignee,
+        "surrogates_by_status": surrogates_by_status,
+        "surrogates_by_assignee": surrogates_by_assignee,
         "trend_data": trend_data,
         "meta_performance": meta_performance,
         "funnel_data": funnel_data,
@@ -1866,9 +1811,9 @@ def get_pdf_export_data(
 PERFORMANCE_STAGE_SLUGS = [
     "contacted",
     "qualified",
-    "pending_match",
+    "ready_to_match",
     "matched",
-    "applied",
+    "application_submitted",
     "lost",
 ]
 
@@ -1908,7 +1853,7 @@ def get_performance_by_user(
         organization_id: Organization to query
         start_date: Start of date range (defaults to 30 days ago)
         end_date: End of date range (defaults to today)
-        mode: 'cohort' (cases created in range) or 'activity' (status changes in range)
+        mode: 'cohort' (surrogates created in range) or 'activity' (status changes in range)
 
     Returns:
         Dict with user performance data, unassigned bucket, and metadata
@@ -1980,60 +1925,60 @@ def _get_cohort_performance(
     )
 
     def _stage_condition(stage_id: uuid.UUID | None):
-        return literal(False) if stage_id is None else CaseStatusHistory.to_stage_id == stage_id
+        return (
+            literal(False) if stage_id is None else SurrogateStatusHistory.to_stage_id == stage_id
+        )
 
     def _count_distinct(condition):
-        return func.count(func.distinct(case((condition, Case.id))))
+        return func.count(func.distinct(case((condition, Surrogate.id))))
 
-    applied_sid = stage_ids.get("applied")
+    application_submitted_sid = stage_ids.get("application_submitted")
     lost_sid = stage_ids.get("lost")
     if lost_sid:
-        if applied_sid:
-            CSH_applied = aliased(CaseStatusHistory)
+        if application_submitted_sid:
+            CSH_application_submitted = aliased(SurrogateStatusHistory)
             lost_condition = and_(
-                CaseStatusHistory.to_stage_id == lost_sid,
+                SurrogateStatusHistory.to_stage_id == lost_sid,
                 ~exists(
-                    select(CSH_applied.id).where(
-                        CSH_applied.case_id == Case.id,
-                        CSH_applied.to_stage_id == applied_sid,
+                    select(CSH_application_submitted.id).where(
+                        CSH_application_submitted.surrogate_id == Surrogate.id,
+                        CSH_application_submitted.to_stage_id == application_submitted_sid,
                     )
                 ),
             )
         else:
-            lost_condition = CaseStatusHistory.to_stage_id == lost_sid
+            lost_condition = SurrogateStatusHistory.to_stage_id == lost_sid
     else:
         lost_condition = literal(False)
 
     base_filters = [
-        Case.organization_id == organization_id,
-        Case.owner_type == OwnerType.USER.value,
-        Case.owner_id.isnot(None),
-        Case.created_at >= start_dt,
-        Case.created_at <= end_dt,
+        Surrogate.organization_id == organization_id,
+        Surrogate.owner_type == OwnerType.USER.value,
+        Surrogate.owner_id.isnot(None),
+        Surrogate.created_at >= start_dt,
+        Surrogate.created_at <= end_dt,
     ]
 
     metrics_rows = (
         db.query(
-            Case.owner_id.label("user_id"),
-            func.count(func.distinct(Case.id)).label("total_cases"),
-            _count_distinct(Case.is_archived.is_(True)).label("archived_count"),
-            _count_distinct(_stage_condition(stage_ids.get("contacted"))).label(
-                "contacted"
-            ),
-            _count_distinct(_stage_condition(stage_ids.get("qualified"))).label(
-                "qualified"
-            ),
-            _count_distinct(_stage_condition(stage_ids.get("pending_match"))).label(
-                "pending_match"
+            Surrogate.owner_id.label("user_id"),
+            func.count(func.distinct(Surrogate.id)).label("total_surrogates"),
+            _count_distinct(Surrogate.is_archived.is_(True)).label("archived_count"),
+            _count_distinct(_stage_condition(stage_ids.get("contacted"))).label("contacted"),
+            _count_distinct(_stage_condition(stage_ids.get("qualified"))).label("qualified"),
+            _count_distinct(_stage_condition(stage_ids.get("ready_to_match"))).label(
+                "ready_to_match"
             ),
             _count_distinct(_stage_condition(stage_ids.get("matched"))).label("matched"),
-            _count_distinct(_stage_condition(stage_ids.get("applied"))).label("applied"),
+            _count_distinct(_stage_condition(stage_ids.get("application_submitted"))).label(
+                "application_submitted"
+            ),
             _count_distinct(lost_condition).label("lost"),
         )
-        .select_from(Case)
-        .outerjoin(CaseStatusHistory, CaseStatusHistory.case_id == Case.id)
+        .select_from(Surrogate)
+        .outerjoin(SurrogateStatusHistory, SurrogateStatusHistory.surrogate_id == Surrogate.id)
         .filter(*base_filters)
-        .group_by(Case.owner_id)
+        .group_by(Surrogate.owner_id)
         .all()
     )
 
@@ -2042,71 +1987,71 @@ def _get_cohort_performance(
     user_data = []
     for user_id, user_name in users_query:
         metrics = metrics_by_user.get(user_id)
-        total = metrics.total_cases if metrics else 0
+        total = metrics.total_surrogates if metrics else 0
         conversion_rate = (
-            round((metrics.applied / total * 100), 1) if metrics and total > 0 else 0.0
+            round((metrics.application_submitted / total * 100), 1)
+            if metrics and total > 0
+            else 0.0
         )
 
         user_data.append(
             {
                 "user_id": str(user_id),
                 "user_name": user_name or "Unknown",
-                "total_cases": total,
+                "total_surrogates": total,
                 "archived_count": metrics.archived_count if metrics else 0,
                 "contacted": metrics.contacted if metrics else 0,
                 "qualified": metrics.qualified if metrics else 0,
-                "pending_match": metrics.pending_match if metrics else 0,
+                "ready_to_match": metrics.ready_to_match if metrics else 0,
                 "matched": metrics.matched if metrics else 0,
-                "applied": metrics.applied if metrics else 0,
+                "application_submitted": metrics.application_submitted if metrics else 0,
                 "lost": metrics.lost if metrics else 0,
                 "conversion_rate": conversion_rate,
                 "avg_days_to_match": None,
-                "avg_days_to_apply": None,
+                "avg_days_to_application_submitted": None,
             }
         )
 
-    # Sort by total_cases descending
-    user_data.sort(key=lambda x: x["total_cases"], reverse=True)
+    # Sort by total_surrogates descending
+    user_data.sort(key=lambda x: x["total_surrogates"], reverse=True)
 
     # Unassigned bucket (queue-owned or no owner)
     unassigned_filters = [
-        Case.organization_id == organization_id,
-        Case.created_at >= start_dt,
-        Case.created_at <= end_dt,
-        or_(Case.owner_type != OwnerType.USER.value, Case.owner_id.is_(None)),
+        Surrogate.organization_id == organization_id,
+        Surrogate.created_at >= start_dt,
+        Surrogate.created_at <= end_dt,
+        or_(Surrogate.owner_type != OwnerType.USER.value, Surrogate.owner_id.is_(None)),
     ]
 
     unassigned_row = (
         db.query(
-            func.count(func.distinct(Case.id)).label("total_cases"),
-            _count_distinct(Case.is_archived.is_(True)).label("archived_count"),
-            _count_distinct(_stage_condition(stage_ids.get("contacted"))).label(
-                "contacted"
-            ),
-            _count_distinct(_stage_condition(stage_ids.get("qualified"))).label(
-                "qualified"
-            ),
-            _count_distinct(_stage_condition(stage_ids.get("pending_match"))).label(
-                "pending_match"
+            func.count(func.distinct(Surrogate.id)).label("total_surrogates"),
+            _count_distinct(Surrogate.is_archived.is_(True)).label("archived_count"),
+            _count_distinct(_stage_condition(stage_ids.get("contacted"))).label("contacted"),
+            _count_distinct(_stage_condition(stage_ids.get("qualified"))).label("qualified"),
+            _count_distinct(_stage_condition(stage_ids.get("ready_to_match"))).label(
+                "ready_to_match"
             ),
             _count_distinct(_stage_condition(stage_ids.get("matched"))).label("matched"),
-            _count_distinct(_stage_condition(stage_ids.get("applied"))).label("applied"),
+            _count_distinct(_stage_condition(stage_ids.get("application_submitted"))).label(
+                "application_submitted"
+            ),
             _count_distinct(lost_condition).label("lost"),
         )
-        .select_from(Case)
-        .outerjoin(CaseStatusHistory, CaseStatusHistory.case_id == Case.id)
+        .select_from(Surrogate)
+        .outerjoin(SurrogateStatusHistory, SurrogateStatusHistory.surrogate_id == Surrogate.id)
         .filter(*unassigned_filters)
         .first()
     )
 
     unassigned = {
-        "total_cases": unassigned_row.total_cases if unassigned_row else 0,
+        "total_surrogates": unassigned_row.total_surrogates if unassigned_row else 0,
         "archived_count": unassigned_row.archived_count if unassigned_row else 0,
         "contacted": unassigned_row.contacted if unassigned_row else 0,
         "qualified": unassigned_row.qualified if unassigned_row else 0,
-        "pending_match": unassigned_row.pending_match if unassigned_row else 0,
+        "ready_to_match": unassigned_row.ready_to_match if unassigned_row else 0,
         "matched": unassigned_row.matched if unassigned_row else 0,
-        "applied": unassigned_row.applied if unassigned_row else 0,
+        "application_submitted": unassigned_row.application_submitted if unassigned_row else 0,
         "lost": unassigned_row.lost if unassigned_row else 0,
     }
 
@@ -2123,7 +2068,7 @@ def _get_activity_performance(
     """
     Activity mode: Cases with status transitions within date range.
 
-    total_cases = distinct cases with ANY transition in range.
+    total_surrogates = distinct surrogates with ANY transition in range.
     Stage counts = transitions to that stage within range.
     """
     # Get all active org users via Membership
@@ -2139,60 +2084,60 @@ def _get_activity_performance(
     )
 
     def _stage_condition(stage_id: uuid.UUID | None):
-        return literal(False) if stage_id is None else CaseStatusHistory.to_stage_id == stage_id
+        return (
+            literal(False) if stage_id is None else SurrogateStatusHistory.to_stage_id == stage_id
+        )
 
     def _count_distinct(condition):
-        return func.count(func.distinct(case((condition, Case.id))))
+        return func.count(func.distinct(case((condition, Surrogate.id))))
 
-    applied_sid = stage_ids.get("applied")
+    application_submitted_sid = stage_ids.get("application_submitted")
     lost_sid = stage_ids.get("lost")
     if lost_sid:
-        if applied_sid:
-            CSH_applied = aliased(CaseStatusHistory)
+        if application_submitted_sid:
+            CSH_application_submitted = aliased(SurrogateStatusHistory)
             lost_condition = and_(
-                CaseStatusHistory.to_stage_id == lost_sid,
+                SurrogateStatusHistory.to_stage_id == lost_sid,
                 ~exists(
-                    select(CSH_applied.id).where(
-                        CSH_applied.case_id == Case.id,
-                        CSH_applied.to_stage_id == applied_sid,
+                    select(CSH_application_submitted.id).where(
+                        CSH_application_submitted.surrogate_id == Surrogate.id,
+                        CSH_application_submitted.to_stage_id == application_submitted_sid,
                     )
                 ),
             )
         else:
-            lost_condition = CaseStatusHistory.to_stage_id == lost_sid
+            lost_condition = SurrogateStatusHistory.to_stage_id == lost_sid
     else:
         lost_condition = literal(False)
 
     base_filters = [
-        Case.organization_id == organization_id,
-        Case.owner_type == OwnerType.USER.value,
-        Case.owner_id.isnot(None),
-        CaseStatusHistory.changed_at >= start_dt,
-        CaseStatusHistory.changed_at <= end_dt,
+        Surrogate.organization_id == organization_id,
+        Surrogate.owner_type == OwnerType.USER.value,
+        Surrogate.owner_id.isnot(None),
+        SurrogateStatusHistory.changed_at >= start_dt,
+        SurrogateStatusHistory.changed_at <= end_dt,
     ]
 
     metrics_rows = (
         db.query(
-            Case.owner_id.label("user_id"),
-            func.count(func.distinct(Case.id)).label("total_cases"),
-            _count_distinct(Case.is_archived.is_(True)).label("archived_count"),
-            _count_distinct(_stage_condition(stage_ids.get("contacted"))).label(
-                "contacted"
-            ),
-            _count_distinct(_stage_condition(stage_ids.get("qualified"))).label(
-                "qualified"
-            ),
-            _count_distinct(_stage_condition(stage_ids.get("pending_match"))).label(
-                "pending_match"
+            Surrogate.owner_id.label("user_id"),
+            func.count(func.distinct(Surrogate.id)).label("total_surrogates"),
+            _count_distinct(Surrogate.is_archived.is_(True)).label("archived_count"),
+            _count_distinct(_stage_condition(stage_ids.get("contacted"))).label("contacted"),
+            _count_distinct(_stage_condition(stage_ids.get("qualified"))).label("qualified"),
+            _count_distinct(_stage_condition(stage_ids.get("ready_to_match"))).label(
+                "ready_to_match"
             ),
             _count_distinct(_stage_condition(stage_ids.get("matched"))).label("matched"),
-            _count_distinct(_stage_condition(stage_ids.get("applied"))).label("applied"),
+            _count_distinct(_stage_condition(stage_ids.get("application_submitted"))).label(
+                "application_submitted"
+            ),
             _count_distinct(lost_condition).label("lost"),
         )
-        .select_from(Case)
-        .join(CaseStatusHistory, CaseStatusHistory.case_id == Case.id)
+        .select_from(Surrogate)
+        .join(SurrogateStatusHistory, SurrogateStatusHistory.surrogate_id == Surrogate.id)
         .filter(*base_filters)
-        .group_by(Case.owner_id)
+        .group_by(Surrogate.owner_id)
         .all()
     )
 
@@ -2201,71 +2146,71 @@ def _get_activity_performance(
     user_data = []
     for user_id, user_name in users_query:
         metrics = metrics_by_user.get(user_id)
-        total = metrics.total_cases if metrics else 0
+        total = metrics.total_surrogates if metrics else 0
         conversion_rate = (
-            round((metrics.applied / total * 100), 1) if metrics and total > 0 else 0.0
+            round((metrics.application_submitted / total * 100), 1)
+            if metrics and total > 0
+            else 0.0
         )
 
         user_data.append(
             {
                 "user_id": str(user_id),
                 "user_name": user_name or "Unknown",
-                "total_cases": total,
+                "total_surrogates": total,
                 "archived_count": metrics.archived_count if metrics else 0,
                 "contacted": metrics.contacted if metrics else 0,
                 "qualified": metrics.qualified if metrics else 0,
-                "pending_match": metrics.pending_match if metrics else 0,
+                "ready_to_match": metrics.ready_to_match if metrics else 0,
                 "matched": metrics.matched if metrics else 0,
-                "applied": metrics.applied if metrics else 0,
+                "application_submitted": metrics.application_submitted if metrics else 0,
                 "lost": metrics.lost if metrics else 0,
                 "conversion_rate": conversion_rate,
                 "avg_days_to_match": None,
-                "avg_days_to_apply": None,
+                "avg_days_to_application_submitted": None,
             }
         )
 
-    # Sort by total_cases descending
-    user_data.sort(key=lambda x: x["total_cases"], reverse=True)
+    # Sort by total_surrogates descending
+    user_data.sort(key=lambda x: x["total_surrogates"], reverse=True)
 
     # Unassigned bucket
     unassigned_filters = [
-        Case.organization_id == organization_id,
-        or_(Case.owner_type != OwnerType.USER.value, Case.owner_id.is_(None)),
-        CaseStatusHistory.changed_at >= start_dt,
-        CaseStatusHistory.changed_at <= end_dt,
+        Surrogate.organization_id == organization_id,
+        or_(Surrogate.owner_type != OwnerType.USER.value, Surrogate.owner_id.is_(None)),
+        SurrogateStatusHistory.changed_at >= start_dt,
+        SurrogateStatusHistory.changed_at <= end_dt,
     ]
 
     unassigned_row = (
         db.query(
-            func.count(func.distinct(Case.id)).label("total_cases"),
-            _count_distinct(Case.is_archived.is_(True)).label("archived_count"),
-            _count_distinct(_stage_condition(stage_ids.get("contacted"))).label(
-                "contacted"
-            ),
-            _count_distinct(_stage_condition(stage_ids.get("qualified"))).label(
-                "qualified"
-            ),
-            _count_distinct(_stage_condition(stage_ids.get("pending_match"))).label(
-                "pending_match"
+            func.count(func.distinct(Surrogate.id)).label("total_surrogates"),
+            _count_distinct(Surrogate.is_archived.is_(True)).label("archived_count"),
+            _count_distinct(_stage_condition(stage_ids.get("contacted"))).label("contacted"),
+            _count_distinct(_stage_condition(stage_ids.get("qualified"))).label("qualified"),
+            _count_distinct(_stage_condition(stage_ids.get("ready_to_match"))).label(
+                "ready_to_match"
             ),
             _count_distinct(_stage_condition(stage_ids.get("matched"))).label("matched"),
-            _count_distinct(_stage_condition(stage_ids.get("applied"))).label("applied"),
+            _count_distinct(_stage_condition(stage_ids.get("application_submitted"))).label(
+                "application_submitted"
+            ),
             _count_distinct(lost_condition).label("lost"),
         )
-        .select_from(Case)
-        .join(CaseStatusHistory, CaseStatusHistory.case_id == Case.id)
+        .select_from(Surrogate)
+        .join(SurrogateStatusHistory, SurrogateStatusHistory.surrogate_id == Surrogate.id)
         .filter(*unassigned_filters)
         .first()
     )
 
     unassigned = {
-        "total_cases": unassigned_row.total_cases if unassigned_row else 0,
+        "total_surrogates": unassigned_row.total_surrogates if unassigned_row else 0,
         "archived_count": unassigned_row.archived_count if unassigned_row else 0,
         "contacted": unassigned_row.contacted if unassigned_row else 0,
         "qualified": unassigned_row.qualified if unassigned_row else 0,
-        "pending_match": unassigned_row.pending_match if unassigned_row else 0,
+        "ready_to_match": unassigned_row.ready_to_match if unassigned_row else 0,
         "matched": unassigned_row.matched if unassigned_row else 0,
-        "applied": unassigned_row.applied if unassigned_row else 0,
+        "application_submitted": unassigned_row.application_submitted if unassigned_row else 0,
         "lost": unassigned_row.lost if unassigned_row else 0,
     }
 
@@ -2281,12 +2226,12 @@ def _add_time_metrics(
     user_data: list[dict[str, Any]],
 ) -> None:
     """
-    Add avg_days_to_match and avg_days_to_apply to user data.
+    Add avg_days_to_match and avg_days_to_application_submitted to user data.
 
     Uses first-reach (MIN changed_at) for each stage.
     """
     matched_sid = stage_ids.get("matched")
-    applied_sid = stage_ids.get("applied")
+    application_submitted_sid = stage_ids.get("application_submitted")
 
     def _avg_days_by_user(stage_id: uuid.UUID | None) -> dict[str, float]:
         if not stage_id:
@@ -2294,36 +2239,34 @@ def _add_time_metrics(
 
         first_stage = (
             db.query(
-                CaseStatusHistory.case_id.label("case_id"),
-                func.min(CaseStatusHistory.changed_at).label("first_changed_at"),
+                SurrogateStatusHistory.surrogate_id.label("surrogate_id"),
+                func.min(SurrogateStatusHistory.changed_at).label("first_changed_at"),
             )
             .filter(
-                CaseStatusHistory.organization_id == organization_id,
-                CaseStatusHistory.to_stage_id == stage_id,
+                SurrogateStatusHistory.organization_id == organization_id,
+                SurrogateStatusHistory.to_stage_id == stage_id,
             )
-            .group_by(CaseStatusHistory.case_id)
+            .group_by(SurrogateStatusHistory.surrogate_id)
             .subquery()
         )
 
         rows = (
             db.query(
-                Case.owner_id.label("user_id"),
+                Surrogate.owner_id.label("user_id"),
                 func.avg(
-                    func.extract(
-                        "epoch", first_stage.c.first_changed_at - Case.created_at
-                    )
+                    func.extract("epoch", first_stage.c.first_changed_at - Surrogate.created_at)
                     / 86400
                 ).label("avg_days"),
             )
-            .join(first_stage, first_stage.c.case_id == Case.id)
+            .join(first_stage, first_stage.c.surrogate_id == Surrogate.id)
             .filter(
-                Case.organization_id == organization_id,
-                Case.owner_type == OwnerType.USER.value,
-                Case.owner_id.isnot(None),
-                Case.created_at >= start_dt,
-                Case.created_at <= end_dt,
+                Surrogate.organization_id == organization_id,
+                Surrogate.owner_type == OwnerType.USER.value,
+                Surrogate.owner_id.isnot(None),
+                Surrogate.created_at >= start_dt,
+                Surrogate.created_at <= end_dt,
             )
-            .group_by(Case.owner_id)
+            .group_by(Surrogate.owner_id)
             .all()
         )
 
@@ -2334,12 +2277,12 @@ def _add_time_metrics(
         }
 
     match_avgs = _avg_days_by_user(matched_sid)
-    apply_avgs = _avg_days_by_user(applied_sid)
+    apply_avgs = _avg_days_by_user(application_submitted_sid)
 
     for user in user_data:
         user_id = user["user_id"]
         user["avg_days_to_match"] = match_avgs.get(user_id)
-        user["avg_days_to_apply"] = apply_avgs.get(user_id)
+        user["avg_days_to_application_submitted"] = apply_avgs.get(user_id)
 
 
 def get_cached_performance_by_user(
@@ -2368,9 +2311,7 @@ def get_cached_performance_by_user(
         else None
     )
     range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
-        if end_date
-        else None
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
     )
     return _get_or_compute_snapshot(
         db,
@@ -2417,9 +2358,7 @@ def get_meta_ad_accounts(
             "hierarchy_synced_at": a.hierarchy_synced_at.isoformat()
             if a.hierarchy_synced_at
             else None,
-            "spend_synced_at": a.spend_synced_at.isoformat()
-            if a.spend_synced_at
-            else None,
+            "spend_synced_at": a.spend_synced_at.isoformat() if a.spend_synced_at else None,
         }
         for a in accounts
     ]
@@ -2631,9 +2570,7 @@ def get_spend_trend(
     if ad_account_id:
         query = query.filter(MetaDailySpend.ad_account_id == ad_account_id)
     if campaign_external_id:
-        query = query.filter(
-            MetaDailySpend.campaign_external_id == campaign_external_id
-        )
+        query = query.filter(MetaDailySpend.campaign_external_id == campaign_external_id)
 
     results = query.all()
 
@@ -2669,19 +2606,16 @@ def get_spend_totals(
 
     Returns totals plus sync status.
     """
-    query = (
-        db.query(
-            func.sum(MetaDailySpend.spend).label("spend"),
-            func.sum(MetaDailySpend.impressions).label("impressions"),
-            func.sum(MetaDailySpend.clicks).label("clicks"),
-            func.sum(MetaDailySpend.leads).label("leads"),
-        )
-        .filter(
-            MetaDailySpend.organization_id == organization_id,
-            MetaDailySpend.spend_date >= start_date,
-            MetaDailySpend.spend_date <= end_date,
-            MetaDailySpend.breakdown_type == "_total",
-        )
+    query = db.query(
+        func.sum(MetaDailySpend.spend).label("spend"),
+        func.sum(MetaDailySpend.impressions).label("impressions"),
+        func.sum(MetaDailySpend.clicks).label("clicks"),
+        func.sum(MetaDailySpend.leads).label("leads"),
+    ).filter(
+        MetaDailySpend.organization_id == organization_id,
+        MetaDailySpend.spend_date >= start_date,
+        MetaDailySpend.spend_date <= end_date,
+        MetaDailySpend.breakdown_type == "_total",
     )
 
     if ad_account_id:
@@ -2727,9 +2661,7 @@ def get_cached_spend_by_campaign(
         organization_id,
         "spend_by_campaign",
         params,
-        lambda: get_spend_by_campaign(
-            db, organization_id, start_date, end_date, ad_account_id
-        ),
+        lambda: get_spend_by_campaign(db, organization_id, start_date, end_date, ad_account_id),
         range_start=range_start,
         range_end=range_end,
     )
@@ -2815,10 +2747,10 @@ def get_leads_by_form(
     Returns: [{
         form_external_id, form_name,
         lead_count,      # From meta_leads
-        case_count,      # From cases (converted leads)
-        qualified_count, # From cases with qualified+ status
-        qualified_rate,  # qualified_count / case_count
-        conversion_rate  # case_count / lead_count (lead-to-case)
+        surrogate_count,      # From surrogates (converted leads)
+        qualified_count, # From surrogates with qualified+ status
+        qualified_rate,  # qualified_count / surrogate_count
+        conversion_rate  # surrogate_count / lead_count (lead-to-case)
     }]
     """
     from app.services import pipeline_service
@@ -2836,7 +2768,7 @@ def get_leads_by_form(
         db.query(
             MetaLead.meta_form_id.label("form_external_id"),
             func.count(MetaLead.id).label("lead_count"),
-            func.count(MetaLead.converted_case_id).label("case_count"),
+            func.count(MetaLead.converted_surrogate_id).label("surrogate_count"),
         )
         .filter(*date_filters)
         .filter(MetaLead.meta_form_id.isnot(None))
@@ -2862,14 +2794,14 @@ def get_leads_by_form(
         qualified_query = (
             db.query(
                 MetaLead.meta_form_id.label("form_external_id"),
-                func.count(Case.id).label("qualified_count"),
+                func.count(Surrogate.id).label("qualified_count"),
             )
-            .join(Case, MetaLead.converted_case_id == Case.id)
+            .join(Surrogate, MetaLead.converted_surrogate_id == Surrogate.id)
             .filter(
                 MetaLead.organization_id == organization_id,
                 MetaLead.meta_form_id.isnot(None),
                 MetaLead.is_converted.is_(True),
-                Case.stage_id.in_(qualified_stage_ids),
+                Surrogate.stage_id.in_(qualified_stage_ids),
             )
         )
         if start_date:
@@ -2896,18 +2828,20 @@ def get_leads_by_form(
     result = []
     for form_external_id, counts in lead_counts.items():
         lead_count = counts.lead_count or 0
-        case_count = counts.case_count or 0
+        surrogate_count = counts.surrogate_count or 0
         qualified_count = qualified_counts.get(form_external_id, 0)
 
-        conversion_rate = round(case_count / lead_count * 100, 1) if lead_count > 0 else 0.0
-        qualified_rate = round(qualified_count / case_count * 100, 1) if case_count > 0 else 0.0
+        conversion_rate = round(surrogate_count / lead_count * 100, 1) if lead_count > 0 else 0.0
+        qualified_rate = (
+            round(qualified_count / surrogate_count * 100, 1) if surrogate_count > 0 else 0.0
+        )
 
         result.append(
             {
                 "form_external_id": form_external_id,
                 "form_name": form_names.get(form_external_id, f"Form {form_external_id[:8]}..."),
                 "lead_count": lead_count,
-                "case_count": case_count,
+                "surrogate_count": surrogate_count,
                 "qualified_count": qualified_count,
                 "conversion_rate": conversion_rate,
                 "qualified_rate": qualified_rate,
@@ -2936,9 +2870,7 @@ def get_cached_leads_by_form(
         else None
     )
     range_end = (
-        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc)
-        if end_date
-        else None
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
     )
     return _get_or_compute_snapshot(
         db,

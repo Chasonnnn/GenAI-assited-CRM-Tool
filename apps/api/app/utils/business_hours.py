@@ -45,7 +45,9 @@ def next_business_start(dt: datetime) -> datetime:
             return dt  # Already in business hours
 
     # Move to next day and find next business day
-    dt = dt.replace(hour=BUSINESS_HOURS_START, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    dt = dt.replace(hour=BUSINESS_HOURS_START, minute=0, second=0, microsecond=0) + timedelta(
+        days=1
+    )
     while not is_business_day(dt):
         dt += timedelta(days=1)
     return dt

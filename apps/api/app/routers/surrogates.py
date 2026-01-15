@@ -1,4 +1,4 @@
-"""Cases router - API endpoints for case management."""
+"""Surrogates router - API endpoints for surrogate management."""
 
 from uuid import UUID
 
@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile, 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.case_access import check_case_access, can_modify_case
+from app.core.surrogate_access import check_surrogate_access, can_modify_surrogate
 from app.core.deps import (
     get_current_session,
     get_db,
@@ -14,140 +14,141 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
-from app.db.enums import AuditEventType, CaseSource, OwnerType
+from app.db.enums import AuditEventType, SurrogateSource, OwnerType
 from app.db.models import User
 from app.schemas.auth import UserSession
-from app.schemas.case import (
-    CaseAssign,
-    CaseCreate,
-    CaseHandoffDeny,
-    CaseListItem,
-    CaseListResponse,
-    CaseRead,
-    CaseStats,
-    CaseStatusChange,
-    CaseStatusHistoryRead,
-    CaseUpdate,
+from app.schemas.surrogate import (
+    SurrogateAssign,
+    SurrogateCreate,
+    SurrogateListItem,
+    SurrogateListResponse,
+    SurrogateRead,
+    SurrogateStats,
+    SurrogateStatusChange,
+    SurrogateStatusHistoryRead,
+    SurrogateUpdate,
     BulkAssign,
-    CaseActivityRead,
-    CaseActivityResponse,
+    SurrogateActivityRead,
+    SurrogateActivityResponse,
+    ContactAttemptCreate,
+    ContactAttemptResponse,
+    ContactAttemptsSummary,
 )
 from app.services import (
-    case_service,
+    surrogate_service,
     dashboard_service,
     import_service,
     membership_service,
     queue_service,
     user_service,
+    contact_attempt_service,
 )
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 
-router = APIRouter(
-    dependencies=[Depends(require_permission(POLICIES["cases"].default))]
-)
+router = APIRouter(dependencies=[Depends(require_permission(POLICIES["surrogates"].default))])
 
 
-def _case_to_read(case, db: Session) -> CaseRead:
-    """Convert Case model to CaseRead schema with joined user names."""
+def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
+    """Convert Surrogate model to SurrogateRead schema with joined user names."""
     owner_name = None
-    if case.owner_type == OwnerType.USER.value:
-        user = user_service.get_user_by_id(db, case.owner_id)
+    if surrogate.owner_type == OwnerType.USER.value:
+        user = user_service.get_user_by_id(db, surrogate.owner_id)
         owner_name = user.display_name if user else None
-    elif case.owner_type == OwnerType.QUEUE.value:
-        queue = queue_service.get_queue(db, case.organization_id, case.owner_id)
+    elif surrogate.owner_type == OwnerType.QUEUE.value:
+        queue = queue_service.get_queue(db, surrogate.organization_id, surrogate.owner_id)
         owner_name = queue.name if queue else None
 
-    return CaseRead(
-        id=case.id,
-        case_number=case.case_number,
-        stage_id=case.stage_id,
-        status_label=case.status_label,
-        source=CaseSource(case.source),
-        is_priority=case.is_priority,
-        owner_type=case.owner_type,
-        owner_id=case.owner_id,
+    return SurrogateRead(
+        id=surrogate.id,
+        surrogate_number=surrogate.surrogate_number,
+        stage_id=surrogate.stage_id,
+        status_label=surrogate.status_label,
+        source=SurrogateSource(surrogate.source),
+        is_priority=surrogate.is_priority,
+        owner_type=surrogate.owner_type,
+        owner_id=surrogate.owner_id,
         owner_name=owner_name,
-        created_by_user_id=case.created_by_user_id,
-        full_name=case.full_name,
-        email=case.email,
-        phone=case.phone,
-        state=case.state,
-        date_of_birth=case.date_of_birth,
-        race=case.race,
-        height_ft=case.height_ft,
-        weight_lb=case.weight_lb,
-        is_age_eligible=case.is_age_eligible,
-        is_citizen_or_pr=case.is_citizen_or_pr,
-        has_child=case.has_child,
-        is_non_smoker=case.is_non_smoker,
-        has_surrogate_experience=case.has_surrogate_experience,
-        num_deliveries=case.num_deliveries,
-        num_csections=case.num_csections,
-        is_archived=case.is_archived,
-        archived_at=case.archived_at,
-        created_at=case.created_at,
-        updated_at=case.updated_at,
+        created_by_user_id=surrogate.created_by_user_id,
+        full_name=surrogate.full_name,
+        email=surrogate.email,
+        phone=surrogate.phone,
+        state=surrogate.state,
+        date_of_birth=surrogate.date_of_birth,
+        race=surrogate.race,
+        height_ft=surrogate.height_ft,
+        weight_lb=surrogate.weight_lb,
+        is_age_eligible=surrogate.is_age_eligible,
+        is_citizen_or_pr=surrogate.is_citizen_or_pr,
+        has_child=surrogate.has_child,
+        is_non_smoker=surrogate.is_non_smoker,
+        has_surrogate_experience=surrogate.has_surrogate_experience,
+        num_deliveries=surrogate.num_deliveries,
+        num_csections=surrogate.num_csections,
+        is_archived=surrogate.is_archived,
+        archived_at=surrogate.archived_at,
+        created_at=surrogate.created_at,
+        updated_at=surrogate.updated_at,
     )
 
 
-def _case_to_list_item(case, db: Session) -> CaseListItem:
-    """Convert Case model to CaseListItem schema."""
+def _surrogate_to_list_item(surrogate, db: Session) -> SurrogateListItem:
+    """Convert Surrogate model to SurrogateListItem schema."""
     from datetime import date
 
     # Use preloaded relationships instead of separate queries (fixes N+1)
     owner_name = None
-    if case.owner_type == OwnerType.USER.value and case.owner_user:
-        owner_name = case.owner_user.display_name
-    elif case.owner_type == OwnerType.QUEUE.value and case.owner_queue:
-        owner_name = case.owner_queue.name
+    if surrogate.owner_type == OwnerType.USER.value and surrogate.owner_user:
+        owner_name = surrogate.owner_user.display_name
+    elif surrogate.owner_type == OwnerType.QUEUE.value and surrogate.owner_queue:
+        owner_name = surrogate.owner_queue.name
 
     # Calculate age from date_of_birth
     age = None
-    if case.date_of_birth:
+    if surrogate.date_of_birth:
         today = date.today()
-        dob = case.date_of_birth
+        dob = surrogate.date_of_birth
         age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
     # Calculate BMI from height_ft and weight_lb
     # BMI = (weight in lbs / (height in inches)^2) * 703
     bmi = None
-    if case.height_ft and case.weight_lb:
-        height_inches = case.height_ft * 12  # Convert feet to inches
+    if surrogate.height_ft and surrogate.weight_lb:
+        height_inches = surrogate.height_ft * 12  # Convert feet to inches
         if height_inches > 0:
-            bmi = round((case.weight_lb / (height_inches**2)) * 703, 1)
+            bmi = round((surrogate.weight_lb / (height_inches**2)) * 703, 1)
 
-    return CaseListItem(
-        id=case.id,
-        case_number=case.case_number,
-        stage_id=case.stage_id,
-        stage_slug=case.stage.slug if case.stage else None,
-        stage_type=case.stage.stage_type if case.stage else None,
-        status_label=case.status_label,
-        source=CaseSource(case.source),
-        full_name=case.full_name,
-        email=case.email,
-        phone=case.phone,
-        state=case.state,
-        owner_type=case.owner_type,
-        owner_id=case.owner_id,
+    return SurrogateListItem(
+        id=surrogate.id,
+        surrogate_number=surrogate.surrogate_number,
+        stage_id=surrogate.stage_id,
+        stage_slug=surrogate.stage.slug if surrogate.stage else None,
+        stage_type=surrogate.stage.stage_type if surrogate.stage else None,
+        status_label=surrogate.status_label,
+        source=SurrogateSource(surrogate.source),
+        full_name=surrogate.full_name,
+        email=surrogate.email,
+        phone=surrogate.phone,
+        state=surrogate.state,
+        owner_type=surrogate.owner_type,
+        owner_id=surrogate.owner_id,
         owner_name=owner_name,
-        is_priority=case.is_priority,
-        is_archived=case.is_archived,
+        is_priority=surrogate.is_priority,
+        is_archived=surrogate.is_archived,
         age=age,
         bmi=bmi,
-        created_at=case.created_at,
+        created_at=surrogate.created_at,
     )
 
 
-@router.get("/stats", response_model=CaseStats)
-def get_case_stats(
+@router.get("/stats", response_model=SurrogateStats)
+def get_surrogate_stats(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Get aggregated case statistics for dashboard with period comparisons."""
-    stats = case_service.get_case_stats(db, session.org_id)
+    """Get aggregated surrogate statistics for dashboard with period comparisons."""
+    stats = surrogate_service.get_surrogate_stats(db, session.org_id)
 
-    return CaseStats(
+    return SurrogateStats(
         total=stats["total"],
         by_status=stats["by_status"],
         this_week=stats["this_week"],
@@ -166,49 +167,43 @@ def get_assignees(
     db: Session = Depends(get_db),
 ):
     """
-    Get list of org members who can be assigned cases.
+    Get list of org members who can be assigned surrogates.
 
     Returns users with their ID, name, and role.
     """
-    return case_service.list_assignees(db, session.org_id)
+    return surrogate_service.list_assignees(db, session.org_id)
 
 
-@router.get("", response_model=CaseListResponse)
-def list_cases(
+@router.get("", response_model=SurrogateListResponse)
+def list_surrogates(
     request: Request,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
     stage_id: UUID | None = None,
-    source: CaseSource | None = None,
+    source: SurrogateSource | None = None,
     owner_id: UUID | None = None,
     q: str | None = Query(None, max_length=100),
     include_archived: bool = False,
     queue_id: UUID | None = None,
     owner_type: str | None = Query(None, pattern="^(user|queue)$"),
-    created_from: str | None = Query(
-        None, description="Filter by creation date from (ISO format)"
-    ),
-    created_to: str | None = Query(
-        None, description="Filter by creation date to (ISO format)"
-    ),
+    created_from: str | None = Query(None, description="Filter by creation date from (ISO format)"),
+    created_to: str | None = Query(None, description="Filter by creation date to (ISO format)"),
     sort_by: str | None = Query(None, description="Column to sort by"),
-    sort_order: str = Query(
-        "desc", pattern="^(asc|desc)$", description="Sort direction"
-    ),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort direction"),
 ):
     """
-    List cases with filters and pagination.
+    List surrogates with filters and pagination.
 
-    - Default excludes archived cases
-    - Search (q) searches name, case_number, and exact email/phone matches
-    - Intake specialists only see their owned cases
-    - queue_id: Filter by cases in a specific queue
+    - Default excludes archived surrogates
+    - Search (q) searches name, surrogate_number, and exact email/phone matches
+    - Intake specialists only see their owned surrogates
+    - queue_id: Filter by surrogates in a specific queue
     - owner_type: Filter by owner type ('user' or 'queue')
     - owner_id: Filter by owner ID (when owner_type='user')
     - created_from/created_to: ISO date strings for date range filtering
-    - Post-approval cases hidden if user lacks view_post_approval_cases permission
+    - Post-approval surrogates hidden if user lacks view_post_approval_surrogates permission
     """
     from app.services import permission_service
 
@@ -219,11 +214,11 @@ def list_cases(
         session.org_id,
         session.user_id,
         session.role.value,
-        "view_post_approval_cases",
+        "view_post_approval_surrogates",
     ):
         exclude_stage_types.append("post_approval")
 
-    cases, total = case_service.list_cases(
+    surrogates, total = surrogate_service.list_surrogates(
         db=db,
         org_id=session.org_id,
         page=page,
@@ -260,11 +255,11 @@ def list_cases(
         db=db,
         org_id=session.org_id,
         user_id=session.user_id,
-        target_type="case_list",
+        target_type="surrogate_list",
         target_id=None,
         request=request,
         details={
-            "count": len(cases),
+            "count": len(surrogates),
             "page": page,
             "per_page": per_page,
             "include_archived": include_archived,
@@ -280,8 +275,8 @@ def list_cases(
     )
     db.commit()
 
-    return CaseListResponse(
-        items=[_case_to_list_item(c, db) for c in cases],
+    return SurrogateListResponse(
+        items=[_surrogate_to_list_item(s, db) for s in surrogates],
         total=total,
         page=page,
         per_page=per_page,
@@ -336,9 +331,7 @@ class ImportStatusResponse(BaseModel):
 async def preview_import(
     request: Request,
     file: UploadFile = File(...),
-    session: UserSession = Depends(
-        require_permission(POLICIES["cases"].actions["import"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["import"])),
     db: Session = Depends(get_db),
 ):
     """
@@ -350,7 +343,7 @@ async def preview_import(
     - Duplicate detection counts (DB + within CSV)
     - Validation error count
 
-    Requires: import_cases permission
+    Requires: import_surrogates permission
     """
     if not file.filename or not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="File must be a CSV")
@@ -376,7 +369,7 @@ async def preview_import(
         db=db,
         org_id=session.org_id,
         user_id=session.user_id,
-        target_type="cases_import_preview",
+        target_type="surrogates_import_preview",
         target_id=None,
         request=request,
         details={
@@ -408,9 +401,7 @@ async def preview_import(
 async def confirm_import(
     request: Request,
     file: UploadFile = File(...),
-    session: UserSession = Depends(
-        require_permission(POLICIES["cases"].actions["import"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["import"])),
     db: Session = Depends(get_db),
 ):
     """
@@ -419,7 +410,7 @@ async def confirm_import(
     For large files, consider scheduling as async job (future enhancement).
     Currently executes synchronously.
 
-    Requires: import_cases permission
+    Requires: import_surrogates permission
     """
     if not file.filename or not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="File must be a CSV")
@@ -488,18 +479,14 @@ async def confirm_import(
         error_count=import_job.error_count,
         errors=import_job.errors,
         created_at=import_job.created_at.isoformat(),
-        completed_at=import_job.completed_at.isoformat()
-        if import_job.completed_at
-        else None,
+        completed_at=import_job.completed_at.isoformat() if import_job.completed_at else None,
     )
 
 
 @router.get("/import/{import_id}", response_model=ImportStatusResponse)
 def get_import_status(
     import_id: UUID,
-    session: UserSession = Depends(
-        require_permission(POLICIES["cases"].actions["import"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["import"])),
     db: Session = Depends(get_db),
 ):
     """Get status of an import job."""
@@ -517,17 +504,13 @@ def get_import_status(
         error_count=import_job.error_count,
         errors=import_job.errors,
         created_at=import_job.created_at.isoformat(),
-        completed_at=import_job.completed_at.isoformat()
-        if import_job.completed_at
-        else None,
+        completed_at=import_job.completed_at.isoformat() if import_job.completed_at else None,
     )
 
 
 @router.get("/import", response_model=list[ImportStatusResponse])
 def list_imports(
-    session: UserSession = Depends(
-        require_permission(POLICIES["cases"].actions["import"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["import"])),
     db: Session = Depends(get_db),
 ):
     """List recent imports for the organization."""
@@ -550,22 +533,22 @@ def list_imports(
     ]
 
 
-# NOTE: /handoff-queue MUST come before /{case_id} routes to avoid routing conflict
-@router.get("/handoff-queue", response_model=CaseListResponse)
-def list_handoff_queue(
+# NOTE: /claim-queue MUST come before /{surrogate_id} routes to avoid routing conflict
+@router.get("/claim-queue", response_model=SurrogateListResponse)
+def list_claim_queue(
     session: UserSession = Depends(
-        require_permission(POLICIES["cases"].actions["view_post_approval"])
+        require_permission(POLICIES["surrogates"].actions["view_post_approval"])
     ),
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
 ):
     """
-    List cases awaiting case manager review (status=pending_handoff).
+    List approved surrogates in Surrogate Pool (ready for claim).
 
-    Requires: view_post_approval_cases permission
+    Requires: view_post_approval_surrogates permission
     """
-    cases, total = case_service.list_handoff_queue(
+    surrogates, total = surrogate_service.list_claim_queue(
         db=db,
         org_id=session.org_id,
         page=page,
@@ -574,8 +557,8 @@ def list_handoff_queue(
 
     pages = (total + per_page - 1) // per_page if per_page > 0 else 0
 
-    return CaseListResponse(
-        items=[_case_to_list_item(c, db) for c in cases],
+    return SurrogateListResponse(
+        items=[_surrogate_to_list_item(s, db) for s in surrogates],
         total=total,
         page=page,
         per_page=per_page,
@@ -585,20 +568,18 @@ def list_handoff_queue(
 
 @router.post(
     "",
-    response_model=CaseRead,
+    response_model=SurrogateRead,
     status_code=201,
     dependencies=[Depends(require_csrf_header)],
 )
-def create_case(
-    data: CaseCreate,
-    session: UserSession = Depends(
-        require_permission(POLICIES["cases"].actions["edit"])
-    ),
+def create_surrogate(
+    data: SurrogateCreate,
+    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["edit"])),
     db: Session = Depends(get_db),
 ):
-    """Create a new case."""
+    """Create a new surrogate."""
     try:
-        case = case_service.create_case(
+        surrogate = surrogate_service.create_surrogate(
             db=db,
             org_id=session.org_id,
             user_id=session.user_id,
@@ -606,57 +587,54 @@ def create_case(
         )
     except Exception as e:
         # Handle unique constraint violations
-        if (
-            "uq_case_email_hash_active" in str(e).lower()
-            or "duplicate" in str(e).lower()
-        ):
+        if "uq_surrogate_email_hash_active" in str(e).lower() or "duplicate" in str(e).lower():
             raise HTTPException(
-                status_code=409, detail="A case with this email already exists"
+                status_code=409, detail="A surrogate with this email already exists"
             )
         raise
 
     dashboard_service.push_dashboard_stats(db, session.org_id)
-    return _case_to_read(case, db)
+    return _surrogate_to_read(surrogate, db)
 
 
-@router.get("/{case_id}", response_model=CaseRead)
-def get_case(
-    case_id: UUID,
+@router.get("/{surrogate_id}", response_model=SurrogateRead)
+def get_surrogate(
+    surrogate_id: UUID,
     request: Request,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Get case by ID (respects permission-based access)."""
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
+    """Get surrogate by ID (respects permission-based access)."""
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
 
     # Access control: checks ownership + post-approval permission
-    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
     from app.services import audit_service
 
     audit_service.log_event(
         db=db,
         org_id=session.org_id,
-        event_type=AuditEventType.DATA_VIEW_CASE,
+        event_type=AuditEventType.DATA_VIEW_SURROGATE,
         actor_user_id=session.user_id,
-        target_type="case",
-        target_id=case.id,
+        target_type="surrogate",
+        target_id=surrogate.id,
         request=request,
     )
     audit_service.log_phi_access(
         db=db,
         org_id=session.org_id,
         user_id=session.user_id,
-        target_type="case",
-        target_id=case.id,
+        target_type="surrogate",
+        target_id=surrogate.id,
         request=request,
-        details={"view": "case_detail"},
+        details={"view": "surrogate_detail"},
     )
     db.commit()
 
-    return _case_to_read(case, db)
+    return _surrogate_to_read(surrogate, db)
 
 
 # =============================================================================
@@ -665,7 +643,7 @@ def get_case(
 
 
 class SendEmailRequest(BaseModel):
-    """Request to send email to case contact."""
+    """Request to send email to surrogate contact."""
 
     template_id: UUID
     subject: str | None = None
@@ -684,25 +662,25 @@ class SendEmailResponse(BaseModel):
 
 
 @router.post(
-    "/{case_id}/send-email",
+    "/{surrogate_id}/send-email",
     response_model=SendEmailResponse,
     dependencies=[Depends(require_csrf_header)],
 )
-async def send_case_email(
-    case_id: UUID,
+async def send_surrogate_email(
+    surrogate_id: UUID,
     data: SendEmailRequest,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """
-    Send email to case contact using template.
+    Send email to surrogate contact using template.
 
     Provider options:
     - "auto": Try Gmail first (if connected), fall back to Resend
     - "gmail": Use user's connected Gmail (fails if not connected)
     - "resend": Use Resend API (fails if not configured)
 
-    The email is logged and linked to the case activity.
+    The email is logged and linked to the surrogate activity.
     """
     from app.services import (
         email_service,
@@ -713,16 +691,16 @@ async def send_case_email(
     from datetime import datetime, timezone
     import os
 
-    # Get case
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
+    # Get surrogate
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
 
     # Access control
-    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
-    if not case.email:
-        raise HTTPException(status_code=400, detail="Case has no email address")
+    if not surrogate.email:
+        raise HTTPException(status_code=400, detail="Surrogate has no email address")
 
     # Get template
     template = email_service.get_template(db, data.template_id, session.org_id)
@@ -730,20 +708,16 @@ async def send_case_email(
         raise HTTPException(status_code=404, detail="Email template not found")
 
     # Prepare variables for template rendering
-    variables = email_service.build_case_template_variables(db, case)
+    variables = email_service.build_surrogate_template_variables(db, surrogate)
 
     # Render template (allow UI overrides)
     subject_template = data.subject if data.subject is not None else template.subject
     body_template = data.body if data.body is not None else template.body
-    subject, body = email_service.render_template(
-        subject_template, body_template, variables
-    )
+    subject, body = email_service.render_template(subject_template, body_template, variables)
 
     # Determine provider
     provider = data.provider
-    gmail_connected = (
-        oauth_service.get_user_integration(db, session.user_id, "gmail") is not None
-    )
+    gmail_connected = oauth_service.get_user_integration(db, session.user_id, "gmail") is not None
     resend_configured = bool(os.getenv("RESEND_API_KEY"))
 
     use_gmail = False
@@ -782,8 +756,8 @@ async def send_case_email(
         email_log = EmailLog(
             organization_id=session.org_id,
             template_id=data.template_id,
-            case_id=case_id,
-            recipient_email=case.email,
+            surrogate_id=surrogate_id,
+            recipient_email=surrogate.email,
             subject=subject,
             body=body,
             status=EmailStatus.PENDING.value,
@@ -795,7 +769,7 @@ async def send_case_email(
         result = await gmail_service.send_email(
             db=db,
             user_id=str(session.user_id),
-            to=case.email,
+            to=surrogate.email,
             subject=subject,
             body=body,
             html=True,  # Templates are typically HTML
@@ -810,7 +784,7 @@ async def send_case_email(
             # Log activity
             activity_service.log_email_sent(
                 db=db,
-                case_id=case_id,
+                surrogate_id=surrogate_id,
                 organization_id=session.org_id,
                 actor_user_id=session.user_id,
                 email_log_id=email_log.id,
@@ -842,10 +816,10 @@ async def send_case_email(
                 db=db,
                 org_id=session.org_id,
                 template_id=data.template_id,
-                recipient_email=case.email,
+                recipient_email=surrogate.email,
                 subject=subject,
                 body=body,
-                case_id=case_id,
+                surrogate_id=surrogate_id,
             )
 
             if result:
@@ -854,7 +828,7 @@ async def send_case_email(
                 # Log activity
                 activity_service.log_email_sent(
                     db=db,
-                    case_id=case_id,
+                    surrogate_id=surrogate_id,
                     organization_id=session.org_id,
                     actor_user_id=session.user_id,
                     email_log_id=log.id,
@@ -876,38 +850,34 @@ async def send_case_email(
 
 
 @router.patch(
-    "/{case_id}", response_model=CaseRead, dependencies=[Depends(require_csrf_header)]
+    "/{surrogate_id}", response_model=SurrogateRead, dependencies=[Depends(require_csrf_header)]
 )
-def update_case(
-    case_id: UUID,
-    data: CaseUpdate,
-    session: UserSession = Depends(
-        require_permission(POLICIES["cases"].actions["edit"])
-    ),
+def update_surrogate(
+    surrogate_id: UUID,
+    data: SurrogateUpdate,
+    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["edit"])),
     db: Session = Depends(get_db),
 ):
     """
-    Update case fields.
+    Update surrogate fields.
 
-    Requires: creator or admin+ (blocked after handoff for intake)
+    Requires: creator or admin+ (blocked after claim for intake)
     """
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
 
-    # Access control: intake can't access handed-off cases
-    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+    # Access control: intake can't access handed-off surrogates
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
     # Permission check: must be able to modify
-    if not can_modify_case(case, str(session.user_id), session.role):
-        raise HTTPException(
-            status_code=403, detail="Not authorized to update this case"
-        )
+    if not can_modify_surrogate(surrogate, str(session.user_id), session.role):
+        raise HTTPException(status_code=403, detail="Not authorized to update this surrogate")
 
     try:
-        case = case_service.update_case(
+        surrogate = surrogate_service.update_surrogate(
             db,
-            case,
+            surrogate,
             data,
             user_id=session.user_id,
             org_id=session.org_id,
@@ -915,39 +885,37 @@ def update_case(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    return _case_to_read(case, db)
+    return _surrogate_to_read(surrogate, db)
 
 
 @router.patch(
-    "/{case_id}/status",
-    response_model=CaseRead,
+    "/{surrogate_id}/status",
+    response_model=SurrogateRead,
     dependencies=[Depends(require_csrf_header)],
 )
 def change_status(
-    case_id: UUID,
-    data: CaseStatusChange,
+    surrogate_id: UUID,
+    data: SurrogateStatusChange,
     session: UserSession = Depends(
-        require_permission(POLICIES["cases"].actions["change_status"])
+        require_permission(POLICIES["surrogates"].actions["change_status"])
     ),
     db: Session = Depends(get_db),
 ):
-    """Change case stage (records history, respects access control)."""
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
+    """Change surrogate stage (records history, respects access control)."""
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
 
-    # Access control: intake can't access handed-off cases
-    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+    # Access control: intake can't access handed-off surrogates
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
-    if case.is_archived:
-        raise HTTPException(
-            status_code=400, detail="Cannot change status of archived case"
-        )
+    if surrogate.is_archived:
+        raise HTTPException(status_code=400, detail="Cannot change status of archived surrogate")
 
     try:
-        case = case_service.change_status(
+        surrogate = surrogate_service.change_status(
             db=db,
-            case=case,
+            surrogate=surrogate,
             new_stage_id=data.stage_id,
             user_id=session.user_id,
             user_role=session.role,
@@ -957,40 +925,34 @@ def change_status(
         raise HTTPException(status_code=403, detail=str(e))
 
     dashboard_service.push_dashboard_stats(db, session.org_id)
-    return _case_to_read(case, db)
+    return _surrogate_to_read(surrogate, db)
 
 
 @router.patch(
-    "/{case_id}/assign",
-    response_model=CaseRead,
+    "/{surrogate_id}/assign",
+    response_model=SurrogateRead,
     dependencies=[Depends(require_csrf_header)],
 )
-def assign_case(
-    case_id: UUID,
-    data: CaseAssign,
-    session: UserSession = Depends(
-        require_permission(POLICIES["cases"].actions["assign"])
-    ),
+def assign_surrogate(
+    surrogate_id: UUID,
+    data: SurrogateAssign,
+    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["assign"])),
     db: Session = Depends(get_db),
 ):
     """
-    Assign case to a user or queue.
+    Assign surrogate to a user or queue.
 
-    Requires: assign_cases permission
+    Requires: assign_surrogates permission
     """
 
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
 
     if data.owner_type == OwnerType.USER:
-        membership = membership_service.get_membership_for_org(
-            db, session.org_id, data.owner_id
-        )
+        membership = membership_service.get_membership_for_org(db, session.org_id, data.owner_id)
         if not membership:
-            raise HTTPException(
-                status_code=400, detail="User not found in organization"
-            )
+            raise HTTPException(status_code=400, detail="User not found in organization")
     elif data.owner_type == OwnerType.QUEUE:
         queue = queue_service.get_queue(db, session.org_id, data.owner_id)
         if not queue or not queue.is_active:
@@ -998,34 +960,28 @@ def assign_case(
     else:
         raise HTTPException(status_code=400, detail="Invalid owner_type")
 
-    case = case_service.assign_case(
-        db, case, data.owner_type, data.owner_id, session.user_id
+    surrogate = surrogate_service.assign_surrogate(
+        db, surrogate, data.owner_type, data.owner_id, session.user_id
     )
-    return _case_to_read(case, db)
+    return _surrogate_to_read(surrogate, db)
 
 
 @router.post("/bulk-assign", dependencies=[Depends(require_csrf_header)])
-def bulk_assign_cases(
+def bulk_assign_surrogates(
     data: BulkAssign,
-    session: UserSession = Depends(
-        require_permission(POLICIES["cases"].actions["assign"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["assign"])),
     db: Session = Depends(get_db),
 ):
     """
-    Bulk assign multiple cases to a user or queue.
+    Bulk assign multiple surrogates to a user or queue.
 
-    Requires: assign_cases permission
+    Requires: assign_surrogates permission
     """
 
     if data.owner_type == OwnerType.USER:
-        membership = membership_service.get_membership_for_org(
-            db, session.org_id, data.owner_id
-        )
+        membership = membership_service.get_membership_for_org(db, session.org_id, data.owner_id)
         if not membership:
-            raise HTTPException(
-                status_code=400, detail="User not found in organization"
-            )
+            raise HTTPException(status_code=400, detail="User not found in organization")
     elif data.owner_type == OwnerType.QUEUE:
         queue = queue_service.get_queue(db, session.org_id, data.owner_id)
         if not queue or not queue.is_active:
@@ -1033,128 +989,120 @@ def bulk_assign_cases(
     else:
         raise HTTPException(status_code=400, detail="Invalid owner_type")
 
-    # Process each case
+    # Process each surrogate
     results = {"assigned": 0, "failed": []}
-    for case_id in data.case_ids:
-        case = case_service.get_case(db, session.org_id, case_id)
-        if not case:
+    for surrogate_id in data.surrogate_ids:
+        surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+        if not surrogate:
             results["failed"].append(
-                {"case_id": str(case_id), "reason": "Case not found"}
+                {"surrogate_id": str(surrogate_id), "reason": "Surrogate not found"}
             )
             continue
 
         try:
-            case_service.assign_case(
-                db, case, data.owner_type, data.owner_id, session.user_id
+            surrogate_service.assign_surrogate(
+                db, surrogate, data.owner_type, data.owner_id, session.user_id
             )
             results["assigned"] += 1
         except Exception as e:
-            results["failed"].append({"case_id": str(case_id), "reason": str(e)})
+            results["failed"].append({"surrogate_id": str(surrogate_id), "reason": str(e)})
 
     return results
 
 
 @router.post(
-    "/{case_id}/archive",
-    response_model=CaseRead,
+    "/{surrogate_id}/archive",
+    response_model=SurrogateRead,
     dependencies=[Depends(require_csrf_header)],
 )
-def archive_case(
-    case_id: UUID,
-    session: UserSession = Depends(
-        require_permission(POLICIES["cases"].actions["archive"])
-    ),
+def archive_surrogate(
+    surrogate_id: UUID,
+    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["archive"])),
     db: Session = Depends(get_db),
 ):
     """
-    Soft-delete (archive) a case.
+    Soft-delete (archive) a surrogate.
 
-    Requires: archive_cases permission
+    Requires: archive_surrogates permission
     """
 
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
 
-    case = case_service.archive_case(db, case, session.user_id)
+    surrogate = surrogate_service.archive_surrogate(db, surrogate, session.user_id)
     dashboard_service.push_dashboard_stats(db, session.org_id)
-    return _case_to_read(case, db)
+    return _surrogate_to_read(surrogate, db)
 
 
 @router.post(
-    "/{case_id}/restore",
-    response_model=CaseRead,
+    "/{surrogate_id}/restore",
+    response_model=SurrogateRead,
     dependencies=[Depends(require_csrf_header)],
 )
-def restore_case(
-    case_id: UUID,
-    session: UserSession = Depends(
-        require_permission(POLICIES["cases"].actions["archive"])
-    ),
+def restore_surrogate(
+    surrogate_id: UUID,
+    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["archive"])),
     db: Session = Depends(get_db),
 ):
     """
-    Restore an archived case.
+    Restore an archived surrogate.
 
-    Requires: archive_cases permission
-    Fails if email is now used by another active case.
+    Requires: archive_surrogates permission
+    Fails if email is now used by another active surrogate.
     """
 
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
 
-    case, error = case_service.restore_case(db, case, session.user_id)
+    surrogate, error = surrogate_service.restore_surrogate(db, surrogate, session.user_id)
     if error:
         raise HTTPException(status_code=409, detail=error)
 
     dashboard_service.push_dashboard_stats(db, session.org_id)
-    return _case_to_read(case, db)
+    return _surrogate_to_read(surrogate, db)
 
 
-@router.delete(
-    "/{case_id}", status_code=204, dependencies=[Depends(require_csrf_header)]
-)
-def delete_case(
-    case_id: UUID,
-    session: UserSession = Depends(
-        require_permission(POLICIES["cases"].actions["delete"])
-    ),
+@router.delete("/{surrogate_id}", status_code=204, dependencies=[Depends(require_csrf_header)])
+def delete_surrogate(
+    surrogate_id: UUID,
+    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["delete"])),
     db: Session = Depends(get_db),
 ):
     """
-    Permanently delete a case.
+    Permanently delete a surrogate.
 
-    Requires: delete_cases permission AND case must be archived first.
+    Requires: delete_surrogates permission AND surrogate must be archived first.
     """
 
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
 
-    if not case.is_archived:
+    if not surrogate.is_archived:
         raise HTTPException(
-            status_code=400, detail="Case must be archived before permanent deletion"
+            status_code=400, detail="Surrogate must be archived before permanent deletion"
         )
 
-    deleted = case_service.hard_delete_case(db, case)
+    deleted = surrogate_service.hard_delete_surrogate(db, surrogate)
     if deleted:
         dashboard_service.push_dashboard_stats(db, session.org_id)
     return None
 
 
-@router.get("/{case_id}/history", response_model=list[CaseStatusHistoryRead])
-def get_case_history(
-    case_id: UUID,
+@router.get("/{surrogate_id}/history", response_model=list[SurrogateStatusHistoryRead])
+def get_surrogate_history(
+    surrogate_id: UUID,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Get status change history for a case."""
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
+    """Get status change history for a surrogate."""
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
 
-    history = case_service.get_status_history(db, case_id, session.org_id)
+    history = surrogate_service.get_status_history(db, surrogate_id, session.org_id)
 
     user_ids = {h.changed_by_user_id for h in history if h.changed_by_user_id}
     users_by_id: dict[UUID, str | None] = {}
@@ -1169,7 +1117,7 @@ def get_case_history(
         changed_by_name = users_by_id.get(h.changed_by_user_id)
 
         result.append(
-            CaseStatusHistoryRead(
+            SurrogateStatusHistoryRead(
                 id=h.id,
                 from_stage_id=h.from_stage_id,
                 to_stage_id=h.to_stage_id,
@@ -1185,37 +1133,37 @@ def get_case_history(
     return result
 
 
-@router.get("/{case_id}/activity", response_model=CaseActivityResponse)
-def get_case_activity(
-    case_id: UUID,
+@router.get("/{surrogate_id}/activity", response_model=SurrogateActivityResponse)
+def get_surrogate_activity(
+    surrogate_id: UUID,
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """
-    Get comprehensive activity log for a case (paginated).
+    Get comprehensive activity log for a surrogate (paginated).
 
     Includes: creates, edits, status changes, assignments, notes, etc.
     """
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
 
     # Access control
-    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
-    items_data, total = case_service.list_case_activity(
+    items_data, total = surrogate_service.list_surrogate_activity(
         db=db,
         org_id=session.org_id,
-        case_id=case_id,
+        surrogate_id=surrogate_id,
         page=page,
         per_page=per_page,
     )
     pages = (total + per_page - 1) // per_page if total > 0 else 1
 
     items = [
-        CaseActivityRead(
+        SurrogateActivityRead(
             id=item["id"],
             activity_type=item["activity_type"],
             actor_user_id=item["actor_user_id"],
@@ -1226,7 +1174,7 @@ def get_case_activity(
         for item in items_data
     ]
 
-    return CaseActivityResponse(
+    return SurrogateActivityResponse(
         items=items,
         total=total,
         page=page,
@@ -1234,112 +1182,41 @@ def get_case_activity(
     )
 
 
-# =============================================================================
-# Handoff Accept/Deny Endpoints (Case Manager+ only)
-# =============================================================================
-
-
-@router.post(
-    "/{case_id}/accept",
-    response_model=CaseRead,
-    dependencies=[Depends(require_csrf_header)],
-)
-def accept_handoff(
-    case_id: UUID,
-    session: UserSession = Depends(
-        require_permission(POLICIES["cases"].actions["assign"])
-    ),
-    db: Session = Depends(get_db),
-):
-    """
-    Accept a pending_handoff case and transition to pending_match.
-
-    Requires: assign_cases permission
-    Returns 409 if case is not in pending_handoff status.
-    """
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
-
-    case, error = case_service.accept_handoff(db, case, session.user_id)
-    if error:
-        raise HTTPException(status_code=409, detail=error)
-
-    return _case_to_read(case, db)
-
-
-@router.post(
-    "/{case_id}/deny",
-    response_model=CaseRead,
-    dependencies=[Depends(require_csrf_header)],
-)
-def deny_handoff(
-    case_id: UUID,
-    data: CaseHandoffDeny,
-    session: UserSession = Depends(
-        require_permission(POLICIES["cases"].actions["assign"])
-    ),
-    db: Session = Depends(get_db),
-):
-    """
-    Deny a pending_handoff case and revert to under_review.
-
-    Requires: assign_cases permission
-    Reason is optional but stored in status history.
-    Returns 409 if case is not in pending_handoff status.
-    """
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
-
-    case, error = case_service.deny_handoff(db, case, session.user_id, data.reason)
-    if error:
-        raise HTTPException(status_code=409, detail=error)
-
-    return _case_to_read(case, db)
-"""Contact attempts endpoints - append to cases.py"""
-
-from app.schemas.case import ContactAttemptCreate, ContactAttemptResponse, ContactAttemptsSummary
-from app.services import contact_attempt_service
-
-
-# =============================================================================
+#
 # Contact Attempts Tracking
-# =============================================================================
+#
 
 
 @router.post(
-    "/{case_id}/contact-attempts",
+    "/{surrogate_id}/contact-attempts",
     response_model=ContactAttemptResponse,
     status_code=201,
     dependencies=[Depends(require_csrf_header)],
 )
 def create_contact_attempt(
-    case_id: UUID,
+    surrogate_id: UUID,
     data: ContactAttemptCreate,
-    session: UserSession = Depends(
-        require_permission(POLICIES["cases"].actions["edit"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["edit"])),
     db: Session = Depends(get_db),
 ):
     """
-    Log a contact attempt for a case.
+    Log a contact attempt for a surrogate.
 
     Supports:
     - Multiple contact methods per attempt
     - Back-dating (cannot be future or before assignment)
     - Automatic contact_status update if outcome='reached'
     """
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
 
-    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
     try:
         attempt = contact_attempt_service.create_contact_attempt(
             session=db,
-            case_id=case_id,
+            surrogate_id=surrogate_id,
             data=data,
             user=session,
         )
@@ -1350,16 +1227,16 @@ def create_contact_attempt(
 
 
 @router.get(
-    "/{case_id}/contact-attempts",
+    "/{surrogate_id}/contact-attempts",
     response_model=ContactAttemptsSummary,
 )
 def get_contact_attempts(
-    case_id: UUID,
+    surrogate_id: UUID,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """
-    Get contact attempts summary for a case.
+    Get contact attempts summary for a surrogate.
 
     Returns:
     - All attempts
@@ -1368,16 +1245,16 @@ def get_contact_attempts(
     - Days since last attempt
     """
     # Access control
-    case = case_service.get_case(db, session.org_id, case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
 
-    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
     try:
-        summary = contact_attempt_service.get_case_contact_attempts_summary(
+        summary = contact_attempt_service.get_surrogate_contact_attempts_summary(
             session=db,
-            case_id=case_id,
+            surrogate_id=surrogate_id,
             user=session,
         )
         return summary

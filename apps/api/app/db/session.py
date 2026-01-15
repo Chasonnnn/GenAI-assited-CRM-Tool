@@ -7,7 +7,5 @@ connect_args = {}
 if make_url(settings.DATABASE_URL).get_backend_name().startswith("postgresql"):
     connect_args["options"] = "-c timezone=utc"
 
-engine = create_engine(
-    settings.DATABASE_URL, pool_pre_ping=True, connect_args=connect_args
-)
+engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

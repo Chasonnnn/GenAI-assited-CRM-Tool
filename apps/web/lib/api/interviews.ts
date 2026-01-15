@@ -52,7 +52,7 @@ export interface TipTapMark {
 // Full interview
 export interface InterviewRead {
     id: string;
-    case_id: string;
+    surrogate_id: string;
     interview_type: InterviewType;
     conducted_at: string;
     conducted_by_user_id: string;
@@ -177,10 +177,10 @@ export interface TranscriptionStatusRead {
 // ============================================================================
 
 /**
- * List interviews for a case.
+ * List interviews for a surrogate.
  */
-export function listInterviews(caseId: string): Promise<InterviewListItem[]> {
-    return api.get<InterviewListItem[]>(`/cases/${caseId}/interviews`);
+export function listInterviews(surrogateId: string): Promise<InterviewListItem[]> {
+    return api.get<InterviewListItem[]>(`/surrogates/${surrogateId}/interviews`);
 }
 
 /**
@@ -193,8 +193,8 @@ export function getInterview(interviewId: string): Promise<InterviewRead> {
 /**
  * Create a new interview.
  */
-export function createInterview(caseId: string, data: InterviewCreatePayload): Promise<InterviewRead> {
-    return api.post<InterviewRead>(`/cases/${caseId}/interviews`, data);
+export function createInterview(surrogateId: string, data: InterviewCreatePayload): Promise<InterviewRead> {
+    return api.post<InterviewRead>(`/surrogates/${surrogateId}/interviews`, data);
 }
 
 /**
@@ -364,7 +364,7 @@ export interface InterviewSummaryResponse {
 
 // All interviews summary response
 export interface AllInterviewsSummaryResponse {
-    case_id: string;
+    surrogate_id: string;
     interview_count: number;
     overall_summary: string;
     timeline: Array<{ date: string; type: string; key_point: string }>;
@@ -382,8 +382,8 @@ export function summarizeInterview(interviewId: string): Promise<InterviewSummar
 }
 
 /**
- * Generate AI summary of all interviews for a case.
+ * Generate AI summary of all interviews for a surrogate.
  */
-export function summarizeAllInterviews(caseId: string): Promise<AllInterviewsSummaryResponse> {
-    return api.post<AllInterviewsSummaryResponse>(`/cases/${caseId}/interviews/ai/summarize-all`);
+export function summarizeAllInterviews(surrogateId: string): Promise<AllInterviewsSummaryResponse> {
+    return api.post<AllInterviewsSummaryResponse>(`/surrogates/${surrogateId}/interviews/ai/summarize-all`);
 }

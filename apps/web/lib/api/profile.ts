@@ -36,39 +36,39 @@ export interface ProfileHiddenUpdate {
     hidden: boolean
 }
 
-export function getProfile(caseId: string): Promise<ProfileDataResponse> {
-    return api.get<ProfileDataResponse>(`/cases/${caseId}/profile`)
+export function getProfile(surrogateId: string): Promise<ProfileDataResponse> {
+    return api.get<ProfileDataResponse>(`/surrogates/${surrogateId}/profile`)
 }
 
-export function syncProfile(caseId: string): Promise<SyncDiffResponse> {
-    return api.post<SyncDiffResponse>(`/cases/${caseId}/profile/sync`)
+export function syncProfile(surrogateId: string): Promise<SyncDiffResponse> {
+    return api.post<SyncDiffResponse>(`/surrogates/${surrogateId}/profile/sync`)
 }
 
 export function saveProfileOverrides(
-    caseId: string,
+    surrogateId: string,
     overrides: JsonObject,
     newBaseSubmissionId?: string | null
 ): Promise<{ status: string }> {
-    return api.put<{ status: string }>(`/cases/${caseId}/profile/overrides`, {
+    return api.put<{ status: string }>(`/surrogates/${surrogateId}/profile/overrides`, {
         overrides,
         new_base_submission_id: newBaseSubmissionId || null,
     })
 }
 
 export function toggleProfileHiddenField(
-    caseId: string,
+    surrogateId: string,
     fieldKey: string,
     hidden: boolean
 ): Promise<{ status: string; field_key: string; hidden: boolean }> {
     return api.post<{ status: string; field_key: string; hidden: boolean }>(
-        `/cases/${caseId}/profile/hidden`,
+        `/surrogates/${surrogateId}/profile/hidden`,
         { field_key: fieldKey, hidden }
     )
 }
 
-export async function exportProfilePdf(caseId: string): Promise<void> {
+export async function exportProfilePdf(surrogateId: string): Promise<void> {
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
-    const url = `${baseUrl}/cases/${caseId}/profile/export`
+    const url = `${baseUrl}/surrogates/${surrogateId}/profile/export`
 
     const response = await fetch(url, {
         method: 'GET',
@@ -99,7 +99,7 @@ export async function exportProfilePdf(caseId: string): Promise<void> {
     const objectUrl = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = objectUrl
-    link.download = `profile_${caseId}.pdf`
+    link.download = `profile_${surrogateId}.pdf`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)

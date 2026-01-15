@@ -114,9 +114,7 @@ async def send_invite_email(
         {"success": True, "message_id": "..."} or {"success": False, "error": "..."}
     """
     # Get org name
-    org = (
-        db.query(Organization).filter(Organization.id == invite.organization_id).first()
-    )
+    org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
     org_name = org.name if org else "the organization"
 
     # Get inviter name
@@ -139,9 +137,7 @@ async def send_invite_email(
     # Build URLs and content
     invite_url = _build_invite_url(invite.id)
     subject = f"You're invited to join {org_name}"
-    html_body = _build_invite_html(
-        org_name, inviter_name, invite.role, invite_url, expires_at
-    )
+    html_body = _build_invite_html(org_name, inviter_name, invite.role, invite_url, expires_at)
 
     # Send via inviter's Gmail (or system default)
     sender_user_id = invite.invited_by_user_id

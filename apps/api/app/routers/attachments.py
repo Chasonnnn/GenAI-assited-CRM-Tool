@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.case_access import check_case_access, can_modify_case
+from app.core.surrogate_access import check_surrogate_access, can_modify_surrogate
 from app.core.deps import (
     get_db,
     require_any_permissions,
@@ -16,9 +16,9 @@ from app.core.deps import (
 )
 from app.core.policies import POLICIES
 from app.db.enums import Role
-from app.db.models import Case
+from app.db.models import Surrogate
 from app.schemas.auth import UserSession
-from app.services import activity_service, attachment_service, case_service, ip_service
+from app.services import activity_service, attachment_service, surrogate_service, ip_service
 
 
 router = APIRouter(prefix="/attachments", tags=["attachments"])
@@ -52,25 +52,23 @@ class AttachmentDownloadResponse(BaseModel):
 # =============================================================================
 
 
-def _get_case_with_access(
+def _get_surrogate_with_access(
     db: Session,
-    case_id: UUID,
+    surrogate_id: UUID,
     session: UserSession,
     require_write: bool = False,
-) -> Case:
-    """Get case and verify user has access."""
-    case = case_service.get_case(db, session.org_id, case_id)
+) -> Surrogate:
+    """Get surrogate and verify user has access."""
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
 
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
 
-    check_case_access(case, session.role, session.user_id, db=db, org_id=session.org_id)
-    if require_write and not can_modify_case(case, session.user_id, session.role):
-        raise HTTPException(
-            status_code=403, detail="Not authorized to modify this case"
-        )
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+    if require_write and not can_modify_surrogate(surrogate, session.user_id, session.role):
+        raise HTTPException(status_code=403, detail="Not authorized to modify this surrogate")
 
-    return case
+    return surrogate
 
 
 # =============================================================================
@@ -78,22 +76,20 @@ def _get_case_with_access(
 # =============================================================================
 
 
-@router.post("/cases/{case_id}/attachments", response_model=AttachmentRead)
+@router.post("/surrogates/{surrogate_id}/attachments", response_model=AttachmentRead)
 async def upload_attachment(
-    case_id: UUID,
+    surrogate_id: UUID,
     file: Annotated[UploadFile, File()],
     db: Session = Depends(get_db),
-    session: UserSession = Depends(
-        require_permission(POLICIES["cases"].actions["edit"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["edit"])),
     _: str = Depends(require_csrf_header),
 ):
     """
-    Upload a file attachment to a case.
+    Upload a file attachment to a surrogate.
 
     File is quarantined until virus scan completes.
     """
-    case = _get_case_with_access(db, case_id, session, require_write=True)
+    surrogate = _get_surrogate_with_access(db, surrogate_id, session, require_write=True)
 
     # Read file content
     content = await file.read()
@@ -107,20 +103,20 @@ async def upload_attachment(
     try:
         attachment = attachment_service.upload_attachment(
             db=db,
-            org_id=case.organization_id,
+            org_id=surrogate.organization_id,
             user_id=session.user_id,
             filename=file.filename or "untitled",
             content_type=file.content_type or "application/octet-stream",
             file=file_obj,
             file_size=file_size,
-            case_id=case.id,
+            surrogate_id=surrogate.id,
         )
 
         # Log activity AFTER successful upload (before commit so it's in same transaction)
         activity_service.log_attachment_added(
             db=db,
-            case_id=case.id,
-            organization_id=case.organization_id,
+            surrogate_id=surrogate.id,
+            organization_id=surrogate.organization_id,
             actor_user_id=session.user_id,
             attachment_id=attachment.id,
             filename=attachment.filename,
@@ -143,20 +139,20 @@ async def upload_attachment(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/cases/{case_id}/attachments", response_model=list[AttachmentRead])
+@router.get("/surrogates/{surrogate_id}/attachments", response_model=list[AttachmentRead])
 async def list_attachments(
-    case_id: UUID,
+    surrogate_id: UUID,
     request: Request,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["cases"].default)),
+    session: UserSession = Depends(require_permission(POLICIES["surrogates"].default)),
 ):
-    """List attachments for a case (excludes quarantined and deleted)."""
-    case = _get_case_with_access(db, case_id, session)
+    """List attachments for a surrogate (excludes quarantined and deleted)."""
+    surrogate = _get_surrogate_with_access(db, surrogate_id, session)
 
     attachments = attachment_service.list_attachments(
         db=db,
-        org_id=case.organization_id,
-        case_id=case.id,
+        org_id=surrogate.organization_id,
+        surrogate_id=surrogate.id,
         include_quarantined=False,
     )
 
@@ -166,8 +162,8 @@ async def list_attachments(
         db=db,
         org_id=session.org_id,
         user_id=session.user_id,
-        target_type="case_attachments",
-        target_id=case.id,
+        target_type="surrogate_attachments",
+        target_id=surrogate.id,
         request=request,
         details={"count": len(attachments)},
     )
@@ -181,9 +177,7 @@ async def list_attachments(
             file_size=a.file_size,
             scan_status=a.scan_status,
             quarantined=a.quarantined,
-            uploaded_by_user_id=str(a.uploaded_by_user_id)
-            if a.uploaded_by_user_id
-            else None,
+            uploaded_by_user_id=str(a.uploaded_by_user_id) if a.uploaded_by_user_id else None,
             created_at=a.created_at.isoformat(),
         )
         for a in attachments
@@ -203,16 +197,12 @@ def _get_ip_with_access(db: Session, ip_id: UUID, session: UserSession):
     return ip
 
 
-@router.get(
-    "/intended-parents/{ip_id}/attachments", response_model=list[AttachmentRead]
-)
+@router.get("/intended-parents/{ip_id}/attachments", response_model=list[AttachmentRead])
 async def list_ip_attachments(
     ip_id: UUID,
     request: Request,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(
-        require_permission(POLICIES["intended_parents"].default)
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["intended_parents"].default)),
 ):
     """List attachments for an intended parent."""
     ip = _get_ip_with_access(db, ip_id, session)
@@ -245,9 +235,7 @@ async def list_ip_attachments(
             file_size=a.file_size,
             scan_status=a.scan_status,
             quarantined=a.quarantined,
-            uploaded_by_user_id=str(a.uploaded_by_user_id)
-            if a.uploaded_by_user_id
-            else None,
+            uploaded_by_user_id=str(a.uploaded_by_user_id) if a.uploaded_by_user_id else None,
             created_at=a.created_at.isoformat(),
         )
         for a in attachments
@@ -311,7 +299,7 @@ async def download_attachment(
     session: UserSession = Depends(
         require_any_permissions(
             [
-                POLICIES["cases"].default,
+                POLICIES["surrogates"].default,
                 POLICIES["intended_parents"].default,
             ]
         )
@@ -331,8 +319,8 @@ async def download_attachment(
         raise HTTPException(status_code=403, detail="File is pending virus scan")
 
     # Verify access: case attachment requires case access, IP attachment uses org-wide access
-    if attachment.case_id:
-        _get_case_with_access(db, attachment.case_id, session)
+    if attachment.surrogate_id:
+        _get_surrogate_with_access(db, attachment.surrogate_id, session)
     elif attachment.intended_parent_id:
         # IP attachments use org-wide access (already verified by get_attachment org_id filter)
         _get_ip_with_access(db, attachment.intended_parent_id, session)
@@ -352,7 +340,7 @@ async def download_attachment(
         target_type="attachment",
         target_id=attachment_id,
         details={
-            "case_id": str(attachment.case_id) if attachment.case_id else None,
+            "surrogate_id": str(attachment.surrogate_id) if attachment.surrogate_id else None,
             "intended_parent_id": str(attachment.intended_parent_id)
             if attachment.intended_parent_id
             else None,
@@ -379,7 +367,7 @@ async def delete_attachment(
     session: UserSession = Depends(
         require_any_permissions(
             [
-                POLICIES["cases"].actions["edit"],
+                POLICIES["surrogates"].actions["edit"],
                 POLICIES["intended_parents"].actions["edit"],
             ]
         )
@@ -401,13 +389,13 @@ async def delete_attachment(
     is_uploader = attachment.uploaded_by_user_id == session.user_id
 
     if not is_admin and not is_uploader:
-        raise HTTPException(
-            status_code=403, detail="Only uploader or admin can delete"
-        )
+        raise HTTPException(status_code=403, detail="Only uploader or admin can delete")
 
-    case = None
-    if attachment.case_id:
-        case = _get_case_with_access(db, attachment.case_id, session, require_write=True)
+    surrogate = None
+    if attachment.surrogate_id:
+        surrogate = _get_surrogate_with_access(
+            db, attachment.surrogate_id, session, require_write=True
+        )
 
     # Capture filename before deletion for activity log
     filename = attachment.filename
@@ -422,12 +410,12 @@ async def delete_attachment(
     if not success:
         raise HTTPException(status_code=404, detail="Attachment not found")
 
-    # Log activity AFTER successful deletion (case attachments only)
-    if case:
+    # Log activity AFTER successful deletion (surrogate attachments only)
+    if surrogate:
         activity_service.log_attachment_deleted(
             db=db,
-            case_id=case.id,
-            organization_id=case.organization_id,
+            surrogate_id=surrogate.id,
+            organization_id=surrogate.organization_id,
             actor_user_id=session.user_id,
             attachment_id=attachment_id,
             filename=filename,
@@ -445,7 +433,7 @@ async def download_local_attachment(
     session: UserSession = Depends(
         require_any_permissions(
             [
-                POLICIES["cases"].default,
+                POLICIES["surrogates"].default,
                 POLICIES["intended_parents"].default,
             ]
         )
@@ -466,8 +454,8 @@ async def download_local_attachment(
         raise HTTPException(status_code=403, detail="File is pending virus scan")
 
     # Verify access: case attachment requires case access, IP attachment uses org-wide access
-    if attachment.case_id:
-        _get_case_with_access(db, attachment.case_id, session)
+    if attachment.surrogate_id:
+        _get_surrogate_with_access(db, attachment.surrogate_id, session)
     elif attachment.intended_parent_id:
         _get_ip_with_access(db, attachment.intended_parent_id, session)
 
@@ -480,7 +468,7 @@ async def download_local_attachment(
         target_type="attachment",
         target_id=attachment.id,
         details={
-            "case_id": str(attachment.case_id) if attachment.case_id else None,
+            "surrogate_id": str(attachment.surrogate_id) if attachment.surrogate_id else None,
             "intended_parent_id": str(attachment.intended_parent_id)
             if attachment.intended_parent_id
             else None,

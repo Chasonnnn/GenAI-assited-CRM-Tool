@@ -20,7 +20,7 @@ from app.db.enums import OwnerType
 from app.db.models import (
     AISettings,
     AutomationWorkflow,
-    Case,
+    Surrogate,
     EmailTemplate,
     Membership,
     MetaPageMapping,
@@ -41,7 +41,7 @@ from app.services import ai_usage_service, analytics_service
 CSV_DANGEROUS_PREFIXES = ("=", "+", "-", "@")
 
 EXPORT_TYPE_FILENAMES = {
-    "cases_csv": "cases_export",
+    "surrogates_csv": "surrogates_export",
     "org_config_zip": "org_config_export",
     "analytics_zip": "analytics_export",
 }
@@ -95,13 +95,13 @@ def store_export_bytes(org_id: UUID, filename: str, payload: bytes) -> str:
     return os.path.relpath(file_path, os.path.abspath(settings.EXPORT_LOCAL_DIR))
 
 
-def store_cases_csv(db: Session, org_id: UUID, filename: str) -> str:
-    """Store streamed cases CSV and return file path/key."""
+def store_surrogates_csv(db: Session, org_id: UUID, filename: str) -> str:
+    """Store streamed surrogates CSV and return file path/key."""
     if settings.EXPORT_STORAGE_BACKEND == "s3":
         with tempfile.TemporaryDirectory() as temp_dir:
             file_path = os.path.join(temp_dir, filename)
             with open(file_path, "w", newline="", encoding="utf-8") as f:
-                for row in stream_cases_csv(db, org_id):
+                for row in stream_surrogates_csv(db, org_id):
                     f.write(row)
             key = _build_admin_export_key(org_id, filename)
             _upload_to_s3(file_path, key)
@@ -110,7 +110,7 @@ def store_cases_csv(db: Session, org_id: UUID, filename: str) -> str:
     export_dir = _ensure_admin_export_dir(org_id)
     file_path = os.path.join(export_dir, filename)
     with open(file_path, "w", newline="", encoding="utf-8") as f:
-        for row in stream_cases_csv(db, org_id):
+        for row in stream_surrogates_csv(db, org_id):
             f.write(row)
     return os.path.relpath(file_path, os.path.abspath(settings.EXPORT_LOCAL_DIR))
 
@@ -123,7 +123,7 @@ def resolve_admin_export_path(file_path: str) -> str:
 def build_export_filename(export_type: str) -> str:
     """Build a timestamped filename for admin exports."""
     prefix = EXPORT_TYPE_FILENAMES.get(export_type, "admin_export")
-    extension = "csv" if export_type == "cases_csv" else "zip"
+    extension = "csv" if export_type == "surrogates_csv" else "zip"
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     return f"{prefix}_{timestamp}.{extension}"
 
@@ -158,7 +158,7 @@ def _write_json(data: Any) -> str:
     return json.dumps(data, indent=2, sort_keys=True, default=str)
 
 
-def stream_cases_csv(db: Session, org_id: UUID) -> Iterator[str]:
+def stream_surrogates_csv(db: Session, org_id: UUID) -> Iterator[str]:
     owner_user = aliased(User)
     owner_queue = aliased(Queue)
     created_by = aliased(User)
@@ -166,7 +166,7 @@ def stream_cases_csv(db: Session, org_id: UUID) -> Iterator[str]:
 
     headers = [
         "id",
-        "case_number",
+        "surrogate_number",
         "organization_id",
         "status_label",
         "stage_id",
@@ -233,7 +233,7 @@ def stream_cases_csv(db: Session, org_id: UUID) -> Iterator[str]:
 
     query = (
         db.query(
-            Case,
+            Surrogate,
             PipelineStage,
             owner_user,
             owner_queue,
@@ -241,25 +241,23 @@ def stream_cases_csv(db: Session, org_id: UUID) -> Iterator[str]:
             archived_by,
             meta_lead,
         )
-        .join(PipelineStage, Case.stage_id == PipelineStage.id)
+        .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
         .outerjoin(
             owner_user,
-            and_(
-                Case.owner_type == OwnerType.USER.value, Case.owner_id == owner_user.id
-            ),
+            and_(Surrogate.owner_type == OwnerType.USER.value, Surrogate.owner_id == owner_user.id),
         )
         .outerjoin(
             owner_queue,
             and_(
-                Case.owner_type == OwnerType.QUEUE.value,
-                Case.owner_id == owner_queue.id,
+                Surrogate.owner_type == OwnerType.QUEUE.value,
+                Surrogate.owner_id == owner_queue.id,
             ),
         )
-        .outerjoin(created_by, Case.created_by_user_id == created_by.id)
-        .outerjoin(archived_by, Case.archived_by_user_id == archived_by.id)
-        .outerjoin(meta_lead, Case.meta_lead_id == meta_lead.id)
-        .filter(Case.organization_id == org_id)
-        .order_by(Case.created_at.asc())
+        .outerjoin(created_by, Surrogate.created_by_user_id == created_by.id)
+        .outerjoin(archived_by, Surrogate.archived_by_user_id == archived_by.id)
+        .outerjoin(meta_lead, Surrogate.meta_lead_id == meta_lead.id)
+        .filter(Surrogate.organization_id == org_id)
+        .order_by(Surrogate.created_at.asc())
     )
 
     for (
@@ -278,7 +276,7 @@ def stream_cases_csv(db: Session, org_id: UUID) -> Iterator[str]:
         yield _write_csv_row(
             [
                 case.id,
-                case.case_number,
+                case.surrogate_number,
                 case.organization_id,
                 case.status_label,
                 case.stage_id,
@@ -405,9 +403,7 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "system_key": t.system_key,
             "category": t.category,
             "current_version": t.current_version,
-            "created_by_user_id": str(t.created_by_user_id)
-            if t.created_by_user_id
-            else None,
+            "created_by_user_id": str(t.created_by_user_id) if t.created_by_user_id else None,
             "created_at": t.created_at,
             "updated_at": t.updated_at,
         }
@@ -445,15 +441,9 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "system_key": w.system_key,
             "requires_review": w.requires_review,
             "reviewed_at": w.reviewed_at,
-            "reviewed_by_user_id": str(w.reviewed_by_user_id)
-            if w.reviewed_by_user_id
-            else None,
-            "created_by_user_id": str(w.created_by_user_id)
-            if w.created_by_user_id
-            else None,
-            "updated_by_user_id": str(w.updated_by_user_id)
-            if w.updated_by_user_id
-            else None,
+            "reviewed_by_user_id": str(w.reviewed_by_user_id) if w.reviewed_by_user_id else None,
+            "created_by_user_id": str(w.created_by_user_id) if w.created_by_user_id else None,
+            "updated_by_user_id": str(w.updated_by_user_id) if w.updated_by_user_id else None,
             "created_at": w.created_at,
             "updated_at": w.updated_at,
         }
@@ -496,12 +486,7 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
         for _user, membership in members
     ]
 
-    queues = (
-        db.query(Queue)
-        .filter(Queue.organization_id == org_id)
-        .order_by(Queue.name)
-        .all()
-    )
+    queues = db.query(Queue).filter(Queue.organization_id == org_id).order_by(Queue.name).all()
     queue_payload = [
         {
             "id": str(queue.id),
@@ -542,9 +527,9 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
         {
             "user_id": str(settings_row.user_id),
             "email": user.email,
-            "case_assigned": settings_row.case_assigned,
-            "case_status_changed": settings_row.case_status_changed,
-            "case_handoff": settings_row.case_handoff,
+            "surrogate_assigned": settings_row.surrogate_assigned,
+            "surrogate_status_changed": settings_row.surrogate_status_changed,
+            "surrogate_claim_available": settings_row.surrogate_claim_available,
             "task_assigned": settings_row.task_assigned,
             "workflow_approvals": settings_row.workflow_approvals,
             "task_reminders": settings_row.task_reminders,
@@ -577,9 +562,7 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
         for integration, user, _membership in integrations
     ]
 
-    ai_settings = (
-        db.query(AISettings).filter(AISettings.organization_id == org_id).first()
-    )
+    ai_settings = db.query(AISettings).filter(AISettings.organization_id == org_id).first()
     ai_payload = None
     if ai_settings:
         ai_payload = {
@@ -691,13 +674,9 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
         archive.writestr("queues.json", _write_json(queue_payload))
         archive.writestr("queue_members.json", _write_json(queue_member_payload))
         archive.writestr("role_permissions.json", _write_json(role_permission_payload))
-        archive.writestr(
-            "user_permission_overrides.json", _write_json(user_override_payload)
-        )
+        archive.writestr("user_permission_overrides.json", _write_json(user_override_payload))
         archive.writestr("email_templates.json", _write_json(template_payload))
-        archive.writestr(
-            "notification_settings.json", _write_json(notification_payload)
-        )
+        archive.writestr("notification_settings.json", _write_json(notification_payload))
         archive.writestr("workflows.json", _write_json(workflow_payload))
         archive.writestr("integrations.json", _write_json(integration_payload))
         archive.writestr("meta_pages.json", _write_json(meta_page_payload))
@@ -716,14 +695,12 @@ def build_analytics_zip(
     meta_spend: dict[str, Any],
 ) -> bytes:
     summary = analytics_service.get_cached_analytics_summary(db, org_id, start, end)
-    cases_by_status = analytics_service.get_cached_cases_by_status(db, org_id)
-    cases_by_assignee = analytics_service.get_cached_cases_by_assignee(db, org_id)
-    cases_trend = analytics_service.get_cached_cases_trend(
+    surrogates_by_status = analytics_service.get_cached_surrogates_by_status(db, org_id)
+    surrogates_by_assignee = analytics_service.get_cached_surrogates_by_assignee(db, org_id)
+    surrogates_trend = analytics_service.get_cached_surrogates_trend(
         db, org_id, start=start, end=end, group_by="day"
     )
-    meta_performance = analytics_service.get_cached_meta_performance(
-        db, org_id, start, end
-    )
+    meta_performance = analytics_service.get_cached_meta_performance(db, org_id, start, end)
     campaigns = analytics_service.get_campaigns(db, org_id)
     funnel = analytics_service.get_funnel_with_filter(
         db,
@@ -732,7 +709,7 @@ def build_analytics_zip(
         end.date(),
         ad_id,
     )
-    cases_by_state = analytics_service.get_cases_by_state_with_filter(
+    surrogates_by_state = analytics_service.get_surrogates_by_state_with_filter(
         db,
         org_id,
         start.date(),
@@ -751,27 +728,27 @@ def build_analytics_zip(
             ),
         )
         archive.writestr(
-            "cases_by_status.csv",
+            "surrogates_by_status.csv",
             _write_csv(
                 ["status", "count"],
-                [(item["status"], item["count"]) for item in cases_by_status],
+                [(item["status"], item["count"]) for item in surrogates_by_status],
             ),
         )
         archive.writestr(
-            "cases_by_assignee.csv",
+            "surrogates_by_assignee.csv",
             _write_csv(
                 ["user_id", "user_email", "count"],
                 [
                     (item["user_id"], item["user_email"], item["count"])
-                    for item in cases_by_assignee
+                    for item in surrogates_by_assignee
                 ],
             ),
         )
         archive.writestr(
-            "cases_trend.csv",
+            "surrogates_trend.csv",
             _write_csv(
                 ["date", "count"],
-                [(item["date"], item["count"]) for item in cases_trend],
+                [(item["date"], item["count"]) for item in surrogates_trend],
             ),
         )
         archive.writestr(
@@ -867,10 +844,7 @@ def build_analytics_zip(
             "campaigns.csv",
             _write_csv(
                 ["ad_id", "ad_name", "lead_count"],
-                [
-                    (item["ad_id"], item["ad_name"], item["lead_count"])
-                    for item in campaigns
-                ],
+                [(item["ad_id"], item["ad_name"], item["lead_count"]) for item in campaigns],
             ),
         )
         archive.writestr(
@@ -884,10 +858,10 @@ def build_analytics_zip(
             ),
         )
         archive.writestr(
-            "cases_by_state.csv",
+            "surrogates_by_state.csv",
             _write_csv(
                 ["state", "count"],
-                [(item["state"], item["count"]) for item in cases_by_state],
+                [(item["state"], item["count"]) for item in surrogates_by_state],
             ),
         )
         archive.writestr(

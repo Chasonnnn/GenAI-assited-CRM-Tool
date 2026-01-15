@@ -20,25 +20,25 @@ import { globalSearch, type SearchResult, type SearchResponse } from "@/lib/api/
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
 
 const ENTITY_CONFIG = {
-    case: {
+    surrogate: {
         icon: FileText,
-        label: "Case",
+        label: "Surrogate",
         color: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-        getUrl: (result: SearchResult) => `/cases/${result.entity_id}`,
+        getUrl: (result: SearchResult) => `/surrogates/${result.entity_id}`,
     },
     note: {
         icon: FileText,
         label: "Note",
         color: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
         getUrl: (result: SearchResult) =>
-            result.case_id ? `/cases/${result.case_id}` : "#",
+            result.surrogate_id ? `/surrogates/${result.surrogate_id}` : "#",
     },
     attachment: {
         icon: Paperclip,
         label: "File",
         color: "bg-green-500/10 text-green-600 dark:text-green-400",
         getUrl: (result: SearchResult) =>
-            result.case_id ? `/cases/${result.case_id}` : "#",
+            result.surrogate_id ? `/surrogates/${result.surrogate_id}` : "#",
     },
     intended_parent: {
         icon: Users,
@@ -75,7 +75,7 @@ export default function SearchPage() {
             <div>
                 <h1 className="text-2xl font-semibold">Search</h1>
                 <p className="text-muted-foreground">
-                    Search across cases, notes, files, and intended parents
+                    Search across surrogates, notes, files, and intended parents
                 </p>
             </div>
 
@@ -83,7 +83,7 @@ export default function SearchPage() {
             <div className="relative max-w-2xl">
                 <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                    placeholder="Search cases, notes, files..."
+                    placeholder="Search surrogates, notes, files..."
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={handleKeyDown}
@@ -109,7 +109,7 @@ export default function SearchPage() {
                         <CardTitle className="text-sm font-medium">Search Tips</CardTitle>
                     </CardHeader>
                     <CardContent className="text-sm text-muted-foreground space-y-2">
-                        <p>• Search by name, email, phone, or case number</p>
+                        <p>• Search by name, email, phone, or surrogate number</p>
                         <p>• Use quotes for exact phrases: &quot;contract signed&quot;</p>
                         <p>• Results are ranked by relevance</p>
                     </CardContent>
@@ -181,10 +181,10 @@ export default function SearchPage() {
                                                         }}
                                                     />
                                                 )}
-                                                {result.case_name &&
-                                                    result.entity_type !== "case" && (
+                                                {result.surrogate_name &&
+                                                    result.entity_type !== "surrogate" && (
                                                         <p className="text-xs text-muted-foreground">
-                                                            Case: {result.case_name}
+                                                            Surrogate: {result.surrogate_name}
                                                         </p>
                                                     )}
                                             </div>

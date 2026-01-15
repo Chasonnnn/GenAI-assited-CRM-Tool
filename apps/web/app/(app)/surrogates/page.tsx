@@ -15,11 +15,11 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Checkbox } from "@/components/ui/checkbox"
 import { MoreVerticalIcon, SearchIcon, XIcon, Loader2Icon, ArchiveIcon, UserPlusIcon, UsersIcon, UploadIcon } from "lucide-react"
 import { SortableTableHead } from "@/components/ui/sortable-table-head"
-import { useCases, useArchiveCase, useRestoreCase, useUpdateCase, useAssignees, useBulkAssign, useBulkArchive } from "@/lib/hooks/use-cases"
+import { useSurrogates, useArchiveSurrogate, useRestoreSurrogate, useUpdateSurrogate, useAssignees, useBulkAssign, useBulkArchive } from "@/lib/hooks/use-surrogates"
 import { useQueues } from "@/lib/hooks/use-queues"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useAuth } from "@/lib/auth-context"
-import type { CaseSource } from "@/lib/types/case"
+import type { SurrogateSource } from "@/lib/types/surrogate"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { cn } from "@/lib/utils"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
@@ -49,11 +49,11 @@ function getInitials(name: string | null): string {
 // Floating Action Bar for bulk operations
 function FloatingActionBar({
     selectedCount,
-    selectedCaseIds,
+    selectedSurrogateIds,
     onClear,
 }: {
     selectedCount: number
-    selectedCaseIds: string[]
+    selectedSurrogateIds: string[]
     onClear: () => void
 }) {
     const { user } = useAuth()
@@ -65,7 +65,7 @@ function FloatingActionBar({
 
     const handleAssign = async (userId: string) => {
         await bulkAssignMutation.mutateAsync({
-            case_ids: selectedCaseIds,
+            surrogate_ids: selectedSurrogateIds,
             owner_type: 'user',
             owner_id: userId,
         })
@@ -73,7 +73,7 @@ function FloatingActionBar({
     }
 
     const handleArchive = async () => {
-        await bulkArchiveMutation.mutateAsync(selectedCaseIds)
+        await bulkArchiveMutation.mutateAsync(selectedSurrogateIds)
         onClear()
     }
 
@@ -82,7 +82,7 @@ function FloatingActionBar({
     return (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
             <div className="bg-primary text-primary-foreground shadow-lg rounded-lg px-6 py-3 flex items-center gap-4">
-                <span className="font-medium">{selectedCount} case{selectedCount > 1 ? 's' : ''} selected</span>
+                <span className="font-medium">{selectedCount} surrogate{selectedCount > 1 ? 's' : ''} selected</span>
                 <div className="h-4 w-px bg-primary-foreground/30" />
 
                 {/* Assign Dropdown - case_manager+ only */}
@@ -127,7 +127,7 @@ const VALID_SOURCES = ["all", "manual", "meta", "website", "referral"] as const
 type SourceFilter = (typeof VALID_SOURCES)[number]
 const isSourceFilter = (value: string | null): value is SourceFilter =>
     value !== null && VALID_SOURCES.includes(value as SourceFilter)
-export default function CasesPage() {
+export default function SurrogatesPage() {
     const searchParams = useSearchParams()
     const router = useRouter()
 
@@ -150,14 +150,14 @@ export default function CasesPage() {
     const [searchQuery, setSearchQuery] = useState(urlSearch || "")
     const [debouncedSearch, setDebouncedSearch] = useState(urlSearch || "")
     const [page, setPage] = useState(1)
-    const [selectedCases, setSelectedCases] = useState<Set<string>>(new Set())
+    const [selectedSurrogates, setSelectedSurrogates] = useState<Set<string>>(new Set())
     const [sortBy, setSortBy] = useState<string | null>(null)
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
     const perPage = 20
     const { user } = useAuth()
 
     // Sync state changes back to URL (preserving other params)
-    const updateUrlParams = useCallback((stage: string, source: CaseSource | "all", queue: string, search: string) => {
+    const updateUrlParams = useCallback((stage: string, source: SurrogateSource | "all", queue: string, search: string) => {
         const newParams = new URLSearchParams(searchParams.toString())
         if (stage !== "all") {
             newParams.set("stage", stage)
@@ -180,7 +180,7 @@ export default function CasesPage() {
             newParams.delete("q")
         }
         const newUrl = newParams.toString() ? `?${newParams}` : ""
-        router.replace(`/cases${newUrl}`, { scroll: false })
+        router.replace(`/surrogates${newUrl}`, { scroll: false })
     }, [searchParams, router])
 
     // Update URL when filters change
@@ -189,7 +189,7 @@ export default function CasesPage() {
         updateUrlParams(stage, sourceFilter, queueFilter, debouncedSearch)
     }, [sourceFilter, queueFilter, debouncedSearch, updateUrlParams])
 
-    const handleSourceChange = useCallback((source: CaseSource | "all") => {
+    const handleSourceChange = useCallback((source: SurrogateSource | "all") => {
         setSourceFilter(source)
         updateUrlParams(stageFilter, source, queueFilter, debouncedSearch)
     }, [stageFilter, queueFilter, debouncedSearch, updateUrlParams])
@@ -246,7 +246,7 @@ export default function CasesPage() {
         return from ? { created_from: formatLocalDate(from) } : {}
     }
 
-    const { data, isLoading, isError, error, refetch } = useCases({
+    const { data, isLoading, isError, error, refetch } = useSurrogates({
         page,
         per_page: perPage,
         sort_order: sortOrder,
@@ -267,9 +267,9 @@ export default function CasesPage() {
         }
     }
 
-    const archiveMutation = useArchiveCase()
-    const restoreMutation = useRestoreCase()
-    const updateMutation = useUpdateCase()
+    const archiveMutation = useArchiveSurrogate()
+    const restoreMutation = useRestoreSurrogate()
+    const updateMutation = useUpdateSurrogate()
 
     const hasActiveFilters = stageFilter !== "all" || sourceFilter !== "all" || queueFilter !== "all" || searchQuery !== "" || dateRange !== "all"
 
@@ -280,44 +280,44 @@ export default function CasesPage() {
         setDateRange("all")
         setCustomRange({ from: undefined, to: undefined })
         setSearchQuery("")
-        setSelectedCases(new Set())
+        setSelectedSurrogates(new Set())
         // Clear URL params
-        router.replace('/cases', { scroll: false })
+        router.replace('/surrogates', { scroll: false })
     }, [router])
 
     // Multi-select handlers
     const handleSelectAll = (checked: boolean) => {
         if (checked && data?.items) {
-            setSelectedCases(new Set(data.items.map(c => c.id)))
+            setSelectedSurrogates(new Set(data.items.map(s => s.id)))
         } else {
-            setSelectedCases(new Set())
+            setSelectedSurrogates(new Set())
         }
     }
 
-    const handleSelectCase = (caseId: string, checked: boolean) => {
-        const newSelected = new Set(selectedCases)
+    const handleSelectSurrogate = (surrogateId: string, checked: boolean) => {
+        const newSelected = new Set(selectedSurrogates)
         if (checked) {
-            newSelected.add(caseId)
+            newSelected.add(surrogateId)
         } else {
-            newSelected.delete(caseId)
+            newSelected.delete(surrogateId)
         }
-        setSelectedCases(newSelected)
+        setSelectedSurrogates(newSelected)
     }
 
     const clearSelection = () => {
-        setSelectedCases(new Set())
+        setSelectedSurrogates(new Set())
     }
 
-    const handleArchive = async (caseId: string) => {
-        await archiveMutation.mutateAsync(caseId)
+    const handleArchive = async (surrogateId: string) => {
+        await archiveMutation.mutateAsync(surrogateId)
     }
 
-    const handleRestore = async (caseId: string) => {
-        await restoreMutation.mutateAsync(caseId)
+    const handleRestore = async (surrogateId: string) => {
+        await restoreMutation.mutateAsync(surrogateId)
     }
 
-    const handleTogglePriority = async (caseId: string, currentPriority: boolean) => {
-        await updateMutation.mutateAsync({ caseId, data: { is_priority: !currentPriority } })
+    const handleTogglePriority = async (surrogateId: string, currentPriority: boolean) => {
+        await updateMutation.mutateAsync({ surrogateId, data: { is_priority: !currentPriority } })
     }
 
     return (
@@ -327,9 +327,9 @@ export default function CasesPage() {
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
                     <div>
-                        <h1 className="text-2xl font-semibold">Cases</h1>
+                        <h1 className="text-2xl font-semibold">Surrogates</h1>
                         <p className="text-muted-foreground">
-                            {data?.total ?? 0} total cases
+                            {data?.total ?? 0} total surrogates
                         </p>
                     </div>
                     <Link href="/settings/import">
@@ -423,7 +423,7 @@ export default function CasesPage() {
                     <div className="relative ml-auto w-full max-w-sm">
                         <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
-                            placeholder="Search cases..."
+                            placeholder="Search surrogates..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="pl-9"
@@ -445,7 +445,7 @@ export default function CasesPage() {
                 {/* Error State */}
                 {isError && (
                     <Card className="p-6 text-center border-destructive/40 bg-destructive/5">
-                        <p className="text-destructive">Unable to load cases.</p>
+                        <p className="text-destructive">Unable to load surrogates.</p>
                         {error instanceof Error && (
                             <p className="mt-2 text-xs text-muted-foreground">{error.message}</p>
                         )}
@@ -468,8 +468,8 @@ export default function CasesPage() {
                         <div className="flex flex-col items-center gap-3">
                             <p className="text-muted-foreground">
                                 {hasActiveFilters
-                                    ? "No cases match your filters"
-                                    : "No cases yet"
+                                    ? "No surrogates match your filters"
+                                    : "No surrogates yet"
                                 }
                             </p>
                             {hasActiveFilters && (
@@ -481,7 +481,7 @@ export default function CasesPage() {
                     </Card>
                 )}
 
-                {/* Cases Table */}
+                {/* Surrogates Table */}
                 {!isLoading && !isError && data && data.items.length > 0 && (
                     <Card className="overflow-hidden py-0">
                         <div className="overflow-x-auto">
@@ -490,11 +490,11 @@ export default function CasesPage() {
                                     <TableRow>
                                         <TableHead className="w-[40px]">
                                             <Checkbox
-                                                checked={data?.items && data.items.length > 0 && selectedCases.size === data.items.length}
+                                                checked={data?.items && data.items.length > 0 && selectedSurrogates.size === data.items.length}
                                                 onCheckedChange={(checked) => handleSelectAll(!!checked)}
                                             />
                                         </TableHead>
-                                        <SortableTableHead column="case_number" label="Case #" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} className="w-[100px]" />
+                                        <SortableTableHead column="surrogate_number" label="Surrogate #" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} className="w-[100px]" />
                                         <SortableTableHead column="full_name" label="Name" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <SortableTableHead column="date_of_birth" label="Age" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <TableHead>BMI</TableHead>
@@ -510,44 +510,44 @@ export default function CasesPage() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {data.items.map((caseItem) => {
-                                        const stage = stageById.get(caseItem.stage_id)
-                                        const statusLabel = caseItem.status_label || stage?.label || "Unknown"
+                                    {data.items.map((surrogateItem) => {
+                                        const stage = stageById.get(surrogateItem.stage_id)
+                                        const statusLabel = surrogateItem.status_label || stage?.label || "Unknown"
                                         const statusColor = stage?.color || "#6B7280"
-                                        // Apply gold styling for entire row on priority cases
-                                        const rowClass = caseItem.is_priority ? "text-amber-600" : ""
+                                        // Apply gold styling for entire row on priority surrogates
+                                        const rowClass = surrogateItem.is_priority ? "text-amber-600" : ""
 
                                         return (
-                                            <TableRow key={caseItem.id} className={rowClass}>
+                                            <TableRow key={surrogateItem.id} className={rowClass}>
                                                 <TableCell>
                                                     <Checkbox
-                                                        checked={selectedCases.has(caseItem.id)}
-                                                        onCheckedChange={(checked) => handleSelectCase(caseItem.id, !!checked)}
+                                                        checked={selectedSurrogates.has(surrogateItem.id)}
+                                                        onCheckedChange={(checked) => handleSelectSurrogate(surrogateItem.id, !!checked)}
                                                     />
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Link href={`/cases/${caseItem.id}`} className={`font-medium hover:underline ${caseItem.is_priority ? "text-amber-600" : "text-primary"}`}>
-                                                        #{caseItem.case_number}
+                                                    <Link href={`/surrogates/${surrogateItem.id}`} className={`font-medium hover:underline ${surrogateItem.is_priority ? "text-amber-600" : "text-primary"}`}>
+                                                        #{surrogateItem.surrogate_number}
                                                     </Link>
                                                 </TableCell>
-                                                <TableCell className="font-medium">{caseItem.full_name}</TableCell>
+                                                <TableCell className="font-medium">{surrogateItem.full_name}</TableCell>
                                                 <TableCell className="text-center">
-                                                    {caseItem.age ?? "—"}
+                                                    {surrogateItem.age ?? "—"}
                                                 </TableCell>
                                                 <TableCell className="text-center">
-                                                    {caseItem.bmi ?? "—"}
+                                                    {surrogateItem.bmi ?? "—"}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {caseItem.race || "—"}
+                                                    {surrogateItem.race || "—"}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {caseItem.state || "—"}
+                                                    {surrogateItem.state || "—"}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {caseItem.phone || "—"}
+                                                    {surrogateItem.phone || "—"}
                                                 </TableCell>
-                                                <TableCell className="max-w-[200px] truncate" title={caseItem.email}>
-                                                    {caseItem.email}
+                                                <TableCell className="max-w-[200px] truncate" title={surrogateItem.email}>
+                                                    {surrogateItem.email}
                                                 </TableCell>
                                                 <TableCell>
                                                     <Badge style={{ backgroundColor: statusColor, color: "white" }}>
@@ -555,21 +555,21 @@ export default function CasesPage() {
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Badge variant="secondary" className="capitalize">{caseItem.source}</Badge>
+                                                    <Badge variant="secondary" className="capitalize">{surrogateItem.source}</Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    {caseItem.owner_name ? (
+                                                    {surrogateItem.owner_name ? (
                                                         <TooltipProvider>
                                                             <Tooltip>
                                                                 <TooltipTrigger>
                                                                     <Avatar className="h-7 w-7">
                                                                         <AvatarFallback className="text-xs">
-                                                                            {getInitials(caseItem.owner_name)}
+                                                                            {getInitials(surrogateItem.owner_name)}
                                                                         </AvatarFallback>
                                                                     </Avatar>
                                                                 </TooltipTrigger>
                                                                 <TooltipContent>
-                                                                    {caseItem.owner_name}
+                                                                    {surrogateItem.owner_name}
                                                                 </TooltipContent>
                                                             </Tooltip>
                                                         </TooltipProvider>
@@ -578,7 +578,7 @@ export default function CasesPage() {
                                                     )}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {formatDate(caseItem.created_at)}
+                                                    {formatDate(surrogateItem.created_at)}
                                                 </TableCell>
                                                 <TableCell>
                                                     <DropdownMenu>
@@ -588,18 +588,18 @@ export default function CasesPage() {
                                                             </span>
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent align="end">
-                                                            <DropdownMenuItem onClick={() => window.location.href = `/cases/${caseItem.id}`}>
+                                                            <DropdownMenuItem onClick={() => window.location.href = `/surrogates/${surrogateItem.id}`}>
                                                                 View Details
                                                             </DropdownMenuItem>
                                                             <DropdownMenuItem
-                                                                onClick={() => handleTogglePriority(caseItem.id, caseItem.is_priority)}
+                                                                onClick={() => handleTogglePriority(surrogateItem.id, surrogateItem.is_priority)}
                                                                 disabled={updateMutation.isPending}
                                                             >
-                                                                {caseItem.is_priority ? "Remove Priority" : "Mark as Priority"}
+                                                                {surrogateItem.is_priority ? "Remove Priority" : "Mark as Priority"}
                                                             </DropdownMenuItem>
-                                                            {!caseItem.is_archived ? (
+                                                            {!surrogateItem.is_archived ? (
                                                                 <DropdownMenuItem
-                                                                    onClick={() => handleArchive(caseItem.id)}
+                                                                    onClick={() => handleArchive(surrogateItem.id)}
                                                                     disabled={archiveMutation.isPending}
                                                                     className="text-destructive"
                                                                 >
@@ -607,7 +607,7 @@ export default function CasesPage() {
                                                                 </DropdownMenuItem>
                                                             ) : (
                                                                 <DropdownMenuItem
-                                                                    onClick={() => handleRestore(caseItem.id)}
+                                                                    onClick={() => handleRestore(surrogateItem.id)}
                                                                     disabled={restoreMutation.isPending}
                                                                 >
                                                                     Restore
@@ -627,7 +627,7 @@ export default function CasesPage() {
                         {data.pages > 1 && (
                             <div className="flex items-center justify-between border-t border-border px-6 py-4">
                                 <div className="text-sm text-muted-foreground">
-                                    Showing {((page - 1) * perPage) + 1}-{Math.min(page * perPage, data.total)} of {data.total} cases
+                                    Showing {((page - 1) * perPage) + 1}-{Math.min(page * perPage, data.total)} of {data.total} surrogates
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <Button
@@ -667,10 +667,10 @@ export default function CasesPage() {
                 )}
 
                 {/* Floating Action Bar for Multi-Select */}
-                {selectedCases.size > 0 && (
+                {selectedSurrogates.size > 0 && (
                     <FloatingActionBar
-                        selectedCount={selectedCases.size}
-                        selectedCaseIds={Array.from(selectedCases)}
+                        selectedCount={selectedSurrogates.size}
+                        selectedSurrogateIds={Array.from(selectedSurrogates)}
                         onClear={clearSelection}
                     />
                 )}

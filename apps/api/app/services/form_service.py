@@ -12,19 +12,19 @@ from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.enums import AuditEventType, FormStatus, FormSubmissionStatus, CaseActivityType
+from app.db.enums import AuditEventType, FormStatus, FormSubmissionStatus, SurrogateActivityType
 from app.db.models import (
-    Case,
     Form,
     FormFieldMapping,
     FormLogo,
     FormSubmission,
     FormSubmissionFile,
     FormSubmissionToken,
+    Surrogate,
 )
-from app.schemas.case import CaseUpdate
 from app.schemas.forms import FormSchema, FormField
-from app.services import audit_service, case_service, notification_service
+from app.schemas.surrogate import SurrogateUpdate
+from app.services import audit_service, notification_service, surrogate_service
 from app.services.attachment_service import (
     calculate_checksum,
     _get_local_storage_path,
@@ -44,19 +44,12 @@ LEGACY_PUBLIC_LOGO_PREFIX = "/forms/public/logos/"
 
 def list_forms(db: Session, org_id: uuid.UUID) -> list[Form]:
     return (
-        db.query(Form)
-        .filter(Form.organization_id == org_id)
-        .order_by(Form.updated_at.desc())
-        .all()
+        db.query(Form).filter(Form.organization_id == org_id).order_by(Form.updated_at.desc()).all()
     )
 
 
 def get_form(db: Session, org_id: uuid.UUID, form_id: uuid.UUID) -> Form | None:
-    return (
-        db.query(Form)
-        .filter(Form.organization_id == org_id, Form.id == form_id)
-        .first()
-    )
+    return db.query(Form).filter(Form.organization_id == org_id, Form.id == form_id).first()
 
 
 def create_form(
@@ -71,9 +64,7 @@ def create_form(
     allowed_mime_types: list[str] | None,
 ) -> Form:
     max_size = (
-        max_file_size_bytes
-        if max_file_size_bytes is not None
-        else DEFAULT_MAX_FILE_SIZE_BYTES
+        max_file_size_bytes if max_file_size_bytes is not None else DEFAULT_MAX_FILE_SIZE_BYTES
     )
     max_count = max_file_count if max_file_count is not None else DEFAULT_MAX_FILE_COUNT
     form = Form(
@@ -168,9 +159,7 @@ def upload_form_logo(
     return logo
 
 
-def get_form_logo(
-    db: Session, org_id: uuid.UUID, logo_id: uuid.UUID
-) -> FormLogo | None:
+def get_form_logo(db: Session, org_id: uuid.UUID, logo_id: uuid.UUID) -> FormLogo | None:
     return (
         db.query(FormLogo)
         .filter(FormLogo.organization_id == org_id, FormLogo.id == logo_id)
@@ -178,9 +167,7 @@ def get_form_logo(
     )
 
 
-def get_form_logo_by_id(
-    db: Session, org_id: uuid.UUID, logo_id: uuid.UUID
-) -> FormLogo | None:
+def get_form_logo_by_id(db: Session, org_id: uuid.UUID, logo_id: uuid.UUID) -> FormLogo | None:
     return get_form_logo(db, org_id, logo_id)
 
 
@@ -188,16 +175,12 @@ def get_form_logo_public_url(logo: FormLogo) -> str:
     return f"/forms/public/{logo.organization_id}/logos/{logo.id}"
 
 
-def normalize_form_schema_logo_url(
-    schema: FormSchema, org_id: uuid.UUID
-) -> FormSchema:
+def normalize_form_schema_logo_url(schema: FormSchema, org_id: uuid.UUID) -> FormSchema:
     if not schema.logo_url:
         return schema
     if schema.logo_url.startswith(LEGACY_PUBLIC_LOGO_PREFIX):
         logo_id = schema.logo_url.removeprefix(LEGACY_PUBLIC_LOGO_PREFIX)
-        return schema.model_copy(
-            update={"logo_url": f"/forms/public/{org_id}/logos/{logo_id}"}
-        )
+        return schema.model_copy(update={"logo_url": f"/forms/public/{org_id}/logos/{logo_id}"})
     return schema
 
 
@@ -234,11 +217,11 @@ def set_field_mappings(
 
     for mapping in mappings:
         field_key = mapping["field_key"]
-        case_field = mapping["case_field"]
+        surrogate_field = mapping["surrogate_field"]
         if field_key not in fields:
             raise ValueError(f"Unknown field key: {field_key}")
-        if case_field not in CASE_FIELD_TYPES:
-            raise ValueError(f"Unsupported case field: {case_field}")
+        if surrogate_field not in SURROGATE_FIELD_TYPES:
+            raise ValueError(f"Unsupported surrogate field: {surrogate_field}")
 
     db.query(FormFieldMapping).filter(FormFieldMapping.form_id == form.id).delete()
     created: list[FormFieldMapping] = []
@@ -247,7 +230,7 @@ def set_field_mappings(
             FormFieldMapping(
                 form_id=form.id,
                 field_key=mapping["field_key"],
-                case_field=mapping["case_field"],
+                surrogate_field=mapping["surrogate_field"],
             )
         )
     db.add_all(created)
@@ -268,7 +251,7 @@ def create_submission_token(
     db: Session,
     org_id: uuid.UUID,
     form: Form,
-    case: Case,
+    surrogate: Surrogate,
     user_id: uuid.UUID,
     expires_in_days: int,
 ) -> FormSubmissionToken:
@@ -277,11 +260,11 @@ def create_submission_token(
 
     existing = (
         db.query(FormSubmission)
-        .filter(FormSubmission.form_id == form.id, FormSubmission.case_id == case.id)
+        .filter(FormSubmission.form_id == form.id, FormSubmission.surrogate_id == surrogate.id)
         .first()
     )
     if existing:
-        raise ValueError("Submission already exists for this case")
+        raise ValueError("Submission already exists for this surrogate")
 
     token = _generate_token(db)
     expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
@@ -289,7 +272,7 @@ def create_submission_token(
     record = FormSubmissionToken(
         organization_id=org_id,
         form_id=form.id,
-        case_id=case.id,
+        surrogate_id=surrogate.id,
         token=token,
         expires_at=expires_at,
         max_submissions=1,
@@ -303,9 +286,7 @@ def create_submission_token(
 
 
 def get_valid_token(db: Session, token: str) -> FormSubmissionToken | None:
-    record = (
-        db.query(FormSubmissionToken).filter(FormSubmissionToken.token == token).first()
-    )
+    record = db.query(FormSubmissionToken).filter(FormSubmissionToken.token == token).first()
     if not record:
         return None
     if record.revoked_at is not None:
@@ -338,12 +319,12 @@ def create_submission(
     existing = (
         db.query(FormSubmission)
         .filter(
-            FormSubmission.form_id == form.id, FormSubmission.case_id == token.case_id
+            FormSubmission.form_id == form.id, FormSubmission.surrogate_id == token.surrogate_id
         )
         .first()
     )
     if existing:
-        raise ValueError("Submission already exists for this case")
+        raise ValueError("Submission already exists for this surrogate")
 
     upload_files = files or []
     _validate_files(form, upload_files)
@@ -351,7 +332,7 @@ def create_submission(
     submission = FormSubmission(
         organization_id=form.organization_id,
         form_id=form.id,
-        case_id=token.case_id,
+        surrogate_id=token.surrogate_id,
         token_id=token.id,
         status=FormSubmissionStatus.PENDING_REVIEW.value,
         answers_json=answers,
@@ -377,16 +358,16 @@ def create_submission(
         target_id=submission.id,
         details={
             "form_id": str(form.id),
-            "case_id": str(token.case_id),
+            "surrogate_id": str(token.surrogate_id),
         },
     )
 
-    # Notify case owner about submission
-    case = db.query(Case).filter(Case.id == token.case_id).first()
-    if case:
+    # Notify surrogate owner about submission
+    surrogate = db.query(Surrogate).filter(Surrogate.id == token.surrogate_id).first()
+    if surrogate:
         notification_service.notify_form_submission_received(
             db=db,
-            case=case,
+            surrogate=surrogate,
             submission_id=submission.id,
         )
 
@@ -407,15 +388,15 @@ def list_form_submissions(
     return query.order_by(FormSubmission.submitted_at.desc()).all()
 
 
-def get_submission_by_case(
-    db: Session, org_id: uuid.UUID, form_id: uuid.UUID, case_id: uuid.UUID
+def get_submission_by_surrogate(
+    db: Session, org_id: uuid.UUID, form_id: uuid.UUID, surrogate_id: uuid.UUID
 ) -> FormSubmission | None:
     return (
         db.query(FormSubmission)
         .filter(
             FormSubmission.organization_id == org_id,
             FormSubmission.form_id == form_id,
-            FormSubmission.case_id == case_id,
+            FormSubmission.surrogate_id == surrogate_id,
         )
         .first()
     )
@@ -503,8 +484,7 @@ def add_submission_file(
     ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename else ""
     suffix = f".{ext}" if ext else ""
     storage_key = (
-        f"{submission.organization_id}/form-submissions/"
-        f"{submission.id}/{uuid.uuid4()}{suffix}"
+        f"{submission.organization_id}/form-submissions/{submission.id}/{uuid.uuid4()}{suffix}"
     )
 
     store_file(storage_key, processed_file)
@@ -532,7 +512,7 @@ def add_submission_file(
         target_id=record.id,
         details={
             "submission_id": str(submission.id),
-            "case_id": str(submission.case_id),
+            "surrogate_id": str(submission.surrogate_id),
             "filename": record.filename,
         },
     )
@@ -568,7 +548,7 @@ def soft_delete_submission_file(
         target_id=file_record.id,
         details={
             "submission_id": str(submission.id),
-            "case_id": str(submission.case_id),
+            "surrogate_id": str(submission.surrogate_id),
             "filename": filename,
         },
     )
@@ -587,11 +567,7 @@ def get_submission_file_download_url(
     if file_record.quarantined:
         return None
 
-    ext = (
-        file_record.filename.rsplit(".", 1)[-1].lower()
-        if "." in file_record.filename
-        else ""
-    )
+    ext = file_record.filename.rsplit(".", 1)[-1].lower() if "." in file_record.filename else ""
     audit_service.log_event(
         db=db,
         org_id=org_id,
@@ -600,7 +576,7 @@ def get_submission_file_download_url(
         target_type="form_submission_file",
         target_id=file_record.id,
         details={
-            "case_id": str(submission.case_id),
+            "surrogate_id": str(submission.surrogate_id),
             "submission_id": str(submission.id),
             "file_ext": ext,
             "file_size": file_record.file_size,
@@ -620,19 +596,19 @@ def approve_submission(
     if submission.status != FormSubmissionStatus.PENDING_REVIEW.value:
         raise ValueError("Submission is not pending review")
 
-    case = db.query(Case).filter(Case.id == submission.case_id).first()
-    if not case:
-        raise ValueError("Case not found")
+    surrogate = db.query(Surrogate).filter(Surrogate.id == submission.surrogate_id).first()
+    if not surrogate:
+        raise ValueError("Surrogate not found")
 
     mappings = list_field_mappings(db, submission.form_id)
-    updates = _build_case_updates(submission, mappings)
+    updates = _build_surrogate_updates(submission, mappings)
 
     if updates:
-        case_update = CaseUpdate(**updates)
-        case_service.update_case(
+        surrogate_update = SurrogateUpdate(**updates)
+        surrogate_service.update_surrogate(
             db=db,
-            case=case,
-            data=case_update,
+            surrogate=surrogate,
+            data=surrogate_update,
             user_id=reviewer_id,
             org_id=submission.organization_id,
             commit=False,
@@ -654,7 +630,7 @@ def approve_submission(
         target_id=submission.id,
         details={
             "form_id": str(submission.form_id),
-            "case_id": str(submission.case_id),
+            "surrogate_id": str(submission.surrogate_id),
         },
     )
 
@@ -686,7 +662,7 @@ def reject_submission(
         target_id=submission.id,
         details={
             "form_id": str(submission.form_id),
-            "case_id": str(submission.case_id),
+            "surrogate_id": str(submission.surrogate_id),
         },
     )
 
@@ -713,12 +689,12 @@ def update_submission_answers(
     schema = _parse_schema(submission.schema_snapshot)
     fields = _flatten_fields(schema)
     mappings = list_field_mappings(db, submission.form_id)
-    mapping_by_key = {m.field_key: m.case_field for m in mappings}
+    mapping_by_key = {m.field_key: m.surrogate_field for m in mappings}
 
     old_values: dict[str, Any] = {}
     new_values: dict[str, Any] = {}
-    case_updates: dict[str, Any] = {}
-    updated_case_fields: list[str] = []
+    surrogate_updates: dict[str, Any] = {}
+    updated_surrogate_fields: list[str] = []
 
     for update in updates:
         field_key = update.get("field_key")
@@ -745,28 +721,29 @@ def update_submission_answers(
 
         # Check if field has a mapping
         if field_key in mapping_by_key:
-            case_field = mapping_by_key[field_key]
-            if case_field in CASE_FIELD_TYPES:
+            surrogate_field = mapping_by_key[field_key]
+            if surrogate_field in SURROGATE_FIELD_TYPES:
                 try:
-                    coerced = _coerce_case_value(case_field, value) if value else None
-                    case_updates[case_field] = coerced
-                    updated_case_fields.append(case_field)
+                    coerced = _coerce_surrogate_value(surrogate_field, value) if value else None
+                    surrogate_updates[surrogate_field] = coerced
+                    updated_surrogate_fields.append(surrogate_field)
                 except ValueError:
-                    pass  # Skip invalid values for case update
+                    pass  # Skip invalid values for surrogate update
 
     # Flag answers_json as modified
     from sqlalchemy.orm.attributes import flag_modified
+
     flag_modified(submission, "answers_json")
 
-    # Update case fields if any
-    if case_updates:
-        case = db.query(Case).filter(Case.id == submission.case_id).first()
-        if case:
-            case_update = CaseUpdate(**case_updates)
-            case_service.update_case(
+    # Update surrogate fields if any
+    if surrogate_updates:
+        surrogate = db.query(Surrogate).filter(Surrogate.id == submission.surrogate_id).first()
+        if surrogate:
+            surrogate_update = SurrogateUpdate(**surrogate_updates)
+            surrogate_service.update_surrogate(
                 db=db,
-                case=case,
-                data=case_update,
+                surrogate=surrogate,
+                data=surrogate_update,
                 user_id=user_id,
                 org_id=submission.organization_id,
                 commit=False,
@@ -774,29 +751,29 @@ def update_submission_answers(
 
     # Log to activity
     from app.services import activity_service
-    if submission.case_id:
+
+    if submission.surrogate_id:
         activity_service.log_activity(
             db=db,
-            case_id=submission.case_id,
+            surrogate_id=submission.surrogate_id,
             organization_id=submission.organization_id,
-            activity_type=CaseActivityType.APPLICATION_EDITED,
+            activity_type=SurrogateActivityType.APPLICATION_EDITED,
             actor_user_id=user_id,
             details={
                 "changes": {k: {"old": old_values.get(k), "new": v} for k, v in new_values.items()},
-                "case_updates": updated_case_fields,
+                "surrogate_updates": updated_surrogate_fields,
             },
         )
 
     db.commit()
     db.refresh(submission)
-    return old_values, updated_case_fields
+    return old_values, updated_surrogate_fields
 
 
 def _generate_token(db: Session) -> str:
     token = secrets.token_urlsafe(32)
     while (
-        db.query(FormSubmissionToken).filter(FormSubmissionToken.token == token).first()
-        is not None
+        db.query(FormSubmissionToken).filter(FormSubmissionToken.token == token).first() is not None
     ):
         token = secrets.token_urlsafe(32)
     return token
@@ -891,11 +868,7 @@ def _validate_field_value(field: FormField, value: Any) -> None:
 def _validate_files(form: Form, files: list[UploadFile]) -> None:
     if not files:
         return
-    max_count = (
-        form.max_file_count
-        if form.max_file_count is not None
-        else DEFAULT_MAX_FILE_COUNT
-    )
+    max_count = form.max_file_count if form.max_file_count is not None else DEFAULT_MAX_FILE_COUNT
     if len(files) > max_count:
         raise ValueError(f"Maximum {max_count} files allowed")
 
@@ -950,8 +923,7 @@ def _store_submission_file(
     ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename else ""
     suffix = f".{ext}" if ext else ""
     storage_key = (
-        f"{submission.organization_id}/form-submissions/"
-        f"{submission.id}/{uuid.uuid4()}{suffix}"
+        f"{submission.organization_id}/form-submissions/{submission.id}/{uuid.uuid4()}{suffix}"
     )
 
     store_file(storage_key, processed_file)
@@ -970,7 +942,7 @@ def _store_submission_file(
     db.add(record)
 
 
-CASE_FIELD_TYPES: dict[str, str] = {
+SURROGATE_FIELD_TYPES: dict[str, str] = {
     "full_name": "str",
     "email": "str",
     "phone": "str",
@@ -990,24 +962,24 @@ CASE_FIELD_TYPES: dict[str, str] = {
 }
 
 
-def _build_case_updates(
+def _build_surrogate_updates(
     submission: FormSubmission, mappings: list[FormFieldMapping]
 ) -> dict[str, Any]:
     updates: dict[str, Any] = {}
     for mapping in mappings:
         field_key = mapping.field_key
-        case_field = mapping.case_field
-        if case_field not in CASE_FIELD_TYPES:
+        surrogate_field = mapping.surrogate_field
+        if surrogate_field not in SURROGATE_FIELD_TYPES:
             continue
         value = submission.answers_json.get(field_key)
         if value in (None, ""):
             continue
-        updates[case_field] = _coerce_case_value(case_field, value)
+        updates[surrogate_field] = _coerce_surrogate_value(surrogate_field, value)
     return updates
 
 
-def _coerce_case_value(case_field: str, value: Any) -> Any:
-    field_type = CASE_FIELD_TYPES.get(case_field)
+def _coerce_surrogate_value(surrogate_field: str, value: Any) -> Any:
+    field_type = SURROGATE_FIELD_TYPES.get(surrogate_field)
     if field_type == "str":
         return str(value)
     if field_type == "bool":
@@ -1016,12 +988,12 @@ def _coerce_case_value(case_field: str, value: Any) -> Any:
         try:
             return int(value)
         except (TypeError, ValueError) as exc:
-            raise ValueError(f"Invalid integer for {case_field}") from exc
+            raise ValueError(f"Invalid integer for {surrogate_field}") from exc
     if field_type == "decimal":
         try:
             return Decimal(str(value))
         except (TypeError, ValueError) as exc:
-            raise ValueError(f"Invalid decimal for {case_field}") from exc
+            raise ValueError(f"Invalid decimal for {surrogate_field}") from exc
     if field_type == "date":
         if isinstance(value, date):
             return value
@@ -1029,8 +1001,8 @@ def _coerce_case_value(case_field: str, value: Any) -> Any:
             try:
                 return date.fromisoformat(value)
             except ValueError as exc:
-                raise ValueError(f"Invalid date for {case_field}") from exc
-        raise ValueError(f"Invalid date for {case_field}")
+                raise ValueError(f"Invalid date for {surrogate_field}") from exc
+        raise ValueError(f"Invalid date for {surrogate_field}")
     return value
 
 

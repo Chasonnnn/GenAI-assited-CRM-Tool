@@ -186,8 +186,8 @@ class AppointmentRead(BaseModel):
     zoom_join_url: str | None
     google_event_id: str | None
     # Linkage fields
-    case_id: UUID | None = None
-    case_number: int | None = None
+    surrogate_id: UUID | None = None
+    surrogate_number: int | None = None
     intended_parent_id: UUID | None = None
     intended_parent_name: str | None = None
     created_at: datetime
@@ -209,8 +209,8 @@ class AppointmentListItem(BaseModel):
     meeting_mode: str
     status: str
     # Linkage fields
-    case_id: UUID | None = None
-    case_number: int | None = None
+    surrogate_id: UUID | None = None
+    surrogate_number: int | None = None
     intended_parent_id: UUID | None = None
     intended_parent_name: str | None = None
     created_at: datetime
@@ -234,7 +234,7 @@ class AppointmentListResponse(BaseModel):
 class AppointmentLinkUpdate(BaseModel):
     """Update an appointment's case/intended parent linkage."""
 
-    case_id: UUID | None = None
+    surrogate_id: UUID | None = None
     intended_parent_id: UUID | None = None
 
 

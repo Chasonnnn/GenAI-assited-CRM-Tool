@@ -188,14 +188,14 @@ function UpcomingItemRow({ item }: { item: UpcomingItem }) {
 
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <span className="font-medium">{formatTime(item.time)}</span>
-                    {item.case_id && (
+                    {item.surrogate_id && (
                         <>
                             <span className="text-muted-foreground/60">•</span>
                             <Link
-                                href={`/cases/${item.case_id}`}
+                                href={`/surrogates/${item.surrogate_id}`}
                                 className="text-teal-600 hover:text-teal-700 hover:underline transition-colors"
                             >
-                                {item.case_number || 'View Case'}
+                                {item.surrogate_number || 'View Surrogate'}
                             </Link>
                         </>
                     )}

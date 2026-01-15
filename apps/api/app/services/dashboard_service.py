@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.websocket import manager
 from app.db.enums import OwnerType, TaskType
-from app.db.models import Case, Task, ZoomMeeting
+from app.db.models import Surrogate, Task, ZoomMeeting
 
 logger = logging.getLogger(__name__)
 
@@ -53,21 +53,21 @@ def get_upcoming_items(
         .all()
     )
 
-    case_ids = {t.case_id for t in tasks if t.case_id}
-    cases = (
+    surrogate_ids = {t.surrogate_id for t in tasks if t.surrogate_id}
+    surrogates = (
         {}
-        if not case_ids
+        if not surrogate_ids
         else {
-            c.id: c
-            for c in db.query(Case)
-            .filter(Case.organization_id == org_id, Case.id.in_(case_ids))
+            s.id: s
+            for s in db.query(Surrogate)
+            .filter(Surrogate.organization_id == org_id, Surrogate.id.in_(surrogate_ids))
             .all()
         }
     )
 
     task_items = []
     for task in tasks:
-        case = cases.get(task.case_id) if task.case_id else None
+        surrogate = surrogates.get(task.surrogate_id) if task.surrogate_id else None
         is_overdue = task.due_date < today if task.due_date else False
         task_items.append(
             {
@@ -75,11 +75,9 @@ def get_upcoming_items(
                 "type": "task",
                 "title": task.title,
                 "time": task.due_time.strftime("%H:%M") if task.due_time else None,
-                "case_id": str(task.case_id) if task.case_id else None,
-                "case_number": case.case_number if case else None,
-                "date": task.due_date.isoformat()
-                if task.due_date
-                else today.isoformat(),
+                "surrogate_id": str(task.surrogate_id) if task.surrogate_id else None,
+                "surrogate_number": surrogate.surrogate_number if surrogate else None,
+                "date": task.due_date.isoformat() if task.due_date else today.isoformat(),
                 "is_overdue": is_overdue,
                 "task_type": task.task_type or "general",
             }
@@ -101,32 +99,30 @@ def get_upcoming_items(
         .all()
     )
 
-    meeting_case_ids = {m.case_id for m in meetings if m.case_id}
-    meeting_cases = (
+    meeting_surrogate_ids = {m.surrogate_id for m in meetings if m.surrogate_id}
+    meeting_surrogates = (
         {}
-        if not meeting_case_ids
+        if not meeting_surrogate_ids
         else {
-            c.id: c
-            for c in db.query(Case)
-            .filter(Case.organization_id == org_id, Case.id.in_(meeting_case_ids))
+            s.id: s
+            for s in db.query(Surrogate)
+            .filter(Surrogate.organization_id == org_id, Surrogate.id.in_(meeting_surrogate_ids))
             .all()
         }
     )
 
     meeting_items = []
     for meeting in meetings:
-        case = meeting_cases.get(meeting.case_id) if meeting.case_id else None
+        surrogate = meeting_surrogates.get(meeting.surrogate_id) if meeting.surrogate_id else None
         meeting_date = meeting.start_time.date() if meeting.start_time else today
         meeting_items.append(
             {
                 "id": str(meeting.id),
                 "type": "meeting",
                 "title": meeting.topic,
-                "time": meeting.start_time.strftime("%H:%M")
-                if meeting.start_time
-                else None,
-                "case_id": str(meeting.case_id) if meeting.case_id else None,
-                "case_number": case.case_number if case else None,
+                "time": meeting.start_time.strftime("%H:%M") if meeting.start_time else None,
+                "surrogate_id": str(meeting.surrogate_id) if meeting.surrogate_id else None,
+                "surrogate_number": surrogate.surrogate_number if surrogate else None,
                 "date": meeting_date.isoformat(),
                 "is_overdue": False,
                 "join_url": meeting.join_url,
@@ -143,10 +139,10 @@ def get_upcoming_items(
 
 def push_dashboard_stats(db: Session, org_id: UUID) -> None:
     """Compute and push dashboard stats to connected org clients."""
-    from app.services import case_service
+    from app.services import surrogate_service
 
     try:
-        stats = case_service.get_case_stats(db, org_id)
+        stats = surrogate_service.get_surrogate_stats(db, org_id)
     except Exception:
         logger.exception("Failed to build dashboard stats for websocket push")
         return

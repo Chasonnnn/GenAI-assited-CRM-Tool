@@ -62,8 +62,8 @@ const navigation = [
         icon: Home,
     },
     {
-        title: "Cases",
-        url: "/cases",
+        title: "Surrogates",
+        url: "/surrogates",
         icon: FolderOpen,
     },
     {

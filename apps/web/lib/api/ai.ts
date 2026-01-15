@@ -74,7 +74,7 @@ export interface AIConversation {
 }
 
 export interface ChatRequest {
-    entity_type?: 'case' | 'global' | 'task' | null;  // null/undefined = global mode
+    entity_type?: 'surrogate' | 'global' | 'task' | null;  // null/undefined = global mode
     entity_id?: string | null;
     message: string;
 }
@@ -189,12 +189,12 @@ export async function rejectAction(approvalId: string): Promise<ActionApprovalRe
 
 export type EmailType = 'follow_up' | 'status_update' | 'meeting_request' | 'document_request' | 'introduction';
 
-export interface SummarizeCaseRequest {
-    case_id: string;
+export interface SummarizeSurrogateRequest {
+    surrogate_id: string;
 }
 
-export interface SummarizeCaseResponse {
-    case_number: string;
+export interface SummarizeSurrogateResponse {
+    surrogate_number: string;
     full_name: string;
     summary: string;
     current_status: string;
@@ -205,7 +205,7 @@ export interface SummarizeCaseResponse {
 }
 
 export interface DraftEmailRequest {
-    case_id: string;
+    surrogate_id: string;
     email_type: EmailType;
     additional_context?: string;
 }
@@ -220,20 +220,20 @@ export interface DraftEmailResponse {
 
 export interface AnalyzeDashboardResponse {
     insights: string[];
-    case_volume_trend: string;
+    surrogate_volume_trend: string;
     bottlenecks: Array<{ status: string; count: number; percentage: number }>;
     recommendations: string[];
     stats: {
-        total_active_cases: number;
-        cases_this_week: number;
-        cases_last_week: number;
+        total_active_surrogates: number;
+        surrogates_this_week: number;
+        surrogates_last_week: number;
         overdue_tasks: number;
         status_breakdown: Record<string, number>;
     };
 }
 
-export async function summarizeCase(caseId: string): Promise<SummarizeCaseResponse> {
-    return api.post<SummarizeCaseResponse>('/ai/summarize-case', { case_id: caseId });
+export async function summarizeSurrogate(surrogateId: string): Promise<SummarizeSurrogateResponse> {
+    return api.post<SummarizeSurrogateResponse>('/ai/summarize-surrogate', { surrogate_id: surrogateId });
 }
 
 export async function draftEmail(request: DraftEmailRequest): Promise<DraftEmailResponse> {

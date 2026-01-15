@@ -113,7 +113,7 @@ type TaskEditPayload = {
     due_date: string | null
     due_time: string | null
     is_completed: boolean
-    case_id: string | null
+    surrogate_id: string | null
 }
 
 export default function TasksPage() {
@@ -328,13 +328,13 @@ export default function TasksPage() {
                             </Badge>
                         )}
                     </div>
-                    {task.case_id && (
+                    {task.surrogate_id && (
                         <Link
-                            href={`/cases/${task.case_id}`}
+                            href={`/surrogates/${task.surrogate_id}`}
                             className="text-sm text-muted-foreground hover:underline"
                             onClick={(event) => event.stopPropagation()}
                         >
-                            Case #{task.case_number}
+                            Surrogate #{task.surrogate_number}
                         </Link>
                     )}
                 </div>
@@ -515,12 +515,12 @@ export default function TasksPage() {
                                                     </p>
                                                 )}
                                                 <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                                    {approval.case_id && (
+                                                    {approval.surrogate_id && (
                                                         <Link
-                                                            href={`/cases/${approval.case_id}`}
+                                                            href={`/surrogates/${approval.surrogate_id}`}
                                                             className="hover:text-foreground hover:underline"
                                                         >
-                                                            Case #{approval.case_number}
+                                                            Surrogate #{approval.surrogate_number}
                                                         </Link>
                                                     )}
                                                     {hoursRemaining !== null && (
@@ -614,7 +614,7 @@ export default function TasksPage() {
                         due_date: editingTask.due_date,
                         due_time: editingTask.due_time ?? null,
                         is_completed: editingTask.is_completed,
-                        case_id: editingTask.case_id,
+                        surrogate_id: editingTask.surrogate_id,
                     } : null}
                     open={!!editingTask}
                     onClose={() => setEditingTask(null)}

@@ -185,9 +185,7 @@ async def parse_schedule_text(
         ]
 
         # Call AI
-        response = await provider.chat(
-            messages=messages, max_tokens=2000, temperature=0.3
-        )
+        response = await provider.chat(messages=messages, max_tokens=2000, temperature=0.3)
         content = response.content
 
         # Parse response - extract JSON from response (handle markdown code blocks)
@@ -233,9 +231,7 @@ async def parse_schedule_text(
                     task_type = TaskType(task_type_str)
                 except ValueError:
                     task_type = TaskType.OTHER
-                    warnings.append(
-                        f"Unknown task type '{task_type_str}', using 'other'"
-                    )
+                    warnings.append(f"Unknown task type '{task_type_str}', using 'other'")
 
                 proposed_task = ProposedTask(
                     title=raw_task.get("title", "Untitled Task")[:255],

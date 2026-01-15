@@ -8,7 +8,15 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.db.enums import TaskType, TaskStatus, OwnerType
-from app.db.models import Case, Membership, Queue, Task, User, WorkflowExecution, WorkflowResumeJob
+from app.db.models import (
+    Surrogate,
+    Membership,
+    Queue,
+    Task,
+    User,
+    WorkflowExecution,
+    WorkflowResumeJob,
+)
 from app.schemas.task import TaskCreate, TaskUpdate, TaskRead, TaskListItem
 from app.services import membership_service, queue_service
 
@@ -35,7 +43,7 @@ def create_task(
     task = Task(
         organization_id=org_id,
         created_by_user_id=user_id,
-        case_id=data.case_id,
+        surrogate_id=data.surrogate_id,
         intended_parent_id=data.intended_parent_id,
         owner_type=owner_type,
         owner_id=owner_id,
@@ -53,14 +61,14 @@ def create_task(
     # Notify assignee (if assigned to user different from creator)
     if owner_type == "user" and owner_id != user_id:
         from app.services import notification_service
-        from app.db.models import User, Case
+        from app.db.models import User, Surrogate
 
         actor = db.query(User).filter(User.id == user_id).first()
         actor_name = actor.display_name if actor else "Someone"
-        case_number = None
-        if data.case_id:
-            case = db.query(Case).filter(Case.id == data.case_id).first()
-            case_number = case.case_number if case else None
+        surrogate_number = None
+        if data.surrogate_id:
+            surrogate = db.query(Surrogate).filter(Surrogate.id == data.surrogate_id).first()
+            surrogate_number = surrogate.surrogate_number if surrogate else None
         notification_service.notify_task_assigned(
             db=db,
             task_id=task.id,
@@ -68,7 +76,7 @@ def create_task(
             org_id=org_id,
             assignee_id=owner_id,
             actor_name=actor_name,
-            case_number=case_number,
+            surrogate_number=surrogate_number,
         )
 
     return task
@@ -124,14 +132,14 @@ def update_task(
         and update_data.get("owner_id") != actor_user_id
     ):
         from app.services import notification_service
-        from app.db.models import User, Case
+        from app.db.models import User, Surrogate
 
         actor = db.query(User).filter(User.id == actor_user_id).first()
         actor_name = actor.display_name if actor else "Someone"
-        case_number = None
-        if task.case_id:
-            case = db.query(Case).filter(Case.id == task.case_id).first()
-            case_number = case.case_number if case else None
+        surrogate_number = None
+        if task.surrogate_id:
+            surrogate = db.query(Surrogate).filter(Surrogate.id == task.surrogate_id).first()
+            surrogate_number = surrogate.surrogate_number if surrogate else None
 
         notification_service.notify_task_assigned(
             db=db,
@@ -140,7 +148,7 @@ def update_task(
             org_id=task.organization_id,
             assignee_id=update_data.get("owner_id"),
             actor_name=actor_name,
-            case_number=case_number,
+            surrogate_number=surrogate_number,
         )
 
     return task
@@ -243,11 +251,11 @@ def get_task_context(
 ) -> dict[str, dict[UUID, str | None]]:
     """Fetch related data for tasks in bulk."""
     if not tasks:
-        return {"user_names": {}, "queue_names": {}, "case_numbers": {}}
+        return {"user_names": {}, "queue_names": {}, "surrogate_numbers": {}}
 
     user_ids = set()
     queue_ids = set()
-    case_ids = set()
+    surrogate_ids = set()
 
     for task in tasks:
         if task.owner_type == OwnerType.USER.value:
@@ -260,8 +268,8 @@ def get_task_context(
             user_ids.add(task.completed_by_user_id)
         if task.workflow_triggered_by_user_id:
             user_ids.add(task.workflow_triggered_by_user_id)
-        if task.case_id:
-            case_ids.add(task.case_id)
+        if task.surrogate_id:
+            surrogate_ids.add(task.surrogate_id)
 
     user_names = {}
     if user_ids:
@@ -276,24 +284,32 @@ def get_task_context(
 
     queue_names = {}
     if queue_ids:
-        queues = db.query(Queue).filter(
-            Queue.organization_id == org_id,
-            Queue.id.in_(queue_ids),
-        ).all()
+        queues = (
+            db.query(Queue)
+            .filter(
+                Queue.organization_id == org_id,
+                Queue.id.in_(queue_ids),
+            )
+            .all()
+        )
         queue_names = {queue.id: queue.name for queue in queues}
 
-    case_numbers = {}
-    if case_ids:
-        cases = db.query(Case).filter(
-            Case.organization_id == org_id,
-            Case.id.in_(case_ids),
-        ).all()
-        case_numbers = {case.id: case.case_number for case in cases}
+    surrogate_numbers = {}
+    if surrogate_ids:
+        surrogates = (
+            db.query(Surrogate)
+            .filter(
+                Surrogate.organization_id == org_id,
+                Surrogate.id.in_(surrogate_ids),
+            )
+            .all()
+        )
+        surrogate_numbers = {surrogate.id: surrogate.surrogate_number for surrogate in surrogates}
 
     return {
         "user_names": user_names,
         "queue_names": queue_names,
-        "case_numbers": case_numbers,
+        "surrogate_numbers": surrogate_numbers,
     }
 
 
@@ -308,12 +324,12 @@ def to_task_read(task: Task, context: dict[str, dict[UUID, str | None]]) -> Task
     created_by_name = context["user_names"].get(task.created_by_user_id)
     completed_by_name = context["user_names"].get(task.completed_by_user_id)
     triggered_by_name = context["user_names"].get(task.workflow_triggered_by_user_id)
-    case_number = context["case_numbers"].get(task.case_id)
+    surrogate_number = context["surrogate_numbers"].get(task.surrogate_id)
 
     return TaskRead(
         id=task.id,
-        case_id=task.case_id,
-        case_number=case_number,
+        surrogate_id=task.surrogate_id,
+        surrogate_number=surrogate_number,
         owner_type=task.owner_type,
         owner_id=task.owner_id,
         owner_name=owner_name,
@@ -352,12 +368,12 @@ def to_task_list_item(
     elif task.owner_type == OwnerType.QUEUE.value:
         owner_name = context["queue_names"].get(task.owner_id)
 
-    case_number = context["case_numbers"].get(task.case_id)
+    surrogate_number = context["surrogate_numbers"].get(task.surrogate_id)
 
     return TaskListItem(
         id=task.id,
-        case_id=task.case_id,
-        case_number=case_number,
+        surrogate_id=task.surrogate_id,
+        surrogate_number=surrogate_number,
         title=task.title,
         task_type=TaskType(task.task_type),
         owner_type=task.owner_type,
@@ -383,7 +399,7 @@ def list_tasks(
     per_page: int = 20,
     q: str | None = None,
     owner_id: UUID | None = None,
-    case_id: UUID | None = None,
+    surrogate_id: UUID | None = None,
     intended_parent_id: UUID | None = None,
     is_completed: bool | None = None,
     task_type: TaskType | None = None,
@@ -397,8 +413,8 @@ def list_tasks(
     List tasks with filters and pagination.
 
     Args:
-        user_role: User's role - used to filter out tasks linked to inaccessible cases
-        user_id: User's ID - for owner-based case access filtering
+        user_role: User's role - used to filter out tasks linked to inaccessible surrogates
+        user_id: User's ID - for owner-based surrogate access filtering
         q: Search query - matches title or description (case-insensitive)
         due_before: Filter tasks with due_date <= this date (YYYY-MM-DD)
         due_after: Filter tasks with due_date >= this date (YYYY-MM-DD)
@@ -409,34 +425,34 @@ def list_tasks(
     """
     from datetime import date
     from app.db.enums import Role, OwnerType
-    from app.db.models import Case
+    from app.db.models import Surrogate
 
     query = db.query(Task).filter(Task.organization_id == org_id)
 
-    # Role-based case access filtering for intake specialists
-    # Filter out tasks linked to cases they can't access
+    # Role-based surrogate access filtering for intake specialists
+    # Filter out tasks linked to surrogates they can't access
     if user_role == Role.INTAKE_SPECIALIST.value or user_role == Role.INTAKE_SPECIALIST:
-        # Subquery: cases intake can access (owner-based)
+        # Subquery: surrogates intake can access (owner-based)
         if user_id:
-            accessible_case_ids = (
-                db.query(Case.id)
+            accessible_surrogate_ids = (
+                db.query(Surrogate.id)
                 .filter(
-                    Case.organization_id == org_id,
-                    (Case.owner_type == OwnerType.USER.value)
-                    & (Case.owner_id == user_id),
+                    Surrogate.organization_id == org_id,
+                    (Surrogate.owner_type == OwnerType.USER.value)
+                    & (Surrogate.owner_id == user_id),
                 )
                 .subquery()
             )
 
             query = query.filter(
                 or_(
-                    Task.case_id.is_(None),  # Tasks without case always visible
-                    Task.case_id.in_(accessible_case_ids),
+                    Task.surrogate_id.is_(None),  # Tasks without surrogate always visible
+                    Task.surrogate_id.in_(accessible_surrogate_ids),
                 )
             )
         else:
-            # No user_id → tasks without a case only
-            query = query.filter(Task.case_id.is_(None))
+            # No user_id → tasks without a surrogate only
+            query = query.filter(Task.surrogate_id.is_(None))
 
     # Search filter (title or description)
     if q:
@@ -457,8 +473,7 @@ def list_tasks(
         query = query.filter(
             or_(
                 Task.created_by_user_id == my_tasks_user_id,
-                (Task.owner_type == OwnerType.USER.value)
-                & (Task.owner_id == my_tasks_user_id),
+                (Task.owner_type == OwnerType.USER.value) & (Task.owner_id == my_tasks_user_id),
             )
         )
 
@@ -469,9 +484,9 @@ def list_tasks(
             Task.owner_id == owner_id,
         )
 
-    # Case filter
-    if case_id:
-        query = query.filter(Task.case_id == case_id)
+    # Surrogate filter
+    if surrogate_id:
+        query = query.filter(Task.surrogate_id == surrogate_id)
 
     # Intended Parent filter
     if intended_parent_id:
@@ -557,15 +572,15 @@ def count_overdue_tasks(db: Session, org_id: UUID, today) -> int:
     )
 
 
-def list_open_tasks_for_case(
+def list_open_tasks_for_surrogate(
     db: Session,
-    case_id: UUID,
+    surrogate_id: UUID,
     limit: int = 10,
     org_id: UUID | None = None,
 ) -> list[Task]:
-    """List open tasks for a case."""
+    """List open tasks for a surrogate."""
     query = db.query(Task).filter(
-        Task.case_id == case_id,
+        Task.surrogate_id == surrogate_id,
         Task.is_completed.is_(False),
         Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
     )
@@ -637,7 +652,7 @@ def resolve_workflow_approval(
     """
     Approve or deny a workflow approval task.
 
-    CASE OWNER ONLY - no permission override, no fallback.
+    SURROGATE OWNER ONLY - no permission override, no fallback.
 
     Args:
         db: Database session
@@ -686,10 +701,10 @@ def resolve_workflow_approval(
     if execution.paused_task_id != task.id:
         raise WorkflowApprovalError("Execution not waiting on this task", 400)
 
-    # CASE OWNER ONLY - strictly enforced, no exceptions
+    # SURROGATE OWNER ONLY - strictly enforced, no exceptions
     if user_id != task.owner_id:
         raise WorkflowApprovalError(
-            "Only the case owner can approve or deny this request",
+            "Only the surrogate owner can approve or deny this request",
             403,
         )
 
@@ -702,7 +717,7 @@ def resolve_workflow_approval(
         task.completed_by_user_id = user_id
     else:  # deny
         task.status = TaskStatus.DENIED.value
-        task.workflow_denial_reason = reason or "Denied by case owner"
+        task.workflow_denial_reason = reason or "Denied by surrogate owner"
 
     task.updated_at = now
     db.flush()
@@ -722,9 +737,7 @@ def resolve_workflow_approval(
     # Log activity with latency metrics
     _log_approval_activity(db, task, decision, user_id, now)
 
-    logger.info(
-        f"Workflow approval {task.id} resolved: {decision} by user {user_id}"
-    )
+    logger.info(f"Workflow approval {task.id} resolved: {decision} by user {user_id}")
 
     return task
 
@@ -789,22 +802,24 @@ def _log_approval_activity(
 ) -> None:
     """Log approval activity with latency metrics."""
     from app.services import activity_service
-    from app.db.enums import CaseActivityType
+    from app.db.enums import SurrogateActivityType
 
     latency_hours = (resolved_at - task.created_at).total_seconds() / 3600
 
     activity_service.log_activity(
         db=db,
-        case_id=task.case_id,
+        surrogate_id=task.surrogate_id,
         organization_id=task.organization_id,
-        activity_type=CaseActivityType.WORKFLOW_APPROVAL_RESOLVED,
+        activity_type=SurrogateActivityType.WORKFLOW_APPROVAL_RESOLVED,
         actor_user_id=user_id,
         details={
             "task_id": str(task.id),
             "workflow_execution_id": str(task.workflow_execution_id),
             "action_type": task.workflow_action_type,
             "decision": decision,
-            "triggered_by_user_id": str(task.workflow_triggered_by_user_id) if task.workflow_triggered_by_user_id else None,
+            "triggered_by_user_id": str(task.workflow_triggered_by_user_id)
+            if task.workflow_triggered_by_user_id
+            else None,
             "approval_latency_hours": round(latency_hours, 2),
         },
     )
@@ -855,9 +870,7 @@ def expire_approval_task(
     now = datetime.now(timezone.utc)
 
     if task.status not in [TaskStatus.PENDING.value, TaskStatus.IN_PROGRESS.value]:
-        logger.info(
-            "Skip expiring task %s with status %s", task.id, task.status
-        )
+        logger.info("Skip expiring task %s with status %s", task.id, task.status)
         return
 
     # Mark as expired
@@ -896,16 +909,16 @@ def expire_approval_task(
     logger.info(f"Expired approval task {task.id}")
 
 
-def invalidate_pending_approvals_for_case(
+def invalidate_pending_approvals_for_surrogate(
     db: Session,
-    case_id: UUID,
+    surrogate_id: UUID,
     reason: str,
     actor_user_id: UUID,
 ) -> int:
     """
-    Invalidate all pending approval tasks for a case.
+    Invalidate all pending approval tasks for a surrogate.
 
-    Called when case owner changes while approvals are pending.
+    Called when surrogate owner changes while approvals are pending.
     Returns count of invalidated tasks.
     """
     from app.db.enums import WorkflowExecutionStatus
@@ -913,7 +926,7 @@ def invalidate_pending_approvals_for_case(
     pending_tasks = (
         db.query(Task)
         .filter(
-            Task.case_id == case_id,
+            Task.surrogate_id == surrogate_id,
             Task.task_type == TaskType.WORKFLOW_APPROVAL.value,
             Task.status.in_([TaskStatus.PENDING.value, TaskStatus.IN_PROGRESS.value]),
         )
@@ -929,9 +942,11 @@ def invalidate_pending_approvals_for_case(
 
         # Cancel workflow execution
         if task.workflow_execution_id:
-            execution = db.query(WorkflowExecution).filter(
-                WorkflowExecution.id == task.workflow_execution_id
-            ).first()
+            execution = (
+                db.query(WorkflowExecution)
+                .filter(WorkflowExecution.id == task.workflow_execution_id)
+                .first()
+            )
 
             if execution and execution.status == WorkflowExecutionStatus.PAUSED.value:
                 execution.status = WorkflowExecutionStatus.CANCELED.value
@@ -944,7 +959,7 @@ def invalidate_pending_approvals_for_case(
     if count > 0:
         db.commit()
         logger.info(
-            f"Invalidated {count} pending approval(s) for case {case_id}: {reason}"
+            f"Invalidated {count} pending approval(s) for surrogate {surrogate_id}: {reason}"
         )
 
     return count

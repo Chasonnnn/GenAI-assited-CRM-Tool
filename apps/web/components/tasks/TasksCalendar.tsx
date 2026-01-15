@@ -17,7 +17,7 @@ interface Task {
     due_time: string | null
     is_completed: boolean
     task_type: string
-    case_id: string | null
+    surrogate_id: string | null
 }
 
 interface TasksCalendarProps {

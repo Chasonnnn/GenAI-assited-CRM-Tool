@@ -254,7 +254,7 @@ def seed_global_templates(db: Session) -> int:
             "description": "Send a welcome email when a new lead is created",
             "category": "onboarding",
             "icon": "mail",
-            "trigger_type": "case_created",
+            "trigger_type": "surrogate_created",
             "trigger_config": {},
             "conditions": [],
             "condition_logic": "AND",
@@ -287,7 +287,7 @@ def seed_global_templates(db: Session) -> int:
             "description": "Notify user when a case is assigned to them",
             "category": "notifications",
             "icon": "bell",
-            "trigger_type": "case_assigned",
+            "trigger_type": "surrogate_assigned",
             "trigger_config": {},
             "conditions": [],
             "condition_logic": "AND",
@@ -301,7 +301,7 @@ def seed_global_templates(db: Session) -> int:
         },
         {
             "name": "Status Change Alert",
-            "description": "Notify managers when a case status changes",
+            "description": "Notify managers when a surrogate status changes",
             "category": "notifications",
             "icon": "activity",
             "trigger_type": "status_changed",
@@ -311,7 +311,7 @@ def seed_global_templates(db: Session) -> int:
             "actions": [
                 {
                     "action_type": "send_notification",
-                    "title": "Case status updated",
+                    "title": "Surrogate status updated",
                     "recipients": "all_admins",
                 }
             ],

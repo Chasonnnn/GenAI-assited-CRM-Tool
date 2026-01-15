@@ -25,7 +25,7 @@ import type { ProposedAction } from "@/lib/api/ai"
 import { ScheduleParserDialog } from "@/components/ai/ScheduleParserDialog"
 
 interface AIChatPanelProps {
-    entityType?: "case" | "task" | null  // null/undefined = global mode
+    entityType?: "surrogate" | "task" | null  // null/undefined = global mode
     entityId?: string | null
     entityName?: string | null
     canApproveActions?: boolean
@@ -128,8 +128,8 @@ export function AIChatPanel({
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <span>Context:</span>
                     <Badge variant="secondary" className="font-normal">
-                        {entityType === "case" && entityName
-                            ? `Case • ${entityName}`
+                        {entityType === "surrogate" && entityName
+                            ? `Surrogate • ${entityName}`
                             : "Global Mode"}
                     </Badge>
                 </div>
@@ -146,14 +146,14 @@ export function AIChatPanel({
                         <div className="flex flex-col items-center justify-center py-8 text-center">
                             <SparklesIcon className="mb-4 h-10 w-10 text-muted-foreground/50" />
                             <p className="text-sm text-muted-foreground">
-                                {entityType === "case"
-                                    ? `Ask me anything about this case.`
+                                {entityType === "surrogate"
+                                    ? `Ask me anything about this surrogate.`
                                     : "Ask me anything! I can help with drafts, answer questions, or parse emails."}
                             </p>
                             <p className="mt-1 text-xs text-muted-foreground/70">
-                                {entityType === "case"
+                                {entityType === "surrogate"
                                     ? "I can help summarize, draft emails, suggest next steps, and more."
-                                    : "Open a case for context-aware assistance with actions."}
+                                    : "Open a surrogate for context-aware assistance with actions."}
                             </p>
                         </div>
                     ) : (
@@ -216,7 +216,7 @@ export function AIChatPanel({
             <div className="border-t px-4 py-2">
                 <div className="flex flex-wrap gap-2">
                     <QuickActionButton
-                        onClick={() => setMessage("Summarize this case")}
+                        onClick={() => setMessage("Summarize this surrogate")}
                         disabled={sendMessage.isPending}
                     >
                         Summarize
@@ -233,7 +233,7 @@ export function AIChatPanel({
                     >
                         Draft Email
                     </QuickActionButton>
-                    {entityType === "case" && entityId && (
+                    {entityType === "surrogate" && entityId && (
                         <QuickActionButton
                             onClick={() => setScheduleParserOpen(true)}
                             disabled={sendMessage.isPending}
@@ -272,11 +272,11 @@ export function AIChatPanel({
             </div>
 
             {/* Schedule Parser Dialog (mount only when open to avoid unnecessary hooks) */}
-            {scheduleParserOpen && entityType === "case" && entityId && (
+            {scheduleParserOpen && entityType === "surrogate" && entityId && (
                 <ScheduleParserDialog
                     open={scheduleParserOpen}
                     onOpenChange={setScheduleParserOpen}
-                    entityType="case"
+                    entityType="surrogate"
                     entityId={entityId}
                     {...(entityName ? { entityName } : {})}
                 />

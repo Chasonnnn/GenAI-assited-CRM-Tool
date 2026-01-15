@@ -1,4 +1,4 @@
-"""Pydantic schemas for cases."""
+"""Pydantic schemas for surrogates."""
 
 from datetime import date, datetime
 from decimal import Decimal
@@ -6,12 +6,12 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from app.db.enums import CaseSource, OwnerType
+from app.db.enums import SurrogateSource, OwnerType
 from app.utils.normalization import normalize_phone, normalize_state
 
 
-class CaseCreate(BaseModel):
-    """Request schema for creating a case."""
+class SurrogateCreate(BaseModel):
+    """Request schema for creating a surrogate."""
 
     # Contact (required)
     full_name: str = Field(..., min_length=1, max_length=255)
@@ -37,7 +37,7 @@ class CaseCreate(BaseModel):
     num_csections: int | None = Field(None, ge=0, le=10)
 
     # Workflow
-    source: CaseSource = CaseSource.MANUAL
+    source: SurrogateSource = SurrogateSource.MANUAL
     is_priority: bool = False
 
     @field_validator("phone")
@@ -57,8 +57,8 @@ class CaseCreate(BaseModel):
         return normalize_state(v)  # Raises ValueError on invalid
 
 
-class CaseUpdate(BaseModel):
-    """Request schema for updating a case (partial)."""
+class SurrogateUpdate(BaseModel):
+    """Request schema for updating a surrogate (partial)."""
 
     full_name: str | None = Field(None, min_length=1, max_length=255)
     email: EmailStr | None = None
@@ -97,21 +97,21 @@ class CaseUpdate(BaseModel):
 
 
 class BulkAssign(BaseModel):
-    """Request schema for bulk case assignment."""
+    """Request schema for bulk surrogateassignment."""
 
-    case_ids: list[UUID] = Field(..., min_length=1, max_length=100)
+    surrogate_ids: list[UUID] = Field(..., min_length=1, max_length=100)
     owner_type: OwnerType
     owner_id: UUID
 
 
-class CaseRead(BaseModel):
-    """Full case response for detail views."""
+class SurrogateRead(BaseModel):
+    """Full surrogateresponse for detail views."""
 
     id: UUID
-    case_number: str
+    surrogate_number: str
     stage_id: UUID
     status_label: str
-    source: CaseSource
+    source: SurrogateSource
     is_priority: bool
 
     # Ownership (Salesforce-style)
@@ -152,16 +152,16 @@ class CaseRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class CaseListItem(BaseModel):
-    """Compact case for table views."""
+class SurrogateListItem(BaseModel):
+    """Compact surrogatefor table views."""
 
     id: UUID
-    case_number: str
+    surrogate_number: str
     stage_id: UUID
     stage_slug: str | None = None
     stage_type: str | None = None
     status_label: str
-    source: CaseSource
+    source: SurrogateSource
     full_name: str
     email: str
     phone: str | None
@@ -180,31 +180,31 @@ class CaseListItem(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class CaseListResponse(BaseModel):
-    """Paginated case list response."""
+class SurrogateListResponse(BaseModel):
+    """Paginated surrogatelist response."""
 
-    items: list[CaseListItem]
+    items: list[SurrogateListItem]
     total: int
     page: int
     per_page: int
     pages: int
 
 
-class CaseStatusChange(BaseModel):
-    """Request to change case stage."""
+class SurrogateStatusChange(BaseModel):
+    """Request to change surrogatestage."""
 
     stage_id: UUID
     reason: str | None = Field(None, max_length=500)
 
 
-class CaseAssign(BaseModel):
-    """Request to assign case to a user or queue."""
+class SurrogateAssign(BaseModel):
+    """Request to assign surrogateto a user or queue."""
 
     owner_type: OwnerType
     owner_id: UUID
 
 
-class CaseStatusHistoryRead(BaseModel):
+class SurrogateStatusHistoryRead(BaseModel):
     """Status history entry response."""
 
     id: UUID
@@ -220,7 +220,7 @@ class CaseStatusHistoryRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class CaseStats(BaseModel):
+class SurrogateStats(BaseModel):
     """Dashboard aggregation stats with period comparisons."""
 
     total: int
@@ -234,16 +234,8 @@ class CaseStats(BaseModel):
     pending_tasks: int = 0
 
 
-class CaseHandoffDeny(BaseModel):
-    """Request to deny a pending_handoff case."""
-
-    reason: str | None = Field(
-        None, max_length=500, description="Reason for denial (logged in status history)"
-    )
-
-
-class CaseActivityRead(BaseModel):
-    """Response schema for case activity log entry."""
+class SurrogateActivityRead(BaseModel):
+    """Response schema for surrogateactivity log entry."""
 
     id: UUID
     activity_type: str
@@ -253,18 +245,13 @@ class CaseActivityRead(BaseModel):
     created_at: datetime
 
 
-class CaseActivityResponse(BaseModel):
-    """Paginated response for case activity log."""
+class SurrogateActivityResponse(BaseModel):
+    """Paginated response for surrogateactivity log."""
 
-    items: list[CaseActivityRead]
+    items: list[SurrogateActivityRead]
     total: int
     page: int
     pages: int
-"""Contact attempts tracking schemas - append to case.py"""
-
-from datetime import datetime
-from uuid import UUID
-from pydantic import BaseModel, Field, field_validator
 
 
 # =============================================================================
@@ -304,7 +291,7 @@ class ContactAttemptResponse(BaseModel):
     """Response schema for a contact attempt."""
 
     id: UUID
-    case_id: UUID
+    surrogate_id: UUID
     attempted_by_user_id: UUID | None
     attempted_by_name: str | None
     contact_methods: list[str]
@@ -313,13 +300,13 @@ class ContactAttemptResponse(BaseModel):
     attempted_at: datetime
     created_at: datetime
     is_backdated: bool
-    case_owner_id_at_attempt: UUID
+    surrogate_owner_id_at_attempt: UUID
 
     model_config = {"from_attributes": True}
 
 
 class ContactAttemptsSummary(BaseModel):
-    """Summary of contact attempts for a case."""
+    """Summary of contact attempts for a surrogate."""
 
     total_attempts: int  # All attempts in history
     current_assignment_attempts: int  # Attempts since latest owner assignment

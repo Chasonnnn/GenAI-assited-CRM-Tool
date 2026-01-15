@@ -4,40 +4,40 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as notesApi from '../api/notes';
-import { caseKeys } from './use-cases';
+import { surrogateKeys } from './use-surrogates';
 
 // Query keys
 export const noteKeys = {
     all: ['notes'] as const,
     lists: () => [...noteKeys.all, 'list'] as const,
-    forCase: (caseId: string) => [...noteKeys.lists(), caseId] as const,
+    forSurrogate: (surrogateId: string) => [...noteKeys.lists(), surrogateId] as const,
 };
 
 /**
- * Fetch notes for a case.
+ * Fetch notes for a surrogate.
  */
-export function useNotes(caseId: string) {
+export function useNotes(surrogateId: string) {
     return useQuery({
-        queryKey: noteKeys.forCase(caseId),
-        queryFn: () => notesApi.getNotes(caseId),
-        enabled: !!caseId,
+        queryKey: noteKeys.forSurrogate(surrogateId),
+        queryFn: () => notesApi.getNotes(surrogateId),
+        enabled: !!surrogateId,
     });
 }
 
 /**
- * Create a note for a case.
+ * Create a note for a surrogate.
  */
 export function useCreateNote() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ caseId, body }: { caseId: string; body: string }) =>
-            notesApi.createNote(caseId, body),
+        mutationFn: ({ surrogateId, body }: { surrogateId: string; body: string }) =>
+            notesApi.createNote(surrogateId, body),
         onSuccess: (newNote) => {
-            queryClient.invalidateQueries({ queryKey: noteKeys.forCase(newNote.case_id) });
+            queryClient.invalidateQueries({ queryKey: noteKeys.forSurrogate(newNote.surrogate_id) });
             // Invalidate history/activity cache to show note_added immediately
             queryClient.invalidateQueries({
-                queryKey: [...caseKeys.detail(newNote.case_id), 'activity'],
+                queryKey: [...surrogateKeys.detail(newNote.surrogate_id), 'activity'],
                 exact: false,
             });
         },
@@ -51,13 +51,13 @@ export function useDeleteNote() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ noteId, caseId: _caseId }: { noteId: string; caseId: string }) =>
+        mutationFn: ({ noteId, surrogateId: _surrogateId }: { noteId: string; surrogateId: string }) =>
             notesApi.deleteNote(noteId),
-        onSuccess: (_, { caseId }) => {
-            queryClient.invalidateQueries({ queryKey: noteKeys.forCase(caseId) });
+        onSuccess: (_, { surrogateId }) => {
+            queryClient.invalidateQueries({ queryKey: noteKeys.forSurrogate(surrogateId) });
             // Invalidate history/activity cache to show note_deleted immediately
             queryClient.invalidateQueries({
-                queryKey: [...caseKeys.detail(caseId), 'activity'],
+                queryKey: [...surrogateKeys.detail(surrogateId), 'activity'],
                 exact: false,
             });
         },

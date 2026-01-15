@@ -9,6 +9,7 @@ from uuid import UUID
 from fastapi import Request
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
+
 try:
     from user_agents import parse as parse_user_agent
 except Exception:  # pragma: no cover - optional dependency in some envs
@@ -157,11 +158,15 @@ def list_user_sessions(
     # Clean up expired sessions while we're here (lazy cleanup)
     cleanup_expired_for_user(db, user_id)
 
-    stmt = select(UserSession).where(
-        UserSession.user_id == user_id,
-        UserSession.organization_id == org_id,
-        UserSession.expires_at > datetime.now(timezone.utc),
-    ).order_by(UserSession.last_active_at.desc())
+    stmt = (
+        select(UserSession)
+        .where(
+            UserSession.user_id == user_id,
+            UserSession.organization_id == org_id,
+            UserSession.expires_at > datetime.now(timezone.utc),
+        )
+        .order_by(UserSession.last_active_at.desc())
+    )
 
     sessions = db.scalars(stmt).all()
 

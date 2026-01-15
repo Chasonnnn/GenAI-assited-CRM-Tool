@@ -9,7 +9,7 @@ import api from './index'
 // =============================================================================
 
 export interface MatchCreate {
-    case_id: string
+    surrogate_id: string
     intended_parent_id: string
     compatibility_score?: number
     notes?: string
@@ -17,7 +17,7 @@ export interface MatchCreate {
 
 export interface MatchRead {
     id: string
-    case_id: string
+    surrogate_id: string
     intended_parent_id: string
     status: string
     compatibility_score: number | null
@@ -29,29 +29,29 @@ export interface MatchRead {
     rejection_reason: string | null
     created_at: string
     updated_at: string
-    case_number: string | null
-    case_name: string | null
+    surrogate_number: string | null
+    surrogate_name: string | null
     ip_name: string | null
-    // Case stage info for status sync
-    case_stage_id: string | null
-    case_stage_slug: string | null
-    case_stage_label: string | null
+    // Surrogate stage info for status sync
+    surrogate_stage_id: string | null
+    surrogate_stage_slug: string | null
+    surrogate_stage_label: string | null
 }
 
 export interface MatchListItem {
     id: string
-    case_id: string
-    case_number: string | null
-    case_name: string | null
+    surrogate_id: string
+    surrogate_number: string | null
+    surrogate_name: string | null
     intended_parent_id: string
     ip_name: string | null
     status: string
     compatibility_score: number | null
     proposed_at: string
-    // Case stage info for status sync
-    case_stage_id: string | null
-    case_stage_slug: string | null
-    case_stage_label: string | null
+    // Surrogate stage info for status sync
+    surrogate_stage_id: string | null
+    surrogate_stage_slug: string | null
+    surrogate_stage_label: string | null
 }
 
 export interface MatchListResponse {
@@ -87,9 +87,9 @@ export type MatchStatus = 'proposed' | 'reviewing' | 'accepted' | 'rejected' | '
 
 export interface ListMatchesParams {
     status?: MatchStatus
-    case_id?: string
+    surrogate_id?: string
     intended_parent_id?: string
-    q?: string  // Search case/IP names
+    q?: string  // Search surrogate/IP names
     page?: number
     per_page?: number
     sort_by?: string
@@ -102,7 +102,7 @@ export interface ListMatchesParams {
 export async function listMatches(params: ListMatchesParams = {}): Promise<MatchListResponse> {
     const searchParams = new URLSearchParams()
     if (params.status) searchParams.set('status', params.status)
-    if (params.case_id) searchParams.set('case_id', params.case_id)
+    if (params.surrogate_id) searchParams.set('surrogate_id', params.surrogate_id)
     if (params.intended_parent_id) searchParams.set('intended_parent_id', params.intended_parent_id)
     if (params.q) searchParams.set('q', params.q)
     if (params.page) searchParams.set('page', params.page.toString())

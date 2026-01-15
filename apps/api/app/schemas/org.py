@@ -18,9 +18,7 @@ class OrgCreate(BaseModel):
         """Validate slug format: lowercase, alphanumeric with hyphens/underscores."""
         v = v.lower().strip()
         if not v.replace("-", "").replace("_", "").isalnum():
-            raise ValueError(
-                "Slug must be alphanumeric with optional hyphens/underscores"
-            )
+            raise ValueError("Slug must be alphanumeric with optional hyphens/underscores")
         return v
 
 

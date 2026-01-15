@@ -1,7 +1,7 @@
 """
 CSV Import API endpoints.
 
-Provides REST interface for bulk case imports via CSV upload.
+Provides REST interface for bulk surrogate imports via CSV upload.
 """
 
 from uuid import UUID
@@ -22,9 +22,9 @@ from app.services import import_service
 
 
 router = APIRouter(
-    prefix="/cases/import",
-    tags=["cases", "import"],
-    dependencies=[Depends(require_permission(POLICIES["cases"].actions["import"]))],
+    prefix="/surrogates/import",
+    tags=["surrogates", "import"],
+    dependencies=[Depends(require_permission(POLICIES["surrogates"].actions["import"]))],
 )
 
 
@@ -132,7 +132,7 @@ async def preview_csv_import(
         db=db,
         org_id=session.org_id,
         user_id=session.user_id,
-        target_type="case_import_preview",
+        target_type="surrogate_import_preview",
         target_id=None,
         request=request,
         details={
@@ -170,7 +170,7 @@ async def execute_csv_import(
     Execute CSV import asynchronously.
 
     Queues import for background processing and returns immediately.
-    Use GET /cases/import/{id} to check status.
+    Use GET /surrogates/import/{id} to check status.
     """
     import base64
     from app.db.enums import JobType
@@ -265,9 +265,7 @@ def get_import_details(
     )
 
     if not import_record:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Import not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Import not found")
 
     from app.services import audit_service
 
@@ -275,7 +273,7 @@ def get_import_details(
         db=db,
         org_id=session.org_id,
         user_id=session.user_id,
-        target_type="case_import_detail",
+        target_type="surrogate_import_detail",
         target_id=import_record.id,
         request=request,
         details={
@@ -298,7 +296,5 @@ def get_import_details(
         error_count=import_record.error_count,
         errors=import_record.errors,
         created_at=import_record.created_at.isoformat(),
-        completed_at=import_record.completed_at.isoformat()
-        if import_record.completed_at
-        else None,
+        completed_at=import_record.completed_at.isoformat() if import_record.completed_at else None,
     )

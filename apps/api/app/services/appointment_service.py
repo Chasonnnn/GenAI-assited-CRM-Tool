@@ -30,7 +30,7 @@ from app.db.models import (
     AppointmentEmailLog,
     Task,
     UserIntegration,
-    Case,
+    Surrogate,
     IntendedParent,
 )
 from app.schemas.appointment import AppointmentRead, AppointmentListItem
@@ -105,9 +105,7 @@ def _sync_to_google_calendar(
                 appt_type_name = appt_type.name
 
         summary = f"{appt_type_name} with {appointment.client_name}"
-        description = (
-            f"Client: {appointment.client_name}\nEmail: {appointment.client_email}"
-        )
+        description = f"Client: {appointment.client_name}\nEmail: {appointment.client_email}"
         if appointment.client_phone:
             description += f"\nPhone: {appointment.client_phone}"
         if appointment.client_notes:
@@ -139,9 +137,7 @@ def _sync_to_google_calendar(
 
     elif action == "update":
         if not appointment.google_event_id:
-            logger.debug(
-                f"No google_event_id for appointment {appointment.id}, skipping update"
-            )
+            logger.debug(f"No google_event_id for appointment {appointment.id}, skipping update")
             return None
 
         result = _run_async(
@@ -179,9 +175,7 @@ def _sync_to_google_calendar(
         if success:
             logger.info(f"Deleted Google Calendar event {appointment.google_event_id}")
         else:
-            logger.warning(
-                f"Failed to delete Google Calendar event {appointment.google_event_id}"
-            )
+            logger.warning(f"Failed to delete Google Calendar event {appointment.google_event_id}")
         return None
 
     return None
@@ -370,15 +364,13 @@ def get_appointment_context(
         return {
             "type_names": {},
             "user_names": {},
-            "case_numbers": {},
+            "surrogate_numbers": {},
             "intended_parent_names": {},
         }
 
     type_ids = {a.appointment_type_id for a in appointments if a.appointment_type_id}
-    approved_by_ids = {
-        a.approved_by_user_id for a in appointments if a.approved_by_user_id
-    }
-    case_ids = {a.case_id for a in appointments if a.case_id}
+    approved_by_ids = {a.approved_by_user_id for a in appointments if a.approved_by_user_id}
+    surrogate_ids = {a.surrogate_id for a in appointments if a.surrogate_id}
     ip_ids = {a.intended_parent_id for a in appointments if a.intended_parent_id}
 
     type_names = {}
@@ -393,10 +385,10 @@ def get_appointment_context(
         users = db.query(User).filter(User.id.in_(approved_by_ids)).all()
         user_names = {u.id: u.display_name for u in users}
 
-    case_numbers = {}
-    if case_ids:
-        cases = db.query(Case).filter(Case.id.in_(case_ids)).all()
-        case_numbers = {c.id: c.case_number for c in cases}
+    surrogate_numbers = {}
+    if surrogate_ids:
+        cases = db.query(Surrogate).filter(Surrogate.id.in_(surrogate_ids)).all()
+        surrogate_numbers = {c.id: c.surrogate_number for c in cases}
 
     intended_parent_names = {}
     if ip_ids:
@@ -406,7 +398,7 @@ def get_appointment_context(
     return {
         "type_names": type_names,
         "user_names": user_names,
-        "case_numbers": case_numbers,
+        "surrogate_numbers": surrogate_numbers,
         "intended_parent_names": intended_parent_names,
     }
 
@@ -440,12 +432,10 @@ def to_appointment_read(
         cancellation_reason=appt.cancellation_reason,
         zoom_join_url=appt.zoom_join_url,
         google_event_id=appt.google_event_id,
-        case_id=appt.case_id,
-        case_number=context["case_numbers"].get(appt.case_id),
+        surrogate_id=appt.surrogate_id,
+        surrogate_number=context["surrogate_numbers"].get(appt.surrogate_id),
         intended_parent_id=appt.intended_parent_id,
-        intended_parent_name=context["intended_parent_names"].get(
-            appt.intended_parent_id
-        ),
+        intended_parent_name=context["intended_parent_names"].get(appt.intended_parent_id),
         created_at=appt.created_at,
         updated_at=appt.updated_at,
     )
@@ -468,12 +458,10 @@ def to_appointment_list_item(
         duration_minutes=appt.duration_minutes,
         meeting_mode=appt.meeting_mode,
         status=appt.status,
-        case_id=appt.case_id,
-        case_number=context["case_numbers"].get(appt.case_id),
+        surrogate_id=appt.surrogate_id,
+        surrogate_number=context["surrogate_numbers"].get(appt.surrogate_id),
         intended_parent_id=appt.intended_parent_id,
-        intended_parent_name=context["intended_parent_names"].get(
-            appt.intended_parent_id
-        ),
+        intended_parent_name=context["intended_parent_names"].get(appt.intended_parent_id),
         created_at=appt.created_at,
     )
 
@@ -770,18 +758,14 @@ def get_available_slots(
     if not appt_type or not appt_type.is_active:
         return []
 
-    duration = (
-        duration_minutes if duration_minutes is not None else appt_type.duration_minutes
-    )
+    duration = duration_minutes if duration_minutes is not None else appt_type.duration_minutes
     buffer_before = (
         buffer_before_minutes
         if buffer_before_minutes is not None
         else appt_type.buffer_before_minutes
     )
     buffer_after = (
-        buffer_after_minutes
-        if buffer_after_minutes is not None
-        else appt_type.buffer_after_minutes
+        buffer_after_minutes if buffer_after_minutes is not None else appt_type.buffer_after_minutes
     )
 
     client_tz = _get_timezone(query.client_timezone)
@@ -909,19 +893,13 @@ def _build_day_slots(
     if day_start < now:
         # Round up to next interval, using timedelta to avoid minute=60 ValueError
         minutes_into_interval = now.minute % interval_minutes
-        minutes_to_add = (
-            interval_minutes - minutes_into_interval if minutes_into_interval else 0
-        )
-        day_start = now.replace(second=0, microsecond=0) + timedelta(
-            minutes=minutes_to_add
-        )
+        minutes_to_add = interval_minutes - minutes_into_interval if minutes_into_interval else 0
+        day_start = now.replace(second=0, microsecond=0) + timedelta(minutes=minutes_to_add)
 
     current = day_start
     total_block = buffer_before + duration_minutes + buffer_after
 
-    while current + timedelta(minutes=total_block) <= day_end + timedelta(
-        minutes=buffer_after
-    ):
+    while current + timedelta(minutes=total_block) <= day_end + timedelta(minutes=buffer_after):
         slot_start = current + timedelta(minutes=buffer_before)
         slot_end = slot_start + timedelta(minutes=duration_minutes)
 
@@ -935,13 +913,9 @@ def _build_day_slots(
                 else buffer_before
             )
             appt_buffer_after = (
-                appt.buffer_after_minutes
-                if appt.buffer_after_minutes is not None
-                else buffer_after
+                appt.buffer_after_minutes if appt.buffer_after_minutes is not None else buffer_after
             )
-            appt_block_start = appt.scheduled_start - timedelta(
-                minutes=appt_buffer_before
-            )
+            appt_block_start = appt.scheduled_start - timedelta(minutes=appt_buffer_before)
             appt_block_end = appt.scheduled_end + timedelta(minutes=appt_buffer_after)
 
             if not (slot_end <= appt_block_start or slot_start >= appt_block_end):
@@ -952,11 +926,7 @@ def _build_day_slots(
         # Tasks store due_time as local time (user's timezone), not UTC
         if not has_conflict:
             for task in tasks:
-                if (
-                    task.due_date == slot_date
-                    and task.due_time
-                    and task.duration_minutes
-                ):
+                if task.due_date == slot_date and task.due_time and task.duration_minutes:
                     # Task time is in user's local timezone, convert to UTC for comparison
                     task_start_local = datetime.combine(
                         task.due_date, task.due_time, tzinfo=user_tz
@@ -1199,9 +1169,8 @@ def approve_booking(
     """
     if appointment.status != AppointmentStatus.PENDING.value:
         raise ValueError(f"Cannot approve appointment with status {appointment.status}")
-    if (
-        appointment.pending_expires_at
-        and appointment.pending_expires_at <= datetime.now(timezone.utc)
+    if appointment.pending_expires_at and appointment.pending_expires_at <= datetime.now(
+        timezone.utc
     ):
         appointment.status = AppointmentStatus.EXPIRED.value
         appointment.pending_expires_at = None
@@ -1239,9 +1208,7 @@ def approve_booking(
             buffer_before_minutes=appointment.buffer_before_minutes,
             buffer_after_minutes=appointment.buffer_after_minutes,
         )
-        if not any(
-            slot.start == appointment.scheduled_start for slot in available_slots
-        ):
+        if not any(slot.start == appointment.scheduled_start for slot in available_slots):
             raise ValueError(
                 "This time slot is no longer available - another appointment or task has been scheduled"
             )
@@ -1316,13 +1283,8 @@ def reschedule_booking(
         AppointmentStatus.PENDING.value,
         AppointmentStatus.CONFIRMED.value,
     ]:
-        raise ValueError(
-            f"Cannot reschedule appointment with status {appointment.status}"
-        )
-    if (
-        appointment.status == AppointmentStatus.PENDING.value
-        and appointment.pending_expires_at
-    ):
+        raise ValueError(f"Cannot reschedule appointment with status {appointment.status}")
+    if appointment.status == AppointmentStatus.PENDING.value and appointment.pending_expires_at:
         if appointment.pending_expires_at <= datetime.now(timezone.utc):
             appointment.status = AppointmentStatus.EXPIRED.value
             appointment.pending_expires_at = None
@@ -1343,12 +1305,8 @@ def reschedule_booking(
         user_id=appointment.user_id,
         org_id=appointment.organization_id,
         appointment_type_id=appointment.appointment_type_id,
-        date_start=new_start.astimezone(
-            _get_timezone(appointment.client_timezone)
-        ).date(),
-        date_end=new_start.astimezone(
-            _get_timezone(appointment.client_timezone)
-        ).date(),
+        date_start=new_start.astimezone(_get_timezone(appointment.client_timezone)).date(),
+        date_end=new_start.astimezone(_get_timezone(appointment.client_timezone)).date(),
         client_timezone=appointment.client_timezone,
     )
     slots = get_available_slots(
@@ -1365,9 +1323,7 @@ def reschedule_booking(
     appointment.scheduled_start = new_start
     appointment.scheduled_end = new_end
     if appointment.status == AppointmentStatus.PENDING.value:
-        appointment.pending_expires_at = datetime.now(timezone.utc) + timedelta(
-            minutes=60
-        )
+        appointment.pending_expires_at = datetime.now(timezone.utc) + timedelta(minutes=60)
 
     # Rotate tokens after reschedule
     appointment.reschedule_token = generate_token()
@@ -1414,10 +1370,7 @@ def cancel_booking(
         AppointmentStatus.CONFIRMED.value,
     ]:
         raise ValueError(f"Cannot cancel appointment with status {appointment.status}")
-    if (
-        appointment.status == AppointmentStatus.PENDING.value
-        and appointment.pending_expires_at
-    ):
+    if appointment.status == AppointmentStatus.PENDING.value and appointment.pending_expires_at:
         if appointment.pending_expires_at <= datetime.now(timezone.utc):
             appointment.status = AppointmentStatus.EXPIRED.value
             appointment.pending_expires_at = None
@@ -1553,15 +1506,15 @@ def list_appointments(
     status: str | None = None,
     date_start: date | None = None,
     date_end: date | None = None,
-    case_id: UUID | None = None,
+    surrogate_id: UUID | None = None,
     intended_parent_id: UUID | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[Appointment], int]:
     """List appointments for a user with pagination.
 
-    When case_id and/or intended_parent_id are provided, filters to appointments
-    matching EITHER the case_id OR the intended_parent_id (used for match-scoped views).
+    When surrogate_id and/or intended_parent_id are provided, filters to appointments
+    matching EITHER the surrogate_id OR the intended_parent_id (used for match-scoped views).
     """
     expire_pending_appointments(db, org_id=org_id, user_id=user_id)
     query = db.query(Appointment).filter(
@@ -1580,25 +1533,22 @@ def list_appointments(
         end_dt = datetime.combine(date_end, time.max, tzinfo=timezone.utc)
         query = query.filter(Appointment.scheduled_start <= end_dt)
 
-    # Filter by case_id OR intended_parent_id (for match-scoped views)
-    if case_id and intended_parent_id:
+    # Filter by surrogate_id OR intended_parent_id (for match-scoped views)
+    if surrogate_id and intended_parent_id:
         query = query.filter(
             or_(
-                Appointment.case_id == case_id,
+                Appointment.surrogate_id == surrogate_id,
                 Appointment.intended_parent_id == intended_parent_id,
             )
         )
-    elif case_id:
-        query = query.filter(Appointment.case_id == case_id)
+    elif surrogate_id:
+        query = query.filter(Appointment.surrogate_id == surrogate_id)
     elif intended_parent_id:
         query = query.filter(Appointment.intended_parent_id == intended_parent_id)
 
     total = query.count()
     appointments = (
-        query.order_by(Appointment.scheduled_start.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
+        query.order_by(Appointment.scheduled_start.desc()).offset(offset).limit(limit).all()
     )
 
     return appointments, total

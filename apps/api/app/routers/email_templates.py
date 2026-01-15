@@ -37,9 +37,7 @@ def list_templates(
     session=Depends(get_current_session),
 ):
     """List email templates for the organization."""
-    templates = email_service.list_templates(
-        db, org_id=session.org_id, active_only=active_only
-    )
+    templates = email_service.list_templates(db, org_id=session.org_id, active_only=active_only)
     return templates
 
 
@@ -170,7 +168,7 @@ def send_email(
         template_id=data.template_id,
         recipient_email=data.recipient_email,
         variables=data.variables,
-        case_id=data.case_id,
+        surrogate_id=data.surrogate_id,
         schedule_at=data.schedule_at,
     )
 
@@ -212,9 +210,7 @@ def get_template_versions(
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    versions = email_service.get_template_versions(
-        db, session.org_id, template_id, limit
-    )
+    versions = email_service.get_template_versions(db, session.org_id, template_id, limit)
     return [
         TemplateVersionRead(
             id=v.id,

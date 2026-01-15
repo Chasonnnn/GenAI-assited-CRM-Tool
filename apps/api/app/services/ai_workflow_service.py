@@ -107,9 +107,9 @@ class WorkflowSaveRequest(BaseModel):
 # =============================================================================
 
 AVAILABLE_TRIGGERS = {
-    "case_created": "When a new case is created",
-    "status_changed": "When a case status changes (use conditions for specific statuses)",
-    "inactivity": "When a case has no activity for a period (trigger_config.days required)",
+    "surrogate_created": "When a new surrogate is created",
+    "status_changed": "When a surrogate status changes (use conditions for specific statuses)",
+    "inactivity": "When a surrogate has no activity for a period (trigger_config.days required)",
     "scheduled": "On a schedule (trigger_config.cron required)",
     "match_proposed": "When a match is proposed",
     "match_accepted": "When a match is accepted",
@@ -131,16 +131,16 @@ AVAILABLE_ACTIONS = {
         "required_fields": ["title"],
         "optional_fields": ["description", "due_days", "priority", "assignee"],
     },
-    "assign_case": {
-        "description": "Assign the case to a user or queue",
+    "assign_surrogate": {
+        "description": "Assign the surrogate to a user or queue",
         "required_fields": ["owner_type", "owner_id"],
     },
     "update_status": {
-        "description": "Update the case status to a specific stage",
+        "description": "Update the surrogate status to a specific stage",
         "required_fields": ["stage_id"],
     },
     "add_note": {
-        "description": "Add a note to the case",
+        "description": "Add a note to the surrogate",
         "required_fields": ["content"],
         "optional_fields": ["is_pinned"],
     },
@@ -218,7 +218,7 @@ Respond with ONLY a valid JSON object (no markdown, no explanation) in this exac
 1. Only use triggers from the available list
 2. Only use actions from the available list
 3. For send_email action, use a real template_id from the list
-4. For assign_case actions, use owner_type ("user" or "queue") and a real owner_id from the list
+4. For assign_surrogate actions, use owner_type ("user" or "queue") and a real owner_id from the list
 5. For send_notification actions, use recipients ("owner", "creator", "all_admins") or a list of user_ids
 6. For update_status actions, use a real stage_id from the list
 6. Keep the workflow simple and focused on the user's request
@@ -256,8 +256,7 @@ def _get_context_for_prompt(db: Session, org_id: UUID) -> dict[str, str]:
         .all()
     )
     templates_text = (
-        "\n".join([f"- {t.id}: {t.name}" for t in templates])
-        or "No templates available"
+        "\n".join([f"- {t.id}: {t.name}" for t in templates]) or "No templates available"
     )
 
     # Get users
@@ -396,9 +395,7 @@ def generate_workflow(
         workflow_data = json.loads(content)
 
         # Validate the generated workflow
-        validation_result = validate_workflow(
-            db, org_id, GeneratedWorkflow(**workflow_data)
-        )
+        validation_result = validate_workflow(db, org_id, GeneratedWorkflow(**workflow_data))
 
         if not validation_result.valid:
             return WorkflowGenerationResponse(
@@ -469,9 +466,7 @@ def validate_workflow(
 
     # Validate condition_logic
     if workflow.condition_logic not in ("AND", "OR"):
-        errors.append(
-            f"Invalid condition_logic: {workflow.condition_logic}. Must be AND or OR"
-        )
+        errors.append(f"Invalid condition_logic: {workflow.condition_logic}. Must be AND or OR")
 
     # Validate conditions
     for i, cond in enumerate(workflow.conditions):
@@ -482,9 +477,7 @@ def validate_workflow(
         if "operator" not in cond:
             errors.append(f"Condition {i + 1} missing 'operator'")
         elif cond["operator"] not in CONDITION_OPERATORS:
-            warnings.append(
-                f"Condition {i + 1} has unknown operator: {cond['operator']}"
-            )
+            warnings.append(f"Condition {i + 1} has unknown operator: {cond['operator']}")
 
     # Validate actions
     if not workflow.actions:
@@ -505,9 +498,7 @@ def validate_workflow(
         # Check required fields
         for field in action_def["required_fields"]:
             if field not in action:
-                errors.append(
-                    f"Action {i + 1} ({action_type}) missing required field: {field}"
-                )
+                errors.append(f"Action {i + 1} ({action_type}) missing required field: {field}")
 
         # Validate template_id exists
         if action_type == "send_email" and "template_id" in action:
@@ -538,12 +529,10 @@ def validate_workflow(
                 .first()
             )
             if not stage:
-                errors.append(
-                    f"Action {i + 1}: Stage ID does not exist: {action['stage_id']}"
-                )
+                errors.append(f"Action {i + 1}: Stage ID does not exist: {action['stage_id']}")
 
-        # Validate assign_case owner
-        if action_type == "assign_case":
+        # Validate assign_surrogate owner
+        if action_type == "assign_surrogate":
             owner_type = action.get("owner_type")
             owner_id = action.get("owner_id")
             if owner_type not in ("user", "queue"):
@@ -575,9 +564,7 @@ def validate_workflow(
                 try:
                     owner_id = UUID(str(owner_id))
                 except (TypeError, ValueError):
-                    errors.append(
-                        f"Action {i + 1}: Invalid queue_id format: {owner_id}"
-                    )
+                    errors.append(f"Action {i + 1}: Invalid queue_id format: {owner_id}")
                     owner_id = None
                 queue = (
                     db.query(Queue)
@@ -585,9 +572,7 @@ def validate_workflow(
                     .first()
                 )
                 if not queue:
-                    errors.append(
-                        f"Action {i + 1}: Queue ID does not exist: {owner_id}"
-                    )
+                    errors.append(f"Action {i + 1}: Queue ID does not exist: {owner_id}")
 
         # Validate create_task assignee
         if action_type == "create_task" and "assignee" in action:
@@ -613,9 +598,7 @@ def validate_workflow(
             recipients = action.get("recipients")
             if isinstance(recipients, str):
                 if recipients not in ("owner", "creator", "all_admins"):
-                    errors.append(
-                        f"Action {i + 1}: invalid recipients value: {recipients}"
-                    )
+                    errors.append(f"Action {i + 1}: invalid recipients value: {recipients}")
             elif isinstance(recipients, list):
                 from app.db.models import Membership
 
@@ -623,23 +606,19 @@ def validate_workflow(
                     try:
                         user_uuid = UUID(str(user_id))
                     except (TypeError, ValueError):
-                        errors.append(
-                            f"Action {i + 1}: Invalid user_id format: {user_id}"
-                        )
+                        errors.append(f"Action {i + 1}: Invalid user_id format: {user_id}")
                         continue
                     member = (
-                    db.query(Membership)
-                    .filter(
-                        Membership.user_id == user_uuid,
-                        Membership.organization_id == org_id,
-                        Membership.is_active.is_(True),
-                    )
-                    .first()
-                )
-                    if not member:
-                        errors.append(
-                            f"Action {i + 1}: User ID does not exist: {user_uuid}"
+                        db.query(Membership)
+                        .filter(
+                            Membership.user_id == user_uuid,
+                            Membership.organization_id == org_id,
+                            Membership.is_active.is_(True),
                         )
+                        .first()
+                    )
+                    if not member:
+                        errors.append(f"Action {i + 1}: User ID does not exist: {user_uuid}")
 
     return WorkflowValidationResponse(
         valid=len(errors) == 0,

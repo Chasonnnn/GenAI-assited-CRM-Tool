@@ -28,7 +28,7 @@ from app.services import (
 router = APIRouter(prefix="/admin/exports", tags=["Admin - Exports"])
 
 EXPORT_EVENT_MAP = {
-    "cases_csv": AuditEventType.DATA_EXPORT_CASES,
+    "surrogates_csv": AuditEventType.DATA_EXPORT_SURROGATES,
     "org_config_zip": AuditEventType.DATA_EXPORT_CONFIG,
     "analytics_zip": AuditEventType.DATA_EXPORT_ANALYTICS,
 }
@@ -98,20 +98,20 @@ def _schedule_export_job(
 
 
 @router.post(
-    "/cases",
+    "/surrogates",
     response_model=AdminExportJobResponse,
     status_code=202,
     dependencies=[Depends(require_csrf_header)],
 )
 @limiter.limit("5/minute")
-def export_cases(
+def export_surrogates(
     request: Request,
     session: UserSession = Depends(require_permission(P.ADMIN_EXPORTS_MANAGE)),
     db: Session = Depends(get_db),
 ) -> AdminExportJobResponse:
-    """Queue a cases export (CSV)."""
-    filename = admin_export_service.build_export_filename("cases_csv")
-    return _schedule_export_job(db, session, "cases_csv", filename)
+    """Queue a surrogates export (CSV)."""
+    filename = admin_export_service.build_export_filename("surrogates_csv")
+    return _schedule_export_job(db, session, "surrogates_csv", filename)
 
 
 @router.post(
@@ -236,7 +236,7 @@ def download_export_file(
         raise HTTPException(status_code=404, detail="Export file missing")
 
     resolved_path = admin_export_service.resolve_admin_export_path(file_path)
-    media_type = "text/csv" if export_type == "cases_csv" else "application/zip"
+    media_type = "text/csv" if export_type == "surrogates_csv" else "application/zip"
 
     return FileResponse(
         resolved_path,

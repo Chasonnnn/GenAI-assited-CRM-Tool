@@ -39,7 +39,7 @@ export function USMapChart({
     data,
     isLoading = false,
     isError = false,
-    title = "Cases by State",
+    title = "Surrogates by State",
 }: USMapChartProps) {
     // Create a lookup map for quick access
     const stateCounts = useMemo(() => {
@@ -112,14 +112,14 @@ export function USMapChart({
         )
     }
 
-    const totalCases = data.reduce((sum, d) => sum + d.count, 0)
+    const totalSurrogates = data.reduce((sum, d) => sum + d.count, 0)
 
     return (
         <Card>
             <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>{title}</CardTitle>
                 <span className="text-sm text-muted-foreground">
-                    Total: {totalCases.toLocaleString()} cases
+                    Total: {totalSurrogates.toLocaleString()} surrogates
                 </span>
             </CardHeader>
             <CardContent>

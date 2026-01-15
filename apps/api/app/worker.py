@@ -46,9 +46,7 @@ EMAIL_FROM = os.getenv("EMAIL_FROM", "noreply@example.com")
 # Worker configuration
 POLL_INTERVAL_SECONDS = int(os.getenv("WORKER_POLL_INTERVAL", "10"))
 BATCH_SIZE = int(os.getenv("WORKER_BATCH_SIZE", "10"))
-SESSION_CLEANUP_INTERVAL_SECONDS = int(
-    os.getenv("SESSION_CLEANUP_INTERVAL_SECONDS", "3600")
-)
+SESSION_CLEANUP_INTERVAL_SECONDS = int(os.getenv("SESSION_CLEANUP_INTERVAL_SECONDS", "3600"))
 
 
 def _mask_email(email: str | None) -> str:
@@ -112,9 +110,7 @@ async def send_email_async(email_log: EmailLog) -> None:
 
 async def process_job(db, job) -> None:
     """Process a single job based on its type."""
-    logger.info(
-        f"Processing job {job.id} (type={job.job_type}, attempt={job.attempts})"
-    )
+    logger.info(f"Processing job {job.id} (type={job.job_type}, attempt={job.attempts})")
 
     if job.job_type == JobType.SEND_EMAIL.value:
         email_log_id = job.payload.get("email_log_id")
@@ -286,9 +282,7 @@ def _resolve_integration_keys(db, job, integration_type) -> list[str]:
                 from app.db.models import MetaAdAccount
 
                 ad_account = (
-                    db.query(MetaAdAccount)
-                    .filter(MetaAdAccount.id == ad_account_uuid)
-                    .first()
+                    db.query(MetaAdAccount).filter(MetaAdAccount.id == ad_account_uuid).first()
                 )
                 if ad_account and ad_account.ad_account_external_id:
                     keys.append(ad_account.ad_account_external_id)
@@ -408,15 +402,13 @@ async def process_interview_transcription(db, job) -> None:
             title="Interview transcription ready",
             body=f"Transcription completed for interview on {interview_date}.",
             entity_type="case",
-            entity_id=link.interview.case_id,
+            entity_id=link.interview.surrogate_id,
             dedupe_key=f"interview_transcription_completed:{job.id}",
             dedupe_window_hours=None,
         )
 
 
-def _record_job_failure(
-    db, job, error_msg: str, exception: Exception | None = None
-) -> None:
+def _record_job_failure(db, job, error_msg: str, exception: Exception | None = None) -> None:
     """Record failed job for integration health and create alert if final failure."""
     from app.services import ops_service, alert_service
     from app.db.enums import IntegrationType, AlertType, AlertSeverity
@@ -471,9 +463,7 @@ def _record_job_failure(
                 JobType.AI_CHAT.value: AlertType.AI_PROVIDER_ERROR,
                 JobType.INTERVIEW_TRANSCRIPTION.value: AlertType.TRANSCRIPTION_FAILED,
             }
-            alert_type = alert_type_map.get(
-                job.job_type, AlertType.WORKER_JOB_FAILED
-            )
+            alert_type = alert_type_map.get(job.job_type, AlertType.WORKER_JOB_FAILED)
 
             # Use actual exception class name for fingerprinting
             error_class = type(exception).__name__ if exception else "UnknownError"
@@ -528,9 +518,7 @@ async def process_meta_lead_fetch(db, job) -> None:
     # Decrypt access token
     try:
         access_token = (
-            decrypt_token(mapping.access_token_encrypted)
-            if mapping.access_token_encrypted
-            else ""
+            decrypt_token(mapping.access_token_encrypted) if mapping.access_token_encrypted else ""
         )
     except Exception as e:
         mapping.last_error = f"Token decryption failed: {str(e)[:100]}"
@@ -598,9 +586,7 @@ async def process_meta_lead_fetch(db, job) -> None:
     mapping.last_error = None
     db.commit()
 
-    logger.info(
-        f"Meta lead {leadgen_id} stored successfully for org {mapping.organization_id}"
-    )
+    logger.info(f"Meta lead {leadgen_id} stored successfully for org {mapping.organization_id}")
 
     # Auto-convert to case so it appears in Cases list immediately
     if meta_lead.is_converted:
@@ -624,7 +610,7 @@ async def process_meta_lead_fetch(db, job) -> None:
     else:
         meta_lead.status = "converted"
         db.commit()
-        logger.info(f"Meta lead {leadgen_id} auto-converted to case {case.case_number}")
+        logger.info(f"Meta lead {leadgen_id} auto-converted to case {case.surrogate_number}")
 
 
 async def process_meta_capi_event(db, job) -> None:
@@ -634,7 +620,7 @@ async def process_meta_capi_event(db, job) -> None:
     Payload:
       - meta_lead_id (leadgen id)
       - meta_ad_external_id (for resolving ad account)
-      - case_status
+      - surrogate_status
       - email, phone (optional)
       - meta_page_id (optional, unused - kept for backward compatibility)
 
@@ -649,12 +635,12 @@ async def process_meta_capi_event(db, job) -> None:
     payload = job.payload or {}
     meta_lead_id = payload.get("meta_lead_id")
     meta_ad_external_id = payload.get("meta_ad_external_id")
-    case_status = payload.get("case_status")
+    surrogate_status = payload.get("surrogate_status")
     email = payload.get("email")
     phone = payload.get("phone")
 
-    if not meta_lead_id or not case_status:
-        raise Exception("Missing meta_lead_id or case_status in job payload")
+    if not meta_lead_id or not surrogate_status:
+        raise Exception("Missing meta_lead_id or surrogate_status in job payload")
 
     # Resolve ad account chain: meta_ad_external_id → MetaAd → MetaAdAccount
     ad_account = None
@@ -699,14 +685,14 @@ async def process_meta_capi_event(db, job) -> None:
         )
         return
 
-    meta_status = meta_capi.map_case_status_to_meta_status(str(case_status))
+    meta_status = meta_capi.map_surrogate_status_to_meta_status(str(surrogate_status))
     if not meta_status:
-        raise Exception(f"Unsupported case status for Meta CAPI: {case_status}")
+        raise Exception(f"Unsupported case status for Meta CAPI: {surrogate_status}")
 
     success, error = await meta_capi.send_status_event_for_account(
         meta_lead_id=str(meta_lead_id),
         ad_account=ad_account,
-        case_status=str(case_status),
+        surrogate_status=str(surrogate_status),
         meta_status=meta_status,
         email=str(email) if email else None,
         phone=str(phone) if phone else None,
@@ -781,9 +767,7 @@ async def worker_loop() -> None:
                                     .first()
                                 )
                                 if email_log:
-                                    email_service.mark_email_failed(
-                                        db, email_log, error_msg
-                                    )
+                                    email_service.mark_email_failed(db, email_log, error_msg)
 
             except Exception as e:
                 logger.error(f"Error in worker loop: {e}")
@@ -802,7 +786,7 @@ async def process_workflow_email(db, job) -> None:
 
     Payload:
         - template_id: UUID of email template
-        - case_id: UUID of case (for variable resolution)
+        - surrogate_id: UUID of case (for variable resolution)
         - recipient_email: Target email address
         - variables: Dict of resolved template variables
     """
@@ -810,7 +794,7 @@ async def process_workflow_email(db, job) -> None:
     from app.services import email_service
 
     template_id = job.payload.get("template_id")
-    case_id = job.payload.get("case_id")
+    surrogate_id = job.payload.get("surrogate_id")
     recipient_email = job.payload.get("recipient_email")
     variables = job.payload.get("variables", {})
 
@@ -818,9 +802,7 @@ async def process_workflow_email(db, job) -> None:
         raise Exception("Missing template_id or recipient_email in workflow email job")
 
     # Get template
-    template = (
-        db.query(EmailTemplate).filter(EmailTemplate.id == UUID(template_id)).first()
-    )
+    template = db.query(EmailTemplate).filter(EmailTemplate.id == UUID(template_id)).first()
     if not template:
         raise Exception(f"Email template {template_id} not found")
 
@@ -837,7 +819,7 @@ async def process_workflow_email(db, job) -> None:
         organization_id=job.organization_id,
         job_id=job.id,
         template_id=template.id,
-        case_id=UUID(case_id) if case_id else None,
+        surrogate_id=UUID(surrogate_id) if surrogate_id else None,
         recipient_email=recipient_email,
         subject=subject,
         body=body,
@@ -852,7 +834,7 @@ async def process_workflow_email(db, job) -> None:
 
     logger.info(
         "Workflow email sent for case=%s recipient=%s",
-        case_id,
+        surrogate_id,
         _mask_email(recipient_email),
     )
 
@@ -885,9 +867,7 @@ async def process_csv_import(db, job) -> None:
         raise Exception(f"Failed to decode file content: {e}")
 
     # Get import record
-    import_record = (
-        db.query(CaseImport).filter(CaseImport.id == UUID(import_id)).first()
-    )
+    import_record = db.query(CaseImport).filter(CaseImport.id == UUID(import_id)).first()
 
     if not import_record:
         raise Exception(f"Import record {import_id} not found")
@@ -896,9 +876,7 @@ async def process_csv_import(db, job) -> None:
     import_record.status = "running"
     db.commit()
 
-    logger.info(
-        f"Starting CSV import job: {import_id}, rows={import_record.total_rows}"
-    )
+    logger.info(f"Starting CSV import job: {import_id}, rows={import_record.total_rows}")
 
     try:
         # Execute the import
@@ -947,14 +925,10 @@ async def process_admin_export(db, job) -> None:
     if not filename:
         filename = admin_export_service.build_export_filename(export_type)
 
-    if export_type == "cases_csv":
-        file_path = admin_export_service.store_cases_csv(
-            db, job.organization_id, filename
-        )
+    if export_type == "surrogates_csv":
+        file_path = admin_export_service.store_surrogates_csv(db, job.organization_id, filename)
     elif export_type == "org_config_zip":
-        export_bytes = admin_export_service.build_org_config_zip(
-            db, job.organization_id
-        )
+        export_bytes = admin_export_service.build_org_config_zip(db, job.organization_id)
         file_path = admin_export_service.store_export_bytes(
             job.organization_id, filename, export_bytes
         )
@@ -1167,9 +1141,7 @@ async def process_workflow_approval_expiry(db, job) -> None:
     from app.db.models import Task
     from app.db.enums import TaskType, TaskStatus
 
-    logger.info(
-        "Starting workflow approval expiry sweep for org %s", job.organization_id
-    )
+    logger.info("Starting workflow approval expiry sweep for org %s", job.organization_id)
 
     now = datetime.now(timezone.utc)
 
@@ -1235,9 +1207,7 @@ async def process_workflow_resume(db, job) -> None:
         raise Exception(f"Task {task_id} not found")
 
     execution = (
-        db.query(WorkflowExecution)
-        .filter(WorkflowExecution.id == UUID(execution_id))
-        .first()
+        db.query(WorkflowExecution).filter(WorkflowExecution.id == UUID(execution_id)).first()
     )
     if not execution:
         raise Exception(f"Execution {execution_id} not found")
@@ -1256,9 +1226,7 @@ async def process_workflow_resume(db, job) -> None:
 
     # Get workflow
     workflow = (
-        db.query(AutomationWorkflow)
-        .filter(AutomationWorkflow.id == execution.workflow_id)
-        .first()
+        db.query(AutomationWorkflow).filter(AutomationWorkflow.id == execution.workflow_id).first()
     )
     if not workflow:
         raise Exception(f"Workflow {execution.workflow_id} not found")
@@ -1289,12 +1257,14 @@ async def process_workflow_resume(db, job) -> None:
 
         # Record the skipped action
         action_results = list(execution.actions_executed or [])
-        action_results.append({
-            "success": False,
-            "action_type": task.workflow_action_type,
-            "skipped": True,
-            "reason": "denied",
-        })
+        action_results.append(
+            {
+                "success": False,
+                "action_type": task.workflow_action_type,
+                "skipped": True,
+                "reason": "denied",
+            }
+        )
         execution.actions_executed = action_results
 
     elif task.status == TaskStatus.EXPIRED.value:
@@ -1306,12 +1276,14 @@ async def process_workflow_resume(db, job) -> None:
         execution.error_message = "Approval timed out"
 
         action_results = list(execution.actions_executed or [])
-        action_results.append({
-            "success": False,
-            "action_type": task.workflow_action_type,
-            "skipped": True,
-            "reason": "expired",
-        })
+        action_results.append(
+            {
+                "success": False,
+                "action_type": task.workflow_action_type,
+                "skipped": True,
+                "reason": "expired",
+            }
+        )
         execution.actions_executed = action_results
 
     else:
@@ -1392,7 +1364,7 @@ async def process_meta_hierarchy_sync(db, job) -> None:
         # Note: Health recording handled centrally by _record_job_success
 
         # Link cases to campaigns (backfill)
-        linked = meta_sync_service.link_cases_to_campaigns(db, job.organization_id)
+        linked = meta_sync_service.link_surrogates_to_campaigns(db, job.organization_id)
         if linked:
             logger.info(f"Linked {linked} cases to campaign data")
 
@@ -1500,10 +1472,7 @@ async def process_meta_form_sync(db, job) -> None:
     payload = job.payload or {}
     page_ids = payload.get("page_ids")
 
-    logger.info(
-        f"Starting forms sync for org {job.organization_id} "
-        f"(pages={page_ids or 'all'})"
-    )
+    logger.info(f"Starting forms sync for org {job.organization_id} (pages={page_ids or 'all'})")
 
     try:
         if page_ids and isinstance(page_ids, list):

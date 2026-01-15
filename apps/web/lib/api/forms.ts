@@ -100,7 +100,7 @@ export interface FormPublishResponse {
 
 export interface FormFieldMappingItem {
     field_key: string
-    case_field: string
+    surrogate_field: string
 }
 
 export interface FormTokenRead {
@@ -120,7 +120,7 @@ export interface FormSubmissionFileRead {
 export interface FormSubmissionRead {
     id: string
     form_id: string
-    case_id: string
+    surrogate_id: string
     status: FormSubmissionStatus
     submitted_at: string
     reviewed_at?: string | null
@@ -188,15 +188,15 @@ export function setFormMappings(formId: string, mappings: FormFieldMappingItem[]
     return api.put<FormFieldMappingItem[]>(`/forms/${formId}/mappings`, { mappings })
 }
 
-export function createFormToken(formId: string, caseId: string, expiresInDays?: number): Promise<FormTokenRead> {
+export function createFormToken(formId: string, surrogateId: string, expiresInDays?: number): Promise<FormTokenRead> {
     return api.post<FormTokenRead>(`/forms/${formId}/tokens`, {
-        case_id: caseId,
+        surrogate_id: surrogateId,
         expires_in_days: expiresInDays,
     })
 }
 
-export function getCaseSubmission(formId: string, caseId: string): Promise<FormSubmissionRead> {
-    return api.get<FormSubmissionRead>(`/forms/${formId}/cases/${caseId}/submission`)
+export function getSurrogateSubmission(formId: string, surrogateId: string): Promise<FormSubmissionRead> {
+    return api.get<FormSubmissionRead>(`/forms/${formId}/surrogates/${surrogateId}/submission`)
 }
 
 export function approveSubmission(submissionId: string, reviewNotes?: string | null): Promise<FormSubmissionRead> {
@@ -261,7 +261,7 @@ export interface SubmissionAnswerUpdate {
 
 export interface SubmissionAnswersUpdateResponse {
     submission: FormSubmissionRead
-    case_updates: string[]
+    surrogate_updates: string[]
 }
 
 export function updateSubmissionAnswers(

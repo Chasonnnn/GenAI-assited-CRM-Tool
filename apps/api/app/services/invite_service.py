@@ -84,9 +84,7 @@ def create_invite(
     # Check org limit
     pending_count = count_pending_invites(db, org_id)
     if pending_count >= MAX_PENDING_INVITES_PER_ORG:
-        raise ValueError(
-            f"Maximum of {MAX_PENDING_INVITES_PER_ORG} pending invites reached"
-        )
+        raise ValueError(f"Maximum of {MAX_PENDING_INVITES_PER_ORG} pending invites reached")
 
     # Check if already a member
     existing_user = db.query(User).filter(func.lower(User.email) == email).first()
@@ -138,9 +136,7 @@ def can_resend(invite: OrgInvite) -> tuple[bool, str | None]:
 
     # Check cooldown
     if invite.last_resent_at:
-        cooldown_end = invite.last_resent_at + timedelta(
-            minutes=INVITE_RESEND_COOLDOWN_MINUTES
-        )
+        cooldown_end = invite.last_resent_at + timedelta(minutes=INVITE_RESEND_COOLDOWN_MINUTES)
         if datetime.now(timezone.utc) < cooldown_end:
             remaining = int((cooldown_end - datetime.now(timezone.utc)).total_seconds())
             return False, f"Wait {remaining} seconds before resending"
@@ -183,9 +179,7 @@ def revoke_invite(
     db.flush()
 
 
-def get_invite(
-    db: Session, org_id: uuid.UUID, invite_id: uuid.UUID
-) -> OrgInvite | None:
+def get_invite(db: Session, org_id: uuid.UUID, invite_id: uuid.UUID) -> OrgInvite | None:
     """Get single invite by ID."""
     return (
         db.query(OrgInvite)
@@ -210,9 +204,7 @@ def get_invite_details(
     if not invite:
         return None, "Unknown Organization", None
 
-    org = (
-        db.query(Organization).filter(Organization.id == invite.organization_id).first()
-    )
+    org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
     org_name = org.name if org else "Unknown Organization"
 
     inviter_name = None
@@ -273,11 +265,7 @@ def accept_invite(
         if not user.active_org_id:
             user.active_org_id = invite.organization_id
         db.commit()
-        org = (
-            db.query(Organization)
-            .filter(Organization.id == invite.organization_id)
-            .first()
-        )
+        org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
         org_name = org.name if org else "Unknown"
         return {
             "organization_id": str(invite.organization_id),
@@ -299,9 +287,7 @@ def accept_invite(
 
     db.commit()
 
-    org = (
-        db.query(Organization).filter(Organization.id == invite.organization_id).first()
-    )
+    org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
     org_name = org.name if org else "Unknown"
 
     return {

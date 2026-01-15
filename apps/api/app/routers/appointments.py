@@ -50,9 +50,7 @@ from app.services import (
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 from app.core.config import settings
 
-router = APIRouter(
-    dependencies=[Depends(require_permission(POLICIES["appointments"].default))]
-)
+router = APIRouter(dependencies=[Depends(require_permission(POLICIES["appointments"].default))])
 
 
 # =============================================================================
@@ -425,9 +423,7 @@ def get_booking_preview_slots(
     db: Session = Depends(get_db),
 ):
     """Preview available slots for the current user's booking page."""
-    appt_type = appointment_service.get_appointment_type(
-        db, appointment_type_id, session.org_id
-    )
+    appt_type = appointment_service.get_appointment_type(db, appointment_type_id, session.org_id)
     if not appt_type or not appt_type.is_active:
         raise HTTPException(status_code=404, detail="Appointment type not found")
     if appt_type.user_id != session.user_id:
@@ -475,12 +471,12 @@ def list_appointments(
     status: str | None = None,
     date_start: date | None = None,
     date_end: date | None = None,
-    case_id: UUID | None = None,
+    surrogate_id: UUID | None = None,
     intended_parent_id: UUID | None = None,
 ):
     """List appointments for the current user.
 
-    Optionally filter by case_id and/or intended_parent_id for match-scoped views.
+    Optionally filter by surrogate_id and/or intended_parent_id for match-scoped views.
     When both are provided, returns appointments matching EITHER.
     """
     offset = (page - 1) * per_page
@@ -491,7 +487,7 @@ def list_appointments(
         status=status,
         date_start=date_start,
         date_end=date_end,
-        case_id=case_id,
+        surrogate_id=surrogate_id,
         intended_parent_id=intended_parent_id,
         limit=per_page,
         offset=offset,
@@ -510,18 +506,13 @@ def list_appointments(
         details={
             "status": status,
             "count": len(appointments),
-            "case_id": str(case_id) if case_id else None,
-            "intended_parent_id": str(intended_parent_id)
-            if intended_parent_id
-            else None,
+            "surrogate_id": str(surrogate_id) if surrogate_id else None,
+            "intended_parent_id": str(intended_parent_id) if intended_parent_id else None,
         },
     )
     db.commit()
     return AppointmentListResponse(
-        items=[
-            appointment_service.to_appointment_list_item(a, context)
-            for a in appointments
-        ],
+        items=[appointment_service.to_appointment_list_item(a, context) for a in appointments],
         total=total,
         page=page,
         per_page=per_page,
@@ -553,7 +544,7 @@ def get_appointment(
         target_type="appointment",
         target_id=appt.id,
         request=request,
-        details={"case_id": str(appt.case_id) if appt.case_id else None},
+        details={"surrogate_id": str(appt.surrogate_id) if appt.surrogate_id else None},
     )
     db.commit()
     return appointment_service.to_appointment_read(appt, context)
@@ -570,9 +561,9 @@ def update_appointment_link(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Update case/intended parent linkage for an appointment."""
-    from app.core.case_access import check_case_access
-    from app.services import case_service, ip_service
+    """Update surrogate/intended parent linkage for an appointment."""
+    from app.core.surrogate_access import check_surrogate_access
+    from app.services import surrogate_service, ip_service
 
     appt = appointment_service.get_appointment(db, appointment_id, session.org_id)
     if not appt:
@@ -581,25 +572,23 @@ def update_appointment_link(
     if appt.user_id != session.user_id and session.role not in ["admin", "developer"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    if "case_id" in data.model_fields_set:
-        if data.case_id is None:
-            appt.case_id = None
+    if "surrogate_id" in data.model_fields_set:
+        if data.surrogate_id is None:
+            appt.surrogate_id = None
         else:
-            case = case_service.get_case(db, session.org_id, data.case_id)
-            if not case:
-                raise HTTPException(status_code=404, detail="Case not found")
-            check_case_access(
-                case, session.role, session.user_id, db=db, org_id=session.org_id
+            surrogate = surrogate_service.get_surrogate(db, session.org_id, data.surrogate_id)
+            if not surrogate:
+                raise HTTPException(status_code=404, detail="Surrogate not found")
+            check_surrogate_access(
+                surrogate, session.role, session.user_id, db=db, org_id=session.org_id
             )
-            appt.case_id = case.id
+            appt.surrogate_id = surrogate.id
 
     if "intended_parent_id" in data.model_fields_set:
         if data.intended_parent_id is None:
             appt.intended_parent_id = None
         else:
-            ip = ip_service.get_intended_parent(
-                db, data.intended_parent_id, session.org_id
-            )
+            ip = ip_service.get_intended_parent(db, data.intended_parent_id, session.org_id)
             if not ip:
                 raise HTTPException(status_code=404, detail="Intended parent not found")
             appt.intended_parent_id = ip.id

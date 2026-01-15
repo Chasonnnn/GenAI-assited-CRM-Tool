@@ -75,9 +75,7 @@ class PaginatedResponse(Generic[T]):
         )
 
 
-def paginate_query(
-    query: SQLAlchemyQuery, pagination: PaginationParams
-) -> tuple[list, int]:
+def paginate_query(query: SQLAlchemyQuery, pagination: PaginationParams) -> tuple[list, int]:
     """
     Apply pagination to a SQLAlchemy query.
 

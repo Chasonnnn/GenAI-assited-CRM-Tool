@@ -7,7 +7,7 @@ import type { JsonObject } from '../types/json';
 
 // Types
 export interface AnalyticsSummary {
-    total_cases: number;
+    total_surrogates: number;
     new_this_period: number;
     qualified_rate: number;
     avg_time_to_qualified_hours: number | null;
@@ -57,22 +57,22 @@ export async function getAnalyticsSummary(params: DateRangeParams = {}): Promise
     return api.get<AnalyticsSummary>(`/analytics/summary${query ? `?${query}` : ''}`);
 }
 
-export async function getCasesByStatus(): Promise<StatusCount[]> {
-    return api.get<StatusCount[]>('/analytics/cases/by-status');
+export async function getSurrogatesByStatus(): Promise<StatusCount[]> {
+    return api.get<StatusCount[]>('/analytics/surrogates/by-status');
 }
 
-export async function getCasesByAssignee(): Promise<AssigneeCount[]> {
-    return api.get<AssigneeCount[]>('/analytics/cases/by-assignee');
+export async function getSurrogatesByAssignee(): Promise<AssigneeCount[]> {
+    return api.get<AssigneeCount[]>('/analytics/surrogates/by-assignee');
 }
 
-export async function getCasesTrend(params: TrendParams = {}): Promise<TrendPoint[]> {
+export async function getSurrogatesTrend(params: TrendParams = {}): Promise<TrendPoint[]> {
     const searchParams = new URLSearchParams();
     if (params.from_date) searchParams.set('from_date', params.from_date);
     if (params.to_date) searchParams.set('to_date', params.to_date);
     if (params.period) searchParams.set('period', params.period);
 
     const query = searchParams.toString();
-    return api.get<TrendPoint[]>(`/analytics/cases/trend${query ? `?${query}` : ''}`);
+    return api.get<TrendPoint[]>(`/analytics/surrogates/trend${query ? `?${query}` : ''}`);
 }
 
 export async function getMetaPerformance(params: DateRangeParams = {}): Promise<MetaPerformance> {
@@ -103,31 +103,31 @@ export interface FunnelStage {
 }
 
 export interface KPIs {
-    new_cases: number;
-    new_cases_change_pct: number;
+    new_surrogates: number;
+    new_surrogates_change_pct: number;
     total_active: number;
     needs_attention: number;
     period_days: number;
 }
 
 // New API functions
-export async function getCasesBySource(params: DateRangeParams = {}): Promise<SourceCount[]> {
+export async function getSurrogatesBySource(params: DateRangeParams = {}): Promise<SourceCount[]> {
     const searchParams = new URLSearchParams();
     if (params.from_date) searchParams.set('from_date', params.from_date);
     if (params.to_date) searchParams.set('to_date', params.to_date);
 
     const query = searchParams.toString();
-    const res = await api.get<{ data: SourceCount[] }>(`/analytics/cases/by-source${query ? `?${query}` : ''}`);
+    const res = await api.get<{ data: SourceCount[] }>(`/analytics/surrogates/by-source${query ? `?${query}` : ''}`);
     return res.data;
 }
 
-export async function getCasesByState(params: DateRangeParams = {}): Promise<StateCount[]> {
+export async function getSurrogatesByState(params: DateRangeParams = {}): Promise<StateCount[]> {
     const searchParams = new URLSearchParams();
     if (params.from_date) searchParams.set('from_date', params.from_date);
     if (params.to_date) searchParams.set('to_date', params.to_date);
 
     const query = searchParams.toString();
-    const res = await api.get<{ data: StateCount[] }>(`/analytics/cases/by-state${query ? `?${query}` : ''}`);
+    const res = await api.get<{ data: StateCount[] }>(`/analytics/surrogates/by-state${query ? `?${query}` : ''}`);
     return res.data;
 }
 
@@ -177,14 +177,14 @@ export async function getFunnelCompare(params: CompareParams = {}): Promise<Funn
     return res.data;
 }
 
-export async function getCasesByStateCompare(params: CompareParams = {}): Promise<StateCount[]> {
+export async function getSurrogatesByStateCompare(params: CompareParams = {}): Promise<StateCount[]> {
     const searchParams = new URLSearchParams();
     if (params.from_date) searchParams.set('from_date', params.from_date);
     if (params.to_date) searchParams.set('to_date', params.to_date);
     if (params.ad_id) searchParams.set('ad_id', params.ad_id);
 
     const query = searchParams.toString();
-    const res = await api.get<{ data: StateCount[] }>(`/analytics/cases/by-state/compare${query ? `?${query}` : ''}`);
+    const res = await api.get<{ data: StateCount[] }>(`/analytics/surrogates/by-state/compare${query ? `?${query}` : ''}`);
     return res.data;
 }
 
@@ -192,9 +192,9 @@ export async function getCasesByStateCompare(params: CompareParams = {}): Promis
 export interface ActivityFeedItem {
     id: string;
     activity_type: string;
-    case_id: string;
-    case_number: string | null;
-    case_name: string | null;
+    surrogate_id: string;
+    surrogate_number: string | null;
+    surrogate_name: string | null;
     actor_name: string | null;
     details: JsonObject | null;
     created_at: string;
@@ -227,27 +227,27 @@ export async function getActivityFeed(params: ActivityFeedParams = {}): Promise<
 export interface UserPerformanceData {
     user_id: string;
     user_name: string;
-    total_cases: number;
+    total_surrogates: number;
     archived_count: number;
     contacted: number;
     qualified: number;
-    pending_match: number;
+    ready_to_match: number;
     matched: number;
-    applied: number;
+    application_submitted: number;
     lost: number;
     conversion_rate: number;
     avg_days_to_match: number | null;
-    avg_days_to_apply: number | null;
+    avg_days_to_application_submitted: number | null;
 }
 
 export interface UnassignedPerformanceData {
-    total_cases: number;
+    total_surrogates: number;
     archived_count: number;
     contacted: number;
     qualified: number;
-    pending_match: number;
+    ready_to_match: number;
     matched: number;
-    applied: number;
+    application_submitted: number;
     lost: number;
 }
 
@@ -388,7 +388,7 @@ export interface FormPerformance {
     form_external_id: string;
     form_name: string;
     lead_count: number;
-    case_count: number;
+    surrogate_count: number;
     qualified_count: number;
     conversion_rate: number;
     qualified_rate: number;

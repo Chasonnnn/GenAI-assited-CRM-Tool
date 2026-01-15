@@ -257,9 +257,7 @@ def get_appointment_for_reschedule(
     db: Session = Depends(get_db),
 ):
     """Get appointment details for reschedule form."""
-    appt = appointment_service.get_appointment_by_token(
-        db, org_id, token, "reschedule"
-    )
+    appt = appointment_service.get_appointment_by_token(db, org_id, token, "reschedule")
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
 
@@ -280,9 +278,7 @@ def get_reschedule_slots(
 
     Uses the appointment's existing settings to determine availability.
     """
-    appt = appointment_service.get_appointment_by_token(
-        db, org_id, token, "reschedule"
-    )
+    appt = appointment_service.get_appointment_by_token(db, org_id, token, "reschedule")
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
 
@@ -337,9 +333,7 @@ def reschedule_by_token(
     db: Session = Depends(get_db),
 ):
     """Reschedule an appointment using self-service token."""
-    appt = appointment_service.get_appointment_by_token(
-        db, org_id, token, "reschedule"
-    )
+    appt = appointment_service.get_appointment_by_token(db, org_id, token, "reschedule")
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
 

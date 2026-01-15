@@ -102,6 +102,16 @@ def create_user_from_invite(
     # Mark invite as accepted
     invite.accepted_at = datetime.now(timezone.utc)
 
+    # Add to Surrogate Pool queue if role qualifies
+    from app.services import membership_service
+
+    membership_service.ensure_surrogate_pool_membership(
+        db=db,
+        org_id=invite.organization_id,
+        user_id=user.id,
+        role=invite.role.value if hasattr(invite.role, "value") else invite.role,
+    )
+
     db.commit()
     db.refresh(user)
     db.refresh(membership)

@@ -1,4 +1,4 @@
-"""Profile service for case profile card overrides and hidden fields."""
+"""Profile service for surrogate profile card overrides and hidden fields."""
 
 import uuid
 from datetime import datetime, timezone
@@ -6,11 +6,11 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.db.enums import CaseActivityType
+from app.db.enums import SurrogateActivityType
 from app.db.models import (
-    CaseProfileOverride,
-    CaseProfileHiddenField,
-    CaseProfileState,
+    SurrogateProfileOverride,
+    SurrogateProfileHiddenField,
+    SurrogateProfileState,
     FormSubmission,
 )
 from app.services import activity_service
@@ -19,10 +19,10 @@ from app.services import activity_service
 def get_profile_data(
     db: Session,
     org_id: uuid.UUID,
-    case_id: uuid.UUID,
+    surrogate_id: uuid.UUID,
 ) -> dict[str, Any]:
     """
-    Get merged profile data for a case.
+    Get merged profile data for a surrogate.
 
     Returns:
         {
@@ -36,15 +36,15 @@ def get_profile_data(
     """
     # Resolve base submission (stored base > first submission)
     base_state = (
-        db.query(CaseProfileState)
+        db.query(SurrogateProfileState)
         .filter(
-            CaseProfileState.case_id == case_id,
-            CaseProfileState.organization_id == org_id,
+            SurrogateProfileState.surrogate_id == surrogate_id,
+            SurrogateProfileState.organization_id == org_id,
         )
         .first()
     )
     base_submission_id = base_state.base_submission_id if base_state else None
-    submission = _get_base_submission(db, org_id, case_id, base_submission_id)
+    submission = _get_base_submission(db, org_id, surrogate_id, base_submission_id)
 
     base_answers: dict[str, Any] = {}
     schema_snapshot = None
@@ -56,10 +56,10 @@ def get_profile_data(
 
     # Get overrides
     overrides_list = (
-        db.query(CaseProfileOverride)
+        db.query(SurrogateProfileOverride)
         .filter(
-            CaseProfileOverride.case_id == case_id,
-            CaseProfileOverride.organization_id == org_id,
+            SurrogateProfileOverride.surrogate_id == surrogate_id,
+            SurrogateProfileOverride.organization_id == org_id,
         )
         .all()
     )
@@ -67,10 +67,10 @@ def get_profile_data(
 
     # Get hidden fields
     hidden_list = (
-        db.query(CaseProfileHiddenField)
+        db.query(SurrogateProfileHiddenField)
         .filter(
-            CaseProfileHiddenField.case_id == case_id,
-            CaseProfileHiddenField.organization_id == org_id,
+            SurrogateProfileHiddenField.surrogate_id == surrogate_id,
+            SurrogateProfileHiddenField.organization_id == org_id,
         )
         .all()
     )
@@ -92,7 +92,7 @@ def get_profile_data(
 def _get_base_submission(
     db: Session,
     org_id: uuid.UUID,
-    case_id: uuid.UUID,
+    surrogate_id: uuid.UUID,
     base_submission_id: uuid.UUID | None = None,
 ) -> FormSubmission | None:
     """Resolve base submission (explicit base or first submission)."""
@@ -101,7 +101,7 @@ def _get_base_submission(
             db.query(FormSubmission)
             .filter(
                 FormSubmission.id == base_submission_id,
-                FormSubmission.case_id == case_id,
+                FormSubmission.surrogate_id == surrogate_id,
                 FormSubmission.organization_id == org_id,
             )
             .first()
@@ -112,7 +112,7 @@ def _get_base_submission(
     return (
         db.query(FormSubmission)
         .filter(
-            FormSubmission.case_id == case_id,
+            FormSubmission.surrogate_id == surrogate_id,
             FormSubmission.organization_id == org_id,
         )
         .order_by(FormSubmission.submitted_at.desc())
@@ -123,7 +123,7 @@ def _get_base_submission(
 def get_sync_diff(
     db: Session,
     org_id: uuid.UUID,
-    case_id: uuid.UUID,
+    surrogate_id: uuid.UUID,
 ) -> list[dict[str, Any]]:
     """
     Get staged changes for syncing from latest submission.
@@ -134,14 +134,14 @@ def get_sync_diff(
         { "field_key": str, "old_value": Any, "new_value": Any }
     """
     # Get current profile data
-    profile = get_profile_data(db, org_id, case_id)
+    profile = get_profile_data(db, org_id, surrogate_id)
     current_merged = profile["merged_view"]
 
     # Get latest submission
     submission = (
         db.query(FormSubmission)
         .filter(
-            FormSubmission.case_id == case_id,
+            FormSubmission.surrogate_id == surrogate_id,
             FormSubmission.organization_id == org_id,
         )
         .order_by(FormSubmission.submitted_at.desc())
@@ -162,11 +162,13 @@ def get_sync_diff(
         new_val = latest_answers.get(key)
 
         if old_val != new_val:
-            staged_changes.append({
-                "field_key": key,
-                "old_value": old_val,
-                "new_value": new_val,
-            })
+            staged_changes.append(
+                {
+                    "field_key": key,
+                    "old_value": old_val,
+                    "new_value": new_val,
+                }
+            )
 
     return staged_changes
 
@@ -174,7 +176,7 @@ def get_sync_diff(
 def save_profile_overrides(
     db: Session,
     org_id: uuid.UUID,
-    case_id: uuid.UUID,
+    surrogate_id: uuid.UUID,
     user_id: uuid.UUID,
     overrides: dict[str, Any],
     new_base_submission_id: uuid.UUID | None = None,
@@ -186,17 +188,17 @@ def save_profile_overrides(
     """
     # Resolve base submission for diff filtering
     base_state = (
-        db.query(CaseProfileState)
+        db.query(SurrogateProfileState)
         .filter(
-            CaseProfileState.case_id == case_id,
-            CaseProfileState.organization_id == org_id,
+            SurrogateProfileState.surrogate_id == surrogate_id,
+            SurrogateProfileState.organization_id == org_id,
         )
         .first()
     )
     base_submission_id = new_base_submission_id or (
         base_state.base_submission_id if base_state else None
     )
-    base_submission = _get_base_submission(db, org_id, case_id, base_submission_id)
+    base_submission = _get_base_submission(db, org_id, surrogate_id, base_submission_id)
     base_answers = base_submission.answers_json if base_submission else {}
 
     if new_base_submission_id is not None and (
@@ -206,10 +208,10 @@ def save_profile_overrides(
 
     # Get current overrides for diff logging
     current_overrides = (
-        db.query(CaseProfileOverride)
+        db.query(SurrogateProfileOverride)
         .filter(
-            CaseProfileOverride.case_id == case_id,
-            CaseProfileOverride.organization_id == org_id,
+            SurrogateProfileOverride.surrogate_id == surrogate_id,
+            SurrogateProfileOverride.organization_id == org_id,
         )
         .all()
     )
@@ -217,21 +219,19 @@ def save_profile_overrides(
 
     # Filter overrides that match base values
     filtered_overrides = {
-        key: value
-        for key, value in overrides.items()
-        if base_answers.get(key) != value
+        key: value for key, value in overrides.items() if base_answers.get(key) != value
     }
 
     # Clear existing overrides
-    db.query(CaseProfileOverride).filter(
-        CaseProfileOverride.case_id == case_id,
-        CaseProfileOverride.organization_id == org_id,
+    db.query(SurrogateProfileOverride).filter(
+        SurrogateProfileOverride.surrogate_id == surrogate_id,
+        SurrogateProfileOverride.organization_id == org_id,
     ).delete()
 
     # Add new overrides
     for field_key, value in filtered_overrides.items():
-        override = CaseProfileOverride(
-            case_id=case_id,
+        override = SurrogateProfileOverride(
+            surrogate_id=surrogate_id,
             organization_id=org_id,
             field_key=field_key,
             value=value,
@@ -248,9 +248,9 @@ def save_profile_overrides(
             base_state.updated_at = datetime.now(timezone.utc)
         else:
             db.add(
-                CaseProfileState(
+                SurrogateProfileState(
                     id=uuid.uuid4(),
-                    case_id=case_id,
+                    surrogate_id=surrogate_id,
                     organization_id=org_id,
                     base_submission_id=new_base_submission_id,
                     updated_by_user_id=user_id,
@@ -270,9 +270,9 @@ def save_profile_overrides(
     if changes:
         activity_service.log_activity(
             db=db,
-            case_id=case_id,
+            surrogate_id=surrogate_id,
             organization_id=org_id,
-            activity_type=CaseActivityType.PROFILE_EDITED,
+            activity_type=SurrogateActivityType.PROFILE_EDITED,
             actor_user_id=user_id,
             details={
                 "changes": changes,
@@ -289,27 +289,27 @@ def save_profile_overrides(
 def set_field_hidden(
     db: Session,
     org_id: uuid.UUID,
-    case_id: uuid.UUID,
+    surrogate_id: uuid.UUID,
     user_id: uuid.UUID,
     field_key: str,
     hidden: bool,
 ) -> None:
     """Toggle hidden state for a profile field."""
     existing = (
-        db.query(CaseProfileHiddenField)
+        db.query(SurrogateProfileHiddenField)
         .filter(
-            CaseProfileHiddenField.case_id == case_id,
-            CaseProfileHiddenField.organization_id == org_id,
-            CaseProfileHiddenField.field_key == field_key,
+            SurrogateProfileHiddenField.surrogate_id == surrogate_id,
+            SurrogateProfileHiddenField.organization_id == org_id,
+            SurrogateProfileHiddenField.field_key == field_key,
         )
         .first()
     )
 
     if hidden and not existing:
         # Add hidden field
-        hidden_field = CaseProfileHiddenField(
+        hidden_field = SurrogateProfileHiddenField(
             id=uuid.uuid4(),
-            case_id=case_id,
+            surrogate_id=surrogate_id,
             organization_id=org_id,
             field_key=field_key,
             hidden_by_user_id=user_id,
@@ -318,9 +318,9 @@ def set_field_hidden(
         db.add(hidden_field)
         activity_service.log_activity(
             db=db,
-            case_id=case_id,
+            surrogate_id=surrogate_id,
             organization_id=org_id,
-            activity_type=CaseActivityType.PROFILE_HIDDEN,
+            activity_type=SurrogateActivityType.PROFILE_HIDDEN,
             actor_user_id=user_id,
             details={
                 "field_key": field_key,
@@ -333,9 +333,9 @@ def set_field_hidden(
         db.delete(existing)
         activity_service.log_activity(
             db=db,
-            case_id=case_id,
+            surrogate_id=surrogate_id,
             organization_id=org_id,
-            activity_type=CaseActivityType.PROFILE_HIDDEN,
+            activity_type=SurrogateActivityType.PROFILE_HIDDEN,
             actor_user_id=user_id,
             details={
                 "field_key": field_key,
@@ -348,14 +348,14 @@ def set_field_hidden(
 def get_hidden_fields(
     db: Session,
     org_id: uuid.UUID,
-    case_id: uuid.UUID,
+    surrogate_id: uuid.UUID,
 ) -> list[str]:
-    """Get list of hidden field keys for a case."""
+    """Get list of hidden field keys for a surrogate."""
     hidden_list = (
-        db.query(CaseProfileHiddenField)
+        db.query(SurrogateProfileHiddenField)
         .filter(
-            CaseProfileHiddenField.case_id == case_id,
-            CaseProfileHiddenField.organization_id == org_id,
+            SurrogateProfileHiddenField.surrogate_id == surrogate_id,
+            SurrogateProfileHiddenField.organization_id == org_id,
         )
         .all()
     )

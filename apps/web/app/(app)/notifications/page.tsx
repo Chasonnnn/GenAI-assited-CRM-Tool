@@ -28,12 +28,12 @@ import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 // Map notification types to UI groups
 const TYPE_GROUPS: Record<string, string[]> = {
     all: [],
-    case: [
-        "case_assigned",
-        "case_status_changed",
-        "case_handoff_ready",
-        "case_handoff_accepted",
-        "case_handoff_denied",
+    surrogate: [
+        "surrogate_assigned",
+        "surrogate_status_changed",
+        "surrogate_claim_available",
+        "surrogate_claimed",
+        "surrogate_claim_denied",
         "interview_transcription_completed",
         "attachment_infected",
     ],
@@ -42,7 +42,7 @@ const TYPE_GROUPS: Record<string, string[]> = {
 }
 
 function getNotificationIcon(type: string) {
-    if (type.startsWith("case")) return FileTextIcon
+    if (type.startsWith("surrogate")) return FileTextIcon
     if (type.startsWith("interview")) return FileTextIcon
     if (type.startsWith("attachment")) return FileTextIcon
     if (type.startsWith("task") || type.startsWith("workflow_approval")) return CheckSquareIcon
@@ -91,8 +91,8 @@ export default function NotificationsPage() {
         if (!notification.read_at) {
             markRead.mutate(notification.id)
         }
-        if (notification.entity_type === "case" && notification.entity_id) {
-            router.push(`/cases/${notification.entity_id}`)
+        if (notification.entity_type === "surrogate" && notification.entity_id) {
+            router.push(`/surrogates/${notification.entity_id}`)
         } else if (notification.entity_type === "task" && notification.entity_id) {
             router.push(`/tasks`)
         } else if (notification.entity_type === "appointment" && notification.entity_id) {
@@ -180,7 +180,7 @@ export default function NotificationsPage() {
                                 {(value: string | null) => {
                                     const labels: Record<string, string> = {
                                         all: "All",
-                                        case: "Case Updates",
+                                        surrogate: "Surrogate Updates",
                                         task: "Task Updates",
                                         appointment: "Appointments",
                                     }
@@ -190,7 +190,7 @@ export default function NotificationsPage() {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All</SelectItem>
-                            <SelectItem value="case">Case Updates</SelectItem>
+                            <SelectItem value="surrogate">Surrogate Updates</SelectItem>
                             <SelectItem value="task">Task Updates</SelectItem>
                             <SelectItem value="appointment">Appointments</SelectItem>
                         </SelectContent>
@@ -244,11 +244,11 @@ export default function NotificationsPage() {
                                                             <span>Assigned to {task.owner_name}</span>
                                                         </>
                                                     )}
-                                                    {task.case_number && (
+                                                    {task.surrogate_number && (
                                                         <>
                                                             <span>•</span>
                                                             <span className="text-teal-500">
-                                                                Case #{task.case_number}
+                                                                Surrogate #{task.surrogate_number}
                                                             </span>
                                                         </>
                                                     )}

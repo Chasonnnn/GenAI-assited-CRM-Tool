@@ -19,7 +19,7 @@ from app.db.enums import OwnerType
 from app.db.models import (
     AISettings,
     AutomationWorkflow,
-    Case,
+    Surrogate,
     EmailTemplate,
     Membership,
     MetaLead,
@@ -95,10 +95,8 @@ def _load_json(archive: zipfile.ZipFile, name: str, default: Any) -> Any:
 
 def _ensure_empty_org(db: Session, org_id: UUID) -> None:
     checks = {
-        "cases": db.query(Case).filter(Case.organization_id == org_id).count(),
-        "pipelines": db.query(Pipeline)
-        .filter(Pipeline.organization_id == org_id)
-        .count(),
+        "surrogates": db.query(Surrogate).filter(Surrogate.organization_id == org_id).count(),
+        "pipelines": db.query(Pipeline).filter(Pipeline.organization_id == org_id).count(),
         "pipeline_stages": db.query(PipelineStage)
         .join(Pipeline, PipelineStage.pipeline_id == Pipeline.id)
         .filter(Pipeline.organization_id == org_id)
@@ -109,9 +107,7 @@ def _ensure_empty_org(db: Session, org_id: UUID) -> None:
         "email_templates": db.query(EmailTemplate)
         .filter(EmailTemplate.organization_id == org_id)
         .count(),
-        "meta_leads": db.query(MetaLead)
-        .filter(MetaLead.organization_id == org_id)
-        .count(),
+        "meta_leads": db.query(MetaLead).filter(MetaLead.organization_id == org_id).count(),
         "queues": db.query(Queue).filter(Queue.organization_id == org_id).count(),
         "queue_members": db.query(QueueMember)
         .join(Queue, QueueMember.queue_id == Queue.id)
@@ -125,9 +121,7 @@ def _ensure_empty_org(db: Session, org_id: UUID) -> None:
         .join(Membership, Membership.user_id == User.id)
         .filter(Membership.organization_id == org_id)
         .count(),
-        "ai_settings": db.query(AISettings)
-        .filter(AISettings.organization_id == org_id)
-        .count(),
+        "ai_settings": db.query(AISettings).filter(AISettings.organization_id == org_id).count(),
         "meta_pages": db.query(MetaPageMapping)
         .filter(MetaPageMapping.organization_id == org_id)
         .count(),
@@ -148,9 +142,7 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
         queues_payload = _load_json(archive, "queues.json", [])
         queue_members_payload = _load_json(archive, "queue_members.json", [])
         role_permissions_payload = _load_json(archive, "role_permissions.json", [])
-        user_overrides_payload = _load_json(
-            archive, "user_permission_overrides.json", []
-        )
+        user_overrides_payload = _load_json(archive, "user_permission_overrides.json", [])
         pipelines_payload = _load_json(archive, "pipelines.json", [])
         templates_payload = _load_json(archive, "email_templates.json", [])
         workflows_payload = _load_json(archive, "workflows.json", [])
@@ -172,19 +164,14 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             org.current_version = organization_payload["current_version"]
 
     export_user_ids = {UUID(item["id"]) for item in users_payload if item.get("id")}
-    export_emails = {
-        item.get("email", "").lower() for item in users_payload if item.get("email")
-    }
+    export_emails = {item.get("email", "").lower() for item in users_payload if item.get("email")}
 
     existing_users_by_id = {
-        user.id: user
-        for user in db.query(User).filter(User.id.in_(export_user_ids)).all()
+        user.id: user for user in db.query(User).filter(User.id.in_(export_user_ids)).all()
     }
     existing_users_by_email = {
         user.email.lower(): user
-        for user in db.query(User)
-        .filter(func.lower(User.email).in_(export_emails))
-        .all()
+        for user in db.query(User).filter(func.lower(User.email).in_(export_emails)).all()
     }
 
     user_id_map: dict[UUID, UUID] = {}
@@ -237,9 +224,7 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
 
     existing_memberships_by_user = {
         membership.user_id: membership
-        for membership in db.query(Membership)
-        .filter(Membership.organization_id == org_id)
-        .all()
+        for membership in db.query(Membership).filter(Membership.organization_id == org_id).all()
     }
 
     for membership_data in memberships_payload:
@@ -250,9 +235,7 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
         membership = existing_memberships_by_user.get(user_id)
         if membership:
             membership.role = membership_data.get("role", membership.role)
-            membership.is_active = membership_data.get(
-                "is_active", membership.is_active
-            )
+            membership.is_active = membership_data.get("is_active", membership.is_active)
         else:
             membership = Membership(
                 id=UUID(membership_data["id"]),
@@ -272,10 +255,8 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             name=queue_data.get("name"),
             description=queue_data.get("description"),
             is_active=queue_data.get("is_active", True),
-            created_at=_parse_datetime(queue_data.get("created_at"))
-            or datetime.now(timezone.utc),
-            updated_at=_parse_datetime(queue_data.get("updated_at"))
-            or datetime.now(timezone.utc),
+            created_at=_parse_datetime(queue_data.get("created_at")) or datetime.now(timezone.utc),
+            updated_at=_parse_datetime(queue_data.get("updated_at")) or datetime.now(timezone.utc),
         )
         db.add(queue)
 
@@ -324,9 +305,7 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
         template = EmailTemplate(
             id=UUID(template_data["id"]),
             organization_id=org_id,
-            created_by_user_id=_map_user_id(
-                _parse_uuid(template_data.get("created_by_user_id"))
-            ),
+            created_by_user_id=_map_user_id(_parse_uuid(template_data.get("created_by_user_id"))),
             name=template_data.get("name"),
             subject=template_data.get("subject"),
             body=template_data.get("body"),
@@ -363,22 +342,14 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             recurrence_interval_hours=workflow_data.get("recurrence_interval_hours"),
             recurrence_stop_on_status=workflow_data.get("recurrence_stop_on_status"),
             rate_limit_per_hour=workflow_data.get("rate_limit_per_hour"),
-            rate_limit_per_entity_per_day=workflow_data.get(
-                "rate_limit_per_entity_per_day"
-            ),
+            rate_limit_per_entity_per_day=workflow_data.get("rate_limit_per_entity_per_day"),
             is_system_workflow=workflow_data.get("is_system_workflow", False),
             system_key=workflow_data.get("system_key"),
             requires_review=workflow_data.get("requires_review", False),
             reviewed_at=_parse_datetime(workflow_data.get("reviewed_at")),
-            reviewed_by_user_id=_map_user_id(
-                _parse_uuid(workflow_data.get("reviewed_by_user_id"))
-            ),
-            created_by_user_id=_map_user_id(
-                _parse_uuid(workflow_data.get("created_by_user_id"))
-            ),
-            updated_by_user_id=_map_user_id(
-                _parse_uuid(workflow_data.get("updated_by_user_id"))
-            ),
+            reviewed_by_user_id=_map_user_id(_parse_uuid(workflow_data.get("reviewed_by_user_id"))),
+            created_by_user_id=_map_user_id(_parse_uuid(workflow_data.get("created_by_user_id"))),
+            updated_by_user_id=_map_user_id(_parse_uuid(workflow_data.get("updated_by_user_id"))),
             created_at=_parse_datetime(workflow_data.get("created_at"))
             or datetime.now(timezone.utc),
             updated_at=_parse_datetime(workflow_data.get("updated_at"))
@@ -390,9 +361,9 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
         settings_row = UserNotificationSettings(
             user_id=_map_user_id(UUID(settings_data["user_id"])),
             organization_id=org_id,
-            case_assigned=settings_data.get("case_assigned", True),
-            case_status_changed=settings_data.get("case_status_changed", True),
-            case_handoff=settings_data.get("case_handoff", True),
+            surrogate_assigned=settings_data.get("surrogate_assigned", True),
+            surrogate_status_changed=settings_data.get("surrogate_status_changed", True),
+            surrogate_claim_available=settings_data.get("surrogate_claim_available", True),
             task_assigned=settings_data.get("task_assigned", True),
             workflow_approvals=settings_data.get("workflow_approvals", True),
             task_reminders=settings_data.get("task_reminders", True),
@@ -411,12 +382,8 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             provider=ai_settings_payload.get("provider", "openai"),
             model=ai_settings_payload.get("model"),
             context_notes_limit=ai_settings_payload.get("context_notes_limit"),
-            conversation_history_limit=ai_settings_payload.get(
-                "conversation_history_limit"
-            ),
-            consent_accepted_at=_parse_datetime(
-                ai_settings_payload.get("consent_accepted_at")
-            ),
+            conversation_history_limit=ai_settings_payload.get("conversation_history_limit"),
+            consent_accepted_at=_parse_datetime(ai_settings_payload.get("consent_accepted_at")),
             consent_accepted_by=_map_user_id(
                 _parse_uuid(ai_settings_payload.get("consent_accepted_by"))
             ),
@@ -502,11 +469,9 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
     }
 
 
-def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
-    if db.query(Case).filter(Case.organization_id == org_id).count():
-        raise ValueError(
-            "Organization already has cases; import requires an empty org."
-        )
+def import_surrogates_csv(db: Session, org_id: UUID, content: bytes) -> int:
+    if db.query(Surrogate).filter(Surrogate.organization_id == org_id).count():
+        raise ValueError("Organization already has surrogates; import requires an empty org.")
     text_content = content.decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(text_content))
     if not reader.fieldnames:
@@ -526,12 +491,9 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
         .all()
     )
     user_ids = {user.id for user in users_in_org}
-    users_by_email = {
-        user.email.lower(): user.id for user in users_in_org if user.email
-    }
+    users_by_email = {user.email.lower(): user.id for user in users_in_org if user.email}
     queue_ids = {
-        queue.id
-        for queue in db.query(Queue).filter(Queue.organization_id == org_id).all()
+        queue.id for queue in db.query(Queue).filter(Queue.organization_id == org_id).all()
     }
 
     meta_leads_to_link: list[tuple[UUID, UUID]] = []
@@ -559,11 +521,7 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
     if meta_lead_ids:
         existing_meta_lead_ids = {
             meta_id
-            for (meta_id,) in (
-                db.query(MetaLead.id)
-                .filter(MetaLead.id.in_(meta_lead_ids))
-                .all()
-            )
+            for (meta_id,) in (db.query(MetaLead.id).filter(MetaLead.id.in_(meta_lead_ids)).all())
         }
 
     for row in rows:
@@ -571,7 +529,7 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
         meta_lead_external_id = row.get("meta_lead_external_id")
         if meta_lead_id and not meta_lead_external_id:
             raise ValueError(
-                f"Missing meta_lead_external_id for case {row.get('id') or 'unknown'}"
+                f"Missing meta_lead_external_id for surrogate {row.get('id') or 'unknown'}"
             )
         if not meta_lead_id or not meta_lead_external_id:
             continue
@@ -591,10 +549,8 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
             field_data=_parse_json(row.get("meta_lead_field_data")),
             raw_payload=_parse_json(row.get("meta_lead_raw_payload")),
             field_data_raw=_parse_json(row.get("meta_lead_field_data_raw")),
-            is_converted=meta_lead_is_converted
-            if meta_lead_is_converted is not None
-            else True,
-            converted_case_id=None,
+            is_converted=meta_lead_is_converted if meta_lead_is_converted is not None else True,
+            converted_surrogate_id=None,
             conversion_error=row.get("meta_lead_conversion_error"),
             status=row.get("meta_lead_status") or "converted",
             fetch_error=row.get("meta_lead_fetch_error"),
@@ -610,43 +566,41 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
         db.flush()
 
     for row in rows:
-        case_id = _parse_uuid(row.get("id"))
-        if not case_id:
-            raise ValueError("Case id is required")
+        surrogate_id = _parse_uuid(row.get("id"))
+        if not surrogate_id:
+            raise ValueError("Surrogate id is required")
 
         stage_id = _parse_uuid(row.get("stage_id"))
         if not stage_id:
-            raise ValueError(f"Stage id is required for case {case_id}")
+            raise ValueError(f"Stage id is required for surrogate {surrogate_id}")
         if stage_id not in stage_ids:
-            raise ValueError(f"Stage {stage_id} not found for case {case_id}")
+            raise ValueError(f"Stage {stage_id} not found for surrogate {surrogate_id}")
 
         owner_type = row.get("owner_type")
         if owner_type not in (OwnerType.USER.value, OwnerType.QUEUE.value):
-            raise ValueError(f"Invalid owner_type for case {case_id}")
+            raise ValueError(f"Invalid owner_type for surrogate {surrogate_id}")
         owner_id = _parse_uuid(row.get("owner_id"))
         if not owner_id:
-            raise ValueError(f"Owner id required for case {case_id}")
+            raise ValueError(f"Owner id required for surrogate {surrogate_id}")
         if owner_type == OwnerType.USER.value:
             owner_id = _resolve_user_id(owner_id, row.get("owner_email"))
             if not owner_id or owner_id not in user_ids:
-                raise ValueError(f"Owner user {owner_id} not found for case {case_id}")
+                raise ValueError(f"Owner user {owner_id} not found for surrogate {surrogate_id}")
         if owner_type == OwnerType.QUEUE.value and owner_id not in queue_ids:
-            raise ValueError(f"Owner queue {owner_id} not found for case {case_id}")
+            raise ValueError(f"Owner queue {owner_id} not found for surrogate {surrogate_id}")
 
         meta_lead_id = _parse_uuid(row.get("meta_lead_id"))
         meta_lead_external_id = row.get("meta_lead_external_id")
 
         if meta_lead_id and not meta_lead_external_id:
-            raise ValueError(f"Missing meta_lead_external_id for case {case_id}")
+            raise ValueError(f"Missing meta_lead_external_id for surrogate {surrogate_id}")
 
         created_by_user_id = _parse_uuid(row.get("created_by_user_id"))
         if created_by_user_id:
-            created_by_user_id = _resolve_user_id(
-                created_by_user_id, row.get("created_by_email")
-            )
+            created_by_user_id = _resolve_user_id(created_by_user_id, row.get("created_by_email"))
             if created_by_user_id and created_by_user_id not in user_ids:
                 raise ValueError(
-                    f"Created-by user {created_by_user_id} not found for case {case_id}"
+                    f"Created-by user {created_by_user_id} not found for surrogate {surrogate_id}"
                 )
 
         archived_by_user_id = _parse_uuid(row.get("archived_by_user_id"))
@@ -656,19 +610,19 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
             )
             if archived_by_user_id and archived_by_user_id not in user_ids:
                 raise ValueError(
-                    f"Archived-by user {archived_by_user_id} not found for case {case_id}"
+                    f"Archived-by user {archived_by_user_id} not found for surrogate {surrogate_id}"
                 )
 
-        if not row.get("case_number"):
-            raise ValueError(f"Missing case_number for case {case_id}")
+        if not row.get("surrogate_number"):
+            raise ValueError(f"Missing surrogate_number for surrogate {surrogate_id}")
         if not row.get("status_label"):
-            raise ValueError(f"Missing status_label for case {case_id}")
+            raise ValueError(f"Missing status_label for surrogate {surrogate_id}")
         if not row.get("source"):
-            raise ValueError(f"Missing source for case {case_id}")
+            raise ValueError(f"Missing source for surrogate {surrogate_id}")
         if not row.get("full_name"):
-            raise ValueError(f"Missing full_name for case {case_id}")
+            raise ValueError(f"Missing full_name for surrogate {surrogate_id}")
         if not row.get("email"):
-            raise ValueError(f"Missing email for case {case_id}")
+            raise ValueError(f"Missing email for surrogate {surrogate_id}")
 
         normalized_email = normalize_email(row.get("email"))
         raw_phone = row.get("phone")
@@ -681,11 +635,11 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
             normalized_phone = None
 
         if meta_lead_id and meta_lead_external_id:
-            meta_leads_to_link.append((meta_lead_id, case_id))
+            meta_leads_to_link.append((meta_lead_id, surrogate_id))
 
-        case = Case(
-            id=case_id,
-            case_number=row.get("case_number"),
+        surrogate = Surrogate(
+            id=surrogate_id,
+            surrogate_number=row.get("surrogate_number"),
             organization_id=org_id,
             status_label=row.get("status_label"),
             stage_id=stage_id,
@@ -719,12 +673,10 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
             archived_by_user_id=archived_by_user_id,
             last_contacted_at=_parse_datetime(row.get("last_contacted_at")),
             last_contact_method=row.get("last_contact_method"),
-            created_at=_parse_datetime(row.get("created_at"))
-            or datetime.now(timezone.utc),
-            updated_at=_parse_datetime(row.get("updated_at"))
-            or datetime.now(timezone.utc),
+            created_at=_parse_datetime(row.get("created_at")) or datetime.now(timezone.utc),
+            updated_at=_parse_datetime(row.get("updated_at")) or datetime.now(timezone.utc),
         )
-        db.add(case)
+        db.add(surrogate)
         imported += 1
 
     db.flush()
@@ -733,8 +685,8 @@ def import_cases_csv(db: Session, org_id: UUID, content: bytes) -> int:
         db.bulk_update_mappings(
             MetaLead,
             [
-                {"id": meta_lead_id, "converted_case_id": case_id}
-                for meta_lead_id, case_id in meta_leads_to_link
+                {"id": meta_lead_id, "converted_surrogate_id": surrogate_id}
+                for meta_lead_id, surrogate_id in meta_leads_to_link
             ],
         )
 

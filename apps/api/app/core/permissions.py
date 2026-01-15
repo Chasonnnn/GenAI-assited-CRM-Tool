@@ -26,7 +26,7 @@ class PermissionCategory(str, Enum):
     """Permission categories for UI grouping."""
 
     NAVIGATION = "Navigation"
-    CASES = "Cases"
+    SURROGATES = "Surrogates"
     INTENDED_PARENTS = "Intended Parents"
     TASKS = "Tasks"
     APPOINTMENTS = "Appointments"
@@ -41,16 +41,16 @@ class PermissionKey(str, Enum):
 
     VIEW_DASHBOARD = "view_dashboard"
 
-    CASES_VIEW = "view_cases"
-    CASES_EDIT = "edit_cases"
-    CASES_DELETE = "delete_cases"
-    CASES_VIEW_POST_APPROVAL = "view_post_approval_cases"
-    CASES_CHANGE_STATUS = "change_case_status"
-    CASES_ASSIGN = "assign_cases"
-    CASES_VIEW_NOTES = "view_case_notes"
-    CASES_EDIT_NOTES = "edit_case_notes"
-    CASES_ARCHIVE = "archive_cases"
-    CASES_IMPORT = "import_cases"
+    SURROGATES_VIEW = "view_surrogates"
+    SURROGATES_EDIT = "edit_surrogates"
+    SURROGATES_DELETE = "delete_surrogates"
+    SURROGATES_VIEW_POST_APPROVAL = "view_post_approval_surrogates"
+    SURROGATES_CHANGE_STATUS = "change_surrogate_status"
+    SURROGATES_ASSIGN = "assign_surrogates"
+    SURROGATES_VIEW_NOTES = "view_surrogate_notes"
+    SURROGATES_EDIT_NOTES = "edit_surrogate_notes"
+    SURROGATES_ARCHIVE = "archive_surrogates"
+    SURROGATES_IMPORT = "import_surrogates"
 
     INTENDED_PARENTS_VIEW = "view_intended_parents"
     INTENDED_PARENTS_EDIT = "edit_intended_parents"
@@ -108,51 +108,60 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
         "Access the main dashboard",
         PermissionCategory.NAVIGATION,
     ),
-    # Cases
-    "view_cases": PermissionDef(
-        "view_cases",
-        "View Cases",
-        "See case list and details",
-        PermissionCategory.CASES,
+    # Surrogates
+    "view_surrogates": PermissionDef(
+        "view_surrogates",
+        "View Surrogates",
+        "See surrogate list and details",
+        PermissionCategory.SURROGATES,
     ),
-    "edit_cases": PermissionDef(
-        "edit_cases", "Edit Cases", "Modify case information", PermissionCategory.CASES
+    "edit_surrogates": PermissionDef(
+        "edit_surrogates",
+        "Edit Surrogates",
+        "Modify surrogate information",
+        PermissionCategory.SURROGATES,
     ),
-    "delete_cases": PermissionDef(
-        "delete_cases", "Delete Cases", "Soft-delete cases", PermissionCategory.CASES
+    "delete_surrogates": PermissionDef(
+        "delete_surrogates",
+        "Delete Surrogates",
+        "Soft-delete surrogates",
+        PermissionCategory.SURROGATES,
     ),
-    "view_post_approval_cases": PermissionDef(
-        "view_post_approval_cases",
-        "View Post-Approval Cases",
-        "See Stage B (post-approval) cases",
-        PermissionCategory.CASES,
+    "view_post_approval_surrogates": PermissionDef(
+        "view_post_approval_surrogates",
+        "View Post-Approval Surrogates",
+        "See Stage B (post-approval) surrogates",
+        PermissionCategory.SURROGATES,
     ),
-    "change_case_status": PermissionDef(
-        "change_case_status",
-        "Change Case Status",
-        "Move cases between pipeline stages",
-        PermissionCategory.CASES,
+    "change_surrogate_status": PermissionDef(
+        "change_surrogate_status",
+        "Change Surrogate Status",
+        "Move surrogates between pipeline stages",
+        PermissionCategory.SURROGATES,
     ),
-    "assign_cases": PermissionDef(
-        "assign_cases",
-        "Assign Cases",
-        "Assign cases to users or queues",
-        PermissionCategory.CASES,
+    "assign_surrogates": PermissionDef(
+        "assign_surrogates",
+        "Assign Surrogates",
+        "Assign surrogates to users or queues",
+        PermissionCategory.SURROGATES,
     ),
-    "view_case_notes": PermissionDef(
-        "view_case_notes",
-        "View Case Notes",
-        "Read case notes",
-        PermissionCategory.CASES,
+    "view_surrogate_notes": PermissionDef(
+        "view_surrogate_notes",
+        "View Surrogate Notes",
+        "Read surrogate notes",
+        PermissionCategory.SURROGATES,
     ),
-    "edit_case_notes": PermissionDef(
-        "edit_case_notes",
-        "Edit Case Notes",
-        "Add and modify case notes",
-        PermissionCategory.CASES,
+    "edit_surrogate_notes": PermissionDef(
+        "edit_surrogate_notes",
+        "Edit Surrogate Notes",
+        "Add and modify surrogate notes",
+        PermissionCategory.SURROGATES,
     ),
-    "import_cases": PermissionDef(
-        "import_cases", "Import Cases", "Import cases via CSV", PermissionCategory.CASES
+    "import_surrogates": PermissionDef(
+        "import_surrogates",
+        "Import Surrogates",
+        "Import surrogates via CSV",
+        PermissionCategory.SURROGATES,
     ),
     # Intended Parents
     "view_intended_parents": PermissionDef(
@@ -371,11 +380,11 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
         PermissionCategory.SETTINGS,
         developer_only=True,
     ),
-    "archive_cases": PermissionDef(
-        "archive_cases",
-        "Archive Cases",
-        "Archive and restore cases",
-        PermissionCategory.CASES,
+    "archive_surrogates": PermissionDef(
+        "archive_surrogates",
+        "Archive Surrogates",
+        "Archive and restore surrogates",
+        PermissionCategory.SURROGATES,
     ),
 }
 
@@ -388,12 +397,12 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
 ROLE_DEFAULTS: dict[str, set[str]] = {
     "intake_specialist": {
         "view_dashboard",
-        "view_cases",
-        "edit_cases",
-        "view_post_approval_cases",  # Allow following cases at all stages
-        "change_case_status",
-        "view_case_notes",
-        "edit_case_notes",
+        "view_surrogates",
+        "edit_surrogates",
+        "view_post_approval_surrogates",  # Allow following surrogates at all stages
+        "change_surrogate_status",
+        "view_surrogate_notes",
+        "edit_surrogate_notes",
         "view_tasks",
         "create_tasks",
         "edit_tasks",
@@ -401,15 +410,15 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
     },
     "case_manager": {
         "view_dashboard",
-        "view_cases",
-        "edit_cases",
-        "view_post_approval_cases",
-        "change_case_status",
-        "assign_cases",
-        "archive_cases",
-        "view_case_notes",
-        "edit_case_notes",
-        "import_cases",
+        "view_surrogates",
+        "edit_surrogates",
+        "view_post_approval_surrogates",
+        "change_surrogate_status",
+        "assign_surrogates",
+        "archive_surrogates",
+        "view_surrogate_notes",
+        "edit_surrogate_notes",
+        "import_surrogates",
         "view_intended_parents",
         "edit_intended_parents",
         "propose_matches",
@@ -424,16 +433,16 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
     },
     "admin": {
         "view_dashboard",
-        "view_cases",
-        "edit_cases",
-        "delete_cases",
-        "view_post_approval_cases",
-        "change_case_status",
-        "assign_cases",
-        "archive_cases",
-        "view_case_notes",
-        "edit_case_notes",
-        "import_cases",
+        "view_surrogates",
+        "edit_surrogates",
+        "delete_surrogates",
+        "view_post_approval_surrogates",
+        "change_surrogate_status",
+        "assign_surrogates",
+        "archive_surrogates",
+        "view_surrogate_notes",
+        "edit_surrogate_notes",
+        "import_surrogates",
         "view_intended_parents",
         "edit_intended_parents",
         "propose_matches",
@@ -474,15 +483,15 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
 
 # Bundles map UI toggles or policy shortcuts to sets of permissions.
 PERMISSION_BUNDLES: dict[str, set[str]] = {
-    "cases_manage": {
-        "view_cases",
-        "edit_cases",
-        "change_case_status",
-        "assign_cases",
-        "archive_cases",
-        "view_case_notes",
-        "edit_case_notes",
-        "import_cases",
+    "surrogates_manage": {
+        "view_surrogates",
+        "edit_surrogates",
+        "change_surrogate_status",
+        "assign_surrogates",
+        "archive_surrogates",
+        "view_surrogate_notes",
+        "edit_surrogate_notes",
+        "import_surrogates",
     },
     "tasks_manage": {
         "view_tasks",

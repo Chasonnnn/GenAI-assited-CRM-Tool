@@ -52,15 +52,11 @@ class ChatResponse:
             "gemini-1.5-pro": {"input": Decimal("1.25"), "output": Decimal("5.00")},
         }
 
-        model_pricing = pricing.get(
-            self.model, {"input": Decimal("0"), "output": Decimal("0")}
-        )
-        input_cost = (Decimal(self.prompt_tokens) / Decimal("1000000")) * model_pricing[
-            "input"
+        model_pricing = pricing.get(self.model, {"input": Decimal("0"), "output": Decimal("0")})
+        input_cost = (Decimal(self.prompt_tokens) / Decimal("1000000")) * model_pricing["input"]
+        output_cost = (Decimal(self.completion_tokens) / Decimal("1000000")) * model_pricing[
+            "output"
         ]
-        output_cost = (
-            Decimal(self.completion_tokens) / Decimal("1000000")
-        ) * model_pricing["output"]
         return input_cost + output_cost
 
 
@@ -110,9 +106,7 @@ class OpenAIProvider(AIProvider):
                 },
                 json={
                     "model": model,
-                    "messages": [
-                        {"role": m.role, "content": m.content} for m in messages
-                    ],
+                    "messages": [{"role": m.role, "content": m.content} for m in messages],
                     "temperature": temperature,
                     "max_tokens": max_tokens,
                 },
@@ -181,9 +175,7 @@ class GeminiProvider(AIProvider):
         }
 
         if system_instruction:
-            request_body["systemInstruction"] = {
-                "parts": [{"text": system_instruction}]
-            }
+            request_body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
@@ -225,9 +217,7 @@ class GeminiProvider(AIProvider):
             return False
 
 
-def get_provider(
-    provider_name: str, api_key: str, model: str | None = None
-) -> AIProvider:
+def get_provider(provider_name: str, api_key: str, model: str | None = None) -> AIProvider:
     """Factory function to get the appropriate AI provider."""
     if provider_name == "openai":
         return OpenAIProvider(api_key, default_model=model or "gpt-4o-mini")

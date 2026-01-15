@@ -1,19 +1,19 @@
 /**
- * TypeScript types for Cases module.
+ * TypeScript types for Surrogates module.
  * Matches backend stage-based pipeline model.
  */
 
-export type CaseSource = 'manual' | 'meta' | 'website' | 'referral';
+export type SurrogateSource = 'manual' | 'meta' | 'website' | 'referral';
 
 // List item (minimal for table display)
-export interface CaseListItem {
+export interface SurrogateListItem {
     id: string;
-    case_number: string;
+    surrogate_number: string;
     stage_id: string;
     stage_slug: string | null;
     stage_type: string | null;
     status_label: string;
-    source: CaseSource;
+    source: SurrogateSource;
     full_name: string;
     email: string;
     phone: string | null;
@@ -29,8 +29,8 @@ export interface CaseListItem {
     created_at: string;
 }
 
-// Full case detail
-export interface CaseRead extends CaseListItem {
+// Full surrogate detail
+export interface SurrogateRead extends SurrogateListItem {
     created_by_user_id: string | null;
     date_of_birth: string | null;
     race: string | null;
@@ -48,8 +48,8 @@ export interface CaseRead extends CaseListItem {
 }
 
 // Paginated response
-export interface CaseListResponse {
-    items: CaseListItem[];
+export interface SurrogateListResponse {
+    items: SurrogateListItem[];
     total: number;
     page: number;
     per_page: number;

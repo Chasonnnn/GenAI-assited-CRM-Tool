@@ -57,7 +57,7 @@ type ViewType = "month" | "week" | "day"
 type FilterType = "all" | "surrogate" | "ip" | "appointments"
 
 interface MatchTasksCalendarProps {
-    caseId: string
+    surrogateId: string
     ipId?: string
     onAddTask?: () => void
 }
@@ -380,7 +380,7 @@ function DayView({
 }
 
 // Main Component
-export function MatchTasksCalendar({ caseId, ipId, onAddTask }: MatchTasksCalendarProps) {
+export function MatchTasksCalendar({ surrogateId, ipId, onAddTask }: MatchTasksCalendarProps) {
     const [currentDate, setCurrentDate] = useState(new Date())
     const [viewType, setViewType] = useState<ViewType>("month")
     const [filter, setFilter] = useState<FilterType>("all")
@@ -410,9 +410,9 @@ export function MatchTasksCalendar({ caseId, ipId, onAddTask }: MatchTasksCalend
         }
     }, [currentDate, viewType])
 
-    // Fetch tasks for Surrogate case
+    // Fetch tasks for surrogate
     const { data: surrogateTasks, isLoading: loadingSurrogate } = useTasks({
-        case_id: caseId,
+        surrogate_id: surrogateId,
         is_completed: false,
         per_page: 100,
         exclude_approvals: true,
@@ -439,7 +439,7 @@ export function MatchTasksCalendar({ caseId, ipId, onAddTask }: MatchTasksCalend
     const { data: appointmentsData, isLoading: loadingAppointments } = useAppointments({
         date_start: dateStart,
         date_end: dateEnd,
-        case_id: caseId,
+        surrogate_id: surrogateId,
         per_page: 100,
         ...(ipId ? { intended_parent_id: ipId } : {}),
     })
@@ -460,7 +460,7 @@ export function MatchTasksCalendar({ caseId, ipId, onAddTask }: MatchTasksCalend
         // Add IP tasks
         if (ipTasks?.items) {
             ipTasks.items.forEach((task) => {
-                // Avoid duplicates (a task could theoretically have both case_id and intended_parent_id)
+                // Avoid duplicates (a task could theoretically have both surrogate_id and intended_parent_id)
                 if (!sources.has(task.id)) {
                     sources.set(task.id, "ip")
                     tasks.push(task)

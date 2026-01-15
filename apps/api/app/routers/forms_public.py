@@ -62,9 +62,7 @@ def get_public_form(token: str, db: Session = Depends(get_db)):
     if not schema:
         raise HTTPException(status_code=404, detail="Form not found")
 
-    schema = form_service.normalize_form_schema_logo_url(
-        schema, token_record.organization_id
-    )
+    schema = form_service.normalize_form_schema_logo_url(schema, token_record.organization_id)
 
     return FormPublicRead(
         form_id=form.id,

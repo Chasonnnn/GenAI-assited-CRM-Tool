@@ -32,7 +32,7 @@ export default function AdminDataPage() {
 
     const isDeveloper = user?.role === "developer"
 
-    const handleExport = useCallback(async (type: "cases" | "config" | "analytics") => {
+    const handleExport = useCallback(async (type: "surrogates" | "config" | "analytics") => {
         setIsExporting(type)
         const headers = { "X-Requested-With": "XMLHttpRequest" }
 
@@ -122,7 +122,7 @@ export default function AdminDataPage() {
         }
     }, [])
 
-    const handleImport = useCallback(async (type: "config" | "cases" | "all", files: { config?: File; cases?: File }) => {
+    const handleImport = useCallback(async (type: "config" | "surrogates" | "all", files: { config?: File; surrogates?: File }) => {
         setIsImporting(true)
         setImportResult(null)
 
@@ -132,9 +132,9 @@ export default function AdminDataPage() {
                 if (!files.config) throw new Error("Config ZIP required")
                 formData.append("config_zip", files.config)
             }
-            if (type === "cases" || type === "all") {
-                if (!files.cases) throw new Error("Cases CSV required")
-                formData.append("cases_csv", files.cases)
+            if (type === "surrogates" || type === "all") {
+                if (!files.surrogates) throw new Error("Surrogates CSV required")
+                formData.append("surrogates_csv", files.surrogates)
             }
 
             const response = await fetch(`${API_BASE}/admin/imports/${type}`, {
@@ -155,7 +155,7 @@ export default function AdminDataPage() {
 
             setImportResult({ status: "success", details: data })
             toast.success("Import complete", {
-                description: `Imported ${data.cases_imported || 0} cases`,
+                description: `Imported ${data.surrogates_imported || 0} surrogates`,
             })
         } catch (error) {
             console.error("Import failed:", error)
@@ -213,24 +213,24 @@ export default function AdminDataPage() {
                                 <CardHeader>
                                     <CardTitle className="flex items-center gap-2">
                                         <DatabaseIcon className="size-5" />
-                                        Cases
+                                        Surrogates
                                     </CardTitle>
                                     <CardDescription>
-                                        Export all cases as CSV with full profile data
+                                        Export all surrogates as CSV with full profile data
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent>
                                     <Button
                                         className="w-full"
-                                        onClick={() => handleExport("cases")}
+                                        onClick={() => handleExport("surrogates")}
                                         disabled={isExporting !== null}
                                     >
-                                        {isExporting === "cases" ? (
+                                        {isExporting === "surrogates" ? (
                                             <Loader2Icon className="mr-2 size-4 animate-spin" />
                                         ) : (
                                             <DownloadIcon className="mr-2 size-4" />
                                         )}
-                                        Export Cases CSV
+                                        Export Surrogates CSV
                                     </Button>
                                 </CardContent>
                             </Card>
@@ -315,12 +315,12 @@ function ImportForm({
     isLoading,
     result
 }: {
-    onImport: (type: "config" | "cases" | "all", files: { config?: File; cases?: File }) => Promise<void>
+    onImport: (type: "config" | "surrogates" | "all", files: { config?: File; surrogates?: File }) => Promise<void>
     isLoading: boolean
     result: { status: string; details: Record<string, unknown> } | null
 }) {
     const [configFile, setConfigFile] = useState<File | null>(null)
-    const [casesFile, setCasesFile] = useState<File | null>(null)
+    const [surrogatesFile, setSurrogatesFile] = useState<File | null>(null)
 
     return (
         <div className="space-y-6">
@@ -328,7 +328,7 @@ function ImportForm({
                 <CardHeader>
                     <CardTitle>Import Files</CardTitle>
                     <CardDescription>
-                        Upload exported files to restore data. Config must be imported before cases.
+                        Upload exported files to restore data. Config must be imported before surrogates.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -348,16 +348,16 @@ function ImportForm({
                     </div>
 
                     <div className="space-y-2">
-                        <Label htmlFor="cases-file">Cases (CSV)</Label>
+                        <Label htmlFor="surrogates-file">Surrogates (CSV)</Label>
                         <Input
-                            id="cases-file"
+                            id="surrogates-file"
                             type="file"
                             accept=".csv"
-                            onChange={(e) => setCasesFile(e.target.files?.[0] || null)}
+                            onChange={(e) => setSurrogatesFile(e.target.files?.[0] || null)}
                         />
-                        {casesFile && (
+                        {surrogatesFile && (
                             <p className="text-sm text-muted-foreground">
-                                Selected: {casesFile.name}
+                                Selected: {surrogatesFile.name}
                             </p>
                         )}
                     </div>
@@ -379,24 +379,29 @@ function ImportForm({
 
                         <Button
                             variant="outline"
-                            onClick={() => onImport("cases", casesFile ? { cases: casesFile } : {})}
-                            disabled={isLoading || !casesFile}
+                            onClick={() =>
+                                onImport(
+                                    "surrogates",
+                                    surrogatesFile ? { surrogates: surrogatesFile } : {}
+                                )
+                            }
+                            disabled={isLoading || !surrogatesFile}
                         >
                             {isLoading ? (
                                 <Loader2Icon className="mr-2 size-4 animate-spin" />
                             ) : (
                                 <UploadIcon className="mr-2 size-4" />
                             )}
-                            Import Cases Only
+                            Import Surrogates Only
                         </Button>
 
                         <Button
                             variant="secondary"
                             onClick={() => onImport("all", {
                                 ...(configFile ? { config: configFile } : {}),
-                                ...(casesFile ? { cases: casesFile } : {}),
+                                ...(surrogatesFile ? { surrogates: surrogatesFile } : {}),
                             })}
-                            disabled={isLoading || !configFile || !casesFile}
+                            disabled={isLoading || !configFile || !surrogatesFile}
                         >
                             {isLoading ? (
                                 <Loader2Icon className="mr-2 size-4 animate-spin" />

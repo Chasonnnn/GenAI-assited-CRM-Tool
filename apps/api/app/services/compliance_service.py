@@ -19,8 +19,8 @@ from app.core.config import settings
 from app.db.enums import JobType
 from app.db.models import (
     AuditLog,
-    Case,
-    CaseActivityLog,
+    Surrogate,
+    SurrogateActivityLog,
     DataRetentionPolicy,
     EntityNote,
     ExportJob,
@@ -42,18 +42,18 @@ REDACT_MODE_FULL = "full"
 
 
 PERSON_LINKED_TARGETS = {
-    "case",
+    "surrogate",
     "intended_parent",
     "match",
     "task",
     "note",
     "entity_note",
-    "case_activity",
+    "surrogate_activity",
     "user",
 }
 
 PERSON_LINKED_DETAIL_KEYS = {
-    "case_id",
+    "surrogate_id",
     "user_id",
     "intended_parent_id",
     "match_id",
@@ -190,9 +190,7 @@ def _redact_value(key: str, value: Any, person_linked: bool) -> Any:
         return _redact_datetime(value)
 
     normalized_key = key.lower() if key else ""
-    if person_linked and any(
-        pattern.search(normalized_key) for pattern in DATE_KEY_PATTERNS
-    ):
+    if person_linked and any(pattern.search(normalized_key) for pattern in DATE_KEY_PATTERNS):
         if isinstance(value, datetime):
             return _redact_datetime(value)
         if isinstance(value, str) and len(value) >= 7:
@@ -277,12 +275,8 @@ def _build_export_rows(
             "request_id": str(log.request_id) if log.request_id else None,
             "prev_hash": log.prev_hash,
             "entry_hash": log.entry_hash,
-            "before_version_id": str(log.before_version_id)
-            if log.before_version_id
-            else None,
-            "after_version_id": str(log.after_version_id)
-            if log.after_version_id
-            else None,
+            "before_version_id": str(log.before_version_id) if log.before_version_id else None,
+            "after_version_id": str(log.after_version_id) if log.after_version_id else None,
             "created_at": log.created_at,
         }
 
@@ -506,9 +500,7 @@ def process_export_job(db: Session, export_job_id: UUID) -> ExportJob:
             "created_at": datetime.now(timezone.utc).isoformat(),
             "redacted": redacted,
             "date_redaction": "year_month" if redacted else "none",
-            "chain_verifiable": False
-            if redacted
-            else chain_metadata["chain_contiguous"],
+            "chain_verifiable": False if redacted else chain_metadata["chain_contiguous"],
             "chain_contiguous": chain_metadata["chain_contiguous"],
             "range_start_prev_hash": chain_metadata["range_start_prev_hash"],
             "record_count": len(rows),
@@ -544,9 +536,7 @@ def process_export_job(db: Session, export_job_id: UUID) -> ExportJob:
             else:
                 _write_json(file_path, rows)
             _write_metadata_file(metadata_path, metadata)
-            job.file_path = os.path.relpath(
-                file_path, os.path.abspath(settings.EXPORT_LOCAL_DIR)
-            )
+            job.file_path = os.path.relpath(file_path, os.path.abspath(settings.EXPORT_LOCAL_DIR))
 
         job.record_count = len(rows)
         job.status = EXPORT_STATUS_COMPLETED
@@ -580,11 +570,11 @@ def seed_default_retention_policies(
 ) -> list[DataRetentionPolicy]:
     """Create default retention policies for a new organization."""
     default_entities = [
-        "cases",
+        "surrogates",
         "matches",
         "tasks",
         "entity_notes",
-        "case_activity",
+        "surrogate_activity",
     ]
     existing = {policy.entity_type for policy in list_retention_policies(db, org_id)}
     created: list[DataRetentionPolicy] = []
@@ -737,16 +727,14 @@ def _get_active_legal_holds(
         .all()
     )
     org_hold = any(hold.entity_type is None for hold in holds)
-    case_hold_ids = {
-        hold.entity_id
-        for hold in holds
-        if hold.entity_type == "case" and hold.entity_id
+    surrogate_hold_ids = {
+        hold.entity_id for hold in holds if hold.entity_type == "surrogate" and hold.entity_id
     }
     entity_hold_ids: dict[str, set[UUID]] = {}
     for hold in holds:
         if hold.entity_type and hold.entity_id:
             entity_hold_ids.setdefault(hold.entity_type, set()).add(hold.entity_id)
-    return org_hold, case_hold_ids, entity_hold_ids
+    return org_hold, surrogate_hold_ids, entity_hold_ids
 
 
 @dataclass
@@ -760,25 +748,25 @@ def _build_retention_query(
     org_id: UUID,
     entity_type: str,
     cutoff: datetime,
-    case_hold_ids: set[UUID],
+    surrogate_hold_ids: set[UUID],
     entity_hold_ids: dict[str, set[UUID]],
 ):
-    if entity_type == "cases":
-        query = db.query(Case).filter(
-            Case.organization_id == org_id,
-            Case.archived_at.is_not(None),
-            Case.archived_at < cutoff,
+    if entity_type == "surrogates":
+        query = db.query(Surrogate).filter(
+            Surrogate.organization_id == org_id,
+            Surrogate.archived_at.is_not(None),
+            Surrogate.archived_at < cutoff,
         )
-        if case_hold_ids:
-            query = query.filter(~Case.id.in_(case_hold_ids))
+        if surrogate_hold_ids:
+            query = query.filter(~Surrogate.id.in_(surrogate_hold_ids))
         return query
     if entity_type == "matches":
         query = db.query(Match).filter(
             Match.organization_id == org_id,
             Match.created_at < cutoff,
         )
-        if case_hold_ids:
-            query = query.filter(~Match.case_id.in_(case_hold_ids))
+        if surrogate_hold_ids:
+            query = query.filter(~Match.surrogate_id.in_(surrogate_hold_ids))
         if entity_hold_ids.get("match"):
             query = query.filter(~Match.id.in_(entity_hold_ids["match"]))
         return query
@@ -789,9 +777,9 @@ def _build_retention_query(
             Task.completed_at.is_not(None),
             Task.completed_at < cutoff,
         )
-        if case_hold_ids:
+        if surrogate_hold_ids:
             query = query.filter(
-                or_(Task.case_id.is_(None), ~Task.case_id.in_(case_hold_ids))
+                or_(Task.surrogate_id.is_(None), ~Task.surrogate_id.in_(surrogate_hold_ids))
             )
         if entity_hold_ids.get("task"):
             query = query.filter(~Task.id.in_(entity_hold_ids["task"]))
@@ -801,11 +789,11 @@ def _build_retention_query(
             EntityNote.organization_id == org_id,
             EntityNote.created_at < cutoff,
         )
-        if case_hold_ids:
+        if surrogate_hold_ids:
             query = query.filter(
                 or_(
-                    EntityNote.entity_type != "case",
-                    ~EntityNote.entity_id.in_(case_hold_ids),
+                    EntityNote.entity_type != "surrogate",
+                    ~EntityNote.entity_id.in_(surrogate_hold_ids),
                 )
             )
         protected_notes = []
@@ -824,23 +812,23 @@ def _build_retention_query(
         if protected_notes:
             query = query.filter(~or_(*protected_notes))
         return query
-    if entity_type == "case_activity":
-        query = db.query(CaseActivityLog).filter(
-            CaseActivityLog.organization_id == org_id,
-            CaseActivityLog.created_at < cutoff,
+    if entity_type == "surrogate_activity":
+        query = db.query(SurrogateActivityLog).filter(
+            SurrogateActivityLog.organization_id == org_id,
+            SurrogateActivityLog.created_at < cutoff,
         )
-        if case_hold_ids:
-            query = query.filter(~CaseActivityLog.case_id.in_(case_hold_ids))
-        if entity_hold_ids.get("case_activity"):
+        if surrogate_hold_ids:
+            query = query.filter(~SurrogateActivityLog.surrogate_id.in_(surrogate_hold_ids))
+        if entity_hold_ids.get("surrogate_activity"):
             query = query.filter(
-                ~CaseActivityLog.id.in_(entity_hold_ids["case_activity"])
+                ~SurrogateActivityLog.id.in_(entity_hold_ids["surrogate_activity"])
             )
         return query
     raise ValueError(f"Unsupported retention entity type: {entity_type}")
 
 
 def preview_purge(db: Session, org_id: UUID) -> list[PurgeResult]:
-    org_hold, case_hold_ids, entity_hold_ids = _get_active_legal_holds(db, org_id)
+    org_hold, surrogate_hold_ids, entity_hold_ids = _get_active_legal_holds(db, org_id)
     if org_hold:
         return []
     policies = list_retention_policies(db, org_id)
@@ -850,14 +838,14 @@ def preview_purge(db: Session, org_id: UUID) -> list[PurgeResult]:
             continue
         cutoff = datetime.now(timezone.utc) - timedelta(days=policy.retention_days)
         query = _build_retention_query(
-            db, org_id, policy.entity_type, cutoff, case_hold_ids, entity_hold_ids
+            db, org_id, policy.entity_type, cutoff, surrogate_hold_ids, entity_hold_ids
         )
         results.append(PurgeResult(entity_type=policy.entity_type, count=query.count()))
     return results
 
 
 def execute_purge(db: Session, org_id: UUID, user_id: UUID | None) -> list[PurgeResult]:
-    org_hold, case_hold_ids, entity_hold_ids = _get_active_legal_holds(db, org_id)
+    org_hold, surrogate_hold_ids, entity_hold_ids = _get_active_legal_holds(db, org_id)
     if org_hold:
         return []
     policies = list_retention_policies(db, org_id)
@@ -867,7 +855,7 @@ def execute_purge(db: Session, org_id: UUID, user_id: UUID | None) -> list[Purge
             continue
         cutoff = datetime.now(timezone.utc) - timedelta(days=policy.retention_days)
         query = _build_retention_query(
-            db, org_id, policy.entity_type, cutoff, case_hold_ids, entity_hold_ids
+            db, org_id, policy.entity_type, cutoff, surrogate_hold_ids, entity_hold_ids
         )
         count = query.count()
         if count:

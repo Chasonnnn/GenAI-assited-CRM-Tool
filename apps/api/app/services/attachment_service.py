@@ -216,7 +216,7 @@ def upload_attachment(
     content_type: str,
     file: BinaryIO,
     file_size: int,
-    case_id: uuid.UUID | None = None,
+    surrogate_id: uuid.UUID | None = None,
     intended_parent_id: uuid.UUID | None = None,
     allowed_extensions: set[str] | None = None,
     allowed_mime_types: set[str] | None = None,
@@ -225,7 +225,7 @@ def upload_attachment(
     Upload and store an attachment.
 
     File is quarantined until virus scan passes.
-    Either case_id or intended_parent_id should be provided.
+    Either surrogate_id or intended_parent_id should be provided.
     """
     # Validate
     is_valid, error = validate_file(
@@ -249,7 +249,7 @@ def upload_attachment(
     # Generate storage key
     attachment_id = uuid.uuid4()
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    entity_id = case_id or intended_parent_id
+    entity_id = surrogate_id or intended_parent_id
     storage_key = f"{org_id}/{entity_id}/{attachment_id}.{ext}"
 
     # Store file
@@ -259,7 +259,7 @@ def upload_attachment(
     attachment = Attachment(
         id=attachment_id,
         organization_id=org_id,
-        case_id=case_id,
+        surrogate_id=surrogate_id,
         intended_parent_id=intended_parent_id,
         uploaded_by_user_id=user_id,
         filename=filename,
@@ -281,10 +281,8 @@ def upload_attachment(
         target_type="attachment",
         target_id=attachment_id,
         details={
-            "case_id": str(case_id) if case_id else None,
-            "intended_parent_id": str(intended_parent_id)
-            if intended_parent_id
-            else None,
+            "surrogate_id": str(surrogate_id) if surrogate_id else None,
+            "intended_parent_id": str(intended_parent_id) if intended_parent_id else None,
             "file_ext": ext,
             "file_size": file_size,
         },
@@ -308,7 +306,7 @@ def upload_attachment(
 def list_attachments(
     db: Session,
     org_id: uuid.UUID,
-    case_id: uuid.UUID | None = None,
+    surrogate_id: uuid.UUID | None = None,
     intended_parent_id: uuid.UUID | None = None,
     include_quarantined: bool = False,
 ) -> list[Attachment]:
@@ -318,8 +316,8 @@ def list_attachments(
         Attachment.deleted_at.is_(None),
     )
 
-    if case_id:
-        query = query.filter(Attachment.case_id == case_id)
+    if surrogate_id:
+        query = query.filter(Attachment.surrogate_id == surrogate_id)
     elif intended_parent_id:
         query = query.filter(Attachment.intended_parent_id == intended_parent_id)
 
@@ -375,11 +373,7 @@ def get_download_url(
         return None
 
     # Audit log
-    ext = (
-        attachment.filename.rsplit(".", 1)[-1].lower()
-        if "." in attachment.filename
-        else ""
-    )
+    ext = attachment.filename.rsplit(".", 1)[-1].lower() if "." in attachment.filename else ""
     audit_service.log_event(
         db=db,
         org_id=org_id,
@@ -388,7 +382,7 @@ def get_download_url(
         target_type="attachment",
         target_id=attachment_id,
         details={
-            "case_id": str(attachment.case_id) if attachment.case_id else None,
+            "surrogate_id": str(attachment.surrogate_id) if attachment.surrogate_id else None,
             "intended_parent_id": str(attachment.intended_parent_id)
             if attachment.intended_parent_id
             else None,
@@ -416,11 +410,7 @@ def soft_delete_attachment(
     attachment.deleted_by_user_id = user_id
 
     # Audit log
-    ext = (
-        attachment.filename.rsplit(".", 1)[-1].lower()
-        if "." in attachment.filename
-        else ""
-    )
+    ext = attachment.filename.rsplit(".", 1)[-1].lower() if "." in attachment.filename else ""
     audit_service.log_event(
         db=db,
         org_id=org_id,
@@ -429,7 +419,7 @@ def soft_delete_attachment(
         target_type="attachment",
         target_id=attachment_id,
         details={
-            "case_id": str(attachment.case_id) if attachment.case_id else None,
+            "surrogate_id": str(attachment.surrogate_id) if attachment.surrogate_id else None,
             "file_ext": ext,
             "file_size": attachment.file_size,
         },

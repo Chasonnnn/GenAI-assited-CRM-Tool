@@ -22,9 +22,9 @@ export interface NotificationListResponse {
 }
 
 export interface NotificationSettings {
-    case_assigned: boolean
-    case_status_changed: boolean
-    case_handoff: boolean
+    surrogate_assigned: boolean
+    surrogate_status_changed: boolean
+    surrogate_claim_available: boolean
     task_assigned: boolean
     workflow_approvals: boolean
     task_reminders: boolean

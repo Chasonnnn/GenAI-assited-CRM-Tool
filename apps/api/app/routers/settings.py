@@ -77,9 +77,7 @@ def get_org_settings(
 def update_org_settings(
     body: OrgSettingsUpdate,
     request: Request,
-    session: UserSession = Depends(
-        require_permission(POLICIES["org_settings"].default)
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["org_settings"].default)),
     db: Session = Depends(get_db),
 ):
     """
@@ -317,11 +315,17 @@ def update_org_signature(
         org.signature_template = body.signature_template
         changed_fields.append("signature_template")
 
-    if body.signature_primary_color is not None and body.signature_primary_color != org.signature_primary_color:
+    if (
+        body.signature_primary_color is not None
+        and body.signature_primary_color != org.signature_primary_color
+    ):
         org.signature_primary_color = body.signature_primary_color
         changed_fields.append("signature_primary_color")
 
-    if body.signature_company_name is not None and body.signature_company_name != org.signature_company_name:
+    if (
+        body.signature_company_name is not None
+        and body.signature_company_name != org.signature_company_name
+    ):
         org.signature_company_name = body.signature_company_name
         changed_fields.append("signature_company_name")
 
@@ -339,12 +343,17 @@ def update_org_signature(
 
     if body.signature_social_links is not None:
         # Convert Pydantic models to dicts for JSONB storage
-        new_links = [{"platform": link.platform, "url": link.url} for link in body.signature_social_links]
+        new_links = [
+            {"platform": link.platform, "url": link.url} for link in body.signature_social_links
+        ]
         if new_links != org.signature_social_links:
             org.signature_social_links = new_links
             changed_fields.append("signature_social_links")
 
-    if body.signature_disclaimer is not None and body.signature_disclaimer != org.signature_disclaimer:
+    if (
+        body.signature_disclaimer is not None
+        and body.signature_disclaimer != org.signature_disclaimer
+    ):
         org.signature_disclaimer = body.signature_disclaimer if body.signature_disclaimer else None
         changed_fields.append("signature_disclaimer")
 
@@ -406,7 +415,7 @@ def get_org_signature_preview(
     valid_templates = ["classic", "modern", "minimal", "professional", "creative"]
     if template and template not in valid_templates:
         template = None  # Fall back to saved template
-    
+
     html = signature_template_service.render_signature_preview(
         db=db,
         org_id=session.org_id,
@@ -437,6 +446,7 @@ class LogoUploadResponse(BaseModel):
 def _get_logo_storage_backend() -> str:
     """Get storage backend for logos."""
     from app.core.config import settings
+
     return getattr(settings, "STORAGE_BACKEND", "local")
 
 
@@ -444,6 +454,7 @@ def _get_local_logo_path() -> str:
     """Get local logo storage directory."""
     from app.core.config import settings
     import tempfile
+
     path = getattr(settings, "LOCAL_STORAGE_PATH", None)
     if not path:
         path = os.path.join(tempfile.gettempdir(), "crm-logos")
@@ -461,6 +472,7 @@ def _upload_logo_to_storage(org_id: uuid_lib.UUID, file_bytes: bytes, extension:
     if backend == "s3":
         import boto3
         from app.core.config import settings
+
         s3 = boto3.client(
             "s3",
             region_name=getattr(settings, "S3_REGION", "us-east-1"),
@@ -499,6 +511,7 @@ def _delete_logo_from_storage(logo_url: str) -> None:
         if backend == "s3" and ".s3." in logo_url:
             import boto3
             from app.core.config import settings
+
             # Extract key from S3 URL
             key = logo_url.split(".amazonaws.com/")[-1]
             s3 = boto3.client(
@@ -613,6 +626,7 @@ async def upload_org_logo(
 
     # Audit log
     from app.services import audit_service
+
     audit_service.log_settings_changed(
         db=db,
         org_id=session.org_id,
@@ -659,6 +673,7 @@ async def delete_org_logo(
 
     # Audit log
     from app.services import audit_service
+
     audit_service.log_settings_changed(
         db=db,
         org_id=session.org_id,

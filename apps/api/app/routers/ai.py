@@ -21,14 +21,14 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.permissions import PermissionKey as P
-from app.core.case_access import check_case_access
-from app.db.enums import CaseActivityType, JobStatus, JobType, Role
+from app.core.surrogate_access import check_surrogate_access
+from app.db.enums import SurrogateActivityType, JobStatus, JobType, Role
 from app.schemas.auth import UserSession
 from app.services import (
     ai_chat_service,
     ai_service,
     ai_settings_service,
-    case_service,
+    surrogate_service,
     ip_service,
     job_service,
     match_service,
@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 CONSENT_TEXT = """
 By enabling the AI Assistant, you acknowledge that:
 
-1. Case data (names, contact info, notes) will be sent to a third-party AI provider 
+1. Surrogate data (names, contact info, notes) will be sent to a third-party AI provider 
    (OpenAI or Google Gemini) for processing.
 
 2. If "Anonymize PII" is enabled (default), personal identifiers will be stripped 
@@ -99,9 +99,7 @@ class AISettingsUpdate(BaseModel):
     context_notes_limit: int | None = Field(None, ge=1, le=20)
     conversation_history_limit: int | None = Field(None, ge=5, le=50)
     anonymize_pii: bool | None = None
-    expected_version: int | None = Field(
-        None, description="Required for optimistic locking"
-    )
+    expected_version: int | None = Field(None, description="Required for optimistic locking")
 
 
 class TestKeyRequest(BaseModel):
@@ -132,9 +130,7 @@ class ChatRequest(BaseModel):
     When provided, context is injected for that specific entity.
     """
 
-    entity_type: str | None = Field(
-        None, pattern="^(case|task|global)$"
-    )  # case, task, or global
+    entity_type: str | None = Field(None, pattern="^(case|task|global)$")  # case, task, or global
     entity_id: uuid.UUID | None = None
     message: str = Field(..., min_length=1, max_length=10000)
 
@@ -172,9 +168,7 @@ def get_settings(
     session: UserSession = Depends(require_permission(P.AI_SETTINGS_MANAGE)),
 ) -> AISettingsResponse:
     """Get AI settings for the organization."""
-    settings = ai_settings_service.get_or_create_ai_settings(
-        db, session.org_id, session.user_id
-    )
+    settings = ai_settings_service.get_or_create_ai_settings(db, session.org_id, session.user_id)
 
     return AISettingsResponse(
         is_enabled=settings.is_enabled,
@@ -300,9 +294,7 @@ def get_consent(
     session: UserSession = Depends(require_permission(P.AI_SETTINGS_MANAGE)),
 ) -> ConsentResponse:
     """Get consent text and status."""
-    settings = ai_settings_service.get_or_create_ai_settings(
-        db, session.org_id, session.user_id
-    )
+    settings = ai_settings_service.get_or_create_ai_settings(db, session.org_id, session.user_id)
 
     return ConsentResponse(
         consent_text=CONSENT_TEXT,
@@ -338,9 +330,7 @@ def accept_consent(
         "accepted_at": settings.consent_accepted_at.isoformat()
         if settings.consent_accepted_at
         else None,
-        "accepted_by": str(settings.consent_accepted_by)
-        if settings.consent_accepted_by
-        else None,
+        "accepted_by": str(settings.consent_accepted_by) if settings.consent_accepted_by else None,
     }
 
 
@@ -385,15 +375,15 @@ def chat(
 
     # Check if user has access to the entity
     if entity_type == "case":
-        case = case_service.get_case(db, session.org_id, entity_id)
-        if not case:
+        surrogate = surrogate_service.get_surrogate(db, session.org_id, entity_id)
+        if not surrogate:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Case not found",
+                detail="Surrogate not found",
             )
-        # Use centralized case access check (owner-based + permissions)
-        check_case_access(
-            case=case,
+        # Use centralized surrogate access check (owner-based + permissions)
+        check_surrogate_access(
+            surrogate=surrogate,
             user_role=session.role,
             user_id=session.user_id,
             db=db,
@@ -473,14 +463,14 @@ def chat_async(
         entity_id = session.user_id
 
     if entity_type == "case":
-        case = case_service.get_case(db, session.org_id, entity_id)
-        if not case:
+        surrogate = surrogate_service.get_surrogate(db, session.org_id, entity_id)
+        if not surrogate:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Case not found",
+                detail="Surrogate not found",
             )
-        check_case_access(
-            case=case,
+        check_surrogate_access(
+            surrogate=surrogate,
             user_role=session.role,
             user_id=session.user_id,
             db=db,
@@ -561,15 +551,15 @@ def get_conversation(
     """Get conversation history for an entity."""
     # Validate entity access before fetching conversations
     if entity_type == "case":
-        case = case_service.get_case(db, session.org_id, entity_id)
-        if not case:
+        surrogate = surrogate_service.get_surrogate(db, session.org_id, entity_id)
+        if not surrogate:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Case not found",
+                detail="Surrogate not found",
             )
-        # Use centralized case access check (owner-based + permissions)
-        check_case_access(
-            case=case,
+        # Use centralized surrogate access check (owner-based + permissions)
+        check_surrogate_access(
+            surrogate=surrogate,
             user_role=session.role,
             user_id=session.user_id,
             db=db,
@@ -771,9 +761,7 @@ def approve_action(
     from app.services.ai_action_executor import execute_action
 
     # Get the approval with related data
-    approval, message, conversation = ai_service.get_approval_with_conversation(
-        db, approval_id
-    )
+    approval, message, conversation = ai_service.get_approval_with_conversation(db, approval_id)
     if not approval:
         raise HTTPException(status_code=404, detail="Action not found")
 
@@ -787,9 +775,7 @@ def approve_action(
     # Verify user owns this conversation or has admin role
     is_manager = session.role in (Role.ADMIN, Role.CASE_MANAGER, Role.DEVELOPER)
     if conversation.user_id != session.user_id and not is_manager:
-        raise HTTPException(
-            status_code=403, detail="Not authorized to approve this action"
-        )
+        raise HTTPException(status_code=403, detail="Not authorized to approve this action")
 
     # Check status
     if approval.status != "pending":
@@ -815,11 +801,11 @@ def approve_action(
         user_permissions=user_permissions,
     )
 
-    # Case activity log for AI-generated actions (case context only)
-    if result.get("success") and conversation.entity_type == "case":
+    # Surrogate activity log for AI-generated actions (surrogate context only)
+    if result.get("success") and conversation.entity_type == "surrogate":
         from app.services import activity_service, pipeline_service
 
-        case_id = conversation.entity_id
+        surrogate_id = conversation.entity_id
         details_base = {
             "source": "ai",
             "approval_id": str(approval.id),
@@ -829,9 +815,9 @@ def approve_action(
         if approval.action_type == "add_note":
             activity_service.log_activity(
                 db=db,
-                case_id=case_id,
+                surrogate_id=surrogate_id,
                 organization_id=session.org_id,
-                activity_type=CaseActivityType.NOTE_ADDED,
+                activity_type=SurrogateActivityType.NOTE_ADDED,
                 actor_user_id=session.user_id,
                 details={
                     **details_base,
@@ -841,9 +827,9 @@ def approve_action(
         elif approval.action_type == "send_email":
             activity_service.log_activity(
                 db=db,
-                case_id=case_id,
+                surrogate_id=surrogate_id,
                 organization_id=session.org_id,
-                activity_type=CaseActivityType.EMAIL_SENT,
+                activity_type=SurrogateActivityType.EMAIL_SENT,
                 actor_user_id=session.user_id,
                 details={
                     **details_base,
@@ -856,21 +842,17 @@ def approve_action(
             old_label = None
             new_label = None
             if old_stage_id:
-                old_stage = pipeline_service.get_stage_by_id(
-                    db, uuid.UUID(old_stage_id)
-                )
+                old_stage = pipeline_service.get_stage_by_id(db, uuid.UUID(old_stage_id))
                 old_label = old_stage.label if old_stage else None
             if new_stage_id:
-                new_stage = pipeline_service.get_stage_by_id(
-                    db, uuid.UUID(new_stage_id)
-                )
+                new_stage = pipeline_service.get_stage_by_id(db, uuid.UUID(new_stage_id))
                 new_label = new_stage.label if new_stage else None
 
             activity_service.log_activity(
                 db=db,
-                case_id=case_id,
+                surrogate_id=surrogate_id,
                 organization_id=session.org_id,
-                activity_type=CaseActivityType.STATUS_CHANGED,
+                activity_type=SurrogateActivityType.STATUS_CHANGED,
                 actor_user_id=session.user_id,
                 details={
                     **details_base,
@@ -881,9 +863,9 @@ def approve_action(
         elif approval.action_type == "create_task":
             activity_service.log_activity(
                 db=db,
-                case_id=case_id,
+                surrogate_id=surrogate_id,
                 organization_id=session.org_id,
-                activity_type=CaseActivityType.TASK_CREATED,
+                activity_type=SurrogateActivityType.TASK_CREATED,
                 actor_user_id=session.user_id,
                 details={
                     **details_base,
@@ -935,9 +917,7 @@ def approve_action(
     )
 
 
-@router.post(
-    "/actions/{approval_id}/reject", dependencies=[Depends(require_csrf_header)]
-)
+@router.post("/actions/{approval_id}/reject", dependencies=[Depends(require_csrf_header)])
 def reject_action(
     approval_id: uuid.UUID,
     db: Session = Depends(get_db),
@@ -945,9 +925,7 @@ def reject_action(
 ) -> dict[str, Any]:
     """Reject a proposed action."""
     # Get the approval with related data
-    approval, message, conversation = ai_service.get_approval_with_conversation(
-        db, approval_id
-    )
+    approval, message, conversation = ai_service.get_approval_with_conversation(db, approval_id)
     if not approval:
         raise HTTPException(status_code=404, detail="Action not found")
 
@@ -961,9 +939,7 @@ def reject_action(
     # Verify user owns this conversation or has admin role
     is_manager = session.role in (Role.ADMIN, Role.CASE_MANAGER, Role.DEVELOPER)
     if conversation.user_id != session.user_id and not is_manager:
-        raise HTTPException(
-            status_code=403, detail="Not authorized to reject this action"
-        )
+        raise HTTPException(status_code=403, detail="Not authorized to reject this action")
 
     # Check status
     if approval.status != "pending":
@@ -1096,16 +1072,16 @@ def get_my_usage(
 # ============================================================================
 
 
-class SummarizeCaseRequest(BaseModel):
-    """Request to summarize a case."""
+class SummarizeSurrogateRequest(BaseModel):
+    """Request to summarize a surrogate."""
 
-    case_id: uuid.UUID
+    surrogate_id: uuid.UUID
 
 
-class SummarizeCaseResponse(BaseModel):
-    """Case summary response."""
+class SummarizeSurrogateResponse(BaseModel):
+    """Surrogate summary response."""
 
-    case_number: str
+    surrogate_number: str
     full_name: str
     summary: str
     current_status: str
@@ -1128,7 +1104,7 @@ class EmailType(str, Enum):
 class DraftEmailRequest(BaseModel):
     """Request to draft an email."""
 
-    case_id: uuid.UUID
+    surrogate_id: uuid.UUID
     email_type: EmailType
     additional_context: str | None = None
 
@@ -1147,7 +1123,7 @@ class AnalyzeDashboardResponse(BaseModel):
     """Dashboard analytics response."""
 
     insights: list[str]
-    case_volume_trend: str
+    surrogate_volume_trend: str
     bottlenecks: list[dict[str, Any]]
     recommendations: list[str]
     stats: dict[str, Any]
@@ -1157,7 +1133,7 @@ class AnalyzeDashboardResponse(BaseModel):
 EMAIL_PROMPTS = {
     EmailType.FOLLOW_UP: """Draft a professional follow-up email to check in with the applicant. 
 The tone should be warm and supportive. Ask how they're doing and if they have any questions.""",
-    EmailType.STATUS_UPDATE: """Draft a status update email informing the applicant about their case progress.
+    EmailType.STATUS_UPDATE: """Draft a status update email informing the applicant about their surrogate progress.
 Be clear about current status, what's been completed, and what to expect next.""",
     EmailType.MEETING_REQUEST: """Draft an email requesting a meeting or phone call with the applicant.
 Suggest a few time options and explain what you'd like to discuss.""",
@@ -1169,18 +1145,18 @@ Highlight key qualifications and background while being professional and respect
 
 
 @router.post(
-    "/summarize-case",
-    response_model=SummarizeCaseResponse,
+    "/summarize-surrogate",
+    response_model=SummarizeSurrogateResponse,
     dependencies=[Depends(require_csrf_header)],
 )
 @limiter.limit("30/minute")
-def summarize_case(
+def summarize_surrogate(
     request: Request,
-    body: SummarizeCaseRequest,
+    body: SummarizeSurrogateRequest,
     db: Session = Depends(get_db),
     session: UserSession = Depends(require_permission(P.AI_USE)),
-) -> SummarizeCaseResponse:
-    """Generate a comprehensive summary of a case using AI.
+) -> SummarizeSurrogateResponse:
+    """Generate a comprehensive summary of a surrogate using AI.
 
     Requires: use_ai_assistant permission
     """
@@ -1200,36 +1176,29 @@ def summarize_case(
             detail="AI consent not accepted",
         )
 
-    # Load case with context
-    case = case_service.get_case(db, session.org_id, body.case_id)
-    if not case:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Case not found"
-        )
+    # Load surrogate with context
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, body.surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Surrogate not found")
 
     # Load notes and tasks
     notes = note_service.list_notes_limited(
         db=db,
         org_id=session.org_id,
         entity_type="case",
-        entity_id=case.id,
+        entity_id=surrogate.id,
         limit=10,
     )
     tasks = task_service.list_open_tasks_for_case(
         db=db,
-        case_id=case.id,
+        surrogate_id=surrogate.id,
         org_id=session.org_id,
         limit=10,
     )
 
     # Build context
     notes_text = (
-        "\n".join(
-            [
-                f"- [{n.created_at.strftime('%Y-%m-%d')}] {n.content[:200]}"
-                for n in notes
-            ]
-        )
+        "\n".join([f"- [{n.created_at.strftime('%Y-%m-%d')}] {n.content[:200]}" for n in notes])
         or "No notes yet"
     )
     tasks_text = (
@@ -1237,11 +1206,11 @@ def summarize_case(
         or "No pending tasks"
     )
 
-    context = f"""Case #{case.case_number}
-Name: {case.full_name}
-Email: {case.email}
-Status: {case.status_label}
-Created: {case.created_at.strftime("%Y-%m-%d")}
+    context = f"""Surrogate #{surrogate.surrogate_number}
+Name: {surrogate.full_name}
+Email: {surrogate.email}
+Status: {surrogate.status_label}
+Created: {surrogate.created_at.strftime("%Y-%m-%d")}
 
 Recent Notes:
 {notes_text}
@@ -1249,13 +1218,13 @@ Recent Notes:
 Pending Tasks:
 {tasks_text}"""
 
-    prompt = f"""Analyze this case and provide a comprehensive summary.
+    prompt = f"""Analyze this surrogate and provide a comprehensive summary.
 
 {context}
 
 Respond in this exact JSON format:
 {{
-  "summary": "2-3 sentence overview of the case",
+  "summary": "2-3 sentence overview of the surrogate",
   "recent_activity": "Brief description of recent activity",
   "suggested_next_steps": ["step 1", "step 2", "step 3"]
 }}
@@ -1308,8 +1277,8 @@ Be concise and professional. Focus on actionable insights."""
 
     # Build key dates
     key_dates = {
-        "created": case.created_at.isoformat() if case.created_at else None,
-        "updated": case.updated_at.isoformat() if case.updated_at else None,
+        "created": surrogate.created_at.isoformat() if surrogate.created_at else None,
+        "updated": surrogate.updated_at.isoformat() if surrogate.updated_at else None,
     }
 
     # Build pending tasks list
@@ -1322,11 +1291,11 @@ Be concise and professional. Focus on actionable insights."""
         for t in tasks
     ]
 
-    return SummarizeCaseResponse(
-        case_number=case.case_number,
-        full_name=case.full_name,
+    return SummarizeSurrogateResponse(
+        surrogate_number=surrogate.surrogate_number,
+        full_name=surrogate.full_name,
         summary=parsed.get("summary", "Unable to generate summary"),
-        current_status=case.status_label,
+        current_status=surrogate.status_label,
         key_dates=key_dates,
         pending_tasks=pending_tasks,
         recent_activity=parsed.get("recent_activity", "No recent activity"),
@@ -1356,20 +1325,14 @@ def draft_email(
     # Check AI is enabled
     settings = ai_settings_service.get_ai_settings(db, session.org_id)
     if not settings or not settings.is_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="AI is not enabled"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="AI is not enabled")
     if ai_settings_service.is_consent_required(settings):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="AI consent not accepted"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="AI consent not accepted")
 
-    # Load case
-    case = case_service.get_case(db, session.org_id, body.case_id)
-    if not case:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Case not found"
-        )
+    # Load surrogate
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, body.surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Surrogate not found")
 
     # Get user name for signature
     user = user_service.get_user_by_id(db, session.user_id)
@@ -1378,16 +1341,14 @@ def draft_email(
     # Build email prompt
     email_instruction = EMAIL_PROMPTS[body.email_type]
     additional = (
-        f"\nAdditional context: {body.additional_context}"
-        if body.additional_context
-        else ""
+        f"\nAdditional context: {body.additional_context}" if body.additional_context else ""
     )
 
     prompt = f"""{email_instruction}
 
-Recipient: {case.full_name}
-Email: {case.email}
-Case Status: {case.status_label}
+Recipient: {surrogate.full_name}
+Email: {surrogate.email}
+Surrogate Status: {surrogate.status_label}
 {additional}
 
 Sender Name: {sender_name}
@@ -1446,8 +1407,8 @@ Be professional, warm, and concise."""
     return DraftEmailResponse(
         subject=parsed.get("subject", "Following up"),
         body=parsed.get("body", ""),
-        recipient_email=case.email,
-        recipient_name=case.full_name,
+        recipient_email=surrogate.email,
+        recipient_name=surrogate.full_name,
         email_type=body.email_type.value,
     )
 
@@ -1470,51 +1431,45 @@ def analyze_dashboard(
     # Check AI is enabled
     settings = ai_settings_service.get_ai_settings(db, session.org_id)
     if not settings or not settings.is_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="AI is not enabled"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="AI is not enabled")
 
     # Gather dashboard stats
     now = datetime.now(timezone.utc)
 
-    case_stats = case_service.get_case_stats(db, session.org_id)
-    total_cases = case_stats["total"]
-    status_summary = case_stats["by_status"]
-    cases_this_week = case_stats["this_week"]
-    cases_last_week = case_stats["last_week"]
+    surrogate_stats = surrogate_service.get_surrogate_stats(db, session.org_id)
+    total_surrogates = surrogate_stats["total"]
+    status_summary = surrogate_stats["by_status"]
+    surrogates_this_week = surrogate_stats["this_week"]
+    surrogates_last_week = surrogate_stats["last_week"]
     overdue_tasks = task_service.count_overdue_tasks(db, session.org_id, now.date())
 
     # Build stats summary
     stats = {
-        "total_active_cases": total_cases,
-        "cases_this_week": cases_this_week,
-        "cases_last_week": cases_last_week,
+        "total_active_surrogates": total_surrogates,
+        "surrogates_this_week": surrogates_this_week,
+        "surrogates_last_week": surrogates_last_week,
         "overdue_tasks": overdue_tasks,
         "status_breakdown": status_summary,
     }
 
     # Determine trend
-    if cases_this_week > cases_last_week:
-        trend = (
-            f"Increasing ({cases_this_week} this week vs {cases_last_week} last week)"
-        )
-    elif cases_this_week < cases_last_week:
-        trend = (
-            f"Decreasing ({cases_this_week} this week vs {cases_last_week} last week)"
-        )
+    if surrogates_this_week > surrogates_last_week:
+        trend = f"Increasing ({surrogates_this_week} this week vs {surrogates_last_week} last week)"
+    elif surrogates_this_week < surrogates_last_week:
+        trend = f"Decreasing ({surrogates_this_week} this week vs {surrogates_last_week} last week)"
     else:
-        trend = f"Stable ({cases_this_week} cases this week)"
+        trend = f"Stable ({surrogates_this_week} surrogates this week)"
 
     # Identify bottlenecks
     bottlenecks = []
     for status_name, count in status_summary.items():
-        if count > total_cases * 0.3:  # More than 30% in one status
+        if count > total_surrogates * 0.3:  # More than 30% in one status
             bottlenecks.append(
                 {
                     "status": status_name,
                     "count": count,
-                    "percentage": round(count / total_cases * 100, 1)
-                    if total_cases > 0
+                    "percentage": round(count / total_surrogates * 100, 1)
+                    if total_surrogates > 0
                     else 0,
                 }
             )
@@ -1524,8 +1479,8 @@ def analyze_dashboard(
     if not api_key:
         # Return basic analysis without AI
         return AnalyzeDashboardResponse(
-            insights=[f"You have {total_cases} active cases"],
-            case_volume_trend=trend,
+            insights=[f"You have {total_surrogates} active surrogates"],
+            surrogate_volume_trend=trend,
             bottlenecks=bottlenecks,
             recommendations=["Configure AI API key for detailed insights"],
             stats=stats,
@@ -1533,9 +1488,9 @@ def analyze_dashboard(
 
     prompt = f"""Analyze this CRM dashboard data for a surrogacy agency:
 
-Total Active Cases: {total_cases}
-Cases This Week: {cases_this_week}
-Cases Last Week: {cases_last_week}
+Total Active Surrogates: {total_surrogates}
+Surrogates This Week: {surrogates_this_week}
+Surrogates Last Week: {surrogates_last_week}
 Overdue Tasks: {overdue_tasks}
 
 Status Breakdown: {status_summary}
@@ -1589,7 +1544,7 @@ Focus on:
 
     return AnalyzeDashboardResponse(
         insights=parsed.get("insights", []),
-        case_volume_trend=trend,
+        surrogate_volume_trend=trend,
         bottlenecks=bottlenecks,
         recommendations=parsed.get("recommendations", []),
         stats=stats,
@@ -1655,9 +1610,7 @@ def generate_workflow(
     request: Request,
     body: GenerateWorkflowRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(
-        require_all_permissions([P.AI_USE, P.AUTOMATION_MANAGE])
-    ),
+    session: UserSession = Depends(require_all_permissions([P.AI_USE, P.AUTOMATION_MANAGE])),
 ) -> GenerateWorkflowResponse:
     """
     Generate a workflow configuration from natural language description.
@@ -1691,9 +1644,7 @@ def generate_workflow(
 def validate_workflow(
     body: ValidateWorkflowRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(
-        require_all_permissions([P.AI_USE, P.AUTOMATION_MANAGE])
-    ),
+    session: UserSession = Depends(require_all_permissions([P.AI_USE, P.AUTOMATION_MANAGE])),
 ) -> ValidateWorkflowResponse:
     """
     Validate a workflow configuration.
@@ -1729,9 +1680,7 @@ def validate_workflow(
 def save_ai_workflow(
     body: SaveWorkflowRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(
-        require_all_permissions([P.AI_USE, P.AUTOMATION_MANAGE])
-    ),
+    session: UserSession = Depends(require_all_permissions([P.AI_USE, P.AUTOMATION_MANAGE])),
 ) -> SaveWorkflowResponse:
     """
     Save an approved AI-generated workflow.
@@ -1797,7 +1746,7 @@ class ParseScheduleRequest(BaseModel):
 
     text: str = Field(..., min_length=1, max_length=10000)
     # At least one entity ID must be provided
-    case_id: uuid.UUID | None = None
+    surrogate_id: uuid.UUID | None = None
     surrogate_id: uuid.UUID | None = None
     intended_parent_id: uuid.UUID | None = None
     match_id: uuid.UUID | None = None
@@ -1805,11 +1754,9 @@ class ParseScheduleRequest(BaseModel):
 
     @model_validator(mode="after")
     def _validate_entity_ids(self):
-        if not any(
-            [self.case_id, self.surrogate_id, self.intended_parent_id, self.match_id]
-        ):
+        if not any([self.surrogate_id, self.surrogate_id, self.intended_parent_id, self.match_id]):
             raise ValueError(
-                "At least one of case_id, surrogate_id, intended_parent_id, or match_id must be provided"
+                "At least one of surrogate_id, surrogate_id, intended_parent_id, or match_id must be provided"
             )
         return self
 
@@ -1838,7 +1785,7 @@ async def parse_schedule(
     """
     Parse schedule text using AI and extract task proposals.
 
-    At least one of case_id, surrogate_id, intended_parent_id, or match_id must be provided.
+    At least one of surrogate_id, surrogate_id, intended_parent_id, or match_id must be provided.
     User reviews and approves before tasks are created.
     """
     from app.services.schedule_parser import parse_schedule_text
@@ -1855,28 +1802,24 @@ async def parse_schedule(
     entity_type = None
     entity_id = None
 
-    # NOTE: surrogate_id is treated as a case_id alias (the CRM uses Case as the surrogate record)
-    case_id = body.case_id or body.surrogate_id
-    if case_id:
-        case = case_service.get_case(db, session.org_id, case_id)
-        if not case:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Case not found"
-            )
-        # Enforce case access (owner/role-based)
-        check_case_access(
-            case=case,
+    # NOTE: surrogate_id is treated as a surrogate_id alias (the CRM uses Surrogate as the surrogate record)
+    surrogate_id = body.surrogate_id or body.surrogate_id
+    if surrogate_id:
+        surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+        if not surrogate:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Surrogate not found")
+        # Enforce surrogate access (owner/role-based)
+        check_surrogate_access(
+            surrogate=surrogate,
             user_role=session.role,
             user_id=session.user_id,
             db=db,
             org_id=session.org_id,
         )
         entity_type = "case"
-        entity_id = case_id
+        entity_id = surrogate_id
     elif body.intended_parent_id:
-        parent = ip_service.get_intended_parent(
-            db, body.intended_parent_id, session.org_id
-        )
+        parent = ip_service.get_intended_parent(db, body.intended_parent_id, session.org_id)
         if not parent:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -1887,15 +1830,13 @@ async def parse_schedule(
     elif body.match_id:
         match = match_service.get_match(db, body.match_id, session.org_id)
         if not match:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Match not found"
-            )
-        # Enforce access to the associated case
-        if match.case_id:
-            case = case_service.get_case(db, session.org_id, match.case_id)
-            if case:
-                check_case_access(
-                    case=case,
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
+        # Enforce access to the associated surrogate
+        if match.surrogate_id:
+            surrogate = surrogate_service.get_surrogate(db, session.org_id, match.surrogate_id)
+            if surrogate:
+                check_surrogate_access(
+                    surrogate=surrogate,
                     user_role=session.role,
                     user_id=session.user_id,
                     db=db,
@@ -1942,7 +1883,7 @@ class BulkTaskCreateRequest(BaseModel):
 
     request_id: uuid.UUID  # Idempotency key
     # At least one entity ID must be provided
-    case_id: uuid.UUID | None = None
+    surrogate_id: uuid.UUID | None = None
     surrogate_id: uuid.UUID | None = None
     intended_parent_id: uuid.UUID | None = None
     match_id: uuid.UUID | None = None
@@ -1950,11 +1891,9 @@ class BulkTaskCreateRequest(BaseModel):
 
     @model_validator(mode="after")
     def _validate_entity_ids(self):
-        if not any(
-            [self.case_id, self.surrogate_id, self.intended_parent_id, self.match_id]
-        ):
+        if not any([self.surrogate_id, self.surrogate_id, self.intended_parent_id, self.match_id]):
             raise ValueError(
-                "At least one of case_id, surrogate_id, intended_parent_id, or match_id must be provided"
+                "At least one of surrogate_id, surrogate_id, intended_parent_id, or match_id must be provided"
             )
         return self
 
@@ -2002,23 +1941,19 @@ async def create_bulk_tasks(
     entity_type = None
     entity_id = None
     match = None
-    case_for_access = None
+    surrogate_for_access = None
 
-    # NOTE: surrogate_id is treated as a case_id alias (the CRM uses Case as the surrogate record)
-    case_id = body.case_id or body.surrogate_id
-    if case_id:
-        case = case_service.get_case(db, session.org_id, case_id)
-        if not case:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Case not found"
-            )
-        case_for_access = case
+    # NOTE: surrogate_id is treated as a surrogate_id alias (the CRM uses Surrogate as the surrogate record)
+    surrogate_id = body.surrogate_id or body.surrogate_id
+    if surrogate_id:
+        surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+        if not surrogate:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Surrogate not found")
+        surrogate_for_access = surrogate
         entity_type = "case"
-        entity_id = case_id
+        entity_id = surrogate_id
     elif body.intended_parent_id:
-        parent = ip_service.get_intended_parent(
-            db, body.intended_parent_id, session.org_id
-        )
+        parent = ip_service.get_intended_parent(db, body.intended_parent_id, session.org_id)
         if not parent:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -2029,20 +1964,20 @@ async def create_bulk_tasks(
     elif body.match_id:
         match = match_service.get_match(db, body.match_id, session.org_id)
         if not match:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Match not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
         entity_type = "match"
         entity_id = body.match_id
 
-        # Enforce access to the associated case (when present)
-        if match.case_id:
-            case_for_access = case_service.get_case(db, session.org_id, match.case_id)
+        # Enforce access to the associated surrogate (when present)
+        if match.surrogate_id:
+            surrogate_for_access = surrogate_service.get_surrogate(
+                db, session.org_id, match.surrogate_id
+            )
 
-    # Case access enforcement (owner/role-based). For IP-only tasks, there may be no case to check.
-    if case_for_access:
-        check_case_access(
-            case=case_for_access,
+    # Surrogate access enforcement (owner/role-based). For IP-only tasks, there may be no surrogate to check.
+    if surrogate_for_access:
+        check_surrogate_access(
+            surrogate=surrogate_for_access,
             user_role=session.role,
             user_id=session.user_id,
             db=db,
@@ -2076,24 +2011,22 @@ async def create_bulk_tasks(
             except ValueError:
                 task_type = TaskType.OTHER
 
-            # Resolve entity links for task - Task model only has case_id and intended_parent_id
-            task_case_id = case_id
+            # Resolve entity links for task - Task model only has surrogate_id and intended_parent_id
+            task_surrogate_id = surrogate_id
             task_ip_id = body.intended_parent_id
 
             # If creating from match, link to both case and intended_parent from the match
             if body.match_id and entity_type == "match":
-                task_case_id = match.case_id if match else None
+                task_surrogate_id = match.surrogate_id if match else None
                 task_ip_id = match.intended_parent_id if match else None
 
-            if not task_case_id and not task_ip_id:
-                raise ValueError(
-                    "Each task must be linked to a case_id or intended_parent_id"
-                )
+            if not task_surrogate_id and not task_ip_id:
+                raise ValueError("Each task must be linked to a surrogate_id or intended_parent_id")
 
             # Create task with appropriate entity link
             task = Task(
                 organization_id=session.org_id,
-                case_id=task_case_id,
+                surrogate_id=task_surrogate_id,
                 intended_parent_id=task_ip_id,
                 title=task_item.title,
                 description=task_item.description,
@@ -2115,18 +2048,18 @@ async def create_bulk_tasks(
             )
 
         # Log single case activity for bulk creation (when a case is available)
-        case_id_for_activity = None
-        if entity_type == "match" and match and match.case_id:
-            case_id_for_activity = match.case_id
-        elif entity_type == "case" and case_id:
-            case_id_for_activity = case_id
+        surrogate_id_for_activity = None
+        if entity_type == "match" and match and match.surrogate_id:
+            surrogate_id_for_activity = match.surrogate_id
+        elif entity_type == "case" and surrogate_id:
+            surrogate_id_for_activity = surrogate_id
 
-        if case_id_for_activity:
+        if surrogate_id_for_activity:
             activity_service.log_activity(
                 db=db,
-                case_id=case_id_for_activity,
+                surrogate_id=surrogate_id_for_activity,
                 organization_id=session.org_id,
-                activity_type=CaseActivityType.TASK_CREATED,
+                activity_type=SurrogateActivityType.TASK_CREATED,
                 actor_user_id=session.user_id,
                 details={
                     "description": f"Created {len(created_tasks)} tasks from AI schedule parsing",

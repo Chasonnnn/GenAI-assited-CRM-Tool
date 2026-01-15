@@ -33,8 +33,8 @@ from app.routers import (
     auth,
     booking,
     campaigns,
-    cases,
-    cases_import,
+    surrogates,
+    surrogates_import,
     compliance,
     dashboard,
     dev,
@@ -102,6 +102,7 @@ if settings.SENTRY_DSN and settings.ENV != "dev":
 # ============================================================================
 # FastAPI App
 # ============================================================================
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -248,6 +249,7 @@ async def security_headers_middleware(request: Request, call_next):
         response.headers["Pragma"] = "no-cache"
     return response
 
+
 # ============================================================================
 # Routers
 # ============================================================================
@@ -255,22 +257,20 @@ async def security_headers_middleware(request: Request, call_next):
 # Auth router (always mounted)
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 
-# Cases module routers
-app.include_router(cases.router, prefix="/cases", tags=["cases"])
+# Surrogates module routers
+app.include_router(surrogates.router, prefix="/surrogates", tags=["surrogates"])
 app.include_router(
     notes.router, tags=["notes"]
-)  # Mixed paths: /cases/{id}/notes and /notes/{id}
+)  # Mixed paths: /surrogates/{id}/notes and /notes/{id}
 app.include_router(
     interviews.router, tags=["interviews"]
-)  # Mixed paths: /cases/{id}/interviews and /interviews/{id}
+)  # Mixed paths: /surrogates/{id}/interviews and /interviews/{id}
 app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 
-app.include_router(cases_import.router)  # Already has /cases/import prefix
+app.include_router(surrogates_import.router)  # Already has /surrogates/import prefix
 
 # Intended Parents module
-app.include_router(
-    intended_parents.router, prefix="/intended-parents", tags=["intended-parents"]
-)
+app.include_router(intended_parents.router, prefix="/intended-parents", tags=["intended-parents"])
 
 # Notifications (user-scoped)
 app.include_router(notifications.router, prefix="/me", tags=["notifications"])
@@ -350,7 +350,7 @@ app.include_router(metadata.router, prefix="/metadata", tags=["metadata"])
 # WebSocket for real-time notifications
 app.include_router(ws_router.router)
 
-# Queue Management (Case Routing)
+# Queue Management (Surrogate Routing)
 app.include_router(queues.router, prefix="/queues", tags=["queues"])
 
 # File Attachments
@@ -387,6 +387,7 @@ if settings.ENV == "dev":
 # ============================================================================
 
 logger = logging.getLogger(__name__)
+
 
 @app.get("/")
 @limiter.exempt

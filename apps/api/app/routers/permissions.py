@@ -343,7 +343,7 @@ def update_member(
                 raise HTTPException(status_code=400, detail=str(e))
 
     if membership.role != old_role:
-        from app.services import audit_service
+        from app.services import audit_service, membership_service
 
         audit_service.log_user_role_changed(
             db=db,
@@ -353,6 +353,20 @@ def update_member(
             old_role=old_role,
             new_role=membership.role,
             request=request,
+        )
+
+        # Update Surrogate Pool queue membership based on new role
+        membership_service.ensure_surrogate_pool_membership(
+            db=db,
+            org_id=session.org_id,
+            user_id=user.id,
+            role=membership.role,
+        )
+        membership_service.remove_surrogate_pool_membership(
+            db=db,
+            org_id=session.org_id,
+            user_id=user.id,
+            new_role=membership.role,
         )
     db.commit()
 
@@ -468,9 +482,7 @@ ROLE_LABELS = {
 
 @router.get("/roles", response_model=list[RoleSummary])
 def list_roles(
-    session: UserSession = Depends(
-        require_permission(POLICIES["team"].actions["view_roles"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["team"].actions["view_roles"])),
 ):
     """
     List all roles with permission counts.
@@ -492,9 +504,7 @@ def list_roles(
 def get_role_detail(
     role: str,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(
-        require_permission(POLICIES["team"].actions["view_roles"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["team"].actions["view_roles"])),
 ):
     """
     Get role detail with all permissions grouped by category.

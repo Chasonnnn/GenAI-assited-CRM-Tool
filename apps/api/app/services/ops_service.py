@@ -180,11 +180,7 @@ def list_integration_health(
 
     Returns enriched data including 24h error counts.
     """
-    healths = (
-        db.query(IntegrationHealth)
-        .filter(IntegrationHealth.organization_id == org_id)
-        .all()
-    )
+    healths = db.query(IntegrationHealth).filter(IntegrationHealth.organization_id == org_id).all()
 
     result = []
     for h in healths:
@@ -198,12 +194,8 @@ def list_integration_health(
                 "integration_key": h.integration_key,
                 "status": h.status,
                 "config_status": h.config_status,
-                "last_success_at": h.last_success_at.isoformat()
-                if h.last_success_at
-                else None,
-                "last_error_at": h.last_error_at.isoformat()
-                if h.last_error_at
-                else None,
+                "last_success_at": h.last_success_at.isoformat() if h.last_success_at else None,
+                "last_error_at": h.last_error_at.isoformat() if h.last_error_at else None,
                 "last_error": h.last_error,
                 "error_count_24h": error_count,
             }

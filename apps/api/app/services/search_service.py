@@ -1,7 +1,7 @@
 """Search service - global full-text search across entities.
 
 Provides:
-- Global search across cases, notes, attachments, intended parents
+- Global search across surrogates, notes, attachments, intended parents
 - Org-scoped and permission-gated results
 - Snippets via ts_headline for context
 - websearch_to_tsquery with plainto_tsquery fallback
@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import OwnerType, Role
-from app.db.models import Attachment, Case, EntityNote, IntendedParent, PipelineStage
+from app.db.models import Attachment, Surrogate, EntityNote, IntendedParent, PipelineStage
 
 
 logger = logging.getLogger(__name__)
@@ -31,14 +31,14 @@ logger = logging.getLogger(__name__)
 class SearchResult(TypedDict):
     """A single search result."""
 
-    entity_type: str  # "case", "note", "attachment", "intended_parent"
+    entity_type: str  # "surrogate", "note", "attachment", "intended_parent"
     entity_id: str
     title: str
     snippet: str
     rank: float
     # Additional context
-    case_id: str | None
-    case_name: str | None
+    surrogate_id: str | None
+    surrogate_name: str | None
 
 
 class SearchResponse(TypedDict):
@@ -78,8 +78,8 @@ def _extract_hashes(query: str) -> tuple[str | None, str | None]:
 
 
 def _user_can_view_notes(permissions: set[str]) -> bool:
-    """Check if user has permission to view case notes."""
-    return "view_case_notes" in permissions
+    """Check if user has permission to view surrogate notes."""
+    return "view_surrogate_notes" in permissions
 
 
 def _user_can_view_intended_parents(permissions: set[str]) -> bool:
@@ -88,18 +88,18 @@ def _user_can_view_intended_parents(permissions: set[str]) -> bool:
 
 
 def _can_view_post_approval(permissions: set[str]) -> bool:
-    """Check if user can view post-approval cases."""
-    return "view_post_approval_cases" in permissions
+    """Check if user can view post-approval surrogates."""
+    return "view_post_approval_surrogates" in permissions
 
 
-def _build_case_access_filter(
+def _build_surrogate_access_filter(
     role: str,
     user_id: UUID,
     can_view_post_approval: bool,
-    case_table,
+    surrogate_table,
     stage_table,
 ):
-    """Build SQLAlchemy filter for case access rules."""
+    """Build SQLAlchemy filter for surrogate access rules."""
     if role == Role.DEVELOPER.value:
         return true()
 
@@ -107,8 +107,8 @@ def _build_case_access_filter(
         ownership_filter = true()
     else:
         ownership_filter = and_(
-            case_table.c.owner_type == OwnerType.USER.value,
-            case_table.c.owner_id == user_id,
+            surrogate_table.c.owner_type == OwnerType.USER.value,
+            surrogate_table.c.owner_id == user_id,
         )
 
     if can_view_post_approval:
@@ -164,14 +164,14 @@ def global_search(
 
     # Default to all types
     if not entity_types:
-        entity_types = ["case", "note", "attachment", "intended_parent"]
+        entity_types = ["surrogate", "note", "attachment", "intended_parent"]
 
     can_view_notes = _user_can_view_notes(permissions)
     can_view_ips = _user_can_view_intended_parents(permissions)
     can_view_post_approval = _can_view_post_approval(permissions)
-    # Search cases
-    if "case" in entity_types:
-        case_results = _search_cases(
+    # Search surrogates
+    if "surrogate" in entity_types:
+        surrogate_results = _search_surrogates(
             db,
             org_id,
             query,
@@ -181,7 +181,7 @@ def global_search(
             user_id,
             can_view_post_approval,
         )
-        results.extend(case_results)
+        results.extend(surrogate_results)
 
     # Search notes (permission-gated)
     if "note" in entity_types and can_view_notes:
@@ -231,7 +231,7 @@ def global_search(
     )
 
 
-def _search_cases(
+def _search_surrogates(
     db: Session,
     org_id: UUID,
     query: str,
@@ -241,77 +241,77 @@ def _search_cases(
     user_id: UUID,
     can_view_post_approval: bool,
 ) -> list[SearchResult]:
-    """Search cases by full_name, case_number, and exact email/phone matches."""
+    """Search surrogates by full_name, surrogate_number, and exact email/phone matches."""
     results: list[SearchResult] = []
     seen_ids: set[str] = set()
 
-    case_table = Case.__table__.alias("c")
+    surrogate_table = Surrogate.__table__.alias("s")
     stage_table = PipelineStage.__table__.alias("ps")
-    case_access_filter = _build_case_access_filter(
+    surrogate_access_filter = _build_surrogate_access_filter(
         role,
         user_id,
         can_view_post_approval,
-        case_table,
+        surrogate_table,
         stage_table,
     )
-    base_from = case_table.outerjoin(
-        stage_table, case_table.c.stage_id == stage_table.c.id
+    base_from = surrogate_table.outerjoin(
+        stage_table, surrogate_table.c.stage_id == stage_table.c.id
     )
 
     email_hash, phone_hash = _extract_hashes(query)
     if email_hash or phone_hash:
         hash_clauses = []
         if email_hash:
-            hash_clauses.append(case_table.c.email_hash == email_hash)
+            hash_clauses.append(surrogate_table.c.email_hash == email_hash)
         if phone_hash:
-            hash_clauses.append(case_table.c.phone_hash == phone_hash)
+            hash_clauses.append(surrogate_table.c.phone_hash == phone_hash)
 
         stmt = (
             select(
-                case_table.c.id,
-                case_table.c.full_name,
-                case_table.c.case_number,
+                surrogate_table.c.id,
+                surrogate_table.c.full_name,
+                surrogate_table.c.surrogate_number,
                 literal(1.0).label("rank"),
             )
             .select_from(base_from)
             .where(
-                case_table.c.organization_id == org_id,
+                surrogate_table.c.organization_id == org_id,
                 or_(*hash_clauses),
-                case_access_filter,
+                surrogate_access_filter,
             )
-            .order_by(case_table.c.created_at.desc())
+            .order_by(surrogate_table.c.created_at.desc())
             .limit(limit)
             .offset(offset)
         )
         rows = db.execute(stmt).fetchall()
         for row in rows:
             result = SearchResult(
-                entity_type="case",
+                entity_type="surrogate",
                 entity_id=str(row.id),
-                title=row.full_name or f"Case {row.case_number}",
-                snippet=row.case_number or "",
+                title=row.full_name or f"Surrogate {row.surrogate_number}",
+                snippet=row.surrogate_number or "",
                 rank=float(row.rank),
-                case_id=str(row.id),
-                case_name=row.full_name,
+                surrogate_id=str(row.id),
+                surrogate_name=row.full_name,
             )
             results.append(result)
             seen_ids.add(str(row.id))
 
     try:
         tsquery = func.websearch_to_tsquery("simple", query)
-        rank_expr = func.ts_rank(case_table.c.search_vector, tsquery).label("rank")
+        rank_expr = func.ts_rank(surrogate_table.c.search_vector, tsquery).label("rank")
         stmt = (
             select(
-                case_table.c.id,
-                case_table.c.full_name,
-                case_table.c.case_number,
+                surrogate_table.c.id,
+                surrogate_table.c.full_name,
+                surrogate_table.c.surrogate_number,
                 rank_expr,
             )
             .select_from(base_from)
             .where(
-                case_table.c.organization_id == org_id,
-                case_table.c.search_vector.op("@@")(tsquery),
-                case_access_filter,
+                surrogate_table.c.organization_id == org_id,
+                surrogate_table.c.search_vector.op("@@")(tsquery),
+                surrogate_access_filter,
             )
             .order_by(rank_expr.desc())
             .limit(limit)
@@ -325,39 +325,39 @@ def _search_cases(
                 continue
             results.append(
                 SearchResult(
-                    entity_type="case",
+                    entity_type="surrogate",
                     entity_id=str(row.id),
-                    title=row.full_name or f"Case {row.case_number}",
-                    snippet=row.case_number or "",
+                    title=row.full_name or f"Surrogate {row.surrogate_number}",
+                    snippet=row.surrogate_number or "",
                     rank=float(row.rank),
-                    case_id=str(row.id),
-                    case_name=row.full_name,
+                    surrogate_id=str(row.id),
+                    surrogate_name=row.full_name,
                 )
             )
     except SQLAlchemyError as e:
-        logger.warning(f"Case search failed, trying fallback: {e}")
+        logger.warning(f"Surrogate search failed, trying fallback: {e}")
         # Try fallback
         try:
             tsquery = func.plainto_tsquery("simple", query)
-            rank_expr = func.ts_rank(case_table.c.search_vector, tsquery).label("rank")
+            rank_expr = func.ts_rank(surrogate_table.c.search_vector, tsquery).label("rank")
             snippet_expr = func.ts_headline(
                 "simple",
-                func.coalesce(case_table.c.full_name, ""),
+                func.coalesce(surrogate_table.c.full_name, ""),
                 tsquery,
             ).label("snippet")
             stmt = (
                 select(
-                    case_table.c.id,
-                    case_table.c.full_name,
-                    case_table.c.case_number,
+                    surrogate_table.c.id,
+                    surrogate_table.c.full_name,
+                    surrogate_table.c.surrogate_number,
                     rank_expr,
                     snippet_expr,
                 )
                 .select_from(base_from)
                 .where(
-                    case_table.c.organization_id == org_id,
-                    case_table.c.search_vector.op("@@")(tsquery),
-                    case_access_filter,
+                    surrogate_table.c.organization_id == org_id,
+                    surrogate_table.c.search_vector.op("@@")(tsquery),
+                    surrogate_access_filter,
                 )
                 .order_by(rank_expr.desc())
                 .limit(limit)
@@ -369,13 +369,13 @@ def _search_cases(
                     continue
                 results.append(
                     SearchResult(
-                        entity_type="case",
+                        entity_type="surrogate",
                         entity_id=str(row.id),
-                        title=row.full_name or f"Case {row.case_number}",
+                        title=row.full_name or f"Surrogate {row.surrogate_number}",
                         snippet=row.snippet or "",
                         rank=float(row.rank),
-                        case_id=str(row.id),
-                        case_name=row.full_name,
+                        surrogate_id=str(row.id),
+                        surrogate_name=row.full_name,
                     )
                 )
         except SQLAlchemyError:
@@ -399,31 +399,26 @@ def _search_notes(
     results = []
 
     notes_table = EntityNote.__table__.alias("en")
-    case_table = Case.__table__.alias("c")
+    surrogate_table = Surrogate.__table__.alias("s")
     stage_table = PipelineStage.__table__.alias("ps")
-    case_access_filter = _build_case_access_filter(
+    surrogate_access_filter = _build_surrogate_access_filter(
         role,
         user_id,
         can_view_post_approval,
-        case_table,
+        surrogate_table,
         stage_table,
     )
-    case_from = (
-        notes_table.join(
-            case_table,
-            and_(
-                notes_table.c.entity_type == "case",
-                notes_table.c.entity_id == case_table.c.id,
-                case_table.c.organization_id == notes_table.c.organization_id,
-            ),
-        )
-        .outerjoin(stage_table, case_table.c.stage_id == stage_table.c.id)
-    )
+    surrogate_from = notes_table.join(
+        surrogate_table,
+        and_(
+            notes_table.c.entity_type == "surrogate",
+            notes_table.c.entity_id == surrogate_table.c.id,
+            surrogate_table.c.organization_id == notes_table.c.organization_id,
+        ),
+    ).outerjoin(stage_table, surrogate_table.c.stage_id == stage_table.c.id)
 
     def _run_queries(tsquery_expr) -> None:
-        rank_expr = func.ts_rank(notes_table.c.search_vector, tsquery_expr).label(
-            "rank"
-        )
+        rank_expr = func.ts_rank(notes_table.c.search_vector, tsquery_expr).label("rank")
         snippet_expr = func.ts_headline(
             "english",
             func.regexp_replace(
@@ -436,29 +431,29 @@ def _search_notes(
             literal("MaxWords=30, MinWords=15, StartSel=<mark>, StopSel=</mark>"),
         ).label("snippet")
 
-        case_stmt = (
+        surrogate_stmt = (
             select(
                 notes_table.c.id,
                 rank_expr,
                 snippet_expr,
-                case_table.c.id.label("case_id"),
-                case_table.c.full_name.label("case_name"),
+                surrogate_table.c.id.label("surrogate_id"),
+                surrogate_table.c.full_name.label("surrogate_name"),
             )
-            .select_from(case_from)
+            .select_from(surrogate_from)
             .where(
                 notes_table.c.organization_id == org_id,
                 notes_table.c.search_vector.op("@@")(tsquery_expr),
-                case_access_filter,
+                surrogate_access_filter,
             )
             .order_by(rank_expr.desc())
             .limit(limit)
             .offset(offset)
         )
 
-        rows = db.execute(case_stmt).fetchall()
+        rows = db.execute(surrogate_stmt).fetchall()
 
         for row in rows:
-            title = f"Note on {row.case_name}" if row.case_name else "Case Note"
+            title = f"Note on {row.surrogate_name}" if row.surrogate_name else "Surrogate Note"
             results.append(
                 SearchResult(
                     entity_type="note",
@@ -466,8 +461,8 @@ def _search_notes(
                     title=title,
                     snippet=row.snippet or "",
                     rank=float(row.rank),
-                    case_id=str(row.case_id),
-                    case_name=row.case_name,
+                    surrogate_id=str(row.surrogate_id),
+                    surrogate_name=row.surrogate_name,
                 )
             )
 
@@ -484,9 +479,7 @@ def _search_notes(
             ),
         )
 
-        ip_rank_expr = func.ts_rank(notes_table.c.search_vector, tsquery_expr).label(
-            "rank"
-        )
+        ip_rank_expr = func.ts_rank(notes_table.c.search_vector, tsquery_expr).label("rank")
         ip_snippet_expr = func.ts_headline(
             "english",
             func.regexp_replace(
@@ -527,8 +520,8 @@ def _search_notes(
                     title=title,
                     snippet=row.snippet or "",
                     rank=float(row.rank),
-                    case_id=None,
-                    case_name=None,
+                    surrogate_id=None,
+                    surrogate_name=None,
                 )
             )
 
@@ -562,53 +555,48 @@ def _search_attachments(
     results = []
 
     attachments_table = Attachment.__table__.alias("a")
-    case_table = Case.__table__.alias("c")
+    surrogate_table = Surrogate.__table__.alias("s")
     stage_table = PipelineStage.__table__.alias("ps")
-    case_access_filter = _build_case_access_filter(
+    surrogate_access_filter = _build_surrogate_access_filter(
         role,
         user_id,
         can_view_post_approval,
-        case_table,
+        surrogate_table,
         stage_table,
     )
-    case_from = (
-        attachments_table.join(
-            case_table,
-            and_(
-                attachments_table.c.case_id == case_table.c.id,
-                case_table.c.organization_id == attachments_table.c.organization_id,
-            ),
-        )
-        .outerjoin(stage_table, case_table.c.stage_id == stage_table.c.id)
-    )
+    surrogate_from = attachments_table.join(
+        surrogate_table,
+        and_(
+            attachments_table.c.surrogate_id == surrogate_table.c.id,
+            surrogate_table.c.organization_id == attachments_table.c.organization_id,
+        ),
+    ).outerjoin(stage_table, surrogate_table.c.stage_id == stage_table.c.id)
 
     def _run_queries(tsquery_expr) -> None:
-        rank_expr = func.ts_rank(
-            attachments_table.c.search_vector, tsquery_expr
-        ).label("rank")
-        case_stmt = (
+        rank_expr = func.ts_rank(attachments_table.c.search_vector, tsquery_expr).label("rank")
+        surrogate_stmt = (
             select(
                 attachments_table.c.id,
                 attachments_table.c.filename,
-                attachments_table.c.case_id,
+                attachments_table.c.surrogate_id,
                 rank_expr,
-                case_table.c.full_name.label("case_name"),
+                surrogate_table.c.full_name.label("surrogate_name"),
             )
-            .select_from(case_from)
+            .select_from(surrogate_from)
             .where(
                 attachments_table.c.organization_id == org_id,
-                attachments_table.c.case_id.is_not(None),
+                attachments_table.c.surrogate_id.is_not(None),
                 attachments_table.c.deleted_at.is_(None),
                 attachments_table.c.quarantined.is_(False),
                 attachments_table.c.search_vector.op("@@")(tsquery_expr),
-                case_access_filter,
+                surrogate_access_filter,
             )
             .order_by(rank_expr.desc())
             .limit(limit)
             .offset(offset)
         )
 
-        rows = db.execute(case_stmt).fetchall()
+        rows = db.execute(surrogate_stmt).fetchall()
 
         for row in rows:
             results.append(
@@ -618,8 +606,8 @@ def _search_attachments(
                     title=row.filename or "Attachment",
                     snippet="",
                     rank=float(row.rank),
-                    case_id=str(row.case_id),
-                    case_name=row.case_name,
+                    surrogate_id=str(row.surrogate_id),
+                    surrogate_name=row.surrogate_name,
                 )
             )
 
@@ -634,9 +622,7 @@ def _search_attachments(
                 ip_table.c.organization_id == attachments_table.c.organization_id,
             ),
         )
-        ip_rank_expr = func.ts_rank(
-            attachments_table.c.search_vector, tsquery_expr
-        ).label("rank")
+        ip_rank_expr = func.ts_rank(attachments_table.c.search_vector, tsquery_expr).label("rank")
         ip_stmt = (
             select(
                 attachments_table.c.id,
@@ -649,7 +635,7 @@ def _search_attachments(
             .where(
                 attachments_table.c.organization_id == org_id,
                 attachments_table.c.intended_parent_id.is_not(None),
-                attachments_table.c.case_id.is_(None),
+                attachments_table.c.surrogate_id.is_(None),
                 attachments_table.c.deleted_at.is_(None),
                 attachments_table.c.quarantined.is_(False),
                 attachments_table.c.search_vector.op("@@")(tsquery_expr),
@@ -670,8 +656,8 @@ def _search_attachments(
                     title=title,
                     snippet="",
                     rank=float(row.rank),
-                    case_id=None,
-                    case_name=None,
+                    surrogate_id=None,
+                    surrogate_name=None,
                 )
             )
 
@@ -729,8 +715,8 @@ def _search_intended_parents(
                     title=row.full_name or "Intended Parent",
                     snippet="",
                     rank=float(row.rank),
-                    case_id=None,
-                    case_name=None,
+                    surrogate_id=None,
+                    surrogate_name=None,
                 )
             )
             seen_ids.add(str(row.id))
@@ -761,8 +747,8 @@ def _search_intended_parents(
                     title=row.full_name or "Intended Parent",
                     snippet="",
                     rank=float(row.rank),
-                    case_id=None,
-                    case_name=None,
+                    surrogate_id=None,
+                    surrogate_name=None,
                 )
             )
     except SQLAlchemyError as e:
@@ -791,8 +777,8 @@ def _search_intended_parents(
                         title=row.full_name or "Intended Parent",
                         snippet="",
                         rank=float(row.rank),
-                        case_id=None,
-                        case_name=None,
+                        surrogate_id=None,
+                        surrogate_name=None,
                     )
                 )
         except SQLAlchemyError as fallback_error:

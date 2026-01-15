@@ -391,11 +391,7 @@ def send_appointment_email(
     and logs it in AppointmentEmailLog.
     """
     # Get org and staff
-    org = (
-        db.query(Organization)
-        .filter(Organization.id == appointment.organization_id)
-        .first()
-    )
+    org = db.query(Organization).filter(Organization.id == appointment.organization_id).first()
     staff = db.query(User).filter(User.id == appointment.user_id).first()
 
     if not org or not staff:
@@ -491,18 +487,14 @@ def send_request_received(
     db: Session, appointment: Appointment, base_url: str = ""
 ) -> AppointmentEmailLog | None:
     """Send 'request received' email to client."""
-    return send_appointment_email(
-        db, appointment, AppointmentEmailType.REQUEST_RECEIVED, base_url
-    )
+    return send_appointment_email(db, appointment, AppointmentEmailType.REQUEST_RECEIVED, base_url)
 
 
 def send_confirmed(
     db: Session, appointment: Appointment, base_url: str = ""
 ) -> AppointmentEmailLog | None:
     """Send confirmation email to client."""
-    return send_appointment_email(
-        db, appointment, AppointmentEmailType.CONFIRMED, base_url
-    )
+    return send_appointment_email(db, appointment, AppointmentEmailType.CONFIRMED, base_url)
 
 
 def send_rescheduled(
@@ -518,9 +510,7 @@ def send_cancelled(
     db: Session, appointment: Appointment, base_url: str = ""
 ) -> AppointmentEmailLog | None:
     """Send cancellation notification to client."""
-    return send_appointment_email(
-        db, appointment, AppointmentEmailType.CANCELLED, base_url
-    )
+    return send_appointment_email(db, appointment, AppointmentEmailType.CANCELLED, base_url)
 
 
 def send_reminder(

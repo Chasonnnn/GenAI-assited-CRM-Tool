@@ -145,7 +145,7 @@ export default function ZoomSettingsPage() {
                                 <CalendarIcon className="h-12 w-12 text-muted-foreground/50 mb-3" />
                                 <p className="text-sm font-medium text-muted-foreground">No appointments yet</p>
                                 <p className="text-xs text-muted-foreground/60 mt-1">
-                                    Appointments created from cases will appear here
+                                    Appointments created from surrogates will appear here
                                 </p>
                             </div>
                         ) : (
@@ -155,7 +155,7 @@ export default function ZoomSettingsPage() {
                                         <TableHead>Topic</TableHead>
                                         <TableHead>Date</TableHead>
                                         <TableHead>Duration</TableHead>
-                                        <TableHead>Case</TableHead>
+                                        <TableHead>Surrogate</TableHead>
                                         <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -170,12 +170,12 @@ export default function ZoomSettingsPage() {
                                             </TableCell>
                                             <TableCell>{meeting.duration} min</TableCell>
                                             <TableCell>
-                                                {meeting.case_id ? (
+                                                {meeting.surrogate_id ? (
                                                     <Link
-                                                        href={`/cases/${meeting.case_id}`}
+                                                        href={`/surrogates/${meeting.surrogate_id}`}
                                                         className="text-teal-600 hover:underline"
                                                     >
-                                                        View Case
+                                                        View Surrogate
                                                     </Link>
                                                 ) : meeting.intended_parent_id ? (
                                                     <Link

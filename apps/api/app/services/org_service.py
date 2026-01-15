@@ -64,9 +64,7 @@ def update_org_settings(
     """
     # Optimistic locking check
     if expected_version is not None and org.current_version != expected_version:
-        raise version_service.VersionConflictError(
-            expected_version, org.current_version
-        )
+        raise version_service.VersionConflictError(expected_version, org.current_version)
 
     # Create snapshot of current state
     version_service.create_version_snapshot(
@@ -153,9 +151,7 @@ def rollback_org_settings(
     Creates a new version with the old settings (history is never rewritten).
     """
     # Get the target version payload
-    version = version_service.get_version_at(
-        db, org.id, "organization", org.id, target_version
-    )
+    version = version_service.get_version_at(db, org.id, "organization", org.id, target_version)
     if not version:
         raise ValueError(f"Version {target_version} not found")
 

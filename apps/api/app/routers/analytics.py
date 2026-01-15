@@ -1,14 +1,14 @@
 """
 Analytics endpoints for admin dashboards.
 
-Provides case statistics, trends, and Meta performance metrics.
+Provides surrogate statistics, trends, and Meta performance metrics.
 """
 
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_permission
@@ -31,7 +31,7 @@ router = APIRouter(
 
 
 class AnalyticsSummary(BaseModel):
-    total_cases: int
+    total_surrogates: int
     new_this_period: int
     qualified_rate: float
     avg_time_to_qualified_hours: Optional[float]
@@ -72,29 +72,29 @@ class UserPerformanceData(BaseModel):
 
     user_id: str
     user_name: str
-    total_cases: int
+    total_surrogates: int
     archived_count: int
     contacted: int
     qualified: int
-    pending_match: int
+    ready_to_match: int
     matched: int
-    applied: int
+    application_submitted: int
     lost: int
     conversion_rate: float
     avg_days_to_match: Optional[float]
-    avg_days_to_apply: Optional[float]
+    avg_days_to_application_submitted: Optional[float]
 
 
 class UnassignedPerformanceData(BaseModel):
-    """Performance metrics for unassigned cases."""
+    """Performance metrics for unassigned surrogates."""
 
-    total_cases: int
+    total_surrogates: int
     archived_count: int
     contacted: int
     qualified: int
-    pending_match: int
+    ready_to_match: int
     matched: int
-    applied: int
+    application_submitted: int
     lost: int
 
 
@@ -126,49 +126,47 @@ def get_analytics_summary(
     from app.services import analytics_service
 
     start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_cached_analytics_summary(
-        db, session.org_id, start, end
-    )
+    data = analytics_service.get_cached_analytics_summary(db, session.org_id, start, end)
     return AnalyticsSummary(**data)
 
 
-@router.get("/cases/by-status", response_model=list[StatusCount])
-def get_cases_by_status(
+@router.get("/surrogates/by-status", response_model=list[StatusCount])
+def get_surrogates_by_status(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Get case counts grouped by status."""
+    """Get surrogate counts grouped by status."""
     from app.services import analytics_service
 
-    data = analytics_service.get_cached_cases_by_status(db, session.org_id)
+    data = analytics_service.get_cached_surrogates_by_status(db, session.org_id)
     return [StatusCount(**item) for item in data]
 
 
-@router.get("/cases/by-assignee", response_model=list[AssigneeCount])
-def get_cases_by_assignee(
+@router.get("/surrogates/by-assignee", response_model=list[AssigneeCount])
+def get_surrogates_by_assignee(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Get case counts grouped by owner (user-owned cases only)."""
+    """Get surrogate counts grouped by owner (user-owned surrogates only)."""
     from app.services import analytics_service
 
-    data = analytics_service.get_cached_cases_by_assignee(db, session.org_id)
+    data = analytics_service.get_cached_surrogates_by_assignee(db, session.org_id)
     return [AssigneeCount(**item) for item in data]
 
 
-@router.get("/cases/trend", response_model=list[TrendPoint])
-def get_cases_trend(
+@router.get("/surrogates/trend", response_model=list[TrendPoint])
+def get_surrogates_trend(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
     period: Literal["day", "week", "month"] = Query("day"),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Get case creation trend over time."""
+    """Get surrogate creation trend over time."""
     from app.services import analytics_service
 
     start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_cached_cases_trend(
+    data = analytics_service.get_cached_surrogates_trend(
         db, session.org_id, start=start, end=end, group_by=period
     )
     return [TrendPoint(**item) for item in data]
@@ -184,8 +182,8 @@ def get_meta_performance(
     """
     Get Meta Lead Ads performance metrics.
 
-    Qualified = Lead's case reached the "Qualified" stage or later.
-    Converted = Lead's case reached the "Application Submitted" stage or later.
+    Qualified = Lead's surrogate reached the "Qualified" stage or later.
+    Converted = Lead's surrogate reached the "Application Submitted" stage or later.
     """
     from app.services import analytics_service
 
@@ -262,7 +260,7 @@ class FormPerformanceItem(BaseModel):
     form_external_id: str
     form_name: str
     lead_count: int
-    case_count: int
+    surrogate_count: int
     qualified_count: int
     conversion_rate: float
     qualified_rate: float
@@ -450,19 +448,19 @@ def get_meta_campaign_list(
 # =============================================================================
 
 
-@router.get("/cases/by-state")
-def get_cases_by_state(
+@router.get("/surrogates/by-state")
+def get_surrogates_by_state(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
     source: Optional[str] = Query(None),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ) -> dict:
-    """Get case count by US state for map visualization."""
+    """Get surrogate count by US state for map visualization."""
     from app.services import analytics_service
 
     start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_cached_cases_by_state(
+    data = analytics_service.get_cached_surrogates_by_state(
         db,
         session.org_id,
         start.date() if start else None,
@@ -472,18 +470,18 @@ def get_cases_by_state(
     return {"data": data}
 
 
-@router.get("/cases/by-source")
-def get_cases_by_source(
+@router.get("/surrogates/by-source")
+def get_surrogates_by_source(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ) -> dict:
-    """Get case count by lead source."""
+    """Get surrogate count by lead source."""
     from app.services import analytics_service
 
     start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_cached_cases_by_source(
+    data = analytics_service.get_cached_surrogates_by_source(
         db, session.org_id, start.date() if start else None, end.date() if end else None
     )
     return {"data": data}
@@ -557,19 +555,19 @@ def get_funnel_compare(
     return {"data": data}
 
 
-@router.get("/cases/by-state/compare")
-def get_cases_by_state_compare(
+@router.get("/surrogates/by-state/compare")
+def get_surrogates_by_state_compare(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
     ad_id: Optional[str] = Query(None),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ) -> dict:
-    """Get cases by state with optional campaign filter."""
+    """Get surrogates by state with optional campaign filter."""
     from app.services import analytics_service
 
     start, end = analytics_service.parse_date_range(from_date, to_date)
-    data = analytics_service.get_cached_cases_by_state_with_filter(
+    data = analytics_service.get_cached_surrogates_by_state_with_filter(
         db,
         session.org_id,
         start.date() if start else None,
@@ -590,7 +588,7 @@ def get_performance_by_user(
     to_date: Optional[str] = Query(None, description="End date (ISO format)"),
     mode: Literal["cohort", "activity"] = Query(
         "cohort",
-        description="cohort: cases created in range; activity: status changes in range",
+        description="cohort: surrogates created in range; activity: status changes in range",
     ),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
@@ -599,22 +597,22 @@ def get_performance_by_user(
     Get individual user performance metrics.
 
     **Modes:**
-    - `cohort`: Analyze cases created within the date range, grouped by current owner.
-      Shows how each user's assigned cases have progressed through stages.
+    - `cohort`: Analyze surrogates created within the date range, grouped by current owner.
+      Shows how each user's assigned surrogates have progressed through stages.
     - `activity`: Analyze status transitions within the date range.
-      Shows activity during a specific period regardless of when cases were created.
+      Shows activity during a specific period regardless of when surrogates were created.
 
     **Metrics:**
-    - `total_cases`: Number of cases (cohort: created in range; activity: with transitions in range)
+    - `total_surrogates`: Number of surrogates (cohort: created in range; activity: with transitions in range)
     - `archived_count`: Cases that are archived
-    - `contacted/qualified/pending_match/matched/applied`: Cases that reached each stage (via history)
-    - `lost`: Cases that reached lost stage AND never reached applied
-    - `conversion_rate`: (applied / total_cases) * 100
+    - `contacted/qualified/ready_to_match/matched/application_submitted`: Surrogates that reached each stage
+    - `lost`: Surrogates that reached lost stage AND never reached application_submitted
+    - `conversion_rate`: (application_submitted / total_surrogates) * 100
     - `avg_days_to_match`: Average days from creation to first match transition
-    - `avg_days_to_apply`: Average days from creation to first applied transition
+    - `avg_days_to_application_submitted`: Average days from creation to first application_submitted transition
 
     **Credit Model:**
-    All metrics are attributed to the current case owner. Cases without an owner
+    All metrics are attributed to the current surrogate owner. Surrogates without an owner
     are grouped in the `unassigned` bucket.
     """
     start, end = analytics_service.parse_date_range(from_date, to_date)
@@ -647,9 +645,9 @@ class ActivityFeedItem(BaseModel):
 
     id: str
     activity_type: str
-    case_id: str
-    case_number: str | None
-    case_name: str | None
+    surrogate_id: str
+    surrogate_number: str | None
+    surrogate_name: str | None
     actor_name: str | None
     details: dict | None
     created_at: str
@@ -674,7 +672,7 @@ def get_activity_feed(
     """
     Get org-wide activity feed.
 
-    Returns recent activities across all cases in the organization.
+    Returns recent activities across all surrogates in the organization.
     Useful for admins to see what's happening across the team.
     """
     items, has_more = analytics_service.get_activity_feed(
@@ -691,9 +689,9 @@ def get_activity_feed(
             ActivityFeedItem(
                 id=item["id"],
                 activity_type=item["activity_type"],
-                case_id=item["case_id"],
-                case_number=item["case_number"],
-                case_name=item["case_name"],
+                surrogate_id=item["surrogate_id"],
+                surrogate_number=item["surrogate_number"],
+                surrogate_name=item["surrogate_name"],
                 actor_name=item["actor_name"],
                 details=item["details"],
                 created_at=item["created_at"],
@@ -738,9 +736,7 @@ async def export_analytics_pdf(
 
     if from_date:
         try:
-            start_dt = datetime.strptime(from_date, "%Y-%m-%d").replace(
-                tzinfo=timezone.utc
-            )
+            start_dt = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
         except ValueError:
             pass
 

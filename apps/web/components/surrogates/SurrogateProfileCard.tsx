@@ -28,12 +28,12 @@ import type { FormSchema } from "@/lib/api/forms"
 import type { JsonObject, JsonValue } from "@/lib/types/json"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 
-interface CaseProfileCardProps {
-    caseId: string
+interface SurrogateProfileCardProps {
+    surrogateId: string
 }
 
-export function CaseProfileCard({ caseId }: CaseProfileCardProps) {
-    const { data: profile, isLoading, error } = useProfile(caseId)
+export function SurrogateProfileCard({ surrogateId }: SurrogateProfileCardProps) {
+    const { data: profile, isLoading, error } = useProfile(surrogateId)
     const syncMutation = useSyncProfile()
     const saveMutation = useSaveProfileOverrides()
     const toggleHiddenMutation = useToggleProfileHidden()
@@ -106,7 +106,7 @@ export function CaseProfileCard({ caseId }: CaseProfileCardProps) {
             if (!isEditMode) {
                 setIsEditMode(true)
             }
-            const result = await syncMutation.mutateAsync(caseId)
+            const result = await syncMutation.mutateAsync(surrogateId)
             if (result.staged_changes.length === 0) {
                 toast.info("Profile is already up to date")
                 return
@@ -129,7 +129,7 @@ export function CaseProfileCard({ caseId }: CaseProfileCardProps) {
         try {
             if (hasOverrideChanges) {
                 await saveMutation.mutateAsync({
-                    caseId,
+                    surrogateId,
                     overrides: editedFields,
                     newBaseSubmissionId: latestSubmissionId,
                 })
@@ -143,7 +143,7 @@ export function CaseProfileCard({ caseId }: CaseProfileCardProps) {
 
             for (const fieldKey of hiddenDiff) {
                 await toggleHiddenMutation.mutateAsync({
-                    caseId,
+                    surrogateId,
                     fieldKey,
                     hidden: currentHidden.has(fieldKey),
                 })
@@ -214,7 +214,7 @@ export function CaseProfileCard({ caseId }: CaseProfileCardProps) {
     const handleExport = async () => {
         setIsExporting(true)
         try {
-            await exportProfilePdf(caseId)
+            await exportProfilePdf(surrogateId)
             toast.success("Profile exported as PDF")
         } catch {
             toast.error("Failed to export profile")

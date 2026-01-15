@@ -45,7 +45,7 @@ export interface EmailSendRequest {
     template_id: string
     recipient_email: string
     variables?: Record<string, string>
-    case_id?: string
+    surrogate_id?: string
     schedule_at?: string
 }
 
@@ -54,7 +54,7 @@ export interface EmailLog {
     organization_id: string
     job_id: string | null
     template_id: string | null
-    case_id: string | null
+    surrogate_id: string | null
     recipient_email: string
     subject: string
     body: string

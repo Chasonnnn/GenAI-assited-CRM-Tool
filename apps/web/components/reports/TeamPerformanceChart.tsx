@@ -39,26 +39,32 @@ export function TeamPerformanceChart({
     const chartData = useMemo(() => {
         if (!data) return []
         return data
-            .filter((user) => user.total_cases > 0)
+            .filter((user) => user.total_surrogates > 0)
             .sort((a, b) => b.conversion_rate - a.conversion_rate)
             .slice(0, 10)
             .map((user) => ({
                 name: user.user_name.split(" ")[0], // First name only for chart
                 fullName: user.user_name,
                 conversion_rate: user.conversion_rate,
-                total_cases: user.total_cases,
-                applied: user.applied,
+                total_surrogates: user.total_surrogates,
+                application_submitted: user.application_submitted,
                 fill: getConversionColor(user.conversion_rate),
             }))
     }, [data])
 
     const avgConversionRate = useMemo(() => {
         if (!data || data.length === 0) return 0
-        const usersWithCases = data.filter((u) => u.total_cases > 0)
-        if (usersWithCases.length === 0) return 0
-        const totalApplied = usersWithCases.reduce((sum, u) => sum + u.applied, 0)
-        const totalCases = usersWithCases.reduce((sum, u) => sum + u.total_cases, 0)
-        return totalCases > 0 ? (totalApplied / totalCases) * 100 : 0
+        const usersWithSurrogates = data.filter((u) => u.total_surrogates > 0)
+        if (usersWithSurrogates.length === 0) return 0
+        const totalApplied = usersWithSurrogates.reduce(
+            (sum, u) => sum + u.application_submitted,
+            0
+        )
+        const totalSurrogates = usersWithSurrogates.reduce(
+            (sum, u) => sum + u.total_surrogates,
+            0
+        )
+        return totalSurrogates > 0 ? (totalApplied / totalSurrogates) * 100 : 0
     }, [data])
 
     if (isLoading) {

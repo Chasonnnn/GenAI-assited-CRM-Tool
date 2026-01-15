@@ -266,7 +266,9 @@ def _apply_mark_html(text: str, mark: dict) -> str:
 
     if mark_type == "link":
         href = attrs.get("href", "#")
-        return f'<a href="{_escape_html(href)}" target="_blank" rel="noopener noreferrer">{text}</a>'
+        return (
+            f'<a href="{_escape_html(href)}" target="_blank" rel="noopener noreferrer">{text}</a>'
+        )
 
     if mark_type == "comment":
         comment_id = attrs.get("commentId", "")
@@ -371,18 +373,12 @@ def html_to_tiptap(html: str) -> dict | None:
         # Strip HTML tags for text content
         text = re.sub(r"<[^>]+>", "", part).strip()
         if text:
-            paragraphs.append({
-                "type": "paragraph",
-                "content": [{"type": "text", "text": text}]
-            })
+            paragraphs.append({"type": "paragraph", "content": [{"type": "text", "text": text}]})
 
     if not paragraphs:
         return None
 
-    return {
-        "type": "doc",
-        "content": paragraphs
-    }
+    return {"type": "doc", "content": paragraphs}
 
 
 def extract_comment_ids(doc: dict | None) -> set[str]:

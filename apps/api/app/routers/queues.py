@@ -12,12 +12,13 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
+from app.db.enums import Role
 from app.schemas.auth import UserSession
 from app.services import queue_service
 from app.services.queue_service import (
     QueueNotFoundError,
-    CaseNotFoundError,
-    CaseAlreadyClaimedError,
+    SurrogateNotFoundError,
+    SurrogateAlreadyClaimedError,
     DuplicateQueueNameError,
     NotQueueMemberError,
     QueueMemberExistsError,
@@ -26,7 +27,7 @@ from app.services.queue_service import (
 )
 
 router = APIRouter(
-    dependencies=[Depends(require_permission(POLICIES["cases"].actions["assign"]))],
+    dependencies=[Depends(require_permission(POLICIES["surrogates"].actions["assign"]))],
 )
 
 
@@ -129,9 +130,7 @@ def create_queue(
     """Create a new queue."""
 
     try:
-        queue = queue_service.create_queue(
-            db, session.org_id, data.name, data.description
-        )
+        queue = queue_service.create_queue(db, session.org_id, data.name, data.description)
         db.commit()
         return queue
     except DuplicateQueueNameError as e:
@@ -188,92 +187,95 @@ def delete_queue(
 
 
 # =============================================================================
-# Claim / Release Endpoints (on cases)
+# Claim / Release Endpoints (on surrogates)
 # =============================================================================
 
 
 @router.post(
-    "/cases/{case_id}/claim",
+    "/surrogates/{surrogate_id}/claim",
     response_model=dict,
     dependencies=[Depends(require_csrf_header)],
 )
-def claim_case(
-    case_id: UUID,
+def claim_surrogate(
+    surrogate_id: UUID,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """
-    Claim a case from a queue.
+    Claim a surrogate from a queue.
 
-    - Case must be in a queue (owner_type="queue")
+    - Surrogate must be in a queue (owner_type="queue")
     - Sets owner to current user
     - Returns 409 if already claimed by a user
     """
+    role_str = session.role.value if hasattr(session.role, "value") else session.role
+    if role_str not in [Role.CASE_MANAGER.value, Role.ADMIN.value, Role.DEVELOPER.value]:
+        raise HTTPException(status_code=403, detail="Only case managers can claim surrogates")
     try:
-        case = queue_service.claim_case(db, session.org_id, case_id, session.user_id)
+        surrogate = queue_service.claim_surrogate(db, session.org_id, surrogate_id, session.user_id)
         db.commit()
-        return {"message": "Case claimed", "case_id": str(case.id)}
-    except CaseNotFoundError:
-        raise HTTPException(status_code=404, detail="Case not found")
-    except CaseAlreadyClaimedError as e:
+        return {"message": "Surrogate claimed", "surrogate_id": str(surrogate.id)}
+    except SurrogateNotFoundError:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+    except SurrogateAlreadyClaimedError as e:
         raise HTTPException(status_code=409, detail=str(e))
     except NotQueueMemberError as e:
         raise HTTPException(status_code=403, detail=str(e))
 
 
 @router.post(
-    "/cases/{case_id}/release",
+    "/surrogates/{surrogate_id}/release",
     response_model=dict,
     dependencies=[Depends(require_csrf_header)],
 )
-def release_case(
-    case_id: UUID,
+def release_surrogate(
+    surrogate_id: UUID,
     data: ReleaseRequest,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """
-    Release a case back to a queue.
+    Release a surrogate back to a queue.
 
-    - Case must be owned by a user
+    - Surrogate must be owned by a user
     - Transfers ownership to specified queue
     """
     try:
-        case = queue_service.release_case(
-            db, session.org_id, case_id, data.queue_id, session.user_id
+        surrogate = queue_service.release_surrogate(
+            db, session.org_id, surrogate_id, data.queue_id, session.user_id
         )
         db.commit()
-        return {"message": "Case released to queue", "case_id": str(case.id)}
-    except CaseNotFoundError:
-        raise HTTPException(status_code=404, detail="Case not found")
+        return {"message": "Surrogate released to queue", "surrogate_id": str(surrogate.id)}
+    except SurrogateNotFoundError:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
     except QueueNotFoundError:
         raise HTTPException(status_code=404, detail="Queue not found or inactive")
 
 
 @router.post(
-    "/cases/{case_id}/assign",
+    "/surrogates/{surrogate_id}/assign",
     response_model=dict,
     dependencies=[Depends(require_csrf_header)],
 )
-def assign_case_to_queue(
-    case_id: UUID,
+def assign_surrogate_to_queue(
+    surrogate_id: UUID,
     data: AssignToQueueRequest,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """
-    Assign a case to a queue.
+    Assign a surrogate to a queue.
 
-    Works whether case is currently user-owned or queue-owned.
+    Works whether surrogate is currently user-owned or queue-owned.
     """
     try:
-        case = queue_service.assign_to_queue(
-            db, session.org_id, case_id, data.queue_id, session.user_id
+        surrogate = queue_service.assign_surrogate_to_queue(
+            db, session.org_id, surrogate_id, data.queue_id, session.user_id
         )
         db.commit()
-        return {"message": "Case assigned to queue", "case_id": str(case.id)}
-    except CaseNotFoundError:
-        raise HTTPException(status_code=404, detail="Case not found")
+        return {"message": "Surrogate assigned to queue", "surrogate_id": str(surrogate.id)}
+    except SurrogateNotFoundError:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
     except QueueNotFoundError:
         raise HTTPException(status_code=404, detail="Queue not found or inactive")
 
@@ -335,9 +337,7 @@ def add_queue_member(
     except QueueMemberUserNotFoundError:
         raise HTTPException(status_code=404, detail="User not found")
     except QueueMemberExistsError:
-        raise HTTPException(
-            status_code=409, detail="User is already a member of this queue"
-        )
+        raise HTTPException(status_code=409, detail="User is already a member of this queue")
 
     return QueueMemberResponse(
         id=member.id,
@@ -381,7 +381,5 @@ def _queue_to_response(queue) -> QueueResponse:
         name=queue.name,
         description=queue.description,
         is_active=queue.is_active,
-        member_ids=[m.user_id for m in queue.members]
-        if hasattr(queue, "members")
-        else [],
+        member_ids=[m.user_id for m in queue.members] if hasattr(queue, "members") else [],
     )

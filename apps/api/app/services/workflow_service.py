@@ -28,10 +28,10 @@ from app.schemas.workflow import (
     ScheduledTriggerConfig,
     TaskDueTriggerConfig,
     InactivityTriggerConfig,
-    CaseUpdatedTriggerConfig,
+    SurrogateUpdatedTriggerConfig,
     SendEmailActionConfig,
     CreateTaskActionConfig,
-    AssignCaseActionConfig,
+    AssignSurrogateActionConfig,
     SendNotificationActionConfig,
     UpdateFieldActionConfig,
     AddNoteActionConfig,
@@ -89,9 +89,7 @@ def update_workflow(
     if data.trigger_type is not None or data.trigger_config is not None:
         trigger_type = data.trigger_type or WorkflowTriggerType(workflow.trigger_type)
         trigger_config = (
-            data.trigger_config
-            if data.trigger_config is not None
-            else workflow.trigger_config
+            data.trigger_config if data.trigger_config is not None else workflow.trigger_config
         )
         _validate_trigger_config(trigger_type, trigger_config)
 
@@ -156,9 +154,7 @@ def list_workflows(
     trigger_type: WorkflowTriggerType | None = None,
 ) -> list[AutomationWorkflow]:
     """List workflows for an organization."""
-    query = db.query(AutomationWorkflow).filter(
-        AutomationWorkflow.organization_id == org_id
-    )
+    query = db.query(AutomationWorkflow).filter(AutomationWorkflow.organization_id == org_id)
 
     if enabled_only:
         query = query.filter(AutomationWorkflow.is_enabled.is_(True))
@@ -349,11 +345,7 @@ def get_workflow_stats(db: Session, org_id: UUID) -> WorkflowStats:
 
     # Average approval latency (for approved tasks only, in hours)
     avg_latency = (
-        db.query(
-            func.avg(
-                func.extract("epoch", Task.completed_at - Task.created_at) / 3600
-            )
-        )
+        db.query(func.avg(func.extract("epoch", Task.completed_at - Task.created_at) / 3600))
         .filter(
             Task.organization_id == org_id,
             Task.task_type == TaskType.WORKFLOW_APPROVAL.value,
@@ -385,8 +377,8 @@ def get_workflow_options(db: Session, org_id: UUID) -> WorkflowOptions:
     # Trigger types with descriptions
     trigger_types = [
         {
-            "value": "case_created",
-            "label": "Case Created",
+            "value": "surrogate_created",
+            "label": "Surrogate Created",
             "description": "When a new case is created",
         },
         {
@@ -395,13 +387,13 @@ def get_workflow_options(db: Session, org_id: UUID) -> WorkflowOptions:
             "description": "When case status changes",
         },
         {
-            "value": "case_assigned",
-            "label": "Case Assigned",
+            "value": "surrogate_assigned",
+            "label": "Surrogate Assigned",
             "description": "When case is assigned",
         },
         {
-            "value": "case_updated",
-            "label": "Case Updated",
+            "value": "surrogate_updated",
+            "label": "Surrogate Updated",
             "description": "When specific fields change",
         },
         {
@@ -474,8 +466,8 @@ def get_workflow_options(db: Session, org_id: UUID) -> WorkflowOptions:
             "description": "Create a task on the case",
         },
         {
-            "value": "assign_case",
-            "label": "Assign Case",
+            "value": "assign_surrogate",
+            "label": "Assign Surrogate",
             "description": "Assign to user or queue",
         },
         {
@@ -533,8 +525,7 @@ def get_workflow_options(db: Session, org_id: UUID) -> WorkflowOptions:
         .all()
     )
     users = [
-        {"id": str(user_id), "display_name": display_name}
-        for user_id, display_name in user_rows
+        {"id": str(user_id), "display_name": display_name} for user_id, display_name in user_rows
     ]
 
     # Queues
@@ -577,17 +568,10 @@ def list_executions(
     offset: int = 0,
 ) -> tuple[list[WorkflowExecution], int]:
     """List executions for a workflow with pagination."""
-    query = db.query(WorkflowExecution).filter(
-        WorkflowExecution.workflow_id == workflow_id
-    )
+    query = db.query(WorkflowExecution).filter(WorkflowExecution.workflow_id == workflow_id)
 
     total = query.count()
-    items = (
-        query.order_by(WorkflowExecution.executed_at.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    items = query.order_by(WorkflowExecution.executed_at.desc()).offset(offset).limit(limit).all()
 
     return items, total
 
@@ -607,9 +591,7 @@ def list_org_executions(
     """
     query = (
         db.query(WorkflowExecution, AutomationWorkflow.name)
-        .join(
-            AutomationWorkflow, WorkflowExecution.workflow_id == AutomationWorkflow.id
-        )
+        .join(AutomationWorkflow, WorkflowExecution.workflow_id == AutomationWorkflow.id)
         .filter(WorkflowExecution.organization_id == org_id)
     )
 
@@ -620,12 +602,7 @@ def list_org_executions(
         query = query.filter(WorkflowExecution.workflow_id == workflow_id)
 
     total = query.count()
-    items = (
-        query.order_by(WorkflowExecution.executed_at.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    items = query.order_by(WorkflowExecution.executed_at.desc()).offset(offset).limit(limit).all()
 
     # Build response with workflow name
     result = []
@@ -638,17 +615,13 @@ def list_org_executions(
                 "status": exec.status,
                 "entity_type": exec.entity_type,
                 "entity_id": exec.entity_id,
-                "action_count": len(exec.actions_executed)
-                if exec.actions_executed
-                else 0,
+                "action_count": len(exec.actions_executed) if exec.actions_executed else 0,
                 "duration_ms": exec.duration_ms or 0,
                 "executed_at": exec.executed_at.isoformat(),
                 "trigger_event": exec.trigger_event,
                 "actions_executed": exec.actions_executed or [],
                 "error_message": exec.error_message,
-                "skip_reason": None
-                if exec.matched_conditions
-                else "Conditions not met",
+                "skip_reason": None if exec.matched_conditions else "Conditions not met",
             }
         )
 
@@ -837,7 +810,7 @@ def _validate_trigger_config(trigger_type: WorkflowTriggerType, config: dict) ->
         WorkflowTriggerType.SCHEDULED: ScheduledTriggerConfig,
         WorkflowTriggerType.TASK_DUE: TaskDueTriggerConfig,
         WorkflowTriggerType.INACTIVITY: InactivityTriggerConfig,
-        WorkflowTriggerType.CASE_UPDATED: CaseUpdatedTriggerConfig,
+        WorkflowTriggerType.SURROGATE_UPDATED: SurrogateUpdatedTriggerConfig,
     }
 
     validator = validators.get(trigger_type)
@@ -861,9 +834,7 @@ def _validate_action_config(db: Session, org_id: UUID, action: dict) -> None:
             .first()
         )
         if not template:
-            raise ValueError(
-                f"Email template {config.template_id} not found in organization"
-            )
+            raise ValueError(f"Email template {config.template_id} not found in organization")
 
     elif action_type == "create_task":
         config = CreateTaskActionConfig.model_validate(action)
@@ -883,8 +854,8 @@ def _validate_action_config(db: Session, org_id: UUID, action: dict) -> None:
             if not membership:
                 raise ValueError(f"User {config.assignee} not found in organization")
 
-    elif action_type == "assign_case":
-        config = AssignCaseActionConfig.model_validate(action)
+    elif action_type == "assign_surrogate":
+        config = AssignSurrogateActionConfig.model_validate(action)
         # Verify owner exists in org
         if config.owner_type == OwnerType.USER:
             from app.db.models import Membership

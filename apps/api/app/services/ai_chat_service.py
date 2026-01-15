@@ -19,7 +19,7 @@ from app.db.models import (
     AIMessage,
     AIActionApproval,
     AIUsageLog,
-    Case,
+    Surrogate,
     EntityNote,
     Task,
     UserIntegration,
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 # System Prompt
 # ============================================================================
 
-SYSTEM_PROMPT = """You are an AI assistant for a surrogacy agency CRM called CareFlow. You help staff manage cases efficiently.
+SYSTEM_PROMPT = """You are an AI assistant for a surrogacy agency CRM called CareFlow. You help staff manage surrogates efficiently.
 
 ## Available Actions
 When you want to propose an action, output it as JSON in an <action> tag. You can propose multiple actions.
@@ -45,7 +45,7 @@ When you want to propose an action, output it as JSON in an <action> tag. You ca
 Action types:
 - send_email: Draft an email (requires user's Gmail to be connected)
 - create_task: Create a follow-up task
-- add_note: Add a note to the case
+- add_note: Add a note to the surrogate
 - update_status: Suggest a status change
 
 Example action format:
@@ -61,12 +61,12 @@ Example action format:
 - Be concise and professional
 - Always propose actions for approval, never auto-execute
 - Don't provide legal or medical advice
-- Keep responses focused on the current case context
+- Keep responses focused on the current surrogate context
 """
 
-GLOBAL_SYSTEM_PROMPT = """You are an AI assistant for a surrogacy agency CRM called CareFlow. You help staff manage cases efficiently.
+GLOBAL_SYSTEM_PROMPT = """You are an AI assistant for a surrogacy agency CRM called CareFlow. You help staff manage surrogates efficiently.
 
-You are in GLOBAL mode - no specific case is selected. You can:
+You are in GLOBAL mode - no specific surrogate is selected. You can:
 - Answer general questions about workflows and processes
 - Help draft messages that the user can copy/paste
 - Suggest next steps based on information the user provides
@@ -74,22 +74,22 @@ You are in GLOBAL mode - no specific case is selected. You can:
 - Answer questions about team performance and conversion metrics (if data is provided below)
 
 If the user pastes an email or describes a situation, you can help:
-1. Identify if it relates to an existing case (ask for the person's name or case number)
+1. Identify if it relates to an existing surrogate (ask for the person's name or surrogate number)
 2. Suggest what tasks should be created
 3. Draft responses
 4. Recommend next steps
 
 When answering performance questions:
 - Identify top performers (high conversion rates) and those who may need support (low conversion rates)
-- Consider both volume (total cases) and efficiency (conversion rate)
-- Applied count represents successful outcomes; Lost represents unsuccessful outcomes
-- Conversion rate = (applied / total_cases) * 100
+- Consider both volume (total surrogates) and efficiency (conversion rate)
+- Application submitted count represents successful outcomes; Lost represents unsuccessful outcomes
+- Conversion rate = (application_submitted / total surrogates) * 100
 
 ## Guidelines
 - Be concise and professional
-- If you need a specific case context to take action, ask the user to open that case
+- If you need a specific surrogate context to take action, ask the user to open that surrogate
 - Don't provide legal or medical advice
-- You cannot execute actions without case context
+- You cannot execute actions without surrogate context
 """
 
 TASK_SYSTEM_PROMPT = """You are an AI assistant for a surrogacy agency CRM called CareFlow. You help staff manage tasks efficiently.
@@ -153,36 +153,40 @@ def _build_performance_context(
 
         lines = [
             "\n## Team Performance (Last 90 Days)",
-            "Mode: Cohort (cases created in the period)",
+            "Mode: Cohort (surrogates created in the period)",
             "",
-            "| Team Member | Cases | Contacted | Qualified | Matched | Applied | Lost | Conv. Rate |",
+            "| Team Member | Surrogates | Contacted | Qualified | Matched | Application Submitted | Lost | Conv. Rate |",
             "|-------------|-------|-----------|-----------|---------|---------|------|------------|",
         ]
 
         for user in data["data"]:
-            if user["total_cases"] > 0:
+            if user["total_surrogates"] > 0:
                 lines.append(
-                    f"| {user['user_name']} | {user['total_cases']} | {user['contacted']} | "
-                    f"{user['qualified']} | {user['matched']} | {user['applied']} | "
+                    f"| {user['user_name']} | {user['total_surrogates']} | {user['contacted']} | "
+                    f"{user['qualified']} | {user['matched']} | {user['application_submitted']} | "
                     f"{user['lost']} | {user['conversion_rate']}% |"
                 )
 
         # Add unassigned if any
         unassigned = data.get("unassigned", {})
-        if unassigned.get("total_cases", 0) > 0:
+        if unassigned.get("total_surrogates", 0) > 0:
             lines.append(
-                f"| Unassigned | {unassigned['total_cases']} | {unassigned['contacted']} | "
-                f"{unassigned['qualified']} | {unassigned['matched']} | {unassigned['applied']} | "
+                f"| Unassigned | {unassigned['total_surrogates']} | {unassigned['contacted']} | "
+                f"{unassigned['qualified']} | {unassigned['matched']} | {unassigned['application_submitted']} | "
                 f"{unassigned['lost']} | - |"
             )
 
         # Add summary
-        total_cases = sum(u["total_cases"] for u in data["data"])
-        total_applied = sum(u["applied"] for u in data["data"])
-        avg_conversion = round(total_applied / total_cases * 100, 1) if total_cases > 0 else 0
+        total_surrogates = sum(u["total_surrogates"] for u in data["data"])
+        total_submitted = sum(u["application_submitted"] for u in data["data"])
+        avg_conversion = (
+            round(total_submitted / total_surrogates * 100, 1) if total_surrogates > 0 else 0
+        )
 
         lines.append("")
-        lines.append(f"**Summary**: {total_cases} total cases, {total_applied} applied, {avg_conversion}% team avg conversion rate")
+        lines.append(
+            f"**Summary**: {total_surrogates} total surrogates, {total_submitted} submitted, {avg_conversion}% team avg conversion rate"
+        )
 
         return "\n".join(lines)
     except Exception as e:
@@ -200,11 +204,11 @@ def _should_fetch_performance(message: str) -> bool:
         "conversion",
         "conversion rate",
         "convert",
-        "applied",
+        "application_submitted",
         "matched",
         "lost",
         "assigned",
-        "cases",
+        "surrogates",
         "team",
         "top performer",
         "needs support",
@@ -214,22 +218,22 @@ def _should_fetch_performance(message: str) -> bool:
 
 
 def _build_dynamic_context(
-    case: Case,
+    surrogate: Surrogate,
     notes: list[EntityNote],
     tasks: list[Task],
     user_integrations: list[str],
     anonymize: bool = False,
     pii_mapping: PIIMapping | None = None,
 ) -> str:
-    """Build dynamic context string for the current case.
+    """Build dynamic context string for the current surrogate.
 
     If anonymize=True and pii_mapping is provided, PII will be replaced with placeholders.
     """
     # Get values, anonymize if needed
-    # Case uses full_name, not first_name/last_name
-    full_name = case.full_name or ""
-    email = case.email or "N/A"
-    phone = case.phone or "N/A"
+    # Surrogate uses full_name, not first_name/last_name
+    full_name = surrogate.full_name or ""
+    email = surrogate.email or "N/A"
+    phone = surrogate.phone or "N/A"
 
     if anonymize and pii_mapping:
         if full_name:
@@ -239,26 +243,26 @@ def _build_dynamic_context(
         if phone != "N/A":
             phone = pii_mapping.add_phone(phone)
 
-    status_value = case.status_label or "N/A"
-    source_value = case.source if isinstance(case.source, str) else case.source.value
+    status_value = surrogate.status_label or "N/A"
+    source_value = surrogate.source if isinstance(surrogate.source, str) else surrogate.source.value
 
     lines = [
-        "## Current Case Context",
-        f"- Case #: {case.case_number}",
+        "## Current Surrogate Context",
+        f"- Surrogate #: {surrogate.surrogate_number}",
         f"- Name: {full_name}",
         f"- Status: {status_value}",
         f"- Email: {email}",
         f"- Phone: {phone}",
-        f"- State: {case.state or 'N/A'}",
+        f"- State: {surrogate.state or 'N/A'}",
     ]
 
-    if case.date_of_birth:
-        lines.append(f"- Date of Birth: {case.date_of_birth}")
-    if case.source:
+    if surrogate.date_of_birth:
+        lines.append(f"- Date of Birth: {surrogate.date_of_birth}")
+    if surrogate.source:
         lines.append(f"- Source: {source_value}")
-    if case.last_contacted_at:
+    if surrogate.last_contacted_at:
         lines.append(
-            f"- Last Contacted: {case.last_contacted_at.strftime('%Y-%m-%d')} via {case.last_contact_method or 'unknown'}"
+            f"- Last Contacted: {surrogate.last_contacted_at.strftime('%Y-%m-%d')} via {surrogate.last_contact_method or 'unknown'}"
         )
 
     # Add notes (plain text, limited)
@@ -266,17 +270,15 @@ def _build_dynamic_context(
         lines.append("\n## Recent Notes")
         # Build known names list for anonymization (use full_name)
         known_names = []
-        if case.full_name:
-            known_names.append(case.full_name)
+        if surrogate.full_name:
+            known_names.append(surrogate.full_name)
             # Split into first/last for matching
-            parts = case.full_name.split()
+            parts = surrogate.full_name.split()
             known_names.extend(parts)
 
         for note in notes[:5]:  # Limit to 5 notes
             plain_text = nh3.clean(note.content, tags=set())  # Strip HTML
-            truncated = (
-                plain_text[:200] + "..." if len(plain_text) > 200 else plain_text
-            )
+            truncated = plain_text[:200] + "..." if len(plain_text) > 200 else plain_text
 
             # Anonymize note content if enabled
             if anonymize and pii_mapping:
@@ -289,9 +291,7 @@ def _build_dynamic_context(
     if pending_tasks:
         lines.append("\n## Pending Tasks")
         for task in pending_tasks[:3]:
-            due = (
-                f" (due {task.due_date.strftime('%Y-%m-%d')})" if task.due_date else ""
-            )
+            due = f" (due {task.due_date.strftime('%Y-%m-%d')})" if task.due_date else ""
             lines.append(f"- {task.title}{due}")
 
     # Add user integrations
@@ -401,63 +401,63 @@ def get_conversation_history(
     return messages
 
 
-def get_case_context(
+def get_surrogate_context(
     db: Session,
-    case_id: uuid.UUID,
+    surrogate_id: uuid.UUID,
     notes_limit: int = 5,
-) -> tuple[Case | None, list[EntityNote], list[Task]]:
-    """Load case with notes and tasks for context."""
-    case = db.query(Case).filter(Case.id == case_id).first()
-    if not case:
+) -> tuple[Surrogate | None, list[EntityNote], list[Task]]:
+    """Load surrogate with notes and tasks for context."""
+    surrogate = db.query(Surrogate).filter(Surrogate.id == surrogate_id).first()
+    if not surrogate:
         return None, [], []
 
-    # Get notes via EntityNote (entity_type='case')
+    # Get notes via EntityNote (entity_type='surrogate')
     notes = (
         db.query(EntityNote)
-        .filter(EntityNote.entity_type == "case", EntityNote.entity_id == case_id)
+        .filter(EntityNote.entity_type == "surrogate", EntityNote.entity_id == surrogate_id)
         .order_by(EntityNote.created_at.desc())
         .limit(notes_limit)
         .all()
     )
 
-    # Get tasks (Task uses case_id, not entity_type/entity_id)
+    # Get tasks (Task uses surrogate_id, not entity_type/entity_id)
     tasks = (
         db.query(Task)
         .filter(
-            Task.case_id == case_id,
+            Task.surrogate_id == surrogate_id,
             Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
         )
         .all()
     )
 
-    return case, notes, tasks
+    return surrogate, notes, tasks
 
 
 def get_task_context(
     db: Session,
     task_id: uuid.UUID,
     organization_id: uuid.UUID,
-) -> tuple[Task | None, Case | None]:
-    """Load task with optional related case for context."""
+) -> tuple[Task | None, Surrogate | None]:
+    """Load task with optional related surrogate for context."""
     task = (
         db.query(Task)
         .filter(
             Task.id == task_id,
             Task.organization_id == organization_id,
         )
-        .options(joinedload(Task.case))
+        .options(joinedload(Task.surrogate))
         .first()
     )
 
     if not task:
         return None, None
 
-    return task, task.case
+    return task, task.surrogate
 
 
 def _build_task_context(
     task: Task,
-    case: Case | None,
+    surrogate: Surrogate | None,
     user_integrations: list[str],
 ) -> str:
     """Build dynamic context string for the current task."""
@@ -469,11 +469,7 @@ def _build_task_context(
     ]
 
     if task.description:
-        desc = (
-            task.description[:300] + "..."
-            if len(task.description) > 300
-            else task.description
-        )
+        desc = task.description[:300] + "..." if len(task.description) > 300 else task.description
         lines.append(f"- Description: {desc}")
     if task.due_date:
         lines.append(f"- Due Date: {task.due_date}")
@@ -482,11 +478,11 @@ def _build_task_context(
     if task.priority:
         lines.append(f"- Priority: {task.priority}")
 
-    if case:
-        lines.append("\n## Related Case")
-        lines.append(f"- Case #: {case.case_number}")
-        lines.append(f"- Name: {case.full_name or 'N/A'}")
-        lines.append(f"- Status: {case.status_label or 'N/A'}")
+    if surrogate:
+        lines.append("\n## Related Surrogate")
+        lines.append(f"- Surrogate #: {surrogate.surrogate_number}")
+        lines.append(f"- Name: {surrogate.full_name or 'N/A'}")
+        lines.append(f"- Status: {surrogate.status_label or 'N/A'}")
 
     # Add user integrations
     lines.append("\n## Your Connected Integrations")
@@ -503,9 +499,7 @@ def _build_task_context(
 def get_user_integrations(db: Session, user_id: uuid.UUID) -> list[str]:
     """Get list of connected integration types for a user."""
     integrations = (
-        db.query(UserIntegration.integration_type)
-        .filter(UserIntegration.user_id == user_id)
-        .all()
+        db.query(UserIntegration.integration_type).filter(UserIntegration.user_id == user_id).all()
     )
     return [i[0] for i in integrations]
 
@@ -550,25 +544,23 @@ async def chat_async(
     pii_mapping = PIIMapping() if should_anonymize else None
 
     # Get or create conversation
-    conversation = get_or_create_conversation(
-        db, organization_id, user_id, entity_type, entity_id
-    )
+    conversation = get_or_create_conversation(db, organization_id, user_id, entity_type, entity_id)
 
     # Load context based on entity type
-    case = None
+    surrogate = None
     system_prompt = SYSTEM_PROMPT
     dynamic_context = ""
 
-    if entity_type == "case":
-        case, notes, tasks = get_case_context(db, entity_id, notes_limit)
-        if not case:
+    if entity_type == "surrogate":
+        surrogate, notes, tasks = get_surrogate_context(db, entity_id, notes_limit)
+        if not surrogate:
             return {
-                "content": "Case not found.",
+                "content": "Surrogate not found.",
                 "proposed_actions": [],
                 "tokens_used": {"prompt": 0, "completion": 0, "total": 0},
             }
         dynamic_context = _build_dynamic_context(
-            case,
+            surrogate,
             notes,
             tasks,
             user_integrations,
@@ -576,7 +568,7 @@ async def chat_async(
             pii_mapping=pii_mapping,
         )
     elif entity_type == "task":
-        task, related_case = get_task_context(db, entity_id, organization_id)
+        task, related_surrogate = get_task_context(db, entity_id, organization_id)
         if not task:
             return {
                 "content": "Task not found.",
@@ -584,7 +576,7 @@ async def chat_async(
                 "tokens_used": {"prompt": 0, "completion": 0, "total": 0},
             }
         system_prompt = TASK_SYSTEM_PROMPT
-        dynamic_context = _build_task_context(task, related_case, user_integrations)
+        dynamic_context = _build_task_context(task, related_surrogate, user_integrations)
     elif entity_type == "global":
         # Global mode - use simplified prompt with performance data
         system_prompt = GLOBAL_SYSTEM_PROMPT
@@ -598,11 +590,11 @@ async def chat_async(
 
     # Anonymize user message if enabled
     anonymized_message = message
-    if should_anonymize and pii_mapping and case:
+    if should_anonymize and pii_mapping and surrogate:
         known_names = []
-        if case.full_name:
-            known_names.append(case.full_name)
-            known_names.extend(case.full_name.split())
+        if surrogate.full_name:
+            known_names.append(surrogate.full_name)
+            known_names.extend(surrogate.full_name.split())
         anonymized_message = anonymize_text(message, pii_mapping, known_names)
 
     # Build messages for AI
@@ -615,11 +607,11 @@ async def chat_async(
     # Add conversation history (anonymize if PII anonymization is enabled)
     for msg in history:
         content = msg.content
-        if should_anonymize and pii_mapping and case:
+        if should_anonymize and pii_mapping and surrogate:
             known_names = []
-            if case.full_name:
-                known_names.append(case.full_name)
-                known_names.extend(case.full_name.split())
+            if surrogate.full_name:
+                known_names.append(surrogate.full_name)
+                known_names.extend(surrogate.full_name.split())
             content = anonymize_text(content, pii_mapping, known_names)
         ai_messages.append(ChatMessage(role=msg.role, content=content))
 

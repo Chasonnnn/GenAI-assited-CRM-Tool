@@ -103,9 +103,7 @@ def wrap_links_in_email(html_body: str, token: str) -> str:
         return f'{match.group(1)}"{tracked_url}"'
 
     # Match <a href="..." or <a href='...'
-    link_pattern = re.compile(
-        r'(<a\s+[^>]*href\s*=\s*)["\']([^"\']+)["\']', re.IGNORECASE
-    )
+    link_pattern = re.compile(r'(<a\s+[^>]*href\s*=\s*)["\']([^"\']+)["\']', re.IGNORECASE)
     return link_pattern.sub(replace_link, html_body)
 
 
@@ -138,9 +136,7 @@ def record_open(
     Returns True if the event was recorded, False if token not found.
     """
     recipient = (
-        db.query(CampaignRecipient)
-        .filter(CampaignRecipient.tracking_token == token)
-        .first()
+        db.query(CampaignRecipient).filter(CampaignRecipient.tracking_token == token).first()
     )
 
     if not recipient:
@@ -182,9 +178,7 @@ def record_click(
     Returns the original URL to redirect to, or None if token not found.
     """
     recipient = (
-        db.query(CampaignRecipient)
-        .filter(CampaignRecipient.tracking_token == token)
-        .first()
+        db.query(CampaignRecipient).filter(CampaignRecipient.tracking_token == token).first()
     )
 
     if not recipient:

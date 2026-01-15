@@ -13,9 +13,9 @@ import { useSendMessage, useAISettings, useApproveAction, useRejectAction } from
 import { useQuery } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 
-interface CaseOption {
+interface SurrogateOption {
     id: string
-    case_number: string
+    surrogate_number: string
     full_name: string
 }
 
@@ -35,12 +35,12 @@ interface ProposedAction {
 }
 
 
-// Fetch recent cases for the selector
-function useCases() {
+// Fetch recent surrogates for the selector
+function useSurrogates() {
     return useQuery({
-        queryKey: ['cases', 'ai-selector'],
+        queryKey: ['surrogates', 'ai-selector'],
         queryFn: async () => {
-            const response = await api.get<{ items: CaseOption[] }>('/cases?per_page=20');
+            const response = await api.get<{ items: SurrogateOption[] }>('/surrogates?per_page=20');
             return response.items;
         },
         staleTime: 60 * 1000,
@@ -48,20 +48,20 @@ function useCases() {
 }
 
 export default function AIAssistantPage() {
-    const [selectedCaseId, setSelectedCaseId] = useState<string>("")
+    const [selectedSurrogateId, setSelectedSurrogateId] = useState<string>("")
     const [message, setMessage] = useState("")
     const [messages, setMessages] = useState<Message[]>([
         {
             id: "welcome",
             role: "assistant",
-            content: "Hello! I'm your AI assistant. Select a case above to start chatting about it, or use the quick actions to get started.",
+            content: "Hello! I'm your AI assistant. Select a surrogate above to start chatting about it, or use the quick actions to get started.",
             timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
         },
     ])
     const messagesEndRef = useRef<HTMLDivElement>(null)
 
-    const casesQuery = useCases()
-    const { data: cases, isLoading: casesLoading, isError: casesError, error: casesErrorData } = casesQuery
+    const surrogatesQuery = useSurrogates()
+    const { data: surrogates, isLoading: surrogatesLoading, isError: surrogatesError, error: surrogatesErrorData } = surrogatesQuery
     const aiSettingsQuery = useAISettings()
     const {
         data: aiSettings,
@@ -73,19 +73,19 @@ export default function AIAssistantPage() {
     const rejectAction = useRejectAction()
 
     const quickActions = [
-        { icon: FileTextIcon, label: "Summarize this case", color: "text-blue-500" },
+        { icon: FileTextIcon, label: "Summarize this surrogate", color: "text-blue-500" },
         { icon: UserIcon, label: "Draft a follow-up email", color: "text-green-500" },
         { icon: CalendarIcon, label: "What are the next steps?", color: "text-purple-500" },
         { icon: ClockIcon, label: "Create a task list", color: "text-orange-500" },
     ]
 
     const suggestedActions = [
-        "What's the current status of this case?",
+        "What's the current status of this surrogate?",
         "Are there any pending tasks?",
         "Summarize recent notes",
         "Draft an email to the intended parents",
     ]
-    const casesErrorMessage = casesErrorData instanceof Error ? casesErrorData.message : ""
+    const surrogatesErrorMessage = surrogatesErrorData instanceof Error ? surrogatesErrorData.message : ""
     const aiSettingsErrorMessage = aiSettingsErrorData instanceof Error ? aiSettingsErrorData.message : ""
 
     // Scroll to bottom when messages change
@@ -94,7 +94,7 @@ export default function AIAssistantPage() {
     }, [messages])
 
     const handleSend = async () => {
-        if (!message.trim() || !selectedCaseId) return
+        if (!message.trim() || !selectedSurrogateId) return
 
         const userMessage: Message = {
             id: `user-${Date.now()}`,
@@ -108,8 +108,8 @@ export default function AIAssistantPage() {
 
         try {
             const response = await sendMessage.mutateAsync({
-                entity_type: 'case',
-                entity_id: selectedCaseId,
+                entity_type: 'surrogate',
+                entity_id: selectedSurrogateId,
                 message: message,
             })
 
@@ -170,7 +170,7 @@ export default function AIAssistantPage() {
         }
     }
 
-    const selectedCase = cases?.find(c => c.id === selectedCaseId)
+    const selectedSurrogate = surrogates?.find(surrogate => surrogate.id === selectedSurrogateId)
     const isAIEnabled = aiSettings?.is_enabled
     const modelName = aiSettings?.model || aiSettings?.provider?.toUpperCase() || 'AI'
 
@@ -181,38 +181,38 @@ export default function AIAssistantPage() {
                 <SidebarTrigger />
                 <div className="flex-1">
                     <h1 className="text-2xl font-semibold">AI Assistant</h1>
-                    <p className="text-xs text-muted-foreground">Get help with your cases, tasks, and workflows</p>
+                    <p className="text-xs text-muted-foreground">Get help with your surrogates, tasks, and workflows</p>
                 </div>
-                {/* Case Selector */}
-                <Select value={selectedCaseId} onValueChange={(v) => setSelectedCaseId(v ?? "")}>
+                {/* Surrogate Selector */}
+                <Select value={selectedSurrogateId} onValueChange={(v) => setSelectedSurrogateId(v ?? "")}>
                     <SelectTrigger className="w-64">
-                        <SelectValue placeholder={casesLoading ? "Loading cases..." : "Select a case"} />
+                        <SelectValue placeholder={surrogatesLoading ? "Loading surrogates..." : "Select a surrogate"} />
                     </SelectTrigger>
                     <SelectContent>
-                        {cases?.map(c => (
-                            <SelectItem key={c.id} value={c.id}>
-                                #{c.case_number} - {c.full_name}
+                        {surrogates?.map(surrogate => (
+                            <SelectItem key={surrogate.id} value={surrogate.id}>
+                                #{surrogate.surrogate_number} - {surrogate.full_name}
                             </SelectItem>
                         ))}
                     </SelectContent>
                 </Select>
             </div>
 
-            {(casesError || aiSettingsError) && (
+            {(surrogatesError || aiSettingsError) && (
                 <div className="mx-4 mt-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
                     <AlertCircleIcon className="h-5 w-5 text-destructive" />
                     <div className="flex-1">
-                        <p className="text-sm font-medium">Unable to load AI settings or cases</p>
+                        <p className="text-sm font-medium">Unable to load AI settings or surrogates</p>
                         <p className="text-xs text-muted-foreground">
-                            {casesErrorMessage || aiSettingsErrorMessage || "Please try again."}
+                            {surrogatesErrorMessage || aiSettingsErrorMessage || "Please try again."}
                         </p>
                     </div>
                     <Button
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                            if (casesError) {
-                                void casesQuery.refetch()
+                            if (surrogatesError) {
+                                void surrogatesQuery.refetch()
                             }
                             if (aiSettingsError) {
                                 void aiSettingsQuery.refetch()
@@ -252,7 +252,7 @@ export default function AIAssistantPage() {
                                         size="sm"
                                         className="w-full justify-start gap-2 bg-transparent text-sm"
                                         onClick={() => setMessage(action.label)}
-                                        disabled={!selectedCaseId}
+                                        disabled={!selectedSurrogateId}
                                     >
                                         <action.icon className={`h-3.5 w-3.5 ${action.color}`} />
                                         {action.label}
@@ -270,7 +270,7 @@ export default function AIAssistantPage() {
                                     <button
                                         key={index}
                                         onClick={() => setMessage(suggestion)}
-                                        disabled={!selectedCaseId}
+                                        disabled={!selectedSurrogateId}
                                         className="flex w-full items-start gap-2 rounded-md py-1 text-left hover:bg-muted/50 transition-colors disabled:opacity-50"
                                     >
                                         <SparklesIcon className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-teal-500" />
@@ -280,14 +280,14 @@ export default function AIAssistantPage() {
                             </div>
                         </Card>
 
-                        {/* Selected Case Info */}
-                        {selectedCase && (
+                        {/* Selected Surrogate Info */}
+                        {selectedSurrogate && (
                             <Card className="gap-2 py-3 px-3">
-                                <div className="text-sm font-medium">Current Case</div>
+                                <div className="text-sm font-medium">Current Surrogate</div>
                                 <div className="text-xs text-muted-foreground">Chatting about:</div>
                                 <div className="rounded-md border p-2">
-                                    <div className="font-medium text-sm">#{selectedCase.case_number}</div>
-                                    <div className="text-xs text-muted-foreground">{selectedCase.full_name}</div>
+                                    <div className="font-medium text-sm">#{selectedSurrogate.surrogate_number}</div>
+                                    <div className="text-xs text-muted-foreground">{selectedSurrogate.full_name}</div>
                                 </div>
                             </Card>
                         )}
@@ -446,7 +446,7 @@ export default function AIAssistantPage() {
                     <CardContent className="shrink-0 border-t p-3">
                         <div className="flex gap-2">
                             <Input
-                                placeholder={selectedCaseId ? "Type your message..." : "Select a case to start chatting"}
+                                placeholder={selectedSurrogateId ? "Type your message..." : "Select a surrogate to start chatting"}
                                 value={message}
                                 onChange={(e) => setMessage(e.target.value)}
                                 onKeyDown={(e) => {
@@ -456,12 +456,12 @@ export default function AIAssistantPage() {
                                     }
                                 }}
                                 className="flex-1 text-sm"
-                                disabled={!selectedCaseId || !isAIEnabled || sendMessage.isPending}
+                                disabled={!selectedSurrogateId || !isAIEnabled || sendMessage.isPending}
                             />
                             <Button
                                 onClick={handleSend}
                                 size="icon"
-                                disabled={!message.trim() || !selectedCaseId || !isAIEnabled || sendMessage.isPending}
+                                disabled={!message.trim() || !selectedSurrogateId || !isAIEnabled || sendMessage.isPending}
                             >
                                 {sendMessage.isPending ? (
                                     <Loader2Icon className="h-4 w-4 animate-spin" />
@@ -471,7 +471,7 @@ export default function AIAssistantPage() {
                             </Button>
                         </div>
                         <p className="mt-1.5 text-[10px] text-muted-foreground">
-                            {!selectedCaseId ? "Select a case above to start" : "Press Enter to send"}
+                            {!selectedSurrogateId ? "Select a surrogate above to start" : "Press Enter to send"}
                         </p>
                     </CardContent>
                 </Card>

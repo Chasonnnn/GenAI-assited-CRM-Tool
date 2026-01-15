@@ -53,9 +53,7 @@ def list_intended_parents(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     sort_by: str | None = Query(None, description="Column to sort by"),
-    sort_order: str = Query(
-        "desc", pattern="^(asc|desc)$", description="Sort direction"
-    ),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort direction"),
     db: Session = Depends(get_db),
     session: dict = Depends(get_current_session),
 ):
@@ -143,9 +141,7 @@ def get_stats(
 def create_intended_parent(
     data: IntendedParentCreate,
     db: Session = Depends(get_db),
-    session: dict = Depends(
-        require_permission(POLICIES["intended_parents"].actions["edit"])
-    ),
+    session: dict = Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
 ):
     """Create a new intended parent."""
     # Check for duplicate email
@@ -205,9 +201,7 @@ def update_intended_parent(
     ip_id: UUID,
     data: IntendedParentUpdate,
     db: Session = Depends(get_db),
-    session: dict = Depends(
-        require_permission(POLICIES["intended_parents"].actions["edit"])
-    ),
+    session: dict = Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
 ):
     """Update an intended parent."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -255,9 +249,7 @@ def update_status(
     ip_id: UUID,
     data: IntendedParentStatusUpdate,
     db: Session = Depends(get_db),
-    session: dict = Depends(
-        require_permission(POLICIES["intended_parents"].actions["edit"])
-    ),
+    session: dict = Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
 ):
     """Change status of an intended parent."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -275,9 +267,7 @@ def update_status(
             status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}"
         )
 
-    updated = ip_service.update_ip_status(
-        db, ip, data.status, session.user_id, data.reason
-    )
+    updated = ip_service.update_ip_status(db, ip, data.status, session.user_id, data.reason)
     return updated
 
 
@@ -289,9 +279,7 @@ def update_status(
 def archive_intended_parent(
     ip_id: UUID,
     db: Session = Depends(get_db),
-    session: dict = Depends(
-        require_permission(POLICIES["intended_parents"].actions["edit"])
-    ),
+    session: dict = Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
 ):
     """Archive (soft delete) an intended parent."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -409,9 +397,7 @@ def list_notes(
     if not ip:
         raise HTTPException(status_code=404, detail="Intended parent not found")
 
-    notes = note_service.list_notes(
-        db, session.org_id, EntityType.INTENDED_PARENT, ip_id
-    )
+    notes = note_service.list_notes(db, session.org_id, EntityType.INTENDED_PARENT, ip_id)
 
     from app.services import audit_service
 
@@ -449,9 +435,7 @@ def create_note(
     ip_id: UUID,
     data: EntityNoteCreate,
     db: Session = Depends(get_db),
-    session: dict = Depends(
-        require_permission(POLICIES["intended_parents"].actions["edit"])
-    ),
+    session: dict = Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
 ):
     """Add a note to an intended parent."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -483,9 +467,7 @@ def delete_note(
     ip_id: UUID,
     note_id: UUID,
     db: Session = Depends(get_db),
-    session: dict = Depends(
-        require_permission(POLICIES["intended_parents"].actions["edit"])
-    ),
+    session: dict = Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
 ):
     """Delete a note (author or admin only)."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -501,8 +483,6 @@ def delete_note(
         Role.ADMIN,
         Role.DEVELOPER,
     ):
-        raise HTTPException(
-            status_code=403, detail="Not authorized to delete this note"
-        )
+        raise HTTPException(status_code=403, detail="Not authorized to delete this note")
 
     note_service.delete_note(db, note)

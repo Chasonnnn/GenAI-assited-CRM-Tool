@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.models import (
     Attachment,
-    CaseInterview,
+    SurrogateInterview,
     InterviewAttachment,
 )
 from app.services import interview_service
@@ -143,7 +143,9 @@ async def transcribe_audio(
 
 def _format_transcript_doc(text: str, filename: str) -> dict:
     """Format transcription text as TipTap JSON."""
-    paragraphs = [paragraph.strip() for paragraph in text.strip().split("\n\n") if paragraph.strip()]
+    paragraphs = [
+        paragraph.strip() for paragraph in text.strip().split("\n\n") if paragraph.strip()
+    ]
 
     header = [
         {"type": "text", "text": "AI Transcription", "marks": [{"type": "bold"}]},
@@ -155,9 +157,7 @@ def _format_transcript_doc(text: str, filename: str) -> dict:
         {"type": "horizontalRule"},
     ]
     for paragraph in paragraphs:
-        content.append(
-            {"type": "paragraph", "content": [{"type": "text", "text": paragraph}]}
-        )
+        content.append({"type": "paragraph", "content": [{"type": "text", "text": paragraph}]})
 
     return {"type": "doc", "content": content}
 
@@ -205,9 +205,9 @@ async def request_transcription(
         raise TranscriptionError("Attachment not found")
 
     interview = db.scalar(
-        select(CaseInterview).where(
-            CaseInterview.id == interview_attachment.interview_id,
-            CaseInterview.organization_id == interview_attachment.organization_id,
+        select(SurrogateInterview).where(
+            SurrogateInterview.id == interview_attachment.interview_id,
+            SurrogateInterview.organization_id == interview_attachment.organization_id,
         )
     )
     if not interview:
@@ -215,9 +215,7 @@ async def request_transcription(
 
     # Check if transcribable
     if not is_transcribable(attachment.content_type):
-        raise TranscriptionError(
-            f"File type '{attachment.content_type}' cannot be transcribed"
-        )
+        raise TranscriptionError(f"File type '{attachment.content_type}' cannot be transcribed")
 
     # Check file size
     if attachment.file_size > MAX_TRANSCRIPTION_SIZE_BYTES:

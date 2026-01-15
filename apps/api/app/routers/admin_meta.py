@@ -10,7 +10,7 @@ Includes:
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -56,9 +56,7 @@ class MetaPageCreate(BaseModel):
 
 class MetaPageUpdate(BaseModel):
     page_name: str | None = None
-    access_token: str | None = Field(
-        None, description="New access token (will be encrypted)"
-    )
+    access_token: str | None = Field(None, description="New access token (will be encrypted)")
     expires_days: int | None = Field(None, ge=1, le=365)
     is_active: bool | None = None
 
@@ -154,9 +152,7 @@ def update_meta_page(
     mapping = meta_page_service.get_mapping_by_page_id(db, session.org_id, page_id)
 
     if not mapping:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Page not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found")
 
     # Update fields
     if data.access_token is not None:
@@ -199,9 +195,7 @@ def delete_meta_page(
     mapping = meta_page_service.get_mapping_by_page_id(db, session.org_id, page_id)
 
     if not mapping:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Page not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found")
 
     meta_page_service.delete_mapping(db, mapping)
 
@@ -452,11 +446,13 @@ async def trigger_hierarchy_sync(
     results = []
     for account in accounts:
         result = await meta_sync_service.sync_hierarchy(db, account, full_sync=full_sync)
-        results.append({
-            "account_id": str(account.id),
-            "account_name": account.ad_account_name,
-            **result,
-        })
+        results.append(
+            {
+                "account_id": str(account.id),
+                "account_name": account.ad_account_name,
+                **result,
+            }
+        )
 
     return SyncTriggerResponse(
         success=all(r.get("error") is None for r in results),
@@ -493,11 +489,13 @@ async def trigger_spend_sync(
     results = []
     for account in accounts:
         result = await meta_sync_service.sync_spend(db, account, date_start, date_end)
-        results.append({
-            "account_id": str(account.id),
-            "account_name": account.ad_account_name,
-            **result,
-        })
+        results.append(
+            {
+                "account_id": str(account.id),
+                "account_name": account.ad_account_name,
+                **result,
+            }
+        )
 
     return SyncTriggerResponse(
         success=all(r.get("error") is None for r in results),

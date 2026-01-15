@@ -23,7 +23,7 @@ import Link from "next/link"
 
 // Trigger display labels
 const TRIGGER_LABELS: Record<string, string> = {
-    case_created: "When a new case is created",
+    surrogate_created: "When a new case is created",
     status_changed: "When case stage changes",
     inactivity: "When case is inactive",
     scheduled: "On a schedule",
@@ -40,7 +40,7 @@ const TRIGGER_LABELS: Record<string, string> = {
 const ACTION_LABELS: Record<string, string> = {
     send_email: "Send Email",
     create_task: "Create Task",
-    assign_case: "Assign Case",
+    assign_surrogate: "Assign Surrogate",
     update_status: "Update Stage",
     add_note: "Add Note",
     send_notification: "Send Notification",

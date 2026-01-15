@@ -11,7 +11,7 @@ from datetime import datetime, date, timezone
 
 from sqlalchemy.orm import Session
 
-from app.db.models import Case, EntityNote, Task, AIActionApproval
+from app.db.models import Surrogate, EntityNote, Task, AIActionApproval
 from app.db.enums import TaskType, OwnerType
 from app.types import JsonObject
 
@@ -66,7 +66,7 @@ class ActionExecutor(ABC):
 
 
 class AddNoteExecutor(ActionExecutor):
-    """Add a note to a case."""
+    """Add a note to a surrogate."""
 
     action_type = "add_note"
 
@@ -97,7 +97,7 @@ class AddNoteExecutor(ActionExecutor):
 
         clean_content = note_service.sanitize_html(content)
         note = EntityNote(
-            entity_type="case",
+            entity_type="surrogate",
             entity_id=entity_id,
             organization_id=org_id,
             author_id=user_id,
@@ -105,11 +105,11 @@ class AddNoteExecutor(ActionExecutor):
         )
         db.add(note)
 
-        # Update case last_contacted
-        case = db.query(Case).filter(Case.id == entity_id).first()
-        if case:
-            case.last_contacted_at = datetime.now(timezone.utc)
-            case.last_contact_method = "note"
+        # Update surrogate last_contacted
+        surrogate = db.query(Surrogate).filter(Surrogate.id == entity_id).first()
+        if surrogate:
+            surrogate.last_contacted_at = datetime.now(timezone.utc)
+            surrogate.last_contact_method = "note"
 
         db.flush()
         workflow_triggers.trigger_note_added(db, note)
@@ -158,10 +158,10 @@ class CreateTaskExecutor(ActionExecutor):
             except ValueError:
                 logger.warning(f"Invalid due_date format: {due_date_str}")
 
-        # Create task (uses case_id, not entity_type/entity_id)
+        # Create task (uses surrogate_id, not entity_type/entity_id)
         task = Task(
             organization_id=org_id,
-            case_id=entity_id,
+            surrogate_id=entity_id,
             owner_type=OwnerType.USER.value,
             owner_id=user_id,
             title=title,
@@ -183,7 +183,7 @@ class CreateTaskExecutor(ActionExecutor):
 
 
 class UpdateStatusExecutor(ActionExecutor):
-    """Update case status."""
+    """Update surrogate status."""
 
     action_type = "update_status"
 
@@ -216,44 +216,42 @@ class UpdateStatusExecutor(ActionExecutor):
     ) -> JsonObject:
         stage_id = payload.get("stage_id")
 
-        case = (
-            db.query(Case)
-            .filter(Case.id == entity_id, Case.organization_id == org_id)
+        surrogate = (
+            db.query(Surrogate)
+            .filter(Surrogate.id == entity_id, Surrogate.organization_id == org_id)
             .first()
         )
-        if not case:
+        if not surrogate:
             return {
                 "action": "update_status",
                 "success": False,
-                "error": "Case not found",
+                "error": "Surrogate not found",
             }
 
         from app.services import pipeline_service
 
         stage = pipeline_service.get_stage_by_id(db, stage_id)
-        current_stage = pipeline_service.get_stage_by_id(db, case.stage_id)
-        case_pipeline_id = current_stage.pipeline_id if current_stage else None
-        if not case_pipeline_id:
-            case_pipeline_id = pipeline_service.get_or_create_default_pipeline(
-                db, org_id
-            ).id
-        if not stage or not stage.is_active or stage.pipeline_id != case_pipeline_id:
+        current_stage = pipeline_service.get_stage_by_id(db, surrogate.stage_id)
+        surrogate_pipeline_id = current_stage.pipeline_id if current_stage else None
+        if not surrogate_pipeline_id:
+            surrogate_pipeline_id = pipeline_service.get_or_create_default_pipeline(db, org_id).id
+        if not stage or not stage.is_active or stage.pipeline_id != surrogate_pipeline_id:
             return {
                 "action": "update_status",
                 "success": False,
-                "error": "Invalid stage for case pipeline",
+                "error": "Invalid stage for surrogate pipeline",
             }
 
-        old_stage_id = case.stage_id
-        old_label = case.status_label
-        case.stage_id = stage.id
-        case.status_label = stage.label
+        old_stage_id = surrogate.stage_id
+        old_label = surrogate.status_label
+        surrogate.stage_id = stage.id
+        surrogate.status_label = stage.label
 
         # Add status history entry
-        from app.db.models import CaseStatusHistory
+        from app.db.models import SurrogateStatusHistory
 
-        history = CaseStatusHistory(
-            case_id=entity_id,
+        history = SurrogateStatusHistory(
+            surrogate_id=entity_id,
             organization_id=org_id,
             from_stage_id=old_stage_id,
             to_stage_id=stage.id,
@@ -361,7 +359,7 @@ class SendEmailExecutor(ActionExecutor):
         clean_content = note_service.sanitize_html(email_content)
 
         note = EntityNote(
-            entity_type="case",
+            entity_type="surrogate",
             entity_id=entity_id,
             organization_id=org_id,
             author_id=user_id,
@@ -369,11 +367,11 @@ class SendEmailExecutor(ActionExecutor):
         )
         db.add(note)
 
-        # Update case last_contacted
-        case = db.query(Case).filter(Case.id == entity_id).first()
-        if case:
-            case.last_contacted_at = datetime.now(timezone.utc)
-            case.last_contact_method = "email"
+        # Update surrogate last_contacted
+        surrogate = db.query(Surrogate).filter(Surrogate.id == entity_id).first()
+        if surrogate:
+            surrogate.last_contacted_at = datetime.now(timezone.utc)
+            surrogate.last_contact_method = "email"
 
         db.flush()
         workflow_triggers.trigger_note_added(db, note)
@@ -404,10 +402,10 @@ class SendEmailExecutor(ActionExecutor):
 
 # Maps action types to the permission required to execute them
 ACTION_PERMISSIONS: dict[str, str] = {
-    "add_note": "edit_case_notes",
+    "add_note": "edit_surrogate_notes",
     "create_task": "create_tasks",
-    "update_status": "change_case_status",
-    "send_email": "edit_cases",  # Sending email updates case contact info
+    "update_status": "change_surrogate_status",
+    "send_email": "edit_surrogates",  # Sending email updates surrogate contact info
 }
 
 
@@ -455,18 +453,14 @@ def execute_action(
         approval.status = "failed"
         approval.error_message = error_msg
         approval.executed_at = datetime.now(timezone.utc)
-        logger.warning(
-            f"AI action denied: user {user_id} lacks approve_ai_actions permission"
-        )
+        logger.warning(f"AI action denied: user {user_id} lacks approve_ai_actions permission")
         return {"success": False, "error": error_msg, "error_code": "permission_denied"}
 
     # 2. Check action-specific permission
     required_permission = ACTION_PERMISSIONS.get(approval.action_type)
     if required_permission and user_permissions is not None:
         if required_permission not in user_permissions:
-            error_msg = (
-                f"You don't have permission to {approval.action_type.replace('_', ' ')}"
-            )
+            error_msg = f"You don't have permission to {approval.action_type.replace('_', ' ')}"
             approval.status = "failed"
             approval.error_message = error_msg
             approval.executed_at = datetime.now(timezone.utc)
@@ -501,9 +495,7 @@ def execute_action(
 
     # 5. Execute
     try:
-        result = executor.execute(
-            approval.action_payload, db, user_id, org_id, entity_id
-        )
+        result = executor.execute(approval.action_payload, db, user_id, org_id, entity_id)
         approval.status = "executed" if result.get("success") else "failed"
         approval.executed_at = datetime.now(timezone.utc)
         if not result.get("success"):

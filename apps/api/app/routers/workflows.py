@@ -14,7 +14,7 @@ from app.core.deps import (
 from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
 from app.db.enums import WorkflowTriggerType
-from app.services import case_service, workflow_service
+from app.services import surrogate_service, workflow_service
 from app.services.workflow_engine import engine
 from app.schemas.workflow import (
     WorkflowCreate,
@@ -119,9 +119,7 @@ def get_execution_stats(
     return workflow_service.get_execution_stats(db, session.org_id)
 
 
-@router.post(
-    "", response_model=WorkflowRead, dependencies=[Depends(require_csrf_header)]
-)
+@router.post("", response_model=WorkflowRead, dependencies=[Depends(require_csrf_header)])
 def create_workflow(
     data: WorkflowCreate,
     db: Session = Depends(get_db),
@@ -256,9 +254,9 @@ def test_workflow(
         raise HTTPException(status_code=404, detail="Workflow not found")
 
     # Get entity
-    entity = case_service.get_case(db, session.org_id, request.entity_id)
+    entity = surrogate_service.get_surrogate(db, session.org_id, request.entity_id)
     if not entity:
-        raise HTTPException(status_code=404, detail="Entity not found")
+        raise HTTPException(status_code=404, detail="Surrogate not found")
 
     # Evaluate conditions
     conditions_evaluated = []
@@ -282,15 +280,11 @@ def test_workflow(
     logic = workflow.condition_logic
     if logic == "AND":
         conditions_matched = (
-            all(c["result"] for c in conditions_evaluated)
-            if conditions_evaluated
-            else True
+            all(c["result"] for c in conditions_evaluated) if conditions_evaluated else True
         )
     else:
         conditions_matched = (
-            any(c["result"] for c in conditions_evaluated)
-            if conditions_evaluated
-            else True
+            any(c["result"] for c in conditions_evaluated) if conditions_evaluated else True
         )
 
     # Preview actions
@@ -303,10 +297,8 @@ def test_workflow(
             description += f"Send template {action.get('template_id')}"
         elif action_type == "create_task":
             description += f"Create task '{action.get('title')}'"
-        elif action_type == "assign_case":
-            description += (
-                f"Assign to {action.get('owner_type')}:{action.get('owner_id')}"
-            )
+        elif action_type == "assign_surrogate":
+            description += f"Assign to {action.get('owner_type')}:{action.get('owner_id')}"
         elif action_type == "send_notification":
             description += f"Notify: {action.get('title')}"
         elif action_type == "update_field":

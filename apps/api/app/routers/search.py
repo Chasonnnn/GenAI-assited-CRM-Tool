@@ -13,7 +13,7 @@ from app.services import permission_service, search_service
 router = APIRouter(
     prefix="/search",
     tags=["Search"],
-    dependencies=[Depends(require_permission(POLICIES["cases"].default))],
+    dependencies=[Depends(require_permission(POLICIES["surrogates"].default))],
 )
 
 
@@ -36,7 +36,7 @@ def global_search(
 
     Results are:
     - Org-scoped to the current user's organization
-    - Permission-gated (notes require view_case_notes, IPs require view_intended_parents)
+    - Permission-gated (notes require view_surrogate_notes, IPs require view_intended_parents)
     - Ranked by relevance
     - Include highlighted snippets
 

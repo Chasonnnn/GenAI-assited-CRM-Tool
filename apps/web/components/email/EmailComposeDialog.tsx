@@ -22,16 +22,16 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { EyeIcon, EyeOffIcon, SendIcon, Loader2Icon } from "lucide-react"
 import { useEmailTemplates, useEmailTemplate } from "@/lib/hooks/use-email-templates"
-import { useSendCaseEmail } from "@/lib/hooks/use-cases"
+import { useSendSurrogateEmail } from "@/lib/hooks/use-surrogates"
 
 interface EmailComposeDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    caseData: {
+    surrogateData: {
         id: string
         email: string
         full_name: string
-        case_number: string
+        surrogate_number: string
         status: string
         state?: string
         phone?: string
@@ -42,7 +42,7 @@ interface EmailComposeDialogProps {
 export function EmailComposeDialog({
     open,
     onOpenChange,
-    caseData,
+    surrogateData,
     onSuccess,
 }: EmailComposeDialogProps) {
     const [selectedTemplate, setSelectedTemplate] = React.useState<string>("")
@@ -54,7 +54,7 @@ export function EmailComposeDialog({
     const { data: templates = [], isLoading: templatesLoading } = useEmailTemplates(true)
     // Fetch full template when one is selected
     const { data: fullTemplate } = useEmailTemplate(selectedTemplate || null)
-    const sendEmailMutation = useSendCaseEmail()
+    const sendEmailMutation = useSendSurrogateEmail()
 
     // Update subject and body when full template loads
     React.useEffect(() => {
@@ -77,7 +77,7 @@ export function EmailComposeDialog({
     const handleSend = async () => {
         try {
             await sendEmailMutation.mutateAsync({
-                caseId: caseData.id,
+                surrogateId: surrogateData.id,
                 data: {
                     template_id: selectedTemplate,
                     subject,
@@ -95,15 +95,15 @@ export function EmailComposeDialog({
         onOpenChange(false)
     }
 
-    // Replace variables with case data for preview
+    // Replace variables with surrogate data for preview
     const renderPreview = (text: string) => {
         return text
-            .replace(/\{\{full_name\}\}/g, caseData.full_name)
-            .replace(/\{\{case_number\}\}/g, caseData.case_number)
-            .replace(/\{\{status\}\}/g, caseData.status)
-            .replace(/\{\{state\}\}/g, caseData.state || "")
-            .replace(/\{\{email\}\}/g, caseData.email)
-            .replace(/\{\{phone\}\}/g, caseData.phone || "")
+            .replace(/\{\{full_name\}\}/g, surrogateData.full_name)
+            .replace(/\{\{surrogate_number\}\}/g, surrogateData.surrogate_number)
+            .replace(/\{\{status\}\}/g, surrogateData.status)
+            .replace(/\{\{state\}\}/g, surrogateData.state || "")
+            .replace(/\{\{email\}\}/g, surrogateData.email)
+            .replace(/\{\{phone\}\}/g, surrogateData.phone || "")
             .replace(/\{\{owner_name\}\}/g, "")
             .replace(/\{\{org_name\}\}/g, "")
     }
@@ -127,7 +127,7 @@ export function EmailComposeDialog({
         "{{full_name}}",
         "{{email}}",
         "{{phone}}",
-        "{{case_number}}",
+        "{{surrogate_number}}",
         "{{status}}",
         "{{state}}",
         "{{owner_name}}",
@@ -139,7 +139,7 @@ export function EmailComposeDialog({
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Send Email</DialogTitle>
-                    <DialogDescription>Compose and send an email to {caseData.full_name}</DialogDescription>
+                    <DialogDescription>Compose and send an email to {surrogateData.full_name}</DialogDescription>
                 </DialogHeader>
 
                 <div className="grid gap-6 py-4">
@@ -165,7 +165,7 @@ export function EmailComposeDialog({
                         <Label htmlFor="recipient">To</Label>
                         <Input
                             id="recipient"
-                            value={caseData.email}
+                            value={surrogateData.email}
                             readOnly
                             className="bg-muted/50 cursor-not-allowed"
                         />

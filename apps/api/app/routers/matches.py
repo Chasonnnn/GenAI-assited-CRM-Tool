@@ -15,9 +15,9 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
-from app.db.enums import CaseActivityType, IntendedParentStatus, MatchStatus
+from app.db.enums import SurrogateActivityType, IntendedParentStatus, MatchStatus
 from app.db.models import (
-    Case,
+    Surrogate,
     IntendedParent,
     Match,
     IntendedParentStatusHistory,
@@ -41,7 +41,7 @@ router = APIRouter(
 class MatchCreate(BaseModel):
     """Request to propose a match."""
 
-    case_id: UUID
+    surrogate_id: UUID
     intended_parent_id: UUID
     compatibility_score: float | None = Field(None, ge=0, le=100)
     notes: str | None = None
@@ -51,7 +51,7 @@ class MatchRead(BaseModel):
     """Match response."""
 
     id: str
-    case_id: str
+    surrogate_id: str
     intended_parent_id: str
     status: str
     compatibility_score: float | None
@@ -64,31 +64,31 @@ class MatchRead(BaseModel):
     created_at: str
     updated_at: str
     # Denormalized for convenience
-    case_number: str | None = None
-    case_name: str | None = None
+    surrogate_number: str | None = None
+    surrogate_name: str | None = None
     ip_name: str | None = None
-    # Case stage info for status sync
-    case_stage_id: str | None = None
-    case_stage_slug: str | None = None
-    case_stage_label: str | None = None
+    # Surrogate stage info for status sync
+    surrogate_stage_id: str | None = None
+    surrogate_stage_slug: str | None = None
+    surrogate_stage_label: str | None = None
 
 
 class MatchListItem(BaseModel):
     """Match list item with summary info."""
 
     id: str
-    case_id: str
-    case_number: str | None
-    case_name: str | None
+    surrogate_id: str
+    surrogate_number: str | None
+    surrogate_name: str | None
     intended_parent_id: str
     ip_name: str | None
     status: str
     compatibility_score: float | None
     proposed_at: str
-    # Case stage info for status sync
-    case_stage_id: str | None = None
-    case_stage_slug: str | None = None
-    case_stage_label: str | None = None
+    # Surrogate stage info for status sync
+    surrogate_stage_id: str | None = None
+    surrogate_stage_slug: str | None = None
+    surrogate_stage_label: str | None = None
 
 
 class MatchListResponse(BaseModel):
@@ -134,9 +134,9 @@ class MatchUpdateNotesRequest(BaseModel):
 def _match_to_read(match: Match, db: Session, org_id: str | None = None) -> MatchRead:
     """Convert Match model to MatchRead schema with org-scoped lookups."""
     # Org-scoped lookups for defense in depth, with eager load for stage
-    case = match_service.get_case_with_stage(
+    surrogate = match_service.get_surrogate_with_stage(
         db,
-        match.case_id,
+        match.surrogate_id,
         UUID(org_id) if org_id else None,
     )
     ip = match_service.get_intended_parent(
@@ -147,52 +147,44 @@ def _match_to_read(match: Match, db: Session, org_id: str | None = None) -> Matc
 
     return MatchRead(
         id=str(match.id),
-        case_id=str(match.case_id),
+        surrogate_id=str(match.surrogate_id),
         intended_parent_id=str(match.intended_parent_id),
         status=match.status,
-        compatibility_score=float(match.compatibility_score)
-        if match.compatibility_score
-        else None,
-        proposed_by_user_id=str(match.proposed_by_user_id)
-        if match.proposed_by_user_id
-        else None,
+        compatibility_score=float(match.compatibility_score) if match.compatibility_score else None,
+        proposed_by_user_id=str(match.proposed_by_user_id) if match.proposed_by_user_id else None,
         proposed_at=match.proposed_at.isoformat() if match.proposed_at else None,
-        reviewed_by_user_id=str(match.reviewed_by_user_id)
-        if match.reviewed_by_user_id
-        else None,
+        reviewed_by_user_id=str(match.reviewed_by_user_id) if match.reviewed_by_user_id else None,
         reviewed_at=match.reviewed_at.isoformat() if match.reviewed_at else None,
         notes=match.notes,
         rejection_reason=match.rejection_reason,
         created_at=match.created_at.isoformat(),
         updated_at=match.updated_at.isoformat(),
-        case_number=case.case_number if case else None,
-        case_name=case.full_name if case else None,
+        surrogate_number=surrogate.surrogate_number if surrogate else None,
+        surrogate_name=surrogate.full_name if surrogate else None,
         ip_name=ip.full_name if ip else None,
-        case_stage_id=str(case.stage.id) if case and case.stage else None,
-        case_stage_slug=case.stage.slug if case and case.stage else None,
-        case_stage_label=case.stage.label if case and case.stage else None,
+        surrogate_stage_id=str(surrogate.stage.id) if surrogate and surrogate.stage else None,
+        surrogate_stage_slug=surrogate.stage.slug if surrogate and surrogate.stage else None,
+        surrogate_stage_label=surrogate.stage.label if surrogate and surrogate.stage else None,
     )
 
 
 def _match_to_list_item(
-    match: Match, case: Case | None, ip: IntendedParent | None
+    match: Match, surrogate: Surrogate | None, ip: IntendedParent | None
 ) -> MatchListItem:
     """Convert Match to list item."""
     return MatchListItem(
         id=str(match.id),
-        case_id=str(match.case_id),
-        case_number=case.case_number if case else None,
-        case_name=case.full_name if case else None,
+        surrogate_id=str(match.surrogate_id),
+        surrogate_number=surrogate.surrogate_number if surrogate else None,
+        surrogate_name=surrogate.full_name if surrogate else None,
         intended_parent_id=str(match.intended_parent_id),
         ip_name=ip.full_name if ip else None,
         status=match.status,
-        compatibility_score=float(match.compatibility_score)
-        if match.compatibility_score
-        else None,
+        compatibility_score=float(match.compatibility_score) if match.compatibility_score else None,
         proposed_at=match.proposed_at.isoformat() if match.proposed_at else "",
-        case_stage_id=str(case.stage.id) if case and case.stage else None,
-        case_stage_slug=case.stage.slug if case and case.stage else None,
-        case_stage_label=case.stage.label if case and case.stage else None,
+        surrogate_stage_id=str(surrogate.stage.id) if surrogate and surrogate.stage else None,
+        surrogate_stage_slug=surrogate.stage.slug if surrogate and surrogate.stage else None,
+        surrogate_stage_label=surrogate.stage.label if surrogate and surrogate.stage else None,
     )
 
 
@@ -210,23 +202,19 @@ def _match_to_list_item(
 def create_match(
     data: MatchCreate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(
-        require_permission(POLICIES["matches"].actions["propose"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
 ) -> MatchRead:
     """
-    Propose a new match between a surrogate (case) and intended parent.
+    Propose a new match between a surrogate and intended parent.
 
     Requires: Manager+ role
     """
     from app.services import activity_service
 
-    # Verify case exists and belongs to org
-    case = match_service.get_case_with_stage(db, data.case_id, session.org_id)
-    if not case:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Case not found"
-        )
+    # Verify surrogate exists and belongs to org
+    surrogate = match_service.get_surrogate_with_stage(db, data.surrogate_id, session.org_id)
+    if not surrogate:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Surrogate not found")
 
     # Verify IP exists and belongs to org
     ip = match_service.get_intended_parent(db, data.intended_parent_id, session.org_id)
@@ -239,7 +227,7 @@ def create_match(
     existing = match_service.get_existing_match(
         db=db,
         org_id=session.org_id,
-        case_id=data.case_id,
+        surrogate_id=data.surrogate_id,
         intended_parent_id=data.intended_parent_id,
     )
     if existing:
@@ -248,16 +236,16 @@ def create_match(
             detail=f"Match already exists with status: {existing.status}",
         )
 
-    # Check if case already has accepted match
-    accepted_match = match_service.get_accepted_match_for_case(
+    # Check if surrogate already has accepted match
+    accepted_match = match_service.get_accepted_match_for_surrogate(
         db=db,
         org_id=session.org_id,
-        case_id=data.case_id,
+        surrogate_id=data.surrogate_id,
     )
     if accepted_match:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Case already has an accepted match",
+            detail="Surrogate already has an accepted match",
         )
 
     # Create match
@@ -265,7 +253,7 @@ def create_match(
 
     match = Match(
         organization_id=session.org_id,
-        case_id=data.case_id,
+        surrogate_id=data.surrogate_id,
         intended_parent_id=data.intended_parent_id,
         status=MatchStatus.PROPOSED.value,
         compatibility_score=data.compatibility_score,
@@ -278,9 +266,9 @@ def create_match(
     # Log activity
     activity_service.log_activity(
         db=db,
-        case_id=data.case_id,
+        surrogate_id=data.surrogate_id,
         organization_id=session.org_id,
-        activity_type=CaseActivityType.MATCH_PROPOSED,
+        activity_type=SurrogateActivityType.MATCH_PROPOSED,
         actor_user_id=session.user_id,
         details={
             "match_id": str(match.id),
@@ -301,20 +289,14 @@ def create_match(
 @router.get("/", response_model=MatchListResponse)
 def list_matches(
     request: Request,
-    status_filter: str | None = Query(
-        None, alias="status", description="Filter by status"
-    ),
-    case_id: UUID | None = Query(None, description="Filter by case ID"),
-    intended_parent_id: UUID | None = Query(
-        None, description="Filter by intended parent ID"
-    ),
-    q: str | None = Query(None, max_length=100, description="Search case/IP names"),
+    status_filter: str | None = Query(None, alias="status", description="Filter by status"),
+    surrogate_id: UUID | None = Query(None, description="Filter by surrogate ID"),
+    intended_parent_id: UUID | None = Query(None, description="Filter by intended parent ID"),
+    q: str | None = Query(None, max_length=100, description="Search surrogate/IP names"),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     sort_by: str | None = Query(None, description="Column to sort by"),
-    sort_order: str = Query(
-        "desc", pattern="^(asc|desc)$", description="Sort direction"
-    ),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort direction"),
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
 ) -> MatchListResponse:
@@ -327,7 +309,7 @@ def list_matches(
         db=db,
         org_id=session.org_id,
         status_filter=status_filter,
-        case_id=case_id,
+        surrogate_id=surrogate_id,
         intended_parent_id=intended_parent_id,
         q=q,
         page=page,
@@ -336,14 +318,14 @@ def list_matches(
         sort_order=sort_order,
     )
 
-    # Batch load cases and IPs (org-scoped), with eager load for case stage
-    case_ids = {m.case_id for m in matches}
+    # Batch load surrogates and IPs (org-scoped), with eager load for stage
+    surrogate_ids = {m.surrogate_id for m in matches}
     ip_ids = {m.intended_parent_id for m in matches}
 
-    cases = match_service.get_cases_with_stage_by_ids(
+    surrogates = match_service.get_surrogates_with_stage_by_ids(
         db=db,
         org_id=session.org_id,
-        case_ids=case_ids,
+        surrogate_ids=surrogate_ids,
     )
     ips = match_service.get_intended_parents_by_ids(
         db=db,
@@ -352,7 +334,11 @@ def list_matches(
     )
 
     items = [
-        _match_to_list_item(m, cases.get(m.case_id), ips.get(m.intended_parent_id))
+        _match_to_list_item(
+            m,
+            surrogates.get(m.surrogate_id),
+            ips.get(m.intended_parent_id),
+        )
         for m in matches
     ]
 
@@ -370,10 +356,8 @@ def list_matches(
             "page": page,
             "per_page": per_page,
             "status": status_filter,
-            "case_id": str(case_id) if case_id else None,
-            "intended_parent_id": str(intended_parent_id)
-            if intended_parent_id
-            else None,
+            "surrogate_id": str(surrogate_id) if surrogate_id else None,
+            "intended_parent_id": str(intended_parent_id) if intended_parent_id else None,
             "q_type": "text" if q else None,
         },
     )
@@ -403,15 +387,10 @@ def get_match(
 
     match = match_service.get_match(db, match_id, session.org_id)
     if not match:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Match not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
 
     # Auto-transition to reviewing on first view by someone other than proposer
-    if (
-        match.status == MatchStatus.PROPOSED.value
-        and match.proposed_by_user_id != session.user_id
-    ):
+    if match.status == MatchStatus.PROPOSED.value and match.proposed_by_user_id != session.user_id:
         match.status = MatchStatus.REVIEWING.value
         match.reviewed_by_user_id = session.user_id
         match.reviewed_at = datetime.now(timezone.utc)
@@ -420,9 +399,9 @@ def get_match(
         # Log review start
         activity_service.log_activity(
             db=db,
-            case_id=match.case_id,
+            surrogate_id=match.surrogate_id,
             organization_id=session.org_id,
-            activity_type=CaseActivityType.MATCH_REVIEWING,
+            activity_type=SurrogateActivityType.MATCH_REVIEWING,
             actor_user_id=session.user_id,
             details={
                 "match_id": str(match.id),
@@ -442,7 +421,7 @@ def get_match(
         target_type="match",
         target_id=match.id,
         details={
-            "case_id": str(match.case_id),
+            "surrogate_id": str(match.surrogate_id),
             "intended_parent_id": str(match.intended_parent_id),
         },
     )
@@ -460,27 +439,28 @@ def accept_match(
     match_id: UUID,
     data: MatchAcceptRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(
-        require_permission(POLICIES["matches"].actions["propose"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
 ) -> MatchRead:
     """
     Accept a match.
 
     This will:
     - Set match status to accepted
-    - Cancel all other pending matches for this case
+    - Cancel all other pending matches for this surrogate
     - Log activity
 
     Requires: Manager+ role
     """
-    from app.services import activity_service, case_service, dashboard_service, pipeline_service
+    from app.services import (
+        activity_service,
+        surrogate_service,
+        dashboard_service,
+        pipeline_service,
+    )
 
     match = match_service.get_match(db, match_id, session.org_id)
     if not match:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Match not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
 
     if match.status not in [MatchStatus.PROPOSED.value, MatchStatus.REVIEWING.value]:
         raise HTTPException(
@@ -488,10 +468,10 @@ def accept_match(
             detail=f"Cannot accept match with status: {match.status}",
         )
 
-    # Update case stage to matched if configured
-    case = match_service.get_case_with_stage(db, match.case_id, session.org_id)
-    if case:
-        current_stage = case.stage
+    # Update surrogate stage to matched if configured
+    surrogate = match_service.get_surrogate_with_stage(db, match.surrogate_id, session.org_id)
+    if surrogate:
+        current_stage = surrogate.stage
         pipeline_id = current_stage.pipeline_id if current_stage else None
         if not pipeline_id:
             pipeline_id = pipeline_service.get_or_create_default_pipeline(
@@ -501,9 +481,9 @@ def accept_match(
             ).id
         matched_stage = pipeline_service.get_stage_by_slug(db, pipeline_id, "matched")
         if matched_stage:
-            case_service.change_status(
+            surrogate_service.change_status(
                 db=db,
-                case=case,
+                surrogate=surrogate,
                 new_stage_id=matched_stage.id,
                 user_id=session.user_id,
                 user_role=session.role,
@@ -536,10 +516,10 @@ def accept_match(
             )
         )
 
-    # Cancel all other pending matches for this case
-    other_matches = match_service.list_pending_matches_for_case(
+    # Cancel all other pending matches for this surrogate
+    other_matches = match_service.list_pending_matches_for_surrogate(
         db=db,
-        case_id=match.case_id,
+        surrogate_id=match.surrogate_id,
         exclude_match_id=match.id,
     )
 
@@ -550,9 +530,9 @@ def accept_match(
     # Log activity
     activity_service.log_activity(
         db=db,
-        case_id=match.case_id,
+        surrogate_id=match.surrogate_id,
         organization_id=session.org_id,
-        activity_type=CaseActivityType.MATCH_ACCEPTED,
+        activity_type=SurrogateActivityType.MATCH_ACCEPTED,
         actor_user_id=session.user_id,
         details={
             "match_id": str(match.id),
@@ -567,7 +547,7 @@ def accept_match(
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This case already has an accepted match (concurrent accept detected)",
+            detail="This surrogate already has an accepted match (concurrent accept detected)",
         )
 
     db.refresh(match)
@@ -588,9 +568,7 @@ def reject_match(
     match_id: UUID,
     data: MatchRejectRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(
-        require_permission(POLICIES["matches"].actions["propose"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
 ) -> MatchRead:
     """
     Reject a match with reason.
@@ -601,9 +579,7 @@ def reject_match(
 
     match = match_service.get_match(db, match_id, session.org_id)
     if not match:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Match not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
 
     if match.status not in [MatchStatus.PROPOSED.value, MatchStatus.REVIEWING.value]:
         raise HTTPException(
@@ -624,9 +600,9 @@ def reject_match(
     # Log activity
     activity_service.log_activity(
         db=db,
-        case_id=match.case_id,
+        surrogate_id=match.surrogate_id,
         organization_id=session.org_id,
-        activity_type=CaseActivityType.MATCH_REJECTED,
+        activity_type=SurrogateActivityType.MATCH_REJECTED,
         actor_user_id=session.user_id,
         details={
             "match_id": str(match.id),
@@ -652,9 +628,7 @@ def reject_match(
 def cancel_match(
     match_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(
-        require_permission(POLICIES["matches"].actions["propose"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
 ) -> None:
     """
     Cancel a proposed match.
@@ -664,9 +638,7 @@ def cancel_match(
     """
     match = match_service.get_match(db, match_id, session.org_id)
     if not match:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Match not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
 
     if match.status not in [MatchStatus.PROPOSED.value, MatchStatus.REVIEWING.value]:
         raise HTTPException(
@@ -682,9 +654,9 @@ def cancel_match(
 
     activity_service.log_activity(
         db=db,
-        case_id=match.case_id,
+        surrogate_id=match.surrogate_id,
         organization_id=session.org_id,
-        activity_type=CaseActivityType.MATCH_CANCELLED,
+        activity_type=SurrogateActivityType.MATCH_CANCELLED,
         actor_user_id=session.user_id,
         details={
             "match_id": str(match.id),
@@ -704,16 +676,12 @@ def update_match_notes(
     match_id: UUID,
     data: MatchUpdateNotesRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(
-        require_permission(POLICIES["matches"].actions["propose"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
 ) -> MatchRead:
     """Update match notes. Requires: Manager+ role."""
     match = match_service.get_match(db, match_id, session.org_id)
     if not match:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Match not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
 
     match.notes = note_service.sanitize_html(data.notes)
     match.updated_at = datetime.now(timezone.utc)
@@ -733,9 +701,7 @@ class MatchEventCreate(BaseModel):
     """Request to create a match event."""
 
     person_type: str = Field(..., pattern="^(surrogate|ip)$")
-    event_type: str = Field(
-        ..., pattern="^(medication|medical_exam|legal|delivery|custom)$"
-    )
+    event_type: str = Field(..., pattern="^(medication|medical_exam|legal|delivery|custom)$")
     title: str = Field(..., min_length=1, max_length=200)
     description: str | None = None
     starts_at: datetime | None = None
@@ -798,9 +764,7 @@ def _event_to_read(event: MatchEvent) -> MatchEventRead:
         all_day=event.all_day,
         start_date=event.start_date.isoformat() if event.start_date else None,
         end_date=event.end_date.isoformat() if event.end_date else None,
-        created_by_user_id=str(event.created_by_user_id)
-        if event.created_by_user_id
-        else None,
+        created_by_user_id=str(event.created_by_user_id) if event.created_by_user_id else None,
         created_at=event.created_at.isoformat(),
         updated_at=event.updated_at.isoformat(),
     )
@@ -809,15 +773,9 @@ def _event_to_read(event: MatchEvent) -> MatchEventRead:
 @router.get("/{match_id}/events", response_model=list[MatchEventRead])
 def list_match_events(
     match_id: UUID,
-    from_date: str | None = Query(
-        None, description="Filter events from this date (YYYY-MM-DD)"
-    ),
-    to_date: str | None = Query(
-        None, description="Filter events until this date (YYYY-MM-DD)"
-    ),
-    person_type: str | None = Query(
-        None, description="Filter by person type (surrogate/ip)"
-    ),
+    from_date: str | None = Query(None, description="Filter events from this date (YYYY-MM-DD)"),
+    to_date: str | None = Query(None, description="Filter events until this date (YYYY-MM-DD)"),
+    person_type: str | None = Query(None, description="Filter by person type (surrogate/ip)"),
     event_type: str | None = Query(None, description="Filter by event type"),
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
@@ -830,9 +788,7 @@ def list_match_events(
     # Verify match exists and belongs to org
     match = match_service.get_match(db, match_id, session.org_id)
     if not match:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Match not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
 
     from_dt = None
     to_dt = None
@@ -848,17 +804,14 @@ def list_match_events(
                 else None
             )
             to_dt = (
-                datetime.fromisoformat(to_date).replace(tzinfo=timezone.utc)
-                + timedelta(days=1)
+                datetime.fromisoformat(to_date).replace(tzinfo=timezone.utc) + timedelta(days=1)
                 if to_date
                 else None
             )
             from_day = date_type.fromisoformat(from_date) if from_date else None
             to_day = date_type.fromisoformat(to_date) if to_date else None
         except ValueError:
-            raise HTTPException(
-                status_code=400, detail="Invalid date format. Use YYYY-MM-DD."
-            )
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
 
     events = match_service.list_match_events(
         db=db,
@@ -884,9 +837,7 @@ def create_match_event(
     match_id: UUID,
     data: MatchEventCreate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(
-        require_permission(POLICIES["matches"].actions["propose"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
 ) -> MatchEventRead:
     """
     Create an event for a match.
@@ -896,32 +847,22 @@ def create_match_event(
     # Verify match exists and belongs to org
     match = match_service.get_match(db, match_id, session.org_id)
     if not match:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Match not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
 
     if data.all_day:
         if not data.start_date:
-            raise HTTPException(
-                status_code=400, detail="start_date is required for all-day events"
-            )
+            raise HTTPException(status_code=400, detail="start_date is required for all-day events")
         start_date = date_type.fromisoformat(data.start_date)
         end_date = date_type.fromisoformat(data.end_date) if data.end_date else None
         if end_date and end_date < start_date:
-            raise HTTPException(
-                status_code=400, detail="end_date must be on or after start_date"
-            )
+            raise HTTPException(status_code=400, detail="end_date must be on or after start_date")
         starts_at = None
         ends_at = None
     else:
         if not data.starts_at:
-            raise HTTPException(
-                status_code=400, detail="starts_at is required for timed events"
-            )
+            raise HTTPException(status_code=400, detail="starts_at is required for timed events")
         if data.ends_at and data.ends_at < data.starts_at:
-            raise HTTPException(
-                status_code=400, detail="ends_at must be on or after starts_at"
-            )
+            raise HTTPException(status_code=400, detail="ends_at must be on or after starts_at")
         start_date = None
         end_date = None
         starts_at = data.starts_at
@@ -968,9 +909,7 @@ def get_match_event(
         org_id=session.org_id,
     )
     if not event:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Event not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
 
     return _event_to_read(event)
 
@@ -985,9 +924,7 @@ def update_match_event(
     event_id: UUID,
     data: MatchEventUpdate,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(
-        require_permission(POLICIES["matches"].actions["propose"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
 ) -> MatchEventRead:
     """
     Update a match event.
@@ -1001,9 +938,7 @@ def update_match_event(
         org_id=session.org_id,
     )
     if not event:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Event not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
 
     next_all_day = data.all_day if data.all_day is not None else event.all_day
     if next_all_day:
@@ -1013,31 +948,19 @@ def update_match_event(
             else event.start_date
         )
         next_end_date = (
-            date_type.fromisoformat(data.end_date)
-            if data.end_date is not None
-            else event.end_date
+            date_type.fromisoformat(data.end_date) if data.end_date is not None else event.end_date
         )
         if not next_start_date:
-            raise HTTPException(
-                status_code=400, detail="start_date is required for all-day events"
-            )
+            raise HTTPException(status_code=400, detail="start_date is required for all-day events")
         if next_end_date and next_end_date < next_start_date:
-            raise HTTPException(
-                status_code=400, detail="end_date must be on or after start_date"
-            )
+            raise HTTPException(status_code=400, detail="end_date must be on or after start_date")
     else:
-        next_starts_at = (
-            data.starts_at if data.starts_at is not None else event.starts_at
-        )
+        next_starts_at = data.starts_at if data.starts_at is not None else event.starts_at
         next_ends_at = data.ends_at if data.ends_at is not None else event.ends_at
         if not next_starts_at:
-            raise HTTPException(
-                status_code=400, detail="starts_at is required for timed events"
-            )
+            raise HTTPException(status_code=400, detail="starts_at is required for timed events")
         if next_ends_at and next_ends_at < next_starts_at:
-            raise HTTPException(
-                status_code=400, detail="ends_at must be on or after starts_at"
-            )
+            raise HTTPException(status_code=400, detail="ends_at must be on or after starts_at")
 
     # Update fields
     if data.person_type is not None:
@@ -1079,9 +1002,7 @@ def delete_match_event(
     match_id: UUID,
     event_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(
-        require_permission(POLICIES["matches"].actions["propose"])
-    ),
+    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
 ) -> None:
     """
     Delete a match event.
@@ -1095,9 +1016,7 @@ def delete_match_event(
         org_id=session.org_id,
     )
     if not event:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Event not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
 
     db.delete(event)
     db.commit()

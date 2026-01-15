@@ -14,11 +14,11 @@ export function AIChatDrawer() {
     }
 
     // Determine props for AIChatPanel
-    // Support case and task context - otherwise works in global mode
-    // (Backend chat endpoint accepts entity_type: case|task|global)
+    // Support surrogate and task context - otherwise works in global mode
+    // (Backend chat endpoint accepts entity_type: surrogate|task|global)
     const getChatProps = () => {
-        if ((entityType === "case" || entityType === "task") && entityId && entityName) {
-            return { entityType: entityType as "case" | "task", entityId, entityName }
+        if ((entityType === "surrogate" || entityType === "task") && entityId && entityName) {
+            return { entityType: entityType as "surrogate" | "task", entityId, entityName }
         }
         return { entityType: null, entityId: null, entityName: null }
     }

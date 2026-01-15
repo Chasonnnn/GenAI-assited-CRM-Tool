@@ -140,9 +140,9 @@ export function useRejectAction() {
 // Focused AI Hooks (One-shot operations)
 // ============================================================================
 
-export function useSummarizeCase() {
+export function useSummarizeSurrogate() {
     return useMutation({
-        mutationFn: (caseId: string) => aiApi.summarizeCase(caseId),
+        mutationFn: (surrogateId: string) => aiApi.summarizeSurrogate(surrogateId),
     });
 }
 

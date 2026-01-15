@@ -76,8 +76,8 @@ const fieldTypes: { basic: FieldTypeOption[]; advanced: FieldTypeOption[] } = {
     ],
 }
 
-// Case field mappings matching backend CASE_FIELD_TYPES
-const caseFieldMappings = [
+// Surrogate field mappings matching backend SURROGATE_FIELD_TYPES
+const surrogateFieldMappings = [
     { value: "full_name", label: "Full Name" },
     { value: "email", label: "Email" },
     { value: "phone", label: "Phone" },
@@ -102,7 +102,7 @@ type FormField = {
     label: string
     helperText: string
     required: boolean
-    caseFieldMapping: string
+    surrogateFieldMapping: string
     options?: string[]
 }
 
@@ -161,7 +161,7 @@ function schemaToPages(schema: FormSchema, mappings: Map<string, string>): FormP
                 label: field.label,
                 helperText: field.help_text || "",
                 required: field.required ?? false,
-                caseFieldMapping: mappings.get(field.key) || "",
+                surrogateFieldMapping: mappings.get(field.key) || "",
                 ...(options ? { options } : {}),
             }
         }),
@@ -182,13 +182,13 @@ function schemaToMetadata(schema?: FormSchema | null): SchemaMetadata {
     }
 }
 
-function buildMappings(pages: FormPage[]): { field_key: string; case_field: string }[] {
+function buildMappings(pages: FormPage[]): { field_key: string; surrogate_field: string }[] {
     return pages.flatMap((page) =>
         page.fields
-            .filter((field) => field.caseFieldMapping)
+            .filter((field) => field.surrogateFieldMapping)
             .map((field) => ({
                 field_key: field.id,
-                case_field: field.caseFieldMapping,
+                surrogate_field: field.surrogateFieldMapping,
             })),
     )
 }
@@ -257,14 +257,14 @@ const buildDraftField = ({
     type,
     required = false,
     helperText = "",
-    caseFieldMapping = "",
+    surrogateFieldMapping = "",
     options,
 }: {
     label: string
     type: FieldType
     required?: boolean
     helperText?: string
-    caseFieldMapping?: string
+    surrogateFieldMapping?: string
     options?: string[]
 }): FormField => ({
     id: buildFieldId(),
@@ -272,7 +272,7 @@ const buildDraftField = ({
     label,
     helperText,
     required,
-    caseFieldMapping,
+    surrogateFieldMapping,
     ...(options ? { options } : {}),
 })
 
@@ -339,28 +339,28 @@ const generateFormDraft = (prompt: string): FormDraft => {
             label: "Full Name",
             type: "text",
             required: true,
-            caseFieldMapping: "full_name",
+            surrogateFieldMapping: "full_name",
             helperText: "Use your legal name.",
         }),
         buildDraftField({
             label: "Email",
             type: "email",
             required: true,
-            caseFieldMapping: "email",
+            surrogateFieldMapping: "email",
             helperText: "We will send updates here.",
         }),
         buildDraftField({
             label: "Phone",
             type: "phone",
             required: true,
-            caseFieldMapping: "phone",
+            surrogateFieldMapping: "phone",
             helperText: "Best number for calls or texts.",
         }),
         buildDraftField({
             label: "State",
             type: "text",
             required: true,
-            caseFieldMapping: "state",
+            surrogateFieldMapping: "state",
             helperText: "Use two-letter state code.",
         }),
     ]
@@ -381,14 +381,14 @@ const generateFormDraft = (prompt: string): FormDraft => {
             label: "Date of Birth",
             type: "date",
             required: true,
-            caseFieldMapping: "date_of_birth",
+            surrogateFieldMapping: "date_of_birth",
             helperText: "Used to confirm eligibility.",
         }),
         buildDraftField({
             label: "US Citizen/PR",
             type: "radio",
             required: true,
-            caseFieldMapping: "is_citizen_or_pr",
+            surrogateFieldMapping: "is_citizen_or_pr",
             helperText: "Select yes or no.",
             options: YES_NO_OPTIONS,
         }),
@@ -396,7 +396,7 @@ const generateFormDraft = (prompt: string): FormDraft => {
             label: "Has Child",
             type: "radio",
             required: true,
-            caseFieldMapping: "has_child",
+            surrogateFieldMapping: "has_child",
             helperText: "Select yes or no.",
             options: YES_NO_OPTIONS,
         }),
@@ -404,7 +404,7 @@ const generateFormDraft = (prompt: string): FormDraft => {
             label: "Non-Smoker",
             type: "radio",
             required: true,
-            caseFieldMapping: "is_non_smoker",
+            surrogateFieldMapping: "is_non_smoker",
             helperText: "Select yes or no.",
             options: YES_NO_OPTIONS,
         }),
@@ -425,7 +425,7 @@ const generateFormDraft = (prompt: string): FormDraft => {
                 label: "Surrogate Experience",
                 type: "radio",
                 required: false,
-                caseFieldMapping: "has_surrogate_experience",
+                surrogateFieldMapping: "has_surrogate_experience",
                 helperText: "Select yes or no.",
                 options: YES_NO_OPTIONS,
             }),
@@ -438,14 +438,14 @@ const generateFormDraft = (prompt: string): FormDraft => {
                 label: "Height (ft)",
                 type: "number",
                 required: false,
-                caseFieldMapping: "height_ft",
+                surrogateFieldMapping: "height_ft",
                 helperText: "Numbers only.",
             }),
             buildDraftField({
                 label: "Weight (lb)",
                 type: "number",
                 required: false,
-                caseFieldMapping: "weight_lb",
+                surrogateFieldMapping: "weight_lb",
                 helperText: "Numbers only.",
             }),
         )
@@ -457,14 +457,14 @@ const generateFormDraft = (prompt: string): FormDraft => {
                 label: "Number of Deliveries",
                 type: "number",
                 required: false,
-                caseFieldMapping: "num_deliveries",
+                surrogateFieldMapping: "num_deliveries",
                 helperText: "Enter 0 if none.",
             }),
             buildDraftField({
                 label: "Number of C-Sections",
                 type: "number",
                 required: false,
-                caseFieldMapping: "num_csections",
+                surrogateFieldMapping: "num_csections",
                 helperText: "Enter 0 if none.",
             }),
         )
@@ -476,7 +476,7 @@ const generateFormDraft = (prompt: string): FormDraft => {
                 label: "Race",
                 type: "text",
                 required: false,
-                caseFieldMapping: "race",
+                surrogateFieldMapping: "race",
                 helperText: "Optional.",
             }),
         )
@@ -617,7 +617,7 @@ export default function FormBuilderPage() {
         if (isNewForm || !formData || isMappingsLoading || hasHydrated) return
 
         const mappingMap = new Map(
-            (mappingData || []).map((mapping) => [mapping.field_key, mapping.case_field]),
+            (mappingData || []).map((mapping) => [mapping.field_key, mapping.surrogate_field]),
         )
         const schema = formData.form_schema || formData.published_schema
 
@@ -702,7 +702,7 @@ export default function FormBuilderPage() {
             label: draggedField.label,
             helperText: "",
             required: false,
-            caseFieldMapping: "",
+            surrogateFieldMapping: "",
         }
         if (["select", "multiselect", "radio"].includes(draggedField.type)) {
             return { ...baseField, options: ["Option 1", "Option 2", "Option 3"] }
@@ -1329,13 +1329,13 @@ export default function FormBuilderPage() {
                             <div className="border-t border-stone-200 pt-6 dark:border-stone-800">
                                 <h3 className="mb-3 text-sm font-semibold">Field Mapping</h3>
                                 <p className="mb-3 text-xs text-stone-500 dark:text-stone-400">
-                                    Map this field to a Case field to auto-populate data
+                                    Map this field to a Surrogate field to auto-populate data
                                 </p>
                                 <Select
-                                    value={selectedFieldData.caseFieldMapping || "none"}
+                                    value={selectedFieldData.surrogateFieldMapping || "none"}
                                     onValueChange={(value) =>
                                         handleUpdateField(selectedFieldData.id, {
-                                            caseFieldMapping: value && value !== "none" ? value : "",
+                                            surrogateFieldMapping: value && value !== "none" ? value : "",
                                         })
                                     }
                                 >
@@ -1344,7 +1344,7 @@ export default function FormBuilderPage() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="none">None</SelectItem>
-                                        {caseFieldMappings.map((mapping) => (
+                                        {surrogateFieldMappings.map((mapping) => (
                                             <SelectItem key={mapping.value} value={mapping.value}>
                                                 {mapping.label}
                                             </SelectItem>

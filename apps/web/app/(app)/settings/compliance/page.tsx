@@ -28,20 +28,20 @@ import {
 } from "@/lib/hooks/use-compliance"
 
 const RETENTION_OPTIONS = [
-    { value: "cases", label: "Cases (archived only)" },
+    { value: "surrogates", label: "Surrogates (archived only)" },
     { value: "matches", label: "Matches" },
     { value: "tasks", label: "Tasks (completed only)" },
     { value: "entity_notes", label: "Notes" },
-    { value: "case_activity", label: "Case Activity" },
+    { value: "surrogate_activity", label: "Surrogate Activity" },
 ]
 
 const LEGAL_HOLD_TYPES = [
     { value: "org", label: "Organization (all records)" },
-    { value: "case", label: "Case" },
+    { value: "surrogate", label: "Surrogate" },
     { value: "match", label: "Match" },
     { value: "task", label: "Task" },
     { value: "entity_notes", label: "Note" },
-    { value: "case_activity", label: "Case Activity" },
+    { value: "surrogate_activity", label: "Surrogate Activity" },
 ]
 
 export default function ComplianceSettingsPage() {

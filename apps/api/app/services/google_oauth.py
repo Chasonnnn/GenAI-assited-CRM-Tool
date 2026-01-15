@@ -114,6 +114,4 @@ def validate_email_domain(email: str) -> None:
 
     domain = email.split("@")[1].lower()
     if domain not in allowed:
-        raise ValueError(
-            f"Email domain '{domain}' not allowed. Allowed: {', '.join(allowed)}"
-        )
+        raise ValueError(f"Email domain '{domain}' not allowed. Allowed: {', '.join(allowed)}")

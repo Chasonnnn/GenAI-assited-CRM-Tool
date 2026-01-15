@@ -2,6 +2,8 @@
 
 import os
 
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 DEFAULT_JWT_SECRET = "change-this-in-production"
 DEFAULT_DEV_SECRET = "change-me"
 DEFAULT_API_BASE_URL = "http://localhost:8000"
@@ -11,8 +13,6 @@ DEFAULT_GOOGLE_REDIRECT_URI = "http://localhost:8000/auth/google/callback"
 DEFAULT_ZOOM_REDIRECT_URI = "http://localhost:8000/integrations/zoom/callback"
 DEFAULT_GMAIL_REDIRECT_URI = "http://localhost:8000/integrations/gmail/callback"
 DEFAULT_DUO_REDIRECT_URI = "http://localhost:3000/auth/duo/callback"
-
-from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -190,6 +190,7 @@ class Settings(BaseSettings):
 
         if errors:
             raise ValueError("Invalid production configuration: " + "; ".join(errors))
+
     SLO_WINDOW_MINUTES: int = 60
 
     # Compliance exports

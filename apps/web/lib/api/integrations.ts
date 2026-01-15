@@ -36,13 +36,13 @@ export interface ZoomMeetingRead {
     start_time: string | null
     duration: number
     join_url: string
-    case_id: string | null
+    surrogate_id: string | null
     intended_parent_id: string | null
     created_at: string
 }
 
 export interface CreateMeetingRequest {
-    entity_type: 'case' | 'intended_parent'
+    entity_type: 'surrogate' | 'intended_parent'
     entity_id: string
     topic: string
     start_time?: string // ISO format
@@ -110,7 +110,7 @@ export async function disconnectIntegration(integrationType: string): Promise<vo
 }
 
 /**
- * Create a Zoom meeting for a case or intended parent.
+ * Create a Zoom meeting for a surrogate or intended parent.
  */
 export async function createZoomMeeting(data: CreateMeetingRequest): Promise<CreateMeetingResponse> {
     return api.post<CreateMeetingResponse>('/integrations/zoom/meetings', data)
@@ -125,7 +125,7 @@ export interface SendZoomInviteRequest {
     duration?: number
     password?: string
     contact_name: string
-    case_id?: string
+    surrogate_id?: string
 }
 
 export interface SendZoomInviteResponse {
@@ -139,4 +139,3 @@ export interface SendZoomInviteResponse {
 export async function sendZoomInvite(data: SendZoomInviteRequest): Promise<SendZoomInviteResponse> {
     return api.post<SendZoomInviteResponse>('/integrations/zoom/send-invite', data)
 }
-

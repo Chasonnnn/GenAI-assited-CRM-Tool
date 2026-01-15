@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import Attachment, CaseInterview, InterviewAttachment
+from app.db.models import Attachment, SurrogateInterview, InterviewAttachment
 from app.services import attachment_service
 
 
@@ -52,7 +52,7 @@ INTERVIEW_ALLOWED_MIME_TYPES = attachment_service.ALLOWED_MIME_TYPES | AUDIO_VID
 def link_attachment(
     db: Session,
     org_id: UUID,
-    interview: CaseInterview,
+    interview: SurrogateInterview,
     attachment_id: UUID,
 ) -> InterviewAttachment:
     """
@@ -149,11 +149,7 @@ def list_interview_attachments(
     return list(
         db.scalars(
             select(InterviewAttachment)
-            .options(
-                joinedload(InterviewAttachment.attachment).joinedload(
-                    Attachment.uploaded_by
-                )
-            )
+            .options(joinedload(InterviewAttachment.attachment).joinedload(Attachment.uploaded_by))
             .where(
                 InterviewAttachment.interview_id == interview_id,
                 InterviewAttachment.organization_id == org_id,
@@ -207,9 +203,7 @@ def to_attachment_read(link: InterviewAttachment) -> dict:
 
     uploaded_by_name = "Unknown"
     if attachment.uploaded_by:
-        uploaded_by_name = (
-            attachment.uploaded_by.display_name or attachment.uploaded_by.email
-        )
+        uploaded_by_name = attachment.uploaded_by.display_name or attachment.uploaded_by.email
 
     return {
         "id": link.id,

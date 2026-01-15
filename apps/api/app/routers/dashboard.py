@@ -23,8 +23,8 @@ class UpcomingTask(BaseModel):
     type: str = "task"
     title: str
     time: str | None  # HH:MM format or None for all-day
-    case_id: str | None
-    case_number: str | None
+    surrogate_id: str | None
+    surrogate_number: str | None
     date: str  # YYYY-MM-DD
     is_overdue: bool
     task_type: str
@@ -37,8 +37,8 @@ class UpcomingMeeting(BaseModel):
     type: str = "meeting"
     title: str
     time: str | None  # HH:MM format
-    case_id: str | None
-    case_number: str | None
+    surrogate_id: str | None
+    surrogate_number: str | None
     date: str  # YYYY-MM-DD
     is_overdue: bool = False
     join_url: str

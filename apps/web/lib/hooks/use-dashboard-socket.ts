@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { caseKeys } from './use-cases';
+import { surrogateKeys } from './use-surrogates';
 import { useAuth } from '@/lib/auth-context';
 
 const WS_URL = process.env.NEXT_PUBLIC_API_BASE_URL?.replace('http', 'ws') || 'ws://localhost:8000';
@@ -80,7 +80,7 @@ export function useDashboardSocket(enabled: boolean = true) {
                 const message = parsed as WebSocketMessage
                 if (message.type === 'stats_update') {
                     // Update React Query cache with new stats
-                    queryClient.setQueryData(caseKeys.stats(), message.data)
+                    queryClient.setQueryData(surrogateKeys.stats(), message.data)
                 }
             };
 

@@ -41,7 +41,7 @@ export async function previewImport(file: File): Promise<ImportPreview> {
     const formData = new FormData()
     formData.append('file', file)
 
-    return api.post<ImportPreview>('/cases/import/preview', formData, {
+    return api.post<ImportPreview>('/surrogates/import/preview', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
     })
 }
@@ -50,15 +50,15 @@ export async function executeImport(file: File): Promise<ImportExecuteResponse> 
     const formData = new FormData()
     formData.append('file', file)
 
-    return api.post<ImportExecuteResponse>('/cases/import/execute', formData, {
+    return api.post<ImportExecuteResponse>('/surrogates/import/execute', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
     })
 }
 
 export async function listImports(): Promise<ImportHistoryItem[]> {
-    return api.get<ImportHistoryItem[]>('/cases/import')
+    return api.get<ImportHistoryItem[]>('/surrogates/import')
 }
 
 export async function getImportDetails(importId: string): Promise<ImportDetail> {
-    return api.get<ImportDetail>(`/cases/import/${importId}`)
+    return api.get<ImportDetail>(`/surrogates/import/${importId}`)
 }

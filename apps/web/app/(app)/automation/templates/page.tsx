@@ -100,10 +100,10 @@ const DEFAULT_CATEGORIES = Object.entries(DEFAULT_CATEGORY_LABELS).map(([value, 
 
 // Trigger type labels for display
 const TRIGGER_LABELS: Record<string, string> = {
-    case_created: "Case Created",
+    surrogate_created: "Surrogate Created",
     status_changed: "Status Changed",
-    case_assigned: "Case Assigned",
-    case_updated: "Field Updated",
+    surrogate_assigned: "Surrogate Assigned",
+    surrogate_updated: "Field Updated",
     task_due: "Task Due",
     task_overdue: "Task Overdue",
     scheduled: "Scheduled",

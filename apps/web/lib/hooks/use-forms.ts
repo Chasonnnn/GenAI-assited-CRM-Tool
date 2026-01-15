@@ -12,7 +12,7 @@ import {
     listFormMappings,
     setFormMappings,
     createFormToken,
-    getCaseSubmission,
+    getSurrogateSubmission,
     approveSubmission,
     rejectSubmission,
     uploadFormLogo,
@@ -29,8 +29,8 @@ export const formKeys = {
     details: () => [...formKeys.all, 'detail'] as const,
     detail: (id: string) => [...formKeys.details(), id] as const,
     mappings: (formId: string) => [...formKeys.detail(formId), 'mappings'] as const,
-    caseSubmission: (formId: string, caseId: string) =>
-        [...formKeys.detail(formId), 'case-submission', caseId] as const,
+    surrogateSubmission: (formId: string, surrogateId: string) =>
+        [...formKeys.detail(formId), 'surrogate-submission', surrogateId] as const,
 }
 
 export function useForms() {
@@ -105,12 +105,12 @@ export function useSetFormMappings() {
     })
 }
 
-export function useCaseFormSubmission(formId: string | null, caseId: string | null) {
+export function useSurrogateFormSubmission(formId: string | null, surrogateId: string | null) {
     return useQuery({
-        queryKey: formId && caseId ? formKeys.caseSubmission(formId, caseId) : ['forms', 'case-submission', 'missing'],
+        queryKey: formId && surrogateId ? formKeys.surrogateSubmission(formId, surrogateId) : ['forms', 'surrogate-submission', 'missing'],
         queryFn: async () => {
             try {
-                return await getCaseSubmission(formId!, caseId!)
+                return await getSurrogateSubmission(formId!, surrogateId!)
             } catch (error) {
                 if (error instanceof ApiError && error.status === 404) {
                     return null
@@ -118,15 +118,15 @@ export function useCaseFormSubmission(formId: string | null, caseId: string | nu
                 throw error
             }
         },
-        enabled: !!formId && !!caseId,
+        enabled: !!formId && !!surrogateId,
         retry: false,
     })
 }
 
 export function useCreateFormToken() {
     return useMutation({
-        mutationFn: ({ formId, caseId, expiresInDays }: { formId: string; caseId: string; expiresInDays?: number }) =>
-            createFormToken(formId, caseId, expiresInDays),
+        mutationFn: ({ formId, surrogateId, expiresInDays }: { formId: string; surrogateId: string; expiresInDays?: number }) =>
+            createFormToken(formId, surrogateId, expiresInDays),
     })
 }
 
@@ -138,7 +138,7 @@ export function useApproveFormSubmission() {
             approveSubmission(submissionId, reviewNotes),
         onSuccess: (submission) => {
             queryClient.invalidateQueries({
-                queryKey: formKeys.caseSubmission(submission.form_id, submission.case_id),
+                queryKey: formKeys.surrogateSubmission(submission.form_id, submission.surrogate_id),
             })
         },
     })
@@ -152,7 +152,7 @@ export function useRejectFormSubmission() {
             rejectSubmission(submissionId, reviewNotes),
         onSuccess: (submission) => {
             queryClient.invalidateQueries({
-                queryKey: formKeys.caseSubmission(submission.form_id, submission.case_id),
+                queryKey: formKeys.surrogateSubmission(submission.form_id, submission.surrogate_id),
             })
         },
     })
@@ -178,9 +178,9 @@ export function useUpdateSubmissionAnswers() {
             const { updateSubmissionAnswers } = await import('@/lib/api/forms')
             return updateSubmissionAnswers(submissionId, updates)
         },
-        onSuccess: (result: { submission: { form_id: string; case_id: string }; case_updates: string[] }) => {
+        onSuccess: (result: { submission: { form_id: string; surrogate_id: string }; surrogate_updates: string[] }) => {
             queryClient.invalidateQueries({
-                queryKey: formKeys.caseSubmission(result.submission.form_id, result.submission.case_id),
+                queryKey: formKeys.surrogateSubmission(result.submission.form_id, result.submission.surrogate_id),
             })
         },
     })
@@ -194,19 +194,19 @@ export function useUploadSubmissionFile() {
             submissionId,
             file,
             formId,
-            caseId,
+            surrogateId,
         }: {
             submissionId: string
             file: File
             formId: string
-            caseId: string
+            surrogateId: string
         }) => {
             const { uploadSubmissionFile } = await import('@/lib/api/forms')
-            return { result: await uploadSubmissionFile(submissionId, file), formId, caseId }
+            return { result: await uploadSubmissionFile(submissionId, file), formId, surrogateId }
         },
-        onSuccess: ({ formId, caseId }) => {
+        onSuccess: ({ formId, surrogateId }) => {
             queryClient.invalidateQueries({
-                queryKey: formKeys.caseSubmission(formId, caseId),
+                queryKey: formKeys.surrogateSubmission(formId, surrogateId),
             })
         },
     })
@@ -220,19 +220,19 @@ export function useDeleteSubmissionFile() {
             submissionId,
             fileId,
             formId,
-            caseId,
+            surrogateId,
         }: {
             submissionId: string
             fileId: string
             formId: string
-            caseId: string
+            surrogateId: string
         }) => {
             const { deleteSubmissionFile } = await import('@/lib/api/forms')
-            return { result: await deleteSubmissionFile(submissionId, fileId), formId, caseId }
+            return { result: await deleteSubmissionFile(submissionId, fileId), formId, surrogateId }
         },
-        onSuccess: ({ formId, caseId }) => {
+        onSuccess: ({ formId, surrogateId }) => {
             queryClient.invalidateQueries({
-                queryKey: formKeys.caseSubmission(formId, caseId),
+                queryKey: formKeys.surrogateSubmission(formId, surrogateId),
             })
         },
     })

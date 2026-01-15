@@ -149,22 +149,22 @@ function NotificationsSettingsCard() {
         description: string
     }> = [
         {
-            key: "case_assigned",
+            key: "surrogate_assigned",
             icon: FolderOpen,
-            title: "Case Assigned",
-            description: "When a case is assigned to you",
+            title: "Surrogate Assigned",
+            description: "When a surrogate is assigned to you",
         },
         {
-            key: "case_status_changed",
+            key: "surrogate_status_changed",
             icon: RefreshCw,
-            title: "Case Status Changed",
-            description: "When a case status is updated",
+            title: "Surrogate Status Changed",
+            description: "When a surrogate status is updated",
         },
         {
-            key: "case_handoff",
+            key: "surrogate_claim_available",
             icon: ArrowRightLeft,
-            title: "Case Handoff",
-            description: "When a case is handed off to you",
+            title: "Surrogate Claim Available",
+            description: "When a surrogate is ready to be claimed",
         },
         {
             key: "task_assigned",

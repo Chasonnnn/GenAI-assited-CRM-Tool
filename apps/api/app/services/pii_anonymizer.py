@@ -63,9 +63,7 @@ PHONE_PATTERNS = [
 ]
 
 
-def anonymize_text(
-    text: str, mapping: PIIMapping, known_names: list[str] | None = None
-) -> str:
+def anonymize_text(text: str, mapping: PIIMapping, known_names: list[str] | None = None) -> str:
     """
     Anonymize PII in text.
 
@@ -124,7 +122,7 @@ def rehydrate_text(text: str, mapping: PIIMapping) -> str:
     return result
 
 
-def anonymize_case_context(
+def anonymize_surrogate_context(
     first_name: str | None,
     last_name: str | None,
     email: str | None,
@@ -133,7 +131,7 @@ def anonymize_case_context(
     mapping: PIIMapping,
 ) -> dict[str, str | None]:
     """
-    Anonymize case context fields.
+    Anonymize surrogate context fields.
 
     Returns dict with anonymized values.
     """

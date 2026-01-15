@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * AddCaseTaskDialog - Dialog for creating tasks for a case.
+ * AddSurrogateTaskDialog - Dialog for creating tasks for a surrogate.
  */
 
 import { useState } from "react"
@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/select"
 import type { TaskRecurrence } from "@/lib/utils/task-recurrence"
 
-export interface CaseTaskFormData {
+export interface SurrogateTaskFormData {
     title: string
     description?: string
     task_type: "meeting" | "follow_up" | "contact" | "review" | "other"
@@ -36,12 +36,12 @@ export interface CaseTaskFormData {
     repeat_until?: string
 }
 
-interface AddCaseTaskDialogProps {
+interface AddSurrogateTaskDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    onSubmit: (data: CaseTaskFormData) => Promise<void>
+    onSubmit: (data: SurrogateTaskFormData) => Promise<void>
     isPending: boolean
-    caseName: string
+    surrogateName: string
 }
 
 const TASK_TYPES = [
@@ -52,16 +52,16 @@ const TASK_TYPES = [
     { value: "other", label: "Other" },
 ]
 
-export function AddCaseTaskDialog({
+export function AddSurrogateTaskDialog({
     open,
     onOpenChange,
     onSubmit,
     isPending,
-    caseName,
-}: AddCaseTaskDialogProps) {
+    surrogateName,
+}: AddSurrogateTaskDialogProps) {
     const [title, setTitle] = useState("")
     const [description, setDescription] = useState("")
-    const [taskType, setTaskType] = useState<CaseTaskFormData["task_type"]>("other")
+    const [taskType, setTaskType] = useState<SurrogateTaskFormData["task_type"]>("other")
     const [dueDate, setDueDate] = useState("")
     const [dueTime, setDueTime] = useState("")
     const [recurrence, setRecurrence] = useState<TaskRecurrence>("none")
@@ -129,7 +129,7 @@ export function AddCaseTaskDialog({
                 <DialogHeader>
                     <DialogTitle>Add Task</DialogTitle>
                     <DialogDescription>
-                        Create a new task for {caseName}.
+                        Create a new task for {surrogateName}.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -147,7 +147,7 @@ export function AddCaseTaskDialog({
 
                     <div className="space-y-2">
                         <Label>Type</Label>
-                        <Select value={taskType} onValueChange={(v) => setTaskType(v as CaseTaskFormData["task_type"])}>
+                        <Select value={taskType} onValueChange={(v) => setTaskType(v as SurrogateTaskFormData["task_type"])}>
                             <SelectTrigger>
                                 <SelectValue>
                                     {(value: string | null) => {
@@ -189,7 +189,7 @@ export function AddCaseTaskDialog({
 
                     <div className="space-y-2">
                         <Label>Repeat</Label>
-                        <Select value={recurrence} onValueChange={(v) => setRecurrence(v as CaseTaskFormData["recurrence"])}>
+                        <Select value={recurrence} onValueChange={(v) => setRecurrence(v as SurrogateTaskFormData["recurrence"])}>
                             <SelectTrigger>
                                 <SelectValue>
                                     {(value: string | null) => {

@@ -144,11 +144,7 @@ def preview_filters(
     Returns total count and sample recipients.
     """
     # Convert FilterCriteria to dict for service call
-    filter_dict = (
-        data.filter_criteria.model_dump(exclude_none=True)
-        if data.filter_criteria
-        else {}
-    )
+    filter_dict = data.filter_criteria.model_dump(exclude_none=True) if data.filter_criteria else {}
 
     return campaign_service.preview_recipients(
         db,
@@ -228,9 +224,7 @@ def cancel_campaign(
     """Cancel a scheduled campaign."""
     cancelled = campaign_service.cancel_campaign(db, session.org_id, campaign_id)
     if not cancelled:
-        raise HTTPException(
-            status_code=400, detail="Campaign not found or cannot be cancelled"
-        )
+        raise HTTPException(status_code=400, detail="Campaign not found or cannot be cancelled")
     db.commit()
     return {"message": "Campaign cancelled"}
 
@@ -345,9 +339,7 @@ def remove_suppression(
     """Remove an email from the suppression list."""
     removed = campaign_service.remove_from_suppression(db, session.org_id, email)
     if not removed:
-        raise HTTPException(
-            status_code=404, detail="Email not found in suppression list"
-        )
+        raise HTTPException(status_code=404, detail="Email not found in suppression list")
     db.commit()
 
 
@@ -366,9 +358,7 @@ def _campaign_to_response(db: Session, campaign) -> CampaignResponse:
         name=campaign.name,
         description=campaign.description,
         email_template_id=campaign.email_template_id,
-        email_template_name=campaign.email_template.name
-        if campaign.email_template
-        else None,
+        email_template_name=campaign.email_template.name if campaign.email_template else None,
         recipient_type=campaign.recipient_type,
         filter_criteria=campaign.filter_criteria,
         scheduled_at=campaign.scheduled_at,

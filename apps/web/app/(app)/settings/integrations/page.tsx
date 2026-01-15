@@ -71,16 +71,17 @@ const AI_PROVIDERS = [
     },
 ] as const
 
+type AiProvider = (typeof AI_PROVIDERS)[number]["value"]
+
+const isAiProvider = (value: string | null | undefined): value is AiProvider =>
+    AI_PROVIDERS.some((providerOption) => providerOption.value === value)
+
 function AIConfigurationSection() {
     const { data: aiSettings, isLoading } = useAISettings()
     const updateSettings = useUpdateAISettings()
     const testKey = useTestAPIKey()
 
     const [isEnabled, setIsEnabled] = useState(false)
-    type AiProvider = (typeof AI_PROVIDERS)[number]["value"]
-    const isAiProvider = (value: string | null | undefined): value is AiProvider =>
-        AI_PROVIDERS.some((providerOption) => providerOption.value === value)
-
     const [provider, setProvider] = useState<AiProvider>("openai")
     const [apiKey, setApiKey] = useState("")
     const [model, setModel] = useState("")
