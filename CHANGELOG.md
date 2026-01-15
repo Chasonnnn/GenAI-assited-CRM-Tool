@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.19.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.18.1...surrogacy-crm-platform-v0.19.0) (2026-01-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* Full rename of Cases entity to Surrogates across the stack.
+
+### Features
+
+* **analytics:** add Meta analytics enhancement with ad accounts, hierarchy, spend tracking, and forms ([e2ac503](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e2ac503630b371a5a304a7ae715af2f05db589b0))
+* rename Cases to Surrogates with pipeline updates ([186c6f2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/186c6f24499a033eb557a59b820de6dc53fe073e))
+
 ## [0.18.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.18.0...surrogacy-crm-platform-v0.18.1) (2026-01-13)
 
 ### Bug Fixes
