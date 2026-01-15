@@ -19,12 +19,12 @@ os.environ.setdefault(
 
 sys.path.insert(0, str(API_ROOT))
 
-from app.services import pipeline_service  # noqa: E402
-from app.services import stage_rules  # noqa: E402
+from app.core import stage_definitions  # noqa: E402
+from app.core import stage_rules  # noqa: E402
 
 
 def _stage_defs() -> list[dict[str, object]]:
-    stage_defs = pipeline_service.get_default_stage_defs()
+    stage_defs = stage_definitions.get_default_stage_defs()
     return [
         {
             "slug": stage["slug"],
@@ -49,8 +49,8 @@ def _role_rules(raw_rules: dict[str, dict[str, list[str]]]) -> dict[str, dict[st
 
 def main() -> None:
     stage_defs = _stage_defs()
-    stage_type_map = dict(pipeline_service.STAGE_TYPE_MAP)
-    stage_order = list(pipeline_service.DEFAULT_STAGE_ORDER)
+    stage_type_map = dict(stage_definitions.STAGE_TYPE_MAP)
+    stage_order = list(stage_definitions.DEFAULT_STAGE_ORDER)
 
     role_visibility = _role_rules(stage_rules.ROLE_STAGE_VISIBILITY)
     role_mutation = _role_rules(stage_rules.ROLE_STAGE_MUTATION)

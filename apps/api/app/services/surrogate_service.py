@@ -333,7 +333,7 @@ def change_status(
     if not role_str:
         raise ValueError("User role is required to change stage")
 
-    from app.services.stage_rules import ROLE_STAGE_MUTATION
+    from app.core.stage_rules import ROLE_STAGE_MUTATION
 
     # Role-based stage permissions
     rules = ROLE_STAGE_MUTATION.get(role_str)
