@@ -2,11 +2,16 @@
 
 import logging
 import os
+import inspect
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+import slowapi.extension as slowapi_extension
 
 from app.core.config import settings
+
+# Patch slowapi for Python 3.14+ where asyncio.iscoroutinefunction is deprecated.
+slowapi_extension.asyncio.iscoroutinefunction = inspect.iscoroutinefunction
 
 # Configure rate limiter with Redis for multi-worker support
 # Falls back to in-memory if Redis is not available (dev/test mode)

@@ -133,6 +133,55 @@ def create_surrogate(
             has_surrogate_experience=data.has_surrogate_experience,
             num_deliveries=data.num_deliveries,
             num_csections=data.num_csections,
+            # Insurance info
+            insurance_company=data.insurance_company,
+            insurance_plan_name=data.insurance_plan_name,
+            insurance_phone=data.insurance_phone,
+            insurance_policy_number=data.insurance_policy_number,
+            insurance_member_id=data.insurance_member_id,
+            insurance_group_number=data.insurance_group_number,
+            insurance_subscriber_name=data.insurance_subscriber_name,
+            insurance_subscriber_dob=data.insurance_subscriber_dob,
+            # IVF clinic
+            clinic_name=data.clinic_name,
+            clinic_address_line1=data.clinic_address_line1,
+            clinic_address_line2=data.clinic_address_line2,
+            clinic_city=data.clinic_city,
+            clinic_state=data.clinic_state,
+            clinic_postal=data.clinic_postal,
+            clinic_phone=data.clinic_phone,
+            clinic_email=data.clinic_email,
+            # Monitoring clinic
+            monitoring_clinic_name=data.monitoring_clinic_name,
+            monitoring_clinic_address_line1=data.monitoring_clinic_address_line1,
+            monitoring_clinic_address_line2=data.monitoring_clinic_address_line2,
+            monitoring_clinic_city=data.monitoring_clinic_city,
+            monitoring_clinic_state=data.monitoring_clinic_state,
+            monitoring_clinic_postal=data.monitoring_clinic_postal,
+            monitoring_clinic_phone=data.monitoring_clinic_phone,
+            monitoring_clinic_email=data.monitoring_clinic_email,
+            # OB provider
+            ob_provider_name=data.ob_provider_name,
+            ob_clinic_name=data.ob_clinic_name,
+            ob_address_line1=data.ob_address_line1,
+            ob_address_line2=data.ob_address_line2,
+            ob_city=data.ob_city,
+            ob_state=data.ob_state,
+            ob_postal=data.ob_postal,
+            ob_phone=data.ob_phone,
+            ob_email=data.ob_email,
+            # Delivery hospital
+            delivery_hospital_name=data.delivery_hospital_name,
+            delivery_hospital_address_line1=data.delivery_hospital_address_line1,
+            delivery_hospital_address_line2=data.delivery_hospital_address_line2,
+            delivery_hospital_city=data.delivery_hospital_city,
+            delivery_hospital_state=data.delivery_hospital_state,
+            delivery_hospital_postal=data.delivery_hospital_postal,
+            delivery_hospital_phone=data.delivery_hospital_phone,
+            delivery_hospital_email=data.delivery_hospital_email,
+            # Pregnancy tracking
+            pregnancy_start_date=data.pregnancy_start_date,
+            pregnancy_due_date=data.pregnancy_due_date,
             is_priority=data.is_priority if hasattr(data, "is_priority") else False,
         )
         db.add(surrogate)
@@ -202,6 +251,55 @@ def update_surrogate(
         "has_surrogate_experience",
         "num_deliveries",
         "num_csections",
+        # Insurance fields
+        "insurance_company",
+        "insurance_plan_name",
+        "insurance_phone",
+        "insurance_policy_number",
+        "insurance_member_id",
+        "insurance_group_number",
+        "insurance_subscriber_name",
+        "insurance_subscriber_dob",
+        # Clinic fields
+        "clinic_name",
+        "clinic_address_line1",
+        "clinic_address_line2",
+        "clinic_city",
+        "clinic_state",
+        "clinic_postal",
+        "clinic_phone",
+        "clinic_email",
+        # Monitoring clinic fields
+        "monitoring_clinic_name",
+        "monitoring_clinic_address_line1",
+        "monitoring_clinic_address_line2",
+        "monitoring_clinic_city",
+        "monitoring_clinic_state",
+        "monitoring_clinic_postal",
+        "monitoring_clinic_phone",
+        "monitoring_clinic_email",
+        # OB provider fields
+        "ob_provider_name",
+        "ob_clinic_name",
+        "ob_address_line1",
+        "ob_address_line2",
+        "ob_city",
+        "ob_state",
+        "ob_postal",
+        "ob_phone",
+        "ob_email",
+        # Delivery hospital fields
+        "delivery_hospital_name",
+        "delivery_hospital_address_line1",
+        "delivery_hospital_address_line2",
+        "delivery_hospital_city",
+        "delivery_hospital_state",
+        "delivery_hospital_postal",
+        "delivery_hospital_phone",
+        "delivery_hospital_email",
+        # Pregnancy fields
+        "pregnancy_start_date",
+        "pregnancy_due_date",
     }
 
     # Track changes for activity log (new values only)
@@ -284,6 +382,51 @@ def update_surrogate(
                 db.commit()
             else:
                 db.flush()
+
+        # Log field group changes (medical, insurance, pregnancy)
+        if changes:
+            changed_fields = set(changes.keys())
+
+            # Medical fields: clinic, monitoring_clinic, ob, delivery_hospital
+            medical_prefixes = ("clinic_", "monitoring_clinic_", "ob_", "delivery_hospital_")
+            if any(f.startswith(medical_prefixes) for f in changed_fields):
+                activity_service.log_medical_info_updated(
+                    db=db,
+                    surrogate_id=surrogate.id,
+                    organization_id=org_id,
+                    actor_user_id=user_id,
+                )
+                if commit:
+                    db.commit()
+                else:
+                    db.flush()
+
+            # Insurance fields
+            if any(f.startswith("insurance_") for f in changed_fields):
+                activity_service.log_insurance_info_updated(
+                    db=db,
+                    surrogate_id=surrogate.id,
+                    organization_id=org_id,
+                    actor_user_id=user_id,
+                )
+                if commit:
+                    db.commit()
+                else:
+                    db.flush()
+
+            # Pregnancy fields
+            pregnancy_fields = {"pregnancy_start_date", "pregnancy_due_date"}
+            if changed_fields & pregnancy_fields:
+                activity_service.log_pregnancy_dates_updated(
+                    db=db,
+                    surrogate_id=surrogate.id,
+                    organization_id=org_id,
+                    actor_user_id=user_id,
+                )
+                if commit:
+                    db.commit()
+                else:
+                    db.flush()
 
     return surrogate
 
