@@ -60,7 +60,6 @@ class Settings(BaseSettings):
 
     # Dev-only
     DEV_SECRET: str = ""
-    DEV_BYPASS_AUTH: bool = False
 
     # Meta Lead Ads webhook
     META_VERIFY_TOKEN: str = ""

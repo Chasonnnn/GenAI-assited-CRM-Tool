@@ -28,7 +28,7 @@ import {
     ChevronRightIcon,
     SearchIcon,
 } from "lucide-react"
-import { useMatches, useMatchStats, type MatchStatus } from "@/lib/hooks/use-matches"
+import { useMatches, useMatchStats, type MatchStatus, type ListMatchesParams } from "@/lib/hooks/use-matches"
 import { parseDateInput } from "@/lib/utils/date"
 
 const STATUS_LABELS: Record<MatchStatus, string> = {
@@ -73,7 +73,7 @@ export default function MatchesPage() {
             ? { status: statusFilter }
             : {}),
         ...(debouncedSearch ? { q: debouncedSearch } : {}),
-    }
+    } satisfies ListMatchesParams
     const { data, isLoading, isError } = useMatches(filters)
     const { data: stats } = useMatchStats()
 

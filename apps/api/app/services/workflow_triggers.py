@@ -473,27 +473,36 @@ def trigger_document_uploaded(db: Session, attachment: Attachment) -> None:
     Note: Only call this after scan_status = 'clean', not on initial upload.
     Skip if file is quarantined.
     """
-    # Get org_id from the related entity
-    org_id = None
+    org_id = attachment.organization_id
     surrogate_id = None
 
     if attachment.surrogate_id:
-        surrogate = db.query(Surrogate).filter(Surrogate.id == attachment.surrogate_id).first()
-        if surrogate:
-            org_id = surrogate.organization_id
-            surrogate_id = surrogate.id
+        surrogate = (
+            db.query(Surrogate)
+            .filter(
+                Surrogate.id == attachment.surrogate_id,
+                Surrogate.organization_id == org_id,
+            )
+            .first()
+        )
+        if not surrogate:
+            return
+        surrogate_id = surrogate.id
 
     # Fallback: check intended_parent_id for IP attachments
-    if not org_id and hasattr(attachment, "intended_parent_id") and attachment.intended_parent_id:
+    if not attachment.surrogate_id and attachment.intended_parent_id:
         from app.db.models import IntendedParent
 
         ip = (
             db.query(IntendedParent)
-            .filter(IntendedParent.id == attachment.intended_parent_id)
+            .filter(
+                IntendedParent.id == attachment.intended_parent_id,
+                IntendedParent.organization_id == org_id,
+            )
             .first()
         )
-        if ip:
-            org_id = ip.organization_id
+        if not ip:
+            return
 
     if not org_id:
         return

@@ -3,8 +3,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import api from '@/lib/api';
 
-const DEV_BYPASS_AUTH = process.env.NEXT_PUBLIC_DEV_BYPASS_AUTH === 'true';
-
 // Interface matches backend MeResponse schema
 export interface User {
     user_id: string;
@@ -24,22 +22,6 @@ export interface User {
     mfa_verified: boolean;
 }
 
-// Mock user for testing when auth is bypassed
-const MOCK_USER: User = {
-    user_id: '4176661a-0bab-4e28-b44f-1591960b88bf',
-    email: 'admin@test.com',
-    display_name: 'Test Admin',
-    org_id: 'd1f370ab-1680-46b3-a37d-7cff639e4a47',
-    org_name: 'Test Organization',
-    org_slug: 'test-org',
-    org_timezone: 'America/Los_Angeles',
-    role: 'admin',
-    ai_enabled: true, // Enable AI for testing
-    mfa_enabled: true,
-    mfa_required: false,
-    mfa_verified: true,
-};
-
 interface AuthContextType {
     user: User | null;
     isLoading: boolean;
@@ -50,17 +32,11 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-    const [user, setUser] = useState<User | null>(DEV_BYPASS_AUTH ? MOCK_USER : null);
-    const [isLoading, setIsLoading] = useState(!DEV_BYPASS_AUTH);
+    const [user, setUser] = useState<User | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);
 
     const fetchUser = async () => {
-        if (DEV_BYPASS_AUTH) {
-            setUser(MOCK_USER);
-            setIsLoading(false);
-            return;
-        }
-
         setIsLoading(true);
         setError(null);
         try {
@@ -105,11 +81,10 @@ export function useRequireAuth() {
     const { user, isLoading } = useAuth();
 
     useEffect(() => {
-        if (!DEV_BYPASS_AUTH && !isLoading && !user) {
+        if (!isLoading && !user) {
             window.location.href = '/login';
         }
         if (
-            !DEV_BYPASS_AUTH &&
             !isLoading &&
             user &&
             user.mfa_required &&

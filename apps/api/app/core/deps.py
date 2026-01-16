@@ -6,7 +6,6 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.core.permissions import PermissionKey
 from app.core.security import decode_session_token
 from app.db.session import SessionLocal
@@ -61,16 +60,6 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
     """
     # Import here to avoid circular imports
     from app.db.models import User
-
-    # DEV BYPASS: Return mock user for testing
-    if settings.DEV_BYPASS_AUTH:
-        mock_user = db.query(User).filter(User.email == "admin@test.com").first()
-        if mock_user:
-            return mock_user
-        # Fallback: get any active user
-        any_user = db.query(User).filter(User.is_active.is_(True)).first()
-        if any_user:
-            return any_user
 
     token = request.cookies.get(COOKIE_NAME)
     if not token:
@@ -137,22 +126,22 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
 
     # Session table validation (enables revocation)
-    # Skip in dev bypass mode since sessions aren't created there
-    if not settings.DEV_BYPASS_AUTH:
-        if not token_hash:
-            raise HTTPException(status_code=401, detail="Not authenticated")
+    if not token_hash:
+        raise HTTPException(status_code=401, detail="Not authenticated")
 
-        db_session = session_service.get_session_by_token_hash(db, token_hash)
-        if not db_session:
-            raise HTTPException(status_code=401, detail="Session revoked or expired")
+    db_session = session_service.get_session_by_token_hash(db, token_hash)
+    if not db_session:
+        raise HTTPException(status_code=401, detail="Session revoked or expired")
 
-        # Update last_active_at (throttled to reduce DB writes)
-        session_service.update_last_active(db, db_session)
+    # Update last_active_at (throttled to reduce DB writes)
+    session_service.update_last_active(db, db_session)
 
     membership = db.query(Membership).filter(Membership.user_id == user.id).first()
 
     if not membership:
         raise HTTPException(status_code=403, detail="No organization membership")
+    if not membership.is_active:
+        raise HTTPException(status_code=403, detail="Membership inactive")
 
     # Validate role is a known enum value - return 403 not 500
     if not Role.has_value(membership.role):
@@ -162,11 +151,6 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
         )
 
     role = Role(membership.role)
-
-    # In dev bypass mode, skip MFA entirely (frontend checks mfa_verified)
-    if settings.DEV_BYPASS_AUTH:
-        mfa_verified = True
-        mfa_required = False
 
     session = UserSession(
         user_id=user.id,
@@ -179,11 +163,9 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
         token_hash=token_hash,
     )
 
-    # Skip MFA check in dev bypass mode
-    if not settings.DEV_BYPASS_AUTH:
-        if session.mfa_required and not session.mfa_verified:
-            if not _is_mfa_bypass_allowed(request):
-                raise HTTPException(status_code=403, detail="MFA verification required")
+    if session.mfa_required and not session.mfa_verified:
+        if not _is_mfa_bypass_allowed(request):
+            raise HTTPException(status_code=403, detail="MFA verification required")
 
     request.state.user_session = session
     return session
