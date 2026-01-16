@@ -89,7 +89,7 @@ export default function IntendedParentsPage() {
     })
     const [page, setPage] = useState(1)
     const [isCreateOpen, setIsCreateOpen] = useState(false)
-    const [sortBy, setSortBy] = useState<string | null>(null)
+    const [sortBy, setSortBy] = useState<string | null>("intended_parent_number")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
 
     // Sync state changes back to URL
@@ -347,7 +347,7 @@ export default function IntendedParentsPage() {
                                 </p>
                             </div>
                         ) : (
-                            <Table>
+                            <Table className="[&_th]:!text-center [&_td]:!text-center [&_th>div]:justify-center">
                                 <TableHeader>
                                     <TableRow>
                                         <SortableTableHead column="intended_parent_number" label="Number" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />

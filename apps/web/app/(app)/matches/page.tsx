@@ -83,7 +83,7 @@ function MatchRow({ match }: { match: MatchListItem }) {
             <TableCell className="text-muted-foreground text-sm">
                 {formatDistanceToNow(new Date(match.proposed_at), { addSuffix: true })}
             </TableCell>
-            <TableCell className="text-right">
+            <TableCell>
                 <Link
                     href={`/intended-parents/matches/${match.id}`}
                     className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent hover:text-accent-foreground"
@@ -271,6 +271,8 @@ function NewMatchDialog({ open, onOpenChange, onSuccess }: NewMatchDialogProps) 
 function MatchTable({ status, search }: { status?: MatchStatus; search?: string }) {
     const { data, isLoading, isError } = useMatches({
         per_page: 50,
+        sort_by: "match_number",
+        sort_order: "desc",
         ...(status ? { status } : {}),
         ...(search ? { q: search } : {}),
     })
@@ -301,7 +303,7 @@ function MatchTable({ status, search }: { status?: MatchStatus; search?: string 
     }
 
     return (
-        <Table>
+        <Table className="[&_th]:!text-center [&_td]:!text-center [&_th>div]:justify-center">
             <TableHeader>
                 <TableRow>
                     <TableHead>Match #</TableHead>
@@ -310,7 +312,7 @@ function MatchTable({ status, search }: { status?: MatchStatus; search?: string 
                     <TableHead>Stage</TableHead>
                     <TableHead>Score</TableHead>
                     <TableHead>Proposed</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
+                    <TableHead>Action</TableHead>
                 </TableRow>
             </TableHeader>
             <TableBody>

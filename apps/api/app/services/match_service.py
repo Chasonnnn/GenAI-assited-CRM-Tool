@@ -154,6 +154,7 @@ def list_matches(
 
     order_func = asc if sort_order == "asc" else desc
     sortable_columns = {
+        "match_number": Match.match_number,
         "status": Match.status,
         "compatibility_score": Match.compatibility_score,
         "proposed_at": Match.proposed_at,

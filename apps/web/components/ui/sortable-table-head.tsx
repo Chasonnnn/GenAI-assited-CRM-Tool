@@ -31,6 +31,17 @@ export function SortableTableHead({
         onSort(column)
     }
 
+    const renderIcon = () => {
+        if (!isActive) {
+            return <ArrowUpDown className="size-4 text-muted-foreground/50" />
+        }
+        return currentOrder === "asc" ? (
+            <ArrowUp className="size-4 text-foreground" />
+        ) : (
+            <ArrowDown className="size-4 text-foreground" />
+        )
+    }
+
     return (
         <TableHead
             className={cn(
@@ -39,17 +50,10 @@ export function SortableTableHead({
             )}
             onClick={handleClick}
         >
-            <div className="flex items-center gap-1">
+            <div className="inline-flex w-full items-center justify-center gap-1">
+                <span className="invisible">{renderIcon()}</span>
                 <span>{label}</span>
-                {isActive ? (
-                    currentOrder === "asc" ? (
-                        <ArrowUp className="size-4 text-foreground" />
-                    ) : (
-                        <ArrowDown className="size-4 text-foreground" />
-                    )
-                ) : (
-                    <ArrowUpDown className="size-4 text-muted-foreground/50" />
-                )}
+                <span>{renderIcon()}</span>
             </div>
         </TableHead>
     )
