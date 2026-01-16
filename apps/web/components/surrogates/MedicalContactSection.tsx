@@ -25,14 +25,15 @@ export function MedicalContactSection({
     showClinicName = true,
 }: MedicalContactSectionProps) {
     const field = (name: string) => `${prefix}_${name}`
-    const getValue = (name: string) => (data as Record<string, unknown>)[field(name)] as string | null
+    const dataRecord = data as unknown as Record<string, string | null | undefined>
+    const getValue = (name: string) => dataRecord[field(name)] ?? null
 
     // OB uses ob_clinic_name, others use {prefix}_name
     const clinicNameField = showProviderName ? `${prefix}_clinic_name` : `${prefix}_name`
-    const getClinicNameValue = () => (data as Record<string, unknown>)[clinicNameField] as string | null
+    const getClinicNameValue = () => dataRecord[clinicNameField] ?? null
 
     // Check if this section has an email field (delivery_hospital may have one now)
-    const hasEmailField = `${prefix}_email` in data
+    const hasEmailField = `${prefix}_email` in dataRecord
 
     return (
         <div className="space-y-3 p-3 rounded-lg border bg-card">

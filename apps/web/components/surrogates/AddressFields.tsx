@@ -11,7 +11,8 @@ interface AddressFieldsProps {
 
 export function AddressFields({ prefix, data, onUpdate }: AddressFieldsProps) {
     const field = (name: string) => `${prefix}_${name}`
-    const getValue = (name: string) => (data as Record<string, unknown>)[field(name)] as string | null
+    const dataRecord = data as unknown as Record<string, string | null | undefined>
+    const getValue = (name: string) => dataRecord[field(name)] ?? null
 
     return (
         <div className="space-y-2 text-sm">
