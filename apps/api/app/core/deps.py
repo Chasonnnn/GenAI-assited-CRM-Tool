@@ -8,13 +8,12 @@ from sqlalchemy.orm import Session
 
 from app.core.permissions import PermissionKey
 from app.core.security import decode_session_token
+from app.core.csrf import CSRF_HEADER, CSRF_COOKIE_NAME, validate_csrf
 from app.db.session import SessionLocal
 
 
 # Cookie and header names
 COOKIE_NAME = "crm_session"
-CSRF_HEADER = "X-Requested-With"
-CSRF_HEADER_VALUE = "XMLHttpRequest"
 
 # MFA enforcement allowlist (paths that can be accessed before MFA verification)
 MFA_BYPASS_PREFIXES = ("/mfa",)
@@ -286,10 +285,13 @@ def require_csrf_header(request: Request) -> None:
     Raises:
         HTTPException 403: Missing or invalid CSRF header
     """
-    if request.headers.get(CSRF_HEADER) != CSRF_HEADER_VALUE:
+    if not validate_csrf(request):
         raise HTTPException(
             status_code=403,
-            detail=f"Missing CSRF header. Include '{CSRF_HEADER}: {CSRF_HEADER_VALUE}'",
+            detail=(
+                "Missing or invalid CSRF token. "
+                f"Include '{CSRF_HEADER}' header matching '{CSRF_COOKIE_NAME}' cookie."
+            ),
         )
 
 

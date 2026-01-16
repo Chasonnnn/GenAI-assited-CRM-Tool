@@ -20,6 +20,7 @@ import {
     ShieldAlertIcon
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
+import { getCsrfHeaders } from "@/lib/csrf"
 import { toast } from "sonner"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
@@ -34,7 +35,7 @@ export default function AdminDataPage() {
 
     const handleExport = useCallback(async (type: "surrogates" | "config" | "analytics") => {
         setIsExporting(type)
-        const headers = { "X-Requested-With": "XMLHttpRequest" }
+        const headers = { ...getCsrfHeaders() }
 
         const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -141,8 +142,7 @@ export default function AdminDataPage() {
                 method: "POST",
                 credentials: "include",
                 headers: {
-                    "X-Requested-With": "XMLHttpRequest",
-                    "X-CSRF-Token": "1",
+                    ...getCsrfHeaders(),
                 },
                 body: formData,
             })

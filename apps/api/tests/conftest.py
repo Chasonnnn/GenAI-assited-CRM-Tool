@@ -254,17 +254,19 @@ async def authed_client(db, test_auth) -> AsyncGenerator:
     from httpx import AsyncClient, ASGITransport
     from app.main import app
     from app.core.deps import get_db
+    from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 
     def override_get_db():
         yield db
 
     app.dependency_overrides[get_db] = override_get_db
 
+    csrf_token = generate_csrf_token()
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="https://test",
-        cookies={test_auth.cookie_name: test_auth.token},
-        headers={"X-Requested-With": "XMLHttpRequest"},
+        cookies={test_auth.cookie_name: test_auth.token, CSRF_COOKIE_NAME: csrf_token},
+        headers={CSRF_HEADER: csrf_token},
     ) as c:
         yield c
 

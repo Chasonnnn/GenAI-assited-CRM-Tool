@@ -35,7 +35,7 @@ Backend
 ✓ Auth: Google OAuth (Workspace SSO) + cookie-based session (JWT in HTTP-only cookie) + GET `/auth/me`
 ✓ Invite-only access (org_invites + CLI bootstrap command)
 ✓ Optional domain allowlist via `ALLOWED_EMAIL_DOMAINS`
-✓ CSRF protection for mutations (`X-Requested-With: XMLHttpRequest`)
+✓ CSRF protection for mutations (`X-CSRF-Token` + `crm_csrf` cookie)
 ✓ Centralized authorization helpers (role checks; membership checks) in `core/deps.py`
 ✓ Centralized query scoping helper: `get_org_scope` dependency
 ✓ Seed/bootstrap path:

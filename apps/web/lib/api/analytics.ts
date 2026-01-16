@@ -3,6 +3,7 @@
  */
 
 import { api } from '../api';
+import { getCsrfHeaders } from '@/lib/csrf';
 import type { JsonObject } from '../types/json';
 
 // Types
@@ -291,9 +292,7 @@ export async function exportAnalyticsPDF(params: DateRangeParams = {}): Promise<
     const response = await fetch(url, {
         method: 'GET',
         credentials: 'include',
-        headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-        },
+        headers: { ...getCsrfHeaders() },
     });
 
     if (!response.ok) {
