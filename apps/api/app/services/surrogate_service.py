@@ -1,9 +1,11 @@
 """Surrogate service - business logic for surrogate operations."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, time, timedelta
+from typing import TypedDict
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -16,9 +18,76 @@ from app.db.enums import (
     OwnerType,
     Role,
 )
-from app.db.models import Surrogate, SurrogateStatusHistory, User
+from app.db.models import Surrogate, SurrogateStatusHistory, StatusChangeRequest, User, Organization
 from app.schemas.surrogate import SurrogateCreate, SurrogateUpdate
 from app.utils.normalization import normalize_email, normalize_name, normalize_phone
+
+
+# Grace period for undo (5 minutes)
+UNDO_GRACE_PERIOD = timedelta(minutes=5)
+
+
+class StatusChangeResult(TypedDict):
+    """Result of a status change operation."""
+
+    status: str  # 'applied' or 'pending_approval'
+    surrogate: Surrogate | None
+    request_id: UUID | None
+    message: str | None
+
+
+def _get_org_timezone(db: Session, org_id: UUID) -> str:
+    """Get organization timezone string."""
+    result = db.execute(
+        select(Organization.timezone).where(Organization.id == org_id)
+    ).scalar_one_or_none()
+    return result or "America/Los_Angeles"
+
+
+def _normalize_effective_at(
+    effective_at: datetime | None,
+    org_timezone_str: str,
+) -> datetime:
+    """
+    Normalize effective_at to UTC datetime.
+
+    Rules:
+    - None: return now (UTC)
+    - Today with time 00:00:00: return now (UTC) - effective now
+    - Past date with time 00:00:00: default to 12:00 PM in org timezone
+    - Otherwise: use as-is (assume UTC if no timezone)
+    """
+    now = datetime.now(timezone.utc)
+
+    if effective_at is None:
+        return now
+
+    # If datetime is naive, assume it's in org timezone
+    org_tz = ZoneInfo(org_timezone_str)
+    if effective_at.tzinfo is None:
+        effective_at = effective_at.replace(tzinfo=org_tz)
+    else:
+        effective_at = effective_at.astimezone(org_tz)
+
+    # Check if time component is midnight (00:00:00)
+    # This indicates date-only was provided
+    if effective_at.time() == time(0, 0, 0):
+        today_org = now.astimezone(org_tz).date()
+        effective_date = effective_at.date()
+
+        if effective_date == today_org:
+            # Today with no time = effective now
+            return now
+        elif effective_date < today_org:
+            # Past date with no time = 12:00 PM org timezone
+            noon = datetime.combine(effective_date, time(12, 0, 0)).replace(tzinfo=org_tz)
+            return noon.astimezone(timezone.utc)
+        else:
+            # Future date - this will be rejected later
+            return effective_at.astimezone(timezone.utc)
+
+    # Has explicit time, use as-is
+    return effective_at.astimezone(timezone.utc)
 
 
 def generate_surrogate_number(db: Session, org_id: UUID) -> str:
@@ -438,23 +507,36 @@ def change_status(
     user_id: UUID | None,
     user_role: Role | None,
     reason: str | None = None,
-) -> Surrogate:
+    effective_at: datetime | None = None,
+) -> StatusChangeResult:
     """
-    Change surrogatestage and record history.
+    Change surrogate stage and record history with backdating support.
 
-    No-op if stage unchanged.
+    Supports:
+    - Normal changes (effective now)
+    - Backdated changes (effective in the past, requires reason)
+    - Regressions (earlier stage, requires admin approval)
 
-    Transition guard: Intake specialists cannot set post_approval stages.
+    Args:
+        effective_at: When the change actually occurred. None = now.
+            - Today with no time: effective now
+            - Past with no time: 12:00 PM org timezone
+
     Returns:
-        Surrogateobject or raises error if transition not allowed
+        StatusChangeResult with status='applied' or 'pending_approval'
     """
     from app.db.enums import Role
     from app.services import pipeline_service
+
+    now = datetime.now(timezone.utc)
+    org_tz_str = _get_org_timezone(db, surrogate.organization_id)
+    normalized_effective_at = _normalize_effective_at(effective_at, org_tz_str)
 
     old_stage_id = surrogate.stage_id
     old_label = surrogate.status_label
     old_stage = pipeline_service.get_stage_by_id(db, old_stage_id) if old_stage_id else None
     old_slug = old_stage.slug if old_stage else None
+    old_order = old_stage.order if old_stage else 0
     surrogate_pipeline_id = old_stage.pipeline_id if old_stage else None
     if not surrogate_pipeline_id:
         surrogate_pipeline_id = pipeline_service.get_or_create_default_pipeline(
@@ -466,11 +548,24 @@ def change_status(
     if not new_stage or not new_stage.is_active:
         raise ValueError("Invalid or inactive stage")
     if new_stage.pipeline_id != surrogate_pipeline_id:
-        raise ValueError("Stage does not belong to surrogatepipeline")
+        raise ValueError("Stage does not belong to surrogate pipeline")
 
-    # No-op if same status
+    # No-op guard: reject if target equals current
     if old_stage_id == new_stage.id:
-        return surrogate
+        raise ValueError("Target stage is same as current stage")
+
+    # Detect backdating and regression
+    # Allow small time drift (1 second) to account for processing time
+    is_backdated = (now - normalized_effective_at).total_seconds() > 1
+    is_regression = new_stage.order < old_order
+
+    # Validation: cannot set future date (allow 1 second tolerance)
+    if (normalized_effective_at - now).total_seconds() > 1:
+        raise ValueError("Cannot set future date for stage change")
+
+    # Validation: cannot set date before surrogate creation
+    if surrogate.created_at and normalized_effective_at < surrogate.created_at:
+        raise ValueError("Cannot set date before surrogate was created")
 
     role_str = user_role.value if hasattr(user_role, "value") else user_role
     if not role_str:
@@ -489,13 +584,137 @@ def change_status(
 
     allowed_types = set(rules["stage_types"])
     allowed_slugs = set(rules.get("extra_slugs", []))
-    if new_stage.stage_type not in allowed_types and new_stage.slug not in allowed_slugs:
-        if role_str == Role.INTAKE_SPECIALIST.value:
+    if not is_regression:
+        if new_stage.stage_type not in allowed_types and new_stage.slug not in allowed_slugs:
+            if role_str == Role.INTAKE_SPECIALIST.value:
+                raise ValueError(f"Intake specialists cannot set stage to {new_stage.slug}")
+            if role_str == Role.CASE_MANAGER.value:
+                raise ValueError("Case managers can only set post-approval stages")
+            raise ValueError("Role not permitted to change stage")
+    elif role_str == Role.INTAKE_SPECIALIST.value:
+        if new_stage.stage_type not in allowed_types and new_stage.slug not in allowed_slugs:
             raise ValueError(f"Intake specialists cannot set stage to {new_stage.slug}")
-        if role_str == Role.CASE_MANAGER.value:
-            raise ValueError("Case managers can only set post-approval stages")
-        raise ValueError("Role not permitted to change stage")
+    elif role_str == Role.CASE_MANAGER.value:
+        regression_allowed_types = allowed_types | {"intake"}
+        if new_stage.stage_type not in regression_allowed_types and new_stage.slug not in allowed_slugs:
+            raise ValueError("Case managers can only regress to intake or post-approval stages")
 
+    # REGRESSION: Create request, don't apply yet (unless within undo grace period)
+    if is_regression:
+        # Check if this is an undo within grace period (must be most recent change)
+        last_history = (
+            db.query(SurrogateStatusHistory)
+            .filter(SurrogateStatusHistory.surrogate_id == surrogate.id)
+            .order_by(SurrogateStatusHistory.recorded_at.desc())
+            .first()
+        )
+
+        within_grace_period = (
+            last_history
+            and last_history.changed_by_user_id == user_id
+            and last_history.recorded_at
+            and (now - last_history.recorded_at) <= UNDO_GRACE_PERIOD
+            and last_history.from_stage_id == new_stage.id  # Undoing to previous stage
+        )
+
+        if within_grace_period:
+            # Undo bypasses admin approval and reason requirement
+            return _apply_status_change(
+                db=db,
+                surrogate=surrogate,
+                new_stage=new_stage,
+                old_stage_id=old_stage_id,
+                old_label=old_label,
+                old_slug=old_slug,
+                user_id=user_id,
+                reason=reason,
+                effective_at=normalized_effective_at,
+                recorded_at=now,
+                is_undo=True,
+            )
+
+    # Backdating or regression requires reason (unless undo)
+    if (is_backdated or is_regression) and not reason:
+        raise ValueError("Reason required for backdated or regressed stage changes")
+
+    if is_regression:
+        # Create pending request for admin approval
+        request = StatusChangeRequest(
+            organization_id=surrogate.organization_id,
+            entity_type="surrogate",
+            entity_id=surrogate.id,
+            target_stage_id=new_stage.id,
+            effective_at=normalized_effective_at,
+            reason=reason or "",
+            requested_by_user_id=user_id,
+            requested_at=now,
+            status="pending",
+        )
+        db.add(request)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise ValueError("A pending regression request already exists for this stage and date.")
+        db.refresh(request)
+
+        from app.services import notification_service
+
+        requester = _get_org_user(db, surrogate.organization_id, user_id)
+        notification_service.notify_status_change_request_pending(
+            db=db,
+            request=request,
+            surrogate=surrogate,
+            target_stage_label=new_stage.label,
+            current_stage_label=old_label or "Unknown",
+            requester_name=requester.display_name if requester else "Someone",
+        )
+
+        return StatusChangeResult(
+            status="pending_approval",
+            surrogate=surrogate,
+            request_id=request.id,
+            message="Regression requires admin approval. Request submitted.",
+        )
+
+    # NON-REGRESSION: Apply immediately
+    return _apply_status_change(
+        db=db,
+        surrogate=surrogate,
+        new_stage=new_stage,
+        old_stage_id=old_stage_id,
+        old_label=old_label,
+        old_slug=old_slug,
+        user_id=user_id,
+        reason=reason,
+        effective_at=normalized_effective_at,
+        recorded_at=now,
+        is_undo=False,
+    )
+
+
+def _apply_status_change(
+    db: Session,
+    surrogate: Surrogate,
+    new_stage,
+    old_stage_id: UUID | None,
+    old_label: str | None,
+    old_slug: str | None,
+    user_id: UUID | None,
+    reason: str | None,
+    effective_at: datetime,
+    recorded_at: datetime,
+    is_undo: bool = False,
+    request_id: UUID | None = None,
+    approved_by_user_id: UUID | None = None,
+    approved_at: datetime | None = None,
+    requested_at: datetime | None = None,
+) -> StatusChangeResult:
+    """
+    Apply a status change to a surrogate (internal helper).
+
+    Called for non-regressions, undo within grace period, and approved regressions.
+    """
     surrogate.stage_id = new_stage.id
     surrogate.status_label = new_stage.label
 
@@ -504,9 +723,9 @@ def change_status(
         if new_stage.slug == SurrogateStatus.CONTACTED.value or new_stage.is_intake_stage is False:
             surrogate.contact_status = ContactStatus.REACHED.value
             if not surrogate.contacted_at:
-                surrogate.contacted_at = datetime.now(timezone.utc)
+                surrogate.contacted_at = effective_at
 
-    # Record history
+    # Record history with dual timestamps
     history = SurrogateStatusHistory(
         surrogate_id=surrogate.id,
         organization_id=surrogate.organization_id,
@@ -516,13 +735,18 @@ def change_status(
         to_label_snapshot=new_stage.label,
         changed_by_user_id=user_id,
         reason=reason,
+        changed_at=effective_at,  # Derived from effective_at for backward compat
+        effective_at=effective_at,
+        recorded_at=recorded_at,
+        is_undo=is_undo,
+        request_id=request_id,
+        requested_at=requested_at,
+        approved_by_user_id=approved_by_user_id,
+        approved_at=approved_at,
     )
     db.add(history)
     db.commit()
     db.refresh(surrogate)
-
-    # NOTE: Status change is recorded in SurrogateStatusHistory (canonical source)
-    # No duplicate log to SurrogateActivityLog needed
 
     # Send notifications
     from app.services import notification_service
@@ -530,7 +754,6 @@ def change_status(
     actor = _get_org_user(db, surrogate.organization_id, user_id)
     actor_name = actor.display_name if actor else "Someone"
 
-    # Notify assignee and creator of status change
     notification_service.notify_surrogate_status_changed(
         db=db,
         surrogate=surrogate,
@@ -566,17 +789,34 @@ def change_status(
             pass  # Best-effort: don't block status change
 
     # Meta CAPI: Send lead quality signal for Meta-sourced surrogates
-    # Uses requested_status (before auto-transition) so 'approved' triggers CAPI
     _maybe_send_capi_event(db, surrogate, old_slug or "", new_stage.slug)
 
-    # Trigger workflows for status change
+    # Trigger workflows with effective_at in payload
     from app.services import workflow_triggers
 
     workflow_triggers.trigger_status_changed(
-        db, surrogate, old_stage_id, new_stage.id, old_slug, new_stage.slug
+        db=db,
+        surrogate=surrogate,
+        old_stage_id=old_stage_id,
+        new_stage_id=new_stage.id,
+        old_stage_slug=old_slug,
+        new_stage_slug=new_stage.slug,
+        effective_at=effective_at,
+        recorded_at=recorded_at,
+        is_undo=is_undo,
+        request_id=request_id,
+        approved_by_user_id=approved_by_user_id,
+        approved_at=approved_at,
+        requested_at=requested_at,
+        changed_by_user_id=user_id,
     )
 
-    return surrogate
+    return StatusChangeResult(
+        status="applied",
+        surrogate=surrogate,
+        request_id=None,
+        message=None,
+    )
 
 
 def _maybe_send_capi_event(

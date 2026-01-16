@@ -65,6 +65,9 @@ class IntendedParentStatusUpdate(BaseModel):
 
     status: str = Field(..., min_length=1)
     reason: str | None = Field(None, max_length=500)
+    effective_at: datetime | None = Field(
+        None, description="When the change actually occurred (optional, defaults to now)"
+    )
 
 
 # =============================================================================
@@ -130,6 +133,23 @@ class IntendedParentStatusHistoryItem(BaseModel):
     changed_by_user_id: UUID | None
     changed_by_name: str | None = None  # Resolved user name
     changed_at: datetime
+    effective_at: datetime | None = None
+    recorded_at: datetime | None = None
+    requested_at: datetime | None = None
+    approved_by_user_id: UUID | None = None
+    approved_by_name: str | None = None
+    approved_at: datetime | None = None
+    is_undo: bool = False
+    request_id: UUID | None = None
+
+
+class IntendedParentStatusChangeResponse(BaseModel):
+    """Response for a status change request."""
+
+    status: str  # 'applied' or 'pending_approval'
+    intended_parent: IntendedParentRead | None = None
+    request_id: UUID | None = None
+    message: str | None = None
 
 
 # =============================================================================

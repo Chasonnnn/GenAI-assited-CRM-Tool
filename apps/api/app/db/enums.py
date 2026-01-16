@@ -216,6 +216,9 @@ class NotificationType(str, Enum):
     TASK_DUE_SOON = "task_due_soon"  # Due within 24h
     TASK_OVERDUE = "task_overdue"  # Past due date
     WORKFLOW_APPROVAL_REQUESTED = "workflow_approval_requested"
+    STATUS_CHANGE_REQUESTED = "status_change_requested"
+    STATUS_CHANGE_APPROVED = "status_change_approved"
+    STATUS_CHANGE_REJECTED = "status_change_rejected"
 
     # Appointment notifications
     APPOINTMENT_REQUESTED = "appointment_requested"  # New appointment request
@@ -316,14 +319,14 @@ class IntendedParentStatus(str, Enum):
     """
     Intended Parent status workflow.
 
-    new → in_review → matched → inactive
+    new → ready_to_match → matched → delivered
     Plus archive/restore pseudo-statuses for history tracking.
     """
 
     NEW = "new"
-    IN_REVIEW = "in_review"
+    READY_TO_MATCH = "ready_to_match"
     MATCHED = "matched"
-    INACTIVE = "inactive"
+    DELIVERED = "delivered"
 
     # Archive pseudo-statuses (for history tracking)
     ARCHIVED = "archived"

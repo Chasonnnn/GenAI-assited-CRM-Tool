@@ -778,11 +778,78 @@ class Surrogate(Base):
     )
 
 
+class StatusChangeRequest(Base):
+    """
+    Tracks pending regression requests that require admin approval.
+
+    Used for both surrogates (stage changes) and intended parents (status changes).
+    Regressions = moving to an earlier stage/status in the defined order.
+    """
+
+    __tablename__ = "status_change_requests"
+    __table_args__ = (Index("idx_status_change_requests_org_status", "organization_id", "status"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    entity_type: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # 'surrogate' or 'intended_parent'
+    entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    target_stage_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pipeline_stages.id", ondelete="SET NULL"), nullable=True
+    )  # For surrogates
+    target_status: Mapped[str | None] = mapped_column(
+        String(50), nullable=True
+    )  # For intended parents
+    effective_at: Mapped[datetime] = mapped_column(nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Request tracking
+    requested_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    requested_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), server_default="pending", nullable=False)
+
+    # Approval tracking
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+    # Rejection tracking
+    rejected_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    rejected_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+    # Cancellation tracking
+    cancelled_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    cancelled_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"), onupdate=text("now()"), nullable=False
+    )
+
+
 class SurrogateStatusHistory(Base):
     """
     Tracks all status changes on surrogates for audit and timeline.
 
     Also records archive/restore operations.
+
+    Dual timestamps for backdating support:
+    - effective_at: When the change actually occurred (user-provided or now)
+    - recorded_at: When it was recorded in the system (always server-generated)
+    - changed_at: Derived from effective_at for backward compatibility
     """
 
     __tablename__ = "surrogate_status_history"
@@ -818,6 +885,31 @@ class SurrogateStatusHistory(Base):
     )
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     changed_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+
+    # Dual timestamps for backdating support
+    effective_at: Mapped[datetime | None] = mapped_column(
+        nullable=True
+    )  # When it actually happened
+    recorded_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"), nullable=False
+    )  # When recorded
+
+    # Audit fields for approval flow
+    requested_at: Mapped[datetime | None] = mapped_column(
+        nullable=True
+    )  # For regressions: when requested
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(nullable=True)  # When admin approved
+    is_undo: Mapped[bool] = mapped_column(
+        server_default=text("false"), nullable=False
+    )  # Undo within grace period
+    request_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("status_change_requests.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     # Relationships
     surrogate: Mapped["Surrogate"] = relationship(back_populates="status_history")
@@ -1874,6 +1966,27 @@ class IntendedParentStatusHistory(Base):
     new_status: Mapped[str] = mapped_column(String(50), nullable=False)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     changed_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+
+    # Dual timestamps for backdating support
+    effective_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"), nullable=False
+    )
+
+    # Audit fields for approval flow
+    requested_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    is_undo: Mapped[bool] = mapped_column(
+        server_default=text("false"), nullable=False
+    )
+    request_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("status_change_requests.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     # Relationships
     intended_parent: Mapped["IntendedParent"] = relationship(back_populates="status_history")

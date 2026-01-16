@@ -37,6 +37,11 @@ const mockUpdateTask = vi.fn()
 const mockCreateTask = vi.fn()
 const mockDeleteTask = vi.fn()
 const mockResolveApproval = vi.fn()
+const mockUseStatusChangeRequests = vi.fn(() => ({
+    data: { items: [], total: 0 },
+    isLoading: false,
+    refetch: vi.fn(),
+}))
 
 vi.mock('@/lib/hooks/use-tasks', () => ({
     useTasks: (params: unknown) => mockUseTasks(params),
@@ -48,8 +53,12 @@ vi.mock('@/lib/hooks/use-tasks', () => ({
     useResolveWorkflowApproval: () => ({ mutateAsync: mockResolveApproval, isPending: false }),
 }))
 
+vi.mock('@/lib/hooks/use-status-change-requests', () => ({
+    useStatusChangeRequests: (...args: unknown[]) => mockUseStatusChangeRequests(...args),
+}))
+
 // Mock auth context
-const mockCurrentUser = { user_id: 'u1', display_name: 'Test User' }
+const mockCurrentUser = { user_id: 'u1', display_name: 'Test User', role: 'case_manager' }
 vi.mock('@/lib/auth-context', () => ({
     useAuth: () => ({ user: mockCurrentUser }),
 }))

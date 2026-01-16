@@ -454,21 +454,44 @@ class SurrogateListResponse(BaseModel):
 
 
 class SurrogateStatusChange(BaseModel):
-    """Request to change surrogatestage."""
+    """Request to change surrogate stage with optional backdating.
+
+    effective_at: When the change actually occurred.
+        - If None or not provided: effective now
+        - If date is today with no time: effective_at = now
+        - If date is past with no time: default to 12:00 PM org timezone
+
+    reason: Required for backdated changes and regressions.
+    """
 
     stage_id: UUID
     reason: str | None = Field(None, max_length=500)
+    effective_at: datetime | None = Field(
+        None, description="When the change actually occurred (optional, defaults to now)"
+    )
+
+
+class SurrogateStatusChangeResponse(BaseModel):
+    """Response for a status change request.
+
+    status: 'applied' if change was applied, 'pending_approval' if regression needs admin approval.
+    """
+
+    status: str  # 'applied' or 'pending_approval'
+    surrogate: "SurrogateRead | None" = None
+    request_id: UUID | None = None
+    message: str | None = None
 
 
 class SurrogateAssign(BaseModel):
-    """Request to assign surrogateto a user or queue."""
+    """Request to assign surrogate to a user or queue."""
 
     owner_type: OwnerType
     owner_id: UUID
 
 
 class SurrogateStatusHistoryRead(BaseModel):
-    """Status history entry response."""
+    """Status history entry response with dual timestamps for backdating support."""
 
     id: UUID
     from_stage_id: UUID | None
@@ -478,7 +501,19 @@ class SurrogateStatusHistoryRead(BaseModel):
     changed_by_user_id: UUID | None
     changed_by_name: str | None = None
     reason: str | None
-    changed_at: datetime
+    changed_at: datetime  # Legacy, derived from effective_at
+
+    # Dual timestamps for backdating
+    effective_at: datetime | None = None  # When it actually happened
+    recorded_at: datetime | None = None  # When recorded in system
+
+    # Audit fields for approval flow
+    requested_at: datetime | None = None
+    approved_by_user_id: UUID | None = None
+    approved_by_name: str | None = None
+    approved_at: datetime | None = None
+    is_undo: bool = False
+    request_id: UUID | None = None
 
     model_config = {"from_attributes": True}
 

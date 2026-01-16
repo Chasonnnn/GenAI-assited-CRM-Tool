@@ -59,6 +59,7 @@ import { MedicalInfoCard } from "@/components/surrogates/MedicalInfoCard"
 import { LatestUpdatesCard } from "@/components/surrogates/LatestUpdatesCard"
 import { PregnancyTrackerCard } from "@/components/surrogates/PregnancyTrackerCard"
 import { useAttachments } from "@/lib/hooks/use-attachments"
+import { ChangeStageModal } from "@/components/surrogates/ChangeStageModal"
 import { useForms } from "@/lib/hooks/use-forms"
 import type { EmailType, SummarizeSurrogateResponse, DraftEmailResponse } from "@/lib/api/ai"
 import type { TaskListItem } from "@/lib/types/task"
@@ -68,6 +69,7 @@ import { cn } from "@/lib/utils"
 import { parseDateInput } from "@/lib/utils/date"
 import { format, parseISO } from "date-fns"
 import { buildRecurringDates, MAX_TASK_OCCURRENCES } from "@/lib/utils/task-recurrence"
+import { toast } from "sonner"
 
 const EMAIL_TYPES: EmailType[] = [
     "follow_up",
@@ -296,6 +298,7 @@ export default function SurrogateDetailPage() {
     const [contactAttemptDialogOpen, setContactAttemptDialogOpen] = React.useState(false)
     const [addTaskDialogOpen, setAddTaskDialogOpen] = React.useState(false)
     const [editingTask, setEditingTask] = React.useState<TaskListItem | null>(null)
+    const [changeStageModalOpen, setChangeStageModalOpen] = React.useState(false)
 
     const timezoneName = React.useMemo(() => {
         try {
@@ -375,9 +378,56 @@ export default function SurrogateDetailPage() {
         setTimeout(() => setCopiedEmail(false), 2000)
     }
 
-    const handleStatusChange = async (newStageId: string) => {
-        if (!surrogateData || !canChangeStage) return
-        await changeStatusMutation.mutateAsync({ surrogateId: id, data: { stage_id: newStageId } })
+    const handleStatusChange = async (data: {
+        stage_id: string
+        reason?: string
+        effective_at?: string
+    }): Promise<{ status: "applied" | "pending_approval"; request_id?: string }> => {
+        if (!surrogateData || !canChangeStage) {
+            return { status: "applied" }
+        }
+        const previousStageId = surrogateData.stage_id
+        const targetStageLabel = stageById.get(data.stage_id)?.label || "Stage"
+        const payload: { stage_id: string; reason?: string; effective_at?: string } = {
+            stage_id: data.stage_id,
+        }
+        if (data.reason) payload.reason = data.reason
+        if (data.effective_at) payload.effective_at = data.effective_at
+
+        const result = await changeStatusMutation.mutateAsync({
+            surrogateId: id,
+            data: payload,
+        })
+        setChangeStageModalOpen(false)
+        const response: { status: "applied" | "pending_approval"; request_id?: string } = {
+            status: result.status,
+        }
+        if (result.request_id) response.request_id = result.request_id
+
+        if (result.status === "applied") {
+            toast.success(`Stage updated to ${targetStageLabel}`, {
+                action: {
+                    label: "Undo (5 min)",
+                    onClick: async () => {
+                        try {
+                            await changeStatusMutation.mutateAsync({
+                                surrogateId: id,
+                                data: { stage_id: previousStageId },
+                            })
+                            toast.success("Stage change undone")
+                        } catch (error) {
+                            const message =
+                                error instanceof Error ? error.message : "Undo failed"
+                            toast.error(message)
+                        }
+                    },
+                },
+                duration: 60000,
+            })
+        } else {
+            toast("Stage change request submitted for approval")
+        }
+        return response
     }
 
     const handleArchive = async () => {
@@ -512,29 +562,14 @@ export default function SurrogateDetailPage() {
                     {surrogateData.is_archived && <Badge variant="secondary">Archived</Badge>}
                 </div>
                 <div className="flex items-center gap-2">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger
-                            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-                            disabled={surrogateData.is_archived || !canChangeStage}
-                        >
-                            <span className="inline-flex items-center">Change Stage</span>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            {visibleStageOptions.map((stageOption) => (
-                                <DropdownMenuItem
-                                    key={stageOption.id}
-                                    onClick={() => handleStatusChange(stageOption.id)}
-                                    disabled={stageOption.id === surrogateData.stage_id}
-                                >
-                                    <span
-                                        className="mr-2 size-2 rounded-full"
-                                        style={{ backgroundColor: stageOption.color }}
-                                    />
-                                    {stageOption.label}
-                                </DropdownMenuItem>
-                            ))}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setChangeStageModalOpen(true)}
+                        disabled={surrogateData.is_archived || !canChangeStage}
+                    >
+                        Change Stage
+                    </Button>
 
                     {/* Send Email Button */}
                     <Button
@@ -1080,13 +1115,13 @@ export default function SurrogateDetailPage() {
                             due_time: editingTask.due_time ?? null,
                             is_completed: editingTask.is_completed,
                             surrogate_id: editingTask.surrogate_id,
-                    } : null}
-                    open={!!editingTask}
-                    onClose={() => setEditingTask(null)}
-                    onSave={handleSaveTask}
-                    onDelete={handleDeleteTask}
-                    isDeleting={deleteTaskMutation.isPending}
-                />
+                        } : null}
+                        open={!!editingTask}
+                        onClose={() => setEditingTask(null)}
+                        onSave={handleSaveTask}
+                        onDelete={handleDeleteTask}
+                        isDeleting={deleteTaskMutation.isPending}
+                    />
 
                     {/* APPLICATION TAB */}
                     <TabsContent value="application" className="space-y-4">
@@ -1619,6 +1654,17 @@ export default function SurrogateDetailPage() {
                 onOpenChange={setContactAttemptDialogOpen}
                 surrogateId={surrogateData.id}
                 surrogateName={surrogateData.full_name}
+            />
+
+            {/* Change Stage Modal */}
+            <ChangeStageModal
+                open={changeStageModalOpen}
+                onOpenChange={setChangeStageModalOpen}
+                stages={visibleStageOptions}
+                currentStageId={surrogateData.stage_id}
+                currentStageLabel={statusLabel}
+                onSubmit={handleStatusChange}
+                isPending={changeStatusMutation.isPending}
             />
         </div>
     )

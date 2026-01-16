@@ -21,7 +21,9 @@ import { TaskEditModal } from "@/components/tasks/TaskEditModal"
 import { AddTaskDialog, type TaskFormData } from "@/components/tasks/AddTaskDialog"
 import { ApprovalTaskActions } from "@/components/tasks/ApprovalTaskActions"
 import { ApprovalStatusBadge } from "@/components/tasks/ApprovalStatusBadge"
+import { StatusChangeRequestActions } from "@/components/status-change-requests/StatusChangeRequestActions"
 import { useTasks, useCompleteTask, useUncompleteTask, useUpdateTask, useCreateTask, useDeleteTask } from "@/lib/hooks/use-tasks"
+import { useStatusChangeRequests } from "@/lib/hooks/use-status-change-requests"
 import { useAuth } from "@/lib/auth-context"
 import { useAIContext } from "@/lib/context/ai-context"
 import type { TaskListItem } from "@/lib/types/task"
@@ -216,6 +218,17 @@ export default function TasksPage() {
 
     // Get current user for ownership check
     const { user: currentUser } = useAuth()
+
+    const canViewStatusRequests = ["admin", "developer"].includes(currentUser?.role || "")
+
+    // Fetch pending status change requests (admin/developer only)
+    const { data: pendingStatusRequests, isLoading: loadingStatusRequests, refetch: refetchStatusRequests } = useStatusChangeRequests(
+        {
+            page: 1,
+            per_page: 50,
+        },
+        canViewStatusRequests
+    )
 
     const completeTask = useCompleteTask()
     const uncompleteTask = useUncompleteTask()
@@ -481,74 +494,127 @@ export default function TasksPage() {
                                         Pending Approvals
                                     </h2>
                                     <p className="text-xs text-amber-600/80 dark:text-amber-500/70 sm:text-sm">
-                                        {pendingApprovals?.items?.length || 0} workflow action{pendingApprovals?.items?.length !== 1 ? 's' : ''} awaiting review
+                                        {(pendingApprovals?.items?.length || 0) + (pendingStatusRequests?.items?.length || 0)} item{(pendingApprovals?.items?.length || 0) + (pendingStatusRequests?.items?.length || 0) !== 1 ? 's' : ''} awaiting review
                                     </p>
                                 </div>
                             </div>
                         </div>
                         <div className="divide-y divide-border">
-                            {loadingApprovals ? (
+                            {(loadingApprovals || loadingStatusRequests) ? (
                                 <div className="flex items-center justify-center py-8">
                                     <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
                                 </div>
-                            ) : pendingApprovals?.items?.length ? (
-                                pendingApprovals.items.map((approval: TaskListItem) => {
-                                    const isOwner = currentUser?.user_id === approval.owner_id
-                                    const dueAt = approval.due_at ? new Date(approval.due_at) : null
-                                    const now = new Date()
-                                    const hoursRemaining = dueAt ? Math.max(0, Math.round((dueAt.getTime() - now.getTime()) / (1000 * 60 * 60))) : null
-                                    const isUrgent = hoursRemaining !== null && hoursRemaining < 8
-
-                                    return (
-                                        <div
-                                            key={approval.id}
-                                            className="group flex flex-col gap-3 p-3 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4"
-                                        >
-                                            <div className="flex-1 space-y-2">
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <span className="font-medium">{approval.title}</span>
-                                                    <ApprovalStatusBadge status={approval.status || 'pending'} />
-                                                </div>
-                                                {approval.workflow_action_preview && (
+                            ) : (
+                                <>
+                                    {/* Stage Regression Requests (Admin Only) */}
+                                    {pendingStatusRequests?.items?.map((item) => {
+                                        const isIpRequest = item.request.entity_type === "intended_parent"
+                                        const requestLabel = isIpRequest
+                                            ? "Status Regression Request"
+                                            : "Stage Regression Request"
+                                        const entityHref = isIpRequest
+                                            ? `/intended-parents/${item.request.entity_id}`
+                                            : `/surrogates/${item.request.entity_id}`
+                                        return (
+                                            <div
+                                                key={`scr-${item.request.id}`}
+                                                className="group flex flex-col gap-3 p-3 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4"
+                                            >
+                                                <div className="flex-1 space-y-2">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span className="font-medium">{requestLabel}</span>
+                                                        <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-xs">
+                                                            Regression
+                                                        </Badge>
+                                                    </div>
                                                     <p className="text-sm text-muted-foreground">
-                                                        {approval.workflow_action_preview}
+                                                        {item.current_stage_label} → {item.target_stage_label}
+                                                        {item.request.reason && ` • ${item.request.reason}`}
                                                     </p>
-                                                )}
-                                                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                                    {approval.surrogate_id && (
+                                                    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                                                         <Link
-                                                            href={`/surrogates/${approval.surrogate_id}`}
+                                                            href={entityHref}
                                                             className="hover:text-foreground hover:underline"
                                                         >
-                                                            Surrogate #{approval.surrogate_number}
+                                                            {item.entity_name || 'Unknown'} ({item.entity_number})
                                                         </Link>
-                                                    )}
-                                                    {hoursRemaining !== null && (
-                                                        <span className={`flex items-center gap-1 ${isUrgent ? 'text-amber-600 font-medium' : ''}`}>
-                                                            <ClockIcon className="size-3" />
-                                                            {hoursRemaining > 24
-                                                                ? `${Math.floor(hoursRemaining / 24)}d ${hoursRemaining % 24}h remaining`
-                                                                : hoursRemaining > 0
-                                                                    ? `${hoursRemaining}h remaining`
-                                                                    : 'Due now'
-                                                            }
+                                                        <span>
+                                                            Requested by {item.requester_name || 'Unknown'}
                                                         </span>
-                                                    )}
+                                                    </div>
+                                                </div>
+                                                <div className="flex-shrink-0">
+                                                    <StatusChangeRequestActions
+                                                        requestId={item.request.id}
+                                                        onResolved={() => refetchStatusRequests()}
+                                                    />
                                                 </div>
                                             </div>
-                                            <div className="flex-shrink-0">
-                                                <ApprovalTaskActions
-                                                    taskId={approval.id}
-                                                    isOwner={isOwner}
-                                                />
+                                        )
+                                    })}
+
+                                    {/* Workflow Approvals */}
+                                    {pendingApprovals?.items?.map((approval: TaskListItem) => {
+                                        const isOwner = currentUser?.user_id === approval.owner_id
+                                        const dueAt = approval.due_at ? new Date(approval.due_at) : null
+                                        const now = new Date()
+                                        const hoursRemaining = dueAt ? Math.max(0, Math.round((dueAt.getTime() - now.getTime()) / (1000 * 60 * 60))) : null
+                                        const isUrgent = hoursRemaining !== null && hoursRemaining < 8
+
+                                        return (
+                                            <div
+                                                key={approval.id}
+                                                className="group flex flex-col gap-3 p-3 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4"
+                                            >
+                                                <div className="flex-1 space-y-2">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span className="font-medium">{approval.title}</span>
+                                                        <ApprovalStatusBadge status={approval.status || 'pending'} />
+                                                    </div>
+                                                    {approval.workflow_action_preview && (
+                                                        <p className="text-sm text-muted-foreground">
+                                                            {approval.workflow_action_preview}
+                                                        </p>
+                                                    )}
+                                                    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                                                        {approval.surrogate_id && (
+                                                            <Link
+                                                                href={`/surrogates/${approval.surrogate_id}`}
+                                                                className="hover:text-foreground hover:underline"
+                                                            >
+                                                                Surrogate #{approval.surrogate_number}
+                                                            </Link>
+                                                        )}
+                                                        {hoursRemaining !== null && (
+                                                            <span className={`flex items-center gap-1 ${isUrgent ? 'text-amber-600 font-medium' : ''}`}>
+                                                                <ClockIcon className="size-3" />
+                                                                {hoursRemaining > 24
+                                                                    ? `${Math.floor(hoursRemaining / 24)}d ${hoursRemaining % 24}h remaining`
+                                                                    : hoursRemaining > 0
+                                                                        ? `${hoursRemaining}h remaining`
+                                                                        : 'Due now'
+                                                                }
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="flex-shrink-0">
+                                                    <ApprovalTaskActions
+                                                        taskId={approval.id}
+                                                        isOwner={isOwner}
+                                                    />
+                                                </div>
                                             </div>
+                                        )
+                                    })}
+
+                                    {/* Empty State */}
+                                    {!(pendingApprovals?.items?.length || pendingStatusRequests?.items?.length) && (
+                                        <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+                                            No pending approvals right now.
                                         </div>
-                                    )
-                                })
-                            ) : (
-                                <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-                                    No pending approvals right now.
-                                </div>
+                                    )}
+                                </>
                             )}
                         </div>
                     </Card>

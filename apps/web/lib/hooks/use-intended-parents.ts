@@ -113,7 +113,13 @@ export function useUpdateIntendedParentStatus() {
     return useMutation({
         mutationFn: ({ id, data }: { id: string; data: IntendedParentStatusUpdate }) =>
             updateIntendedParentStatus(id, data),
-        onSuccess: (_, { id }) => {
+        onSuccess: (response, { id }) => {
+            if (response.status === 'applied' && response.intended_parent) {
+                queryClient.setQueryData(
+                    intendedParentKeys.detail(response.intended_parent.id),
+                    response.intended_parent
+                )
+            }
             queryClient.invalidateQueries({ queryKey: intendedParentKeys.lists() })
             queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(id) })
             queryClient.invalidateQueries({ queryKey: intendedParentKeys.stats() })

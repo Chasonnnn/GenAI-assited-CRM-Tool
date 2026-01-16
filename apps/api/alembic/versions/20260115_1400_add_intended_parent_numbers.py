@@ -59,9 +59,7 @@ def upgrade() -> None:
         WHERE s.id = ranked.id;
     """)
 
-    op.execute(
-        "ALTER TABLE intended_parents ALTER COLUMN intended_parent_number SET NOT NULL"
-    )
+    op.execute("ALTER TABLE intended_parents ALTER COLUMN intended_parent_number SET NOT NULL")
     op.create_unique_constraint(
         "uq_intended_parent_number",
         "intended_parents",
@@ -125,9 +123,7 @@ def downgrade() -> None:
     )
     op.drop_column("intended_parents", "intended_parent_number")
 
-    op.execute(
-        "DELETE FROM org_counters WHERE counter_type = 'intended_parent_number'"
-    )
+    op.execute("DELETE FROM org_counters WHERE counter_type = 'intended_parent_number'")
 
     op.execute("""
         UPDATE surrogates

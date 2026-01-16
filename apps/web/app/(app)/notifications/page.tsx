@@ -37,7 +37,15 @@ const TYPE_GROUPS: Record<string, string[]> = {
         "interview_transcription_completed",
         "attachment_infected",
     ],
-    task: ["task_assigned", "task_due_soon", "task_overdue", "workflow_approval_requested"],
+    task: [
+        "task_assigned",
+        "task_due_soon",
+        "task_overdue",
+        "workflow_approval_requested",
+        "status_change_requested",
+        "status_change_approved",
+        "status_change_rejected",
+    ],
     appointment: ["appointment_requested", "appointment_confirmed", "appointment_cancelled", "appointment_reminder"],
 }
 
@@ -45,7 +53,13 @@ function getNotificationIcon(type: string) {
     if (type.startsWith("surrogate")) return FileTextIcon
     if (type.startsWith("interview")) return FileTextIcon
     if (type.startsWith("attachment")) return FileTextIcon
-    if (type.startsWith("task") || type.startsWith("workflow_approval")) return CheckSquareIcon
+    if (
+        type.startsWith("task") ||
+        type.startsWith("workflow_approval") ||
+        type.startsWith("status_change_")
+    ) {
+        return CheckSquareIcon
+    }
     if (type.startsWith("appointment")) return CalendarIcon
     return BellIcon
 }
@@ -93,6 +107,8 @@ export default function NotificationsPage() {
         }
         if (notification.entity_type === "surrogate" && notification.entity_id) {
             router.push(`/surrogates/${notification.entity_id}`)
+        } else if (notification.entity_type === "intended_parent" && notification.entity_id) {
+            router.push(`/intended-parents/${notification.entity_id}`)
         } else if (notification.entity_type === "task" && notification.entity_id) {
             router.push(`/tasks`)
         } else if (notification.entity_type === "appointment" && notification.entity_id) {

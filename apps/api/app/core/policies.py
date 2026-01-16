@@ -70,6 +70,13 @@ POLICIES: dict[str, ResourcePolicy] = {
     "meta_leads": ResourcePolicy(default=P.META_LEADS_MANAGE, actions={}),
     "org_settings": ResourcePolicy(default=P.ORG_MANAGE, actions={}),
     "forms": ResourcePolicy(default=P.FORMS_MANAGE, actions={}),
+    "status_change_requests": ResourcePolicy(
+        default=P.APPROVE_STATUS_CHANGE_REQUESTS,
+        actions={
+            "view_requests": P.APPROVE_STATUS_CHANGE_REQUESTS,
+            "approve_requests": P.APPROVE_STATUS_CHANGE_REQUESTS,
+        },
+    ),
 }
 
 

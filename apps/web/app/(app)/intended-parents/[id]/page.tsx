@@ -19,13 +19,6 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
-import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
@@ -59,22 +52,51 @@ import {
 } from "@/lib/hooks/use-intended-parents"
 import { useSetAIContext } from "@/lib/context/ai-context"
 import { ProposeMatchFromIPDialog } from "@/components/matches/ProposeMatchFromIPDialog"
+import { ChangeStageModal } from "@/components/surrogates/ChangeStageModal"
 import type { IntendedParentStatus } from "@/lib/types/intended-parent"
+import type { PipelineStage } from "@/lib/api/pipelines"
 import { parseDateInput } from "@/lib/utils/date"
+import { toast } from "sonner"
 
 const STATUS_LABELS: Record<IntendedParentStatus, string> = {
     new: "New",
-    in_review: "In Review",
+    ready_to_match: "Ready to Match",
     matched: "Matched",
-    inactive: "Inactive",
+    delivered: "Delivered",
 }
 
 const STATUS_COLORS: Record<IntendedParentStatus, string> = {
     new: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-    in_review: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-    matched: "bg-green-500/10 text-green-500 border-green-500/20",
-    inactive: "bg-gray-500/10 text-gray-500 border-gray-500/20",
+    ready_to_match: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+    matched: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+    delivered: "bg-teal-500/10 text-teal-600 border-teal-500/20",
 }
+
+const STATUS_DOT_COLORS: Record<IntendedParentStatus, string> = {
+    new: "#3b82f6",
+    ready_to_match: "#f59e0b",
+    matched: "#10b981",
+    delivered: "#14b8a6",
+}
+
+const STATUS_ORDER: Record<IntendedParentStatus, number> = {
+    new: 0,
+    ready_to_match: 1,
+    matched: 2,
+    delivered: 3,
+}
+
+const STATUS_OPTIONS: IntendedParentStatus[] = ["new", "ready_to_match", "matched", "delivered"]
+
+const STATUS_STAGE_OPTIONS: PipelineStage[] = STATUS_OPTIONS.map((status) => ({
+    id: status,
+    slug: status,
+    label: STATUS_LABELS[status],
+    color: STATUS_DOT_COLORS[status],
+    order: STATUS_ORDER[status],
+    stage_type: "post_approval",
+    is_active: true,
+}))
 const isIntendedParentStatus = (value: string | null): value is IntendedParentStatus =>
     !!value && Object.prototype.hasOwnProperty.call(STATUS_LABELS, value)
 
@@ -94,6 +116,7 @@ export default function IntendedParentDetailPage() {
         notes_internal: "",
     })
     const [proposeMatchOpen, setProposeMatchOpen] = useState(false)
+    const [changeStatusModalOpen, setChangeStatusModalOpen] = useState(false)
 
     // Queries
     const { data: ip, isLoading } = useIntendedParent(id)
@@ -119,7 +142,8 @@ export default function IntendedParentDetailPage() {
             : null
     )
 
-    const formatDate = (dateStr: string) => {
+    const formatDate = (dateStr?: string | null) => {
+        if (!dateStr) return "—"
         const parsed = parseDateInput(dateStr)
         if (Number.isNaN(parsed.getTime())) return "—"
         return parsed.toLocaleDateString("en-US", {
@@ -171,9 +195,55 @@ export default function IntendedParentDetailPage() {
         setIsEditOpen(false)
     }
 
-    const handleStatusChange = async (newStatus: string | null) => {
-        if (!isIntendedParentStatus(newStatus)) return
-        await statusMutation.mutateAsync({ id, data: { status: newStatus } })
+    const handleStatusChange = async (data: {
+        stage_id: string
+        reason?: string
+        effective_at?: string
+    }): Promise<{ status: "applied" | "pending_approval"; request_id?: string }> => {
+        if (!ip || !isIntendedParentStatus(data.stage_id)) {
+            return { status: "applied" }
+        }
+        const previousStatus = ip.status
+        const targetLabel = STATUS_LABELS[data.stage_id] || "Status"
+        const payload: { status: IntendedParentStatus; reason?: string; effective_at?: string } = {
+            status: data.stage_id,
+        }
+        if (data.reason) payload.reason = data.reason
+        if (data.effective_at) payload.effective_at = data.effective_at
+
+        const result = await statusMutation.mutateAsync({ id, data: payload })
+        setChangeStatusModalOpen(false)
+
+        const response: { status: "applied" | "pending_approval"; request_id?: string } = {
+            status: result.status,
+        }
+        if (result.request_id) response.request_id = result.request_id
+
+        if (result.status === "applied") {
+            toast.success(`Status updated to ${targetLabel}`, {
+                action: {
+                    label: "Undo (5 min)",
+                    onClick: async () => {
+                        try {
+                            await statusMutation.mutateAsync({
+                                id,
+                                data: { status: previousStatus },
+                            })
+                            toast.success("Status change undone")
+                        } catch (error) {
+                            const message =
+                                error instanceof Error ? error.message : "Undo failed"
+                            toast.error(message)
+                        }
+                    },
+                },
+                duration: 60000,
+            })
+        } else {
+            toast("Status change request submitted for approval")
+        }
+
+        return response
     }
 
     const handleArchive = async () => {
@@ -323,24 +393,19 @@ export default function IntendedParentDetailPage() {
                         {/* Status Change */}
                         <Card>
                             <CardHeader>
-                                <CardTitle>Stage</CardTitle>
+                                <CardTitle>Status</CardTitle>
                             </CardHeader>
-                            <CardContent>
-                                <Select
-                                    value={ip.status}
-                                    onValueChange={handleStatusChange}
-                                    disabled={statusMutation.isPending}
+                            <CardContent className="flex flex-wrap items-center justify-between gap-3">
+                                <Badge className={STATUS_COLORS[ip.status]}>
+                                    {STATUS_LABELS[ip.status]}
+                                </Badge>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setChangeStatusModalOpen(true)}
+                                    disabled={statusMutation.isPending || ip.is_archived}
                                 >
-                                    <SelectTrigger className="w-[200px]">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="new">New</SelectItem>
-                                        <SelectItem value="in_review">In Review</SelectItem>
-                                        <SelectItem value="matched">Matched</SelectItem>
-                                        <SelectItem value="inactive">Inactive</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                                    Change Status
+                                </Button>
                             </CardContent>
                         </Card>
 
@@ -391,7 +456,7 @@ export default function IntendedParentDetailPage() {
                     <div className="space-y-6">
                         <Card>
                             <CardHeader>
-                                <CardTitle>Stage History</CardTitle>
+                                <CardTitle>Status History</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 {history?.length ? (
@@ -423,8 +488,33 @@ export default function IntendedParentDetailPage() {
                                                     {item.reason && (
                                                         <p className="text-xs text-muted-foreground">{item.reason}</p>
                                                     )}
+                                                    {item.is_undo && (
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Reverted within grace period
+                                                        </p>
+                                                    )}
+                                                    {item.requested_at ? (
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Requested by {item.changed_by_name || "Unknown"} •{" "}
+                                                            {formatDate(item.requested_at)}
+                                                        </p>
+                                                    ) : item.changed_by_name ? (
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Changed by {item.changed_by_name}
+                                                        </p>
+                                                    ) : null}
+                                                    {item.approved_by_name && item.approved_at && (
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Approved by {item.approved_by_name} •{" "}
+                                                            {formatDate(item.approved_at)}
+                                                        </p>
+                                                    )}
                                                     <p className="text-xs text-muted-foreground mt-1">
-                                                        {formatDate(item.changed_at)}
+                                                        Effective {formatDate(item.effective_at || item.changed_at)}
+                                                        {item.recorded_at &&
+                                                            item.recorded_at !== item.effective_at && (
+                                                                <> • Recorded {formatDate(item.recorded_at)}</>
+                                                            )}
                                                     </p>
                                                 </div>
                                             </div>
@@ -456,6 +546,17 @@ export default function IntendedParentDetailPage() {
                     </div>
                 </div>
             </div>
+
+            <ChangeStageModal
+                open={changeStatusModalOpen}
+                onOpenChange={setChangeStatusModalOpen}
+                stages={STATUS_STAGE_OPTIONS}
+                currentStageId={ip.status}
+                currentStageLabel={STATUS_LABELS[ip.status]}
+                entityLabel="Status"
+                onSubmit={handleStatusChange}
+                isPending={statusMutation.isPending}
+            />
 
             {/* Edit Modal */}
             <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>

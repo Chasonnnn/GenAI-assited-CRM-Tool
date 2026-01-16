@@ -29,7 +29,7 @@ const mockUseIntendedParents = vi.fn()
 vi.mock('@/lib/hooks/use-intended-parents', () => ({
     useIntendedParents: (filters: unknown) => mockUseIntendedParents(filters),
     useIntendedParentStats: () => ({
-        data: { total: 1, by_status: { new: 1, in_review: 0, matched: 0, inactive: 0 } },
+        data: { total: 1, by_status: { new: 1, ready_to_match: 0, matched: 0, delivered: 0 } },
     }),
     useCreateIntendedParent: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))

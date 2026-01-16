@@ -32,6 +32,7 @@ from app.services import surrogate_service
 from app.services import note_service
 from app.services import task_service
 from app.services import meta_lead_service
+from app.services import status_change_request_service
 
 __all__ = [
     # Auth service
@@ -61,4 +62,5 @@ __all__ = [
     "note_service",
     "task_service",
     "meta_lead_service",
+    "status_change_request_service",
 ]
