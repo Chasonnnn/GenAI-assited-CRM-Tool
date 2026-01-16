@@ -67,6 +67,8 @@ export default function MatchesPage() {
     const filters = {
         page,
         per_page: 20,
+        sort_by: "match_number",
+        sort_order: "desc",
         ...(statusFilter !== "all" && isMatchStatus(statusFilter)
             ? { status: statusFilter }
             : {}),
@@ -187,7 +189,7 @@ export default function MatchesPage() {
                                 </p>
                             </div>
                         ) : (
-                            <Table>
+                            <Table className="[&_th]:!text-center [&_td]:!text-center [&_th>div]:justify-center">
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Match #</TableHead>

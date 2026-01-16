@@ -151,7 +151,7 @@ export default function SurrogatesPage() {
     const [debouncedSearch, setDebouncedSearch] = useState(urlSearch || "")
     const [page, setPage] = useState(1)
     const [selectedSurrogates, setSelectedSurrogates] = useState<Set<string>>(new Set())
-    const [sortBy, setSortBy] = useState<string | null>(null)
+    const [sortBy, setSortBy] = useState<string | null>("surrogate_number")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
     const perPage = 20
     const { user } = useAuth()
@@ -421,7 +421,7 @@ export default function SurrogatesPage() {
                         </Select>
                     )}
 
-                    <div className="relative w-full sm:w-[280px]">
+                    <div className="relative w-full sm:ml-auto sm:w-[280px]">
                         <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
                             placeholder="Search surrogates..."
@@ -486,7 +486,7 @@ export default function SurrogatesPage() {
                 {!isLoading && !isError && data && data.items.length > 0 && (
                     <Card className="overflow-hidden py-0">
                         <div className="overflow-x-auto">
-                            <Table>
+                            <Table className="[&_th]:!text-center [&_td]:!text-center [&_th>div]:justify-center">
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead className="w-[40px]">
