@@ -1,21 +1,63 @@
 """Intended Parent service - business logic for IP CRUD and status management."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from decimal import Decimal
+from typing import TypedDict
 from uuid import UUID
 
 from sqlalchemy import func, or_, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import IntendedParentStatus
-from app.db.models import IntendedParent, IntendedParentStatusHistory
+from app.db.models import IntendedParent, IntendedParentStatusHistory, StatusChangeRequest, User
 from app.utils.normalization import normalize_email, normalize_phone
 
 
 # =============================================================================
 # CRUD Operations
 # =============================================================================
+
+
+UNDO_GRACE_PERIOD = timedelta(minutes=5)
+
+IP_STATUS_ORDER = {
+    IntendedParentStatus.NEW.value: 0,
+    IntendedParentStatus.READY_TO_MATCH.value: 1,
+    IntendedParentStatus.MATCHED.value: 2,
+    IntendedParentStatus.DELIVERED.value: 3,
+}
+
+
+class StatusChangeResult(TypedDict):
+    """Result of a status change operation."""
+
+    status: str  # 'applied' or 'pending_approval'
+    intended_parent: IntendedParent | None
+    request_id: UUID | None
+    message: str | None
+
+
+def _get_org_user(db: Session, org_id: UUID, user_id: UUID | None) -> User | None:
+    if not user_id:
+        return None
+    from app.services import membership_service
+
+    membership = membership_service.get_membership_for_org(db, org_id, user_id)
+    return membership.user if membership else None
+
+
+def _format_status_label(status: str | None) -> str:
+    if not status:
+        return "Unknown"
+    return status.replace("_", " ").title()
+
+
+def _status_order(status: str) -> int:
+    if status not in IP_STATUS_ORDER:
+        raise ValueError(f"Unknown intended parent status: {status}")
+    return IP_STATUS_ORDER[status]
 
 
 def generate_intended_parent_number(db: Session, org_id: UUID) -> str:
@@ -174,6 +216,7 @@ def create_intended_parent(
     owner_id: UUID | None = None,
 ) -> IntendedParent:
     """Create a new intended parent and record initial status."""
+    now = datetime.now(timezone.utc)
     normalized_email = normalize_email(email)
     normalized_phone = normalize_phone(phone) if phone else None
     ip = IntendedParent(
@@ -200,6 +243,8 @@ def create_intended_parent(
         old_status=None,
         new_status=ip.status,
         reason="Initial creation",
+        effective_at=now,
+        recorded_at=now,
     )
     db.add(history)
     db.commit()
@@ -256,15 +301,147 @@ def update_intended_parent(
 # =============================================================================
 
 
-def update_ip_status(
+def change_status(
     db: Session,
     ip: IntendedParent,
     new_status: str,
     user_id: UUID,
     reason: str | None = None,
-) -> IntendedParent:
-    """Change status and record in history."""
-    old_status = ip.status
+    effective_at: datetime | None = None,
+) -> StatusChangeResult:
+    """
+    Change intended parent status with backdating and regression support.
+
+    - Backdating (past date): Requires reason, applies immediately
+    - Regression (earlier status): Requires reason + admin approval
+    - Undo within 5-min grace period: Bypasses admin approval
+    """
+    if new_status == ip.status:
+        raise ValueError("Target status is same as current status")
+
+    now = datetime.now(timezone.utc)
+
+    from app.services import surrogate_service
+
+    org_tz_str = surrogate_service._get_org_timezone(db, ip.organization_id)
+    normalized_effective_at = surrogate_service._normalize_effective_at(effective_at, org_tz_str)
+
+    # Detect backdating and regression
+    is_backdated = (now - normalized_effective_at).total_seconds() > 1
+    is_regression = _status_order(new_status) < _status_order(ip.status)
+
+    # Validation: cannot set future date (allow 1 second tolerance)
+    if (normalized_effective_at - now).total_seconds() > 1:
+        raise ValueError("Cannot set future date for status change")
+
+    # Validation: cannot set date before intended parent creation
+    if ip.created_at and normalized_effective_at < ip.created_at:
+        raise ValueError("Cannot set date before intended parent was created")
+
+    # Regression: allow undo within grace period (no approval)
+    if is_regression:
+        last_history = (
+            db.query(IntendedParentStatusHistory)
+            .filter(IntendedParentStatusHistory.intended_parent_id == ip.id)
+            .order_by(IntendedParentStatusHistory.recorded_at.desc())
+            .first()
+        )
+
+        within_grace_period = (
+            last_history
+            and last_history.changed_by_user_id == user_id
+            and last_history.recorded_at
+            and (now - last_history.recorded_at) <= UNDO_GRACE_PERIOD
+            and last_history.old_status == new_status
+            and last_history.new_status == ip.status
+        )
+
+        if within_grace_period:
+            return _apply_status_change(
+                db=db,
+                ip=ip,
+                new_status=new_status,
+                old_status=ip.status,
+                user_id=user_id,
+                reason=reason,
+                effective_at=normalized_effective_at,
+                recorded_at=now,
+                is_undo=True,
+            )
+
+    # Backdating or regression requires reason (unless undo)
+    if (is_backdated or is_regression) and not reason:
+        raise ValueError("Reason required for backdated or regressed status changes")
+
+    if is_regression:
+        request = StatusChangeRequest(
+            organization_id=ip.organization_id,
+            entity_type="intended_parent",
+            entity_id=ip.id,
+            target_status=new_status,
+            effective_at=normalized_effective_at,
+            reason=reason or "",
+            requested_by_user_id=user_id,
+            requested_at=now,
+            status="pending",
+        )
+        db.add(request)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise ValueError("A pending regression request already exists for this status and date.")
+        db.refresh(request)
+
+        from app.services import notification_service
+
+        requester = _get_org_user(db, ip.organization_id, user_id)
+        notification_service.notify_ip_status_change_request_pending(
+            db=db,
+            request=request,
+            intended_parent=ip,
+            target_status_label=_format_status_label(new_status),
+            current_status_label=_format_status_label(ip.status),
+            requester_name=requester.display_name if requester else "Someone",
+        )
+
+        return StatusChangeResult(
+            status="pending_approval",
+            intended_parent=ip,
+            request_id=request.id,
+            message="Regression requires admin approval. Request submitted.",
+        )
+
+    # NON-REGRESSION: Apply immediately
+    return _apply_status_change(
+        db=db,
+        ip=ip,
+        new_status=new_status,
+        old_status=ip.status,
+        user_id=user_id,
+        reason=reason,
+        effective_at=normalized_effective_at,
+        recorded_at=now,
+        is_undo=False,
+    )
+
+
+def _apply_status_change(
+    db: Session,
+    ip: IntendedParent,
+    new_status: str,
+    old_status: str,
+    user_id: UUID | None,
+    reason: str | None,
+    effective_at: datetime,
+    recorded_at: datetime,
+    is_undo: bool = False,
+    request_id: UUID | None = None,
+    approved_by_user_id: UUID | None = None,
+    approved_at: datetime | None = None,
+    requested_at: datetime | None = None,
+) -> StatusChangeResult:
+    """Apply a status change to an intended parent (internal helper)."""
     ip.status = new_status
     ip.last_activity = datetime.now(timezone.utc)
     ip.updated_at = datetime.now(timezone.utc)
@@ -275,11 +452,25 @@ def update_ip_status(
         old_status=old_status,
         new_status=new_status,
         reason=reason,
+        changed_at=effective_at,
+        effective_at=effective_at,
+        recorded_at=recorded_at,
+        is_undo=is_undo,
+        request_id=request_id,
+        requested_at=requested_at,
+        approved_by_user_id=approved_by_user_id,
+        approved_at=approved_at,
     )
     db.add(history)
     db.commit()
     db.refresh(ip)
-    return ip
+
+    return StatusChangeResult(
+        status="applied",
+        intended_parent=ip,
+        request_id=None,
+        message=None,
+    )
 
 
 def get_ip_status_history(db: Session, ip_id: UUID) -> list[IntendedParentStatusHistory]:
@@ -287,7 +478,7 @@ def get_ip_status_history(db: Session, ip_id: UUID) -> list[IntendedParentStatus
     return (
         db.query(IntendedParentStatusHistory)
         .filter(IntendedParentStatusHistory.intended_parent_id == ip_id)
-        .order_by(IntendedParentStatusHistory.changed_at.desc())
+        .order_by(IntendedParentStatusHistory.recorded_at.desc())
         .all()
     )
 
@@ -303,11 +494,12 @@ def archive_intended_parent(
     user_id: UUID,
 ) -> IntendedParent:
     """Soft delete (archive) an intended parent. Sets status to 'archived'."""
+    now = datetime.now(timezone.utc)
     old_status = ip.status
     ip.is_archived = True
-    ip.archived_at = datetime.now(timezone.utc)
+    ip.archived_at = now
     ip.status = IntendedParentStatus.ARCHIVED.value  # Actually change the status
-    ip.last_activity = datetime.now(timezone.utc)
+    ip.last_activity = now
 
     # Record in history
     history = IntendedParentStatusHistory(
@@ -316,6 +508,8 @@ def archive_intended_parent(
         old_status=old_status,
         new_status=IntendedParentStatus.ARCHIVED.value,
         reason="Archived",
+        effective_at=now,
+        recorded_at=now,
     )
     db.add(history)
     db.commit()
@@ -329,6 +523,7 @@ def restore_intended_parent(
     user_id: UUID,
 ) -> IntendedParent:
     """Restore an archived intended parent. Restores to previous status before archive."""
+    now = datetime.now(timezone.utc)
     # Get the status before archiving from history
     history = (
         db.query(IntendedParentStatusHistory)
@@ -348,7 +543,7 @@ def restore_intended_parent(
     ip.is_archived = False
     ip.archived_at = None
     ip.status = previous_status
-    ip.last_activity = datetime.now(timezone.utc)
+    ip.last_activity = now
 
     history_entry = IntendedParentStatusHistory(
         intended_parent_id=ip.id,
@@ -356,6 +551,8 @@ def restore_intended_parent(
         old_status=IntendedParentStatus.ARCHIVED.value,
         new_status=previous_status,
         reason="Restored from archive",
+        effective_at=now,
+        recorded_at=now,
     )
     db.add(history_entry)
     db.commit()

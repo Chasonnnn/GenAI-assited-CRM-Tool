@@ -21,6 +21,7 @@ from app.schemas.intended_parent import (
     IntendedParentListItem,
     IntendedParentStatusUpdate,
     IntendedParentStatusHistoryItem,
+    IntendedParentStatusChangeResponse,
     IntendedParentStats,
 )
 from app.schemas.entity_note import EntityNoteCreate, EntityNoteRead, EntityNoteListItem
@@ -242,7 +243,7 @@ def update_intended_parent(
 
 @router.patch(
     "/{ip_id}/status",
-    response_model=IntendedParentRead,
+    response_model=IntendedParentStatusChangeResponse,
     dependencies=[Depends(require_csrf_header)],
 )
 def update_status(
@@ -267,8 +268,28 @@ def update_status(
             status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}"
         )
 
-    updated = ip_service.update_ip_status(db, ip, data.status, session.user_id, data.reason)
-    return updated
+    if ip.is_archived:
+        raise HTTPException(status_code=400, detail="Cannot change status of archived intended parent")
+
+    try:
+        result = ip_service.change_status(
+            db=db,
+            ip=ip,
+            new_status=data.status,
+            user_id=session.user_id,
+            reason=data.reason,
+            effective_at=data.effective_at,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+    ip_read = IntendedParentRead.model_validate(result["intended_parent"]) if result["intended_parent"] else None
+    return IntendedParentStatusChangeResponse(
+        status=result["status"],
+        intended_parent=ip_read,
+        request_id=result.get("request_id"),
+        message=result.get("message"),
+    )
 
 
 @router.post(
@@ -364,6 +385,10 @@ def get_status_history(
         if h.changed_by_user_id:
             user = user_service.get_user_by_id(db, h.changed_by_user_id)
             changed_by_name = user.display_name if user else None
+        approved_by_name = None
+        if h.approved_by_user_id:
+            user = user_service.get_user_by_id(db, h.approved_by_user_id)
+            approved_by_name = user.display_name if user else None
 
         result.append(
             IntendedParentStatusHistoryItem(
@@ -374,6 +399,14 @@ def get_status_history(
                 changed_by_user_id=h.changed_by_user_id,
                 changed_by_name=changed_by_name,
                 changed_at=h.changed_at,
+                effective_at=h.effective_at,
+                recorded_at=h.recorded_at,
+                requested_at=h.requested_at,
+                approved_by_user_id=h.approved_by_user_id,
+                approved_by_name=approved_by_name,
+                approved_at=h.approved_at,
+                is_undo=h.is_undo,
+                request_id=h.request_id,
             )
         )
 

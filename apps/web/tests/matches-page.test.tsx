@@ -134,6 +134,8 @@ describe('MatchesPage', () => {
             status: undefined,
             page: 1,
             per_page: 20,
+            sort_by: 'match_number',
+            sort_order: 'desc',
         })
     })
 

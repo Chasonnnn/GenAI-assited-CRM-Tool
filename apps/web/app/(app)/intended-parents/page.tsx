@@ -54,19 +54,19 @@ import { US_STATES } from "@/lib/constants/us-states"
 
 const STATUS_LABELS: Record<IntendedParentStatus, string> = {
     new: "New",
-    in_review: "In Review",
+    ready_to_match: "Ready to Match",
     matched: "Matched",
-    inactive: "Inactive",
+    delivered: "Delivered",
 }
 
 const STATUS_COLORS: Record<IntendedParentStatus, string> = {
     new: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-    in_review: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-    matched: "bg-green-500/10 text-green-500 border-green-500/20",
-    inactive: "bg-gray-500/10 text-gray-500 border-gray-500/20",
+    ready_to_match: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+    matched: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+    delivered: "bg-teal-500/10 text-teal-600 border-teal-500/20",
 }
 
-const STATUS_OPTIONS: IntendedParentStatus[] = ["new", "in_review", "matched", "inactive"]
+const STATUS_OPTIONS: IntendedParentStatus[] = ["new", "ready_to_match", "matched", "delivered"]
 const VALID_STATUSES = ["all", ...STATUS_OPTIONS]
 
 export default function IntendedParentsPage() {
@@ -282,20 +282,20 @@ export default function IntendedParentsPage() {
                 <div className="flex flex-col gap-4 md:flex-row md:items-center">
                     <Select value={statusFilter} onValueChange={(v) => { if (v) handleStatusChange(v) }}>
                         <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="All Stages">
+                            <SelectValue placeholder="All Statuses">
                                 {(value: string | null) => {
-                                    if (!value || value === "all") return "All Stages"
+                                    if (!value || value === "all") return "All Statuses"
                                     const status = STATUS_OPTIONS.find((option) => option === value)
                                     return status ? STATUS_LABELS[status] : value
                                 }}
                             </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all">All Stages</SelectItem>
+                            <SelectItem value="all">All Statuses</SelectItem>
                             <SelectItem value="new">New</SelectItem>
-                            <SelectItem value="in_review">In Review</SelectItem>
+                            <SelectItem value="ready_to_match">Ready to Match</SelectItem>
                             <SelectItem value="matched">Matched</SelectItem>
-                            <SelectItem value="inactive">Inactive</SelectItem>
+                            <SelectItem value="delivered">Delivered</SelectItem>
                         </SelectContent>
                     </Select>
                     <DateRangePicker
@@ -356,7 +356,7 @@ export default function IntendedParentsPage() {
                                         <SortableTableHead column="phone" label="Phone" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <SortableTableHead column="state" label="State" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <SortableTableHead column="budget" label="Budget" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                                        <SortableTableHead column="status" label="Stage" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                                        <SortableTableHead column="status" label="Status" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <SortableTableHead column="created_at" label="Created" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                     </TableRow>
                                 </TableHeader>

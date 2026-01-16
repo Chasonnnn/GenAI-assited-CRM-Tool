@@ -94,7 +94,8 @@ export function useUpdateSurrogate() {
 }
 
 /**
- * Change surrogate status.
+ * Change surrogate status/stage.
+ * Returns { status: 'applied' | 'pending_approval', surrogate?, request_id? }
  */
 export function useChangeSurrogateStatus() {
     const queryClient = useQueryClient();
@@ -102,11 +103,16 @@ export function useChangeSurrogateStatus() {
     return useMutation({
         mutationFn: ({ surrogateId, data }: { surrogateId: string; data: surrogatesApi.SurrogateStatusChangePayload }) =>
             surrogatesApi.changeSurrogateStatus(surrogateId, data),
-        onSuccess: (updatedSurrogate) => {
-            queryClient.setQueryData(surrogateKeys.detail(updatedSurrogate.id), updatedSurrogate);
+        onSuccess: (response, { surrogateId }) => {
+            // If change was applied immediately, update the cache
+            if (response.status === 'applied' && response.surrogate) {
+                queryClient.setQueryData(surrogateKeys.detail(response.surrogate.id), response.surrogate);
+            }
+            // Invalidate related queries
             queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.history(updatedSurrogate.id) });
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.history(surrogateId) });
             queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
         },
     });
 }

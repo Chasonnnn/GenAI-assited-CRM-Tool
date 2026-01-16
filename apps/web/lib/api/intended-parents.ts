@@ -11,6 +11,7 @@ import type {
     IntendedParentStatusHistoryItem,
     IntendedParentStats,
     IntendedParentListResponse,
+    IntendedParentStatusChangeResponse,
     EntityNote,
     EntityNoteListItem,
     EntityNoteCreate,
@@ -85,8 +86,8 @@ export async function updateIntendedParent(
 export async function updateIntendedParentStatus(
     id: string,
     data: IntendedParentStatusUpdate
-): Promise<IntendedParent> {
-    return api.patch<IntendedParent>(`/intended-parents/${id}/status`, data)
+): Promise<IntendedParentStatusChangeResponse> {
+    return api.patch<IntendedParentStatusChangeResponse>(`/intended-parents/${id}/status`, data)
 }
 
 // Archive / Restore / Delete

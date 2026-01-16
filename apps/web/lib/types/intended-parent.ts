@@ -2,7 +2,7 @@
  * Intended Parent types
  */
 
-export type IntendedParentStatus = 'new' | 'in_review' | 'matched' | 'inactive'
+export type IntendedParentStatus = 'new' | 'ready_to_match' | 'matched' | 'delivered'
 
 export interface IntendedParent {
     id: string
@@ -67,6 +67,7 @@ export interface IntendedParentUpdate {
 export interface IntendedParentStatusUpdate {
     status: IntendedParentStatus
     reason?: string
+    effective_at?: string
 }
 
 export interface IntendedParentStatusHistoryItem {
@@ -77,6 +78,14 @@ export interface IntendedParentStatusHistoryItem {
     changed_by_user_id: string | null
     changed_by_name: string | null
     changed_at: string
+    effective_at: string | null
+    recorded_at: string | null
+    requested_at: string | null
+    approved_by_user_id: string | null
+    approved_by_name: string | null
+    approved_at: string | null
+    is_undo: boolean
+    request_id: string | null
 }
 
 export interface IntendedParentStats {
@@ -89,6 +98,13 @@ export interface IntendedParentListResponse {
     total: number
     page: number
     per_page: number
+}
+
+export interface IntendedParentStatusChangeResponse {
+    status: 'applied' | 'pending_approval'
+    intended_parent: IntendedParent | null
+    request_id: string | null
+    message: string | null
 }
 
 // Entity Note types (polymorphic)

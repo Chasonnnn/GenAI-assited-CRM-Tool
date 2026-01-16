@@ -18,8 +18,10 @@ from app.db.models import (
     Notification,
     UserNotificationSettings,
     Surrogate,
+    IntendedParent,
     Attachment,
     Membership,
+    StatusChangeRequest,
 )
 from app.core.websocket import manager
 
@@ -446,6 +448,190 @@ def notify_surrogate_ready_for_claim(
             entity_id=surrogate.id,
             dedupe_key=dedupe_key,
         )
+
+
+def notify_status_change_request_pending(
+    db: Session,
+    request: StatusChangeRequest,
+    surrogate: Surrogate,
+    target_stage_label: str,
+    current_stage_label: str,
+    requester_name: str,
+) -> None:
+    """Notify approvers that a regression request is pending."""
+    from app.services import permission_service
+
+    memberships = (
+        db.query(Membership)
+        .filter(
+            Membership.organization_id == surrogate.organization_id,
+            Membership.is_active.is_(True),
+        )
+        .all()
+    )
+
+    for membership in memberships:
+        role_str = membership.role.value if hasattr(membership.role, "value") else membership.role
+        if not permission_service.check_permission(
+            db,
+            surrogate.organization_id,
+            membership.user_id,
+            role_str,
+            "approve_status_change_requests",
+        ):
+            continue
+        if not should_notify(
+            db, membership.user_id, surrogate.organization_id, "workflow_approvals"
+        ):
+            continue
+
+        dedupe_key = f"status_change_request:{request.id}:{membership.user_id}"
+        create_notification(
+            db=db,
+            org_id=surrogate.organization_id,
+            user_id=membership.user_id,
+            type=NotificationType.STATUS_CHANGE_REQUESTED,
+            title=f"Stage regression approval needed for Surrogate #{surrogate.surrogate_number}",
+            body=(
+                f"{requester_name} requested {current_stage_label} → {target_stage_label} "
+                f"for {surrogate.full_name}"
+            ),
+            entity_type="surrogate",
+            entity_id=surrogate.id,
+            dedupe_key=dedupe_key,
+        )
+
+
+def notify_ip_status_change_request_pending(
+    db: Session,
+    request: StatusChangeRequest,
+    intended_parent: IntendedParent,
+    target_status_label: str,
+    current_status_label: str,
+    requester_name: str,
+) -> None:
+    """Notify approvers that an intended parent regression request is pending."""
+    from app.services import permission_service
+
+    memberships = (
+        db.query(Membership)
+        .filter(
+            Membership.organization_id == intended_parent.organization_id,
+            Membership.is_active.is_(True),
+        )
+        .all()
+    )
+
+    for membership in memberships:
+        role_str = membership.role.value if hasattr(membership.role, "value") else membership.role
+        if not permission_service.check_permission(
+            db,
+            intended_parent.organization_id,
+            membership.user_id,
+            role_str,
+            "approve_status_change_requests",
+        ):
+            continue
+        if not should_notify(
+            db, membership.user_id, intended_parent.organization_id, "workflow_approvals"
+        ):
+            continue
+
+        dedupe_key = f"status_change_request:{request.id}:{membership.user_id}"
+        create_notification(
+            db=db,
+            org_id=intended_parent.organization_id,
+            user_id=membership.user_id,
+            type=NotificationType.STATUS_CHANGE_REQUESTED,
+            title=(
+                "Status regression approval needed for "
+                f"Intended Parent #{intended_parent.intended_parent_number}"
+            ),
+            body=(
+                f"{requester_name} requested {current_status_label} → {target_status_label} "
+                f"for {intended_parent.full_name}"
+            ),
+            entity_type="intended_parent",
+            entity_id=intended_parent.id,
+            dedupe_key=dedupe_key,
+        )
+
+
+def notify_status_change_request_resolved(
+    db: Session,
+    request: StatusChangeRequest,
+    surrogate: Surrogate,
+    approved: bool,
+    resolver_name: str,
+    reason: str | None = None,
+) -> None:
+    """Notify requester that a regression request was approved or rejected."""
+    if not request.requested_by_user_id:
+        return
+    if not should_notify(
+        db, request.requested_by_user_id, surrogate.organization_id, "workflow_approvals"
+    ):
+        return
+
+    status_label = "approved" if approved else "rejected"
+    notification_type = (
+        NotificationType.STATUS_CHANGE_APPROVED if approved else NotificationType.STATUS_CHANGE_REJECTED
+    )
+    body = f"{resolver_name} {status_label} your stage regression request"
+    if reason:
+        body = f"{body}: {reason}"
+
+    create_notification(
+        db=db,
+        org_id=surrogate.organization_id,
+        user_id=request.requested_by_user_id,
+        type=notification_type,
+        title=f"Stage regression {status_label} for Surrogate #{surrogate.surrogate_number}",
+        body=body,
+        entity_type="surrogate",
+        entity_id=surrogate.id,
+        dedupe_key=f"status_change_request:{request.id}:{status_label}",
+    )
+
+
+def notify_ip_status_change_request_resolved(
+    db: Session,
+    request: StatusChangeRequest,
+    intended_parent: IntendedParent,
+    approved: bool,
+    resolver_name: str,
+    reason: str | None = None,
+) -> None:
+    """Notify requester that an intended parent regression request was approved or rejected."""
+    if not request.requested_by_user_id:
+        return
+    if not should_notify(
+        db, request.requested_by_user_id, intended_parent.organization_id, "workflow_approvals"
+    ):
+        return
+
+    status_label = "approved" if approved else "rejected"
+    notification_type = (
+        NotificationType.STATUS_CHANGE_APPROVED if approved else NotificationType.STATUS_CHANGE_REJECTED
+    )
+    body = f"{resolver_name} {status_label} your status regression request"
+    if reason:
+        body = f"{body}: {reason}"
+
+    create_notification(
+        db=db,
+        org_id=intended_parent.organization_id,
+        user_id=request.requested_by_user_id,
+        type=notification_type,
+        title=(
+            "Status regression "
+            f"{status_label} for Intended Parent #{intended_parent.intended_parent_number}"
+        ),
+        body=body,
+        entity_type="intended_parent",
+        entity_id=intended_parent.id,
+        dedupe_key=f"status_change_request:{request.id}:{status_label}",
+    )
 
 
 def notify_task_assigned(

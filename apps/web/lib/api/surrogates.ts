@@ -155,6 +155,15 @@ export interface SurrogateUpdatePayload {
 export interface SurrogateStatusChangePayload {
     stage_id: string;
     reason?: string;
+    effective_at?: string; // ISO datetime, optional (defaults to now)
+}
+
+// Status change response
+export interface SurrogateStatusChangeResponse {
+    status: 'applied' | 'pending_approval';
+    surrogate?: SurrogateRead | null;
+    request_id?: string | null;
+    message?: string | null;
 }
 
 // Assign surrogate payload
@@ -228,10 +237,12 @@ export function updateSurrogate(surrogateId: string, data: SurrogateUpdatePayloa
 }
 
 /**
- * Change surrogate status.
+ * Change surrogate status/stage.
+ * Returns status: 'applied' if change was applied immediately,
+ * or 'pending_approval' if the change requires admin approval (regression).
  */
-export function changeSurrogateStatus(surrogateId: string, data: SurrogateStatusChangePayload): Promise<SurrogateRead> {
-    return api.patch<SurrogateRead>(`/surrogates/${surrogateId}/status`, data);
+export function changeSurrogateStatus(surrogateId: string, data: SurrogateStatusChangePayload): Promise<SurrogateStatusChangeResponse> {
+    return api.patch<SurrogateStatusChangeResponse>(`/surrogates/${surrogateId}/status`, data);
 }
 
 /**

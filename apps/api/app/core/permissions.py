@@ -94,6 +94,7 @@ class PermissionKey(str, Enum):
     ADMIN_EXPORTS_MANAGE = "manage_admin_exports"
     ADMIN_IMPORTS_MANAGE = "manage_admin_imports"
     ADMIN_VERSIONS_MANAGE = "manage_admin_versions"
+    APPROVE_STATUS_CHANGE_REQUESTS = "approve_status_change_requests"
 
 
 # =============================================================================
@@ -386,6 +387,12 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
         "Archive and restore surrogates",
         PermissionCategory.SURROGATES,
     ),
+    "approve_status_change_requests": PermissionDef(
+        "approve_status_change_requests",
+        "Approve Status Change Requests",
+        "Approve or reject stage/status regression requests",
+        PermissionCategory.SURROGATES,
+    ),
 }
 
 
@@ -443,6 +450,7 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "view_surrogate_notes",
         "edit_surrogate_notes",
         "import_surrogates",
+        "approve_status_change_requests",
         "view_intended_parents",
         "edit_intended_parents",
         "propose_matches",

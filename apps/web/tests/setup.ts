@@ -104,3 +104,30 @@ if (!Element.prototype.getAnimations) {
     // @ts-expect-error - minimal Web Animations API polyfill for tests
     Element.prototype.getAnimations = () => []
 }
+
+// JSDOM navigation stubs to avoid "Not implemented: navigation" warnings.
+const noopNavigate = vi.fn()
+try {
+    Object.defineProperty(window.location, 'assign', { configurable: true, value: noopNavigate })
+    Object.defineProperty(window.location, 'replace', { configurable: true, value: noopNavigate })
+    Object.defineProperty(window.location, 'reload', { configurable: true, value: noopNavigate })
+} catch {
+    Object.defineProperty(window, 'location', {
+        writable: true,
+        value: {
+            href: window.location.href,
+            origin: window.location.origin,
+            protocol: window.location.protocol,
+            host: window.location.host,
+            hostname: window.location.hostname,
+            port: window.location.port,
+            pathname: window.location.pathname,
+            search: window.location.search,
+            hash: window.location.hash,
+            ancestorOrigins: window.location.ancestorOrigins,
+            assign: noopNavigate,
+            replace: noopNavigate,
+            reload: noopNavigate,
+        },
+    })
+}

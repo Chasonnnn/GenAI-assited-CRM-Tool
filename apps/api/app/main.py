@@ -61,6 +61,7 @@ from app.routers import (
     queues,
     search,
     settings as settings_router,
+    status_change_requests,
     tasks,
     templates,
     tracking,
@@ -138,6 +139,7 @@ def _record_api_error_alert(
         logging.exception("Failed to record system alert for API error")
     finally:
         db.close()
+
 
 # ============================================================================
 # Sentry Integration (optional, for production error tracking)
@@ -454,6 +456,9 @@ app.include_router(mfa.router, prefix="/mfa", tags=["mfa"])
 
 # Global Search
 app.include_router(search.router)
+
+# Status Change Requests (Admin approval workflow)
+app.include_router(status_change_requests.router)
 
 # Dev router (ONLY mounted in dev mode)
 if settings.ENV == "dev":

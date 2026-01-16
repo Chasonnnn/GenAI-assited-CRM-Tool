@@ -25,6 +25,7 @@ from app.schemas.surrogate import (
     SurrogateRead,
     SurrogateStats,
     SurrogateStatusChange,
+    SurrogateStatusChangeResponse,
     SurrogateStatusHistoryRead,
     SurrogateUpdate,
     BulkAssign,
@@ -939,7 +940,7 @@ def update_surrogate(
 
 @router.patch(
     "/{surrogate_id}/status",
-    response_model=SurrogateRead,
+    response_model=SurrogateStatusChangeResponse,
     dependencies=[Depends(require_csrf_header)],
 )
 def change_status(
@@ -950,7 +951,18 @@ def change_status(
     ),
     db: Session = Depends(get_db),
 ):
-    """Change surrogate stage (records history, respects access control)."""
+    """
+    Change surrogate stage (records history, respects access control).
+
+    Supports backdated changes and regressions:
+    - Backdating (past date): Requires reason, applies immediately
+    - Regression (earlier stage): Requires reason + admin approval
+    - Undo within 5-min grace period: Bypasses admin approval
+
+    Returns:
+        status='applied' if change was applied immediately
+        status='pending_approval' if regression needs admin approval
+    """
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
@@ -962,19 +974,28 @@ def change_status(
         raise HTTPException(status_code=400, detail="Cannot change status of archived surrogate")
 
     try:
-        surrogate = surrogate_service.change_status(
+        result = surrogate_service.change_status(
             db=db,
             surrogate=surrogate,
             new_stage_id=data.stage_id,
             user_id=session.user_id,
             user_role=session.role,
             reason=data.reason,
+            effective_at=data.effective_at,
         )
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
 
     dashboard_service.push_dashboard_stats(db, session.org_id)
-    return _surrogate_to_read(surrogate, db)
+
+    # Build response with full surrogate data
+    surrogate_read = _surrogate_to_read(result["surrogate"], db) if result["surrogate"] else None
+    return SurrogateStatusChangeResponse(
+        status=result["status"],
+        surrogate=surrogate_read,
+        request_id=result.get("request_id"),
+        message=result.get("message"),
+    )
 
 
 @router.patch(
