@@ -32,13 +32,13 @@ def create_org(name: str, slug: str, admin_email: str):
         # Validate slug format
         slug = slug.lower().strip()
         if not slug.replace("-", "").replace("_", "").isalnum():
-            click.echo("❌ Slug must be alphanumeric (with optional hyphens/underscores)")
+            click.echo("[ERROR] Slug must be alphanumeric (with optional hyphens/underscores)")
             return
 
         # Check if org already exists
         existing = db.query(Organization).filter(Organization.slug == slug).first()
         if existing:
-            click.echo(f"❌ Organization with slug '{slug}' already exists")
+            click.echo(f"[ERROR] Organization with slug '{slug}' already exists")
             return
 
         # Check for existing pending invite for this email
@@ -48,7 +48,7 @@ def create_org(name: str, slug: str, admin_email: str):
             .first()
         )
         if existing_invite:
-            click.echo(f"❌ Pending invite already exists for {admin_email}")
+            click.echo(f"[ERROR] Pending invite already exists for {admin_email}")
             return
 
         # Create organization
@@ -67,15 +67,15 @@ def create_org(name: str, slug: str, admin_email: str):
         db.add(invite)
         db.commit()
 
-        click.echo(f"✓ Created organization: {name}")
+        click.echo(f"[OK] Created organization: {name}")
         click.echo(f"  ID: {org.id}")
         click.echo(f"  Slug: {slug}")
-        click.echo(f"✓ Created invite for {admin_email} with role: admin")
+        click.echo(f"[OK] Created invite for {admin_email} with role: admin")
         click.echo("→ Admin should log in with Google using that email")
 
     except Exception as e:
         db.rollback()
-        click.echo(f"❌ Error: {e}")
+        click.echo(f"[ERROR] Error: {e}")
     finally:
         db.close()
 
@@ -95,19 +95,19 @@ def revoke_sessions(email: str):
     try:
         user = db.query(User).filter(User.email == email.lower()).first()
         if not user:
-            click.echo(f"❌ User not found: {email}")
+            click.echo(f"[ERROR] User not found: {email}")
             return
 
         old_version = user.token_version
         user.token_version += 1
         db.commit()
 
-        click.echo(f"✓ Revoked all sessions for {email}")
+        click.echo(f"[OK] Revoked all sessions for {email}")
         click.echo(f"  Token version: {old_version} → {user.token_version}")
 
     except Exception as e:
         db.rollback()
-        click.echo(f"❌ Error: {e}")
+        click.echo(f"[ERROR] Error: {e}")
     finally:
         db.close()
 
@@ -144,7 +144,7 @@ def update_meta_page_token(
     from app.core.encryption import encrypt_token, is_encryption_configured
 
     if not is_encryption_configured():
-        click.echo("❌ META_ENCRYPTION_KEY not configured in .env")
+        click.echo("[ERROR] META_ENCRYPTION_KEY not configured in .env")
         click.echo(
             '   Generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
         )
@@ -155,7 +155,7 @@ def update_meta_page_token(
         # Find organization
         org = db.query(Organization).filter(Organization.slug == org_slug.lower()).first()
         if not org:
-            click.echo(f"❌ Organization not found: {org_slug}")
+            click.echo(f"[ERROR] Organization not found: {org_slug}")
             return
 
         # Encrypt token
@@ -175,7 +175,7 @@ def update_meta_page_token(
             if page_name:
                 existing.page_name = page_name
             db.commit()
-            click.echo(f"✓ Updated page mapping for page_id={page_id}")
+            click.echo(f"[OK] Updated page mapping for page_id={page_id}")
         else:
             # Create new
             mapping = MetaPageMapping(
@@ -188,14 +188,14 @@ def update_meta_page_token(
             )
             db.add(mapping)
             db.commit()
-            click.echo(f"✓ Created page mapping for page_id={page_id}")
+            click.echo(f"[OK] Created page mapping for page_id={page_id}")
 
         click.echo(f"  Organization: {org.name} ({org.slug})")
         click.echo(f"  Token expires: {expires_at.strftime('%Y-%m-%d')}")
 
     except Exception as e:
         db.rollback()
-        click.echo(f"❌ Error: {e}")
+        click.echo(f"[ERROR] Error: {e}")
     finally:
         db.close()
 
@@ -218,17 +218,17 @@ def deactivate_meta_page(page_id: str):
         mapping = db.query(MetaPageMapping).filter(MetaPageMapping.page_id == page_id).first()
 
         if not mapping:
-            click.echo(f"❌ Page mapping not found: {page_id}")
+            click.echo(f"[ERROR] Page mapping not found: {page_id}")
             return
 
         mapping.is_active = False
         db.commit()
 
-        click.echo(f"✓ Deactivated page mapping for page_id={page_id}")
+        click.echo(f"[OK] Deactivated page mapping for page_id={page_id}")
 
     except Exception as e:
         db.rollback()
-        click.echo(f"❌ Error: {e}")
+        click.echo(f"[ERROR] Error: {e}")
     finally:
         db.close()
 
@@ -300,13 +300,13 @@ def backfill_permissions(dry_run: bool):
         click.echo()
         if total_created > 0:
             verb = "would create" if dry_run else "created"
-            click.echo(f"✓ {verb.capitalize()} {total_created} total permission(s)")
+            click.echo(f"[OK] {verb.capitalize()} {total_created} total permission(s)")
         else:
-            click.echo("✓ All permissions already up to date")
+            click.echo("[OK] All permissions already up to date")
 
     except Exception as e:
         db.rollback()
-        click.echo(f"❌ Error: {e}")
+        click.echo(f"[ERROR] Error: {e}")
         raise
     finally:
         db.close()

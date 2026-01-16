@@ -150,6 +150,10 @@ class SurrogateActivityType(str, Enum):
     WORKFLOW_APPROVAL_INVALIDATED = (
         "workflow_approval_invalidated"  # Approval invalidated (owner change)
     )
+    # Medical/Insurance/Pregnancy updates (no PHI logged, just audit trail)
+    MEDICAL_INFO_UPDATED = "medical_info_updated"
+    INSURANCE_INFO_UPDATED = "insurance_info_updated"
+    PREGNANCY_DATES_UPDATED = "pregnancy_dates_updated"
 
 
 class MatchStatus(str, Enum):

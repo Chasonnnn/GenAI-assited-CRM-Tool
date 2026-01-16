@@ -45,6 +45,73 @@ export interface SurrogateRead extends SurrogateListItem {
     num_csections: number | null;
     archived_at: string | null;
     updated_at: string;
+
+    // =========================================================================
+    // INSURANCE INFO
+    // =========================================================================
+    insurance_company: string | null;
+    insurance_plan_name: string | null;
+    insurance_phone: string | null;
+    insurance_policy_number: string | null;
+    insurance_member_id: string | null;
+    insurance_group_number: string | null;
+    insurance_subscriber_name: string | null;
+    insurance_subscriber_dob: string | null;  // ISO date string
+
+    // =========================================================================
+    // IVF CLINIC
+    // =========================================================================
+    clinic_name: string | null;
+    clinic_address_line1: string | null;
+    clinic_address_line2: string | null;
+    clinic_city: string | null;
+    clinic_state: string | null;
+    clinic_postal: string | null;
+    clinic_phone: string | null;
+    clinic_email: string | null;
+
+    // =========================================================================
+    // MONITORING CLINIC
+    // =========================================================================
+    monitoring_clinic_name: string | null;
+    monitoring_clinic_address_line1: string | null;
+    monitoring_clinic_address_line2: string | null;
+    monitoring_clinic_city: string | null;
+    monitoring_clinic_state: string | null;
+    monitoring_clinic_postal: string | null;
+    monitoring_clinic_phone: string | null;
+    monitoring_clinic_email: string | null;
+
+    // =========================================================================
+    // OB PROVIDER
+    // =========================================================================
+    ob_provider_name: string | null;
+    ob_clinic_name: string | null;
+    ob_address_line1: string | null;
+    ob_address_line2: string | null;
+    ob_city: string | null;
+    ob_state: string | null;
+    ob_postal: string | null;
+    ob_phone: string | null;
+    ob_email: string | null;
+
+    // =========================================================================
+    // DELIVERY HOSPITAL
+    // =========================================================================
+    delivery_hospital_name: string | null;
+    delivery_hospital_address_line1: string | null;
+    delivery_hospital_address_line2: string | null;
+    delivery_hospital_city: string | null;
+    delivery_hospital_state: string | null;
+    delivery_hospital_postal: string | null;
+    delivery_hospital_phone: string | null;
+    delivery_hospital_email: string | null;
+
+    // =========================================================================
+    // PREGNANCY TRACKING
+    // =========================================================================
+    pregnancy_start_date: string | null;  // ISO date string
+    pregnancy_due_date: string | null;    // ISO date string
 }
 
 // Paginated response

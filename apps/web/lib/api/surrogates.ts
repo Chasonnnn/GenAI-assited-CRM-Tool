@@ -94,6 +94,61 @@ export interface SurrogateUpdatePayload {
     num_deliveries?: number | null;
     num_csections?: number | null;
     is_priority?: boolean;
+
+    // Insurance info
+    insurance_company?: string | null;
+    insurance_plan_name?: string | null;
+    insurance_phone?: string | null;
+    insurance_policy_number?: string | null;
+    insurance_member_id?: string | null;
+    insurance_group_number?: string | null;
+    insurance_subscriber_name?: string | null;
+    insurance_subscriber_dob?: string | null;
+
+    // IVF Clinic
+    clinic_name?: string | null;
+    clinic_address_line1?: string | null;
+    clinic_address_line2?: string | null;
+    clinic_city?: string | null;
+    clinic_state?: string | null;
+    clinic_postal?: string | null;
+    clinic_phone?: string | null;
+    clinic_email?: string | null;
+
+    // Monitoring Clinic
+    monitoring_clinic_name?: string | null;
+    monitoring_clinic_address_line1?: string | null;
+    monitoring_clinic_address_line2?: string | null;
+    monitoring_clinic_city?: string | null;
+    monitoring_clinic_state?: string | null;
+    monitoring_clinic_postal?: string | null;
+    monitoring_clinic_phone?: string | null;
+    monitoring_clinic_email?: string | null;
+
+    // OB Provider
+    ob_provider_name?: string | null;
+    ob_clinic_name?: string | null;
+    ob_address_line1?: string | null;
+    ob_address_line2?: string | null;
+    ob_city?: string | null;
+    ob_state?: string | null;
+    ob_postal?: string | null;
+    ob_phone?: string | null;
+    ob_email?: string | null;
+
+    // Delivery Hospital
+    delivery_hospital_name?: string | null;
+    delivery_hospital_address_line1?: string | null;
+    delivery_hospital_address_line2?: string | null;
+    delivery_hospital_city?: string | null;
+    delivery_hospital_state?: string | null;
+    delivery_hospital_postal?: string | null;
+    delivery_hospital_phone?: string | null;
+    delivery_hospital_email?: string | null;
+
+    // Pregnancy tracking
+    pregnancy_start_date?: string | null;
+    pregnancy_due_date?: string | null;
 }
 
 // Status change payload
