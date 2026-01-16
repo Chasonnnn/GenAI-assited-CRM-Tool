@@ -3,6 +3,29 @@
 This is a starter checklist to wire GitHub Actions to GCP using OIDC
 (no long-lived keys). It matches the workflows in `.github/workflows/deploy-gcp.yml`.
 
+## Custom Domains (Per-Org Portals)
+
+Recommended structure for enterprise clients:
+- `portal.clientdomain.com` → frontend
+- `api.clientdomain.com` → API (keeps cookies same-site)
+
+Steps:
+1) Domain mapping / load balancer
+   - Map your frontend service to `portal.clientdomain.com`
+   - Map your API service to `api.clientdomain.com`
+2) DNS
+   - Create CNAME records for `portal` and `api` to the GCP target hostnames
+   - For Wix-managed domains, use subdomain CNAMEs (avoid apex CNAMEs)
+3) Set env vars
+   - Backend:
+     - `FRONTEND_URL=https://portal.clientdomain.com`
+     - `CORS_ORIGINS=https://portal.clientdomain.com`
+     - `API_BASE_URL=https://api.clientdomain.com`
+   - Frontend:
+     - `NEXT_PUBLIC_API_BASE_URL=https://api.clientdomain.com`
+4) Set org portal domain in the app
+   - Settings → Organization → Portal Domain: `portal.clientdomain.com`
+
 ## 1) Enable required APIs
 
 ```bash

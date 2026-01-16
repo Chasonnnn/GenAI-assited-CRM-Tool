@@ -48,7 +48,6 @@ from app.services import (
     org_service,
 )
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
-from app.core.config import settings
 
 router = APIRouter(dependencies=[Depends(require_permission(POLICIES["appointments"].default))])
 
@@ -341,14 +340,13 @@ def get_booking_link(
     db: Session = Depends(get_db),
 ):
     """Get or create booking link for the current user."""
-    from app.core.config import settings
-
     link = appointment_service.get_or_create_booking_link(
         db=db,
         user_id=session.user_id,
         org_id=session.org_id,
     )
-    base_url = settings.FRONTEND_URL if hasattr(settings, "FRONTEND_URL") else ""
+    org = org_service.get_org_by_id(db, session.org_id)
+    base_url = org_service.get_org_portal_base_url(org)
     return _link_to_read(link, base_url)
 
 
@@ -362,8 +360,6 @@ def regenerate_booking_link(
     db: Session = Depends(get_db),
 ):
     """Regenerate booking link with a new slug."""
-    from app.core.config import settings
-
     link = appointment_service.regenerate_booking_link(
         db=db,
         user_id=session.user_id,
@@ -371,7 +367,8 @@ def regenerate_booking_link(
     if not link:
         raise HTTPException(status_code=404, detail="Booking link not found")
 
-    base_url = settings.FRONTEND_URL if hasattr(settings, "FRONTEND_URL") else ""
+    org = org_service.get_org_by_id(db, session.org_id)
+    base_url = org_service.get_org_portal_base_url(org)
     return _link_to_read(link, base_url)
 
 
@@ -625,7 +622,8 @@ def approve_appointment(
         )
 
         # Send confirmation email to client
-        base_url = str(settings.FRONTEND_URL).rstrip("/")
+        org = org_service.get_org_by_id(db, appt.organization_id)
+        base_url = org_service.get_org_portal_base_url(org)
         appointment_email_service.send_confirmed(db, appt, base_url)
 
         context = appointment_service.get_appointment_context(db, [appt])
@@ -663,7 +661,8 @@ def reschedule_appointment(
         )
 
         # Send reschedule notification email
-        base_url = str(settings.FRONTEND_URL).rstrip("/")
+        org = org_service.get_org_by_id(db, appt.organization_id)
+        base_url = org_service.get_org_portal_base_url(org)
         appointment_email_service.send_rescheduled(db, appt, old_start, base_url)
 
         context = appointment_service.get_appointment_context(db, [appt])
@@ -700,7 +699,8 @@ def cancel_appointment(
         )
 
         # Send cancellation notification email
-        base_url = str(settings.FRONTEND_URL).rstrip("/")
+        org = org_service.get_org_by_id(db, appt.organization_id)
+        base_url = org_service.get_org_portal_base_url(org)
         appointment_email_service.send_cancelled(db, appt, base_url)
 
         context = appointment_service.get_appointment_context(db, [appt])

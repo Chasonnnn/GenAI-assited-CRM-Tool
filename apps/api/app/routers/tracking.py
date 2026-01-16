@@ -128,6 +128,7 @@ async def track_open(
 async def track_click(
     token: str,
     url: str,
+    sig: str,
     request: Request,
     db: Session = Depends(get_db),
 ) -> Response:
@@ -146,6 +147,7 @@ async def track_click(
             db=db,
             token=token,
             url=url,
+            signature=sig,
             ip_address=ip_address,
             user_agent=user_agent,
         )

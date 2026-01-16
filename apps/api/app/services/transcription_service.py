@@ -132,8 +132,9 @@ async def transcribe_audio(
             response.raise_for_status()
             return response.text
         except httpx.HTTPStatusError as e:
-            logger.error(f"Whisper API error: {e.response.status_code} - {e.response.text}")
-            raise TranscriptionError(f"Transcription failed: {e.response.text}")
+            status_code = e.response.status_code
+            logger.error("Whisper API error: status=%s", status_code)
+            raise TranscriptionError(f"Transcription failed: provider error ({status_code})")
         except httpx.TimeoutException:
             raise TranscriptionError("Transcription timed out. The file may be too long.")
         except Exception as e:

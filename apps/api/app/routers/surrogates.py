@@ -699,6 +699,7 @@ class SendEmailRequest(BaseModel):
     subject: str | None = None
     body: str | None = None
     provider: str = "auto"  # "gmail", "resend", or "auto" (gmail first, then resend)
+    idempotency_key: str | None = None
 
 
 class SendEmailResponse(BaseModel):
@@ -738,7 +739,6 @@ async def send_surrogate_email(
         oauth_service,
         activity_service,
     )
-    from datetime import datetime, timezone
     import os
 
     # Get surrogate
@@ -799,63 +799,41 @@ async def send_surrogate_email(
 
     # Send email
     if use_gmail:
-        # Create email log for direct Gmail send
-        from app.db.models import EmailLog
-        from app.db.enums import EmailStatus
-
-        email_log = EmailLog(
-            organization_id=session.org_id,
-            template_id=data.template_id,
-            surrogate_id=surrogate_id,
-            recipient_email=surrogate.email,
-            subject=subject,
-            body=body,
-            status=EmailStatus.PENDING.value,
-        )
-        db.add(email_log)
-        db.commit()
-        db.refresh(email_log)
-
-        result = await gmail_service.send_email(
+        result = await gmail_service.send_email_logged(
             db=db,
+            org_id=session.org_id,
             user_id=str(session.user_id),
             to=surrogate.email,
             subject=subject,
             body=body,
             html=True,  # Templates are typically HTML
+            template_id=data.template_id,
+            surrogate_id=surrogate_id,
+            idempotency_key=data.idempotency_key,
         )
 
         if result.get("success"):
-            email_log.status = EmailStatus.SENT.value
-            email_log.sent_at = datetime.now(timezone.utc)
-            email_log.external_id = result.get("message_id")
-            db.commit()
-
             # Log activity
             activity_service.log_email_sent(
                 db=db,
                 surrogate_id=surrogate_id,
                 organization_id=session.org_id,
                 actor_user_id=session.user_id,
-                email_log_id=email_log.id,
+                email_log_id=result.get("email_log_id"),
                 subject=subject,
                 provider="gmail",
             )
 
             return SendEmailResponse(
                 success=True,
-                email_log_id=email_log.id,
+                email_log_id=result.get("email_log_id"),
                 message_id=result.get("message_id"),
                 provider_used="gmail",
             )
         else:
-            email_log.status = EmailStatus.FAILED.value
-            email_log.error = result.get("error")
-            db.commit()
-
             return SendEmailResponse(
                 success=False,
-                email_log_id=email_log.id,
+                email_log_id=result.get("email_log_id"),
                 error=result.get("error"),
             )
 

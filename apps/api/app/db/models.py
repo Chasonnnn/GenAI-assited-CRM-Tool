@@ -60,6 +60,7 @@ class Organization(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    portal_domain: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     timezone: Mapped[str] = mapped_column(
@@ -1802,6 +1803,13 @@ class EmailLog(Base):
     __table_args__ = (
         Index("idx_email_logs_org", "organization_id", "created_at"),
         Index("idx_email_logs_surrogate", "surrogate_id", "created_at"),
+        Index(
+            "uq_email_logs_idempotency",
+            "organization_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -1828,6 +1836,7 @@ class EmailLog(Base):
     subject: Mapped[str] = mapped_column(String(200), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(
         String(20),
         server_default=text(f"'{DEFAULT_EMAIL_STATUS.value}'"),
@@ -3468,6 +3477,13 @@ class ZoomMeeting(Base):
         Index("ix_zoom_meetings_user_id", "user_id"),
         Index("ix_zoom_meetings_surrogate_id", "surrogate_id"),
         Index("ix_zoom_meetings_org_created", "organization_id", "created_at"),
+        Index(
+            "uq_zoom_meetings_idempotency",
+            "organization_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -3492,6 +3508,7 @@ class ZoomMeeting(Base):
 
     # Zoom meeting details
     zoom_meeting_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     topic: Mapped[str] = mapped_column(String(255), nullable=False)
     start_time: Mapped[datetime | None] = mapped_column(nullable=True)
     duration: Mapped[int] = mapped_column(default=30, nullable=False)  # minutes

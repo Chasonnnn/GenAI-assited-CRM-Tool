@@ -115,6 +115,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_WEBHOOK: int = 100  # Meta webhooks
     RATE_LIMIT_API: int = 60  # General API
     RATE_LIMIT_SEARCH: int = 30  # Global search
+    RATE_LIMIT_PUBLIC_READ: int = 60  # Public GET endpoints
     RATE_LIMIT_PUBLIC_FORMS: int = 10  # Public form submissions
 
     # Analytics caching
@@ -161,6 +162,8 @@ class Settings(BaseSettings):
             errors.append("DEV_SECRET must be set for non-dev environments")
         if not self.API_BASE_URL:
             errors.append("API_BASE_URL must be set for non-dev environments")
+        if self.META_TEST_MODE:
+            errors.append("META_TEST_MODE must be false in non-dev environments")
 
         url_fields = [
             "API_BASE_URL",
@@ -186,6 +189,19 @@ class Settings(BaseSettings):
         for key_name, key_value in encryption_keys:
             if not key_value:
                 errors.append(f"{key_name} must be set for non-dev environments")
+
+        if not self.ATTACHMENT_SCAN_ENABLED:
+            errors.append("ATTACHMENT_SCAN_ENABLED must be true in non-dev environments")
+
+        if not self.SENTRY_DSN:
+            if not self.GCP_MONITORING_ENABLED:
+                errors.append(
+                    "SENTRY_DSN must be set or GCP_MONITORING_ENABLED must be true in non-dev environments"
+                )
+            elif not self.gcp_project_id:
+                errors.append(
+                    "GCP_PROJECT_ID or GOOGLE_CLOUD_PROJECT must be set when GCP monitoring is enabled"
+                )
 
         if errors:
             raise ValueError("Invalid production configuration: " + "; ".join(errors))

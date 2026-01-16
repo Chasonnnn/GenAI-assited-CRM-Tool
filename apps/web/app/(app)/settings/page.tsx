@@ -362,6 +362,7 @@ function OrganizationSection() {
   const [orgAddress, setOrgAddress] = useState("")
   const [orgPhone, setOrgPhone] = useState("")
   const [orgEmail, setOrgEmail] = useState("")
+  const [orgPortalDomain, setOrgPortalDomain] = useState("")
   const [orgSaving, setOrgSaving] = useState(false)
   const [orgSaved, setOrgSaved] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
@@ -376,6 +377,7 @@ function OrganizationSection() {
         setOrgAddress(settings.address || "")
         setOrgPhone(settings.phone || "")
         setOrgEmail(settings.email || "")
+        setOrgPortalDomain(settings.portal_domain || "")
       } catch (error) {
         console.error("Failed to load organization settings:", error)
       } finally {
@@ -397,11 +399,13 @@ function OrganizationSection() {
       const trimmedAddress = orgAddress.trim()
       const trimmedPhone = orgPhone.trim()
       const trimmedEmail = orgEmail.trim()
+      const trimmedPortalDomain = orgPortalDomain.trim()
       await updateOrgSettings({
         ...(trimmedName ? { name: trimmedName } : {}),
         ...(trimmedAddress ? { address: trimmedAddress } : {}),
         ...(trimmedPhone ? { phone: trimmedPhone } : {}),
         ...(trimmedEmail ? { email: trimmedEmail } : {}),
+        portal_domain: trimmedPortalDomain || null,
       })
       setOrgSaved(true)
       setTimeout(() => setOrgSaved(false), 2000)
@@ -469,6 +473,19 @@ function OrganizationSection() {
             value={orgEmail}
             onChange={(e) => setOrgEmail(e.target.value)}
           />
+        </div>
+
+        <div className="space-y-2 md:col-span-2">
+          <Label htmlFor="portalDomain">Portal Domain</Label>
+          <Input
+            id="portalDomain"
+            placeholder="portal.ewifamilyglobal.com"
+            value={orgPortalDomain}
+            onChange={(e) => setOrgPortalDomain(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Used for public links (forms, booking, invites). Leave blank to use the main app domain.
+          </p>
         </div>
       </div>
 

@@ -313,6 +313,7 @@ class SendEmailExecutor(ActionExecutor):
         to = payload.get("to")
         subject = payload.get("subject")
         body = payload.get("body")
+        idempotency_key = payload.get("idempotency_key")
 
         if not to:
             return False, "Recipient email is required"
@@ -367,12 +368,17 @@ class SendEmailExecutor(ActionExecutor):
 
         # Try to send via Gmail API
         result = asyncio.run(
-            gmail_service.send_email(
+            gmail_service.send_email_logged(
                 db=db,
+                org_id=org_id,
                 user_id=str(user_id),
                 to=to,
                 subject=subject,
                 body=body,
+                html=False,
+                template_id=None,
+                surrogate_id=entity_id,
+                idempotency_key=idempotency_key,
             )
         )
 
@@ -418,6 +424,7 @@ class SendEmailExecutor(ActionExecutor):
                 "subject": subject,
                 "note_id": str(note.id),
                 "gmail_message_id": result.get("message_id"),
+                "email_log_id": result.get("email_log_id"),
                 "success": True,
             }
         else:
@@ -426,6 +433,7 @@ class SendEmailExecutor(ActionExecutor):
                 "to": to,
                 "subject": subject,
                 "note_id": str(note.id),
+                "email_log_id": result.get("email_log_id"),
                 "success": False,
                 "error": result.get("error", "Gmail send failed"),
             }
@@ -520,8 +528,12 @@ def execute_action(
             "error_code": "unknown_action",
         }
 
+    payload = dict(approval.action_payload or {})
+    if approval.action_type == "send_email":
+        payload.setdefault("idempotency_key", f"ai:{approval.id}")
+
     # 4. Validate
-    is_valid, error = executor.validate(approval.action_payload, db, user_id, org_id)
+    is_valid, error = executor.validate(payload, db, user_id, org_id)
     if not is_valid:
         approval.status = "failed"
         approval.error_message = error
@@ -530,7 +542,7 @@ def execute_action(
 
     # 5. Execute
     try:
-        result = executor.execute(approval.action_payload, db, user_id, org_id, entity_id)
+        result = executor.execute(payload, db, user_id, org_id, entity_id)
         approval.status = "executed" if result.get("success") else "failed"
         approval.executed_at = datetime.now(timezone.utc)
         if not result.get("success"):

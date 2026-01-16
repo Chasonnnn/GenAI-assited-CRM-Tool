@@ -39,6 +39,7 @@ class OrgSettingsRead(BaseModel):
     address: str | None
     phone: str | None
     email: str | None
+    portal_domain: str | None
 
 
 class OrgSettingsUpdate(BaseModel):
@@ -48,6 +49,16 @@ class OrgSettingsUpdate(BaseModel):
     address: str | None = None
     phone: str | None = None
     email: str | None = None
+    portal_domain: str | None = None
+
+    @field_validator("portal_domain")
+    @classmethod
+    def validate_portal_domain(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return org_service.normalize_portal_domain(v)
 
 
 @router.get("/organization", response_model=OrgSettingsRead)
@@ -66,6 +77,7 @@ def get_org_settings(
         address=getattr(org, "address", None),
         phone=getattr(org, "phone", None),
         email=getattr(org, "contact_email", None),
+        portal_domain=org.portal_domain,
     )
 
 
@@ -97,6 +109,9 @@ def update_org_settings(
         changed_fields.append("phone")
     if body.email is not None and body.email != getattr(org, "contact_email", None):
         changed_fields.append("email")
+    portal_domain_set = "portal_domain" in body.model_fields_set
+    if portal_domain_set and body.portal_domain != getattr(org, "portal_domain", None):
+        changed_fields.append("portal_domain")
     org = org_service.update_org_contact(
         db=db,
         org=org,
@@ -104,6 +119,9 @@ def update_org_settings(
         address=body.address,
         phone=body.phone,
         email=body.email,
+        portal_domain=body.portal_domain
+        if portal_domain_set
+        else org_service.PORTAL_DOMAIN_UNSET,
     )
     if changed_fields:
         from app.services import audit_service
@@ -124,6 +142,7 @@ def update_org_settings(
         address=getattr(org, "address", None),
         phone=getattr(org, "phone", None),
         email=getattr(org, "contact_email", None),
+        portal_domain=org.portal_domain,
     )
 
 

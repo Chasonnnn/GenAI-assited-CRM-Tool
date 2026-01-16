@@ -64,6 +64,7 @@
 
 ### Docs: `docs/`
 - `docs/DESIGN.md`: backend architecture and feature design.
+- `docs/backup-restore-runbook.md`: Postgres + storage backup/restore steps.
 - `docs/automation.md`, `docs/oauth-setup-guide.md`, etc: domain-specific docs.
 
 ---

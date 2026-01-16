@@ -15,6 +15,7 @@ export interface OrgSettings {
     address: string | null;
     phone: string | null;
     email: string | null;
+    portal_domain: string | null;
 }
 
 export interface UpdateOrgRequest {
@@ -22,6 +23,7 @@ export interface UpdateOrgRequest {
     address?: string;
     phone?: string;
     email?: string;
+    portal_domain?: string | null;
 }
 
 // =============================================================================

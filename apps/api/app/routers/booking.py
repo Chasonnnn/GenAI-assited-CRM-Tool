@@ -90,7 +90,9 @@ def _appointment_to_public_read(appt, db: Session) -> dict:
 
 
 @router.get("/{public_slug}")
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
 def get_booking_page(
+    request: Request,
     public_slug: str,
     db: Session = Depends(get_db),
 ):
@@ -134,7 +136,9 @@ def get_booking_page(
 
 
 @router.get("/{public_slug}/slots")
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
 def get_available_slots(
+    request: Request,
     public_slug: str,
     appointment_type_id: UUID,
     date_start: date = Query(..., description="Start date (YYYY-MM-DD)"),
@@ -237,7 +241,8 @@ def create_booking(
         )
 
         # Send confirmation email to client
-        base_url = str(settings.FRONTEND_URL).rstrip("/")
+        org = org_service.get_org_by_id(db, link.organization_id)
+        base_url = org_service.get_org_portal_base_url(org)
         appointment_email_service.send_request_received(db, appt, base_url)
 
         return _appointment_to_public_read(appt, db)
@@ -251,7 +256,9 @@ def create_booking(
 
 
 @router.get("/self-service/{org_id}/reschedule/{token}")
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
 def get_appointment_for_reschedule(
+    request: Request,
     org_id: UUID,
     token: str,
     db: Session = Depends(get_db),
@@ -265,7 +272,9 @@ def get_appointment_for_reschedule(
 
 
 @router.get("/self-service/{org_id}/reschedule/{token}/slots")
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
 def get_reschedule_slots(
+    request: Request,
     org_id: UUID,
     token: str,
     date_start: date = Query(..., description="Start date (YYYY-MM-DD)"),
@@ -348,7 +357,8 @@ def reschedule_by_token(
         )
 
         # Send reschedule notification email
-        base_url = str(settings.FRONTEND_URL).rstrip("/")
+        org = org_service.get_org_by_id(db, appt.organization_id)
+        base_url = org_service.get_org_portal_base_url(org)
         appointment_email_service.send_rescheduled(db, appt, old_start, base_url)
 
         return _appointment_to_public_read(appt, db)
@@ -357,7 +367,9 @@ def reschedule_by_token(
 
 
 @router.get("/self-service/{org_id}/cancel/{token}")
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
 def get_appointment_for_cancel(
+    request: Request,
     org_id: UUID,
     token: str,
     db: Session = Depends(get_db),
@@ -394,7 +406,8 @@ def cancel_by_token(
         )
 
         # Send cancellation notification email
-        base_url = str(settings.FRONTEND_URL).rstrip("/")
+        org = org_service.get_org_by_id(db, appt.organization_id)
+        base_url = org_service.get_org_portal_base_url(org)
         appointment_email_service.send_cancelled(db, appt, base_url)
 
         return _appointment_to_public_read(appt, db)

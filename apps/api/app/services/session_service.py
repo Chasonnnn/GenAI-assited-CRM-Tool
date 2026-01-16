@@ -1,6 +1,7 @@
 """Session service - manages user session tracking for revocation support."""
 
 import hashlib
+import ipaddress
 import logging
 import os
 from datetime import datetime, timedelta, timezone
@@ -51,6 +52,21 @@ def parse_device_info(user_agent_str: str | None) -> str:
         return " ".join(device_parts) if device_parts else "Unknown Device"
     except Exception:
         return "Unknown Device"
+
+
+def mask_ip(ip_address: str | None) -> str | None:
+    """Mask IP for logs to avoid storing raw PII."""
+    if not ip_address:
+        return None
+    try:
+        ip_obj = ipaddress.ip_address(ip_address)
+    except ValueError:
+        return None
+    if isinstance(ip_obj, ipaddress.IPv4Address):
+        network = ipaddress.ip_network(f"{ip_address}/24", strict=False)
+        return f"{network.network_address}/24"
+    network = ipaddress.ip_network(f"{ip_address}/64", strict=False)
+    return f"{network.network_address}/64"
 
 
 def get_client_ip(request: Request | None) -> str | None:
@@ -110,11 +126,12 @@ def create_session(
     db.commit()
     db.refresh(session_record)
 
+    masked_ip = mask_ip(ip_address)
     logger.info(
         "Created session for user %s (device: %s, ip: %s)",
         user_id,
         device_info,
-        ip_address,
+        masked_ip,
     )
 
     return session_record

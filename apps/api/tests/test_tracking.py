@@ -45,6 +45,7 @@ def test_get_tracked_link_url():
     url = tracking_service.get_tracked_link_url(token, original_url)
     assert "/tracking/click/test-token-123" in url
     assert "url=" in url
+    assert "sig=" in url
     # URL should be encoded
     assert "https%3A%2F%2F" in url
 
@@ -85,8 +86,9 @@ def test_wrap_links_in_email():
 
     # Both links should be wrapped
     assert result.count("/tracking/click/test-token") == 2
-    assert "https://example.com/page1" not in result.split("url=")[0]
-    assert "https://example.com/page2" not in result.split("url=")[0]
+    assert result.count("sig=") == 2
+    assert "https%3A%2F%2Fexample.com%2Fpage1" in result
+    assert "https%3A%2F%2Fexample.com%2Fpage2" in result
 
 
 def test_wrap_links_skips_mailto():
@@ -138,6 +140,7 @@ def test_prepare_email_for_tracking():
     # Should have both pixel and wrapped link
     assert "/tracking/open/test-token" in result
     assert "/tracking/click/test-token" in result
+    assert "sig=" in result
 
 
 # =============================================================================
@@ -318,10 +321,12 @@ def test_record_click_creates_event(db, test_org, test_user):
 
     # Record click
     original_url = "https://example.com/page"
+    signature = tracking_service.get_tracking_signature(token, original_url)
     result = tracking_service.record_click(
         db=db,
         token=token,
         url=original_url,
+        signature=signature,
         ip_address="127.0.0.1",
         user_agent="TestAgent/1.0",
     )
@@ -336,7 +341,76 @@ def test_record_click_creates_event(db, test_org, test_user):
     assert run.clicked_count == 1
 
 
+def test_record_click_invalid_signature(db, test_org, test_user):
+    """Test that invalid signature returns None and does not update counters."""
+    from app.db.models import CampaignRecipient, CampaignRun, Campaign, EmailTemplate
+
+    template = EmailTemplate(
+        organization_id=test_org.id,
+        name="Test Template 4",
+        subject="Test",
+        body="Test body",
+    )
+    db.add(template)
+    db.flush()
+
+    campaign = Campaign(
+        organization_id=test_org.id,
+        name="Test Campaign 4",
+        recipient_type="case",
+        email_template_id=template.id,
+    )
+    db.add(campaign)
+    db.flush()
+
+    run = CampaignRun(
+        organization_id=test_org.id,
+        campaign_id=campaign.id,
+        status="running",
+    )
+    db.add(run)
+    db.flush()
+
+    token = tracking_service.generate_tracking_token()
+    recipient = CampaignRecipient(
+        run_id=run.id,
+        entity_type="case",
+        entity_id=test_org.id,
+        recipient_email="test@example.com",
+        status="sent",
+        tracking_token=token,
+    )
+    db.add(recipient)
+    db.commit()
+
+    original_url = "https://example.com/page"
+    bad_signature = tracking_service.get_tracking_signature(token, "https://example.com/other")
+    result = tracking_service.record_click(
+        db=db,
+        token=token,
+        url=original_url,
+        signature=bad_signature,
+        ip_address="127.0.0.1",
+        user_agent="TestAgent/1.0",
+    )
+
+    assert result is None
+
+    db.refresh(recipient)
+    assert recipient.click_count == 0
+    assert recipient.clicked_at is None
+
+    db.refresh(run)
+    assert run.clicked_count == 0
+
+
 def test_record_click_invalid_token(db):
     """Test that invalid token returns None."""
-    result = tracking_service.record_click(db, "invalid-token-xyz", "https://example.com")
+    signature = tracking_service.get_tracking_signature("invalid-token-xyz", "https://example.com")
+    result = tracking_service.record_click(
+        db,
+        "invalid-token-xyz",
+        "https://example.com",
+        signature,
+    )
     assert result is None

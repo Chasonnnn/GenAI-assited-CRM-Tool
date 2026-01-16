@@ -49,6 +49,7 @@ export function EmailComposeDialog({
     const [subject, setSubject] = React.useState("")
     const [body, setBody] = React.useState("")
     const [isPreview, setIsPreview] = React.useState(false)
+    const idempotencyKeyRef = React.useRef<string | null>(null)
 
     // Fetch email templates list
     const { data: templates = [], isLoading: templatesLoading } = useEmailTemplates(true)
@@ -71,17 +72,25 @@ export function EmailComposeDialog({
             setSubject("")
             setBody("")
             setIsPreview(false)
+            idempotencyKeyRef.current = null
         }
     }, [open])
 
     const handleSend = async () => {
         try {
+            if (!idempotencyKeyRef.current) {
+                idempotencyKeyRef.current =
+                    typeof crypto !== "undefined" && "randomUUID" in crypto
+                        ? crypto.randomUUID()
+                        : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+            }
             await sendEmailMutation.mutateAsync({
                 surrogateId: surrogateData.id,
                 data: {
                     template_id: selectedTemplate,
                     subject,
                     body,
+                    idempotency_key: idempotencyKeyRef.current,
                 },
             })
             onSuccess?.()

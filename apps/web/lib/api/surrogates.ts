@@ -177,6 +177,7 @@ export interface SurrogateSendEmailPayload {
     subject?: string;
     body?: string;
     provider?: 'auto' | 'gmail' | 'resend';
+    idempotency_key?: string;
 }
 
 export interface SurrogateSendEmailResponse {

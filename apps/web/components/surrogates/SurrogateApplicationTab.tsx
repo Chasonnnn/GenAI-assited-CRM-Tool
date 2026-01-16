@@ -38,6 +38,7 @@ import {
     UploadIcon,
 } from "lucide-react"
 import { toast } from "sonner"
+import { useAuth } from "@/lib/auth-context"
 import {
     useApproveFormSubmission,
     useSurrogateFormSubmission,
@@ -79,13 +80,18 @@ export function SurrogateApplicationTab({
     surrogateId,
     formId,
 }: SurrogateApplicationTabProps) {
+    const { user } = useAuth()
     const [baseUrl, setBaseUrl] = React.useState("")
 
     React.useEffect(() => {
+        if (user?.org_portal_domain) {
+            setBaseUrl(`https://${user.org_portal_domain}`)
+            return
+        }
         if (typeof window !== "undefined") {
             setBaseUrl(window.location.origin)
         }
-    }, [])
+    }, [user?.org_portal_domain])
 
     const {
         data: submission,

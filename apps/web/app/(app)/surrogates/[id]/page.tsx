@@ -290,6 +290,7 @@ export default function SurrogateDetailPage() {
         password: string | null
         start_time: string | null
     } | null>(null)
+    const zoomIdempotencyKeyRef = React.useRef<string | null>(null)
     const [aiSummary, setAiSummary] = React.useState<SummarizeSurrogateResponse | null>(null)
     const [aiDraftEmail, setAiDraftEmail] = React.useState<DraftEmailResponse | null>(null)
     const [selectedEmailType, setSelectedEmailType] = React.useState<EmailType | null>(null)
@@ -307,6 +308,12 @@ export default function SurrogateDetailPage() {
             return 'UTC'
         }
     }, [])
+
+    React.useEffect(() => {
+        if (!zoomDialogOpen) {
+            zoomIdempotencyKeyRef.current = null
+        }
+    }, [zoomDialogOpen])
 
     // Fetch data
     const { data: surrogateData, isLoading, error } = useSurrogate(id)
@@ -1596,6 +1603,12 @@ export default function SurrogateDetailPage() {
                                 onClick={async () => {
                                     if (!zoomStartAt) return
                                     try {
+                                        if (!zoomIdempotencyKeyRef.current) {
+                                            zoomIdempotencyKeyRef.current =
+                                                typeof crypto !== 'undefined' && 'randomUUID' in crypto
+                                                    ? crypto.randomUUID()
+                                                    : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+                                        }
                                         const result = await createZoomMeetingMutation.mutateAsync({
                                             entity_type: 'surrogate',
                                             entity_id: id,
@@ -1604,6 +1617,7 @@ export default function SurrogateDetailPage() {
                                             timezone: timezoneName,
                                             duration: zoomDuration,
                                             contact_name: surrogateData?.full_name,
+                                            idempotency_key: zoomIdempotencyKeyRef.current,
                                         })
                                         setLastMeetingResult({
                                             join_url: result.join_url,

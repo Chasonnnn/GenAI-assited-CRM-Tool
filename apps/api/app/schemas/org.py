@@ -28,6 +28,7 @@ class OrgRead(BaseModel):
     id: UUID
     name: str
     slug: str
+    portal_domain: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

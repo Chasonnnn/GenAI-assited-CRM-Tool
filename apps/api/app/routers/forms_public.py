@@ -28,7 +28,8 @@ def _schema_or_none(schema_json: dict | None) -> FormSchema | None:
 
 
 @router.get("/{org_id}/logos/{logo_id}")
-def get_form_logo(org_id: UUID, logo_id: UUID, db: Session = Depends(get_db)):
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
+def get_form_logo(request: Request, org_id: UUID, logo_id: UUID, db: Session = Depends(get_db)):
     logo = form_service.get_form_logo_by_id(db, org_id, logo_id)
     if not logo:
         raise HTTPException(status_code=404, detail="Logo not found")
@@ -49,7 +50,8 @@ def get_form_logo(org_id: UUID, logo_id: UUID, db: Session = Depends(get_db)):
 
 
 @router.get("/{token}", response_model=FormPublicRead)
-def get_public_form(token: str, db: Session = Depends(get_db)):
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
+def get_public_form(request: Request, token: str, db: Session = Depends(get_db)):
     token_record = form_service.get_valid_token(db, token)
     if not token_record:
         raise HTTPException(status_code=404, detail="Form not found")

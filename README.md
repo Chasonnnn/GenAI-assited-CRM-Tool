@@ -380,6 +380,29 @@ pnpm test:all        # Full frontend suite
 - **Database**: Cloud SQL or Supabase
 - **Storage**: S3-compatible for file uploads
 
+### Custom Domains (Per-Org Portals)
+Use per-client subdomains to keep cookies same-site and make public links branded.
+
+1) Create subdomains
+- App: `portal.clientdomain.com`
+- API: `api.clientdomain.com`
+
+2) DNS (CNAME)
+- Point `portal` to your frontend host (Vercel or Cloud Run/LB)
+- Point `api` to your API host (Cloud Run/LB)
+  - For Wix-managed domains, use subdomain CNAMEs (avoid apex CNAMEs)
+
+3) Env vars
+- Backend:
+  - `FRONTEND_URL=https://portal.clientdomain.com`
+  - `CORS_ORIGINS=https://portal.clientdomain.com`
+  - `API_BASE_URL=https://api.clientdomain.com`
+- Frontend:
+  - `NEXT_PUBLIC_API_BASE_URL=https://api.clientdomain.com`
+
+4) Set the org portal domain (drives public links for forms, booking, invites)
+- Settings → Organization → Portal Domain: `portal.clientdomain.com`
+
 ---
 
 ## 📝 License
