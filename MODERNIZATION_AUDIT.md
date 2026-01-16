@@ -1,27 +1,16 @@
 # MODERNIZATION_AUDIT
 
-Date: 2026-01-15
+Date: 2026-01-16
 Scope: Backend + frontend + infra modernization opportunities with concrete refactor steps.
 
 ## Backend
 
-### 1) Replace X-Requested-With CSRF with per-request tokens
-- Evidence: `apps/api/app/core/deps.py:298-312` and `apps/api/app/main.py:284-296` use a static `X-Requested-With` header.
-- Risk: Static headers are weaker than real CSRF tokens and can be replayed if CORS is misconfigured; does not meet modern CSRF best practices.
-- Modern replacement:
-  1) Add a CSRF token cookie (`csrf_token`) with a random value per session.
-  2) Require `X-CSRF-Token` header to match the cookie for all mutations.
-  3) Rotate the token on login and optionally on logout.
-- Exact refactor steps:
-  1) Create `apps/api/app/core/csrf.py` with token generation + verification helpers.
-  2) Add middleware that sets `csrf_token` cookie on first request.
-  3) Replace `require_csrf_header` to validate `X-CSRF-Token`.
-  4) Update `apps/web/lib/api.ts` to read the cookie and send `X-CSRF-Token`.
+### 1) Replace X-Requested-With CSRF with per-request tokens (Resolved)
+- Status: Resolved.
+- Evidence: `apps/api/app/core/csrf.py:1-52`, `apps/api/app/core/deps.py:289-300`, `apps/api/app/main.py:284-305`, `apps/web/lib/csrf.ts:1-15`, `apps/web/lib/api.ts:21-38`.
 - Migration plan:
-  1) Implement token issuance + validation and keep accepting `X-Requested-With` for one release.
-  2) Update frontend client to send `X-CSRF-Token` and add tests for missing/invalid token.
-  3) Remove the legacy header requirement and update docs/examples.
-- Effort estimate: 3-5 days (M).
+  1) No further migration. `X-Requested-With` is removed and `X-CSRF-Token` is required.
+- Effort estimate: Done.
 
 ### 2) WebSocket auth hardening (Resolved)
 - Status: Resolved.
@@ -47,65 +36,35 @@ Scope: Backend + frontend + infra modernization opportunities with concrete refa
   4) Add performance and regression tests, then remove legacy sync wrappers.
 - Effort estimate: 5-10 days (L).
 
-### 4) Public S3 URLs for avatars/signatures
-- Evidence: `apps/api/app/routers/auth.py:492-496` and `apps/api/app/routers/auth.py:899-904` return direct S3 URLs.
-- Risk: Requires public buckets or breaks access; public buckets expose user photos.
-- Modern replacement:
-  1) Store object keys in DB and generate signed URLs on demand.
-- Exact refactor steps:
-  1) Add `apps/api/app/services/storage_service.py` to generate signed URLs.
-  2) Replace URL construction in auth router with signed URL generation.
+### 4) Public S3 URLs for avatars/signatures (Resolved)
+- Status: Resolved.
+- Evidence: `apps/api/app/services/media_service.py:1-49`, `apps/api/app/routers/auth.py:241-790`, `apps/api/app/routers/settings.py:295-661`, `apps/api/app/services/signature_template_service.py:95-168`, `apps/api/app/routers/booking.py:124-134`, `apps/api/app/routers/appointments.py:399-409`.
 - Migration plan:
-  1) Add object-key fields (if missing) and backfill from existing URLs.
-  2) Serve avatars/signatures via signed URL endpoint; keep old URL fields for one release.
-  3) Remove public URL usage and enforce private buckets.
-- Effort estimate: 3-6 days (M-L).
+  1) No further migration. Signed URLs are returned and public-read ACLs removed.
+- Effort estimate: Done.
 
-### 5) Manual proxy IP handling
-- Evidence: `apps/api/app/services/session_service.py:61-66` uses `X-Forwarded-For` directly.
-- Risk: Spoofed IPs; inconsistent with proxy trust settings.
-- Modern replacement:
-  1) Use Starlette `ProxyHeadersMiddleware` and trust settings.
-- Exact refactor steps:
-  1) Add `ProxyHeadersMiddleware` in `apps/api/app/main.py` when `TRUST_PROXY_HEADERS` is true.
-  2) Update `get_client_ip` to rely on `request.client.host` only.
+### 5) Manual proxy IP handling (Resolved)
+- Status: Resolved.
+- Evidence: `apps/api/app/main.py:184-201`, `apps/api/app/services/session_service.py:63-74`, `apps/api/tests/test_proxy_headers.py:1-32`.
 - Migration plan:
-  1) Add `TRUST_PROXY_HEADERS` setting and enable in staging behind the proxy.
-  2) Verify logged IPs match ingress headers; roll out to production.
-  3) Remove direct `X-Forwarded-For` reads.
-- Effort estimate: 1-2 days (S).
+  1) No further migration. Set `TRUST_PROXY_HEADERS=true` behind Cloud Run/LB.
+- Effort estimate: Done.
 
-### 6) In-memory idempotency cache for AI bulk tasks
-- Evidence: `apps/api/app/routers/ai.py:1909-1939` uses a module-level dict for `request_id` caching.
-- Risk: Not shared across workers, lost on restart, unbounded memory growth under load.
-- Modern replacement:
-  1) Persist idempotency responses in DB or Redis with TTL.
-- Exact refactor steps:
-  1) Add a `bulk_task_idempotency` table (`org_id`, `user_id`, `request_id`, `response_json`, `created_at`, `expires_at`) with a unique constraint on `(org_id, user_id, request_id)`.
-  2) On request, look up an existing response by key and return it if present.
-  3) On success, insert the response and set a TTL (cleanup job or DB scheduled deletion).
+### 6) In-memory idempotency cache for AI bulk tasks (Resolved)
+- Status: Resolved.
+- Evidence: `apps/api/app/db/models.py:2365-2406`, `apps/api/alembic/versions/20260116_1400_add_ai_bulk_task_requests.py:1-63`, `apps/api/app/routers/ai.py:1918-2089`, `apps/api/tests/test_ai_bulk_tasks.py:198-256`.
 - Migration plan:
-  1) Add the new idempotency table and backfill nothing (new only).
-  2) Update the endpoint to read/write idempotency records; add a cleanup job.
-  3) Remove the in-memory cache once DB-backed idempotency is confirmed.
-- Effort estimate: 2-4 days (M).
+  1) No further migration. DB-backed idempotency is active.
+- Effort estimate: Done.
 
 ## Frontend
 
-### 7) Client-side auth redirect instead of server-side gating
-- Evidence: `apps/web/lib/auth-context.tsx:104-120` redirects on the client after rendering.
-- Risk: Flash of protected content and inconsistent auth UX; no server-side enforcement.
-- Modern replacement:
-  1) Use Next.js middleware to enforce authentication at the edge.
-  2) Use server components/layouts to redirect before render.
-- Exact refactor steps:
-  1) Add `apps/web/middleware.ts` to check session cookie and redirect to `/login`.
-  2) Move auth gating logic into `apps/web/app/(app)/layout.tsx` server component if needed.
+### 7) Client-side auth redirect instead of server-side gating (Resolved)
+- Status: Resolved.
+- Evidence: `apps/web/middleware.ts:1-28`, `apps/web/app/(app)/layout.tsx:1-49`.
 - Migration plan:
-  1) Implement middleware gating for `/app` routes and keep client redirects as fallback.
-  2) Move protected data fetching into server components where possible.
-  3) Remove client-side redirect once middleware is validated in staging.
-- Effort estimate: 2-4 days (M).
+  1) No further migration. Middleware enforces auth before render.
+- Effort estimate: Done.
 
 ## Infra / Ops
 

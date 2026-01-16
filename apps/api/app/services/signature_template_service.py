@@ -13,7 +13,7 @@ from typing import Literal
 from sqlalchemy.orm import Session
 
 from app.db.models import Organization, User
-from app.services import org_service, user_service
+from app.services import media_service, org_service, user_service
 
 
 # Template types
@@ -113,10 +113,12 @@ def _get_base_data(org: Organization, user: User) -> dict:
     effective_title = getattr(user, "signature_title", None) or getattr(user, "title", None)
     effective_phone = getattr(user, "signature_phone", None) or getattr(user, "phone", None)
     effective_photo = getattr(user, "signature_photo_url", None) or user.avatar_url
+    signed_photo = media_service.get_signed_media_url(effective_photo)
+    signed_logo = media_service.get_signed_media_url(org.signature_logo_url)
 
     return {
         # Org branding (all HTML-escaped)
-        "logo_url": escape_text(org.signature_logo_url),
+        "logo_url": escape_text(signed_logo),
         "primary_color": primary_color,
         "company_name": escape_text(org.signature_company_name or org.name),
         "address": escape_text(org.signature_address),
@@ -130,7 +132,7 @@ def _get_base_data(org: Organization, user: User) -> dict:
         "user_phone": escape_text(effective_phone),
         "user_title": escape_text(effective_title),
         "phone": escape_text(effective_phone),  # Alias for templates that use "phone"
-        "photo_url": effective_photo,  # Not escaped - it's a URL
+        "photo_url": signed_photo,  # Not escaped - it's a URL
         # User social links (validated)
         "linkedin": validate_url(user.signature_linkedin),
         "twitter": validate_url(user.signature_twitter),
@@ -156,7 +158,7 @@ def _get_sample_data(org: Organization) -> dict:
 
     return {
         # Org branding (all HTML-escaped)
-        "logo_url": escape_text(org.signature_logo_url),
+        "logo_url": escape_text(media_service.get_signed_media_url(org.signature_logo_url)),
         "primary_color": primary_color,
         "company_name": escape_text(org.signature_company_name or org.name),
         "address": escape_text(org.signature_address),

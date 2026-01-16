@@ -93,9 +93,10 @@ Later (90+ days)
 
 Evidence
 - `docker-compose.yml:1-16` defines only a local Postgres volume; no backup/restore automation.
+- `docs/backup-restore-runbook.md:1-80` documents manual backup/restore steps but not scheduled automation or verification.
 
 Now (0-30 days)
-- Define backup scripts: add `scripts/backup_db.sh` and `scripts/restore_db.sh` (new files, ~1-80 each) to export/import `DATABASE_URL`; document required env vars and retention in `docs/ops/backup_restore.md` (new file, ~1-200).
+- Define backup scripts: add `scripts/backup_db.sh` and `scripts/restore_db.sh` (new files, ~1-80 each) to wrap the `pg_dump`/`pg_restore` commands from `docs/backup-restore-runbook.md:20-59`. Update `docs/backup-restore-runbook.md` to reference these scripts and document required env vars and retention in the same file.
 
 Next (30-90 days)
 - Automated backups: add a scheduler spec (e.g., `ops/cron/backup.yaml`, new file ~1-120) to run `scripts/backup_db.sh` nightly and ship encrypted backups to object storage; add a verification script `scripts/verify_restore.sh` (new file, ~1-120) that restores to staging and runs `apps/api` smoke tests.

@@ -21,7 +21,7 @@ from app.core.deps import (
 from app.core.policies import POLICIES
 from app.db.enums import Role
 from app.schemas.auth import UserSession
-from app.services import org_service, signature_template_service
+from app.services import media_service, org_service, signature_template_service
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -295,7 +295,7 @@ def get_org_signature(
 
     return OrgSignatureRead(
         signature_template=org.signature_template,
-        signature_logo_url=org.signature_logo_url,
+        signature_logo_url=media_service.get_signed_media_url(org.signature_logo_url),
         signature_primary_color=org.signature_primary_color,
         signature_company_name=org.signature_company_name,
         signature_address=org.signature_address,
@@ -401,7 +401,7 @@ def update_org_signature(
 
     return OrgSignatureRead(
         signature_template=org.signature_template,
-        signature_logo_url=org.signature_logo_url,
+        signature_logo_url=media_service.get_signed_media_url(org.signature_logo_url),
         signature_primary_color=org.signature_primary_color,
         signature_company_name=org.signature_company_name,
         signature_address=org.signature_address,
@@ -504,7 +504,6 @@ def _upload_logo_to_storage(org_id: uuid_lib.UUID, file_bytes: bytes, extension:
             Key=filename,
             Body=file_bytes,
             ContentType=f"image/{extension}",
-            ACL="public-read",
         )
         # Return public S3 URL
         region = getattr(settings, "S3_REGION", "us-east-1")
@@ -656,7 +655,9 @@ async def upload_org_logo(
     )
     db.commit()
 
-    return LogoUploadResponse(signature_logo_url=new_logo_url)
+    return LogoUploadResponse(
+        signature_logo_url=media_service.get_signed_media_url(new_logo_url)
+    )
 
 
 @router.delete(

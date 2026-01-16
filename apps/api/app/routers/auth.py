@@ -35,7 +35,13 @@ from app.core.security import (
     verify_oauth_state,
 )
 from app.schemas.auth import MeResponse, SessionResponse, UserSession
-from app.services import org_service, session_service, signature_template_service, user_service
+from app.services import (
+    media_service,
+    org_service,
+    session_service,
+    signature_template_service,
+    user_service,
+)
 from app.services.auth_service import resolve_user_and_create_session
 from app.services.google_oauth import (
     exchange_code_for_tokens,
@@ -232,7 +238,7 @@ def get_me(
         user_id=user.id,
         email=user.email,
         display_name=user.display_name,
-        avatar_url=user.avatar_url,
+        avatar_url=media_service.get_signed_media_url(user.avatar_url),
         phone=user.phone,
         title=user.title,
         org_id=org.id,
@@ -279,7 +285,7 @@ def update_me(
         user_id=user.id,
         email=user.email,
         display_name=user.display_name,
-        avatar_url=user.avatar_url,
+        avatar_url=media_service.get_signed_media_url(user.avatar_url),
         phone=user.phone,
         title=user.title,
         org_id=org.id,
@@ -521,7 +527,7 @@ async def upload_avatar(
     if old_avatar_url:
         background_tasks.add_task(_delete_old_avatar, old_avatar_url)
 
-    return AvatarResponse(avatar_url=avatar_url)
+    return AvatarResponse(avatar_url=media_service.get_signed_media_url(avatar_url))
 
 
 @router.delete(
@@ -669,7 +675,7 @@ def get_my_signature(
         signature_name=user.signature_name,
         signature_title=user.signature_title,
         signature_phone=user.signature_phone,
-        signature_photo_url=user.signature_photo_url,
+        signature_photo_url=media_service.get_signed_media_url(user.signature_photo_url),
         # User social links
         signature_linkedin=user.signature_linkedin,
         signature_twitter=user.signature_twitter,
@@ -678,10 +684,12 @@ def get_my_signature(
         profile_name=user.display_name,
         profile_title=user.title,
         profile_phone=user.phone,
-        profile_photo_url=user.avatar_url,
+        profile_photo_url=media_service.get_signed_media_url(user.avatar_url),
         # Org branding (read-only)
         org_signature_template=org.signature_template if org else None,
-        org_signature_logo_url=org.signature_logo_url if org else None,
+        org_signature_logo_url=media_service.get_signed_media_url(
+            org.signature_logo_url if org else None
+        ),
         org_signature_primary_color=org.signature_primary_color if org else None,
         org_signature_company_name=org.signature_company_name if org else None,
         org_signature_address=org.signature_address if org else None,
@@ -766,7 +774,7 @@ def update_my_signature(
         signature_name=user.signature_name,
         signature_title=user.signature_title,
         signature_phone=user.signature_phone,
-        signature_photo_url=user.signature_photo_url,
+        signature_photo_url=media_service.get_signed_media_url(user.signature_photo_url),
         # Social links
         signature_linkedin=user.signature_linkedin,
         signature_twitter=user.signature_twitter,
@@ -775,10 +783,12 @@ def update_my_signature(
         profile_name=user.display_name,
         profile_title=user.title,
         profile_phone=user.phone,
-        profile_photo_url=user.avatar_url,
+        profile_photo_url=media_service.get_signed_media_url(user.avatar_url),
         # Org branding
         org_signature_template=org.signature_template if org else None,
-        org_signature_logo_url=org.signature_logo_url if org else None,
+        org_signature_logo_url=media_service.get_signed_media_url(
+            org.signature_logo_url if org else None
+        ),
         org_signature_primary_color=org.signature_primary_color if org else None,
         org_signature_company_name=org.signature_company_name if org else None,
         org_signature_address=org.signature_address if org else None,
@@ -930,7 +940,9 @@ async def upload_signature_photo(
 
     logger.info("Signature photo uploaded for user %s", session.user_id)
 
-    return SignaturePhotoResponse(signature_photo_url=photo_url)
+    return SignaturePhotoResponse(
+        signature_photo_url=media_service.get_signed_media_url(photo_url)
+    )
 
 
 @router.delete(

@@ -28,6 +28,7 @@ from app.core.rate_limit import limiter
 from app.services import (
     appointment_service,
     appointment_email_service,
+    media_service,
     user_service,
     org_service,
 )
@@ -127,7 +128,7 @@ def get_booking_page(
         staff=StaffInfoRead(
             user_id=user.id,
             display_name=user.display_name,
-            avatar_url=user.avatar_url,
+            avatar_url=media_service.get_signed_media_url(user.avatar_url),
         ),
         appointment_types=[_type_to_read(t) for t in types],
         org_name=org_name,

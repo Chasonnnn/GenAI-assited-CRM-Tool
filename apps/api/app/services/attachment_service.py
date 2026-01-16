@@ -168,9 +168,10 @@ def strip_exif_data(file: BinaryIO, content_type: str) -> BinaryIO:
         return file
 
 
-def generate_signed_url(storage_key: str) -> str:
+def generate_signed_url(storage_key: str, expires_in_seconds: int | None = None) -> str:
     """Generate signed download URL."""
     backend = _get_storage_backend()
+    expires_in = expires_in_seconds or SIGNED_URL_EXPIRY_SECONDS
 
     if backend == "s3":
         s3 = _get_s3_client()
@@ -179,7 +180,7 @@ def generate_signed_url(storage_key: str) -> str:
             url = s3.generate_presigned_url(
                 "get_object",
                 Params={"Bucket": bucket, "Key": storage_key},
-                ExpiresIn=SIGNED_URL_EXPIRY_SECONDS,
+                ExpiresIn=expires_in,
             )
             return url
         except ClientError:
