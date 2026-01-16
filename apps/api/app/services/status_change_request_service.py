@@ -15,9 +15,16 @@ from app.db.models import (
 )
 
 
-def get_request(db: Session, request_id: UUID) -> StatusChangeRequest | None:
+def get_request(db: Session, request_id: UUID, org_id: UUID) -> StatusChangeRequest | None:
     """Get a status change request by ID."""
-    return db.query(StatusChangeRequest).filter(StatusChangeRequest.id == request_id).first()
+    return (
+        db.query(StatusChangeRequest)
+        .filter(
+            StatusChangeRequest.id == request_id,
+            StatusChangeRequest.organization_id == org_id,
+        )
+        .first()
+    )
 
 
 def get_pending_requests(
@@ -59,6 +66,7 @@ def get_pending_requests(
 def approve_request(
     db: Session,
     request_id: UUID,
+    org_id: UUID,
     admin_user_id: UUID,
     admin_role: Role | None = None,
 ) -> StatusChangeRequest:
@@ -81,7 +89,7 @@ def approve_request(
     """
     from app.services import surrogate_service, pipeline_service, ip_service
 
-    request = get_request(db, request_id)
+    request = get_request(db, request_id, org_id)
     if not request:
         raise ValueError("Request not found")
 
@@ -97,7 +105,14 @@ def approve_request(
 
     if request.entity_type == "surrogate":
         # Get surrogate
-        surrogate = db.query(Surrogate).filter(Surrogate.id == request.entity_id).first()
+        surrogate = (
+            db.query(Surrogate)
+            .filter(
+                Surrogate.id == request.entity_id,
+                Surrogate.organization_id == org_id,
+            )
+            .first()
+        )
         if not surrogate:
             raise ValueError("Surrogate not found")
 
@@ -132,7 +147,12 @@ def approve_request(
 
     elif request.entity_type == "intended_parent":
         intended_parent = (
-            db.query(IntendedParent).filter(IntendedParent.id == request.entity_id).first()
+            db.query(IntendedParent)
+            .filter(
+                IntendedParent.id == request.entity_id,
+                IntendedParent.organization_id == org_id,
+            )
+            .first()
         )
         if not intended_parent:
             raise ValueError("Intended parent not found")
@@ -195,6 +215,7 @@ def approve_request(
 def reject_request(
     db: Session,
     request_id: UUID,
+    org_id: UUID,
     admin_user_id: UUID,
     admin_role: Role | None = None,
     reason: str | None = None,
@@ -215,7 +236,7 @@ def reject_request(
     Raises:
         ValueError: If request not found, not pending, or user not authorized
     """
-    request = get_request(db, request_id)
+    request = get_request(db, request_id, org_id)
     if not request:
         raise ValueError("Request not found")
 
@@ -237,7 +258,14 @@ def reject_request(
     db.refresh(request)
 
     if request.entity_type == "surrogate":
-        surrogate = db.query(Surrogate).filter(Surrogate.id == request.entity_id).first()
+        surrogate = (
+            db.query(Surrogate)
+            .filter(
+                Surrogate.id == request.entity_id,
+                Surrogate.organization_id == org_id,
+            )
+            .first()
+        )
         if surrogate:
             from app.services import notification_service
 
@@ -253,7 +281,12 @@ def reject_request(
             )
     elif request.entity_type == "intended_parent":
         intended_parent = (
-            db.query(IntendedParent).filter(IntendedParent.id == request.entity_id).first()
+            db.query(IntendedParent)
+            .filter(
+                IntendedParent.id == request.entity_id,
+                IntendedParent.organization_id == org_id,
+            )
+            .first()
         )
         if intended_parent:
             from app.services import notification_service
@@ -275,6 +308,7 @@ def reject_request(
 def cancel_request(
     db: Session,
     request_id: UUID,
+    org_id: UUID,
     user_id: UUID,
 ) -> StatusChangeRequest:
     """
@@ -293,7 +327,7 @@ def cancel_request(
     Raises:
         ValueError: If request not found, not pending, or user not the requester
     """
-    request = get_request(db, request_id)
+    request = get_request(db, request_id, org_id)
     if not request:
         raise ValueError("Request not found")
 
@@ -318,6 +352,7 @@ def cancel_request(
 def get_request_with_details(
     db: Session,
     request_id: UUID,
+    org_id: UUID,
 ) -> dict | None:
     """
     Get a status change request with related entity and user details.
@@ -330,7 +365,7 @@ def get_request_with_details(
     - target_stage_label: Label of the target stage/status
     - current_stage_label: Label of the current stage/status
     """
-    request = get_request(db, request_id)
+    request = get_request(db, request_id, org_id)
     if not request:
         return None
 
@@ -349,7 +384,14 @@ def get_request_with_details(
         result["requester_name"] = requester.display_name
 
     if request.entity_type == "surrogate":
-        surrogate = db.query(Surrogate).filter(Surrogate.id == request.entity_id).first()
+        surrogate = (
+            db.query(Surrogate)
+            .filter(
+                Surrogate.id == request.entity_id,
+                Surrogate.organization_id == org_id,
+            )
+            .first()
+        )
         if surrogate:
             result["entity_name"] = surrogate.full_name
             result["entity_number"] = surrogate.surrogate_number
@@ -366,7 +408,12 @@ def get_request_with_details(
                     result["target_stage_label"] = target_stage.label
     elif request.entity_type == "intended_parent":
         intended_parent = (
-            db.query(IntendedParent).filter(IntendedParent.id == request.entity_id).first()
+            db.query(IntendedParent)
+            .filter(
+                IntendedParent.id == request.entity_id,
+                IntendedParent.organization_id == org_id,
+            )
+            .first()
         )
         if intended_parent:
             result["entity_name"] = intended_parent.full_name

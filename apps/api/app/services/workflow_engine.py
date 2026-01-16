@@ -435,7 +435,10 @@ class WorkflowEngine:
         if entity_type == "surrogate":
             return entity
         if hasattr(entity, "surrogate_id") and entity.surrogate_id:
-            return db.query(Surrogate).filter(Surrogate.id == entity.surrogate_id).first()
+            query = db.query(Surrogate).filter(Surrogate.id == entity.surrogate_id)
+            if hasattr(entity, "organization_id"):
+                query = query.filter(Surrogate.organization_id == entity.organization_id)
+            return query.first()
         return None
 
     def _create_approval_task(

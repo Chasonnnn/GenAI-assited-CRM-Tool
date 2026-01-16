@@ -130,7 +130,7 @@ class ChatRequest(BaseModel):
     When provided, context is injected for that specific entity.
     """
 
-    entity_type: str | None = Field(None, pattern="^(case|task|global)$")  # case, task, or global
+    entity_type: str | None = Field(None, pattern="^(case|surrogate|task|global)$")
     entity_id: uuid.UUID | None = None
     message: str = Field(..., min_length=1, max_length=10000)
 
@@ -374,7 +374,7 @@ def chat(
         entity_id = session.user_id
 
     # Check if user has access to the entity
-    if entity_type == "case":
+    if entity_type in ("case", "surrogate"):
         surrogate = surrogate_service.get_surrogate(db, session.org_id, entity_id)
         if not surrogate:
             raise HTTPException(
@@ -462,7 +462,7 @@ def chat_async(
         entity_type = "global"
         entity_id = session.user_id
 
-    if entity_type == "case":
+    if entity_type in ("case", "surrogate"):
         surrogate = surrogate_service.get_surrogate(db, session.org_id, entity_id)
         if not surrogate:
             raise HTTPException(
@@ -550,7 +550,7 @@ def get_conversation(
 ) -> dict[str, Any]:
     """Get conversation history for an entity."""
     # Validate entity access before fetching conversations
-    if entity_type == "case":
+    if entity_type in ("case", "surrogate"):
         surrogate = surrogate_service.get_surrogate(db, session.org_id, entity_id)
         if not surrogate:
             raise HTTPException(

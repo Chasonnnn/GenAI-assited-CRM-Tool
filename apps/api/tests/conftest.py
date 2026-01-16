@@ -17,7 +17,6 @@ import pytest
 
 # Set test environment variables BEFORE any app imports
 os.environ.setdefault("TESTING", "1")  # Enable test mode (in-memory rate limiter)
-os.environ.setdefault("DEV_BYPASS_AUTH", "False")
 os.environ.setdefault("ENV", "test")
 os.environ.setdefault("FERNET_KEY", "_uKVT313or8juloqHLg9OtBNJv9LCBzEC6mJ1yG9S_E=")
 os.environ.setdefault("ZOOM_CLIENT_ID", "test-zoom-client-id")

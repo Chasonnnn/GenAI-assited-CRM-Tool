@@ -502,7 +502,7 @@ Deliverable
 
 Week 11 — Testing Infrastructure + CI/CD + Versioning ✓ COMPLETE
 Backend Testing
-✓ pytest.ini with DEV_BYPASS_AUTH=False for auth testing
+✓ pytest.ini sets ENV=test for auth testing
 ✓ conftest.py with:
   ✓ JWT token minting via create_session_token()
   ✓ Savepoint DB fixture pattern (rollback on test end)

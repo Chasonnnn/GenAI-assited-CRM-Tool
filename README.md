@@ -226,35 +226,41 @@ META_CAPI_ENABLED=false
 
 # Development
 DEV_SECRET=local-dev-secret
-DEV_BYPASS_AUTH=false
 ```
 
 ### Frontend (`apps/web/.env.local`)
 
 ```env
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
-NEXT_PUBLIC_DEV_BYPASS_AUTH=false
 ```
 
 ---
 
 ## 🔧 Local Development Setup
 
-### Dev Auth Bypass (Skip Google OAuth)
+### Dev Login-As (Skip Google OAuth)
 
 For local development without configuring Google OAuth:
 
 1. **Backend** (`apps/api/.env`):
    ```env
-   DEV_BYPASS_AUTH=true
+   DEV_SECRET=local-dev-secret
+   ENV=dev
    ```
 
-2. **Frontend** (`apps/web/.env.local`):
-   ```env
-   NEXT_PUBLIC_DEV_BYPASS_AUTH=true
+2. Seed a test org and users (returns user IDs):
+   ```bash
+   curl -s -X POST http://localhost:8000/dev/seed \
+     -H "X-Dev-Secret: $DEV_SECRET"
    ```
 
-3. Restart both servers — you'll be auto-logged in as `admin@test.com`
+3. Log in as a seeded user (sets the session cookie):
+   ```bash
+   curl -i -X POST http://localhost:8000/dev/login-as/<user_id> \
+     -H "X-Dev-Secret: $DEV_SECRET"
+   ```
+
+4. Refresh the browser — you should now be authenticated.
 
 ### Database Reset & Seed
 
@@ -268,30 +274,13 @@ docker-compose down -v && docker-compose up -d
 cd apps/api
 .venv/bin/python -m alembic upgrade head
 
-# 3. Create org and admin user
-.venv/bin/python -m app.cli create-org --name "Test Agency" --slug "test" --admin-email "admin@test.com"
+# 3. Seed a test org and users (dev endpoints)
+curl -s -X POST http://localhost:8000/dev/seed \
+  -H "X-Dev-Secret: $DEV_SECRET"
 
-# 4. Create the admin user (for dev bypass)
-.venv/bin/python -c "
-from app.db.session import SessionLocal
-from app.db.models import User, Membership, Organization
-from app.db.enums import Role
-from uuid import uuid4
-
-db = SessionLocal()
-org = db.query(Organization).first()
-user = User(id=uuid4(), email='admin@test.com', display_name='Test Admin', is_active=True, token_version=0)
-db.add(user)
-db.commit()
-
-membership = Membership(id=uuid4(), user_id=user.id, organization_id=org.id, role=Role.DEVELOPER.value, is_active=True)
-db.add(membership)
-db.commit()
-print(f'Created user: {user.email}')
-db.close()
-"
-
-# 5. Restart backend to pick up changes
+# 4. Log in as a seeded user (sets the session cookie)
+curl -i -X POST http://localhost:8000/dev/login-as/<user_id> \
+  -H "X-Dev-Secret: $DEV_SECRET"
 ```
 
 ### Required Encryption Keys

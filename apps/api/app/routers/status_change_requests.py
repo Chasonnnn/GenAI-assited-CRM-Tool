@@ -105,7 +105,11 @@ def list_pending_requests(
     # Get details for each request
     items = []
     for req in requests:
-        details = status_change_request_service.get_request_with_details(db, req.id)
+        details = status_change_request_service.get_request_with_details(
+            db=db,
+            request_id=req.id,
+            org_id=session.org_id,
+        )
         if details:
             items.append(
                 StatusChangeRequestDetail(
@@ -159,7 +163,11 @@ def get_request(
     db: Session = Depends(get_db),
 ):
     """Get a status change request by ID."""
-    details = status_change_request_service.get_request_with_details(db, request_id)
+    details = status_change_request_service.get_request_with_details(
+        db=db,
+        request_id=request_id,
+        org_id=session.org_id,
+    )
     if not details:
         raise HTTPException(status_code=404, detail="Request not found")
 
@@ -215,7 +223,11 @@ def approve_request(
     Applies the requested stage/status change and records the approval.
     """
     # Verify request belongs to org
-    req = status_change_request_service.get_request(db, request_id)
+    req = status_change_request_service.get_request(
+        db=db,
+        request_id=request_id,
+        org_id=session.org_id,
+    )
     if not req or req.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Request not found")
 
@@ -223,6 +235,7 @@ def approve_request(
         result = status_change_request_service.approve_request(
             db=db,
             request_id=request_id,
+            org_id=session.org_id,
             admin_user_id=session.user_id,
             admin_role=session.role,
         )
@@ -269,7 +282,11 @@ def reject_request(
     The requested stage/status change is NOT applied.
     """
     # Verify request belongs to org
-    req = status_change_request_service.get_request(db, request_id)
+    req = status_change_request_service.get_request(
+        db=db,
+        request_id=request_id,
+        org_id=session.org_id,
+    )
     if not req or req.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Request not found")
 
@@ -277,6 +294,7 @@ def reject_request(
         result = status_change_request_service.reject_request(
             db=db,
             request_id=request_id,
+            org_id=session.org_id,
             admin_user_id=session.user_id,
             admin_role=session.role,
             reason=data.reason if data else None,
@@ -323,7 +341,11 @@ def cancel_request(
     Only the requester can cancel their own request.
     """
     # Verify request belongs to org
-    req = status_change_request_service.get_request(db, request_id)
+    req = status_change_request_service.get_request(
+        db=db,
+        request_id=request_id,
+        org_id=session.org_id,
+    )
     if not req or req.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Request not found")
 
@@ -331,6 +353,7 @@ def cancel_request(
         result = status_change_request_service.cancel_request(
             db=db,
             request_id=request_id,
+            org_id=session.org_id,
             user_id=session.user_id,
         )
     except ValueError as e:

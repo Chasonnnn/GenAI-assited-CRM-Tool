@@ -18,6 +18,21 @@ from app.types import JsonObject
 logger = logging.getLogger(__name__)
 
 
+def _get_surrogate_for_action(
+    db: Session,
+    surrogate_id: uuid.UUID,
+    org_id: uuid.UUID,
+) -> Surrogate | None:
+    return (
+        db.query(Surrogate)
+        .filter(
+            Surrogate.id == surrogate_id,
+            Surrogate.organization_id == org_id,
+        )
+        .first()
+    )
+
+
 # ============================================================================
 # Base Executor
 # ============================================================================
@@ -95,6 +110,14 @@ class AddNoteExecutor(ActionExecutor):
         # Create note (EntityNote uses entity_type, entity_id, content)
         from app.services import note_service, workflow_triggers
 
+        surrogate = _get_surrogate_for_action(db, entity_id, org_id)
+        if not surrogate:
+            return {
+                "action": "add_note",
+                "success": False,
+                "error": "Surrogate not found",
+            }
+
         clean_content = note_service.sanitize_html(content)
         note = EntityNote(
             entity_type="surrogate",
@@ -106,10 +129,8 @@ class AddNoteExecutor(ActionExecutor):
         db.add(note)
 
         # Update surrogate last_contacted
-        surrogate = db.query(Surrogate).filter(Surrogate.id == entity_id).first()
-        if surrogate:
-            surrogate.last_contacted_at = datetime.now(timezone.utc)
-            surrogate.last_contact_method = "note"
+        surrogate.last_contacted_at = datetime.now(timezone.utc)
+        surrogate.last_contact_method = "note"
 
         db.flush()
         workflow_triggers.trigger_note_added(db, note)
@@ -149,6 +170,14 @@ class CreateTaskExecutor(ActionExecutor):
         title = payload.get("title")
         description = payload.get("description", "")
         due_date_str = payload.get("due_date")
+
+        surrogate = _get_surrogate_for_action(db, entity_id, org_id)
+        if not surrogate:
+            return {
+                "action": "create_task",
+                "success": False,
+                "error": "Surrogate not found",
+            }
 
         # Parse due date if provided
         due_date_val = None
@@ -328,6 +357,14 @@ class SendEmailExecutor(ActionExecutor):
         subject = payload.get("subject")
         body = payload.get("body")
 
+        surrogate = _get_surrogate_for_action(db, entity_id, org_id)
+        if not surrogate:
+            return {
+                "action": "send_email",
+                "success": False,
+                "error": "Surrogate not found",
+            }
+
         # Try to send via Gmail API
         result = asyncio.run(
             gmail_service.send_email(
@@ -368,10 +405,8 @@ class SendEmailExecutor(ActionExecutor):
         db.add(note)
 
         # Update surrogate last_contacted
-        surrogate = db.query(Surrogate).filter(Surrogate.id == entity_id).first()
-        if surrogate:
-            surrogate.last_contacted_at = datetime.now(timezone.utc)
-            surrogate.last_contact_method = "email"
+        surrogate.last_contacted_at = datetime.now(timezone.utc)
+        surrogate.last_contact_method = "email"
 
         db.flush()
         workflow_triggers.trigger_note_added(db, note)

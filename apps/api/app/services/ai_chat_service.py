@@ -32,6 +32,9 @@ from app.types import JsonObject
 
 logger = logging.getLogger(__name__)
 
+LEGACY_SURROGATE_ENTITY_TYPE = "case"
+SURROGATE_ENTITY_TYPE = "surrogate"
+
 
 # ============================================================================
 # System Prompt
@@ -328,6 +331,19 @@ def _clean_content(content: str) -> str:
     return re.sub(r"<action>.*?</action>", "", content, flags=re.DOTALL).strip()
 
 
+def _normalize_entity_type(entity_type: str) -> str:
+    if entity_type == LEGACY_SURROGATE_ENTITY_TYPE:
+        return SURROGATE_ENTITY_TYPE
+    return entity_type
+
+
+def _resolve_entity_types(entity_type: str) -> list[str]:
+    normalized = _normalize_entity_type(entity_type)
+    if normalized == SURROGATE_ENTITY_TYPE:
+        return [SURROGATE_ENTITY_TYPE, LEGACY_SURROGATE_ENTITY_TYPE]
+    return [normalized]
+
+
 # ============================================================================
 # Core Chat Functions
 # ============================================================================
@@ -341,12 +357,14 @@ def get_or_create_conversation(
     entity_id: uuid.UUID,
 ) -> AIConversation:
     """Get or create a conversation for a user and entity."""
+    normalized_entity_type = _normalize_entity_type(entity_type)
+    entity_types = _resolve_entity_types(entity_type)
     conversation = (
         db.query(AIConversation)
         .filter(
             AIConversation.organization_id == organization_id,
             AIConversation.user_id == user_id,
-            AIConversation.entity_type == entity_type,
+            AIConversation.entity_type.in_(entity_types),
             AIConversation.entity_id == entity_id,
         )
         .first()
@@ -358,7 +376,7 @@ def get_or_create_conversation(
     conversation = AIConversation(
         organization_id=organization_id,
         user_id=user_id,
-        entity_type=entity_type,
+        entity_type=normalized_entity_type,
         entity_id=entity_id,
     )
     db.add(conversation)
@@ -404,17 +422,29 @@ def get_conversation_history(
 def get_surrogate_context(
     db: Session,
     surrogate_id: uuid.UUID,
+    organization_id: uuid.UUID,
     notes_limit: int = 5,
 ) -> tuple[Surrogate | None, list[EntityNote], list[Task]]:
     """Load surrogate with notes and tasks for context."""
-    surrogate = db.query(Surrogate).filter(Surrogate.id == surrogate_id).first()
+    surrogate = (
+        db.query(Surrogate)
+        .filter(
+            Surrogate.id == surrogate_id,
+            Surrogate.organization_id == organization_id,
+        )
+        .first()
+    )
     if not surrogate:
         return None, [], []
 
     # Get notes via EntityNote (entity_type='surrogate')
     notes = (
         db.query(EntityNote)
-        .filter(EntityNote.entity_type == "surrogate", EntityNote.entity_id == surrogate_id)
+        .filter(
+            EntityNote.entity_type == "surrogate",
+            EntityNote.entity_id == surrogate_id,
+            EntityNote.organization_id == organization_id,
+        )
         .order_by(EntityNote.created_at.desc())
         .limit(notes_limit)
         .all()
@@ -425,6 +455,7 @@ def get_surrogate_context(
         db.query(Task)
         .filter(
             Task.surrogate_id == surrogate_id,
+            Task.organization_id == organization_id,
             Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
         )
         .all()
@@ -543,16 +574,25 @@ async def chat_async(
     # Create PII mapping for anonymization/rehydration
     pii_mapping = PIIMapping() if should_anonymize else None
 
+    normalized_entity_type = _normalize_entity_type(entity_type)
+
     # Get or create conversation
-    conversation = get_or_create_conversation(db, organization_id, user_id, entity_type, entity_id)
+    conversation = get_or_create_conversation(
+        db, organization_id, user_id, normalized_entity_type, entity_id
+    )
 
     # Load context based on entity type
     surrogate = None
     system_prompt = SYSTEM_PROMPT
     dynamic_context = ""
 
-    if entity_type == "surrogate":
-        surrogate, notes, tasks = get_surrogate_context(db, entity_id, notes_limit)
+    if normalized_entity_type == SURROGATE_ENTITY_TYPE:
+        surrogate, notes, tasks = get_surrogate_context(
+            db=db,
+            surrogate_id=entity_id,
+            organization_id=organization_id,
+            notes_limit=notes_limit,
+        )
         if not surrogate:
             return {
                 "content": "Surrogate not found.",
@@ -567,7 +607,7 @@ async def chat_async(
             anonymize=should_anonymize,
             pii_mapping=pii_mapping,
         )
-    elif entity_type == "task":
+    elif normalized_entity_type == "task":
         task, related_surrogate = get_task_context(db, entity_id, organization_id)
         if not task:
             return {
@@ -577,7 +617,7 @@ async def chat_async(
             }
         system_prompt = TASK_SYSTEM_PROMPT
         dynamic_context = _build_task_context(task, related_surrogate, user_integrations)
-    elif entity_type == "global":
+    elif normalized_entity_type == "global":
         # Global mode - use simplified prompt with performance data
         system_prompt = GLOBAL_SYSTEM_PROMPT
         integrations_ctx = f"User's connected integrations: {', '.join(user_integrations) if user_integrations else 'none'}"
@@ -766,7 +806,7 @@ def get_user_conversations(
     query = db.query(AIConversation).filter(AIConversation.user_id == user_id)
 
     if entity_type:
-        query = query.filter(AIConversation.entity_type == entity_type)
+        query = query.filter(AIConversation.entity_type.in_(_resolve_entity_types(entity_type)))
     if entity_id:
         query = query.filter(AIConversation.entity_id == entity_id)
 
