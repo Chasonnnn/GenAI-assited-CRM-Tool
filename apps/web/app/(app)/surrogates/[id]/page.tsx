@@ -54,6 +54,11 @@ import { AddSurrogateTaskDialog, type SurrogateTaskFormData } from "@/components
 import { TaskEditModal } from "@/components/tasks/TaskEditModal"
 import { SurrogateProfileCard } from "@/components/surrogates/SurrogateProfileCard"
 import { LogContactAttemptDialog } from "@/components/surrogates/LogContactAttemptDialog"
+import { InsuranceInfoCard } from "@/components/surrogates/InsuranceInfoCard"
+import { MedicalInfoCard } from "@/components/surrogates/MedicalInfoCard"
+import { LatestUpdatesCard } from "@/components/surrogates/LatestUpdatesCard"
+import { PregnancyTrackerCard } from "@/components/surrogates/PregnancyTrackerCard"
+import { useAttachments } from "@/lib/hooks/use-attachments"
 import { useForms } from "@/lib/hooks/use-forms"
 import type { EmailType, SummarizeSurrogateResponse, DraftEmailResponse } from "@/lib/api/ai"
 import type { TaskListItem } from "@/lib/types/task"
@@ -258,6 +263,17 @@ export default function SurrogateDetailPage() {
             )
         })
     }, [stageOptions, user?.role])
+
+    // Stage visibility for medical info and pregnancy tracker cards
+    const readyToMatchStage = React.useMemo(
+        () => stageOptions.find(s => s.slug === 'ready_to_match'),
+        [stageOptions]
+    )
+    const heartbeatStage = React.useMemo(
+        () => stageOptions.find(s => s.slug === 'heartbeat_confirmed'),
+        [stageOptions]
+    )
+
     const [copiedEmail, setCopiedEmail] = React.useState(false)
     const [editDialogOpen, setEditDialogOpen] = React.useState(false)
     const [releaseDialogOpen, setReleaseDialogOpen] = React.useState(false)
@@ -293,6 +309,7 @@ export default function SurrogateDetailPage() {
     const { data: surrogateData, isLoading, error } = useSurrogate(id)
     const { data: activityData } = useSurrogateActivity(id)
     const { data: notes } = useNotes(id)
+    const { data: attachments } = useAttachments(id)
     const { data: tasksData, isLoading: tasksLoading } = useTasks({ surrogate_id: id, exclude_approvals: true })
 
     // Mutations
@@ -714,146 +731,203 @@ export default function SurrogateDetailPage() {
 
                     {/* OVERVIEW TAB */}
                     <TabsContent value="overview" className="space-y-4">
-                        <div className="grid gap-4 md:grid-cols-[1.5fr_1fr]">
-                            <div className="space-y-4">
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>Contact Information</CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3">
-                                        <div>
-                                            <span className="text-sm text-muted-foreground">Name:</span>
-                                            <InlineEditField
-                                                value={surrogateData.full_name}
-                                                onSave={async (value) => {
-                                                    await updateSurrogateMutation.mutateAsync({ surrogateId: id, data: { full_name: value } })
-                                                }}
-                                                placeholder="Enter name"
-                                                className="text-2xl font-semibold"
-                                                displayClassName="-mx-0"
-                                                label="Full name"
-                                            />
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm text-muted-foreground">Email:</span>
-                                            <InlineEditField
-                                                value={surrogateData.email}
-                                                onSave={async (value) => {
-                                                    await updateSurrogateMutation.mutateAsync({ surrogateId: id, data: { email: value } })
-                                                }}
-                                                type="email"
-                                                placeholder="Enter email"
-                                                validate={(v) => !v.includes('@') ? 'Invalid email' : null}
-                                                label="Email"
-                                            />
-                                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={copyEmail}>
-                                                {copiedEmail ? <CheckIcon className="h-3 w-3" /> : <CopyIcon className="h-3 w-3" />}
-                                            </Button>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm text-muted-foreground">Phone:</span>
-                                            <InlineEditField
-                                                value={surrogateData.phone ?? undefined}
-                                                onSave={async (value) => {
-                                                    await updateSurrogateMutation.mutateAsync({ surrogateId: id, data: { phone: value || null } })
-                                                }}
-                                                type="tel"
-                                                placeholder="-"
-                                                label="Phone"
-                                            />
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm text-muted-foreground">State:</span>
-                                            <InlineEditField
-                                                value={surrogateData.state ?? undefined}
-                                                onSave={async (value) => {
-                                                    await updateSurrogateMutation.mutateAsync({ surrogateId: id, data: { state: value || null } })
-                                                }}
-                                                placeholder="-"
-                                                validate={(v) => v && v.length !== 2 ? 'Use 2-letter code (e.g., CA, TX)' : null}
-                                                label="State"
-                                            />
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm text-muted-foreground">Source:</span>
-                                            <Badge variant="secondary" className="capitalize">{surrogateData.source}</Badge>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm text-muted-foreground">Created:</span>
-                                            <span className="text-sm">{formatDate(surrogateData.created_at)}</span>
-                                        </div>
-                                    </CardContent>
-                                </Card>
+                        {(() => {
+                            // Stage visibility for conditional cards
+                            const currentStage = stageById.get(surrogateData.stage_id)
+                            const isReadyToMatchOrLater = !!(
+                                currentStage &&
+                                readyToMatchStage &&
+                                currentStage.order >= readyToMatchStage.order
+                            )
+                            const isHeartbeatConfirmedOrLater = !!(
+                                currentStage &&
+                                heartbeatStage &&
+                                currentStage.order >= heartbeatStage.order
+                            )
 
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>Demographics</CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm text-muted-foreground">Date of Birth:</span>
-                                            <span className="text-sm">{surrogateData.date_of_birth ? formatDate(surrogateData.date_of_birth) : '-'}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm text-muted-foreground">Race:</span>
-                                            <span className="text-sm">{surrogateData.race || '-'}</span>
-                                        </div>
-                                        {(surrogateData.height_ft || surrogateData.weight_lb) && (
-                                            <>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-sm text-muted-foreground">Height:</span>
-                                                    <span className="text-sm">{surrogateData.height_ft ? `${surrogateData.height_ft} ft` : '-'}</span>
+                            return (
+                                <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+                                    {/* LEFT COLUMN */}
+                                    <div className="space-y-4">
+                                        {/* Contact Information */}
+                                        <Card>
+                                            <CardHeader>
+                                                <CardTitle>Contact Information</CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="space-y-3">
+                                                <div>
+                                                    <span className="text-sm text-muted-foreground">Name:</span>
+                                                    <InlineEditField
+                                                        value={surrogateData.full_name}
+                                                        onSave={async (value) => {
+                                                            await updateSurrogateMutation.mutateAsync({ surrogateId: id, data: { full_name: value } })
+                                                        }}
+                                                        placeholder="Enter name"
+                                                        className="text-2xl font-semibold"
+                                                        displayClassName="-mx-0"
+                                                        label="Full name"
+                                                    />
                                                 </div>
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-sm text-muted-foreground">Weight:</span>
-                                                    <span className="text-sm">{surrogateData.weight_lb ? `${surrogateData.weight_lb} lb` : '-'}</span>
+                                                    <span className="text-sm text-muted-foreground">Email:</span>
+                                                    <InlineEditField
+                                                        value={surrogateData.email}
+                                                        onSave={async (value) => {
+                                                            await updateSurrogateMutation.mutateAsync({ surrogateId: id, data: { email: value } })
+                                                        }}
+                                                        type="email"
+                                                        placeholder="Enter email"
+                                                        validate={(v) => !v.includes('@') ? 'Invalid email' : null}
+                                                        label="Email"
+                                                    />
+                                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={copyEmail}>
+                                                        {copiedEmail ? <CheckIcon className="h-3 w-3" /> : <CopyIcon className="h-3 w-3" />}
+                                                    </Button>
                                                 </div>
-                                            </>
-                                        )}
-                                    </CardContent>
-                                </Card>
-                            </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm text-muted-foreground">Phone:</span>
+                                                    <InlineEditField
+                                                        value={surrogateData.phone ?? undefined}
+                                                        onSave={async (value) => {
+                                                            await updateSurrogateMutation.mutateAsync({ surrogateId: id, data: { phone: value || null } })
+                                                        }}
+                                                        type="tel"
+                                                        placeholder="-"
+                                                        label="Phone"
+                                                    />
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm text-muted-foreground">State:</span>
+                                                    <InlineEditField
+                                                        value={surrogateData.state ?? undefined}
+                                                        onSave={async (value) => {
+                                                            await updateSurrogateMutation.mutateAsync({ surrogateId: id, data: { state: value || null } })
+                                                        }}
+                                                        placeholder="-"
+                                                        validate={(v) => v && v.length !== 2 ? 'Use 2-letter code (e.g., CA, TX)' : null}
+                                                        label="State"
+                                                    />
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm text-muted-foreground">Source:</span>
+                                                    <Badge variant="secondary" className="capitalize">{surrogateData.source}</Badge>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm text-muted-foreground">Created:</span>
+                                                    <span className="text-sm">{formatDate(surrogateData.created_at)}</span>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
 
-                            <div>
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>Eligibility Checklist</CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3">
-                                        {[
-                                            { label: 'Age Eligible (18-42)', value: surrogateData.is_age_eligible },
-                                            { label: 'US Citizen or PR', value: surrogateData.is_citizen_or_pr },
-                                            { label: 'Has Child', value: surrogateData.has_child },
-                                            { label: 'Non-Smoker', value: surrogateData.is_non_smoker },
-                                            { label: 'Prior Surrogate Experience', value: surrogateData.has_surrogate_experience },
-                                        ].map(({ label, value }) => (
-                                            <div key={label} className="flex items-center gap-2">
-                                                {value === true && <CheckIcon className="h-4 w-4 text-green-500" />}
-                                                {value === false && <XIcon className="h-4 w-4 text-red-500" />}
-                                                {value === null && <span className="h-4 w-4 text-center text-muted-foreground">-</span>}
-                                                <span className="text-sm">{label}</span>
-                                            </div>
-                                        ))}
-                                        {(surrogateData.num_deliveries !== null || surrogateData.num_csections !== null) && (
-                                            <div className="border-t pt-3 space-y-2">
-                                                {surrogateData.num_deliveries !== null && (
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-sm text-muted-foreground">Deliveries:</span>
-                                                        <span className="text-sm">{surrogateData.num_deliveries}</span>
-                                                    </div>
+                                        {/* Demographics */}
+                                        <Card>
+                                            <CardHeader>
+                                                <CardTitle>Demographics</CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="space-y-3">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm text-muted-foreground">Date of Birth:</span>
+                                                    <span className="text-sm">{surrogateData.date_of_birth ? formatDate(surrogateData.date_of_birth) : '-'}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm text-muted-foreground">Race:</span>
+                                                    <span className="text-sm">{surrogateData.race || '-'}</span>
+                                                </div>
+                                                {(surrogateData.height_ft || surrogateData.weight_lb) && (
+                                                    <>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-sm text-muted-foreground">Height:</span>
+                                                            <span className="text-sm">{surrogateData.height_ft ? `${surrogateData.height_ft} ft` : '-'}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-sm text-muted-foreground">Weight:</span>
+                                                            <span className="text-sm">{surrogateData.weight_lb ? `${surrogateData.weight_lb} lb` : '-'}</span>
+                                                        </div>
+                                                    </>
                                                 )}
-                                                {surrogateData.num_csections !== null && (
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-sm text-muted-foreground">C-Sections:</span>
-                                                        <span className="text-sm">{surrogateData.num_csections}</span>
-                                                    </div>
-                                                )}
-                                            </div>
+                                            </CardContent>
+                                        </Card>
+
+                                        {/* Insurance Info - Always visible */}
+                                        <InsuranceInfoCard
+                                            surrogateData={surrogateData}
+                                            onUpdate={async (data) => {
+                                                await updateSurrogateMutation.mutateAsync({ surrogateId: id, data })
+                                            }}
+                                        />
+
+                                        {/* Medical Information - Visible at Ready to Match+ */}
+                                        {isReadyToMatchOrLater && (
+                                            <MedicalInfoCard
+                                                surrogateData={surrogateData}
+                                                onUpdate={async (data) => {
+                                                    await updateSurrogateMutation.mutateAsync({ surrogateId: id, data })
+                                                }}
+                                            />
                                         )}
-                                    </CardContent>
-                                </Card>
-                            </div>
-                        </div>
+                                    </div>
+
+                                    {/* RIGHT COLUMN */}
+                                    <div className="space-y-4">
+                                        {/* Latest Updates - Always visible */}
+                                        <LatestUpdatesCard
+                                            surrogateId={id}
+                                            notes={notes}
+                                            attachments={attachments}
+                                        />
+
+                                        {/* Eligibility Checklist */}
+                                        <Card>
+                                            <CardHeader>
+                                                <CardTitle>Eligibility Checklist</CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="space-y-3">
+                                                {[
+                                                    { label: 'Age Eligible (18-42)', value: surrogateData.is_age_eligible },
+                                                    { label: 'US Citizen or PR', value: surrogateData.is_citizen_or_pr },
+                                                    { label: 'Has Child', value: surrogateData.has_child },
+                                                    { label: 'Non-Smoker', value: surrogateData.is_non_smoker },
+                                                    { label: 'Prior Surrogate Experience', value: surrogateData.has_surrogate_experience },
+                                                ].map(({ label, value }) => (
+                                                    <div key={label} className="flex items-center gap-2">
+                                                        {value === true && <CheckIcon className="h-4 w-4 text-green-500" />}
+                                                        {value === false && <XIcon className="h-4 w-4 text-red-500" />}
+                                                        {value === null && <span className="h-4 w-4 text-center text-muted-foreground">-</span>}
+                                                        <span className="text-sm">{label}</span>
+                                                    </div>
+                                                ))}
+                                                {(surrogateData.num_deliveries !== null || surrogateData.num_csections !== null) && (
+                                                    <div className="border-t pt-3 space-y-2">
+                                                        {surrogateData.num_deliveries !== null && (
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-sm text-muted-foreground">Deliveries:</span>
+                                                                <span className="text-sm">{surrogateData.num_deliveries}</span>
+                                                            </div>
+                                                        )}
+                                                        {surrogateData.num_csections !== null && (
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-sm text-muted-foreground">C-Sections:</span>
+                                                                <span className="text-sm">{surrogateData.num_csections}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </CardContent>
+                                        </Card>
+
+                                        {/* Pregnancy Tracker - Visible at Heartbeat Confirmed+ */}
+                                        {isHeartbeatConfirmedOrLater && (
+                                            <PregnancyTrackerCard
+                                                surrogateData={surrogateData}
+                                                onUpdate={async (data) => {
+                                                    await updateSurrogateMutation.mutateAsync({ surrogateId: id, data })
+                                                }}
+                                            />
+                                        )}
+                                    </div>
+                                </div>
+                            )
+                        })()}
                     </TabsContent>
 
                     {/* NOTES TAB */}

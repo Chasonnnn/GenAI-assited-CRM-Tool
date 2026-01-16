@@ -330,3 +330,54 @@ def log_task_deleted(
             "title": title,
         },
     )
+
+
+def log_medical_info_updated(
+    db: Session,
+    surrogate_id: UUID,
+    organization_id: UUID,
+    actor_user_id: UUID,
+) -> SurrogateActivityLog:
+    """Log that medical info was updated (no PHI in details)."""
+    return log_activity(
+        db=db,
+        surrogate_id=surrogate_id,
+        organization_id=organization_id,
+        activity_type=SurrogateActivityType.MEDICAL_INFO_UPDATED,
+        actor_user_id=actor_user_id,
+        details={},
+    )
+
+
+def log_insurance_info_updated(
+    db: Session,
+    surrogate_id: UUID,
+    organization_id: UUID,
+    actor_user_id: UUID,
+) -> SurrogateActivityLog:
+    """Log that insurance info was updated (no PHI in details)."""
+    return log_activity(
+        db=db,
+        surrogate_id=surrogate_id,
+        organization_id=organization_id,
+        activity_type=SurrogateActivityType.INSURANCE_INFO_UPDATED,
+        actor_user_id=actor_user_id,
+        details={},
+    )
+
+
+def log_pregnancy_dates_updated(
+    db: Session,
+    surrogate_id: UUID,
+    organization_id: UUID,
+    actor_user_id: UUID,
+) -> SurrogateActivityLog:
+    """Log that pregnancy dates were updated (no PHI in details)."""
+    return log_activity(
+        db=db,
+        surrogate_id=surrogate_id,
+        organization_id=organization_id,
+        activity_type=SurrogateActivityType.PREGNANCY_DATES_UPDATED,
+        actor_user_id=actor_user_id,
+        details={},
+    )
