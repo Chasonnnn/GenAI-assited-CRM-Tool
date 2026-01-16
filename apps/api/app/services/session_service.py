@@ -74,11 +74,10 @@ def get_client_ip(request: Request | None) -> str | None:
     if not request:
         return None
 
-    # Check X-Forwarded-For first (for proxies/load balancers)
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        # Take the first IP (original client)
-        return forwarded.split(",")[0].strip()
+    if settings.TRUST_PROXY_HEADERS:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
 
     # Fall back to direct connection
     if request.client:

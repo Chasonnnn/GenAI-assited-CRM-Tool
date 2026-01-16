@@ -78,6 +78,19 @@ apps/api/app/
 ### CSRF Protection
 All mutations require: `X-CSRF-Token` header matching the `crm_csrf` cookie
 
+### Media URL Signing
+- Avatars, signature photos, and org logos are stored in S3
+- API responses return signed URLs (no public ACLs)
+- Signed URLs are generated via `media_service.get_signed_media_url` (24h TTL)
+
+### Proxy Headers
+- Set `TRUST_PROXY_HEADERS=true` behind a load balancer (Cloud Run)
+- Enables ProxyHeaders middleware + X-Forwarded-For client IP extraction
+
+### AI Bulk Task Idempotency
+- `POST /ai/create-bulk-tasks` uses `request_id`
+- Responses are persisted in `ai_bulk_task_requests` (org_id, user_id, request_id unique)
+
 ### Roles (4 total)
 | Role | Description |
 |------|-------------|

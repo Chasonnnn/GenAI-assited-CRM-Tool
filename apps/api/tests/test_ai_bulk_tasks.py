@@ -227,3 +227,61 @@ async def test_bulk_task_creation_match_links_case_and_ip(
     assert created_task is not None
     assert created_task.surrogate_id == match.surrogate_id
     assert created_task.intended_parent_id == match.intended_parent_id
+
+
+@pytest.mark.asyncio
+async def test_bulk_task_creation_idempotent_persists(
+    case_manager_client: AsyncClient,
+    case_manager_user,
+    test_org,
+    default_stage,
+    db,
+):
+    case = _create_case(db, test_org.id, case_manager_user.id, default_stage)
+    request_id = uuid.uuid4()
+    payload = {
+        "request_id": str(request_id),
+        "surrogate_id": str(case.id),
+        "tasks": [
+            {
+                "title": "Follow up",
+                "task_type": "follow_up",
+            }
+        ],
+    }
+
+    response = await case_manager_client.post("/ai/create-bulk-tasks", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"]
+    task_ids = [t["task_id"] for t in data["created"]]
+    assert task_ids
+
+    count_before = (
+        db.query(Task)
+        .filter(
+            Task.organization_id == test_org.id,
+            Task.surrogate_id == case.id,
+        )
+        .count()
+    )
+
+    from app.routers import ai as ai_router
+
+    if hasattr(ai_router, "_idempotency_cache"):
+        ai_router._idempotency_cache.clear()
+
+    response_repeat = await case_manager_client.post("/ai/create-bulk-tasks", json=payload)
+    assert response_repeat.status_code == 200
+    data_repeat = response_repeat.json()
+    assert data_repeat == data
+
+    count_after = (
+        db.query(Task)
+        .filter(
+            Task.organization_id == test_org.id,
+            Task.surrogate_id == case.id,
+        )
+        .count()
+    )
+    assert count_after == count_before

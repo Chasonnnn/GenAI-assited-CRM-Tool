@@ -11,6 +11,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, model_validator
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.deps import (
@@ -1906,10 +1907,6 @@ class BulkTaskCreateResponse(BaseModel):
     error: str | None = None
 
 
-# Simple in-memory cache for idempotency (in production, use Redis)
-_idempotency_cache: dict[str, BulkTaskCreateResponse] = {}
-
-
 @router.post(
     "/create-bulk-tasks",
     response_model=BulkTaskCreateResponse,
@@ -1927,15 +1924,22 @@ async def create_bulk_tasks(
     Tasks can be linked to case, surrogate, intended parent, or match.
     """
     from datetime import date, time
-    from app.db.models import Task
+    from app.db.models import Task, AIBulkTaskRequest
     from app.db.enums import TaskType
     from app.services import activity_service
 
-    # Check idempotency cache
-    cache_key = f"{session.org_id}:{session.user_id}:{body.request_id}"
-    if cache_key in _idempotency_cache:
-        logger.info(f"Returning cached result for request_id={body.request_id}")
-        return _idempotency_cache[cache_key]
+    existing_request = (
+        db.query(AIBulkTaskRequest)
+        .filter(
+            AIBulkTaskRequest.organization_id == session.org_id,
+            AIBulkTaskRequest.user_id == session.user_id,
+            AIBulkTaskRequest.request_id == body.request_id,
+        )
+        .first()
+    )
+    if existing_request:
+        logger.info("Returning cached result for request_id=%s", body.request_id)
+        return BulkTaskCreateResponse(**existing_request.response_payload)
 
     # Verify entity exists and belongs to org
     entity_type = None
@@ -2071,15 +2075,36 @@ async def create_bulk_tasks(
                 },
             )
 
-        db.commit()
-
         result = BulkTaskCreateResponse(
             success=True,
             created=created_tasks,
         )
 
-        # Cache for idempotency
-        _idempotency_cache[cache_key] = result
+        db.add(
+            AIBulkTaskRequest(
+                organization_id=session.org_id,
+                user_id=session.user_id,
+                request_id=body.request_id,
+                response_payload=result.model_dump(),
+            )
+        )
+
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            existing_request = (
+                db.query(AIBulkTaskRequest)
+                .filter(
+                    AIBulkTaskRequest.organization_id == session.org_id,
+                    AIBulkTaskRequest.user_id == session.user_id,
+                    AIBulkTaskRequest.request_id == body.request_id,
+                )
+                .first()
+            )
+            if existing_request:
+                return BulkTaskCreateResponse(**existing_request.response_payload)
+            raise
 
         logger.info(
             f"Created {len(created_tasks)} tasks for {entity_type} {entity_id} "

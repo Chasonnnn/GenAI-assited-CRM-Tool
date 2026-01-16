@@ -379,6 +379,7 @@ pnpm test:all        # Full frontend suite
 - **Backend**: Cloud Run, Railway, or Render
 - **Database**: Cloud SQL or Supabase
 - **Storage**: S3-compatible for file uploads
+- **Proxy headers**: Set `TRUST_PROXY_HEADERS=true` behind Cloud Run/LB
 
 ### Custom Domains (Per-Org Portals)
 Use per-client subdomains to keep cookies same-site and make public links branded.
