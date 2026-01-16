@@ -49,6 +49,7 @@ export interface CreateMeetingRequest {
     timezone?: string // IANA timezone name (e.g. America/Los_Angeles)
     duration?: number // minutes, default 30
     contact_name?: string
+    idempotency_key?: string
 }
 
 export interface CreateMeetingResponse {

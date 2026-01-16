@@ -12,11 +12,13 @@ from zoneinfo import ZoneInfo
 
 import httpx
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.enums import EntityType, TaskType, OwnerType
 from app.db.models import EntityNote, Task, ZoomMeeting as ZoomMeetingModel
 from app.services import oauth_service
+from app.services.http_service import request_with_retries
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +52,25 @@ class CreateMeetingResult(BaseModel):
     task_id: uuid.UUID | None = None
 
 
+def _meeting_from_model(model: ZoomMeetingModel) -> ZoomMeeting:
+    try:
+        meeting_id = int(model.zoom_meeting_id)
+    except (TypeError, ValueError):
+        meeting_id = 0
+
+    return ZoomMeeting(
+        id=meeting_id,
+        uuid="",
+        topic=model.topic,
+        start_time=model.start_time.isoformat() if model.start_time else None,
+        duration=model.duration,
+        timezone=model.timezone,
+        join_url=model.join_url,
+        start_url=model.start_url,
+        password=model.password,
+    )
+
+
 def list_zoom_meetings(
     db: Session,
     org_id: uuid.UUID,
@@ -80,6 +101,7 @@ async def create_zoom_meeting(
     start_time: datetime | None = None,
     duration: int = 30,
     timezone_name: str = "America/Los_Angeles",
+    idempotency_key: str | None = None,
 ) -> ZoomMeeting:
     """Create a Zoom meeting using the Zoom API.
 
@@ -125,17 +147,24 @@ async def create_zoom_meeting(
         meeting_data["start_time"] = local_dt.replace(tzinfo=None, microsecond=0).isoformat()
 
     async with httpx.AsyncClient() as client:
-        response = await client.post(
-            f"{ZOOM_API_BASE}/users/me/meetings",
-            headers={
+        async def request_fn():
+            headers = {
                 "Authorization": f"Bearer {access_token}",
                 "Content-Type": "application/json",
-            },
-            json=meeting_data,
-            timeout=30.0,
-        )
-        response.raise_for_status()
-        data = response.json()
+            }
+            if idempotency_key:
+                headers["X-Idempotency-Key"] = idempotency_key
+            return await client.post(
+                f"{ZOOM_API_BASE}/users/me/meetings",
+                headers=headers,
+                json=meeting_data,
+                timeout=30.0,
+            )
+
+        response = await request_with_retries(request_fn)
+
+    response.raise_for_status()
+    data = response.json()
 
     return ZoomMeeting(
         id=data["id"],
@@ -187,6 +216,7 @@ async def schedule_zoom_meeting(
     timezone_name: str = "America/Los_Angeles",
     duration: int = 30,
     contact_name: str | None = None,
+    idempotency_key: str | None = None,
 ) -> CreateMeetingResult:
     """Schedule a Zoom meeting and add note + meeting task.
 
@@ -204,6 +234,22 @@ async def schedule_zoom_meeting(
     Returns:
         CreateMeetingResult with meeting details and note/task IDs
     """
+    if idempotency_key:
+        existing = (
+            db.query(ZoomMeetingModel)
+            .filter(
+                ZoomMeetingModel.organization_id == org_id,
+                ZoomMeetingModel.idempotency_key == idempotency_key,
+            )
+            .first()
+        )
+        if existing:
+            return CreateMeetingResult(
+                meeting=_meeting_from_model(existing),
+                note_id=None,
+                task_id=None,
+            )
+
     # Get user's Zoom token
     access_token = await get_user_zoom_token(db, user_id)
 
@@ -214,6 +260,7 @@ async def schedule_zoom_meeting(
         start_time=start_time,
         duration=duration,
         timezone_name=timezone_name,
+        idempotency_key=idempotency_key,
     )
 
     meeting_start_time = None
@@ -314,6 +361,7 @@ async def schedule_zoom_meeting(
         surrogate_id=entity_id if entity_type == EntityType.CASE else None,
         intended_parent_id=entity_id if entity_type == EntityType.INTENDED_PARENT else None,
         zoom_meeting_id=str(meeting.id),
+        idempotency_key=idempotency_key,
         topic=meeting.topic,
         start_time=meeting_start_time,
         duration=duration,
@@ -324,7 +372,27 @@ async def schedule_zoom_meeting(
     )
     db.add(zoom_meeting_record)
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        if idempotency_key:
+            existing = (
+                db.query(ZoomMeetingModel)
+                .filter(
+                    ZoomMeetingModel.organization_id == org_id,
+                    ZoomMeetingModel.idempotency_key == idempotency_key,
+                )
+                .first()
+            )
+            if existing:
+                return CreateMeetingResult(
+                    meeting=_meeting_from_model(existing),
+                    note_id=None,
+                    task_id=None,
+                )
+        raise
+
     db.refresh(note)
 
     return CreateMeetingResult(

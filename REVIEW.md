@@ -15,33 +15,7 @@ Scope: Full repository read (all files) + targeted audit of auth/session, router
 
 ### Medium
 
-#### 1) Tracking click endpoint is an open redirect
-- Severity: Medium
-- Category: Security
-- Evidence: `apps/api/app/routers/tracking.py:126-166` accepts arbitrary `url` query param; `apps/api/app/services/tracking_service.py:168-211` returns the decoded URL.
-- Impact: Attackers can turn your domain into an open redirect for phishing, reducing deliverability and reputation.
-- Fix recommendation (exact steps):
-  1) Store original URLs server-side at send time (per recipient + link id).
-  2) Replace `url` query param with `link_id` and look up the URL from the DB.
-  3) Reject if no link matches the token.
-
-#### 2) Session creation logs raw IP addresses
-- Severity: Medium
-- Category: Security
-- Evidence: `apps/api/app/services/session_service.py:113-118` logs `ip_address` in clear text.
-- Impact: Violates “Never log raw PII” policy and creates privacy risk in logs.
-- Fix recommendation (exact steps):
-  1) Replace the IP in logs with a hash or a masked form (e.g., `x.x.x.0/24`).
-  2) Keep raw IP in DB if required for security, but exclude it from logs.
-
-#### 3) Transcription error logging includes raw response body
-- Severity: Medium
-- Category: Security
-- Evidence: `apps/api/app/services/transcription_service.py:135-136` logs `e.response.text` and re-raises with full text.
-- Impact: Provider error bodies can include sensitive data (PII/PHI); the error text may be exposed in logs or API responses.
-- Fix recommendation (exact steps):
-  1) Log only status code and a stable error code; omit response body.
-  2) Raise a sanitized error message without provider response content.
+- None observed.
 
 ### Low
 

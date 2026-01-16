@@ -7,15 +7,15 @@ Scope: Full-file audit with emphasis on tenant isolation, public attack surfaces
 1) Resolved: AI anonymization bypass (`entity_type=case`), PII can be sent unredacted.
 2) Resolved: Missing org scoping in status change request service entity lookups.
 3) Resolved: Missing org scoping in AI/workflow helpers (surrogate context, document triggers).
-4) Blocker: Tracking click endpoint allows open redirect.
-5) Blocker: PII in logs (session IP logging, transcription error body).
-6) Blocker: Virus scanning not enforced by default for uploads (public forms/attachments).
-7) Blocker: Redis-backed rate limiting is optional; in-memory fallback weakens production protection.
-8) Blocker: Public GET endpoints lack rate limits (forms/booking).
-9) Blocker: No documented backups/restore procedure.
-10) Blocker: `META_TEST_MODE` bypasses webhook signature without a prod guard.
+4) Resolved: Tracking click endpoint allows open redirect.
+5) Resolved: PII in logs (session IP logging, transcription error body).
+6) Resolved: Virus scanning not enforced by default for uploads (public forms/attachments).
+7) Resolved: Redis-backed rate limiting is optional; in-memory fallback weakens production protection.
+8) Blocker: ZAP baseline scan not run against staging.
+9) Resolved: Gmail/Zoom send paths now include retries + idempotency keys.
+10) Resolved: Monitoring/alerting enforced in non-dev (Sentry or GCP required).
 
-Recommended fix order: 4 → 5 → 6 → 7 → 8 → 9 → 10.
+Recommended fix order: 8.
 
 ## Launch Gates (Pass/Fail)
 
@@ -23,13 +23,13 @@ Recommended fix order: 4 → 5 → 6 → 7 → 8 → 9 → 10.
 |---|---|---|---|
 | Tenant isolation | PASS | Org-scoped lookups in `apps/api/app/services/status_change_request_service.py`, `apps/api/app/services/ai_chat_service.py`, `apps/api/app/services/ai_action_executor.py`, `apps/api/app/services/workflow_engine.py`, `apps/api/app/services/workflow_triggers.py`; cross-org tests added in `apps/api/tests/test_status_change_request_scoping.py`, `apps/api/tests/test_ai_action_executor_scoping.py`, `apps/api/tests/test_workflow_trigger_scoping.py`. | None. |
 | Auth hardening | PASS | Membership is_active enforced (`apps/api/app/core/deps.py:152-169`); WebSocket uses cookie auth + Origin allowlist (`apps/api/app/routers/websocket.py:22-132`); dev bypass removed from frontend (`apps/web/lib/auth-context.tsx:1-122`). | None. |
-| PII/secrets handling | FAIL | Raw IP logging (`apps/api/app/services/session_service.py:113-118`); transcription error logs (`apps/api/app/services/transcription_service.py:135-136`). | Mask IPs; sanitize error logs. |
-| Public attack surface | FAIL | Open redirect in tracking (`apps/api/app/routers/tracking.py:126-166`, `apps/api/app/services/tracking_service.py:168-211`) | Replace URL param with stored link id or signed URL validation. |
-| Upload safety | FAIL | Virus scanning default off (`apps/api/app/core/config.py:214`, `apps/api/app/services/form_service.py:916-940`) | Enforce scanning in prod; document ClamAV deployment. |
-| Rate limiting | FAIL | Redis fallback to in-memory (`apps/api/app/core/rate_limit.py:16-50`) | Require Redis in prod; fail fast if unavailable. |
-| Monitoring/alerting | PARTIAL | Sentry and GCP monitoring optional (`apps/api/app/main.py:148-163`, `apps/api/app/core/gcp_monitoring.py`) | Enable in staging/prod with alert routing. |
-| Backups/restore | FAIL | No documented restore procedure found | Create runbook and test restore. |
-| Integration idempotency | PARTIAL | Meta jobs idempotent; Gmail/Zoom send lacks retries/idempotency (`apps/api/app/services/gmail_service.py:22-100`) | Add retry policy and idempotency keys. |
+| PII/secrets handling | PASS | IPs masked in logs (`apps/api/app/services/session_service.py`); transcription errors sanitized (`apps/api/app/services/transcription_service.py`). | None. |
+| Public attack surface | PASS | Public GET endpoints rate-limited in `apps/api/app/routers/forms_public.py` and `apps/api/app/routers/booking.py` with `RATE_LIMIT_PUBLIC_READ`. | None. |
+| Upload safety | PASS | Virus scanning enforced in non-dev config (`apps/api/app/core/config.py`). | None. |
+| Rate limiting | PASS | Redis required in non-dev (`apps/api/app/core/rate_limit.py`). | None. |
+| Monitoring/alerting | PASS | Non-dev config requires Sentry or GCP monitoring (`apps/api/app/core/config.py`) and initializes Sentry when configured (`apps/api/app/main.py:148-163`). | None. |
+| Backups/restore | PASS | Runbook added in `docs/backup-restore-runbook.md`. | Run a quarterly restore test and record results. |
+| Integration idempotency | PASS | Gmail send retries + idempotency logging (`apps/api/app/services/gmail_service.py`), Zoom create retries + idempotency on meetings (`apps/api/app/services/zoom_service.py`), keys stored in `email_logs` + `zoom_meetings`. | None. |
 | ZAP baseline scan | FAIL | No recorded run; config exists (`zap-baseline.conf`) | Run ZAP against staging and fix findings. |
 
 ## Public Attack Surfaces
@@ -37,32 +37,22 @@ Recommended fix order: 4 → 5 → 6 → 7 → 8 → 9 → 10.
 ### Public forms (apply)
 - Surface: `GET /forms/public/{token}`, `POST /forms/public/{token}/submit` (`apps/api/app/routers/forms_public.py:51-110`).
 - Protections: tokenized access, rate limit on submit.
-- Gaps: no explicit rate limit on GET; virus scanning optional.
-- Required changes:
-  1) Enforce `ATTACHMENT_SCAN_ENABLED=true` in production.
-  2) Add rate limiting on GET endpoints for token brute-force protection.
+- Gaps: None observed; GET endpoints rate-limited via `RATE_LIMIT_PUBLIC_READ`.
 
 ### Public booking
 - Surface: `/book/{public_slug}`, `/book/{public_slug}/slots`, `/book/{public_slug}/book` (`apps/api/app/routers/booking.py:92-238`).
 - Protections: random slug, rate limit on booking actions.
-- Gaps: no rate limit on page/slots; potential enumeration load.
-- Required changes:
-  1) Add rate limits to page + slots endpoints.
-  2) Add abuse protection (IP throttling + basic bot detection headers).
+- Gaps: None observed; page/slots endpoints rate-limited via `RATE_LIMIT_PUBLIC_READ`.
 
 ### Email tracking
 - Surface: `/tracking/open/{token}`, `/tracking/click/{token}` (`apps/api/app/routers/tracking.py:83-166`).
 - Protections: token required.
-- Gaps: open redirect on click; no validation on url param.
-- Required changes:
-  1) Replace `url` param with server-stored link id, or sign URL with HMAC and verify.
+- Gaps: None observed with signed URL validation.
 
 ### Webhooks
 - Surface: `/webhooks/meta` (`apps/api/app/routers/webhooks.py:23-148`).
 - Protections: HMAC signature, payload size limit, rate limiting.
-- Gaps: `META_TEST_MODE` bypasses signature; no prod guard.
-- Required changes:
-  1) Add config validation to prevent `META_TEST_MODE=true` in non-dev.
+- Gaps: None observed; `META_TEST_MODE` blocked in non-dev (`apps/api/app/core/config.py`).
 
 ### Auth/OAuth
 - Surface: Google OAuth, integration callbacks (`apps/api/app/routers/auth.py`, `apps/api/app/routers/integrations.py`).
@@ -85,12 +75,8 @@ Recommended fix order: 4 → 5 → 6 → 7 → 8 → 9 → 10.
 
 ## PII/Secrets Audit
 
-- Raw IP logging in sessions (`apps/api/app/services/session_service.py:113-118`).
-- Transcription error logs include provider response body (`apps/api/app/services/transcription_service.py:135-136`).
 - Tokens stored encrypted (good): `apps/api/app/services/oauth_service.py:88-170`, `apps/api/app/core/encryption.py`.
-- Required changes:
-  1) Mask IPs in logs.
-  2) Sanitize provider error logging to exclude bodies.
+- Resolved: IPs masked in logs; transcription error messages sanitized.
 
 ## Ops Readiness
 
@@ -100,27 +86,21 @@ Recommended fix order: 4 → 5 → 6 → 7 → 8 → 9 → 10.
   1) Add a staging migration runbook that includes verification of `alembic upgrade head` idempotency.
 
 ### Backups / Restore
-- No restore procedure documented.
+- Runbook added in `docs/backup-restore-runbook.md`.
 - Required changes:
-  1) Add a restore runbook for Postgres and S3/local storage.
-  2) Execute a quarterly restore test and record results.
+  1) Execute a quarterly restore test and record results.
 
 ### Monitoring & Alerting
-- Sentry and GCP monitoring are optional (`apps/api/app/main.py:148-163`).
+- Enforced: non-dev requires Sentry DSN or GCP monitoring config (`apps/api/app/core/config.py`).
 - Required changes:
-  1) Enable one error tracking path (Sentry or GCP) in staging and prod; verify alert routing.
+  1) Set `SENTRY_DSN` or `GCP_PROJECT_ID`/`GOOGLE_CLOUD_PROJECT` in staging/prod and verify alert routing.
 
 ### Rate Limiting
-- Redis fallback to in-memory in production (`apps/api/app/core/rate_limit.py:16-50`).
-- Required changes:
-  1) Require Redis in prod; fail startup if unavailable.
+- Resolved: Redis required in non-dev (`apps/api/app/core/rate_limit.py`).
 
 ### Retry/Idempotency for Integrations
 - Meta lead fetch is idempotent; Meta CAPI uses event_id.
-- Gmail/Zoom send lacks retries/idempotency (`apps/api/app/services/gmail_service.py:22-100`).
-- Required changes:
-  1) Add retry policy with exponential backoff for Gmail/Zoom API calls.
-  2) Add idempotency keys for send operations where possible.
+- Resolved: Gmail send uses retry + EmailLog idempotency; Zoom create uses retry + meeting idempotency.
 
 ### ZAP Baseline Scan Plan (Staging)
 - Run against staging URL with config `zap-baseline.conf`.

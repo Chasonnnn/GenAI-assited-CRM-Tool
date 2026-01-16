@@ -17,6 +17,7 @@ slowapi_extension.asyncio.iscoroutinefunction = inspect.iscoroutinefunction
 # Falls back to in-memory if Redis is not available (dev/test mode)
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 IS_TESTING = os.getenv("TESTING", "").lower() in ("1", "true", "yes")
+IS_DEV = settings.ENV.lower() in ("dev", "development")
 DEFAULT_LIMITS = (
     [] if IS_TESTING or settings.RATE_LIMIT_API <= 0 else [f"{settings.RATE_LIMIT_API}/minute"]
 )
@@ -29,7 +30,6 @@ if IS_TESTING:
         default_limits=DEFAULT_LIMITS,
     )
 else:
-    # Try Redis, fall back to memory if connection fails
     try:
         import redis
 
@@ -42,9 +42,12 @@ else:
             default_limits=DEFAULT_LIMITS,
         )
     except Exception as e:
-        logging.warning(f"Redis unavailable for rate limiting, using in-memory: {e}")
-        limiter = Limiter(
-            key_func=get_remote_address,
-            storage_uri="memory://",
-            default_limits=DEFAULT_LIMITS,
-        )
+        if IS_DEV:
+            logging.warning(f"Redis unavailable for rate limiting, using in-memory: {e}")
+            limiter = Limiter(
+                key_func=get_remote_address,
+                storage_uri="memory://",
+                default_limits=DEFAULT_LIMITS,
+            )
+        else:
+            raise RuntimeError("Redis is required for rate limiting in non-dev environments") from e

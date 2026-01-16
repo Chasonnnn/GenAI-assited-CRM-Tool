@@ -5,6 +5,9 @@ Handles tracking pixel generation, link wrapping, and recording
 open/click events for campaign analytics.
 """
 
+import base64
+import hashlib
+import hmac
 import logging
 import re
 import secrets
@@ -20,6 +23,8 @@ from app.db.models import CampaignRecipient, CampaignTrackingEvent
 
 
 logger = logging.getLogger(__name__)
+
+TRACKING_SIGNATURE_VERSION = "v1"
 
 
 # =============================================================================
@@ -49,11 +54,41 @@ def get_tracking_pixel_url(token: str) -> str:
     return f"{base}/tracking/open/{token}"
 
 
+def _get_signing_secrets() -> list[str]:
+    secrets_list = [secret for secret in settings.jwt_secrets if secret]
+    if not secrets_list:
+        raise ValueError("JWT_SECRET must be set for tracking link signing")
+    return secrets_list
+
+
+def _sign_tracked_url(token: str, original_url: str, secret: str) -> str:
+    payload = f"{TRACKING_SIGNATURE_VERSION}:{token}:{original_url}".encode("utf-8")
+    digest = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(digest).decode("utf-8").rstrip("=")
+
+
+def get_tracking_signature(token: str, original_url: str) -> str:
+    """Get HMAC signature for a tracked URL."""
+    return _sign_tracked_url(token, original_url, _get_signing_secrets()[0])
+
+
+def verify_tracking_signature(token: str, original_url: str, signature: str) -> bool:
+    """Verify a tracked URL signature using current and previous secrets."""
+    if not signature:
+        return False
+    for secret in _get_signing_secrets():
+        expected = _sign_tracked_url(token, original_url, secret)
+        if hmac.compare_digest(expected, signature):
+            return True
+    return False
+
+
 def get_tracked_link_url(token: str, original_url: str) -> str:
-    """Get the tracking URL for a link (click tracking)."""
+    """Get the signed tracking URL for a link (click tracking)."""
     base = get_tracking_base_url()
     encoded_url = quote(original_url, safe="")
-    return f"{base}/tracking/click/{token}?url={encoded_url}"
+    signature = get_tracking_signature(token, original_url)
+    return f"{base}/tracking/click/{token}?url={encoded_url}&sig={signature}"
 
 
 # =============================================================================
@@ -169,13 +204,14 @@ def record_click(
     db: Session,
     token: str,
     url: str,
+    signature: str,
     ip_address: Optional[str] = None,
     user_agent: Optional[str] = None,
 ) -> Optional[str]:
     """
     Record a link click event.
 
-    Returns the original URL to redirect to, or None if token not found.
+    Returns the original URL to redirect to, or None if token/signature invalid.
     """
     recipient = (
         db.query(CampaignRecipient).filter(CampaignRecipient.tracking_token == token).first()
@@ -184,8 +220,10 @@ def record_click(
     if not recipient:
         return None
 
-    # Decode the URL
+    # Decode and verify the URL signature
     original_url = unquote(url)
+    if not verify_tracking_signature(token, original_url, signature):
+        return None
 
     # Record the event
     event = CampaignTrackingEvent(

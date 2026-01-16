@@ -175,9 +175,11 @@ async def gmail_callback(
     session: UserSession = Depends(get_current_session),
 ) -> RedirectResponse:
     """Handle Gmail OAuth callback."""
+    org = org_service.get_org_by_id(db, session.org_id)
+    base_url = org_service.get_org_portal_base_url(org)
     cookie_name = _oauth_cookie_name("gmail")
     error_response = RedirectResponse(
-        f"{settings.FRONTEND_URL}/settings/integrations?error=invalid_state",
+        f"{base_url}/settings/integrations?error=invalid_state",
         status_code=302,
     )
     error_response.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
@@ -239,7 +241,7 @@ async def gmail_callback(
         db.commit()
 
         success = RedirectResponse(
-            f"{settings.FRONTEND_URL}/settings/integrations?success=gmail",
+            f"{base_url}/settings/integrations?success=gmail",
             status_code=302,
         )
         success.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
@@ -249,7 +251,7 @@ async def gmail_callback(
             f"Gmail OAuth callback failed for user={session.user_id} org={session.org_id}: {e}"
         )
         error = RedirectResponse(
-            f"{settings.FRONTEND_URL}/settings/integrations?error=gmail_failed",
+            f"{base_url}/settings/integrations?error=gmail_failed",
             status_code=302,
         )
         error.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
@@ -429,9 +431,11 @@ async def zoom_callback(
     session: UserSession = Depends(get_current_session),
 ) -> RedirectResponse:
     """Handle Zoom OAuth callback."""
+    org = org_service.get_org_by_id(db, session.org_id)
+    base_url = org_service.get_org_portal_base_url(org)
     cookie_name = _oauth_cookie_name("zoom")
     error_response = RedirectResponse(
-        f"{settings.FRONTEND_URL}/settings/integrations?error=invalid_state",
+        f"{base_url}/settings/integrations?error=invalid_state",
         status_code=302,
     )
     error_response.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
@@ -493,7 +497,7 @@ async def zoom_callback(
         db.commit()
 
         success = RedirectResponse(
-            f"{settings.FRONTEND_URL}/settings/integrations?success=zoom",
+            f"{base_url}/settings/integrations?success=zoom",
             status_code=302,
         )
         success.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
@@ -503,7 +507,7 @@ async def zoom_callback(
             f"Zoom OAuth callback failed for user={session.user_id} org={session.org_id}: {e}"
         )
         error = RedirectResponse(
-            f"{settings.FRONTEND_URL}/settings/integrations?error=zoom_failed",
+            f"{base_url}/settings/integrations?error=zoom_failed",
             status_code=302,
         )
         error.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
@@ -525,6 +529,7 @@ class CreateMeetingRequest(BaseModel):
     timezone: str | None = None  # IANA timezone name (e.g. "America/Los_Angeles")
     duration: int = 30  # minutes
     contact_name: str | None = None
+    idempotency_key: str | None = None
 
 
 class CreateMeetingResponse(BaseModel):
@@ -620,6 +625,7 @@ async def create_zoom_meeting(
             timezone_name=timezone_name,
             duration=request.duration,
             contact_name=request.contact_name,
+            idempotency_key=request.idempotency_key,
         )
 
         return CreateMeetingResponse(
@@ -637,6 +643,12 @@ async def create_zoom_meeting(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Zoom API error. Please try again or reconnect Zoom.",
+        )
+    except httpx.RequestError as e:
+        logger.error(f"Zoom API request failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Zoom API request failed. Please try again later.",
         )
 
 

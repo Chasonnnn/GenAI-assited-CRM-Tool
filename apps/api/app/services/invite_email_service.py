@@ -8,17 +8,15 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.db.models import OrgInvite, Organization, User
-from app.services import gmail_service
+from app.services import gmail_service, org_service
 
 logger = logging.getLogger(__name__)
 
 
-def _build_invite_url(invite_id: UUID) -> str:
+def _build_invite_url(invite_id: UUID, base_url: str) -> str:
     """Build the invite acceptance URL."""
-    frontend_url = settings.FRONTEND_URL.rstrip("/")
-    return f"{frontend_url}/invite/{invite_id}"
+    return f"{base_url.rstrip('/')}/invite/{invite_id}"
 
 
 def _build_invite_html(
@@ -116,6 +114,7 @@ async def send_invite_email(
     # Get org name
     org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
     org_name = org.name if org else "the organization"
+    base_url = org_service.get_org_portal_base_url(org)
 
     # Get inviter name
     inviter_name = None
@@ -135,7 +134,7 @@ async def send_invite_email(
             expires_at = "soon"
 
     # Build URLs and content
-    invite_url = _build_invite_url(invite.id)
+    invite_url = _build_invite_url(invite.id, base_url)
     subject = f"You're invited to join {org_name}"
     html_body = _build_invite_html(org_name, inviter_name, invite.role, invite_url, expires_at)
 
@@ -145,13 +144,17 @@ async def send_invite_email(
         logger.warning(f"No inviter for invite {invite.id}, cannot send email")
         return {"success": False, "error": "No inviter to send from"}
 
-    result = await gmail_service.send_email(
+    result = await gmail_service.send_email_logged(
         db=db,
+        org_id=invite.organization_id,
         user_id=str(sender_user_id),
         to=invite.email,
         subject=subject,
         body=html_body,
         html=True,
+        template_id=None,
+        surrogate_id=None,
+        idempotency_key=f"invite:{invite.id}",
     )
 
     if result.get("success"):

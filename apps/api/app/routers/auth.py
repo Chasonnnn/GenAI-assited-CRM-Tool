@@ -27,6 +27,7 @@ from app.core.deps import COOKIE_NAME, get_current_session, get_db, require_csrf
 from app.core.rate_limit import limiter
 from app.core.security import (
     create_oauth_state_payload,
+    decode_session_token,
     generate_oauth_nonce,
     generate_oauth_state,
     parse_oauth_state_payload,
@@ -183,7 +184,16 @@ async def google_callback(
         return error_response
 
     # Success! Set session cookie and redirect
-    success_response = RedirectResponse(url=_get_success_redirect(), status_code=302)
+    base_url = None
+    try:
+        payload = decode_session_token(session_token)
+        org_id = payload.get("org_id")
+        if org_id:
+            org = org_service.get_org_by_id(db, UUIDType(str(org_id)))
+            base_url = org_service.get_org_portal_base_url(org)
+    except Exception:
+        base_url = None
+    success_response = RedirectResponse(url=_get_success_redirect(base_url), status_code=302)
     success_response.delete_cookie(OAUTH_STATE_COOKIE, path="/auth")
     success_response.set_cookie(
         key=COOKIE_NAME,
@@ -227,6 +237,7 @@ def get_me(
         org_name=org.name,
         org_slug=org.slug,
         org_timezone=org.timezone,
+        org_portal_domain=org.portal_domain if org else None,
         role=session.role,
         ai_enabled=org.ai_enabled if org else False,
         mfa_enabled=user.mfa_enabled,
@@ -273,6 +284,7 @@ def update_me(
         org_name=org.name,
         org_slug=org.slug,
         org_timezone=org.timezone,
+        org_portal_domain=org.portal_domain if org else None,
         role=session.role,
         ai_enabled=org.ai_enabled if org else False,
         mfa_enabled=user.mfa_enabled,
@@ -990,11 +1002,13 @@ def logout(
 # =============================================================================
 
 
-def _get_success_redirect() -> str:
+def _get_success_redirect(base_url: str | None = None) -> str:
     """Safe success redirect URL - fixed path, no user input."""
-    return f"{settings.FRONTEND_URL.rstrip('/')}/dashboard"
+    base = base_url or settings.FRONTEND_URL.rstrip("/")
+    return f"{base}/dashboard"
 
 
-def _get_error_redirect(error_code: str) -> str:
+def _get_error_redirect(error_code: str, base_url: str | None = None) -> str:
     """Safe error redirect URL - fixed path with error code."""
-    return f"{settings.FRONTEND_URL.rstrip('/')}/login?error={error_code}"
+    base = base_url or settings.FRONTEND_URL.rstrip("/")
+    return f"{base}/login?error={error_code}"

@@ -1,9 +1,11 @@
 """Organization service - org operations with version control."""
 
 from uuid import UUID
+from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.db.models import Organization
 from app.services import version_service
 
@@ -44,6 +46,33 @@ def create_org(db: Session, name: str, slug: str) -> Organization:
     compliance_service.seed_default_retention_policies(db, org.id)
 
     return org
+
+
+def normalize_portal_domain(domain: str) -> str:
+    """Normalize a portal domain to host[:port] format."""
+    value = domain.strip().lower()
+    if not value:
+        raise ValueError("Portal domain must not be empty")
+
+    parsed = urlparse(value if "://" in value else f"https://{value}")
+    if not parsed.hostname:
+        raise ValueError("Portal domain is invalid")
+    if parsed.username or parsed.password:
+        raise ValueError("Portal domain must not include credentials")
+    if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+        raise ValueError("Portal domain must not include a path or query")
+
+    host = parsed.hostname
+    if parsed.port:
+        host = f"{host}:{parsed.port}"
+    return host
+
+
+def get_org_portal_base_url(org: Organization | None) -> str:
+    """Resolve the portal base URL for an organization."""
+    if org and org.portal_domain:
+        return f"https://{org.portal_domain}"
+    return settings.FRONTEND_URL.rstrip("/") if settings.FRONTEND_URL else ""
 
 
 def update_org_settings(
@@ -111,6 +140,9 @@ def update_org_settings(
     return org
 
 
+PORTAL_DOMAIN_UNSET = object()
+
+
 def update_org_contact(
     db: Session,
     org: Organization,
@@ -118,6 +150,7 @@ def update_org_contact(
     address: str | None = None,
     phone: str | None = None,
     email: str | None = None,
+    portal_domain: str | None | object = PORTAL_DOMAIN_UNSET,
 ) -> Organization:
     """Update organization contact settings."""
     if name is not None:
@@ -128,6 +161,8 @@ def update_org_contact(
         org.phone = phone
     if email is not None and hasattr(org, "contact_email"):
         org.contact_email = email
+    if portal_domain is not PORTAL_DOMAIN_UNSET:
+        org.portal_domain = portal_domain
 
     db.commit()
     db.refresh(org)
