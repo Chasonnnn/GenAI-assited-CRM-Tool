@@ -40,6 +40,73 @@ class SurrogateCreate(BaseModel):
     source: SurrogateSource = SurrogateSource.MANUAL
     is_priority: bool = False
 
+    # =========================================================================
+    # INSURANCE INFO
+    # =========================================================================
+    insurance_company: str | None = Field(None, max_length=255)
+    insurance_plan_name: str | None = Field(None, max_length=255)
+    insurance_phone: str | None = None
+    insurance_policy_number: str | None = None
+    insurance_member_id: str | None = None
+    insurance_group_number: str | None = Field(None, max_length=100)
+    insurance_subscriber_name: str | None = None
+    insurance_subscriber_dob: date | None = None
+
+    # =========================================================================
+    # IVF CLINIC
+    # =========================================================================
+    clinic_name: str | None = Field(None, max_length=255)
+    clinic_address_line1: str | None = None
+    clinic_address_line2: str | None = None
+    clinic_city: str | None = Field(None, max_length=100)
+    clinic_state: str | None = None
+    clinic_postal: str | None = Field(None, max_length=20)
+    clinic_phone: str | None = None
+    clinic_email: EmailStr | None = None
+
+    # =========================================================================
+    # MONITORING CLINIC
+    # =========================================================================
+    monitoring_clinic_name: str | None = Field(None, max_length=255)
+    monitoring_clinic_address_line1: str | None = None
+    monitoring_clinic_address_line2: str | None = None
+    monitoring_clinic_city: str | None = Field(None, max_length=100)
+    monitoring_clinic_state: str | None = None
+    monitoring_clinic_postal: str | None = Field(None, max_length=20)
+    monitoring_clinic_phone: str | None = None
+    monitoring_clinic_email: EmailStr | None = None
+
+    # =========================================================================
+    # OB PROVIDER
+    # =========================================================================
+    ob_provider_name: str | None = Field(None, max_length=255)
+    ob_clinic_name: str | None = Field(None, max_length=255)
+    ob_address_line1: str | None = None
+    ob_address_line2: str | None = None
+    ob_city: str | None = Field(None, max_length=100)
+    ob_state: str | None = None
+    ob_postal: str | None = Field(None, max_length=20)
+    ob_phone: str | None = None
+    ob_email: EmailStr | None = None
+
+    # =========================================================================
+    # DELIVERY HOSPITAL
+    # =========================================================================
+    delivery_hospital_name: str | None = Field(None, max_length=255)
+    delivery_hospital_address_line1: str | None = None
+    delivery_hospital_address_line2: str | None = None
+    delivery_hospital_city: str | None = Field(None, max_length=100)
+    delivery_hospital_state: str | None = None
+    delivery_hospital_postal: str | None = Field(None, max_length=20)
+    delivery_hospital_phone: str | None = None
+    delivery_hospital_email: EmailStr | None = None
+
+    # =========================================================================
+    # PREGNANCY TRACKING
+    # =========================================================================
+    pregnancy_start_date: date | None = None
+    pregnancy_due_date: date | None = None
+
     @field_validator("phone")
     @classmethod
     def validate_phone(cls, v: str | None) -> str | None:
@@ -55,6 +122,37 @@ class SurrogateCreate(BaseModel):
         if v is None or v.strip() == "":
             return None
         return normalize_state(v)  # Raises ValueError on invalid
+
+    @field_validator(
+        "insurance_phone",
+        "clinic_phone",
+        "monitoring_clinic_phone",
+        "ob_phone",
+        "delivery_hospital_phone",
+    )
+    @classmethod
+    def validate_optional_phone(cls, v: str | None) -> str | None:
+        """Normalize and validate optional phone fields to E.164."""
+        if v is None:
+            return None
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return normalize_phone(v)
+
+    @field_validator(
+        "clinic_state",
+        "monitoring_clinic_state",
+        "ob_state",
+        "delivery_hospital_state",
+    )
+    @classmethod
+    def validate_optional_state(cls, v: str | None) -> str | None:
+        """Normalize and validate optional state fields to 2-letter code."""
+        if v is None:
+            return None
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return normalize_state(v)
 
 
 class SurrogateUpdate(BaseModel):
@@ -77,6 +175,73 @@ class SurrogateUpdate(BaseModel):
     num_csections: int | None = Field(None, ge=0, le=10)
     is_priority: bool | None = None
 
+    # =========================================================================
+    # INSURANCE INFO
+    # =========================================================================
+    insurance_company: str | None = Field(None, max_length=255)
+    insurance_plan_name: str | None = Field(None, max_length=255)
+    insurance_phone: str | None = None
+    insurance_policy_number: str | None = None
+    insurance_member_id: str | None = None
+    insurance_group_number: str | None = Field(None, max_length=100)
+    insurance_subscriber_name: str | None = None
+    insurance_subscriber_dob: date | None = None
+
+    # =========================================================================
+    # IVF CLINIC
+    # =========================================================================
+    clinic_name: str | None = Field(None, max_length=255)
+    clinic_address_line1: str | None = None
+    clinic_address_line2: str | None = None
+    clinic_city: str | None = Field(None, max_length=100)
+    clinic_state: str | None = None
+    clinic_postal: str | None = Field(None, max_length=20)
+    clinic_phone: str | None = None
+    clinic_email: EmailStr | None = None
+
+    # =========================================================================
+    # MONITORING CLINIC
+    # =========================================================================
+    monitoring_clinic_name: str | None = Field(None, max_length=255)
+    monitoring_clinic_address_line1: str | None = None
+    monitoring_clinic_address_line2: str | None = None
+    monitoring_clinic_city: str | None = Field(None, max_length=100)
+    monitoring_clinic_state: str | None = None
+    monitoring_clinic_postal: str | None = Field(None, max_length=20)
+    monitoring_clinic_phone: str | None = None
+    monitoring_clinic_email: EmailStr | None = None
+
+    # =========================================================================
+    # OB PROVIDER
+    # =========================================================================
+    ob_provider_name: str | None = Field(None, max_length=255)
+    ob_clinic_name: str | None = Field(None, max_length=255)
+    ob_address_line1: str | None = None
+    ob_address_line2: str | None = None
+    ob_city: str | None = Field(None, max_length=100)
+    ob_state: str | None = None
+    ob_postal: str | None = Field(None, max_length=20)
+    ob_phone: str | None = None
+    ob_email: EmailStr | None = None
+
+    # =========================================================================
+    # DELIVERY HOSPITAL
+    # =========================================================================
+    delivery_hospital_name: str | None = Field(None, max_length=255)
+    delivery_hospital_address_line1: str | None = None
+    delivery_hospital_address_line2: str | None = None
+    delivery_hospital_city: str | None = Field(None, max_length=100)
+    delivery_hospital_state: str | None = None
+    delivery_hospital_postal: str | None = Field(None, max_length=20)
+    delivery_hospital_phone: str | None = None
+    delivery_hospital_email: EmailStr | None = None
+
+    # =========================================================================
+    # PREGNANCY TRACKING
+    # =========================================================================
+    pregnancy_start_date: date | None = None
+    pregnancy_due_date: date | None = None
+
     @field_validator("phone")
     @classmethod
     def validate_phone(cls, v: str | None) -> str | None:
@@ -92,6 +257,37 @@ class SurrogateUpdate(BaseModel):
         if v is None:
             return None
         if v.strip() == "":
+            return None
+        return normalize_state(v)
+
+    @field_validator(
+        "insurance_phone",
+        "clinic_phone",
+        "monitoring_clinic_phone",
+        "ob_phone",
+        "delivery_hospital_phone",
+    )
+    @classmethod
+    def validate_optional_phone(cls, v: str | None) -> str | None:
+        """Normalize and validate optional phone fields to E.164."""
+        if v is None:
+            return None
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return normalize_phone(v)
+
+    @field_validator(
+        "clinic_state",
+        "monitoring_clinic_state",
+        "ob_state",
+        "delivery_hospital_state",
+    )
+    @classmethod
+    def validate_optional_state(cls, v: str | None) -> str | None:
+        """Normalize and validate optional state fields to 2-letter code."""
+        if v is None:
+            return None
+        if isinstance(v, str) and v.strip() == "":
             return None
         return normalize_state(v)
 
@@ -140,6 +336,73 @@ class SurrogateRead(BaseModel):
     has_surrogate_experience: bool | None
     num_deliveries: int | None
     num_csections: int | None
+
+    # =========================================================================
+    # INSURANCE INFO
+    # =========================================================================
+    insurance_company: str | None = None
+    insurance_plan_name: str | None = None
+    insurance_phone: str | None = None
+    insurance_policy_number: str | None = None
+    insurance_member_id: str | None = None
+    insurance_group_number: str | None = None
+    insurance_subscriber_name: str | None = None
+    insurance_subscriber_dob: date | None = None
+
+    # =========================================================================
+    # IVF CLINIC
+    # =========================================================================
+    clinic_name: str | None = None
+    clinic_address_line1: str | None = None
+    clinic_address_line2: str | None = None
+    clinic_city: str | None = None
+    clinic_state: str | None = None
+    clinic_postal: str | None = None
+    clinic_phone: str | None = None
+    clinic_email: str | None = None
+
+    # =========================================================================
+    # MONITORING CLINIC
+    # =========================================================================
+    monitoring_clinic_name: str | None = None
+    monitoring_clinic_address_line1: str | None = None
+    monitoring_clinic_address_line2: str | None = None
+    monitoring_clinic_city: str | None = None
+    monitoring_clinic_state: str | None = None
+    monitoring_clinic_postal: str | None = None
+    monitoring_clinic_phone: str | None = None
+    monitoring_clinic_email: str | None = None
+
+    # =========================================================================
+    # OB PROVIDER
+    # =========================================================================
+    ob_provider_name: str | None = None
+    ob_clinic_name: str | None = None
+    ob_address_line1: str | None = None
+    ob_address_line2: str | None = None
+    ob_city: str | None = None
+    ob_state: str | None = None
+    ob_postal: str | None = None
+    ob_phone: str | None = None
+    ob_email: str | None = None
+
+    # =========================================================================
+    # DELIVERY HOSPITAL
+    # =========================================================================
+    delivery_hospital_name: str | None = None
+    delivery_hospital_address_line1: str | None = None
+    delivery_hospital_address_line2: str | None = None
+    delivery_hospital_city: str | None = None
+    delivery_hospital_state: str | None = None
+    delivery_hospital_postal: str | None = None
+    delivery_hospital_phone: str | None = None
+    delivery_hospital_email: str | None = None
+
+    # =========================================================================
+    # PREGNANCY TRACKING
+    # =========================================================================
+    pregnancy_start_date: date | None = None
+    pregnancy_due_date: date | None = None
 
     # Soft delete
     is_archived: bool
