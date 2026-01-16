@@ -1,8 +1,8 @@
 """Add backdated status change support for intended parents.
 
-Revision ID: 20260115_1700
-Revises: 20260115_1600
-Create Date: 2026-01-15 17:00:00.000000
+Revision ID: 20260115_1715
+Revises: 20260115_1710
+Create Date: 2026-01-15 17:15:00.000000
 
 """
 
@@ -13,8 +13,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = "20260115_1700"
-down_revision: Union[str, None] = "20260115_1600"
+revision: str = "20260115_1715"
+down_revision: Union[str, None] = "20260115_1710"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
