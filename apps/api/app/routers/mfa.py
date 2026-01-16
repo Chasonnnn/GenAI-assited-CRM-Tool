@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import COOKIE_NAME, get_current_session, get_db, require_csrf_header
+from app.core.csrf import set_csrf_cookie
 from app.core.security import create_session_token
 from app.schemas.auth import UserSession
 from app.services import duo_service, membership_service, mfa_service, user_service
@@ -310,6 +311,7 @@ def complete_mfa_challenge(
         secure=settings.cookie_secure,
         path="/",
     )
+    set_csrf_cookie(response)
 
     return MFACompleteResponse(
         success=True,
@@ -507,6 +509,7 @@ def verify_duo_callback(
         secure=settings.cookie_secure,
         path="/",
     )
+    set_csrf_cookie(response)
 
     payload = {
         "success": True,

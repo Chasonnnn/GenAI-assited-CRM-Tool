@@ -25,6 +25,7 @@ import { useSetAIContext } from "@/lib/context/ai-context"
 import { useAIUsageSummary } from "@/lib/hooks/use-ai"
 import { toast } from "sonner"
 import { formatLocalDate } from "@/lib/utils/date"
+import { getCsrfHeaders } from "@/lib/csrf"
 
 // Chart configs
 const surrogatesOverviewConfig = {
@@ -299,7 +300,7 @@ export default function ReportsPage() {
 
             const response = await fetch(url, {
                 credentials: 'include',
-                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                headers: { ...getCsrfHeaders() },
             })
 
             if (!response.ok) {

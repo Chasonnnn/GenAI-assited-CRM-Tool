@@ -76,7 +76,7 @@ apps/api/app/
 - Tokens signed with either key are valid during rotation
 
 ### CSRF Protection
-All mutations require: `X-Requested-With: XMLHttpRequest` header
+All mutations require: `X-CSRF-Token` header matching the `crm_csrf` cookie
 
 ### Roles (4 total)
 | Role | Description |

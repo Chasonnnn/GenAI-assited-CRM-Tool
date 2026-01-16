@@ -4,6 +4,7 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 
 from app.core.deps import COOKIE_NAME, get_db
+from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.permissions import PERMISSION_REGISTRY, PermissionKey as P
 from app.core.policies import POLICIES
 from app.core.security import create_session_token
@@ -64,11 +65,12 @@ async def _client_with_revoked_permission(db, test_org, permission: P) -> AsyncC
 
     app.dependency_overrides[get_db] = override_get_db
 
+    csrf_token = generate_csrf_token()
     return AsyncClient(
         transport=ASGITransport(app=app),
         base_url="https://test",
-        cookies={COOKIE_NAME: token},
-        headers={"X-Requested-With": "XMLHttpRequest"},
+        cookies={COOKIE_NAME: token, CSRF_COOKIE_NAME: csrf_token},
+        headers={CSRF_HEADER: csrf_token},
     )
 
 

@@ -3,6 +3,8 @@
  * Handles credentials (cookies) and error responses.
  */
 
+import { getCsrfHeaders } from '@/lib/csrf';
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
 export class ApiError extends Error {
@@ -27,7 +29,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     const isFormData = body instanceof FormData;
 
     const headers: HeadersInit = {
-        'X-Requested-With': 'XMLHttpRequest', // CSRF header
+        ...getCsrfHeaders(),
         ...(!isFormData && { 'Content-Type': 'application/json' }),
         ...customHeaders,
     };

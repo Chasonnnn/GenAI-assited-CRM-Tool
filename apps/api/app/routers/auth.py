@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import COOKIE_NAME, get_current_session, get_db, require_csrf_header
+from app.core.csrf import CSRF_COOKIE_NAME, set_csrf_cookie
 from app.core.rate_limit import limiter
 from app.core.security import (
     create_oauth_state_payload,
@@ -204,6 +205,7 @@ async def google_callback(
         secure=settings.cookie_secure,
         path="/",
     )
+    set_csrf_cookie(success_response)
     return success_response
 
 
@@ -975,7 +977,7 @@ def logout(
     """
     Clear session cookie, delete session from DB, and log logout event.
 
-    Requires X-Requested-With header for CSRF protection.
+    Requires X-CSRF-Token header for CSRF protection.
     """
     # Delete session from database (enables revocation)
     token = request.cookies.get(COOKIE_NAME)
@@ -994,6 +996,7 @@ def logout(
     db.commit()
 
     response.delete_cookie(COOKIE_NAME, path="/")
+    response.delete_cookie(CSRF_COOKIE_NAME, path="/")
     return {"status": "logged_out"}
 
 

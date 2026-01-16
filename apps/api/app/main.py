@@ -15,7 +15,8 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
-from app.core.deps import COOKIE_NAME, CSRF_HEADER, CSRF_HEADER_VALUE
+from app.core.deps import COOKIE_NAME
+from app.core.csrf import CSRF_HEADER, CSRF_COOKIE_NAME, set_csrf_cookie, validate_csrf
 from app.core.gcp_monitoring import report_exception, setup_gcp_monitoring
 from app.core.structured_logging import build_log_context
 from app.core.rate_limit import limiter
@@ -286,14 +287,20 @@ async def metrics_middleware(request: Request, call_next):
 async def csrf_protection_middleware(request: Request, call_next):
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         if request.cookies.get(COOKIE_NAME):
-            if request.headers.get(CSRF_HEADER) != CSRF_HEADER_VALUE:
+            if not validate_csrf(request):
                 return JSONResponse(
                     status_code=403,
                     content={
-                        "detail": f"Missing CSRF header. Include '{CSRF_HEADER}: {CSRF_HEADER_VALUE}'"
+                        "detail": (
+                            "Missing or invalid CSRF token. "
+                            f"Include '{CSRF_HEADER}' header matching '{CSRF_COOKIE_NAME}' cookie."
+                        )
                     },
                 )
-    return await call_next(request)
+    response = await call_next(request)
+    if request.cookies.get(COOKIE_NAME) and not request.cookies.get(CSRF_COOKIE_NAME):
+        set_csrf_cookie(response)
+    return response
 
 
 # Add rate limiter
@@ -307,7 +314,7 @@ app.add_middleware(
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,  # Required for cookies
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+    allow_headers=["Content-Type", "Authorization", CSRF_HEADER],
     expose_headers=["X-Request-ID", "Content-Disposition"],
 )
 

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import COOKIE_NAME, get_db
+from app.core.csrf import set_csrf_cookie
 from app.core.security import create_session_token
 from app.services import (
     dev_service,
@@ -83,6 +84,7 @@ def login_as(user_id: UUID, response: Response, db: Session = Depends(get_db)):
         secure=settings.cookie_secure,
         path="/",
     )
+    set_csrf_cookie(response)
 
     return {
         "status": "logged_in",

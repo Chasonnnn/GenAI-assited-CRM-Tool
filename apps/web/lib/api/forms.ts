@@ -3,6 +3,7 @@
  */
 
 import api from './index'
+import { getCsrfHeaders } from '@/lib/csrf'
 import type { JsonObject } from '../types/json'
 
 export type FormStatus = 'draft' | 'published' | 'archived'
@@ -281,9 +282,7 @@ export async function exportSubmissionPdf(submissionId: string): Promise<void> {
     const response = await fetch(url, {
         method: 'GET',
         credentials: 'include',
-        headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-        },
+        headers: { ...getCsrfHeaders() },
     })
 
     if (!response.ok) {

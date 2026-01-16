@@ -52,6 +52,7 @@ import {
     Search,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
+import { getCsrfHeaders } from "@/lib/csrf"
 import { NotificationBell } from "@/components/notification-bell"
 import { ThemeToggle } from "@/components/theme-toggle"
 
@@ -199,7 +200,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                 method: "POST",
                 credentials: "include",
                 headers: {
-                    "X-Requested-With": "XMLHttpRequest",
+                    ...getCsrfHeaders(),
                 },
             })
         } catch {

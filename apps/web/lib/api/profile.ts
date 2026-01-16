@@ -3,6 +3,7 @@
  */
 
 import api from './index'
+import { getCsrfHeaders } from '@/lib/csrf'
 import type { FormSchema } from './forms'
 import type { JsonObject, JsonValue } from '../types/json'
 
@@ -73,9 +74,7 @@ export async function exportProfilePdf(surrogateId: string): Promise<void> {
     const response = await fetch(url, {
         method: 'GET',
         credentials: 'include',
-        headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-        },
+        headers: { ...getCsrfHeaders() },
     })
     if (!response.ok) {
         throw new Error(`Export failed (${response.status})`)
