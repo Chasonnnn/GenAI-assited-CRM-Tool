@@ -48,12 +48,42 @@ function ChartContainer({
 }) {
   const uniqueId = React.useId()
   const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`
+  const containerRef = React.useRef<HTMLDivElement | null>(null)
+  const [hasSize, setHasSize] = React.useState(
+    () => typeof window === "undefined" || typeof ResizeObserver === "undefined"
+  )
+
+  React.useEffect(() => {
+    const element = containerRef.current
+    if (!element) return
+
+    const updateSize = () => {
+      const rect = element.getBoundingClientRect()
+      setHasSize(rect.width > 0 && rect.height > 0)
+    }
+
+    updateSize()
+
+    if (typeof ResizeObserver === "undefined") {
+      if (typeof window.requestAnimationFrame === "function") {
+        const frame = window.requestAnimationFrame(updateSize)
+        return () => window.cancelAnimationFrame(frame)
+      }
+      updateSize()
+      return
+    }
+
+    const observer = new ResizeObserver(updateSize)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
 
   return (
     <ChartContext.Provider value={{ config }}>
       <div
         data-slot="chart"
         data-chart={chartId}
+        ref={containerRef}
         className={cn(
           "[&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border flex aspect-video justify-center text-xs [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden [&_.recharts-sector]:outline-hidden [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-hidden",
           className
@@ -61,9 +91,11 @@ function ChartContainer({
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
-        <RechartsPrimitive.ResponsiveContainer minHeight={1} minWidth={1}>
-          {children}
-        </RechartsPrimitive.ResponsiveContainer>
+        {hasSize ? (
+          <RechartsPrimitive.ResponsiveContainer minHeight={1} minWidth={1}>
+            {children}
+          </RechartsPrimitive.ResponsiveContainer>
+        ) : null}
       </div>
     </ChartContext.Provider>
   )
