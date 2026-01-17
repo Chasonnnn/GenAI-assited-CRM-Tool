@@ -22,6 +22,8 @@ from app.db.models import (
     Match,
     IntendedParentStatusHistory,
     MatchEvent,
+    StatusChangeRequest,
+    User,
 )
 from app.schemas.auth import UserSession
 from app.services import match_service, note_service, workflow_triggers
@@ -122,6 +124,12 @@ class MatchRejectRequest(BaseModel):
 
     notes: str | None = None
     rejection_reason: str = Field(..., min_length=1)
+
+
+class MatchCancelRequest(BaseModel):
+    """Request to cancel an accepted match (admin approval required)."""
+
+    reason: str | None = None
 
 
 class MatchUpdateNotesRequest(BaseModel):
@@ -625,6 +633,93 @@ def reject_match(
 
     # Fire workflow trigger for match rejected
     workflow_triggers.trigger_match_rejected(db, match)
+
+    return _match_to_read(match, db, str(session.org_id))
+
+
+@router.post(
+    "/{match_id}/cancel-request",
+    response_model=MatchRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def request_cancel_match(
+    match_id: UUID,
+    data: MatchCancelRequest,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
+) -> MatchRead:
+    """
+    Request cancellation of an accepted match (requires admin approval).
+
+    This will:
+    - Create a pending status change request tied to the match
+    - Mark the match as cancel_pending
+    """
+    match = match_service.get_match(db, match_id, session.org_id)
+    if not match:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
+
+    if match.status != MatchStatus.ACCEPTED.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only accepted matches can be cancelled",
+        )
+
+    existing_request = (
+        db.query(StatusChangeRequest)
+        .filter(
+            StatusChangeRequest.organization_id == session.org_id,
+            StatusChangeRequest.entity_type == "match",
+            StatusChangeRequest.entity_id == match.id,
+            StatusChangeRequest.status == "pending",
+        )
+        .first()
+    )
+    if existing_request:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A pending cancellation request already exists for this match",
+        )
+
+    now = datetime.now(timezone.utc)
+    request = StatusChangeRequest(
+        organization_id=session.org_id,
+        entity_type="match",
+        entity_id=match.id,
+        target_status=MatchStatus.CANCELLED.value,
+        effective_at=now,
+        reason=(data.reason or "").strip(),
+        requested_by_user_id=session.user_id,
+        requested_at=now,
+        status="pending",
+    )
+    db.add(request)
+
+    match.status = MatchStatus.CANCEL_PENDING.value
+    match.updated_at = now
+
+    db.commit()
+    db.refresh(match)
+    db.refresh(request)
+
+    from app.services import notification_service
+
+    surrogate = match_service.get_surrogate_with_stage(db, match.surrogate_id, session.org_id)
+    intended_parent = match_service.get_intended_parent(
+        db, match.intended_parent_id, session.org_id
+    )
+    requester = db.query(User).filter(User.id == session.user_id).first()
+    requester_name = requester.display_name if requester else "Someone"
+
+    if surrogate and intended_parent:
+        notification_service.notify_match_cancel_request_pending(
+            db=db,
+            request=request,
+            match=match,
+            surrogate=surrogate,
+            intended_parent=intended_parent,
+            requester_name=requester_name,
+        )
 
     return _match_to_read(match, db, str(session.org_id))
 

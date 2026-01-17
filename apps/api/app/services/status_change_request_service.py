@@ -5,13 +5,14 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.db.enums import Role
+from app.db.enums import IntendedParentStatus, MatchStatus, Role, SurrogateActivityType
 from app.db.models import (
     StatusChangeRequest,
     Surrogate,
     User,
     PipelineStage,
     IntendedParent,
+    Match,
 )
 
 
@@ -87,7 +88,7 @@ def approve_request(
     Raises:
         ValueError: If request not found, not pending, or user not authorized
     """
-    from app.services import surrogate_service, pipeline_service, ip_service
+    from app.services import surrogate_service, pipeline_service, ip_service, match_service, activity_service
 
     request = get_request(db, request_id, org_id)
     if not request:
@@ -175,6 +176,83 @@ def approve_request(
             approved_at=now,
             requested_at=request.requested_at,
         )
+    elif request.entity_type == "match":
+        match = match_service.get_match(db, request.entity_id, org_id)
+        if not match:
+            raise ValueError("Match not found")
+        if request.target_status != MatchStatus.CANCELLED.value:
+            raise ValueError("Target status not found")
+
+        surrogate = match_service.get_surrogate_with_stage(db, match.surrogate_id, org_id)
+        intended_parent = match_service.get_intended_parent(db, match.intended_parent_id, org_id)
+        if not surrogate or not intended_parent:
+            raise ValueError("Match participants not found")
+
+        pipeline_id = surrogate.stage.pipeline_id if surrogate.stage else None
+        if not pipeline_id:
+            pipeline_id = pipeline_service.get_or_create_default_pipeline(
+                db,
+                org_id,
+                admin_user_id,
+            ).id
+        ready_stage = pipeline_service.get_stage_by_slug(db, pipeline_id, "ready_to_match")
+        if not ready_stage:
+            raise ValueError("Ready to match stage not found")
+
+        old_stage_id = surrogate.stage_id
+        old_label = surrogate.status_label
+        old_stage = pipeline_service.get_stage_by_id(db, old_stage_id) if old_stage_id else None
+        old_slug = old_stage.slug if old_stage else None
+
+        surrogate_service._apply_status_change(
+            db=db,
+            surrogate=surrogate,
+            new_stage=ready_stage,
+            old_stage_id=old_stage_id,
+            old_label=old_label,
+            old_slug=old_slug,
+            user_id=request.requested_by_user_id,
+            reason=request.reason,
+            effective_at=request.effective_at,
+            recorded_at=now,
+            is_undo=False,
+            request_id=request.id,
+            approved_by_user_id=admin_user_id,
+            approved_at=now,
+            requested_at=request.requested_at,
+        )
+
+        ip_service._apply_status_change(
+            db=db,
+            ip=intended_parent,
+            new_status=IntendedParentStatus.READY_TO_MATCH.value,
+            old_status=intended_parent.status,
+            user_id=request.requested_by_user_id,
+            reason=request.reason,
+            effective_at=request.effective_at,
+            recorded_at=now,
+            is_undo=False,
+            request_id=request.id,
+            approved_by_user_id=admin_user_id,
+            approved_at=now,
+            requested_at=request.requested_at,
+        )
+
+        match.status = MatchStatus.CANCELLED.value
+        match.updated_at = now
+        db.add(match)
+
+        activity_service.log_activity(
+            db=db,
+            surrogate_id=match.surrogate_id,
+            organization_id=org_id,
+            activity_type=SurrogateActivityType.MATCH_CANCELLED,
+            actor_user_id=admin_user_id,
+            details={
+                "match_id": str(match.id),
+                "intended_parent_id": str(match.intended_parent_id),
+            },
+        )
     else:
         raise ValueError(f"Unknown entity type: {request.entity_type}")
 
@@ -205,6 +283,16 @@ def approve_request(
             db=db,
             request=request,
             intended_parent=intended_parent,
+            approved=True,
+            resolver_name=resolver_name,
+        )
+    elif request.entity_type == "match":
+        admin_user = db.query(User).filter(User.id == admin_user_id).first()
+        resolver_name = admin_user.display_name if admin_user else "Admin"
+        notification_service.notify_match_cancel_request_resolved(
+            db=db,
+            request=request,
+            match=match,
             approved=True,
             resolver_name=resolver_name,
         )
@@ -254,6 +342,20 @@ def reject_request(
     request.rejected_by_user_id = admin_user_id
     request.rejected_at = now
 
+    if request.entity_type == "match":
+        match = (
+            db.query(Match)
+            .filter(
+                Match.id == request.entity_id,
+                Match.organization_id == org_id,
+            )
+            .first()
+        )
+        if match and match.status == MatchStatus.CANCEL_PENDING.value:
+            match.status = MatchStatus.ACCEPTED.value
+            match.updated_at = now
+            db.add(match)
+
     db.commit()
     db.refresh(request)
 
@@ -301,6 +403,28 @@ def reject_request(
                 resolver_name=resolver_name,
                 reason=reason,
             )
+    elif request.entity_type == "match":
+        match = (
+            db.query(Match)
+            .filter(
+                Match.id == request.entity_id,
+                Match.organization_id == org_id,
+            )
+            .first()
+        )
+        if match:
+            from app.services import notification_service
+
+            admin_user = db.query(User).filter(User.id == admin_user_id).first()
+            resolver_name = admin_user.display_name if admin_user else "Admin"
+            notification_service.notify_match_cancel_request_resolved(
+                db=db,
+                request=request,
+                match=match,
+                approved=False,
+                resolver_name=resolver_name,
+                reason=reason,
+            )
 
     return request
 
@@ -342,6 +466,20 @@ def cancel_request(
     request.status = "cancelled"
     request.cancelled_by_user_id = user_id
     request.cancelled_at = now
+
+    if request.entity_type == "match":
+        match = (
+            db.query(Match)
+            .filter(
+                Match.id == request.entity_id,
+                Match.organization_id == org_id,
+            )
+            .first()
+        )
+        if match and match.status == MatchStatus.CANCEL_PENDING.value:
+            match.status = MatchStatus.ACCEPTED.value
+            match.updated_at = now
+            db.add(match)
 
     db.commit()
     db.refresh(request)
@@ -421,6 +559,43 @@ def get_request_with_details(
             result["current_stage_label"] = _format_status_label(intended_parent.status)
             if request.target_status:
                 result["target_stage_label"] = _format_status_label(request.target_status)
+    elif request.entity_type == "match":
+        match = (
+            db.query(Match)
+            .filter(
+                Match.id == request.entity_id,
+                Match.organization_id == org_id,
+            )
+            .first()
+        )
+        if match:
+            result["entity_number"] = match.match_number
+            result["current_stage_label"] = _format_status_label(match.status)
+            if request.target_status:
+                result["target_stage_label"] = _format_status_label(request.target_status)
+
+            surrogate = (
+                db.query(Surrogate)
+                .filter(
+                    Surrogate.id == match.surrogate_id,
+                    Surrogate.organization_id == org_id,
+                )
+                .first()
+            )
+            intended_parent = (
+                db.query(IntendedParent)
+                .filter(
+                    IntendedParent.id == match.intended_parent_id,
+                    IntendedParent.organization_id == org_id,
+                )
+                .first()
+            )
+            if surrogate and intended_parent:
+                result["entity_name"] = f"{surrogate.full_name} ↔ {intended_parent.full_name}"
+            elif surrogate:
+                result["entity_name"] = surrogate.full_name
+            elif intended_parent:
+                result["entity_name"] = intended_parent.full_name
 
     return result
 
