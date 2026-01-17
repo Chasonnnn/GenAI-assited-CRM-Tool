@@ -21,7 +21,7 @@ class MonitoringClients:
 
 
 def _monitoring_enabled() -> bool:
-    if settings.ENV == "dev":
+    if settings.is_dev:
         return False
     if os.getenv("TESTING", "").lower() in ("1", "true", "yes"):
         return False

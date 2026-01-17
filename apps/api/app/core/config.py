@@ -246,6 +246,11 @@ class Settings(BaseSettings):
         return self.GCP_PROJECT_ID or os.getenv("GOOGLE_CLOUD_PROJECT", "")
 
     @property
+    def is_dev(self) -> bool:
+        """True for dev-like environments (dev/development/test)."""
+        return self.ENV.lower() in {"dev", "development", "test"}
+
+    @property
     def cors_origins_list(self) -> list[str]:
         """Parse CORS_ORIGINS into a list."""
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
@@ -268,7 +273,7 @@ class Settings(BaseSettings):
     @property
     def cookie_secure(self) -> bool:
         """Secure cookies only in production."""
-        return self.ENV != "dev"
+        return not self.is_dev
 
 
 settings = Settings()

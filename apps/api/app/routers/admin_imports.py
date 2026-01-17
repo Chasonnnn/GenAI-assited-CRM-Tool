@@ -18,7 +18,7 @@ router = APIRouter(prefix="/admin/imports", tags=["Admin - Imports"])
 
 
 def _ensure_dev_env() -> None:
-    if settings.ENV not in ("dev", "test"):
+    if not settings.is_dev:
         raise HTTPException(status_code=403, detail="Admin imports are only available in dev mode.")
 
 
