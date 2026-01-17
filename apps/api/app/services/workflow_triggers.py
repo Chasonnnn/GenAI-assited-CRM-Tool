@@ -422,6 +422,7 @@ def trigger_match_proposed(db: Session, match: Match) -> None:
 
 def trigger_match_accepted(db: Session, match: Match) -> None:
     """Trigger workflows when a match is accepted."""
+    accepted_at = match.reviewed_at or match.updated_at
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.MATCH_ACCEPTED,
@@ -434,7 +435,7 @@ def trigger_match_accepted(db: Session, match: Match) -> None:
             if match.intended_parent_id
             else None,
             "status": match.status,
-            "accepted_at": match.accepted_at.isoformat() if match.accepted_at else None,
+            "accepted_at": accepted_at.isoformat() if accepted_at else None,
         },
         org_id=match.organization_id,
         source=WorkflowEventSource.USER,

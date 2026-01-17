@@ -24,6 +24,7 @@ import {
 import { useNotificationSocket } from "@/lib/hooks/use-notification-socket"
 import { useBrowserNotifications } from "@/lib/hooks/use-browser-notifications"
 import type { Notification } from "@/lib/api/notifications"
+import { getNotificationHref } from "@/lib/utils/notification-routing"
 
 export function NotificationBell() {
     const router = useRouter()
@@ -55,6 +56,7 @@ export function NotificationBell() {
                 ...(lastNotification.body ? { body: lastNotification.body } : {}),
                 ...(lastNotification.entity_type ? { entityType: lastNotification.entity_type } : {}),
                 ...(lastNotification.entity_id ? { entityId: lastNotification.entity_id } : {}),
+                ...(lastNotification.type ? { notificationType: lastNotification.type } : {}),
             }
             showNotification(lastNotification.title || 'New notification', notificationOptions)
         }
@@ -70,17 +72,7 @@ export function NotificationBell() {
             markRead.mutate(notification.id)
         }
 
-        // Navigate to entity
-        if (notification.entity_type === "surrogate" && notification.entity_id) {
-            router.push(`/surrogates/${notification.entity_id}`)
-        } else if (notification.entity_type === "task" && notification.entity_id) {
-            router.push(`/tasks`)
-        } else if (notification.entity_type === "appointment") {
-            router.push(`/appointments`)
-        } else {
-            // Fallback: go to notifications page
-            router.push('/notifications')
-        }
+        router.push(getNotificationHref(notification))
     }
 
     const handleMarkAllRead = () => {

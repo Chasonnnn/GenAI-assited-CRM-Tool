@@ -120,6 +120,60 @@ describe('NotificationsPage', () => {
         )
     })
 
+    it('routes approval-needed notifications to tasks', () => {
+        mockUseNotifications.mockReturnValue({
+            data: {
+                unread_count: 1,
+                items: [
+                    {
+                        id: 'n3',
+                        type: 'status_change_requested',
+                        title: 'Approval needed',
+                        body: 'A status change requires approval.',
+                        entity_type: 'surrogate',
+                        entity_id: 's2',
+                        read_at: null,
+                        created_at: new Date().toISOString(),
+                    },
+                ],
+            },
+            isLoading: false,
+        })
+        mockUseTasks.mockReturnValue({ data: { items: [] }, isLoading: false })
+
+        render(<NotificationsPage />)
+        fireEvent.click(screen.getByText('Approval needed'))
+        expect(mockMarkRead).toHaveBeenCalledWith('n3')
+        expect(mockPush).toHaveBeenCalledWith('/tasks?filter=my_tasks&focus=approvals')
+    })
+
+    it('routes overdue task notifications to the overdue section', () => {
+        mockUseNotifications.mockReturnValue({
+            data: {
+                unread_count: 1,
+                items: [
+                    {
+                        id: 'n4',
+                        type: 'task_overdue',
+                        title: 'Task overdue',
+                        body: 'A task is overdue.',
+                        entity_type: 'task',
+                        entity_id: 't2',
+                        read_at: null,
+                        created_at: new Date().toISOString(),
+                    },
+                ],
+            },
+            isLoading: false,
+        })
+        mockUseTasks.mockReturnValue({ data: { items: [] }, isLoading: false })
+
+        render(<NotificationsPage />)
+        fireEvent.click(screen.getByText('Task overdue'))
+        expect(mockMarkRead).toHaveBeenCalledWith('n4')
+        expect(mockPush).toHaveBeenCalledWith('/tasks?filter=my_tasks&focus=overdue')
+    })
+
     it('shows empty state when no notifications', () => {
         mockUseNotifications.mockReturnValue({
             data: { unread_count: 0, items: [] },
