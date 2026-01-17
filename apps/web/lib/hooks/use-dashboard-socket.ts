@@ -33,20 +33,30 @@ export function useDashboardSocket(enabled: boolean = true) {
     const queryClient = useQueryClient();
     const { user } = useAuth();
     const wsRef = useRef<WebSocket | null>(null);
+    const isActiveRef = useRef(true);
+    const manualCloseRef = useRef(false);
     const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const reconnectDelayRef = useRef(INITIAL_RECONNECT_DELAY);
     const errorLoggedRef = useRef(false);
     const [isConnected, setIsConnected] = useState(false);
 
     const connect = useCallback(() => {
-        if (!enabled || !user || wsRef.current?.readyState === WebSocket.OPEN) {
+        if (!enabled || !user) {
             return;
+        }
+        const existing = wsRef.current
+        if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
+            return
         }
 
         try {
             const ws = new WebSocket(`${WS_URL}/ws/notifications`);
 
             ws.onopen = () => {
+                if (!isActiveRef.current || !enabled || !user) {
+                    ws.close(1000, "Inactive");
+                    return;
+                }
                 setIsConnected(true);
                 reconnectDelayRef.current = INITIAL_RECONNECT_DELAY; // Reset delay on successful connect
                 errorLoggedRef.current = false;
@@ -85,12 +95,25 @@ export function useDashboardSocket(enabled: boolean = true) {
             };
 
             ws.onerror = () => {
+                if (!isActiveRef.current || manualCloseRef.current) {
+                    return;
+                }
                 errorLoggedRef.current = true;
             };
 
             ws.onclose = (event) => {
                 setIsConnected(false);
                 wsRef.current = null;
+
+                if (!isActiveRef.current || !enabled || !user) {
+                    return;
+                }
+
+                if (manualCloseRef.current) {
+                    manualCloseRef.current = false;
+                    connect();
+                    return;
+                }
 
                 // Don't reconnect if explicitly closed or disabled
                 if (!enabled || event.code === 1000) {
@@ -130,15 +153,18 @@ export function useDashboardSocket(enabled: boolean = true) {
 
     // Connect on mount, disconnect on unmount
     useEffect(() => {
+        isActiveRef.current = true;
         if (enabled && user) {
             connect();
         }
 
         return () => {
+            isActiveRef.current = false;
             if (reconnectTimeoutRef.current) {
                 clearTimeout(reconnectTimeoutRef.current);
             }
-            if (wsRef.current) {
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                manualCloseRef.current = true;
                 wsRef.current.close(1000, 'Component unmounted');
                 wsRef.current = null;
             }

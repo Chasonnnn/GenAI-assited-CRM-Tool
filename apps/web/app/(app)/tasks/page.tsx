@@ -107,6 +107,25 @@ type ViewType = "list" | "calendar"
 const isViewType = (value: string | null): value is ViewType =>
     value === "list" || value === "calendar"
 
+type FocusTarget =
+    | "approvals"
+    | "tasks"
+    | "overdue"
+    | "today"
+    | "tomorrow"
+    | "this-week"
+    | "later"
+    | "no-date"
+const isFocusTarget = (value: string | null): value is FocusTarget =>
+    value === "approvals" ||
+    value === "tasks" ||
+    value === "overdue" ||
+    value === "today" ||
+    value === "tomorrow" ||
+    value === "this-week" ||
+    value === "later" ||
+    value === "no-date"
+
 type TaskEditPayload = {
     id: string
     title: string
@@ -124,9 +143,13 @@ export default function TasksPage() {
 
     // Read initial values from URL params
     const urlFilter = searchParams.get("filter")
+    const urlFocus = searchParams.get("focus")
 
     const [filter, setFilter] = useState<FilterType>(
         isFilterType(urlFilter) ? urlFilter : "my_tasks"
+    )
+    const [pendingFocus, setPendingFocus] = useState<FocusTarget | null>(
+        isFocusTarget(urlFocus) ? urlFocus : null
     )
     const [showCompleted, setShowCompleted] = useState(false)
     const [view, setView] = useState<ViewType>(() => {
@@ -136,6 +159,10 @@ export default function TasksPage() {
         }
         return "calendar"
     })
+
+    useEffect(() => {
+        setPendingFocus(isFocusTarget(urlFocus) ? urlFocus : null)
+    }, [urlFocus])
 
     // Sync state changes back to URL
     const updateUrlParams = useCallback((filterValue: FilterType) => {
@@ -374,7 +401,7 @@ export default function TasksPage() {
         const colors = categoryColors[category]
 
         return (
-            <div key={category} className="space-y-3">
+            <div key={category} id={`tasks-${category}`} className="space-y-3">
                 <div className="flex items-center gap-3">
                     <div className={`h-px flex-1 ${category === 'overdue' ? 'bg-destructive' : 'bg-border'}`} />
                     <h3 className={`text-sm font-medium ${colors.text}`}>
@@ -395,6 +422,36 @@ export default function TasksPage() {
         refetchIncomplete()
         refetchCompleted()
     }
+
+    useEffect(() => {
+        if (!pendingFocus || pendingFocus === "approvals") {
+            return
+        }
+        if (view === "calendar") {
+            setView("list")
+            localStorage.setItem("tasks-view", "list")
+        }
+    }, [pendingFocus, view])
+
+    useEffect(() => {
+        if (!pendingFocus) return
+        if (pendingFocus !== "approvals" && view !== "list") return
+        if (isLoading) return
+        if (pendingFocus === "approvals" && (loadingApprovals || loadingStatusRequests)) return
+
+        const targetId =
+            pendingFocus === "approvals"
+                ? "tasks-approvals"
+                : pendingFocus === "tasks"
+                    ? "tasks-list"
+                    : `tasks-${pendingFocus}`
+        const target =
+            document.getElementById(targetId) || document.getElementById("tasks-list")
+        if (!target) return
+
+        target.scrollIntoView({ behavior: "smooth", block: "start" })
+        setPendingFocus(null)
+    }, [pendingFocus, view, isLoading, loadingApprovals, loadingStatusRequests])
 
     return (
         <div className="flex min-h-screen flex-col">
@@ -483,7 +540,10 @@ export default function TasksPage() {
 
                 {/* Pending Approvals Section */}
                 {!isLoading && !hasError && (
-                    <Card className="overflow-hidden border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-transparent">
+                    <Card
+                        id="tasks-approvals"
+                        className="overflow-hidden border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-transparent"
+                    >
                         <div className="border-b border-amber-500/20 bg-amber-500/5 px-4 py-3 sm:px-6 sm:py-4">
                             <div className="flex items-center gap-3">
                                 <div className="flex size-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 sm:size-9">
@@ -509,12 +569,17 @@ export default function TasksPage() {
                                     {/* Stage Regression Requests (Admin Only) */}
                                     {pendingStatusRequests?.items?.map((item) => {
                                         const isIpRequest = item.request.entity_type === "intended_parent"
-                                        const requestLabel = isIpRequest
-                                            ? "Status Regression Request"
-                                            : "Stage Regression Request"
-                                        const entityHref = isIpRequest
-                                            ? `/intended-parents/${item.request.entity_id}`
-                                            : `/surrogates/${item.request.entity_id}`
+                                        const isMatchRequest = item.request.entity_type === "match"
+                                        const requestLabel = isMatchRequest
+                                            ? "Match Cancellation Request"
+                                            : isIpRequest
+                                                ? "Status Regression Request"
+                                                : "Stage Regression Request"
+                                        const entityHref = isMatchRequest
+                                            ? `/intended-parents/matches/${item.request.entity_id}`
+                                            : isIpRequest
+                                                ? `/intended-parents/${item.request.entity_id}`
+                                                : `/surrogates/${item.request.entity_id}`
                                         return (
                                             <div
                                                 key={`scr-${item.request.id}`}
@@ -524,7 +589,7 @@ export default function TasksPage() {
                                                     <div className="flex flex-wrap items-center gap-2">
                                                         <span className="font-medium">{requestLabel}</span>
                                                         <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-xs">
-                                                            Regression
+                                                            {isMatchRequest ? "Cancellation" : "Regression"}
                                                         </Badge>
                                                     </div>
                                                     <p className="text-sm text-muted-foreground">
@@ -622,7 +687,7 @@ export default function TasksPage() {
 
                 {/* List View */}
                 {!isLoading && !hasError && view === "list" && (
-                    <Card className="p-6">
+                    <Card id="tasks-list" className="p-6">
                         <div className="space-y-6">
                             {/* Task sections by due date */}
                             {renderSection('overdue', groupedTasks.overdue)}
