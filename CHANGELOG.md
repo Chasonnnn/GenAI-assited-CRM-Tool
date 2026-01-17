@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.19.2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.19.1...surrogacy-crm-platform-v0.19.2) (2026-01-17)
+
+
+### Features
+
+* add backdated status changes with admin approval workflow ([413a1c1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/413a1c16084d4926d18ab54a1c7d93280c2db8e2))
+* Add default sorting to entity tables, center align table content, and enable match number sorting in the API. ([f9222fa](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f9222fabfa1adf8b1851d0e10c382067d4e9800c))
+* enforce org-scoped lookups and cross-org isolation for AI/workflow actions ([797a621](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/797a621dc95821a4d6004ad4c28849768283a3e6))
+* expand surrogate overview and medical data ([11b22a4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/11b22a4aff53490409b2ff2075038a8e0d27347e))
+* proxy headers, DB-backed idempotency, and server-side auth gating ([1bc7988](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1bc798866071f45cec1f3832fe5bbfac3188fd94))
+* security hardening and ops readiness for launch ([d09ad0e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d09ad0e8a2358aafb4ce96d886da1fd6bc72b935))
+* **security:** implement double-submit CSRF token pattern ([80f52e9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/80f52e944759f9ccb7d477eb3f9a32d1ad72f476))
+
 ## [0.19.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.19.0...surrogacy-crm-platform-v0.19.1) (2026-01-15)
 
 
