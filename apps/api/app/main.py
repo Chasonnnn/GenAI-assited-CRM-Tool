@@ -188,8 +188,8 @@ app = FastAPI(
     title="CRM API",
     description="Multi-tenant CRM and case management API",
     version=settings.VERSION,
-    docs_url="/docs" if settings.ENV == "dev" else None,
-    redoc_url="/redoc" if settings.ENV == "dev" else None,
+    docs_url="/docs" if settings.is_dev else None,
+    redoc_url="/redoc" if settings.is_dev else None,
     lifespan=lifespan,
 )
 
@@ -299,7 +299,10 @@ async def metrics_middleware(request: Request, call_next):
 @app.middleware("http")
 async def csrf_protection_middleware(request: Request, call_next):
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
-        if request.cookies.get(COOKIE_NAME):
+        # Skip CSRF for dev endpoints (protected by X-Dev-Secret instead)
+        if request.url.path.startswith("/dev/"):
+            pass
+        elif request.cookies.get(COOKIE_NAME):
             if not validate_csrf(request):
                 return JSONResponse(
                     status_code=403,
@@ -327,7 +330,7 @@ app.add_middleware(
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,  # Required for cookies
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", CSRF_HEADER],
+    allow_headers=["Content-Type", "Authorization", CSRF_HEADER, "X-Dev-Secret"],
     expose_headers=["X-Request-ID", "Content-Disposition"],
 )
 
@@ -480,8 +483,8 @@ app.include_router(search.router)
 # Status Change Requests (Admin approval workflow)
 app.include_router(status_change_requests.router)
 
-# Dev router (ONLY mounted in dev mode)
-if settings.ENV == "dev":
+# Dev router (ONLY mounted in dev-like environments)
+if settings.is_dev:
     app.include_router(dev.router, prefix="/dev", tags=["dev"])
 
 
