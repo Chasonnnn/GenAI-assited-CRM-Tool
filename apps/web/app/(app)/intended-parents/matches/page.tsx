@@ -35,6 +35,7 @@ const STATUS_LABELS: Record<MatchStatus, string> = {
     proposed: "Proposed",
     reviewing: "Reviewing",
     accepted: "Accepted",
+    cancel_pending: "Cancellation Pending",
     rejected: "Rejected",
     cancelled: "Cancelled",
 }
@@ -43,11 +44,12 @@ const STATUS_COLORS: Record<MatchStatus, string> = {
     proposed: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
     reviewing: "bg-blue-500/10 text-blue-500 border-blue-500/20",
     accepted: "bg-green-500/10 text-green-500 border-green-500/20",
+    cancel_pending: "bg-amber-500/10 text-amber-600 border-amber-500/20",
     rejected: "bg-red-500/10 text-red-500 border-red-500/20",
     cancelled: "bg-gray-500/10 text-gray-500 border-gray-500/20",
 }
 
-const MATCH_STATUSES = ["proposed", "reviewing", "accepted", "rejected", "cancelled"] as const
+const MATCH_STATUSES = ["proposed", "reviewing", "accepted", "cancel_pending", "rejected", "cancelled"] as const
 type MatchStatusFilter = (typeof MATCH_STATUSES)[number] | "all"
 const isMatchStatus = (value: string): value is MatchStatus =>
     MATCH_STATUSES.includes(value as MatchStatus)
