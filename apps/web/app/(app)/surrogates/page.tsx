@@ -485,8 +485,7 @@ export default function SurrogatesPage() {
                 {/* Surrogates Table */}
                 {!isLoading && !isError && data && data.items.length > 0 && (
                     <Card className="overflow-hidden py-0">
-                        <div className="overflow-x-auto">
-                            <Table className="[&_th]:!text-center [&_td]:!text-center [&_th>div]:justify-center">
+                        <Table className="min-w-max [&_th]:!text-center [&_td]:!text-center [&_th>div]:justify-center">
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead className="w-[40px]">
@@ -621,8 +620,7 @@ export default function SurrogatesPage() {
                                         )
                                     })}
                                 </TableBody>
-                            </Table>
-                        </div>
+                        </Table>
 
                         {/* Pagination */}
                         {data.pages > 1 && (
