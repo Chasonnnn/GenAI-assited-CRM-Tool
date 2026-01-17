@@ -20,7 +20,7 @@ class AppointmentTypeCreate(BaseModel):
     duration_minutes: int = Field(30, ge=15, le=480)
     buffer_before_minutes: int = Field(0, ge=0, le=60)
     buffer_after_minutes: int = Field(5, ge=0, le=60)
-    meeting_mode: Literal["zoom", "phone", "in_person"] = "zoom"
+    meeting_mode: Literal["zoom", "google_meet", "phone", "in_person"] = "zoom"
     reminder_hours_before: int = Field(24, ge=0, le=168)
 
 
@@ -32,7 +32,7 @@ class AppointmentTypeUpdate(BaseModel):
     duration_minutes: int | None = Field(None, ge=15, le=480)
     buffer_before_minutes: int | None = Field(None, ge=0, le=60)
     buffer_after_minutes: int | None = Field(None, ge=0, le=60)
-    meeting_mode: Literal["zoom", "phone", "in_person"] | None = None
+    meeting_mode: Literal["zoom", "google_meet", "phone", "in_person"] | None = None
     reminder_hours_before: int | None = Field(None, ge=0, le=168)
     is_active: bool | None = None
 
@@ -185,6 +185,9 @@ class AppointmentRead(BaseModel):
     cancellation_reason: str | None
     zoom_join_url: str | None
     google_event_id: str | None
+    google_meet_url: str | None = None
+    meeting_started_at: datetime | None = None
+    meeting_ended_at: datetime | None = None
     # Linkage fields
     surrogate_id: UUID | None = None
     surrogate_number: str | None = None
@@ -208,6 +211,8 @@ class AppointmentListItem(BaseModel):
     duration_minutes: int
     meeting_mode: str
     status: str
+    zoom_join_url: str | None = None
+    google_meet_url: str | None = None
     # Linkage fields
     surrogate_id: UUID | None = None
     surrogate_number: str | None = None

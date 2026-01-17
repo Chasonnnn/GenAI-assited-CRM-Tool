@@ -63,8 +63,9 @@ const TIMEZONE_OPTIONS = [
 ]
 
 // Appointment format display
-const MEETING_MODES = {
+const MEETING_MODES: Record<string, { icon: typeof VideoIcon; label: string }> = {
     zoom: { icon: VideoIcon, label: "Zoom Video Call" },
+    google_meet: { icon: VideoIcon, label: "Google Meet" },
     phone: { icon: PhoneIcon, label: "Phone Call" },
     in_person: { icon: MapPinIcon, label: "In-Person Appointment" },
 }

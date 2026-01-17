@@ -57,8 +57,9 @@ const STATUS_STYLES = {
 }
 
 // Meeting mode icons
-const MEETING_MODE_ICONS = {
+const MEETING_MODE_ICONS: Record<string, typeof VideoIcon> = {
     zoom: VideoIcon,
+    google_meet: VideoIcon,
     phone: PhoneIcon,
     in_person: MapPinIcon,
 }
@@ -271,6 +272,16 @@ function AppointmentDetailDialog({
                                 className="text-primary underline text-sm"
                             >
                                 Join Zoom
+                            </a>
+                        )}
+                        {appointment.google_meet_url && (
+                            <a
+                                href={appointment.google_meet_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary underline text-sm"
+                            >
+                                Join Google Meet
                             </a>
                         )}
                     </div>

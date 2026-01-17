@@ -432,6 +432,9 @@ def to_appointment_read(
         cancellation_reason=appt.cancellation_reason,
         zoom_join_url=appt.zoom_join_url,
         google_event_id=appt.google_event_id,
+        google_meet_url=appt.google_meet_url,
+        meeting_started_at=appt.meeting_started_at,
+        meeting_ended_at=appt.meeting_ended_at,
         surrogate_id=appt.surrogate_id,
         surrogate_number=context["surrogate_numbers"].get(appt.surrogate_id),
         intended_parent_id=appt.intended_parent_id,
@@ -458,6 +461,8 @@ def to_appointment_list_item(
         duration_minutes=appt.duration_minutes,
         meeting_mode=appt.meeting_mode,
         status=appt.status,
+        zoom_join_url=appt.zoom_join_url,
+        google_meet_url=appt.google_meet_url,
         surrogate_id=appt.surrogate_id,
         surrogate_number=context["surrogate_numbers"].get(appt.surrogate_id),
         intended_parent_id=appt.intended_parent_id,
@@ -1163,10 +1168,13 @@ def approve_booking(
     Approve a pending appointment.
 
     - Re-validates slot availability to prevent double-booking
+    - Creates Zoom meeting or Google Meet link based on meeting mode
     - Sets status to confirmed
+    - Schedules reminder email
     - Clears pending expiry
-    - (Future: Create Zoom meeting, add to Google Calendar)
     """
+    from app.services import zoom_service, calendar_service, appointment_email_service
+
     if appointment.status != AppointmentStatus.PENDING.value:
         raise ValueError(f"Cannot approve appointment with status {appointment.status}")
     if appointment.pending_expires_at and appointment.pending_expires_at <= datetime.now(
@@ -1213,6 +1221,59 @@ def approve_booking(
                 "This time slot is no longer available - another appointment or task has been scheduled"
             )
 
+    # Create meeting link based on meeting mode (before changing status)
+    meeting_mode = appointment.meeting_mode
+    appt_type = (
+        db.query(AppointmentType)
+        .filter(AppointmentType.id == appointment.appointment_type_id)
+        .first()
+    )
+    appt_type_name = appt_type.name if appt_type else "Appointment"
+
+    if meeting_mode == MeetingMode.ZOOM.value:
+        # Check if Zoom is connected
+        if not zoom_service.check_user_has_zoom(db, appointment.user_id):
+            raise ValueError("Zoom not connected. Please connect in Settings → Integrations.")
+
+        # Create Zoom meeting
+        access_token = _run_async(zoom_service.get_user_zoom_token(db, appointment.user_id))
+        if not access_token:
+            raise ValueError("Failed to get Zoom access token. Please reconnect Zoom.")
+
+        meeting = _run_async(
+            zoom_service.create_zoom_meeting(
+                access_token=access_token,
+                topic=f"{appt_type_name} with {appointment.client_name}",
+                start_time=appointment.scheduled_start,
+                duration=appointment.duration_minutes,
+                timezone_name=appointment.client_timezone or "America/Los_Angeles",
+            )
+        )
+        if meeting:
+            appointment.zoom_meeting_id = str(meeting.id)
+            appointment.zoom_join_url = meeting.join_url
+
+    elif meeting_mode == MeetingMode.GOOGLE_MEET.value:
+        # Check if Gmail is connected
+        if not calendar_service.check_user_has_gmail(db, appointment.user_id):
+            raise ValueError("Gmail not connected. Please connect in Settings → Integrations.")
+
+        # Create Google Meet link
+        result = _run_async(
+            calendar_service.create_google_meet_link(
+                access_token=_run_async(calendar_service.get_google_access_token(db, appointment.user_id)),
+                calendar_id="primary",
+                summary=f"{appt_type_name} with {appointment.client_name}",
+                start_time=appointment.scheduled_start,
+                end_time=appointment.scheduled_end,
+                timezone_name=appointment.client_timezone or "America/Los_Angeles",
+                attendee_emails=[appointment.client_email],
+            )
+        )
+        if result:
+            appointment.google_event_id = result["event_id"]
+            appointment.google_meet_url = result["meet_url"]
+
     appointment.status = AppointmentStatus.CONFIRMED.value
     appointment.approved_at = datetime.now(timezone.utc)
     appointment.approved_by_user_id = approved_by_user_id
@@ -1228,28 +1289,34 @@ def approve_booking(
     db.commit()
     db.refresh(appointment)
 
-    # Sync to Google Calendar (best-effort, after commit)
-    google_event_id = _sync_to_google_calendar(db, appointment, "create")
-    if google_event_id:
-        appointment.google_event_id = google_event_id
-        db.commit()
-        db.refresh(appointment)
+    # Sync to Google Calendar for non-Google Meet modes (best-effort, after commit)
+    if meeting_mode != MeetingMode.GOOGLE_MEET.value:
+        google_event_id = _sync_to_google_calendar(db, appointment, "create")
+        if google_event_id:
+            appointment.google_event_id = google_event_id
+            db.commit()
+            db.refresh(appointment)
+
+    # Schedule reminder email
+    if appt_type and appt_type.reminder_hours_before > 0:
+        from app.core.config import settings
+        appointment_email_service.schedule_reminder_email(
+            db=db,
+            appointment=appointment,
+            base_url=settings.FRONTEND_URL,
+            hours_before=appt_type.reminder_hours_before,
+        )
 
     # Notify staff about confirmed appointment
     from app.services import notification_service
 
-    appt_type = (
-        db.query(AppointmentType)
-        .filter(AppointmentType.id == appointment.appointment_type_id)
-        .first()
-    )
     notification_service.notify_appointment_confirmed(
         db=db,
         org_id=appointment.organization_id,
         staff_user_id=appointment.user_id,
         appointment_id=appointment.id,
         client_name=appointment.client_name,
-        appointment_type=appt_type.name if appt_type else "Appointment",
+        appointment_type=appt_type_name,
         confirmed_time=appointment.scheduled_start.strftime("%Y-%m-%d %H:%M"),
     )
 
@@ -1268,7 +1335,13 @@ def reschedule_booking(
     by_client: bool = False,
     token: str | None = None,
 ) -> Appointment:
-    """Reschedule an appointment to a new time."""
+    """Reschedule an appointment to a new time.
+
+    For Zoom appointments, creates a new meeting link.
+    For Google Meet, updates the calendar event.
+    """
+    from app.services import zoom_service, calendar_service
+
     # Validate token if client-initiated
     if by_client:
         if not token or appointment.reschedule_token != token:
@@ -1325,6 +1398,38 @@ def reschedule_booking(
     if appointment.status == AppointmentStatus.PENDING.value:
         appointment.pending_expires_at = datetime.now(timezone.utc) + timedelta(minutes=60)
 
+    # Regenerate meeting link for Zoom appointments (confirmed only)
+    meeting_mode = appointment.meeting_mode
+    if (
+        meeting_mode == MeetingMode.ZOOM.value
+        and appointment.zoom_meeting_id
+        and appointment.status == AppointmentStatus.CONFIRMED.value
+    ):
+        try:
+            if zoom_service.check_user_has_zoom(db, appointment.user_id):
+                access_token = _run_async(zoom_service.get_user_zoom_token(db, appointment.user_id))
+                if access_token:
+                    appt_type = (
+                        db.query(AppointmentType)
+                        .filter(AppointmentType.id == appointment.appointment_type_id)
+                        .first()
+                    )
+                    appt_type_name = appt_type.name if appt_type else "Appointment"
+                    meeting = _run_async(
+                        zoom_service.create_zoom_meeting(
+                            access_token=access_token,
+                            topic=f"{appt_type_name} with {appointment.client_name}",
+                            start_time=new_start,
+                            duration=appointment.duration_minutes,
+                            timezone_name=appointment.client_timezone or "America/Los_Angeles",
+                        )
+                    )
+                    if meeting:
+                        appointment.zoom_meeting_id = str(meeting.id)
+                        appointment.zoom_join_url = meeting.join_url
+        except Exception as e:
+            logger.warning(f"Failed to regenerate Zoom meeting on reschedule: {e}")
+
     # Rotate tokens after reschedule
     appointment.reschedule_token = generate_token()
     appointment.cancel_token = generate_token()
@@ -1336,13 +1441,24 @@ def reschedule_booking(
     db.refresh(appointment)
 
     # Sync to Google Calendar (best-effort, after commit)
-    if appointment.google_event_id:
+    if appointment.google_event_id and meeting_mode != MeetingMode.GOOGLE_MEET.value:
         updated_event_id = _sync_to_google_calendar(db, appointment, "update")
         if not updated_event_id:
             # Event may have been deleted in Google - clear ID and optionally recreate
             appointment.google_event_id = None
             db.commit()
             db.refresh(appointment)
+    elif meeting_mode == MeetingMode.GOOGLE_MEET.value and appointment.google_event_id:
+        # Update Google Meet event time
+        _run_async(
+            calendar_service.update_appointment_event(
+                db=db,
+                user_id=appointment.user_id,
+                event_id=appointment.google_event_id,
+                start_time=new_start,
+                end_time=new_end,
+            )
+        )
 
     return appointment
 
@@ -1354,7 +1470,12 @@ def cancel_booking(
     by_client: bool = False,
     token: str | None = None,
 ) -> Appointment:
-    """Cancel an appointment."""
+    """Cancel an appointment.
+
+    Also deletes associated Zoom meeting if present.
+    """
+    from app.services import zoom_service
+
     # Validate token if client-initiated
     if by_client:
         if not token or appointment.cancel_token != token:
@@ -1392,6 +1513,15 @@ def cancel_booking(
 
     db.commit()
     db.refresh(appointment)
+
+    # Delete Zoom meeting (best-effort, after commit)
+    if appointment.zoom_meeting_id:
+        try:
+            access_token = _run_async(zoom_service.get_user_zoom_token(db, appointment.user_id))
+            if access_token:
+                _run_async(zoom_service.delete_zoom_meeting(access_token, appointment.zoom_meeting_id))
+        except Exception as e:
+            logger.warning(f"Failed to delete Zoom meeting {appointment.zoom_meeting_id}: {e}")
 
     # Delete from Google Calendar (best-effort, after commit)
     if appointment.google_event_id:

@@ -506,3 +506,155 @@ async def delete_appointment_event(
         calendar_id="primary",
         event_id=event_id,
     )
+
+
+# =============================================================================
+# Google Meet Integration
+# =============================================================================
+
+
+class GoogleMeetResult(TypedDict):
+    """Result of creating a Google Calendar event with Meet link."""
+
+    event_id: str
+    meet_url: str
+
+
+def check_user_has_gmail(db: Session, user_id: UUID) -> bool:
+    """Check if user has connected Gmail/Google."""
+    integration = oauth_service.get_user_integration(db, user_id, "gmail")
+    return integration is not None
+
+
+async def create_google_meet_link(
+    access_token: str,
+    calendar_id: str,
+    summary: str,
+    start_time: datetime,
+    end_time: datetime,
+    description: str = "",
+    timezone_name: str = "America/Los_Angeles",
+    attendee_emails: list[str] | None = None,
+) -> GoogleMeetResult:
+    """
+    Create a Google Calendar event with automatic Meet link.
+
+    Uses conferenceDataVersion=1 to request a Google Meet link be created.
+
+    Args:
+        access_token: User's Google OAuth access token
+        calendar_id: Calendar ID (usually "primary")
+        summary: Event title
+        start_time: Event start time (UTC)
+        end_time: Event end time (UTC)
+        description: Event description
+        timezone_name: Timezone for display
+        attendee_emails: Optional list of attendee emails
+
+    Returns:
+        GoogleMeetResult with event_id and meet_url
+
+    Raises:
+        ValueError: If API call fails or no Meet link generated
+    """
+    event_body = {
+        "summary": summary,
+        "description": description,
+        "start": {
+            "dateTime": start_time.isoformat(),
+            "timeZone": timezone_name,
+        },
+        "end": {
+            "dateTime": end_time.isoformat(),
+            "timeZone": timezone_name,
+        },
+        "conferenceData": {
+            "createRequest": {
+                "requestId": f"meet-{start_time.timestamp()}-{hash(summary) % 10000}",
+                "conferenceSolutionKey": {"type": "hangoutsMeet"},
+            }
+        },
+    }
+
+    if attendee_emails:
+        event_body["attendees"] = [{"email": e} for e in attendee_emails]
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                },
+                json=event_body,
+                params={
+                    "conferenceDataVersion": "1",
+                    "sendUpdates": "all" if attendee_emails else "none",
+                },
+                timeout=30.0,
+            )
+
+            if response.status_code not in [200, 201]:
+                error_text = response.text
+                logger.error(f"Google Calendar API error: {response.status_code} - {error_text}")
+                raise ValueError(f"Failed to create Google Calendar event: {response.status_code}")
+
+            data = response.json()
+
+            # Extract Meet link from conferenceData
+            conference_data = data.get("conferenceData", {})
+            entry_points = conference_data.get("entryPoints", [])
+            meet_url = None
+
+            for entry in entry_points:
+                if entry.get("entryPointType") == "video":
+                    meet_url = entry.get("uri")
+                    break
+
+            if not meet_url:
+                logger.warning(f"No Meet link in response for event {data.get('id')}")
+                raise ValueError("Google Meet link was not generated")
+
+            return GoogleMeetResult(
+                event_id=data["id"],
+                meet_url=meet_url,
+            )
+
+    except httpx.HTTPError as e:
+        logger.exception(f"HTTP error creating Google Meet event: {e}")
+        raise ValueError(f"Failed to create Google Meet: {e}")
+
+
+async def create_appointment_meet_link(
+    db: Session,
+    user_id: UUID,
+    summary: str,
+    start_time: datetime,
+    end_time: datetime,
+    client_email: str,
+    description: str = "",
+    timezone_name: str = "America/Los_Angeles",
+) -> GoogleMeetResult:
+    """
+    Create a Google Calendar event with Meet link for an appointment.
+
+    Convenience wrapper that gets the token and creates the event with Meet.
+
+    Raises:
+        ValueError: If no Gmail integration or API failure
+    """
+    access_token = await get_google_access_token(db, user_id)
+    if not access_token:
+        raise ValueError("Gmail not connected. Please connect in Settings → Integrations.")
+
+    return await create_google_meet_link(
+        access_token=access_token,
+        calendar_id="primary",
+        summary=summary,
+        start_time=start_time,
+        end_time=end_time,
+        description=description,
+        timezone_name=timezone_name,
+        attendee_emails=[client_email],
+    )

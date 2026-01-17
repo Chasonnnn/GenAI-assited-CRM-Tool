@@ -90,6 +90,7 @@ class Settings(BaseSettings):
     ZOOM_CLIENT_ID: str = ""
     ZOOM_CLIENT_SECRET: str = ""
     ZOOM_REDIRECT_URI: str = ""
+    ZOOM_WEBHOOK_SECRET: str = ""  # Webhook verification token from Zoom app settings
 
     # Token Encryption (for storing OAuth tokens, AI API keys)
     FERNET_KEY: str = ""  # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"

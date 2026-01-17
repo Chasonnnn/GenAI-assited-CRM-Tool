@@ -133,8 +133,9 @@ const TIME_OPTIONS = Array.from({ length: 24 * 2 }, (_, i) => {
 })
 
 // Meeting mode icons
-const MEETING_MODE_ICONS = {
+const MEETING_MODE_ICONS: Record<string, typeof VideoIcon> = {
     zoom: VideoIcon,
+    google_meet: VideoIcon,
     phone: PhoneIcon,
     in_person: MapPinIcon,
 }
@@ -430,7 +431,7 @@ function AppointmentTypesCard() {
         description: "",
         duration_minutes: 30,
         buffer_after_minutes: 5,
-        meeting_mode: "zoom" as "zoom" | "phone" | "in_person",
+        meeting_mode: "zoom" as "zoom" | "google_meet" | "phone" | "in_person",
         reminder_hours_before: 24,
     })
 
@@ -599,7 +600,7 @@ function AppointmentTypesCard() {
                                 <Select
                                     value={formData.meeting_mode}
                                     onValueChange={(v) =>
-                                        v && setFormData({ ...formData, meeting_mode: v as "zoom" | "phone" | "in_person" })
+                                        v && setFormData({ ...formData, meeting_mode: v as "zoom" | "google_meet" | "phone" | "in_person" })
                                     }
                                 >
                                     <SelectTrigger>
@@ -607,6 +608,7 @@ function AppointmentTypesCard() {
                                             {(value: string | null) => {
                                                 const labels: Record<string, string> = {
                                                     zoom: "Zoom",
+                                                    google_meet: "Google Meet",
                                                     phone: "Phone",
                                                     in_person: "In-Person",
                                                 }
@@ -618,6 +620,11 @@ function AppointmentTypesCard() {
                                         <SelectItem value="zoom">
                                             <div className="flex items-center gap-2">
                                                 <VideoIcon className="size-4" /> Zoom
+                                            </div>
+                                        </SelectItem>
+                                        <SelectItem value="google_meet">
+                                            <div className="flex items-center gap-2">
+                                                <VideoIcon className="size-4" /> Google Meet
                                             </div>
                                         </SelectItem>
                                         <SelectItem value="phone">
@@ -659,7 +666,7 @@ function AppointmentTypesCard() {
                 ) : (
                     <div className="space-y-3">
                         {types?.map((type) => {
-                            const ModeIcon = MEETING_MODE_ICONS[type.meeting_mode]
+                            const ModeIcon = MEETING_MODE_ICONS[type.meeting_mode] || VideoIcon
                             return (
                                 <div
                                     key={type.id}

@@ -83,8 +83,9 @@ const TASK_COLOR = "bg-purple-500"
 const GOOGLE_EVENT_COLOR = "bg-slate-400"
 
 // Meeting mode icons
-const MEETING_MODE_ICONS = {
+const MEETING_MODE_ICONS: Record<string, typeof VideoIcon> = {
     zoom: VideoIcon,
+    google_meet: VideoIcon,
     phone: PhoneIcon,
     in_person: MapPinIcon,
 }

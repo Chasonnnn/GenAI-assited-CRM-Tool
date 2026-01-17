@@ -101,6 +101,8 @@ DEFAULT_TEMPLATES: dict[AppointmentEmailType, dict[str, str]] = {
                 <tr><td style="padding: 8px 0; color: #6b7280;">Time:</td><td style="padding: 8px 0;"><strong>{{scheduled_time}}</strong></td></tr>
                 <tr><td style="padding: 8px 0; color: #6b7280;">Duration:</td><td style="padding: 8px 0;"><strong>{{duration}} minutes</strong></td></tr>
                 <tr><td style="padding: 8px 0; color: #6b7280;">With:</td><td style="padding: 8px 0;"><strong>{{staff_name}}</strong></td></tr>
+                <tr><td style="padding: 8px 0; color: #6b7280;">Join Zoom:</td><td style="padding: 8px 0;"><a href="{{zoom_join_url}}" style="color: #2563eb; text-decoration: none;">{{zoom_join_url}}</a></td></tr>
+                <tr><td style="padding: 8px 0; color: #6b7280;">Join Google Meet:</td><td style="padding: 8px 0;"><a href="{{google_meet_url}}" style="color: #2563eb; text-decoration: none;">{{google_meet_url}}</a></td></tr>
             </table>
         </div>
         
@@ -231,6 +233,8 @@ DEFAULT_TEMPLATES: dict[AppointmentEmailType, dict[str, str]] = {
                 <tr><td style="padding: 8px 0; color: #6b7280;">Time:</td><td style="padding: 8px 0;"><strong>{{scheduled_time}}</strong></td></tr>
                 <tr><td style="padding: 8px 0; color: #6b7280;">Duration:</td><td style="padding: 8px 0;"><strong>{{duration}} minutes</strong></td></tr>
                 <tr><td style="padding: 8px 0; color: #6b7280;">With:</td><td style="padding: 8px 0;"><strong>{{staff_name}}</strong></td></tr>
+                <tr><td style="padding: 8px 0; color: #6b7280;">Join Zoom:</td><td style="padding: 8px 0;"><a href="{{zoom_join_url}}" style="color: #2563eb; text-decoration: none;">{{zoom_join_url}}</a></td></tr>
+                <tr><td style="padding: 8px 0; color: #6b7280;">Join Google Meet:</td><td style="padding: 8px 0;"><a href="{{google_meet_url}}" style="color: #2563eb; text-decoration: none;">{{google_meet_url}}</a></td></tr>
             </table>
         </div>
         
@@ -257,6 +261,7 @@ DEFAULT_TEMPLATES: dict[AppointmentEmailType, dict[str, str]] = {
 
 MEETING_MODE_DISPLAY = {
     "zoom": "Zoom Video Call",
+    "google_meet": "Google Meet",
     "phone": "Phone Call",
     "in_person": "In-Person Meeting",
 }
@@ -319,9 +324,10 @@ def build_appointment_variables(
         )
         if appointment.cancel_token
         else "",
-        # Zoom (if available)
+        # Meeting links (if available)
         "zoom_join_url": appointment.zoom_join_url or "",
         "zoom_meeting_id": appointment.zoom_meeting_id or "",
+        "google_meet_url": appointment.google_meet_url or "",
         # Cancellation
         "cancellation_reason": appointment.cancellation_reason or "",
         # Client notes

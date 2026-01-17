@@ -703,6 +703,7 @@ class MeetingMode(str, Enum):
     """Meeting mode for appointments."""
 
     ZOOM = "zoom"
+    GOOGLE_MEET = "google_meet"
     PHONE = "phone"
     IN_PERSON = "in_person"
 
