@@ -17,7 +17,7 @@ slowapi_extension.asyncio.iscoroutinefunction = inspect.iscoroutinefunction
 # Falls back to in-memory if Redis is not available (dev/test mode)
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 IS_TESTING = os.getenv("TESTING", "").lower() in ("1", "true", "yes")
-IS_DEV = settings.ENV.lower() in ("dev", "development")
+IS_DEV = settings.is_dev
 DEFAULT_LIMITS = (
     [] if IS_TESTING or settings.RATE_LIMIT_API <= 0 else [f"{settings.RATE_LIMIT_API}/minute"]
 )

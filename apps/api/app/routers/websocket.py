@@ -32,6 +32,16 @@ def _allowed_origins() -> set[str]:
     return {origin for origin in allowed if origin}
 
 
+def _origin_is_allowed(origin: str | None, *, allowed: set[str], is_dev: bool) -> bool:
+    if is_dev:
+        return True
+    if not origin:
+        return False
+    if not allowed:
+        return False
+    return _normalize_origin(origin) in allowed
+
+
 @router.websocket("/notifications")
 async def websocket_notifications(
     websocket: WebSocket,
@@ -48,13 +58,12 @@ async def websocket_notifications(
     - dashboard stats (type: 'stats_update')
     """
     origin = websocket.headers.get("origin")
-    if origin:
-        allowed = _allowed_origins()
-        if not allowed or _normalize_origin(origin) not in allowed:
-            await websocket.close(code=4003, reason="Origin not allowed")
-            return
-    elif settings.ENV not in ("dev", "test"):
+    if not origin and not settings.is_dev:
         await websocket.close(code=4003, reason="Origin required")
+        return
+    allowed = _allowed_origins()
+    if origin and not _origin_is_allowed(origin, allowed=allowed, is_dev=settings.is_dev):
+        await websocket.close(code=4003, reason="Origin not allowed")
         return
 
     # Authenticate
