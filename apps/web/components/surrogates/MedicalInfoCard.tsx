@@ -17,14 +17,14 @@ export function MedicalInfoCard({ surrogateData, onUpdate }: MedicalInfoCardProp
     }
 
     return (
-        <Card>
-            <CardHeader className="pb-3">
+        <Card className="gap-4 py-4">
+            <CardHeader className="px-4 pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
                     <HospitalIcon className="size-4" />
                     Medical Information
                 </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4">
                 <div className="grid gap-4 md:grid-cols-2">
                     {/* IVF Clinic */}
                     <MedicalContactSection

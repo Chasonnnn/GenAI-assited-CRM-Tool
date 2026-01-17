@@ -3,12 +3,18 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import SurrogateDetailPage from '../app/(app)/surrogates/[id]/page'
 
 const mockPush = vi.fn()
+const mockReplace = vi.fn()
+const mockSearchParams = {
+    get: vi.fn(),
+    toString: vi.fn(),
+}
 const mockCreateZoomMeeting = vi.fn()
 const mockSendZoomInvite = vi.fn()
 
 vi.mock('next/navigation', () => ({
     useParams: () => ({ id: 'c1' }),
-    useRouter: () => ({ push: mockPush }),
+    useRouter: () => ({ push: mockPush, replace: mockReplace }),
+    useSearchParams: () => mockSearchParams,
 }))
 
 vi.mock('@/lib/auth-context', () => ({
@@ -228,6 +234,9 @@ describe('SurrogateDetailPage', () => {
         mockUseAttachments.mockReturnValue({ data: [] })
 
         mockPush.mockReset()
+        mockReplace.mockReset()
+        mockSearchParams.get.mockReturnValue(null)
+        mockSearchParams.toString.mockReturnValue('')
         mockClaimSurrogate.mockReset()
         mockReleaseSurrogate.mockReset()
         const clipboardWriteText = navigator.clipboard.writeText as unknown as { mockClear?: () => void }
@@ -266,54 +275,28 @@ describe('SurrogateDetailPage', () => {
         expect(mockClaimSurrogate).toHaveBeenCalledWith('c1')
     })
 
-    it('shows Insurance Info and Latest Updates on overview', () => {
-        mockUseNotes.mockReturnValue({
-            data: [
-                {
-                    id: 'n1',
-                    surrogate_id: 'c1',
-                    author_name: 'Case Manager',
-                    body: '<p>Latest note content</p>',
-                    created_at: new Date().toISOString(),
-                },
-            ],
-        })
-        mockUseAttachments.mockReturnValue({
-            data: [
-                {
-                    id: 'a1',
-                    filename: 'intake.pdf',
-                    content_type: 'application/pdf',
-                    file_size: 12345,
-                    scan_status: 'clean',
-                    quarantined: false,
-                    uploaded_by_user_id: null,
-                    created_at: new Date().toISOString(),
-                },
-            ],
-        })
-        mockUseSurrogateHistory.mockReturnValue({
-            data: [
-                {
-                    id: 'h1',
-                    from_stage_id: 's1',
-                    to_stage_id: 's2',
-                    from_label_snapshot: 'New Unread',
-                    to_label_snapshot: 'Ready to Match',
-                    changed_by_user_id: 'u1',
-                    changed_by_name: 'Case Manager',
-                    reason: null,
-                    changed_at: new Date().toISOString(),
-                },
-            ],
-        })
+    it('selects tab from url params', () => {
+        mockSearchParams.get.mockImplementation((key: string) => (key === 'tab' ? 'history' : null))
+        mockSearchParams.toString.mockReturnValue('tab=history')
 
         render(<SurrogateDetailPage />)
 
+        const historyTab = screen.getByRole('tab', { name: /History/i })
+        expect(historyTab).toHaveAttribute('aria-selected', 'true')
+    })
+
+    it('updates url when switching tabs', () => {
+        render(<SurrogateDetailPage />)
+
+        fireEvent.click(screen.getByRole('tab', { name: /Notes/i }))
+        expect(mockReplace).toHaveBeenCalledWith('/surrogates/c1?tab=notes', { scroll: false })
+    })
+
+    it('shows Insurance Info and Activity on overview', () => {
+        render(<SurrogateDetailPage />)
+
         expect(screen.getByText('Insurance Information')).toBeInTheDocument()
-        expect(screen.getByText('Latest Updates')).toBeInTheDocument()
-        expect(screen.getByText('Latest note content')).toBeInTheDocument()
-        expect(screen.getByText('intake.pdf')).toBeInTheDocument()
+        expect(screen.getByText('Activity')).toBeInTheDocument()
     })
 
     it('hides Medical Information and Pregnancy Tracker before ready_to_match', () => {

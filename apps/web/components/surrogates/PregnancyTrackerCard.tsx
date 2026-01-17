@@ -96,14 +96,14 @@ export function PregnancyTrackerCard({
     }
 
     return (
-        <Card>
-            <CardHeader className="pb-3">
+        <Card className="gap-4 py-4">
+            <CardHeader className="px-4 pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
                     <HeartPulseIcon className="size-4 text-pink-500" />
                     Pregnancy Tracker
                 </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="px-4 space-y-3">
                 {/* Week/Day Display - only show if start date is set and not future */}
                 {pregnancy && pregnancy.gestationalDays >= 0 && (
                     <div className="flex items-center gap-4">
@@ -235,4 +235,3 @@ export function PregnancyTrackerCard({
         </Card>
     )
 }
-

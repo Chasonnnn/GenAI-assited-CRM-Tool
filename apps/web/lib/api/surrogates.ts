@@ -51,6 +51,8 @@ export interface SurrogateStatusHistory {
     changed_by_name: string | null;
     reason: string | null;
     changed_at: string;
+    effective_at?: string | null;
+    recorded_at?: string | null;
 }
 
 // Create surrogate payload
