@@ -11,7 +11,7 @@ Coverage:
 """
 
 import pytest
-from datetime import datetime, timedelta, timezone, time
+from datetime import date, datetime, timedelta, timezone, time
 from zoneinfo import ZoneInfo
 from uuid import uuid4
 
@@ -322,6 +322,9 @@ class TestTokens:
         if not slots:
             pytest.skip("No available slots for testing")
 
+        appointment_type.meeting_mode = "phone"
+        db.commit()
+
         appt = create_booking(
             db=db,
             org_id=test_org.id,
@@ -403,6 +406,9 @@ class TestBookingStatus:
         if not slots:
             pytest.skip("No available slots for testing")
 
+        appointment_type.meeting_mode = "phone"
+        db.commit()
+
         appt = create_booking(
             db=db,
             org_id=test_org.id,
@@ -452,6 +458,9 @@ class TestBookingStatus:
 
         if not slots:
             pytest.skip("No available slots for testing")
+
+        appointment_type.meeting_mode = "phone"
+        db.commit()
 
         appt = create_booking(
             db=db,
@@ -567,6 +576,7 @@ class TestEmailTemplates:
             "booking_url",
             "zoom_join_url",
             "zoom_meeting_id",
+            "google_meet_url",
             "old_scheduled_date",
             "old_scheduled_time",
             "cancellation_reason",
@@ -741,3 +751,277 @@ class TestTaskTimezoneConflict:
         assert len(slots_after) < len(slots_before), (
             "Task should block some slots - timezone handling may be incorrect"
         )
+
+
+# =============================================================================
+# Meeting Automation Tests (TDD for Zoom/Google Meet)
+# =============================================================================
+
+
+def _next_weekday(target_weekday: int) -> date:
+    """Get next occurrence of weekday (0=Monday)."""
+    today = datetime.now(timezone.utc).date()
+    days_ahead = (target_weekday - today.weekday()) % 7
+    if days_ahead == 0:
+        days_ahead = 7
+    return today + timedelta(days=days_ahead)
+
+
+def _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start):
+    appt = Appointment(
+        id=uuid4(),
+        organization_id=test_org.id,
+        user_id=test_user.id,
+        appointment_type_id=appointment_type.id,
+        client_name="Test Client",
+        client_email="client@example.com",
+        client_phone="555-111-2222",
+        client_timezone="America/New_York",
+        scheduled_start=scheduled_start,
+        scheduled_end=scheduled_start + timedelta(minutes=appointment_type.duration_minutes),
+        duration_minutes=appointment_type.duration_minutes,
+        buffer_before_minutes=appointment_type.buffer_before_minutes,
+        buffer_after_minutes=appointment_type.buffer_after_minutes,
+        meeting_mode=appointment_type.meeting_mode,
+        status=AppointmentStatus.PENDING.value,
+        pending_expires_at=datetime.now(timezone.utc) + timedelta(minutes=60),
+        reschedule_token=f"reschedule-{uuid4().hex}",
+        cancel_token=f"cancel-{uuid4().hex}",
+    )
+    db.add(appt)
+    db.flush()
+    return appt
+
+
+def test_approve_booking_creates_zoom_meeting_and_schedules_reminder(
+    db, test_org, test_user, appointment_type, availability_rules, monkeypatch
+):
+    """Approval should create Zoom meeting link and schedule reminder."""
+    from app.services import appointment_service, appointment_email_service, zoom_service
+
+    appointment_type.meeting_mode = MeetingMode.ZOOM.value
+    db.flush()
+
+    target_date = _next_weekday(0)  # Monday
+    local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
+    scheduled_start = local_start.astimezone(timezone.utc)
+
+    appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
+
+    monkeypatch.setattr(appointment_service, "_sync_to_google_calendar", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "app.services.notification_service.notify_appointment_confirmed", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        "app.services.workflow_triggers.trigger_appointment_scheduled", lambda *a, **k: None
+    )
+    monkeypatch.setattr(zoom_service, "check_user_has_zoom", lambda *a, **k: True)
+
+    async def fake_get_user_zoom_token(*args, **kwargs):
+        return "test-token"
+
+    async def fake_create_zoom_meeting(*args, **kwargs):
+        return zoom_service.ZoomMeeting(
+            id=123456789,
+            uuid="",
+            topic="Test Meeting",
+            start_time=scheduled_start.isoformat(),
+            duration=30,
+            timezone="America/New_York",
+            join_url="https://zoom.us/j/123456789",
+            start_url="https://zoom.us/s/123456789",
+            password=None,
+        )
+
+    monkeypatch.setattr(zoom_service, "get_user_zoom_token", fake_get_user_zoom_token)
+    monkeypatch.setattr(zoom_service, "create_zoom_meeting", fake_create_zoom_meeting)
+
+    called = {}
+
+    def fake_schedule_reminder(db, appointment, base_url="", hours_before=24):
+        called["appointment_id"] = appointment.id
+        called["hours_before"] = hours_before
+        return None
+
+    monkeypatch.setattr(appointment_email_service, "schedule_reminder_email", fake_schedule_reminder)
+
+    approved = appointment_service.approve_booking(db, appt, approved_by_user_id=test_user.id)
+
+    assert approved.status == AppointmentStatus.CONFIRMED.value
+    assert approved.zoom_meeting_id == "123456789"
+    assert approved.zoom_join_url == "https://zoom.us/j/123456789"
+    assert called["appointment_id"] == approved.id
+    assert called["hours_before"] == appointment_type.reminder_hours_before
+
+
+def test_approve_booking_fails_when_zoom_not_connected(
+    db, test_org, test_user, appointment_type, availability_rules, monkeypatch
+):
+    """Zoom meeting mode should require a connected Zoom integration."""
+    from app.services import appointment_service, zoom_service
+
+    appointment_type.meeting_mode = MeetingMode.ZOOM.value
+    db.flush()
+
+    target_date = _next_weekday(0)
+    local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
+    scheduled_start = local_start.astimezone(timezone.utc)
+
+    appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
+
+    monkeypatch.setattr(zoom_service, "check_user_has_zoom", lambda *a, **k: False)
+
+    with pytest.raises(ValueError, match="Zoom not connected"):
+        appointment_service.approve_booking(db, appt, approved_by_user_id=test_user.id)
+
+    db.refresh(appt)
+    assert appt.status == AppointmentStatus.PENDING.value
+
+
+def test_approve_booking_creates_google_meet_link(
+    db, test_org, test_user, appointment_type, availability_rules, monkeypatch
+):
+    """Google Meet mode should create a Meet link on approval."""
+    from app.services import appointment_service, calendar_service
+
+    appointment_type.meeting_mode = "google_meet"
+    db.flush()
+
+    target_date = _next_weekday(0)
+    local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
+    scheduled_start = local_start.astimezone(timezone.utc)
+
+    appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
+
+    monkeypatch.setattr(appointment_service, "_sync_to_google_calendar", lambda *a, **k: None)
+
+    monkeypatch.setattr(calendar_service, "check_user_has_gmail", lambda *a, **k: True, raising=False)
+
+    async def fake_create_google_meet_link(*args, **kwargs):
+        return {"event_id": "event_123", "meet_url": "https://meet.google.com/abc-defg-hij"}
+
+    monkeypatch.setattr(calendar_service, "create_google_meet_link", fake_create_google_meet_link, raising=False)
+
+    approved = appointment_service.approve_booking(db, appt, approved_by_user_id=test_user.id)
+
+    assert getattr(approved, "google_event_id", None) == "event_123"
+    assert getattr(approved, "google_meet_url", None) == "https://meet.google.com/abc-defg-hij"
+
+
+def test_reschedule_booking_regenerates_zoom_link(
+    db, test_org, test_user, appointment_type, availability_rules, monkeypatch
+):
+    """Reschedule should regenerate the Zoom meeting link."""
+    from app.services import appointment_service, zoom_service
+
+    appointment_type.meeting_mode = MeetingMode.ZOOM.value
+    db.flush()
+
+    target_date = _next_weekday(0)
+    local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
+    scheduled_start = local_start.astimezone(timezone.utc)
+
+    appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
+    appt.status = AppointmentStatus.CONFIRMED.value
+    appt.zoom_meeting_id = "old_meeting"
+    appt.zoom_join_url = "https://zoom.us/j/old"
+    db.flush()
+
+    monkeypatch.setattr(appointment_service, "_sync_to_google_calendar", lambda *a, **k: None)
+    monkeypatch.setattr(zoom_service, "check_user_has_zoom", lambda *a, **k: True)
+
+    async def fake_get_user_zoom_token(*args, **kwargs):
+        return "test-token"
+
+    async def fake_create_zoom_meeting(*args, **kwargs):
+        return zoom_service.ZoomMeeting(
+            id=999,
+            uuid="",
+            topic="Rescheduled Meeting",
+            start_time=(scheduled_start + timedelta(days=1)).isoformat(),
+            duration=30,
+            timezone="America/New_York",
+            join_url="https://zoom.us/j/999",
+            start_url="https://zoom.us/s/999",
+            password=None,
+        )
+
+    monkeypatch.setattr(zoom_service, "get_user_zoom_token", fake_get_user_zoom_token)
+    monkeypatch.setattr(zoom_service, "create_zoom_meeting", fake_create_zoom_meeting)
+
+    new_start = scheduled_start + timedelta(days=1)
+    updated = appointment_service.reschedule_booking(
+        db=db,
+        appointment=appt,
+        new_start=new_start,
+        by_client=False,
+    )
+
+    assert updated.zoom_meeting_id == "999"
+    assert updated.zoom_join_url == "https://zoom.us/j/999"
+
+
+def test_approve_booking_fails_when_gmail_not_connected(
+    db, test_org, test_user, appointment_type, availability_rules, monkeypatch
+):
+    """Google Meet mode should require Gmail integration."""
+    from app.services import appointment_service, calendar_service
+
+    appointment_type.meeting_mode = "google_meet"
+    db.flush()
+
+    target_date = _next_weekday(0)
+    local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
+    scheduled_start = local_start.astimezone(timezone.utc)
+
+    appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
+
+    monkeypatch.setattr(calendar_service, "check_user_has_gmail", lambda *a, **k: False, raising=False)
+
+    with pytest.raises(ValueError, match="Gmail not connected"):
+        appointment_service.approve_booking(db, appt, approved_by_user_id=test_user.id)
+
+    db.refresh(appt)
+    assert appt.status == AppointmentStatus.PENDING.value
+
+
+def test_cancel_booking_deletes_zoom_meeting(
+    db, test_org, test_user, appointment_type, availability_rules, monkeypatch
+):
+    """Cancel should attempt to delete the Zoom meeting."""
+    from app.services import appointment_service, zoom_service
+
+    appointment_type.meeting_mode = MeetingMode.ZOOM.value
+    db.flush()
+
+    target_date = _next_weekday(0)
+    local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
+    scheduled_start = local_start.astimezone(timezone.utc)
+
+    appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
+    appt.status = AppointmentStatus.CONFIRMED.value
+    appt.zoom_meeting_id = "123456789"
+    appt.zoom_join_url = "https://zoom.us/j/123456789"
+    db.flush()
+
+    monkeypatch.setattr(
+        "app.services.notification_service.notify_appointment_cancelled", lambda *a, **k: None
+    )
+
+    async def fake_get_user_zoom_token(*args, **kwargs):
+        return "test-token"
+
+    called = {}
+
+    async def fake_delete_zoom_meeting(access_token, meeting_id):
+        called["token"] = access_token
+        called["meeting_id"] = meeting_id
+        return True
+
+    monkeypatch.setattr(zoom_service, "get_user_zoom_token", fake_get_user_zoom_token)
+    monkeypatch.setattr(zoom_service, "delete_zoom_meeting", fake_delete_zoom_meeting, raising=False)
+
+    cancelled = appointment_service.cancel_booking(db, appt, by_client=False)
+
+    assert cancelled.status == AppointmentStatus.CANCELLED.value
+    assert called["meeting_id"] == "123456789"

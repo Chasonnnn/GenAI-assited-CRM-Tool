@@ -179,6 +179,40 @@ async def create_zoom_meeting(
     )
 
 
+async def delete_zoom_meeting(
+    access_token: str,
+    meeting_id: str,
+) -> bool:
+    """
+    Delete a Zoom meeting.
+
+    Args:
+        access_token: User's Zoom OAuth access token
+        meeting_id: Zoom meeting ID to delete
+
+    Returns:
+        True on success, False on failure
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.delete(
+                f"{ZOOM_API_BASE}/meetings/{meeting_id}",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=30.0,
+            )
+
+            # 204 = success, 404 = already deleted (treat as success)
+            if response.status_code in [204, 404]:
+                return True
+
+            logger.warning(f"Failed to delete Zoom meeting {meeting_id}: {response.status_code}")
+            return False
+
+    except Exception as e:
+        logger.exception(f"Error deleting Zoom meeting {meeting_id}: {e}")
+        return False
+
+
 # ============================================================================
 # High-Level Functions (with note/task creation)
 # ============================================================================

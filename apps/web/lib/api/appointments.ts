@@ -41,6 +41,8 @@ async function publicRequest<T>(path: string, options: RequestInit = {}): Promis
 // Types
 // =============================================================================
 
+export type MeetingMode = 'zoom' | 'google_meet' | 'phone' | 'in_person';
+
 export interface AppointmentType {
     id: string;
     user_id: string;
@@ -50,7 +52,7 @@ export interface AppointmentType {
     duration_minutes: number;
     buffer_before_minutes: number;
     buffer_after_minutes: number;
-    meeting_mode: 'zoom' | 'phone' | 'in_person';
+    meeting_mode: MeetingMode;
     reminder_hours_before: number;
     is_active: boolean;
     created_at: string;
@@ -63,7 +65,7 @@ export interface AppointmentTypeCreate {
     duration_minutes?: number;
     buffer_before_minutes?: number;
     buffer_after_minutes?: number;
-    meeting_mode?: 'zoom' | 'phone' | 'in_person';
+    meeting_mode?: MeetingMode;
     reminder_hours_before?: number;
 }
 
@@ -133,6 +135,9 @@ export interface Appointment {
     cancellation_reason: string | null;
     zoom_join_url: string | null;
     google_event_id: string | null;
+    google_meet_url: string | null;
+    meeting_started_at: string | null;
+    meeting_ended_at: string | null;
     // Linkage fields
     surrogate_id: string | null;
     surrogate_number: string | null;
@@ -154,6 +159,8 @@ export interface AppointmentListItem {
     duration_minutes: number;
     meeting_mode: string;
     status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show' | 'expired';
+    zoom_join_url: string | null;
+    google_meet_url: string | null;
     // Linkage fields
     surrogate_id: string | null;
     surrogate_number: string | null;
@@ -216,6 +223,7 @@ export interface PublicAppointmentView {
     status: string;
     client_timezone: string;
     zoom_join_url: string | null;
+    google_meet_url: string | null;
 }
 
 // =============================================================================

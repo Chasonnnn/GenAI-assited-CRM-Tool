@@ -3584,6 +3584,32 @@ class ZoomMeeting(Base):
     intended_parent: Mapped["IntendedParent"] = relationship()
 
 
+class ZoomWebhookEvent(Base):
+    """
+    Zoom webhook events for deduplication and audit trail.
+
+    Stores processed webhook events to prevent duplicate processing
+    and track meeting lifecycle (started/ended timestamps).
+    """
+
+    __tablename__ = "zoom_webhook_events"
+    __table_args__ = (
+        Index("ix_zoom_webhook_events_zoom_meeting_id", "zoom_meeting_id"),
+        Index("ix_zoom_webhook_events_processed_at", "processed_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    provider_event_id: Mapped[str] = mapped_column(
+        String(255), unique=True, nullable=False
+    )  # Dedupe key from Zoom
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False)  # meeting.started, meeting.ended
+    zoom_meeting_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    processed_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+
+
 # =============================================================================
 # Matching
 # =============================================================================
@@ -4514,8 +4540,17 @@ class Appointment(Base):
 
     # Integration IDs
     google_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    google_meet_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     zoom_meeting_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     zoom_join_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    # Meeting lifecycle timestamps (from webhook events)
+    meeting_started_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    meeting_ended_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
 
     # Self-service tokens (one-time use tokens for client actions)
     reschedule_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
