@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { getNotificationHref } from '@/lib/utils/notification-routing'
 
 export type NotificationPermission = 'granted' | 'denied' | 'default'
 
@@ -55,6 +56,7 @@ export function useBrowserNotifications(hookOptions: UseBrowserNotificationsOpti
             tag?: string
             entityType?: string
             entityId?: string
+            notificationType?: string
         }
     ) => {
         if (!isSupported || permission !== 'granted') {
@@ -75,18 +77,13 @@ export function useBrowserNotifications(hookOptions: UseBrowserNotificationsOpti
                 notification.close()
 
                 // Navigate to the entity if provided
-                if (options?.entityType && options?.entityId) {
-                    if (options.entityType === 'surrogate') {
-                        router.push(`/surrogates/${options.entityId}`)
-                    } else if (options.entityType === 'task') {
-                        router.push(`/tasks`)
-                    } else if (options.entityType === 'appointment') {
-                        router.push(`/appointments`)
-                    }
-                } else {
-                    // Default: go to notifications page
-                    router.push('/notifications')
-                }
+                router.push(
+                    getNotificationHref({
+                        type: options?.notificationType ?? "",
+                        entity_type: options?.entityType ?? null,
+                        entity_id: options?.entityId ?? null,
+                    })
+                )
 
                 const clickData = options?.entityType && options?.entityId
                     ? { entityType: options.entityType, entityId: options.entityId }

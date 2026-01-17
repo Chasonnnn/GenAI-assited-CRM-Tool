@@ -22,6 +22,7 @@ from app.db.models import (
     Attachment,
     Membership,
     StatusChangeRequest,
+    Match,
 )
 from app.core.websocket import manager
 
@@ -557,6 +558,56 @@ def notify_ip_status_change_request_pending(
         )
 
 
+def notify_match_cancel_request_pending(
+    db: Session,
+    request: StatusChangeRequest,
+    match: Match,
+    surrogate: Surrogate,
+    intended_parent: IntendedParent,
+    requester_name: str,
+) -> None:
+    """Notify approvers that a match cancellation request is pending."""
+    from app.services import permission_service
+
+    memberships = (
+        db.query(Membership)
+        .filter(
+            Membership.organization_id == match.organization_id,
+            Membership.is_active.is_(True),
+        )
+        .all()
+    )
+
+    for membership in memberships:
+        role_str = membership.role.value if hasattr(membership.role, "value") else membership.role
+        if not permission_service.check_permission(
+            db,
+            match.organization_id,
+            membership.user_id,
+            role_str,
+            "approve_status_change_requests",
+        ):
+            continue
+        if not should_notify(db, membership.user_id, match.organization_id, "workflow_approvals"):
+            continue
+
+        dedupe_key = f"status_change_request:{request.id}:{membership.user_id}"
+        create_notification(
+            db=db,
+            org_id=match.organization_id,
+            user_id=membership.user_id,
+            type=NotificationType.STATUS_CHANGE_REQUESTED,
+            title=f"Match cancellation approval needed for Match #{match.match_number}",
+            body=(
+                f"{requester_name} requested cancellation for "
+                f"{surrogate.full_name} ↔ {intended_parent.full_name}"
+            ),
+            entity_type="match",
+            entity_id=match.id,
+            dedupe_key=dedupe_key,
+        )
+
+
 def notify_status_change_request_resolved(
     db: Session,
     request: StatusChangeRequest,
@@ -630,6 +681,41 @@ def notify_ip_status_change_request_resolved(
         body=body,
         entity_type="intended_parent",
         entity_id=intended_parent.id,
+        dedupe_key=f"status_change_request:{request.id}:{status_label}",
+    )
+
+
+def notify_match_cancel_request_resolved(
+    db: Session,
+    request: StatusChangeRequest,
+    match: Match,
+    approved: bool,
+    resolver_name: str,
+    reason: str | None = None,
+) -> None:
+    """Notify requester that a match cancellation request was approved or rejected."""
+    if not request.requested_by_user_id:
+        return
+    if not should_notify(db, request.requested_by_user_id, match.organization_id, "workflow_approvals"):
+        return
+
+    status_label = "approved" if approved else "rejected"
+    notification_type = (
+        NotificationType.STATUS_CHANGE_APPROVED if approved else NotificationType.STATUS_CHANGE_REJECTED
+    )
+    body = f"{resolver_name} {status_label} your match cancellation request"
+    if reason:
+        body = f"{body}: {reason}"
+
+    create_notification(
+        db=db,
+        org_id=match.organization_id,
+        user_id=request.requested_by_user_id,
+        type=notification_type,
+        title=f"Match cancellation {status_label} for Match #{match.match_number}",
+        body=body,
+        entity_type="match",
+        entity_id=match.id,
         dedupe_key=f"status_change_request:{request.id}:{status_label}",
     )
 

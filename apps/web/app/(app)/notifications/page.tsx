@@ -23,6 +23,7 @@ import {
 import { useNotifications, useMarkRead, useMarkAllRead } from "@/lib/hooks/use-notifications"
 import { useTasks } from "@/lib/hooks/use-tasks"
 import type { Notification } from "@/lib/api/notifications"
+import { getNotificationHref } from "@/lib/utils/notification-routing"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 
 // Map notification types to UI groups
@@ -105,15 +106,7 @@ export default function NotificationsPage() {
         if (!notification.read_at) {
             markRead.mutate(notification.id)
         }
-        if (notification.entity_type === "surrogate" && notification.entity_id) {
-            router.push(`/surrogates/${notification.entity_id}`)
-        } else if (notification.entity_type === "intended_parent" && notification.entity_id) {
-            router.push(`/intended-parents/${notification.entity_id}`)
-        } else if (notification.entity_type === "task" && notification.entity_id) {
-            router.push(`/tasks`)
-        } else if (notification.entity_type === "appointment" && notification.entity_id) {
-            router.push(`/appointments`)
-        }
+        router.push(getNotificationHref(notification))
     }
 
     const handleMarkAllRead = () => {

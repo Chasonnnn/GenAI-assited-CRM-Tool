@@ -50,6 +50,8 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
     const [unreadCount, setUnreadCount] = useState<number | null>(null)
 
     const wsRef = useRef<WebSocket | null>(null)
+    const isActiveRef = useRef(true)
+    const manualCloseRef = useRef(false)
     const reconnectAttempts = useRef(0)
     const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
     const pingInterval = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -57,9 +59,9 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
     const connect = useCallback(() => {
         if (!user || !enabled) return
 
-        // Clear any existing connection
-        if (wsRef.current) {
-            wsRef.current.close()
+        const existing = wsRef.current
+        if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
+            return
         }
 
         // Determine WebSocket URL
@@ -72,6 +74,10 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
             wsRef.current = ws
 
             ws.onopen = () => {
+                if (!isActiveRef.current || !enabled || !user) {
+                    ws.close(1000, 'Inactive')
+                    return
+                }
                 setIsConnected(true)
                 reconnectAttempts.current = 0
 
@@ -108,6 +114,17 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
                     clearInterval(pingInterval.current)
                     pingInterval.current = null
                 }
+                wsRef.current = null
+
+                if (!isActiveRef.current || !enabled || !user) {
+                    return
+                }
+
+                if (manualCloseRef.current) {
+                    manualCloseRef.current = false
+                    connect()
+                    return
+                }
 
                 // Attempt reconnect with exponential backoff
                 if (reconnectAttempts.current < maxReconnectAttempts) {
@@ -121,6 +138,9 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
             }
 
             ws.onerror = () => {
+                if (!isActiveRef.current || manualCloseRef.current) {
+                    return
+                }
                 // Only log on first attempt to avoid console spam
                 if (reconnectAttempts.current === 0) {
                     console.warn('[WS] Connection failed - notifications will use polling fallback')
@@ -133,9 +153,11 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
 
     // Connect on mount / when user changes
     useEffect(() => {
+        isActiveRef.current = true
         connect()
 
         return () => {
+            isActiveRef.current = false
             if (reconnectTimeout.current) {
                 clearTimeout(reconnectTimeout.current)
                 reconnectTimeout.current = null
@@ -144,8 +166,9 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
                 clearInterval(pingInterval.current)
                 pingInterval.current = null
             }
-            if (wsRef.current) {
-                wsRef.current.close()
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                manualCloseRef.current = true
+                wsRef.current.close(1000, 'Component unmounted')
             }
         }
     }, [connect])
@@ -153,6 +176,11 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
     // Manual reconnect function
     const reconnect = useCallback(() => {
         reconnectAttempts.current = 0
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            manualCloseRef.current = true
+            wsRef.current.close(1000, 'Manual reconnect')
+            return
+        }
         connect()
     }, [connect])
 
