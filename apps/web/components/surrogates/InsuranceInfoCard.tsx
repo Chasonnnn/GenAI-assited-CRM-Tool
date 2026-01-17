@@ -18,14 +18,14 @@ export function InsuranceInfoCard({ surrogateData, onUpdate }: InsuranceInfoCard
     }
 
     return (
-        <Card>
-            <CardHeader className="pb-3">
+        <Card className="gap-4 py-4">
+            <CardHeader className="px-4 pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
                     <ShieldIcon className="size-4" />
                     Insurance Information
                 </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="px-4 space-y-3">
                 {/* Company & Plan */}
                 <div className="grid grid-cols-2 gap-4">
                     <div>
