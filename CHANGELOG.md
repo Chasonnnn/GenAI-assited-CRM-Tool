@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.19.3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.19.2...surrogacy-crm-platform-v0.19.3) (2026-01-17)
+
+
+### Features
+
+* add Zoom and Google Meet integration for appointments ([f3b8886](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f3b88861e2b593b4b7e94a3b4f77fe7223a47846))
+* **matches:** add cancel match request workflow ([e2552d5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e2552d5260e00dd8b7d897ef3dcdf7390056db51))
+* **matches:** add cancel match UI ([0ef3282](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0ef328222d335b5870bc4d03c3e5f4a0a45716fa))
+* **notifications:** enhance notification system ([ef4c004](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ef4c00495807632e8441a6a1e1b6404108d4ad02))
+* **surrogate-detail:** add tab navigation and activity timeline ([9b08885](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9b08885f4fc370ee111f3376fc3ff79388f2a504))
+
+
+### Bug Fixes
+
+* add missing partial indexes to StatusChangeRequest model ([9805c45](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9805c45913d2d942081a9e8ace9f9faee92d4c25))
+* **chart:** fix ChartContainer rendering in JSDOM tests ([d8f453b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d8f453b6968eda1c9e542b478b31ad6fec561566))
+* **chart:** improve ResponsiveContainer size handling ([4fcf0d0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4fcf0d036f821e452b3e287f8d0c36de5ebece1a))
+* create session record on dev login ([62c295a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/62c295a532f7951eb2d8bacd2ad16c523ab61a2f))
+* enable dev login from browser ([0018dee](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0018dee28ce7150a705bd9840c04b565df9c23d0))
+
 ## [0.19.2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.19.1...surrogacy-crm-platform-v0.19.2) (2026-01-17)
 
 
