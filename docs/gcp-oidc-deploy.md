@@ -3,28 +3,30 @@
 This is a starter checklist to wire GitHub Actions to GCP using OIDC
 (no long-lived keys). It matches the workflows in `.github/workflows/deploy-gcp.yml`.
 
-## Custom Domains (Per-Org Portals)
+## Custom Domains (Branded Redirect Portals)
 
 Recommended structure for enterprise clients:
-- `portal.clientdomain.com` → frontend
-- `api.clientdomain.com` → API (keeps cookies same-site)
+- `portal.clientdomain.com` → redirect service → `https://app.yourdomain.com`
 
 Steps:
-1) Domain mapping / load balancer
-   - Map your frontend service to `portal.clientdomain.com`
-   - Map your API service to `api.clientdomain.com`
+1) Domain mapping
+   - Map a single redirect service to `portal.clientdomain.com`.
 2) DNS
-   - Create CNAME records for `portal` and `api` to the GCP target hostnames
-   - For Wix-managed domains, use subdomain CNAMEs (avoid apex CNAMEs)
-3) Set env vars
+   - Create a CNAME record for `portal` pointing to the redirect service target hostname.
+   - For Wix-managed domains, use subdomain CNAMEs (avoid apex CNAMEs).
+3) Keep env vars on the primary domains
    - Backend:
-     - `FRONTEND_URL=https://portal.clientdomain.com`
-     - `CORS_ORIGINS=https://portal.clientdomain.com`
-     - `API_BASE_URL=https://api.clientdomain.com`
+     - `FRONTEND_URL=https://app.yourdomain.com`
+     - `CORS_ORIGINS=https://app.yourdomain.com`
+     - `API_BASE_URL=https://api.yourdomain.com`
    - Frontend:
-     - `NEXT_PUBLIC_API_BASE_URL=https://api.clientdomain.com`
+     - `NEXT_PUBLIC_API_BASE_URL=https://api.yourdomain.com`
 4) Set org portal domain in the app
    - Settings → Organization → Portal Domain: `portal.clientdomain.com`
+
+Note: A hosted per-client portal (same-site cookies on the client domain)
+requires a shared host for UI + API or per-client cookie domain changes.
+The redirect approach avoids cross-site cookie issues.
 
 ## 1) Enable required APIs
 

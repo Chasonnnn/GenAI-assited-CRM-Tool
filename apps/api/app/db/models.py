@@ -788,7 +788,28 @@ class StatusChangeRequest(Base):
     """
 
     __tablename__ = "status_change_requests"
-    __table_args__ = (Index("idx_status_change_requests_org_status", "organization_id", "status"),)
+    __table_args__ = (
+        Index("idx_status_change_requests_org_status", "organization_id", "status"),
+        # Partial unique indexes to prevent duplicate pending requests
+        Index(
+            "idx_pending_surrogate_requests",
+            "organization_id",
+            "entity_id",
+            "target_stage_id",
+            "effective_at",
+            unique=True,
+            postgresql_where=text("entity_type = 'surrogate' AND status = 'pending'"),
+        ),
+        Index(
+            "idx_pending_ip_requests",
+            "organization_id",
+            "entity_id",
+            "target_status",
+            "effective_at",
+            unique=True,
+            postgresql_where=text("entity_type = 'intended_parent' AND status = 'pending'"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")

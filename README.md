@@ -381,28 +381,33 @@ pnpm test:all        # Full frontend suite
 - **Storage**: S3-compatible for file uploads
 - **Proxy headers**: Set `TRUST_PROXY_HEADERS=true` behind Cloud Run/LB
 
-### Custom Domains (Per-Org Portals)
-Use per-client subdomains to keep cookies same-site and make public links branded.
+### Custom Domains (Branded Redirect Portals)
+Use per-client subdomains as branded entry points that redirect to your primary app domain.
 
 1) Create subdomains
-- App: `portal.clientdomain.com`
-- API: `api.clientdomain.com`
+- Portal: `portal.clientdomain.com`
 
-2) DNS (CNAME)
-- Point `portal` to your frontend host (Vercel or Cloud Run/LB)
-- Point `api` to your API host (Cloud Run/LB)
+2) Domain mapping (Cloud Run)
+- Map `portal.clientdomain.com` to a single redirect service that 308-redirects to your primary app.
+
+3) DNS (CNAME)
+- Point `portal` to the redirect service target hostname provided by Cloud Run.
   - For Wix-managed domains, use subdomain CNAMEs (avoid apex CNAMEs)
 
-3) Env vars
+4) Env vars (stay on the primary domains)
 - Backend:
-  - `FRONTEND_URL=https://portal.clientdomain.com`
-  - `CORS_ORIGINS=https://portal.clientdomain.com`
-  - `API_BASE_URL=https://api.clientdomain.com`
+  - `FRONTEND_URL=https://app.yourdomain.com`
+  - `CORS_ORIGINS=https://app.yourdomain.com`
+  - `API_BASE_URL=https://api.yourdomain.com`
 - Frontend:
-  - `NEXT_PUBLIC_API_BASE_URL=https://api.clientdomain.com`
+  - `NEXT_PUBLIC_API_BASE_URL=https://api.yourdomain.com`
 
-4) Set the org portal domain (drives public links for forms, booking, invites)
+5) Set the org portal domain (drives public links for forms, booking, invites)
 - Settings → Organization → Portal Domain: `portal.clientdomain.com`
+
+Note: A fully hosted per-client portal (same-site cookies on the client domain)
+requires a different deployment model (shared host for UI + API or per-client
+cookie domain changes). The redirect approach avoids cross-site cookie issues.
 
 ---
 
