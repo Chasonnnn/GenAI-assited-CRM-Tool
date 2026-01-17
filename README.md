@@ -248,19 +248,33 @@ For local development without configuring Google OAuth:
    ENV=dev
    ```
 
-2. Seed a test org and users (returns user IDs):
+2. Start the API and web apps.
+
+3. Export the dev secret for curl (or replace `$DEV_SECRET` below with the literal value):
+   ```bash
+   export DEV_SECRET=local-dev-secret
+   ```
+
+4. Seed a test org and users (returns user IDs):
    ```bash
    curl -s -X POST http://localhost:8000/dev/seed \
      -H "X-Dev-Secret: $DEV_SECRET"
    ```
 
-3. Log in as a seeded user (sets the session cookie):
-   ```bash
-   curl -i -X POST http://localhost:8000/dev/login-as/<user_id> \
-     -H "X-Dev-Secret: $DEV_SECRET"
+5. Pick a `user_id` from the response.
+
+6. Log in from the browser (recommended; this stores cookies in the browser):
+   ```js
+   await fetch("/api/dev/login-as/<user_id>", {
+     method: "POST",
+     headers: { "X-Dev-Secret": "<your dev secret>" },
+     credentials: "include",
+   }).then((r) => r.json())
    ```
 
-4. Refresh the browser — you should now be authenticated.
+7. Refresh the browser — you should now be authenticated.
+
+Note: `curl -i` against `/dev/login-as` is useful for inspecting `Set-Cookie`, but it does not log your browser in.
 
 ### Database Reset & Seed
 
@@ -278,9 +292,8 @@ cd apps/api
 curl -s -X POST http://localhost:8000/dev/seed \
   -H "X-Dev-Secret: $DEV_SECRET"
 
-# 4. Log in as a seeded user (sets the session cookie)
-curl -i -X POST http://localhost:8000/dev/login-as/<user_id> \
-  -H "X-Dev-Secret: $DEV_SECRET"
+# 4. Log in from the browser (see Dev Login-As steps above)
+#    This ensures cookies are stored in the browser.
 ```
 
 ### Required Encryption Keys
