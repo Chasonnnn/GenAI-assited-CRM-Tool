@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -15,6 +15,7 @@ from app.services import (
     meta_lead_service,
     meta_page_service,
     org_service,
+    session_service,
     user_service,
 )
 
@@ -28,7 +29,7 @@ def _verify_dev_secret(x_dev_secret: str = Header(...)):
     Provides an extra layer of protection for dev endpoints
     beyond just the ENV check.
     """
-    if settings.ENV not in ("dev", "test"):
+    if not settings.is_dev:
         raise HTTPException(status_code=403, detail="Dev endpoints are only available in dev/test.")
     if not settings.DEV_SECRET:
         raise HTTPException(status_code=501, detail="DEV_SECRET not configured")
@@ -48,7 +49,12 @@ def seed_test_data(db: Session = Depends(get_db)):
 
 
 @router.post("/login-as/{user_id}", dependencies=[Depends(_verify_dev_secret)])
-def login_as(user_id: UUID, response: Response, db: Session = Depends(get_db)):
+def login_as(
+    user_id: UUID,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
     """
     Bypass OAuth and directly set session cookie for testing.
 
@@ -73,6 +79,14 @@ def login_as(user_id: UUID, response: Response, db: Session = Depends(get_db)):
         user.token_version,
         mfa_verified=True,
         mfa_required=False,
+    )
+
+    session_service.create_session(
+        db=db,
+        user_id=user.id,
+        org_id=membership.organization_id,
+        token=token,
+        request=request,
     )
 
     response.set_cookie(
