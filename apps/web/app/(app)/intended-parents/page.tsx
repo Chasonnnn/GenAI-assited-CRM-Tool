@@ -350,7 +350,7 @@ export default function IntendedParentsPage() {
                             <Table className="[&_th]:!text-center [&_td]:!text-center [&_th>div]:justify-center">
                                 <TableHeader>
                                     <TableRow>
-                                        <SortableTableHead column="intended_parent_number" label="Number" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                                        <SortableTableHead column="intended_parent_number" label="IP#" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <SortableTableHead column="full_name" label="Name" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <SortableTableHead column="email" label="Email" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <SortableTableHead column="phone" label="Phone" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
@@ -363,16 +363,16 @@ export default function IntendedParentsPage() {
                                 <TableBody>
                                     {data.items.map((ip: IntendedParentListItem) => (
                                         <TableRow key={ip.id} className="cursor-pointer hover:bg-muted/50">
-                                            <TableCell className="font-medium text-muted-foreground">
-                                                {ip.intended_parent_number}
-                                            </TableCell>
                                             <TableCell>
                                                 <Link
                                                     href={`/intended-parents/${ip.id}`}
-                                                    className="font-medium hover:text-primary hover:underline"
+                                                    className="font-medium text-primary hover:underline"
                                                 >
-                                                    {ip.full_name}
+                                                    {ip.intended_parent_number}
                                                 </Link>
+                                            </TableCell>
+                                            <TableCell className="font-medium">
+                                                {ip.full_name}
                                             </TableCell>
                                             <TableCell className="text-muted-foreground">{ip.email}</TableCell>
                                             <TableCell className="text-muted-foreground">{ip.phone || "—"}</TableCell>

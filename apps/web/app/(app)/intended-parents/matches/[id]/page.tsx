@@ -5,7 +5,7 @@ import { useParams, useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
@@ -16,12 +16,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import {
     MailIcon,
     PhoneIcon,
@@ -47,17 +41,15 @@ import { RejectMatchDialog } from "@/components/matches/RejectMatchDialog"
 import { AddNoteDialog } from "@/components/matches/AddNoteDialog"
 import { UploadFileDialog } from "@/components/matches/UploadFileDialog"
 import { AddTaskDialog, type TaskFormData } from "@/components/matches/AddTaskDialog"
-import { useSurrogate, useChangeSurrogateStatus, useSurrogateActivity, surrogateKeys } from "@/lib/hooks/use-surrogates"
+import { useSurrogate, useSurrogateActivity, surrogateKeys } from "@/lib/hooks/use-surrogates"
 import { useNotes, useCreateNote } from "@/lib/hooks/use-notes"
 import { useIntendedParent, useIntendedParentNotes, useIntendedParentHistory, intendedParentKeys, useCreateIntendedParentNote } from "@/lib/hooks/use-intended-parents"
-import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useTasks, useCreateTask, taskKeys } from "@/lib/hooks/use-tasks"
 import { useAttachments, useIPAttachments, useUploadAttachment, useUploadIPAttachment, useDeleteAttachment, useDownloadAttachment } from "@/lib/hooks/use-attachments"
 import { useAuth } from "@/lib/auth-context"
 import { useQueryClient } from "@tanstack/react-query"
 import { ScheduleParserDialog } from "@/components/ai/ScheduleParserDialog"
 import { useSetAIContext } from "@/lib/context/ai-context"
-import { cn } from "@/lib/utils"
 import { parseDateInput } from "@/lib/utils/date"
 
 const STATUS_LABELS: Record<string, string> = {
@@ -197,16 +189,6 @@ export default function MatchDetailPage() {
     // Fetch activity from Surrogate and IP
     const { data: surrogateActivity } = useSurrogateActivity(match?.surrogate_id || "", 1, 50)
     const { data: ipHistory } = useIntendedParentHistory(match?.intended_parent_id || null)
-
-    // Pipeline stages for status change dropdown
-    const { data: defaultPipeline } = useDefaultPipeline()
-    const changeStatusMutation = useChangeSurrogateStatus()
-
-    // Filter to post-approval stages only (case managers can only move to post-approval)
-    const postApprovalStages = useMemo(() => {
-        if (!defaultPipeline?.stages) return []
-        return defaultPipeline.stages.filter(s => s.stage_type === 'post_approval')
-    }, [defaultPipeline])
 
     // Combine notes from all sources with source labels
     type CombinedNote = {
@@ -382,14 +364,6 @@ export default function MatchDetailPage() {
             hour: "numeric",
             minute: "2-digit",
         })
-    }
-
-    // Handle surrogate status change from Match detail
-    const handleSurrogateStatusChange = async (newStageId: string) => {
-        if (!match?.surrogate_id) return
-        await changeStatusMutation.mutateAsync({ surrogateId: match.surrogate_id, data: { stage_id: newStageId } })
-        // Invalidate match query to refresh surrogate stage fields
-        queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
     }
 
     // Handle Accept match
@@ -569,31 +543,6 @@ export default function MatchDetailPage() {
                                 </Button>
                             </>
                         )}
-                        {/* Change Stage Dropdown - only for case_manager+ on accepted matches */}
-                        {canChangeStatus && match.status === 'accepted' && postApprovalStages.length > 0 && (
-                            <DropdownMenu>
-                                <DropdownMenuTrigger
-                                    className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-7 text-xs")}
-                                >
-                                    <span className="inline-flex items-center">Change Stage</span>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                    {postApprovalStages.map((stage) => (
-                                        <DropdownMenuItem
-                                            key={stage.id}
-                                            onClick={() => handleSurrogateStatusChange(stage.id)}
-                                            disabled={stage.id === surrogateData?.stage_id}
-                                        >
-                                            <span
-                                                className="mr-2 size-2 rounded-full"
-                                                style={{ backgroundColor: stage.color }}
-                                            />
-                                            {stage.label}
-                                        </DropdownMenuItem>
-                                    ))}
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        )}
                     </div>
                 </div>
 
@@ -642,7 +591,14 @@ export default function MatchDetailPage() {
                                                     </AvatarFallback>
                                                 </Avatar>
                                                 <div className="flex-1 min-w-0">
-                                                    <h3 className="text-base font-semibold truncate">{surrogateData.full_name}</h3>
+                                                    <h3 className="text-base font-semibold truncate">
+                                                        <Link
+                                                            href={`/surrogates/${surrogateData.id}`}
+                                                            className="hover:underline underline-offset-4"
+                                                        >
+                                                            {surrogateData.full_name || "Surrogate"}
+                                                        </Link>
+                                                    </h3>
                                                     <div className="flex items-center gap-1 mt-0.5">
                                                         <Badge variant="outline" className="text-xs px-1.5 py-0">#{surrogateData.surrogate_number}</Badge>
                                                         <Badge variant="secondary" className="text-xs px-1.5 py-0">{surrogateData.status_label}</Badge>
@@ -716,7 +672,14 @@ export default function MatchDetailPage() {
                                                     </AvatarFallback>
                                                 </Avatar>
                                                 <div className="flex-1 min-w-0">
-                                                    <h3 className="text-base font-semibold truncate">{ipData.full_name}</h3>
+                                                    <h3 className="text-base font-semibold truncate">
+                                                        <Link
+                                                            href={`/intended-parents/${ipData.id}`}
+                                                            className="hover:underline underline-offset-4"
+                                                        >
+                                                            {ipData.full_name || "Intended Parent"}
+                                                        </Link>
+                                                    </h3>
                                                     <Badge variant="secondary" className="text-xs px-1.5 py-0 mt-0.5">{ipData.status}</Badge>
                                                 </div>
                                             </div>

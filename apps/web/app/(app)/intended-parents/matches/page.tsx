@@ -205,13 +205,18 @@ export default function MatchesPage() {
                                 <TableBody>
                                     {data.items.map((match) => (
                                         <TableRow key={match.id} className="cursor-pointer hover:bg-muted/50">
-                                            <TableCell className="text-muted-foreground">
-                                                {match.match_number || "—"}
-                                            </TableCell>
                                             <TableCell>
                                                 <Link
                                                     href={`/intended-parents/matches/${match.id}`}
-                                                    className="font-medium hover:text-primary hover:underline"
+                                                    className="font-medium text-primary hover:underline"
+                                                >
+                                                    {match.match_number || "—"}
+                                                </Link>
+                                            </TableCell>
+                                            <TableCell className="font-medium">
+                                                <Link
+                                                    href={`/intended-parents/matches/${match.id}`}
+                                                    className="text-primary hover:underline underline-offset-4"
                                                 >
                                                     {match.surrogate_name || "—"}
                                                 </Link>
@@ -220,7 +225,12 @@ export default function MatchesPage() {
                                                 {match.surrogate_number || "—"}
                                             </TableCell>
                                             <TableCell className="text-muted-foreground">
-                                                {match.ip_name || "—"}
+                                                <Link
+                                                    href={`/intended-parents/matches/${match.id}`}
+                                                    className="text-primary hover:underline underline-offset-4"
+                                                >
+                                                    {match.ip_name || "—"}
+                                                </Link>
                                             </TableCell>
                                             <TableCell>
                                                 {match.compatibility_score !== null
