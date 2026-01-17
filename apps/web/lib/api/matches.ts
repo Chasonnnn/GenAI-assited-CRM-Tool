@@ -79,11 +79,15 @@ export interface MatchRejectRequest {
     rejection_reason: string
 }
 
+export interface MatchCancelRequest {
+    reason?: string
+}
+
 export interface MatchUpdateNotesRequest {
     notes: string
 }
 
-export type MatchStatus = 'proposed' | 'reviewing' | 'accepted' | 'rejected' | 'cancelled'
+export type MatchStatus = 'proposed' | 'reviewing' | 'accepted' | 'cancel_pending' | 'rejected' | 'cancelled'
 
 // =============================================================================
 // API Functions
@@ -153,10 +157,10 @@ export async function rejectMatch(matchId: string, data: MatchRejectRequest): Pr
 }
 
 /**
- * Cancel a proposed match.
+ * Request cancellation of an accepted match (admin approval required).
  */
-export async function cancelMatch(matchId: string): Promise<void> {
-    await api.delete(`/matches/${matchId}`)
+export async function cancelMatch(matchId: string, data: MatchCancelRequest = {}): Promise<MatchRead> {
+    return api.post<MatchRead>(`/matches/${matchId}/cancel-request`, data)
 }
 
 /**

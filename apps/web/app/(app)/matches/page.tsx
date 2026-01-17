@@ -25,6 +25,7 @@ const STATUS_CONFIG: Record<MatchStatus, { label: string; color: string; icon?: 
     proposed: { label: "Proposed", color: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" },
     reviewing: { label: "Reviewing", color: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300" },
     accepted: { label: "Accepted", color: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300", icon: <CheckCircleIcon className="size-3" /> },
+    cancel_pending: { label: "Cancellation Pending", color: "bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200", icon: <AlertCircleIcon className="size-3" /> },
     rejected: { label: "Rejected", color: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300", icon: <XCircleIcon className="size-3" /> },
     cancelled: { label: "Cancelled", color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300" },
 }

@@ -35,9 +35,10 @@ import {
     CalendarPlusIcon,
     UploadIcon,
 } from "lucide-react"
-import { useMatch, matchKeys, useAcceptMatch, useRejectMatch } from "@/lib/hooks/use-matches"
+import { useMatch, matchKeys, useAcceptMatch, useRejectMatch, useCancelMatch } from "@/lib/hooks/use-matches"
 import { MatchTasksCalendar } from "@/components/matches/MatchTasksCalendar"
 import { RejectMatchDialog } from "@/components/matches/RejectMatchDialog"
+import { CancelMatchDialog } from "@/components/matches/CancelMatchDialog"
 import { AddNoteDialog } from "@/components/matches/AddNoteDialog"
 import { UploadFileDialog } from "@/components/matches/UploadFileDialog"
 import { AddTaskDialog, type TaskFormData } from "@/components/matches/AddTaskDialog"
@@ -56,6 +57,7 @@ const STATUS_LABELS: Record<string, string> = {
     proposed: "Proposed",
     reviewing: "Reviewing",
     accepted: "Accepted",
+    cancel_pending: "Cancellation Pending",
     rejected: "Rejected",
     cancelled: "Cancelled",
 }
@@ -64,6 +66,7 @@ const STATUS_COLORS: Record<string, string> = {
     proposed: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
     reviewing: "bg-blue-500/10 text-blue-500 border-blue-500/20",
     accepted: "bg-green-500/10 text-green-500 border-green-500/20",
+    cancel_pending: "bg-amber-500/10 text-amber-600 border-amber-500/20",
     rejected: "bg-red-500/10 text-red-500 border-red-500/20",
     cancelled: "bg-gray-500/10 text-gray-500 border-gray-500/20",
 }
@@ -106,6 +109,7 @@ export default function MatchDetailPage() {
         isSourceFilter(urlSource) ? urlSource : "all"
     )
     const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
+    const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
     const [addNoteDialogOpen, setAddNoteDialogOpen] = useState(false)
     const [uploadFileDialogOpen, setUploadFileDialogOpen] = useState(false)
     const [addTaskDialogOpen, setAddTaskDialogOpen] = useState(false)
@@ -149,6 +153,7 @@ export default function MatchDetailPage() {
     const { data: match, isLoading: matchLoading } = useMatch(matchId)
     const acceptMatchMutation = useAcceptMatch()
     const rejectMatchMutation = useRejectMatch()
+    const cancelMatchMutation = useCancelMatch()
     const createNoteMutation = useCreateNote()
     const createIPNoteMutation = useCreateIntendedParentNote()
     const uploadAttachmentMutation = useUploadAttachment()
@@ -395,6 +400,12 @@ export default function MatchDetailPage() {
         queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
     }
 
+    const handleCancelMatch = async (reason?: string) => {
+        await cancelMatchMutation.mutateAsync({ matchId, data: reason ? { reason } : {} })
+        queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
+        queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
+    }
+
     // Handle Add Note
     const handleAddNote = async (target: "surrogate" | "ip", content: string) => {
         try {
@@ -543,6 +554,17 @@ export default function MatchDetailPage() {
                                 </Button>
                             </>
                         )}
+                        {canChangeStatus && match.status === 'accepted' && (
+                            <Button
+                                variant="destructive"
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => setCancelDialogOpen(true)}
+                                disabled={cancelMatchMutation.isPending}
+                            >
+                                {cancelMatchMutation.isPending ? 'Requesting...' : 'Cancel Match'}
+                            </Button>
+                        )}
                     </div>
                 </div>
 
@@ -569,9 +591,9 @@ export default function MatchDetailPage() {
 
                         <TabsContent value="overview" className="h-[calc(100vh-145px)]">
                             {/* 3-Column Horizontal Layout: 35% | 35% | 30% */}
-                            <div className="grid gap-4 h-full" style={{ gridTemplateColumns: '35% 35% 30%' }}>
+                            <div className="grid h-full gap-4 grid-cols-[minmax(0,35fr)_minmax(0,35fr)_minmax(0,30fr)]">
                                 {/* Surrogate Column - 35% */}
-                                <div className="border rounded-lg p-4 overflow-y-auto">
+                                <div className="min-w-0 border rounded-lg p-4 overflow-y-auto">
                                     <div className="flex items-center gap-2 mb-3">
                                         <UserIcon className="size-4 text-purple-500" />
                                         <h2 className="text-sm font-semibold text-purple-500">Surrogate</h2>
@@ -652,7 +674,7 @@ export default function MatchDetailPage() {
                                 </div>
 
                                 {/* Intended Parents Column - 35% */}
-                                <div className="border rounded-lg p-4 overflow-y-auto">
+                                <div className="min-w-0 border rounded-lg p-4 overflow-y-auto">
                                     <div className="flex items-center gap-2 mb-3">
                                         <UsersIcon className="size-4 text-green-500" />
                                         <h2 className="text-sm font-semibold text-green-500">Intended Parents</h2>
@@ -732,7 +754,7 @@ export default function MatchDetailPage() {
                                 </div>
 
                                 {/* Notes/Files/Tasks/Activity Column - 30% */}
-                                <div className="border rounded-lg flex flex-col overflow-hidden">
+                                <div className="min-w-0 border rounded-lg flex flex-col overflow-hidden">
                                     {/* Source Filter - above tabs */}
                                     <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30">
                                         <Select
@@ -1037,6 +1059,13 @@ export default function MatchDetailPage() {
                 onOpenChange={setRejectDialogOpen}
                 onConfirm={handleRejectMatch}
                 isPending={rejectMatchMutation.isPending}
+            />
+
+            <CancelMatchDialog
+                open={cancelDialogOpen}
+                onOpenChange={setCancelDialogOpen}
+                onConfirm={handleCancelMatch}
+                isPending={cancelMatchMutation.isPending}
             />
 
             {/* Add Note Dialog */}

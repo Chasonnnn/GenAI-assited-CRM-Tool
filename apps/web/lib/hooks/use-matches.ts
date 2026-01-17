@@ -16,6 +16,7 @@ import {
     type MatchCreate,
     type MatchAcceptRequest,
     type MatchRejectRequest,
+    type MatchCancelRequest,
     type MatchUpdateNotesRequest,
     type MatchListResponse,
     type MatchStatsResponse,
@@ -125,9 +126,11 @@ export function useCancelMatch() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: (matchId: string) => cancelMatch(matchId),
-        onSuccess: () => {
+        mutationFn: ({ matchId, data }: { matchId: string; data?: MatchCancelRequest }) =>
+            cancelMatch(matchId, data),
+        onSuccess: (result) => {
             queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
+            queryClient.setQueryData(matchKeys.detail(result.id), result)
         },
     })
 }

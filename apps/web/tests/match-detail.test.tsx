@@ -185,6 +185,7 @@ describe('MatchDetailPage', () => {
             isLoading: false,
             error: null,
         })
+        mockUseCancelMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
 
         mockUseSurrogate.mockReturnValue({
             data: mockSurrogate,
