@@ -49,9 +49,7 @@ function ChartContainer({
   const uniqueId = React.useId()
   const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`
   const containerRef = React.useRef<HTMLDivElement | null>(null)
-  const [hasSize, setHasSize] = React.useState(
-    () => typeof window === "undefined" || typeof ResizeObserver === "undefined"
-  )
+  const [size, setSize] = React.useState<{ width: number; height: number } | null>(null)
 
   React.useEffect(() => {
     const element = containerRef.current
@@ -59,7 +57,15 @@ function ChartContainer({
 
     const updateSize = () => {
       const rect = element.getBoundingClientRect()
-      setHasSize(rect.width > 0 && rect.height > 0)
+      const width = Math.round(rect.width)
+      const height = Math.round(rect.height)
+      if (width > 0 && height > 0) {
+        setSize((prev) =>
+          prev && prev.width === width && prev.height === height ? prev : { width, height }
+        )
+      } else {
+        setSize(null)
+      }
     }
 
     updateSize()
@@ -91,8 +97,13 @@ function ChartContainer({
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
-        {hasSize ? (
-          <RechartsPrimitive.ResponsiveContainer minHeight={1} minWidth={1}>
+        {size ? (
+          <RechartsPrimitive.ResponsiveContainer
+            width={size.width}
+            height={size.height}
+            minHeight={1}
+            minWidth={1}
+          >
             {children}
           </RechartsPrimitive.ResponsiveContainer>
         ) : null}
