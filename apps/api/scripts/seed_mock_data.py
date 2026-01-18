@@ -415,7 +415,7 @@ def create_surrogates(
             clinic_email=email_from_name(random.choice(CLINIC_NAMES)),
             
             # Monitoring Clinic
-            monitoring_clinic_name=f"{random.choice(['Women\'s', 'Family', 'Advanced', 'Premier'])} Fertility Center",
+            monitoring_clinic_name=f"{random.choice(['Womens', 'Family', 'Advanced', 'Premier'])} Fertility Center",
             monitoring_clinic_address_line1=monitoring_addr[0],
             monitoring_clinic_address_line2=monitoring_addr[1],
             monitoring_clinic_city=monitoring_addr[2],
