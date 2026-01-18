@@ -381,3 +381,51 @@ def log_pregnancy_dates_updated(
         actor_user_id=actor_user_id,
         details={},
     )
+
+
+def log_journey_image_set(
+    db: Session,
+    surrogate_id: UUID,
+    organization_id: UUID,
+    actor_user_id: UUID,
+    milestone_slug: str,
+    new_attachment_id: UUID,
+    old_attachment_id: UUID | None = None,
+) -> SurrogateActivityLog:
+    """Log journey milestone featured image set/changed."""
+    details = {
+        "milestone_slug": milestone_slug,
+        "new_attachment_id": str(new_attachment_id),
+    }
+    if old_attachment_id:
+        details["old_attachment_id"] = str(old_attachment_id)
+    return log_activity(
+        db=db,
+        surrogate_id=surrogate_id,
+        organization_id=organization_id,
+        activity_type=SurrogateActivityType.JOURNEY_IMAGE_SET,
+        actor_user_id=actor_user_id,
+        details=details,
+    )
+
+
+def log_journey_image_cleared(
+    db: Session,
+    surrogate_id: UUID,
+    organization_id: UUID,
+    actor_user_id: UUID,
+    milestone_slug: str,
+    old_attachment_id: UUID,
+) -> SurrogateActivityLog:
+    """Log journey milestone featured image cleared."""
+    return log_activity(
+        db=db,
+        surrogate_id=surrogate_id,
+        organization_id=organization_id,
+        activity_type=SurrogateActivityType.JOURNEY_IMAGE_CLEARED,
+        actor_user_id=actor_user_id,
+        details={
+            "milestone_slug": milestone_slug,
+            "old_attachment_id": str(old_attachment_id),
+        },
+    )

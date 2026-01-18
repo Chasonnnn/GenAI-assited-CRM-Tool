@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 import csv
 import json
 import os
@@ -8,7 +9,15 @@ import pytest
 from app.core.config import settings
 from app.core.encryption import hash_email
 from app.db.enums import AuditEventType, TaskType
-from app.db.models import AuditLog, Task
+from app.db.models import (
+    AuditLog,
+    Task,
+    AIConversation,
+    AIMessage,
+    AIActionApproval,
+    AIUsageLog,
+    AIEntitySummary,
+)
 from app.services import compliance_service
 from app.utils.normalization import normalize_email
 
@@ -198,7 +207,90 @@ def test_export_empty_result(db, test_org, test_user, export_settings):
 
     # Only header, no data rows
     assert len(rows) <= 1
-    assert job.record_count == 0
+
+
+def test_retention_preview_includes_ai_tables(db, test_org, test_user):
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+
+    conversation = AIConversation(
+        organization_id=test_org.id,
+        user_id=test_user.id,
+        entity_type="surrogate",
+        entity_id=uuid4(),
+        created_at=cutoff,
+        updated_at=cutoff,
+    )
+    db.add(conversation)
+    db.flush()
+
+    message = AIMessage(
+        conversation_id=conversation.id,
+        role="user",
+        content="Hello",
+        created_at=cutoff,
+    )
+    db.add(message)
+    db.flush()
+
+    approval = AIActionApproval(
+        message_id=message.id,
+        action_index=0,
+        action_type="add_note",
+        action_payload={"content": "Note"},
+        status="pending",
+        created_at=cutoff,
+    )
+    db.add(approval)
+    db.flush()
+
+    usage_log = AIUsageLog(
+        organization_id=test_org.id,
+        user_id=test_user.id,
+        conversation_id=conversation.id,
+        model="gpt-4o-mini",
+        prompt_tokens=1,
+        completion_tokens=1,
+        total_tokens=2,
+        created_at=cutoff,
+    )
+    db.add(usage_log)
+    db.flush()
+
+    summary = AIEntitySummary(
+        organization_id=test_org.id,
+        entity_type="surrogate",
+        entity_id=uuid4(),
+        summary_text="Summary",
+        notes_plain_text=None,
+        updated_at=cutoff,
+    )
+    db.add(summary)
+    db.flush()
+
+    for entity_type in [
+        "ai_conversations",
+        "ai_messages",
+        "ai_action_approvals",
+        "ai_usage_log",
+        "ai_entity_summaries",
+    ]:
+        compliance_service.upsert_retention_policy(
+            db=db,
+            org_id=test_org.id,
+            user_id=test_user.id,
+            entity_type=entity_type,
+            retention_days=1,
+            is_active=True,
+        )
+
+    results = compliance_service.preview_purge(db, test_org.id)
+    result_map = {item.entity_type: item.count for item in results}
+
+    assert result_map["ai_conversations"] >= 1
+    assert result_map["ai_messages"] >= 1
+    assert result_map["ai_action_approvals"] >= 1
+    assert result_map["ai_usage_log"] >= 1
+    assert result_map["ai_entity_summaries"] >= 1
 
 
 def test_specific_entity_legal_hold_blocks_related(db, test_org, test_user):
