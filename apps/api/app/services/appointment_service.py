@@ -8,7 +8,6 @@ Handles:
 - Approval, reschedule, and cancellation workflows
 """
 
-import asyncio
 import hashlib
 import logging
 import secrets
@@ -35,6 +34,7 @@ from app.db.models import (
 )
 from app.schemas.appointment import AppointmentRead, AppointmentListItem
 from app.db.enums import AppointmentStatus, MeetingMode
+from app.core.async_utils import run_async
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -53,22 +53,7 @@ def _run_async(coro: Coroutine[object, object, T]) -> T | None:
     Returns None on failure (best-effort).
     """
     try:
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
-
-        if loop is not None:
-            # Already in async context - create a task and let it run
-            # Can't block here, so we run in a new thread
-            import concurrent.futures
-
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(asyncio.run, coro)
-                return future.result(timeout=30)
-        else:
-            # Not in async context
-            return asyncio.run(coro)
+        return run_async(coro, timeout=30)
     except Exception as e:
         logger.warning(f"Async operation failed: {e}")
         return None
