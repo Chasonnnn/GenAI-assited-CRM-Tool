@@ -1,0 +1,186 @@
+variable "project_id" {
+  type        = string
+  description = "GCP project id"
+}
+
+variable "region" {
+  type        = string
+  description = "GCP region"
+  default     = "us-central1"
+}
+
+variable "domain" {
+  type        = string
+  description = "Base domain (e.g. example.com)"
+}
+
+variable "artifact_repo" {
+  type        = string
+  description = "Artifact Registry repo name"
+  default     = "crm"
+}
+
+variable "github_owner" {
+  type        = string
+  description = "GitHub org/user for Cloud Build triggers"
+}
+
+variable "github_repo" {
+  type        = string
+  description = "GitHub repo name for Cloud Build triggers"
+}
+
+variable "github_branch" {
+  type        = string
+  description = "GitHub branch for Cloud Build triggers"
+  default     = "main"
+}
+
+variable "api_service_name" {
+  type        = string
+  default     = "crm-api"
+}
+
+variable "web_service_name" {
+  type        = string
+  default     = "crm-web"
+}
+
+variable "worker_job_name" {
+  type        = string
+  default     = "crm-worker"
+}
+
+variable "migrate_job_name" {
+  type        = string
+  default     = "crm-migrate"
+}
+
+variable "database_tier" {
+  type        = string
+  default     = "db-g1-small"
+}
+
+variable "database_version" {
+  type        = string
+  default     = "POSTGRES_15"
+}
+
+variable "database_name" {
+  type        = string
+  default     = "crm"
+}
+
+variable "database_user" {
+  type        = string
+  default     = "crm_user"
+}
+
+variable "database_password" {
+  type        = string
+  sensitive   = true
+}
+
+variable "redis_memory_size_gb" {
+  type        = number
+  default     = 1
+}
+
+variable "vpc_connector_cidr" {
+  type        = string
+  default     = "10.8.0.0/28"
+}
+
+variable "run_cpu" {
+  type        = string
+  default     = "1"
+}
+
+variable "run_memory" {
+  type        = string
+  default     = "1Gi"
+}
+
+variable "run_min_instances" {
+  type        = number
+  default     = 0
+}
+
+variable "run_max_instances" {
+  type        = number
+  default     = 10
+}
+
+variable "storage_backend" {
+  type        = string
+  default     = "s3"
+}
+
+variable "s3_bucket" {
+  type        = string
+}
+
+variable "s3_region" {
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "export_storage_backend" {
+  type        = string
+  default     = "s3"
+}
+
+variable "export_s3_bucket" {
+  type        = string
+}
+
+variable "export_s3_region" {
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "attachment_scan_enabled" {
+  type        = bool
+  default     = true
+}
+
+variable "allowed_email_domains" {
+  type        = string
+  default     = ""
+}
+
+variable "gcp_monitoring_enabled" {
+  type        = bool
+  default     = true
+}
+
+variable "secrets" {
+  type        = map(string)
+  sensitive   = true
+  description = "Map of secret values (provided via TF_VAR_secrets)."
+  validation {
+    condition = alltrue([
+      for k in [
+        "JWT_SECRET",
+        "DEV_SECRET",
+        "INTERNAL_SECRET",
+        "META_ENCRYPTION_KEY",
+        "FERNET_KEY",
+        "DATA_ENCRYPTION_KEY",
+        "PII_HASH_KEY",
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "ZOOM_CLIENT_ID",
+        "ZOOM_CLIENT_SECRET",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY"
+      ] : contains(keys(var.secrets), k)
+    ])
+    error_message = "secrets map is missing one or more required keys."
+  }
+}
+
+variable "enable_domain_mapping" {
+  type        = bool
+  default     = true
+}
