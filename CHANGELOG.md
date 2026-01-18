@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.19.5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.19.4...surrogacy-crm-platform-v0.19.5) (2026-01-18)
+
+
+### Features
+
+* **admin:** enhance import/export services ([51837fd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/51837fd89f2c0e6a8325f6d1ffcff763088d24c8))
+* **infra:** add GCP Cloud Run deployment infrastructure ([1f9fce9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1f9fce9bae2f6e41f19e39ed024352bca9c05ee3))
+
+
+### Bug Fixes
+
+* fix f-string syntax for Python 3.11 compatibility ([c05a6d1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c05a6d18d5ffcf2b5ec56758c257463e97df61d4))
+
 ## [0.19.4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.19.3...surrogacy-crm-platform-v0.19.4) (2026-01-18)
 
 
