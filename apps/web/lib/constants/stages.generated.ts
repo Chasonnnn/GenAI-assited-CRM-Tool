@@ -95,14 +95,14 @@ export const STAGE_DEFS: StageDef[] = [
     },
     {
         "slug": "transfer_cycle",
-        "label": "Transfer Cycle",
+        "label": "Transfer Cycle Initiated",
         "color": "#0D9488",
         "order": 12,
         "stageType": "post_approval"
     },
     {
         "slug": "second_hcg_confirmed",
-        "label": "Second Hcg Confirmed",
+        "label": "Second hCG confirmed",
         "color": "#10B981",
         "order": 13,
         "stageType": "post_approval"
@@ -116,7 +116,7 @@ export const STAGE_DEFS: StageDef[] = [
     },
     {
         "slug": "ob_care_established",
-        "label": "Ob Care Established",
+        "label": "OB Care Established",
         "color": "#84CC16",
         "order": 15,
         "stageType": "post_approval"
@@ -129,25 +129,25 @@ export const STAGE_DEFS: StageDef[] = [
         "stageType": "post_approval"
     },
     {
+        "slug": "delivered",
+        "label": "Delivered",
+        "color": "#16A34A",
+        "order": 17,
+        "stageType": "post_approval"
+    },
+    {
         "slug": "lost",
         "label": "Lost",
         "color": "#EF4444",
-        "order": 17,
+        "order": 18,
         "stageType": "terminal"
     },
     {
         "slug": "disqualified",
         "label": "Disqualified",
         "color": "#EF4444",
-        "order": 18,
-        "stageType": "terminal"
-    },
-    {
-        "slug": "delivered",
-        "label": "Delivered",
-        "color": "#16A34A",
         "order": 19,
-        "stageType": "post_approval"
+        "stageType": "terminal"
     }
 ]
 
@@ -190,9 +190,9 @@ export const DEFAULT_STAGE_ORDER: string[] = [
     "heartbeat_confirmed",
     "ob_care_established",
     "anatomy_scanned",
+    "delivered",
     "lost",
-    "disqualified",
-    "delivered"
+    "disqualified"
 ]
 
 export const ROLE_STAGE_VISIBILITY: Record<string, RoleStageRule> = {
