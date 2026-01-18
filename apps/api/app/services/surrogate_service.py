@@ -156,7 +156,8 @@ def create_surrogate(
     from app.services import queue_service
     from app.services import pipeline_service
 
-    if user_id:
+    assign_to_user = data.assign_to_user if data.assign_to_user is not None else user_id is not None
+    if user_id and assign_to_user:
         owner_type = OwnerType.USER.value
         owner_id = user_id
     else:

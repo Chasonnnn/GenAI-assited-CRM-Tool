@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import SurrogatesPage from '../app/(app)/surrogates/page'
 
 // ============================================================================
@@ -33,6 +33,7 @@ const mockUseSurrogates = vi.fn()
 const mockUseArchiveSurrogate = vi.fn()
 const mockUseRestoreSurrogate = vi.fn()
 const mockUseUpdateSurrogate = vi.fn()
+const mockUseCreateSurrogate = vi.fn()
 const mockUseAssignees = vi.fn()
 const mockUseBulkAssign = vi.fn()
 const mockUseBulkArchive = vi.fn()
@@ -43,6 +44,7 @@ vi.mock('@/lib/hooks/use-surrogates', () => ({
     useArchiveSurrogate: () => mockUseArchiveSurrogate(),
     useRestoreSurrogate: () => mockUseRestoreSurrogate(),
     useUpdateSurrogate: () => mockUseUpdateSurrogate(),
+    useCreateSurrogate: () => mockUseCreateSurrogate(),
     useAssignees: () => mockUseAssignees(),
     useBulkAssign: () => mockUseBulkAssign(),
     useBulkArchive: () => mockUseBulkArchive(),
@@ -89,6 +91,7 @@ describe('SurrogatesPage', () => {
         mockUseArchiveSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseRestoreSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseUpdateSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+        mockUseCreateSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseAssignees.mockReturnValue({ data: [] })
         mockUseBulkAssign.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseBulkArchive.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
@@ -160,6 +163,19 @@ describe('SurrogatesPage', () => {
         expect(screen.getByText('John Doe')).toBeInTheDocument()
         expect(screen.getByText('#S12345')).toBeInTheDocument()
         expect(screen.getByText('john@example.com')).toBeInTheDocument()
+    })
+
+    it('opens New Surrogates dialog', () => {
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+        fireEvent.click(screen.getByRole('button', { name: 'New Surrogates' }))
+        expect(screen.getByRole('heading', { name: 'New Surrogates' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Import CSV' })).toBeInTheDocument()
     })
 
     it('uses page from URL params', () => {

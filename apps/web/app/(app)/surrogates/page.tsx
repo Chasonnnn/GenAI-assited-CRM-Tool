@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { useSearchParams, useRouter } from "next/navigation"
-import { Card } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
@@ -11,12 +11,14 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { PaginationJump } from "@/components/ui/pagination-jump"
-import { MoreVerticalIcon, SearchIcon, XIcon, Loader2Icon, ArchiveIcon, UserPlusIcon, UsersIcon, UploadIcon } from "lucide-react"
+import { MoreVerticalIcon, SearchIcon, XIcon, Loader2Icon, ArchiveIcon, UserPlusIcon, UsersIcon, UploadIcon, PlusIcon } from "lucide-react"
 import { SortableTableHead } from "@/components/ui/sortable-table-head"
-import { useSurrogates, useArchiveSurrogate, useRestoreSurrogate, useUpdateSurrogate, useAssignees, useBulkAssign, useBulkArchive } from "@/lib/hooks/use-surrogates"
+import { useSurrogates, useArchiveSurrogate, useRestoreSurrogate, useUpdateSurrogate, useAssignees, useBulkAssign, useBulkArchive, useCreateSurrogate } from "@/lib/hooks/use-surrogates"
 import { useQueues } from "@/lib/hooks/use-queues"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useAuth } from "@/lib/auth-context"
@@ -24,6 +26,7 @@ import type { SurrogateSource } from "@/lib/types/surrogate"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { cn } from "@/lib/utils"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
+import { toast } from "sonner"
 
 // Format date for display
 function formatDate(dateString: string | null | undefined): string {
@@ -119,10 +122,18 @@ function FloatingActionBar({
     )
 }
 
-const VALID_SOURCES = ["all", "manual", "meta", "website", "referral"] as const
+const VALID_SOURCES = ["all", "manual", "meta", "website", "referral", "agency", "import"] as const
 type SourceFilter = (typeof VALID_SOURCES)[number]
 const isSourceFilter = (value: string | null): value is SourceFilter =>
     value !== null && VALID_SOURCES.includes(value as SourceFilter)
+
+const CREATE_SOURCE_OPTIONS: { value: SurrogateSource; label: string }[] = [
+    { value: "manual", label: "Manual" },
+    { value: "website", label: "Website" },
+    { value: "referral", label: "Referral" },
+    { value: "agency", label: "Agency" },
+    { value: "meta", label: "Meta" },
+]
 
 const VALID_DATE_RANGES: DateRangePreset[] = ["all", "today", "week", "month", "custom"]
 const isDateRangePreset = (value: string | null): value is DateRangePreset =>
@@ -177,8 +188,15 @@ export default function SurrogatesPage() {
     const [selectedSurrogates, setSelectedSurrogates] = useState<Set<string>>(new Set())
     const [sortBy, setSortBy] = useState<string | null>("surrogate_number")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
+    const [isCreateOpen, setIsCreateOpen] = useState(false)
+    const [createForm, setCreateForm] = useState({
+        full_name: "",
+        email: "",
+        source: "manual" as SurrogateSource,
+    })
     const perPage = 20
     const { user } = useAuth()
+    const createMutation = useCreateSurrogate()
 
     // Sync state changes back to URL
     const updateUrlParams = useCallback((
@@ -423,6 +441,38 @@ export default function SurrogatesPage() {
         await updateMutation.mutateAsync({ surrogateId, data: { is_priority: !currentPriority } })
     }
 
+    const resetCreateForm = () => {
+        setCreateForm({
+            full_name: "",
+            email: "",
+            source: "manual",
+        })
+    }
+
+    const handleCreate = async () => {
+        try {
+            const fullName = createForm.full_name.trim()
+            const email = createForm.email.trim()
+            if (!fullName || !email) {
+                toast.error("Name and email are required")
+                return
+            }
+            const created = await createMutation.mutateAsync({
+                full_name: fullName,
+                email,
+                source: createForm.source,
+                assign_to_user: user?.role === "intake_specialist",
+            })
+            setIsCreateOpen(false)
+            resetCreateForm()
+            toast.success("Surrogate created successfully")
+            router.push(`/surrogates/${created.id}`)
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Failed to create surrogate"
+            toast.error(message)
+        }
+    }
+
     return (
         <div className="flex flex-col h-full overflow-hidden">
             {/* Page Header - Fixed Height */}
@@ -434,12 +484,10 @@ export default function SurrogatesPage() {
                             {data?.total ?? 0} total surrogates
                         </p>
                     </div>
-                    <Link href="/settings/import">
-                        <Button>
-                            <UploadIcon className="mr-2 size-4" />
-                            Import CSV
-                        </Button>
-                    </Link>
+                    <Button onClick={() => setIsCreateOpen(true)}>
+                        <PlusIcon className="mr-2 size-4" />
+                        New Surrogates
+                    </Button>
                 </div>
             </div>
 
@@ -481,6 +529,8 @@ export default function SurrogatesPage() {
                                         meta: "Meta",
                                         website: "Website",
                                         referral: "Referral",
+                                        agency: "Agency",
+                                        import: "Import",
                                     }
                                     return labels[value] ?? value
                                 }}
@@ -492,6 +542,8 @@ export default function SurrogatesPage() {
                             <SelectItem value="meta">Meta</SelectItem>
                             <SelectItem value="website">Website</SelectItem>
                             <SelectItem value="referral">Referral</SelectItem>
+                            <SelectItem value="agency">Agency</SelectItem>
+                            <SelectItem value="import">Import</SelectItem>
                         </SelectContent>
                     </Select>
 
@@ -542,6 +594,83 @@ export default function SurrogatesPage() {
                     )}
                 </div>
             </div>
+
+            {/* Create Modal */}
+            <Dialog open={isCreateOpen} onOpenChange={(open) => { setIsCreateOpen(open); if (!open) resetCreateForm() }}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>New Surrogates</DialogTitle>
+                        <DialogDescription>Add a new surrogate to the system</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="surrogate-full-name">Full Name *</Label>
+                            <Input
+                                id="surrogate-full-name"
+                                value={createForm.full_name}
+                                onChange={(e) => setCreateForm({ ...createForm, full_name: e.target.value })}
+                                placeholder="Jane Smith"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="surrogate-email">Email *</Label>
+                            <Input
+                                id="surrogate-email"
+                                type="email"
+                                value={createForm.email}
+                                onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                                placeholder="jane@example.com"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="surrogate-source">Source *</Label>
+                            <Select
+                                value={createForm.source}
+                                onValueChange={(value) => setCreateForm({ ...createForm, source: value as SurrogateSource })}
+                            >
+                                <SelectTrigger id="surrogate-source">
+                                    <SelectValue placeholder="Select a source" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {CREATE_SOURCE_OPTIONS.map((source) => (
+                                        <SelectItem key={source.value} value={source.value}>
+                                            {source.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <Card className="bg-muted/50">
+                            <CardContent className="py-4 flex items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-sm font-medium">Import CSV</p>
+                                    <p className="text-xs text-muted-foreground">
+                                        Bulk upload surrogates from a CSV file.
+                                    </p>
+                                </div>
+                                <Link href="/surrogates/import">
+                                    <Button variant="outline" size="sm" onClick={() => setIsCreateOpen(false)}>
+                                        <UploadIcon className="mr-2 size-4" />
+                                        Import CSV
+                                    </Button>
+                                </Link>
+                            </CardContent>
+                        </Card>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={handleCreate}
+                            disabled={createMutation.isPending || !createForm.full_name.trim() || !createForm.email.trim()}
+                        >
+                            {createMutation.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
+                            Create
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* Scrollable Content Area */}
             <div className="flex-1 overflow-auto p-6">
