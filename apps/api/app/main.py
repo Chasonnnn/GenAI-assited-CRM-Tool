@@ -374,7 +374,8 @@ app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 app.include_router(surrogates_import.router)  # Already has /surrogates/import prefix
 
 # Surrogate Journey (timeline view)
-app.include_router(journey.router)  # Already has /journey prefix
+app.include_router(journey.router)  # Authenticated journey endpoints
+app.include_router(journey.export_router)  # Token-auth export view
 
 # Intended Parents module
 app.include_router(intended_parents.router, prefix="/intended-parents", tags=["intended-parents"])
