@@ -282,12 +282,17 @@ function buildTimelineData(
     }
 
     // 6. Find current stage order for completed/upcoming detection
-    const activeStages = allPipelineStages.filter((s) => s.is_active).sort((a, b) => a.order - b.order)
+    const activeStages = allPipelineStages
+        .filter((s) => s.is_active)
+        .sort((a, b) => a.order - b.order)
     const currentStage = activeStages.find((s) => s.id === currentStageId)
     const currentStageOrder = currentStage?.order ?? 0
 
     // 7. Create StageGroup for ALL pipeline stages (preserve full story)
-    const stageGroups: StageGroup[] = activeStages.map((stage) => {
+    const displayStages = activeStages.filter(
+        (stage) => stage.stage_type !== "terminal" && !["lost", "disqualified"].includes(stage.slug)
+    )
+    const stageGroups: StageGroup[] = displayStages.map((stage) => {
         const allActivities = activitiesByStage.get(stage.id) || []
         const entryMeta = stageEntryMeta.get(stage.id)
         const entryAt = entryMeta?.entryAt || null

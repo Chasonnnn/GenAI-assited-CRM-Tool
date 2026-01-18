@@ -371,7 +371,7 @@ class WorkflowOptions(BaseModel):
     email_templates: list[dict]  # {id, name}
     users: list[dict]  # {id, display_name}
     queues: list[dict]  # {id, name}
-    statuses: list[dict]  # {value, label}
+    statuses: list[dict]  # {id, value, label, is_active}
 
 
 # =============================================================================

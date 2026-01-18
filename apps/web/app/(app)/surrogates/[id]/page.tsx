@@ -822,7 +822,7 @@ export default function SurrogateDetailPage() {
             {/* Tabs Content */}
             <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
                 <Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
-                    <TabsList className="mb-4 overflow-x-auto">
+                    <TabsList className="mb-4 overflow-x-auto print:hidden">
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="notes">Notes {notes && notes.length > 0 && `(${notes.length})`}</TabsTrigger>
                         <TabsTrigger value="tasks">Tasks {tasksData && tasksData.items.length > 0 && `(${tasksData.items.length})`}</TabsTrigger>
@@ -973,6 +973,16 @@ export default function SurrogateDetailPage() {
 
                                     {/* RIGHT COLUMN */}
                                     <div className="space-y-4">
+                                        {/* Pregnancy Tracker - Visible at Heartbeat Confirmed+ */}
+                                        {isHeartbeatConfirmedOrLater && (
+                                            <PregnancyTrackerCard
+                                                surrogateData={surrogateData}
+                                                onUpdate={async (data) => {
+                                                    await updateSurrogateMutation.mutateAsync({ surrogateId: id, data })
+                                                }}
+                                            />
+                                        )}
+
                                         {/* Activity Timeline - Stage-grouped activity */}
                                         <ActivityTimeline
                                             surrogateId={id}
@@ -1016,15 +1026,6 @@ export default function SurrogateDetailPage() {
                                             )}
                                         </SurrogateOverviewCard>
 
-                                        {/* Pregnancy Tracker - Visible at Heartbeat Confirmed+ */}
-                                        {isHeartbeatConfirmedOrLater && (
-                                            <PregnancyTrackerCard
-                                                surrogateData={surrogateData}
-                                                onUpdate={async (data) => {
-                                                    await updateSurrogateMutation.mutateAsync({ surrogateId: id, data })
-                                                }}
-                                            />
-                                        )}
                                     </div>
                                 </div>
                             )
@@ -1032,84 +1033,86 @@ export default function SurrogateDetailPage() {
                     </TabsContent>
 
                     {/* NOTES TAB */}
-                    <TabsContent value="notes" className="space-y-4">
+                    <TabsContent value="notes">
                         <Card>
-                            <CardHeader className="pb-4">
-                                <CardTitle className="flex items-center gap-2">
-                                    Notes
-                                    {notes && notes.length > 0 && (
-                                        <Badge variant="secondary" className="text-xs">
-                                            {notes.length}
-                                        </Badge>
-                                    )}
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-6">
-                                {/* Add Note Section */}
-                                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                                    <h4 className="text-sm font-medium mb-3 text-muted-foreground">Add a note</h4>
-                                    <RichTextEditor
-                                        placeholder="Write your note here..."
-                                        onSubmit={handleAddNote}
-                                        submitLabel="Add Note"
-                                        isSubmitting={createNoteMutation.isPending}
-                                    />
-                                </div>
+                            <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] divide-y lg:divide-y-0 lg:divide-x divide-border">
+                                {/* Notes Column - Left/Main */}
+                                <div className="p-6 order-last lg:order-first">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-lg font-semibold">Notes</h3>
+                                        {notes && notes.length > 0 && (
+                                            <Badge variant="secondary" className="text-xs">
+                                                {notes.length}
+                                            </Badge>
+                                        )}
+                                    </div>
 
-                                {/* Notes List */}
-                                {notes && notes.length > 0 ? (
-                                    <div className="space-y-3">
-                                        {notes.map((note) => (
-                                            <div
-                                                key={note.id}
-                                                className="group rounded-lg border border-border bg-card p-4 transition-colors hover:bg-accent/30"
-                                            >
-                                                <div className="flex items-start gap-3">
-                                                    <Avatar className="h-9 w-9 flex-shrink-0">
-                                                        <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                                                            {getInitials(note.author_name)}
-                                                        </AvatarFallback>
-                                                    </Avatar>
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex items-center justify-between gap-2">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-sm font-medium">{note.author_name || 'Unknown'}</span>
-                                                                <span className="text-xs text-muted-foreground">
-                                                                    {formatDateTime(note.created_at)}
-                                                                </span>
+                                    {/* Add Note Section */}
+                                    <div className="rounded-lg border border-border bg-muted/30 p-4 mb-6">
+                                        <h4 className="text-sm font-medium mb-3 text-muted-foreground">Add a note</h4>
+                                        <RichTextEditor
+                                            placeholder="Write your note here..."
+                                            onSubmit={handleAddNote}
+                                            submitLabel="Add Note"
+                                            isSubmitting={createNoteMutation.isPending}
+                                        />
+                                    </div>
+
+                                    {/* Notes List */}
+                                    {notes && notes.length > 0 ? (
+                                        <div className="space-y-3">
+                                            {notes.map((note) => (
+                                                <div
+                                                    key={note.id}
+                                                    className="group rounded-lg border border-border bg-card p-4 transition-colors hover:bg-accent/30"
+                                                >
+                                                    <div className="flex items-start gap-3">
+                                                        <Avatar className="h-9 w-9 flex-shrink-0">
+                                                            <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                                                                {getInitials(note.author_name)}
+                                                            </AvatarFallback>
+                                                        </Avatar>
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center justify-between gap-2">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-sm font-medium">{note.author_name || 'Unknown'}</span>
+                                                                    <span className="text-xs text-muted-foreground">
+                                                                        {formatDateTime(note.created_at)}
+                                                                    </span>
+                                                                </div>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                    onClick={() => handleDeleteNote(note.id)}
+                                                                >
+                                                                    <TrashIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+                                                                </Button>
                                                             </div>
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                onClick={() => handleDeleteNote(note.id)}
-                                                            >
-                                                                <TrashIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
-                                                            </Button>
+                                                            <div
+                                                                className="mt-2 text-sm prose prose-sm max-w-none dark:prose-invert"
+                                                                dangerouslySetInnerHTML={{ __html: note.body }}
+                                                            />
                                                         </div>
-                                                        <div
-                                                            className="mt-2 text-sm prose prose-sm max-w-none dark:prose-invert"
-                                                            dangerouslySetInnerHTML={{ __html: note.body }}
-                                                        />
                                                     </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-8">
+                                            <p className="text-sm text-muted-foreground">No notes yet. Add the first note above.</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Attachments Column - Right/Sidebar */}
+                                <div className="lg:sticky lg:top-4 lg:self-start p-6 order-first lg:order-last">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-lg font-semibold">Attachments</h3>
                                     </div>
-                                ) : (
-                                    <div className="text-center py-8">
-                                        <p className="text-sm text-muted-foreground">No notes yet. Add the first note above.</p>
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Attachments</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <FileUploadZone surrogateId={id} />
-                            </CardContent>
+                                    <FileUploadZone surrogateId={id} />
+                                </div>
+                            </div>
                         </Card>
                     </TabsContent>
 

@@ -1,6 +1,7 @@
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID
 import uuid
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -27,11 +28,16 @@ async def _create_surrogate(authed_client):
     return response.json()
 
 
+def _org_today(org_timezone: str | None) -> str:
+    tz_name = org_timezone or "America/Los_Angeles"
+    return datetime.now(ZoneInfo(tz_name)).date().isoformat()
+
+
 @pytest.mark.asyncio
 async def test_setting_actual_delivery_date_advances_stage(authed_client, db, test_auth):
     surrogate = await _create_surrogate(authed_client)
     delivered_stage = _get_stage(db, test_auth.org.id, "delivered")
-    today = date.today().isoformat()
+    today = _org_today(test_auth.org.timezone)
 
     response = await authed_client.patch(
         f"/surrogates/{surrogate['id']}",
@@ -50,7 +56,7 @@ async def test_setting_actual_delivery_date_advances_stage(authed_client, db, te
 async def test_delivered_stage_sets_actual_delivery_date_when_missing(authed_client, db, test_auth):
     surrogate = await _create_surrogate(authed_client)
     delivered_stage = _get_stage(db, test_auth.org.id, "delivered")
-    today = date.today().isoformat()
+    today = _org_today(test_auth.org.timezone)
 
     response = await authed_client.patch(
         f"/surrogates/{surrogate['id']}/status",

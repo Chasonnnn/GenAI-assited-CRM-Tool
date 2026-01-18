@@ -230,7 +230,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
     return (
         <SidebarProvider>
-            <Sidebar collapsible="icon">
+            <Sidebar collapsible="icon" className="print:hidden">
                 <SidebarHeader>
                     <SidebarMenu>
                         <SidebarMenuItem>
@@ -509,18 +509,18 @@ export function AppSidebar({ children }: AppSidebarProps) {
                         </SidebarMenuItem>
                     </SidebarMenu>
                 </SidebarFooter>
-                <SidebarRail />
+                <SidebarRail className="print:hidden" />
             </Sidebar>
 
             <SidebarInset>
-                <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b px-4">
+                <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b px-4 print:hidden">
                     <SidebarTrigger className="-ml-1" />
                     <div className="flex items-center gap-2">
                         <NotificationBell />
                         <ThemeToggle />
                     </div>
                 </header>
-                <main className="flex-1 min-w-0 overflow-hidden">{children}</main>
+                <main className="flex-1 min-w-0 overflow-hidden print:overflow-visible">{children}</main>
             </SidebarInset>
 
             {/* Search Command Palette */}
