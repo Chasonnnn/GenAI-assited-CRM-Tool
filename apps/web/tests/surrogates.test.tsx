@@ -13,15 +13,18 @@ vi.mock('next/link', () => ({
     ),
 }))
 
+const mockSearchParams = new URLSearchParams()
+const mockRouterReplace = vi.fn()
+
 // Mock Next.js navigation
 vi.mock('next/navigation', () => ({
     useSearchParams: () => ({
-        get: () => null,
-        toString: () => '',
+        get: (key: string) => mockSearchParams.get(key),
+        toString: () => mockSearchParams.toString(),
     }),
     useRouter: () => ({
         push: vi.fn(),
-        replace: vi.fn(),
+        replace: mockRouterReplace,
     }),
 }))
 
@@ -36,7 +39,7 @@ const mockUseBulkArchive = vi.fn()
 const mockUseQueues = vi.fn()
 
 vi.mock('@/lib/hooks/use-surrogates', () => ({
-    useSurrogates: () => mockUseSurrogates(),
+    useSurrogates: (filters: unknown) => mockUseSurrogates(filters),
     useArchiveSurrogate: () => mockUseArchiveSurrogate(),
     useRestoreSurrogate: () => mockUseRestoreSurrogate(),
     useUpdateSurrogate: () => mockUseUpdateSurrogate(),
@@ -78,6 +81,11 @@ vi.mock('@/lib/hooks/use-pipelines', () => ({
 describe('SurrogatesPage', () => {
     beforeEach(() => {
         // Reset mocks default return values
+        mockSearchParams.delete('page')
+        mockSearchParams.delete('stage')
+        mockSearchParams.delete('source')
+        mockSearchParams.delete('queue')
+        mockSearchParams.delete('q')
         mockUseArchiveSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseRestoreSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseUpdateSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
@@ -134,6 +142,7 @@ describe('SurrogatesPage', () => {
                 owner_id: 'u1',
                 owner_name: 'Owner',
                 created_at: new Date().toISOString(),
+                last_activity_at: new Date().toISOString(),
                 is_priority: false,
                 is_archived: false,
                 age: null,
@@ -151,5 +160,21 @@ describe('SurrogatesPage', () => {
         expect(screen.getByText('John Doe')).toBeInTheDocument()
         expect(screen.getByText('#S12345')).toBeInTheDocument()
         expect(screen.getByText('john@example.com')).toBeInTheDocument()
+    })
+
+    it('uses page from URL params', () => {
+        mockSearchParams.set('page', '3')
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+        expect(mockUseSurrogates).toHaveBeenCalledWith(
+            expect.objectContaining({
+                page: 3,
+            })
+        )
     })
 })

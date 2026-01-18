@@ -319,6 +319,24 @@ describe('SurrogateDetailPage', () => {
         expect(screen.getByText('Activity')).toBeInTheDocument()
     })
 
+    it('shows BMI in demographics when height and weight are set', () => {
+        mockUseSurrogate.mockReturnValueOnce({
+            data: {
+                ...baseSurrogateData,
+                height_ft: 5.5,
+                weight_lb: 120,
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogateDetailPage />)
+
+        const bmiValue = Math.round((120 / ((5.5 * 12) ** 2)) * 703 * 10) / 10
+        expect(screen.getByText('BMI:')).toBeInTheDocument()
+        expect(screen.getByText(String(bmiValue))).toBeInTheDocument()
+    })
+
     it('hides Medical Information and Pregnancy Tracker before ready_to_match', () => {
         render(<SurrogateDetailPage />)
 
