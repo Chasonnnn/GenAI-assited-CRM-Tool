@@ -61,6 +61,7 @@ import { InsuranceInfoCard } from "@/components/surrogates/InsuranceInfoCard"
 import { MedicalInfoCard } from "@/components/surrogates/MedicalInfoCard"
 import { ActivityTimeline } from "@/components/surrogates/ActivityTimeline"
 import { PregnancyTrackerCard } from "@/components/surrogates/PregnancyTrackerCard"
+import { SurrogateJourneyTab } from "@/components/surrogates/journey/SurrogateJourneyTab"
 import { SurrogateOverviewCard } from "@/components/surrogates/SurrogateOverviewCard"
 import { ChangeStageModal } from "@/components/surrogates/ChangeStageModal"
 import { useForms } from "@/lib/hooks/use-forms"
@@ -90,6 +91,7 @@ const TAB_VALUES = [
     "application",
     "profile",
     "history",
+    "journey",
     "ai",
 ] as const
 type TabValue = (typeof TAB_VALUES)[number]
@@ -317,6 +319,29 @@ export default function SurrogateDetailPage() {
         () => stageOptions.find(s => s.slug === 'heartbeat_confirmed'),
         [stageOptions]
     )
+    // Stage visibility for Journey tab (visible at "matched" stage or later)
+    const matchedStage = React.useMemo(
+        () => stageOptions.find(s => s.slug === 'matched'),
+        [stageOptions]
+    )
+
+    // Fetch data
+    const { data: surrogateData, isLoading, error } = useSurrogate(id)
+
+    // Compute if journey tab should be visible based on current stage
+    const canViewJourney = React.useMemo(() => {
+        if (!surrogateData || !matchedStage) return false
+        const currentStage = stageById.get(surrogateData.stage_id)
+        if (!currentStage) return false
+        return currentStage.order >= matchedStage.order
+    }, [surrogateData, matchedStage, stageById])
+
+    // Redirect away from journey tab if not available
+    React.useEffect(() => {
+        if (surrogateData && currentTab === "journey" && !canViewJourney) {
+            handleTabChange("overview")
+        }
+    }, [surrogateData, currentTab, canViewJourney, handleTabChange])
 
     const [copiedEmail, setCopiedEmail] = React.useState(false)
     const [editDialogOpen, setEditDialogOpen] = React.useState(false)
@@ -357,8 +382,7 @@ export default function SurrogateDetailPage() {
         }
     }, [zoomDialogOpen])
 
-    // Fetch data
-    const { data: surrogateData, isLoading, error } = useSurrogate(id)
+    // Additional data fetches
     const { data: activityData } = useSurrogateActivity(id)
     const { data: notes } = useNotes(id)
     const { data: tasksData, isLoading: tasksLoading } = useTasks({ surrogate_id: id, exclude_approvals: true })
@@ -806,11 +830,19 @@ export default function SurrogateDetailPage() {
                         <TabsTrigger value="application">Application</TabsTrigger>
                         {canViewProfile && <TabsTrigger value="profile">Profile</TabsTrigger>}
                         <TabsTrigger value="history">History</TabsTrigger>
+                        <TabsTrigger value="journey" disabled={!canViewJourney}>
+                            Journey
+                        </TabsTrigger>
                         <TabsTrigger value="ai" className="gap-1">
                             <SparklesIcon className="h-3 w-3" />
                             AI
                         </TabsTrigger>
                     </TabsList>
+                    {surrogateData && !canViewJourney && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            Journey available after Match Confirmed
+                        </p>
+                    )}
 
                     {/* OVERVIEW TAB */}
                     <TabsContent value="overview" className="space-y-4">
@@ -1352,6 +1384,13 @@ export default function SurrogateDetailPage() {
                             </div>
                         )}
                     </TabsContent>
+
+                    {/* JOURNEY TAB */}
+                    {canViewJourney && (
+                        <TabsContent value="journey" className="space-y-4">
+                            <SurrogateJourneyTab surrogateId={id} />
+                        </TabsContent>
+                    )}
                 </Tabs>
             </div>
 
