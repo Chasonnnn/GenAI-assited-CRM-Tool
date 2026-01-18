@@ -7,6 +7,9 @@ import type { JourneyResponse, JourneyMilestone } from "@/lib/api/journey"
 
 interface JourneyTimelineProps {
     journey: JourneyResponse
+    surrogateId?: string
+    canEditImages?: boolean
+    onEditImage?: (milestoneSlug: string) => void
 }
 
 interface MilestoneWithMeta {
@@ -23,7 +26,12 @@ interface PhaseWithMilestones {
     milestones: MilestoneWithMeta[]
 }
 
-export function JourneyTimeline({ journey }: JourneyTimelineProps) {
+export function JourneyTimeline({
+    journey,
+    surrogateId,
+    canEditImages = false,
+    onEditImage,
+}: JourneyTimelineProps) {
     // Flatten all milestones and compute metadata
     const allMilestones = journey.phases.flatMap((phase) => phase.milestones)
     const totalMilestones = allMilestones.length
@@ -115,6 +123,9 @@ export function JourneyTimeline({ journey }: JourneyTimelineProps) {
                                             <JourneyMilestoneCard
                                                 milestone={meta.milestone}
                                                 side="left"
+                                                surrogateId={surrogateId}
+                                                canEdit={canEditImages}
+                                                onEditImage={onEditImage}
                                             />
                                         )}
                                     </div>
@@ -130,6 +141,9 @@ export function JourneyTimeline({ journey }: JourneyTimelineProps) {
                                             <JourneyMilestoneCard
                                                 milestone={meta.milestone}
                                                 side="right"
+                                                surrogateId={surrogateId}
+                                                canEdit={canEditImages}
+                                                onEditImage={onEditImage}
                                             />
                                         )}
                                     </div>
@@ -143,6 +157,9 @@ export function JourneyTimeline({ journey }: JourneyTimelineProps) {
                                             <JourneyMilestoneCard
                                                 milestone={meta.milestone}
                                                 side="left"
+                                                surrogateId={surrogateId}
+                                                canEdit={canEditImages}
+                                                onEditImage={onEditImage}
                                             />
                                         </div>
                                     </div>

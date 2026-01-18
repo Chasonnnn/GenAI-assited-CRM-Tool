@@ -1,11 +1,14 @@
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from uuid import UUID
 import uuid
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from app.db.models import Surrogate
+from app.services import pdf_export_service
 from app.services import pipeline_service
+from app.core.security import create_export_token
 
 
 def _get_stage(db, org_id, slug: str):
@@ -49,6 +52,11 @@ def _find_milestone(payload: dict, slug: str):
     raise AssertionError(f"Missing milestone {slug}")
 
 
+def _org_today(org_timezone: str | None) -> str:
+    tz_name = org_timezone or "America/Los_Angeles"
+    return datetime.now(ZoneInfo(tz_name)).date().isoformat()
+
+
 @pytest.mark.asyncio
 async def test_journey_completion_date_uses_next_milestone_entry(authed_client, db, test_auth):
     surrogate = await _create_surrogate(authed_client)
@@ -56,7 +64,7 @@ async def test_journey_completion_date_uses_next_milestone_entry(authed_client, 
     matched = _get_stage(db, test_auth.org.id, "matched")
 
     await _set_stage(authed_client, surrogate["id"], ready_to_match.id)
-    today = date.today().isoformat()
+    today = _org_today(test_auth.org.timezone)
     await _set_stage(authed_client, surrogate["id"], matched.id, effective_at=today)
 
     response = await authed_client.get(f"/journey/surrogates/{surrogate['id']}")
@@ -77,7 +85,7 @@ async def test_journey_completion_date_uses_next_milestone_entry(authed_client, 
 async def test_journey_terminal_state_has_banner_and_no_current(authed_client, db, test_auth):
     surrogate = await _create_surrogate(authed_client)
     lost_stage = _get_stage(db, test_auth.org.id, "lost")
-    today = date.today().isoformat()
+    today = _org_today(test_auth.org.timezone)
 
     await _set_stage(authed_client, surrogate["id"], lost_stage.id, effective_at=today)
 
@@ -143,3 +151,43 @@ async def test_journey_completed_milestones_do_not_roll_back(authed_client, db, 
 
     approved_matching = _find_milestone(payload, "approved_matching")
     assert approved_matching["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_journey_export_pdf_returns_pdf(authed_client, monkeypatch):
+    surrogate = await _create_surrogate(authed_client)
+
+    def fake_export_journey_pdf(*_args, **_kwargs):
+        return b"%PDF-1.4\njourney"
+
+    monkeypatch.setattr(pdf_export_service, "export_journey_pdf", fake_export_journey_pdf)
+
+    response = await authed_client.get(f"/journey/surrogates/{surrogate['id']}/export")
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("application/pdf")
+    assert response.headers["content-disposition"].startswith("attachment;")
+    assert response.content.startswith(b"%PDF")
+
+
+@pytest.mark.asyncio
+async def test_journey_export_view_rejects_invalid_token(authed_client):
+    surrogate = await _create_surrogate(authed_client)
+
+    response = await authed_client.get(
+        f"/journey/surrogates/{surrogate['id']}/export-view?export_token=invalid"
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_journey_export_view_returns_payload(authed_client, test_auth):
+    surrogate = await _create_surrogate(authed_client)
+    token = create_export_token(test_auth.org.id, UUID(surrogate["id"]))
+
+    response = await authed_client.get(
+        f"/journey/surrogates/{surrogate['id']}/export-view?export_token={token}"
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["surrogate_id"] == surrogate["id"]
+    assert payload["phases"]

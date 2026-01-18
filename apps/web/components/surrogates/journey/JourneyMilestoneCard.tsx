@@ -1,12 +1,18 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { format, parseISO } from "date-fns"
+import { ImageIcon, PencilIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import type { JourneyMilestone, JourneyMilestoneStatus } from "@/lib/api/journey"
 
 interface JourneyMilestoneCardProps {
     milestone: JourneyMilestone
     side: "left" | "right"
+    surrogateId?: string | undefined
+    canEdit?: boolean | undefined
+    onEditImage?: ((milestoneSlug: string) => void) | undefined
 }
 
 const STATUS_STYLES: Record<JourneyMilestoneStatus, {
@@ -31,12 +37,27 @@ const STATUS_STYLES: Record<JourneyMilestoneStatus, {
     },
 }
 
-export function JourneyMilestoneCard({ milestone, side }: JourneyMilestoneCardProps) {
+export function JourneyMilestoneCard({
+    milestone,
+    side,
+    surrogateId,
+    canEdit = false,
+    onEditImage,
+}: JourneyMilestoneCardProps) {
     const styles = STATUS_STYLES[milestone.status]
     const completedDate = milestone.completed_at ? parseISO(milestone.completed_at) : null
+    const [imageError, setImageError] = useState(false)
 
     // Show date only for completed/current milestones that are not soft
     const showDate = !!completedDate && !milestone.is_soft
+
+    // Use featured image if available, otherwise default
+    const imageUrl = milestone.featured_image_url || milestone.default_image_url
+    const hasCustomImage = !!milestone.featured_image_url
+
+    useEffect(() => {
+        setImageError(false)
+    }, [imageUrl])
 
     return (
         <article
@@ -75,15 +96,47 @@ export function JourneyMilestoneCard({ milestone, side }: JourneyMilestoneCardPr
                 </p>
             )}
 
-            {/* Featured image placeholder - abstract illustration */}
+            {/* Featured image - visible in print */}
             <div
                 className={cn(
-                    "relative mt-4 aspect-[16/9] overflow-hidden rounded-lg",
-                    "bg-stone-100 dark:bg-stone-800/50",
-                    "print:hidden"
+                    "group relative mt-4 aspect-[16/9] overflow-hidden rounded-lg",
+                    "bg-stone-100 dark:bg-stone-800/50"
                 )}
             >
-                <MilestonePlaceholder slug={milestone.slug} />
+                {imageUrl && !imageError ? (
+                    <img
+                        src={imageUrl}
+                        alt={`${milestone.label} milestone`}
+                        className="size-full object-cover"
+                        onError={() => setImageError(true)}
+                    />
+                ) : (
+                    <MilestonePlaceholder slug={milestone.slug} />
+                )}
+
+                {/* Edit button overlay - only for case_manager+ */}
+                {canEdit && onEditImage && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/40 group-hover:opacity-100 print:hidden">
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            className="h-8 gap-1.5 shadow-lg"
+                            onClick={() => onEditImage(milestone.slug)}
+                        >
+                            {hasCustomImage ? (
+                                <>
+                                    <PencilIcon className="size-3.5" />
+                                    Change
+                                </>
+                            ) : (
+                                <>
+                                    <ImageIcon className="size-3.5" />
+                                    Set Image
+                                </>
+                            )}
+                        </Button>
+                    </div>
+                )}
             </div>
         </article>
     )
