@@ -61,12 +61,12 @@ async def get_google_access_token(
     user_id: UUID,
 ) -> str | None:
     """
-    Get a valid Google access token for a user.
+    Get a valid Google Calendar access token for a user.
 
     Refreshes the token if expired.
     Returns None if no integration exists.
     """
-    return await oauth_service.get_access_token_async(db, user_id, "gmail")
+    return await oauth_service.get_access_token_async(db, user_id, "google_calendar")
 
 
 # =============================================================================
@@ -238,7 +238,7 @@ async def get_user_calendar_events(
 
     Returns connection state + events for UI handling.
     """
-    integration = oauth_service.get_user_integration(db, user_id, "gmail")
+    integration = oauth_service.get_user_integration(db, user_id, "google_calendar")
     if not integration:
         return {"connected": False, "events": [], "error": "not_connected"}
 
@@ -451,7 +451,7 @@ async def create_appointment_event(
     Create a calendar event for an appointment.
 
     Convenience wrapper that gets the token and creates the event.
-    Returns None if no Gmail integration or API failure.
+    Returns None if no Google Calendar integration or API failure.
     """
     access_token = await get_google_access_token(db, user_id)
     if not access_token:
@@ -520,9 +520,9 @@ class GoogleMeetResult(TypedDict):
     meet_url: str
 
 
-def check_user_has_gmail(db: Session, user_id: UUID) -> bool:
-    """Check if user has connected Gmail/Google."""
-    integration = oauth_service.get_user_integration(db, user_id, "gmail")
+def check_user_has_google_calendar(db: Session, user_id: UUID) -> bool:
+    """Check if user has connected Google Calendar."""
+    integration = oauth_service.get_user_integration(db, user_id, "google_calendar")
     return integration is not None
 
 
@@ -642,11 +642,13 @@ async def create_appointment_meet_link(
     Convenience wrapper that gets the token and creates the event with Meet.
 
     Raises:
-        ValueError: If no Gmail integration or API failure
+        ValueError: If no Google Calendar integration or API failure
     """
     access_token = await get_google_access_token(db, user_id)
     if not access_token:
-        raise ValueError("Gmail not connected. Please connect in Settings → Integrations.")
+        raise ValueError(
+            "Google Calendar not connected. Please connect in Settings → Integrations."
+        )
 
     return await create_google_meet_link(
         access_token=access_token,

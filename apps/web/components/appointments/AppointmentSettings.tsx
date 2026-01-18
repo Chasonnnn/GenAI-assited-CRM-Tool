@@ -8,7 +8,7 @@
  * - Weekly availability grid
  * - Date overrides
  * - Appointment types management
- * - Gmail connection warning
+ * - Google Calendar connection warning
  */
 
 import { useState, useEffect } from "react"
@@ -48,7 +48,7 @@ import {
     PhoneIcon,
     MapPinIcon,
     Loader2Icon,
-    MailIcon,
+    CalendarIcon,
     ExternalLinkIcon,
     EyeIcon,
 } from "lucide-react"
@@ -69,35 +69,34 @@ import { useUserIntegrations } from "@/lib/hooks/use-user-integrations"
 import type { AppointmentType } from "@/lib/api/appointments"
 
 // =============================================================================
-// Gmail Connection Warning Banner
+// Google Calendar Connection Warning Banner
 // =============================================================================
 
-function GmailWarningBanner() {
+function GoogleCalendarWarningBanner() {
     const [dismissed, setDismissed] = useState(false)
     const { data: integrations, isLoading, isError } = useUserIntegrations()
-    const gmailConnected = integrations?.some(
+    const calendarConnected = integrations?.some(
         (integration) =>
-            integration.integration_type === "gmail" && integration.connected
+            integration.integration_type === "google_calendar" && integration.connected
     )
 
-    if (dismissed || isLoading || isError || gmailConnected) return null
+    if (dismissed || isLoading || isError || calendarConnected) return null
 
     return (
         <Alert className="mb-6 border-amber-500/50 bg-amber-50 dark:bg-amber-950/20">
-            <MailIcon className="size-4 text-amber-600" />
+            <CalendarIcon className="size-4 text-amber-600" />
             <AlertTitle className="text-amber-800 dark:text-amber-400">
-                Gmail Integration Recommended
+                Google Calendar Integration Recommended
             </AlertTitle>
             <AlertDescription className="text-amber-700 dark:text-amber-300">
                 <p className="mb-2">
-                    Connect your Gmail account to enable calendar sync, automated email confirmations,
-                    and appointment reminders for your clients.
+                    Connect your Google Calendar to enable calendar sync and Google Meet links for appointments.
                 </p>
                 <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" className="border-amber-500 text-amber-700 hover:bg-amber-100">
                         <a href="/settings/integrations" className="flex items-center">
                             <ExternalLinkIcon className="size-3 mr-1" />
-                            Connect Gmail
+                            Connect Google Calendar
                         </a>
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => setDismissed(true)}>
@@ -717,7 +716,7 @@ function AppointmentTypesCard() {
 export function AppointmentSettings() {
     return (
         <div className="space-y-6">
-            <GmailWarningBanner />
+            <GoogleCalendarWarningBanner />
             <Tabs defaultValue="availability" className="w-full">
                 <TabsList className="w-full justify-start">
                     <TabsTrigger value="availability">Availability</TabsTrigger>
