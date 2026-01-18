@@ -112,12 +112,12 @@ export default function CampaignsPage() {
     const [campaignName, setCampaignName] = useState("")
     const [campaignDescription, setCampaignDescription] = useState("")
     const [selectedTemplateId, setSelectedTemplateId] = useState("")
-    const isRecipientType = (value: string | null): value is "surrogate" | "intended_parent" =>
-        value === "surrogate" || value === "intended_parent"
+    const isRecipientType = (value: string | null): value is "case" | "intended_parent" =>
+        value === "case" || value === "intended_parent"
     const isScheduleFor = (value: unknown): value is "now" | "later" =>
         value === "now" || value === "later"
 
-    const [recipientType, setRecipientType] = useState<"surrogate" | "intended_parent">("surrogate")
+    const [recipientType, setRecipientType] = useState<"case" | "intended_parent">("case")
     const [selectedStages, setSelectedStages] = useState<string[]>([])
     const [selectedStates, setSelectedStates] = useState<string[]>([])
     const [scheduleFor, setScheduleFor] = useState<"now" | "later">("now")
@@ -166,7 +166,7 @@ export default function CampaignsPage() {
         setCampaignName("")
         setCampaignDescription("")
         setSelectedTemplateId("")
-        setRecipientType("surrogate")
+        setRecipientType("case")
         setSelectedStages([])
         setSelectedStates([])
         setScheduleFor("now")
@@ -575,14 +575,14 @@ export default function CampaignsPage() {
                                         <SelectTrigger>
                                             <SelectValue placeholder="Select type">
                                                 {(value: string | null) => {
-                                                    if (value === "surrogate") return "Surrogates"
+                                                    if (value === "case") return "Surrogates"
                                                     if (value === "intended_parent") return "Intended Parents"
                                                     return "Select type"
                                                 }}
                                             </SelectValue>
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="surrogate">Surrogates</SelectItem>
+                                            <SelectItem value="case">Surrogates</SelectItem>
                                             <SelectItem value="intended_parent">Intended Parents</SelectItem>
                                         </SelectContent>
                                     </Select>
@@ -665,7 +665,9 @@ export default function CampaignsPage() {
                                         </div>
                                         <div className="flex justify-between">
                                             <span className="text-muted-foreground">Recipients:</span>
-                                            <span className="font-medium capitalize">{recipientType.replace(/_/g, " ")}s</span>
+                                            <span className="font-medium">
+                                                {recipientType === "case" ? "Surrogates" : "Intended Parents"}
+                                            </span>
                                         </div>
                                         {selectedStages.length > 0 && (
                                             <div className="flex justify-between items-start">
