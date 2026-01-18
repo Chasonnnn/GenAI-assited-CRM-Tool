@@ -57,6 +57,7 @@ from app.routers import (
     interviews,
     invites,
     jobs,
+    journey,
     matches,
     metadata,
     mfa,
@@ -371,6 +372,9 @@ app.include_router(
 app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 
 app.include_router(surrogates_import.router)  # Already has /surrogates/import prefix
+
+# Surrogate Journey (timeline view)
+app.include_router(journey.router)  # Already has /journey prefix
 
 # Intended Parents module
 app.include_router(intended_parents.router, prefix="/intended-parents", tags=["intended-parents"])

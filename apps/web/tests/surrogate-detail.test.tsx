@@ -145,6 +145,7 @@ const baseSurrogateData = {
     // Pregnancy tracking
     pregnancy_start_date: null,
     pregnancy_due_date: null,
+    actual_delivery_date: null,
 }
 
 vi.mock('@/lib/hooks/use-surrogates', () => ({
@@ -292,6 +293,23 @@ describe('SurrogateDetailPage', () => {
         expect(mockReplace).toHaveBeenCalledWith('/surrogates/c1?tab=notes', { scroll: false })
     })
 
+    it('disables Journey tab before matched', () => {
+        render(<SurrogateDetailPage />)
+
+        const journeyTab = screen.getByRole('tab', { name: /Journey/i })
+        expect(journeyTab).toHaveAttribute('aria-disabled', 'true')
+        expect(screen.getByText('Journey available after Match Confirmed')).toBeInTheDocument()
+    })
+
+    it('redirects to overview when journey tab is requested before matched', () => {
+        mockSearchParams.get.mockImplementation((key: string) => (key === 'tab' ? 'journey' : null))
+        mockSearchParams.toString.mockReturnValue('tab=journey')
+
+        render(<SurrogateDetailPage />)
+
+        expect(mockReplace).toHaveBeenCalledWith('/surrogates/c1', { scroll: false })
+    })
+
     it('shows Insurance Info and Activity on overview', () => {
         render(<SurrogateDetailPage />)
 
@@ -345,5 +363,27 @@ describe('SurrogateDetailPage', () => {
 
         expect(screen.getByText('Pregnancy Tracker')).toBeInTheDocument()
         expect(screen.getByText('Due Date:')).toBeInTheDocument()
+    })
+
+    it('shows Actual Delivery Date row when delivery date is set', () => {
+        mockUseSurrogate.mockReturnValueOnce({
+            data: {
+                ...baseSurrogateData,
+                status_label: 'Heartbeat Confirmed',
+                stage_id: 's3',
+                stage_slug: 'heartbeat_confirmed',
+                stage_type: 'post_approval',
+                pregnancy_start_date: '2025-01-10',
+                pregnancy_due_date: '2025-10-17',
+                actual_delivery_date: '2025-10-20',
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogateDetailPage />)
+
+        expect(screen.getByText('Pregnancy Tracker')).toBeInTheDocument()
+        expect(screen.getByText('Actual Delivery Date:')).toBeInTheDocument()
     })
 })
