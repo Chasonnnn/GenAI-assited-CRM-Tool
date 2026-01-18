@@ -8,10 +8,11 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient
 
-from app.db.models import Attachment, Surrogate, InterviewAttachment, Job
+from app.db.models import Attachment, Surrogate, InterviewAttachment, Job, AISettings
 from app.db.enums import JobType
 from app.schemas.interview import InterviewCreate, InterviewNoteCreate
-from app.services import interview_note_service, interview_service
+from app.services import interview_note_service, interview_service, ai_settings_service
+from app.services.ai_provider import ChatResponse
 
 
 @pytest.fixture
@@ -182,3 +183,67 @@ async def test_interview_summary_requires_ai_enabled(
 
     response = await authed_client.post(f"/interviews/{interview.id}/ai/summarize")
     assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_interview_summary_anonymizes_transcript(
+    authed_client: AsyncClient, db, test_org, test_user, test_surrogate, monkeypatch
+):
+    transcript_json = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Interview with Jane Doe jane.doe@example.com",
+                    }
+                ],
+            }
+        ],
+    }
+    interview = _create_interview(
+        db, test_org.id, test_surrogate.id, test_user.id, transcript_json=transcript_json
+    )
+
+    settings = AISettings(
+        organization_id=test_org.id,
+        is_enabled=True,
+        provider="openai",
+        model="gpt-4o-mini",
+        current_version=1,
+        anonymize_pii=True,
+        consent_accepted_at=datetime.now(timezone.utc),
+        consent_accepted_by=test_user.id,
+        api_key_encrypted=ai_settings_service.encrypt_api_key("sk-test"),
+    )
+    db.add(settings)
+    db.flush()
+
+    captured = []
+
+    class StubProvider:
+        async def chat(self, messages, **kwargs):  # noqa: ARG002
+            captured.extend(messages)
+            return ChatResponse(
+                content=(
+                    '{"summary":"Ok","key_points":[],"concerns":[],"sentiment":"neutral","follow_up_items":[]}'
+                ),
+                prompt_tokens=10,
+                completion_tokens=5,
+                total_tokens=15,
+                model="gpt-4o-mini",
+            )
+
+    monkeypatch.setattr(
+        "app.services.ai_interview_service.get_provider",
+        lambda *_args, **_kwargs: StubProvider(),
+    )
+
+    response = await authed_client.post(f"/interviews/{interview.id}/ai/summarize")
+    assert response.status_code == 200
+
+    combined = "\n".join(msg.content for msg in captured)
+    assert "Jane Doe" not in combined
+    assert "jane.doe@example.com" not in combined

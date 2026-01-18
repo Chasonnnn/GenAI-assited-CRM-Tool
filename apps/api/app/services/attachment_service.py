@@ -310,8 +310,13 @@ def list_attachments(
     surrogate_id: uuid.UUID | None = None,
     intended_parent_id: uuid.UUID | None = None,
     include_quarantined: bool = False,
+    content_type_prefix: str | None = None,
 ) -> list[Attachment]:
-    """List attachments for a case or intended parent (excludes deleted)."""
+    """List attachments for a case or intended parent (excludes deleted).
+
+    Args:
+        content_type_prefix: Filter by content type prefix (e.g., "image/" for all images)
+    """
     query = db.query(Attachment).filter(
         Attachment.organization_id == org_id,
         Attachment.deleted_at.is_(None),
@@ -324,6 +329,9 @@ def list_attachments(
 
     if not include_quarantined:
         query = query.filter(Attachment.quarantined == False)  # noqa: E712
+
+    if content_type_prefix:
+        query = query.filter(Attachment.content_type.startswith(content_type_prefix))
 
     return query.order_by(Attachment.created_at.desc()).all()
 

@@ -23,9 +23,12 @@ export interface AttachmentDownload {
 export const attachmentsApi = {
     /**
      * List attachments for a surrogate
+     * @param type Optional filter: "image" to get only image attachments
      */
-    list: (surrogateId: string) =>
-        api.get<Attachment[]>(`/attachments/surrogates/${surrogateId}/attachments`),
+    list: (surrogateId: string, type?: "image") => {
+        const params = type ? `?type=${type}` : ""
+        return api.get<Attachment[]>(`/attachments/surrogates/${surrogateId}/attachments${params}`)
+    },
 
     /**
      * Upload a file attachment

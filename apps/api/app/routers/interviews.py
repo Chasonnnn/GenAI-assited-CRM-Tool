@@ -20,6 +20,7 @@ from app.core.surrogate_access import can_modify_surrogate, check_surrogate_acce
 from app.core.deps import (
     get_current_session,
     get_db,
+    require_ai_enabled,
     require_csrf_header,
     require_permission,
 )
@@ -682,7 +683,7 @@ def get_transcription_status(
 @router.post(
     "/interviews/{interview_id}/ai/summarize",
     response_model=InterviewSummaryResponse,
-    dependencies=[Depends(require_csrf_header)],
+    dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
 async def summarize_interview(
     interview_id: UUID,
@@ -708,7 +709,7 @@ async def summarize_interview(
 @router.post(
     "/surrogates/{surrogate_id}/interviews/ai/summarize-all",
     response_model=AllInterviewsSummaryResponse,
-    dependencies=[Depends(require_csrf_header)],
+    dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
 async def summarize_all_interviews(
     surrogate_id: UUID,
