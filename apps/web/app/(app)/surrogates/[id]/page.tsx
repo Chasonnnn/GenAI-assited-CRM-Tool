@@ -130,6 +130,13 @@ function formatDate(dateString: string): string {
     })
 }
 
+function computeBmi(heightFt: number | null, weightLb: number | null): number | null {
+    if (!heightFt || !weightLb) return null
+    const heightInches = heightFt * 12
+    if (heightInches <= 0) return null
+    return Math.round((weightLb / (heightInches ** 2)) * 703 * 10) / 10
+}
+
 function toLocalIsoDateTime(date: Date): string {
     const pad = (n: number) => String(n).padStart(2, '0')
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:00`
@@ -327,6 +334,11 @@ export default function SurrogateDetailPage() {
 
     // Fetch data
     const { data: surrogateData, isLoading, error } = useSurrogate(id)
+    const bmiValue = React.useMemo(() => {
+        if (!surrogateData) return null
+        if (typeof surrogateData.bmi === "number") return surrogateData.bmi
+        return computeBmi(surrogateData.height_ft, surrogateData.weight_lb)
+    }, [surrogateData])
 
     // Compute if journey tab should be visible based on current stage
     const canViewJourney = React.useMemo(() => {
@@ -938,7 +950,7 @@ export default function SurrogateDetailPage() {
                                                 <span className="text-sm text-muted-foreground">Race:</span>
                                                 <span className="text-sm">{surrogateData.race || '-'}</span>
                                             </div>
-                                            {(surrogateData.height_ft || surrogateData.weight_lb) && (
+                                            {(surrogateData.height_ft || surrogateData.weight_lb || bmiValue !== null) && (
                                                 <>
                                                     <div className="flex items-center gap-2">
                                                         <span className="text-sm text-muted-foreground">Height:</span>
@@ -947,6 +959,10 @@ export default function SurrogateDetailPage() {
                                                     <div className="flex items-center gap-2">
                                                         <span className="text-sm text-muted-foreground">Weight:</span>
                                                         <span className="text-sm">{surrogateData.weight_lb ? `${surrogateData.weight_lb} lb` : '-'}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-sm text-muted-foreground">BMI:</span>
+                                                        <span className="text-sm">{bmiValue ?? '-'}</span>
                                                     </div>
                                                 </>
                                             )}

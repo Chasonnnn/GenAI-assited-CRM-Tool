@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Checkbox } from "@/components/ui/checkbox"
+import { PaginationJump } from "@/components/ui/pagination-jump"
 import { MoreVerticalIcon, SearchIcon, XIcon, Loader2Icon, ArchiveIcon, UserPlusIcon, UsersIcon, UploadIcon } from "lucide-react"
 import { SortableTableHead } from "@/components/ui/sortable-table-head"
 import { useSurrogates, useArchiveSurrogate, useRestoreSurrogate, useUpdateSurrogate, useAssignees, useBulkAssign, useBulkArchive } from "@/lib/hooks/use-surrogates"
@@ -25,19 +26,14 @@ import { cn } from "@/lib/utils"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 
 // Format date for display
-function formatDate(dateString: string): string {
+function formatDate(dateString: string | null | undefined): string {
+    if (!dateString) return "—"
     const date = parseDateInput(dateString)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-
-    if (diffDays === 0) return "Today"
-    if (diffDays === 1) return "Yesterday"
-    if (diffDays < 7) return `${diffDays} days ago`
-    if (diffDays < 14) return "1 week ago"
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`
-    if (diffDays < 60) return "1 month ago"
-    return `${Math.floor(diffDays / 30)} months ago`
+    return new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "2-digit",
+        year: "numeric",
+    }).format(date)
 }
 
 // Get initials from name
@@ -127,77 +123,147 @@ const VALID_SOURCES = ["all", "manual", "meta", "website", "referral"] as const
 type SourceFilter = (typeof VALID_SOURCES)[number]
 const isSourceFilter = (value: string | null): value is SourceFilter =>
     value !== null && VALID_SOURCES.includes(value as SourceFilter)
+
+const VALID_DATE_RANGES: DateRangePreset[] = ["all", "today", "week", "month", "custom"]
+const isDateRangePreset = (value: string | null): value is DateRangePreset =>
+    value !== null && VALID_DATE_RANGES.includes(value as DateRangePreset)
+
+const parsePageParam = (value: string | null): number => {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1
+}
+
+const parseDateParam = (value: string | null): Date | undefined => {
+    if (!value) return undefined
+    const parsed = parseDateInput(value)
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed
+}
+
+const datesEqual = (left?: Date, right?: Date) => {
+    return (left?.getTime() ?? null) === (right?.getTime() ?? null)
+}
 export default function SurrogatesPage() {
     const searchParams = useSearchParams()
     const router = useRouter()
+    const currentQuery = searchParams.toString()
 
     // Read initial values from URL params
     const urlStage = searchParams.get("stage")
     const urlSource = searchParams.get("source")
     const urlQueue = searchParams.get("queue")
     const urlSearch = searchParams.get("q")
+    const urlPage = searchParams.get("page")
+    const urlRange = searchParams.get("range")
+    const urlFrom = searchParams.get("from")
+    const urlTo = searchParams.get("to")
 
     const [stageFilter, setStageFilter] = useState<string>(urlStage || "all")
     const [sourceFilter, setSourceFilter] = useState<SourceFilter>(
         isSourceFilter(urlSource) ? urlSource : "all"
     )
     const [queueFilter, setQueueFilter] = useState<string>(urlQueue || "all")
-    const [dateRange, setDateRange] = useState<DateRangePreset>('all')
-    const [customRange, setCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
-        from: undefined,
-        to: undefined,
-    })
+    const initialRange = isDateRangePreset(urlRange) ? urlRange : "all"
+    const initialCustomRange = initialRange === "custom"
+        ? {
+            from: parseDateParam(urlFrom),
+            to: parseDateParam(urlTo),
+        }
+        : { from: undefined, to: undefined }
+    const [dateRange, setDateRange] = useState<DateRangePreset>(initialRange)
+    const [customRange, setCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>(initialCustomRange)
     const [searchQuery, setSearchQuery] = useState(urlSearch || "")
     const [debouncedSearch, setDebouncedSearch] = useState(urlSearch || "")
-    const [page, setPage] = useState(1)
+    const [page, setPage] = useState(parsePageParam(urlPage))
     const [selectedSurrogates, setSelectedSurrogates] = useState<Set<string>>(new Set())
     const [sortBy, setSortBy] = useState<string | null>("surrogate_number")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
     const perPage = 20
     const { user } = useAuth()
 
-    // Sync state changes back to URL (preserving other params)
-    const updateUrlParams = useCallback((stage: string, source: SurrogateSource | "all", queue: string, search: string) => {
-        const newParams = new URLSearchParams(searchParams.toString())
+    // Sync state changes back to URL
+    const updateUrlParams = useCallback((
+        stage: string,
+        source: SurrogateSource | "all",
+        queue: string,
+        search: string,
+        currentPage: number,
+        range: DateRangePreset,
+        rangeDates: { from: Date | undefined; to: Date | undefined }
+    ) => {
+        const newParams = new URLSearchParams()
         if (stage !== "all") {
             newParams.set("stage", stage)
-        } else {
-            newParams.delete("stage")
         }
         if (source !== "all") {
             newParams.set("source", source)
-        } else {
-            newParams.delete("source")
         }
         if (queue !== "all") {
             newParams.set("queue", queue)
-        } else {
-            newParams.delete("queue")
         }
         if (search) {
             newParams.set("q", search)
-        } else {
-            newParams.delete("q")
         }
-        const newUrl = newParams.toString() ? `?${newParams}` : ""
+        if (currentPage > 1) {
+            newParams.set("page", String(currentPage))
+        }
+        if (range !== "all") {
+            newParams.set("range", range)
+            if (range === "custom") {
+                if (rangeDates.from) {
+                    newParams.set("from", formatLocalDate(rangeDates.from))
+                }
+                if (rangeDates.to) {
+                    newParams.set("to", formatLocalDate(rangeDates.to))
+                }
+            }
+        }
+        const nextQuery = newParams.toString()
+        if (nextQuery === currentQuery) return
+        const newUrl = nextQuery ? `?${nextQuery}` : ""
         router.replace(`/surrogates${newUrl}`, { scroll: false })
-    }, [searchParams, router])
+    }, [router, currentQuery])
 
     // Update URL when filters change
     const handleStageChange = useCallback((stage: string) => {
         setStageFilter(stage)
-        updateUrlParams(stage, sourceFilter, queueFilter, debouncedSearch)
-    }, [sourceFilter, queueFilter, debouncedSearch, updateUrlParams])
+        setPage(1)
+        updateUrlParams(stage, sourceFilter, queueFilter, debouncedSearch, 1, dateRange, customRange)
+    }, [sourceFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, customRange])
 
     const handleSourceChange = useCallback((source: SurrogateSource | "all") => {
         setSourceFilter(source)
-        updateUrlParams(stageFilter, source, queueFilter, debouncedSearch)
-    }, [stageFilter, queueFilter, debouncedSearch, updateUrlParams])
+        setPage(1)
+        updateUrlParams(stageFilter, source, queueFilter, debouncedSearch, 1, dateRange, customRange)
+    }, [stageFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, customRange])
 
     const handleQueueChange = useCallback((queue: string) => {
         setQueueFilter(queue)
-        updateUrlParams(stageFilter, sourceFilter, queue, debouncedSearch)
-    }, [stageFilter, sourceFilter, debouncedSearch, updateUrlParams])
+        setPage(1)
+        updateUrlParams(stageFilter, sourceFilter, queue, debouncedSearch, 1, dateRange, customRange)
+    }, [stageFilter, sourceFilter, debouncedSearch, updateUrlParams, dateRange, customRange])
+
+    const handlePageChange = useCallback((nextPage: number) => {
+        setPage(nextPage)
+        updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, nextPage, dateRange, customRange)
+    }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, customRange])
+
+    const handlePresetChange = useCallback((preset: DateRangePreset) => {
+        setDateRange(preset)
+        if (preset !== "custom") {
+            setCustomRange({ from: undefined, to: undefined })
+        }
+        setPage(1)
+        updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, 1, preset, preset === "custom" ? customRange : { from: undefined, to: undefined })
+    }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, updateUrlParams, customRange])
+
+    const handleCustomRangeChange = useCallback((range: { from: Date | undefined; to: Date | undefined }) => {
+        setCustomRange(range)
+        if (dateRange !== "custom") {
+            setDateRange("custom")
+        }
+        setPage(1)
+        updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, 1, "custom", range)
+    }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange])
 
     // Fetch queues for filter dropdown (case_manager+ only)
     const canSeeQueues = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
@@ -214,17 +280,52 @@ export default function SurrogatesPage() {
 
     // Sync debouncedSearch to URL (separate effect to avoid circular updates)
     useEffect(() => {
-        // Only sync if this is from a user search, not initial load
-        const urlSearch = searchParams.get("q")
-        if (debouncedSearch !== (urlSearch || "")) {
-            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch)
+        const urlSearchValue = searchParams.get("q") || ""
+        if (debouncedSearch !== urlSearchValue) {
+            setPage(1)
+            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, 1, dateRange, customRange)
         }
-    }, [debouncedSearch]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [debouncedSearch, searchParams, stageFilter, sourceFilter, queueFilter, updateUrlParams, dateRange, customRange])
 
-    // Reset page when filters change
+    // Sync state when URL changes (back/forward)
     useEffect(() => {
-        setPage(1)
-    }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, dateRange, customRange])
+        const nextStage = searchParams.get("stage") || "all"
+        if (nextStage !== stageFilter) {
+            setStageFilter(nextStage)
+        }
+        const nextSource = isSourceFilter(searchParams.get("source")) ? searchParams.get("source") as SourceFilter : "all"
+        if (nextSource !== sourceFilter) {
+            setSourceFilter(nextSource)
+        }
+        const nextQueue = searchParams.get("queue") || "all"
+        if (nextQueue !== queueFilter) {
+            setQueueFilter(nextQueue)
+        }
+        const nextSearch = searchParams.get("q") || ""
+        if (nextSearch !== searchQuery) {
+            setSearchQuery(nextSearch)
+        }
+        if (nextSearch !== debouncedSearch) {
+            setDebouncedSearch(nextSearch)
+        }
+        const nextPage = parsePageParam(searchParams.get("page"))
+        if (nextPage !== page) {
+            setPage(nextPage)
+        }
+        const nextRange = isDateRangePreset(searchParams.get("range")) ? searchParams.get("range") as DateRangePreset : "all"
+        if (nextRange !== dateRange) {
+            setDateRange(nextRange)
+        }
+        if (nextRange === "custom") {
+            const nextFrom = parseDateParam(searchParams.get("from"))
+            const nextTo = parseDateParam(searchParams.get("to"))
+            if (!datesEqual(nextFrom, customRange.from) || !datesEqual(nextTo, customRange.to)) {
+                setCustomRange({ from: nextFrom, to: nextTo })
+            }
+        } else if (customRange.from || customRange.to) {
+            setCustomRange({ from: undefined, to: undefined })
+        }
+    }, [currentQuery]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Convert date range to ISO strings
     const getDateRangeParams = () => {
@@ -280,6 +381,8 @@ export default function SurrogatesPage() {
         setDateRange("all")
         setCustomRange({ from: undefined, to: undefined })
         setSearchQuery("")
+        setDebouncedSearch("")
+        setPage(1)
         setSelectedSurrogates(new Set())
         // Clear URL params
         router.replace('/surrogates', { scroll: false })
@@ -394,9 +497,9 @@ export default function SurrogatesPage() {
 
                     <DateRangePicker
                         preset={dateRange}
-                        onPresetChange={setDateRange}
+                        onPresetChange={handlePresetChange}
                         customRange={customRange}
-                        onCustomRangeChange={setCustomRange}
+                        onCustomRangeChange={handleCustomRangeChange}
                     />
 
                     {/* Queue Filter (case_manager+ only) */}
@@ -506,6 +609,7 @@ export default function SurrogatesPage() {
                                         <SortableTableHead column="source" label="Source" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <TableHead>Assigned To</TableHead>
                                         <SortableTableHead column="created_at" label="Created" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                                        <TableHead>Last Updated</TableHead>
                                         <TableHead className="w-[50px]"></TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -516,6 +620,7 @@ export default function SurrogatesPage() {
                                         const statusColor = stage?.color || "#6B7280"
                                         // Apply gold styling for entire row on priority surrogates
                                         const rowClass = surrogateItem.is_priority ? "text-amber-600" : ""
+                                        const mutedCellClass = surrogateItem.is_priority ? "text-amber-600" : "text-muted-foreground"
 
                                         return (
                                             <TableRow key={surrogateItem.id} className={rowClass}>
@@ -531,22 +636,22 @@ export default function SurrogatesPage() {
                                                     </Link>
                                                 </TableCell>
                                                 <TableCell className="font-medium">{surrogateItem.full_name}</TableCell>
-                                                <TableCell className="text-center">
+                                                <TableCell className={cn("text-center", mutedCellClass)}>
                                                     {surrogateItem.age ?? "—"}
                                                 </TableCell>
-                                                <TableCell className="text-center">
+                                                <TableCell className={cn("text-center", mutedCellClass)}>
                                                     {surrogateItem.bmi ?? "—"}
                                                 </TableCell>
-                                                <TableCell>
+                                                <TableCell className={mutedCellClass}>
                                                     {surrogateItem.race || "—"}
                                                 </TableCell>
-                                                <TableCell>
+                                                <TableCell className={mutedCellClass}>
                                                     {surrogateItem.state || "—"}
                                                 </TableCell>
-                                                <TableCell>
+                                                <TableCell className={mutedCellClass}>
                                                     {surrogateItem.phone || "—"}
                                                 </TableCell>
-                                                <TableCell className="max-w-[200px] truncate" title={surrogateItem.email}>
+                                                <TableCell className={cn("max-w-[200px] truncate", mutedCellClass)} title={surrogateItem.email}>
                                                     {surrogateItem.email}
                                                 </TableCell>
                                                 <TableCell>
@@ -577,8 +682,11 @@ export default function SurrogatesPage() {
                                                         <span className="text-muted-foreground">—</span>
                                                     )}
                                                 </TableCell>
-                                                <TableCell>
+                                                <TableCell className={mutedCellClass}>
                                                     {formatDate(surrogateItem.created_at)}
+                                                </TableCell>
+                                                <TableCell className={mutedCellClass}>
+                                                    {formatDate(surrogateItem.last_activity_at || surrogateItem.created_at)}
                                                 </TableCell>
                                                 <TableCell>
                                                     <DropdownMenu>
@@ -628,12 +736,12 @@ export default function SurrogatesPage() {
                                 <div className="text-sm text-muted-foreground">
                                     Showing {((page - 1) * perPage) + 1}-{Math.min(page * perPage, data.total)} of {data.total} surrogates
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                     <Button
                                         variant="outline"
                                         size="sm"
                                         disabled={page === 1}
-                                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                                        onClick={() => handlePageChange(Math.max(1, page - 1))}
                                     >
                                         Previous
                                     </Button>
@@ -644,7 +752,7 @@ export default function SurrogatesPage() {
                                                 key={pageNum}
                                                 variant={page === pageNum ? "default" : "outline"}
                                                 size="sm"
-                                                onClick={() => setPage(pageNum)}
+                                                onClick={() => handlePageChange(pageNum)}
                                             >
                                                 {pageNum}
                                             </Button>
@@ -655,10 +763,15 @@ export default function SurrogatesPage() {
                                         variant="outline"
                                         size="sm"
                                         disabled={page >= data.pages}
-                                        onClick={() => setPage(p => Math.min(data.pages, p + 1))}
+                                        onClick={() => handlePageChange(Math.min(data.pages, page + 1))}
                                     >
                                         Next
                                     </Button>
+                                    <PaginationJump
+                                        page={page}
+                                        totalPages={data.pages}
+                                        onPageChange={handlePageChange}
+                                    />
                                 </div>
                             </div>
                         )}
