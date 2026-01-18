@@ -145,15 +145,26 @@ async def list_attachments(
     request: Request,
     db: Session = Depends(get_db),
     session: UserSession = Depends(require_permission(POLICIES["surrogates"].default)),
+    type: str | None = None,
 ):
-    """List attachments for a surrogate (excludes quarantined and deleted)."""
+    """List attachments for a surrogate (excludes quarantined and deleted).
+
+    Args:
+        type: Filter by file type. Supported: "image" (filters to image/* content types)
+    """
     surrogate = _get_surrogate_with_access(db, surrogate_id, session)
+
+    # Map type param to content_type prefix
+    content_type_prefix = None
+    if type == "image":
+        content_type_prefix = "image/"
 
     attachments = attachment_service.list_attachments(
         db=db,
         org_id=surrogate.organization_id,
         surrogate_id=surrogate.id,
         include_quarantined=False,
+        content_type_prefix=content_type_prefix,
     )
 
     from app.services import audit_service

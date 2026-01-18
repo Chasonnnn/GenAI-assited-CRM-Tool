@@ -15,6 +15,17 @@ export function useAttachments(surrogateId: string | null) {
     })
 }
 
+/**
+ * Fetch only image attachments for a surrogate (for journey featured image selection)
+ */
+export function useImageAttachments(surrogateId: string | null) {
+    return useQuery({
+        queryKey: ["attachments", surrogateId, "images"],
+        queryFn: () => attachmentsApi.list(surrogateId!, "image"),
+        enabled: !!surrogateId,
+    })
+}
+
 export function useUploadAttachment() {
     const queryClient = useQueryClient()
 
@@ -23,6 +34,7 @@ export function useUploadAttachment() {
             attachmentsApi.upload(surrogateId, file),
         onSuccess: (data, variables) => {
             queryClient.invalidateQueries({ queryKey: ["attachments", variables.surrogateId] })
+            queryClient.invalidateQueries({ queryKey: ["attachments", variables.surrogateId, "images"] })
             // Invalidate history/activity cache to show attachment_added immediately
             queryClient.invalidateQueries({
                 queryKey: [...surrogateKeys.detail(variables.surrogateId), 'activity'],
@@ -48,6 +60,17 @@ export function useDownloadAttachment() {
     })
 }
 
+/**
+ * Fetch signed download URL without opening a new tab.
+ * Useful for image previews.
+ */
+export function useAttachmentDownloadUrl() {
+    return useMutation({
+        mutationFn: (attachmentId: string) =>
+            attachmentsApi.getDownloadUrl(attachmentId),
+    })
+}
+
 export function useDeleteAttachment() {
     const queryClient = useQueryClient()
 
@@ -56,6 +79,7 @@ export function useDeleteAttachment() {
             attachmentsApi.delete(attachmentId),
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: ["attachments", variables.surrogateId] })
+            queryClient.invalidateQueries({ queryKey: ["attachments", variables.surrogateId, "images"] })
             // Invalidate history/activity cache to show attachment_deleted immediately
             queryClient.invalidateQueries({
                 queryKey: [...surrogateKeys.detail(variables.surrogateId), 'activity'],

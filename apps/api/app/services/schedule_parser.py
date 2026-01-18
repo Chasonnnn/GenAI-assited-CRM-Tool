@@ -102,6 +102,7 @@ async def parse_schedule_text(
     org_id: UUID,
     text: str,
     user_timezone: str | None = None,
+    known_names: list[str] | None = None,
 ) -> ParseScheduleResult:
     """
     Parse schedule text using AI and extract task proposals.
@@ -116,6 +117,7 @@ async def parse_schedule_text(
         ParseScheduleResult with proposed tasks and metadata
     """
     from app.services import ai_settings_service
+    from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_text
 
     # Get organization timezone
     org = db.query(Organization).filter(Organization.id == org_id).first()
@@ -162,6 +164,10 @@ async def parse_schedule_text(
     logger.info(f"Parsing schedule: {len(text)} chars, org_id={org_id}")
 
     proposed_tasks: list[ProposedTask] = []
+    pii_mapping = PIIMapping() if ai_settings.anonymize_pii else None
+    prompt_text = text
+    if ai_settings.anonymize_pii and pii_mapping:
+        prompt_text = anonymize_text(text, pii_mapping, known_names)
 
     try:
         # Decrypt API key
@@ -181,7 +187,7 @@ async def parse_schedule_text(
         # Build messages
         messages = [
             ChatMessage(role="system", content=PARSE_SCHEDULE_SYSTEM_PROMPT),
-            ChatMessage(role="user", content=_build_user_prompt(text, reference_date)),
+            ChatMessage(role="user", content=_build_user_prompt(prompt_text, reference_date)),
         ]
 
         # Call AI
@@ -241,6 +247,12 @@ async def parse_schedule_text(
                     task_type=task_type,
                     confidence=float(raw_task.get("confidence", 0.8)),
                 )
+                if ai_settings.anonymize_pii and pii_mapping:
+                    proposed_task.title = rehydrate_text(proposed_task.title, pii_mapping)
+                    if proposed_task.description:
+                        proposed_task.description = rehydrate_text(
+                            proposed_task.description, pii_mapping
+                        )
                 proposed_tasks.append(proposed_task)
 
             except Exception as e:
