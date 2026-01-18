@@ -4,7 +4,7 @@ Revision ID: 0001_baseline
 Revises:
 Create Date: 2025-12-12
 
-This is the fresh baseline migration for the CRM platform.
+This is the fresh baseline migration for Surrogacy Force.
 Creates all authentication and tenant isolation tables.
 """
 

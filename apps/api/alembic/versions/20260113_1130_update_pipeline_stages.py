@@ -1,4 +1,4 @@
-"""Update pipeline stages for the surrogacy CRM.
+"""Update pipeline stages for Surrogacy Force.
 
 Stage changes:
 - Rename: followup_scheduled → interview_scheduled
