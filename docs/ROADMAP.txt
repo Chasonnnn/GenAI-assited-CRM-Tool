@@ -631,7 +631,7 @@ Backend (optional)
 - User settings table field for theme preference
 - Sync preference across devices
 Deliverable
-- Users can personalize the CRM appearance with preset themes
+- Users can personalize the Surrogacy Force appearance with preset themes
 
 ---
 

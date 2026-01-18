@@ -131,7 +131,7 @@ All notable changes to this project will be documented in this file.
 
 ### Features
 
-**Core CRM**
+**Core Surrogacy Force**
 * Cases, intended parents, and matches modules with detailed views, activity history, and inline editing.
 * Queue/ownership system with bulk assignment, priority handling, and org-configurable pipelines.
 * Unified tasks and calendar with recurrence, reminders, appointments, and booking flows.

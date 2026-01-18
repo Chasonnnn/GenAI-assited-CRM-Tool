@@ -1,6 +1,6 @@
 # Surrogacy Force Platform
 
-> **Version:** 0.16.0 | Multi-tenant CRM for surrogacy agencies
+> **Version:** 0.16.0 | Multi-tenant Surrogacy Force platform for surrogacy agencies
 
 ## Project Guidelines
 

@@ -34,7 +34,7 @@ Browser -> Next.js route -> `apps/web/lib/api.ts` or `apps/web/lib/api/*` -> Fas
 - App entry: `apps/api/app/main.py`
 - Worker: `apps/api/app/worker.py`
 - CLI: `apps/api/app/cli.py`
-- Core utilities: `apps/api/app/core/*` (config, deps, csrf, rate limits, permissions, policies, logging, stage rules)
+- Core utilities: `apps/api/app/core/*` (config, deps, csrf, rate limits, permissions, policies, logging, stage rules, async_utils)
 - DB: `apps/api/app/db/*` (models, enums, session)
 - Routers: `apps/api/app/routers/*` (see API Index)
 - Services: `apps/api/app/services/*` (surrogates, matches, workflows, AI, analytics, integrations, compliance)
@@ -50,6 +50,8 @@ Browser -> Next.js route -> `apps/web/lib/api.ts` or `apps/web/lib/api/*` -> Fas
 - Authenticated layout: `apps/web/app/(app)/layout.tsx`
 - Public routes: `apps/web/app/login/page.tsx`, `apps/web/app/mfa/page.tsx`, `apps/web/app/invite/[id]/page.tsx`, `apps/web/app/apply/[token]/page.tsx`, `apps/web/app/book/*`
 - Core pages: `apps/web/app/(app)/dashboard/page.tsx`, `apps/web/app/(app)/surrogates/page.tsx`, `apps/web/app/(app)/surrogates/[id]/page.tsx`, `apps/web/app/(app)/intended-parents/page.tsx`, `apps/web/app/(app)/matches/page.tsx`, `apps/web/app/(app)/tasks/page.tsx`, `apps/web/app/(app)/ai-assistant/page.tsx`, `apps/web/app/(app)/reports/page.tsx`, `apps/web/app/(app)/automation/page.tsx`, `apps/web/app/(app)/settings/*`
+- Dashboard widgets: `apps/web/app/(app)/dashboard/components/*` (KPI cards, trend chart, stage chart, attention panel)
+- Dashboard state: `apps/web/app/(app)/dashboard/context/dashboard-filters.tsx`
 - Components: `apps/web/components/*` (surrogates, interviews, matches, tasks, appointments, AI, reports)
 - API + hooks: `apps/web/lib/api.ts`, `apps/web/lib/api/*`, `apps/web/lib/hooks/*`
 - Context/state: `apps/web/lib/auth-context.tsx`, `apps/web/lib/context/ai-context.tsx`, `apps/web/lib/store/*`
@@ -59,7 +61,7 @@ Browser -> Next.js route -> `apps/web/lib/api.ts` or `apps/web/lib/api/*` -> Fas
 
 ## Feature -> Module Mapping
 - Authentication + MFA: UI in `apps/web/app/login/page.tsx`, `apps/web/app/mfa/page.tsx`; API in `apps/api/app/routers/auth.py`, `apps/api/app/routers/mfa.py`; services in `apps/api/app/services/auth_service.py`, `apps/api/app/services/session_service.py`
-- Surrogates CRM: UI in `apps/web/app/(app)/surrogates/page.tsx`, `apps/web/app/(app)/surrogates/[id]/page.tsx`; API in `apps/api/app/routers/surrogates.py`; services in `apps/api/app/services/surrogate_service.py`
+- Surrogates (Surrogacy Force): UI in `apps/web/app/(app)/surrogates/page.tsx`, `apps/web/app/(app)/surrogates/[id]/page.tsx`; API in `apps/api/app/routers/surrogates.py`; services in `apps/api/app/services/surrogate_service.py`
 - Journey timeline: UI in `apps/web/components/surrogates/journey/*`; API in `apps/api/app/routers/journey.py`; service in `apps/api/app/services/journey_service.py`
 - Surrogate profile: UI in `apps/web/components/surrogates/SurrogateProfileCard.tsx`; API in `apps/api/app/routers/profile.py`; service in `apps/api/app/services/profile_service.py`
 - Intended parents: UI in `apps/web/app/(app)/intended-parents/page.tsx`; API in `apps/api/app/routers/intended_parents.py`; service in `apps/api/app/services/ip_service.py`
@@ -238,6 +240,7 @@ See each router for full endpoint list.
 - Admin versions: `apps/api/app/routers/admin_versions.py` (prefix `/admin/versions`)
 - Jobs list: `apps/api/app/routers/jobs.py` (prefix `/jobs`)
 - Internal schedules: `apps/api/app/routers/internal.py` (prefix `/internal/scheduled`)
+- Monitoring alerts: `apps/api/app/routers/monitoring.py` (prefix `/internal/alerts`)
 - Metadata: `apps/api/app/routers/metadata.py` (prefix `/metadata`)
 - Dev-only: `apps/api/app/routers/dev.py` (prefix `/dev`)
 
