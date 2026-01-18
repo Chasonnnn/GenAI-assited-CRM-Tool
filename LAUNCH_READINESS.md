@@ -3,34 +3,34 @@
 Date: 2026-01-15
 Scope: Full-file audit with emphasis on tenant isolation, public attack surfaces, PII handling, and ops readiness.
 
-## Executive Summary (Top 10 Launch Blockers + Fix Order)
-1) Resolved: AI anonymization bypass (`entity_type=case`), PII can be sent unredacted.
-2) Resolved: Missing org scoping in status change request service entity lookups.
-3) Resolved: Missing org scoping in AI/workflow helpers (surrogate context, document triggers).
-4) Resolved: Tracking click endpoint allows open redirect.
-5) Resolved: PII in logs (session IP logging, transcription error body).
-6) Resolved: Virus scanning not enforced by default for uploads (public forms/attachments).
-7) Resolved: Redis-backed rate limiting is optional; in-memory fallback weakens production protection.
-8) Blocker: ZAP baseline scan not run against staging.
-9) Resolved: Gmail/Zoom send paths now include retries + idempotency keys.
-10) Resolved: Monitoring/alerting enforced in non-dev (Sentry or GCP required).
+## Open Launch Items (Do First)
+- [ ] Run ZAP baseline scan against staging and triage findings (`zap-baseline.conf`).
+- [ ] Run staging migration with idempotency check and log it (`docs/migration-runbook.md`).
+- [ ] Execute quarterly restore test and record results (`docs/backup-restore-runbook.md`).
+- [ ] Verify GCP alert routing and record results (`docs/monitoring-runbook.md`).
 
-Recommended fix order: 8.
+## Executive Summary (Open Blockers + Fix Order)
+1) Blocker: ZAP baseline scan not run against staging.
+2) Action: Staging migration idempotency check not yet logged.
+3) Action: Quarterly restore test not yet recorded.
+4) Action: GCP alert routing verification not yet recorded.
 
-## Launch Gates (Pass/Fail)
+Recommended fix order: 1.
+
+## Launch Gates (Open Actions First)
 
 | Gate | Status | Evidence | Required Action |
 |---|---|---|---|
+| ZAP baseline scan | FAIL | No recorded run; config exists (`zap-baseline.conf`) | Run ZAP against staging and fix findings. |
+| Monitoring/alerting | PASS | Non-dev config requires Sentry or GCP monitoring (`apps/api/app/core/config.py`) and initializes Sentry when configured (`apps/api/app/main.py:148-163`). | Use GCP monitoring and verify alert routing (see `docs/monitoring-runbook.md`). |
+| Backups/restore | PASS | Runbook added in `docs/backup-restore-runbook.md`. | Run a quarterly restore test and record results in `docs/backup-restore-runbook.md`. |
 | Tenant isolation | PASS | Org-scoped lookups in `apps/api/app/services/status_change_request_service.py`, `apps/api/app/services/ai_chat_service.py`, `apps/api/app/services/ai_action_executor.py`, `apps/api/app/services/workflow_engine.py`, `apps/api/app/services/workflow_triggers.py`; cross-org tests added in `apps/api/tests/test_status_change_request_scoping.py`, `apps/api/tests/test_ai_action_executor_scoping.py`, `apps/api/tests/test_workflow_trigger_scoping.py`. | None. |
 | Auth hardening | PASS | Membership is_active enforced (`apps/api/app/core/deps.py:152-169`); WebSocket uses cookie auth + Origin allowlist (`apps/api/app/routers/websocket.py:22-132`); dev bypass removed from frontend (`apps/web/lib/auth-context.tsx:1-122`). | None. |
 | PII/secrets handling | PASS | IPs masked in logs (`apps/api/app/services/session_service.py`); transcription errors sanitized (`apps/api/app/services/transcription_service.py`). | None. |
 | Public attack surface | PASS | Public GET endpoints rate-limited in `apps/api/app/routers/forms_public.py` and `apps/api/app/routers/booking.py` with `RATE_LIMIT_PUBLIC_READ`. | None. |
 | Upload safety | PASS | Virus scanning enforced in non-dev config (`apps/api/app/core/config.py`). | None. |
 | Rate limiting | PASS | Redis required in non-dev (`apps/api/app/core/rate_limit.py`). | None. |
-| Monitoring/alerting | PASS | Non-dev config requires Sentry or GCP monitoring (`apps/api/app/core/config.py`) and initializes Sentry when configured (`apps/api/app/main.py:148-163`). | None. |
-| Backups/restore | PASS | Runbook added in `docs/backup-restore-runbook.md`. | Run a quarterly restore test and record results. |
 | Integration idempotency | PASS | Gmail send retries + idempotency logging (`apps/api/app/services/gmail_service.py`), Zoom create retries + idempotency on meetings (`apps/api/app/services/zoom_service.py`), keys stored in `email_logs` + `zoom_meetings`. | None. |
-| ZAP baseline scan | FAIL | No recorded run; config exists (`zap-baseline.conf`) | Run ZAP against staging and fix findings. |
 
 ## Public Attack Surfaces
 
@@ -83,17 +83,17 @@ Recommended fix order: 8.
 ### Migrations
 - Alembic commands present in `agents.md` and README.
 - Required changes:
-  1) Add a staging migration runbook that includes verification of `alembic upgrade head` idempotency.
+  1) Staging migration runbook added in `docs/migration-runbook.md` (includes `alembic upgrade head` idempotency check). Record the latest run in the log.
 
 ### Backups / Restore
 - Runbook added in `docs/backup-restore-runbook.md`.
 - Required changes:
-  1) Execute a quarterly restore test and record results.
+  1) Execute a quarterly restore test and record results in `docs/backup-restore-runbook.md`.
 
 ### Monitoring & Alerting
 - Enforced: non-dev requires Sentry DSN or GCP monitoring config (`apps/api/app/core/config.py`).
 - Required changes:
-  1) Set `SENTRY_DSN` or `GCP_PROJECT_ID`/`GOOGLE_CLOUD_PROJECT` in staging/prod and verify alert routing.
+  1) Use GCP monitoring: set `GCP_PROJECT_ID` or `GOOGLE_CLOUD_PROJECT` in staging/prod and verify alert routing (see `docs/monitoring-runbook.md`).
 
 ### Rate Limiting
 - Resolved: Redis required in non-dev (`apps/api/app/core/rate_limit.py`).
@@ -108,6 +108,17 @@ Recommended fix order: 8.
   1) Deploy staging with sample data.
   2) Run baseline scan and export report.
   3) Triage findings and re-run after fixes.
+
+## Resolved Items (Historical)
+1) Resolved: AI anonymization bypass (`entity_type=case`), PII can be sent unredacted.
+2) Resolved: Missing org scoping in status change request service entity lookups.
+3) Resolved: Missing org scoping in AI/workflow helpers (surrogate context, document triggers).
+4) Resolved: Tracking click endpoint allows open redirect.
+5) Resolved: PII in logs (session IP logging, transcription error body).
+6) Resolved: Virus scanning not enforced by default for uploads (public forms/attachments).
+7) Resolved: Redis-backed rate limiting is optional; in-memory fallback weakens production protection.
+8) Resolved: Gmail/Zoom send paths now include retries + idempotency keys.
+9) Resolved: Monitoring/alerting enforced in non-dev (Sentry or GCP required).
 
 ## Validation Commands
 
