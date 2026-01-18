@@ -276,6 +276,141 @@ def gmail_connection_status(
 
 
 # ============================================================================
+# Google Calendar OAuth
+# ============================================================================
+
+
+@router.get("/google-calendar/connect")
+def google_calendar_connect(
+    request: Request,
+    response: Response,
+    session: UserSession = Depends(get_current_session),
+) -> dict[str, str]:
+    """Get Google Calendar OAuth authorization URL."""
+    if not settings.GOOGLE_CLIENT_ID:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google Calendar integration not configured. Set GOOGLE_CLIENT_ID.",
+        )
+
+    state = generate_oauth_state()
+    nonce = generate_oauth_nonce()
+    user_agent = request.headers.get("user-agent", "")
+    state_payload = create_oauth_state_payload(state, nonce, user_agent)
+
+    response.set_cookie(
+        key=_oauth_cookie_name("google_calendar"),
+        value=state_payload,
+        max_age=OAUTH_STATE_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+        secure=settings.cookie_secure,
+        path=OAUTH_STATE_COOKIE_PATH,
+    )
+
+    redirect_uri = settings.GOOGLE_CALENDAR_REDIRECT_URI
+    auth_url = oauth_service.get_google_calendar_auth_url(redirect_uri, state)
+    return {"auth_url": auth_url}
+
+
+@router.get("/google-calendar/callback")
+async def google_calendar_callback(
+    request: Request,
+    code: str,
+    state: str,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+) -> RedirectResponse:
+    """Google Calendar OAuth callback."""
+    org = org_service.get_org_by_id(db, session.org_id)
+    base_url = org_service.get_org_portal_base_url(org)
+
+    cookie_name = _oauth_cookie_name("google_calendar")
+    cookie_value = request.cookies.get(cookie_name)
+    if not cookie_value:
+        error = RedirectResponse(
+            f"{base_url}/settings/integrations?error=invalid_state",
+            status_code=302,
+        )
+        error.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
+        return error
+
+    try:
+        payload = parse_oauth_state_payload(cookie_value)
+        valid, _ = verify_oauth_state(payload, state, request.headers.get("user-agent", ""))
+        if not valid:
+            raise ValueError("Invalid OAuth state")
+
+        tokens = await oauth_service.exchange_google_calendar_code(
+            code, settings.GOOGLE_CALENDAR_REDIRECT_URI
+        )
+        user_info = await oauth_service.get_google_calendar_user_info(tokens["access_token"])
+
+        oauth_service.save_integration(
+            db,
+            user_id=session.user_id,
+            integration_type="google_calendar",
+            access_token=tokens["access_token"],
+            refresh_token=tokens.get("refresh_token"),
+            expires_in=tokens.get("expires_in"),
+            account_email=user_info.get("email"),
+        )
+
+        # Audit log (no secrets)
+        from app.db.enums import AuditEventType
+        from app.services import audit_service
+
+        integration = oauth_service.get_user_integration(db, session.user_id, "google_calendar")
+        audit_service.log_event(
+            db=db,
+            org_id=session.org_id,
+            event_type=AuditEventType.INTEGRATION_CONNECTED,
+            actor_user_id=session.user_id,
+            target_type="user_integration",
+            target_id=integration.id if integration else None,
+            details={
+                "integration_type": "google_calendar",
+                "account_email": audit_service.hash_email(user_info.get("email", "") or ""),
+            },
+            request=request,
+        )
+
+        success = RedirectResponse(
+            f"{base_url}/settings/integrations?success=google_calendar",
+            status_code=302,
+        )
+        success.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
+        return success
+    except Exception as e:
+        logger.exception(
+            f"Google Calendar OAuth callback failed for user={session.user_id} org={session.org_id}: {e}"
+        )
+        error = RedirectResponse(
+            f"{base_url}/settings/integrations?error=google_calendar_failed",
+            status_code=302,
+        )
+        error.delete_cookie(cookie_name, path=OAUTH_STATE_COOKIE_PATH)
+        return error
+
+
+@router.get("/google-calendar/status")
+def google_calendar_connection_status(
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+) -> dict[str, Any]:
+    """Check if current user has Google Calendar connected."""
+    integration = oauth_service.get_user_integration(db, session.user_id, "google_calendar")
+
+    return {
+        "connected": integration is not None,
+        "account_email": integration.account_email if integration else None,
+        "expires_at": integration.token_expires_at.isoformat()
+        if integration and integration.token_expires_at
+        else None,
+    }
+
+
+# ============================================================================
 # Google Calendar Events
 # ============================================================================
 

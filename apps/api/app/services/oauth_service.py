@@ -180,23 +180,32 @@ GMAIL_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 GMAIL_SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/userinfo.email",
+]
+
+GOOGLE_CALENDAR_SCOPES = [
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/calendar.events",
+    "https://www.googleapis.com/auth/userinfo.email",
 ]
 
 
-def get_gmail_auth_url(redirect_uri: str, state: str) -> str:
-    """Generate Gmail OAuth authorization URL."""
+def _get_google_auth_url(scopes: list[str], redirect_uri: str, state: str) -> str:
+    """Generate Google OAuth authorization URL for a scope set."""
     params = {
         "client_id": settings.GOOGLE_CLIENT_ID,
         "redirect_uri": redirect_uri,
         "response_type": "code",
-        "scope": " ".join(GMAIL_SCOPES),
+        "scope": " ".join(scopes),
         "access_type": "offline",
         "prompt": "consent",
         "state": state,
     }
     return f"{GMAIL_AUTH_URL}?{urlencode(params)}"
+
+
+def get_gmail_auth_url(redirect_uri: str, state: str) -> str:
+    """Generate Gmail OAuth authorization URL."""
+    return _get_google_auth_url(GMAIL_SCOPES, redirect_uri, state)
 
 
 async def exchange_gmail_code(code: str, redirect_uri: str) -> JsonObject:
@@ -245,6 +254,26 @@ async def refresh_gmail_token(refresh_token: str) -> JsonObject | None:
     except Exception as e:
         logger.error(f"Gmail token refresh failed: {e}")
         return None
+
+
+def get_google_calendar_auth_url(redirect_uri: str, state: str) -> str:
+    """Generate Google Calendar OAuth authorization URL."""
+    return _get_google_auth_url(GOOGLE_CALENDAR_SCOPES, redirect_uri, state)
+
+
+async def exchange_google_calendar_code(code: str, redirect_uri: str) -> JsonObject:
+    """Exchange authorization code for Google Calendar tokens."""
+    return await exchange_gmail_code(code, redirect_uri)
+
+
+async def get_google_calendar_user_info(access_token: str) -> JsonObject:
+    """Get user info for Google Calendar integration."""
+    return await get_gmail_user_info(access_token)
+
+
+async def refresh_google_calendar_token(refresh_token: str) -> JsonObject | None:
+    """Refresh Google Calendar access token."""
+    return await refresh_gmail_token(refresh_token)
 
 
 # ============================================================================
@@ -379,6 +408,8 @@ def refresh_token(db: Session, integration: UserIntegration, integration_type: s
     async def do_refresh():
         if integration_type == "gmail":
             return await refresh_gmail_token(refresh)
+        if integration_type == "google_calendar":
+            return await refresh_google_calendar_token(refresh)
         elif integration_type == "zoom":
             return await refresh_zoom_token(refresh)
         return None
@@ -428,6 +459,8 @@ async def refresh_token_async(
     try:
         if integration_type == "gmail":
             result = await refresh_gmail_token(refresh)
+        elif integration_type == "google_calendar":
+            result = await refresh_google_calendar_token(refresh)
         elif integration_type == "zoom":
             result = await refresh_zoom_token(refresh)
         else:
