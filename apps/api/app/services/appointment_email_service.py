@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Appointment, AppointmentEmailLog, Organization, User
 from app.db.enums import AppointmentEmailType
-from app.services import email_service
+from app.services import email_service, org_service
 from app.services.appointment_service import (
     log_appointment_email,
     mark_email_sent,
@@ -312,7 +312,7 @@ def build_appointment_variables(
         "staff_name": staff.display_name if staff else "",
         "staff_email": staff.email if staff else "",
         # Org info
-        "org_name": org.name if org else "",
+        "org_name": org_service.get_org_display_name(org) if org else "",
         # Links - use correct self-service paths (frontend routes)
         "reschedule_url": (
             f"{base_url}/book/self-service/{appointment.organization_id}/reschedule/{appointment.reschedule_token}"
