@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.19.4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.19.3...surrogacy-crm-platform-v0.19.4) (2026-01-18)
+
+
+### Features
+
+* **ai:** enhance AI assistant with privacy and access controls ([ebfa84a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ebfa84a547421823a596f5b8699c7be3c1955e0b))
+* **attachments:** add attachment scanning service ([c2b8c6a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c2b8c6a26e957fe699e46e4e58ae349588361ee8))
+* **compliance:** enhance compliance service with activity tracking ([c9acc95](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c9acc95a0c8a3f9e990d3586a93179d9ee17952f))
+* **integrations:** enhance OAuth and integrations management ([682f6ed](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/682f6ed02212d0bc59d8cabe942a2d740c001d16))
+* **jobs:** enhance job service with retry and monitoring ([71191a5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/71191a55f3da12383ffdcd54bbf4e3ebc74b918f))
+* **journey:** add surrogate journey timeline ([2f395fb](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2f395fb95c1110d3233285ca88666944370a5440))
+* **journey:** enhance journey timeline with featured images and PDF export ([761d02a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/761d02a93ea28b646fa78e583a04726fc2561498))
+* **surrogates:** add actual delivery date tracking ([b8cf3ce](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b8cf3cef249494a6a497d7613bc079ba81123338))
+* **surrogates:** add import page and improve surrogate list ([bc94a3b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bc94a3bf86870df85fe2a4eeea4436697b29312f))
+
+
+### Bug Fixes
+
+* **surrogates:** add agency source and improve list fields ([dea2807](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/dea2807cb8bd733e9bcd57aed1275d24d86d1d09))
+
 ## [0.19.3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.19.2...surrogacy-crm-platform-v0.19.3) (2026-01-17)
 
 
