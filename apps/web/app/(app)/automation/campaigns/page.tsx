@@ -93,6 +93,13 @@ const statusLabels: Record<string, string> = {
     cancelled: "Cancelled",
 }
 
+const INTENDED_PARENT_STAGE_OPTIONS = [
+    { id: "new", label: "New", color: "#3B82F6" },
+    { id: "ready_to_match", label: "Ready to Match", color: "#F59E0B" },
+    { id: "matched", label: "Matched", color: "#10B981" },
+    { id: "delivered", label: "Delivered", color: "#14B8A6" },
+] as const
+
 export default function CampaignsPage() {
     const router = useRouter()
     const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined)
@@ -126,10 +133,19 @@ export default function CampaignsPage() {
     const sendCampaign = useSendCampaign()
     const previewFilters = usePreviewFilters()
 
-    const buildFilterCriteria = () => ({
-        ...(selectedStages.length > 0 ? { stage_ids: selectedStages } : {}),
-        ...(selectedStates.length > 0 ? { states: selectedStates } : {}),
-    })
+    const buildFilterCriteria = () => {
+        const stageFilters =
+            selectedStages.length > 0
+                ? recipientType === "intended_parent"
+                    ? { stage_slugs: selectedStages }
+                    : { stage_ids: selectedStages }
+                : {}
+
+        return {
+            ...stageFilters,
+            ...(selectedStates.length > 0 ? { states: selectedStates } : {}),
+        }
+    }
 
     // Fetch pipeline stages for status filter
     const { data: pipeline } = useQuery({
@@ -137,6 +153,10 @@ export default function CampaignsPage() {
         queryFn: getDefaultPipeline,
     })
     const pipelineStages = pipeline?.stages || []
+    const stageOptions =
+        recipientType === "intended_parent"
+            ? INTENDED_PARENT_STAGE_OPTIONS
+            : pipelineStages.filter(stage => stage.is_active)
 
     // Filtered campaigns
     const filteredCampaigns = campaigns || []
@@ -439,7 +459,7 @@ export default function CampaignsPage() {
 
             {/* Create Campaign Wizard */}
             <Dialog open={showCreateWizard} onOpenChange={(open) => !open && resetWizard()}>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>Create Campaign</DialogTitle>
                         <DialogDescription>
@@ -548,6 +568,7 @@ export default function CampaignsPage() {
                                         onValueChange={(value) => {
                                             if (isRecipientType(value)) {
                                                 setRecipientType(value)
+                                                setSelectedStages([])
                                             }
                                         }}
                                     >
@@ -567,9 +588,9 @@ export default function CampaignsPage() {
                                     </Select>
                                 </div>
                                 <div className="space-y-2">
-                                    <Label>Filter by Stage</Label>
+                                    <Label>{recipientType === "intended_parent" ? "Filter by Status" : "Filter by Stage"}</Label>
                                     <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                                        {pipelineStages.filter(s => s.is_active).map((stage) => (
+                                        {stageOptions.map((stage) => (
                                             <div key={stage.id} className="flex items-center space-x-2">
                                                 <Checkbox
                                                     id={stage.id}
@@ -649,13 +670,13 @@ export default function CampaignsPage() {
                                         {selectedStages.length > 0 && (
                                             <div className="flex justify-between items-start">
                                                 <span className="text-muted-foreground">Filtered by Stage:</span>
-                                                <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
-                                                    {selectedStages.map((stageId) => {
-                                                        const stage = pipelineStages.find(s => s.id === stageId)
-                                                        return stage ? (
-                                                            <Badge key={stageId} variant="secondary" className="text-xs">
-                                                                <span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: stage.color }} />
-                                                                {stage.label}
+                                            <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
+                                                {selectedStages.map((stageId) => {
+                                                    const stage = stageOptions.find(s => s.id === stageId)
+                                                    return stage ? (
+                                                        <Badge key={stageId} variant="secondary" className="text-xs">
+                                                            <span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: stage.color }} />
+                                                            {stage.label}
                                                             </Badge>
                                                         ) : null
                                                     })}

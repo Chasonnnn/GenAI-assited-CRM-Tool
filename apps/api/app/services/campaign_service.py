@@ -247,6 +247,9 @@ def _build_recipient_query(db: Session, org_id: UUID, recipient_type: str, filte
             IntendedParent.is_archived.is_(False),  # Exclude archived IPs
         )
 
+        if criteria.stage_slugs:
+            query = query.filter(IntendedParent.status.in_(criteria.stage_slugs))
+
         if criteria.created_after:
             query = query.filter(IntendedParent.created_at >= criteria.created_after)
 
