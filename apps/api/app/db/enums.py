@@ -298,6 +298,7 @@ class JobType(str, Enum):
     AI_CHAT = "ai_chat"
     CONTACT_REMINDER_CHECK = "contact_reminder_check"  # Daily contact follow-up check
     INTERVIEW_TRANSCRIPTION = "interview_transcription"
+    ATTACHMENT_SCAN = "attachment_scan"
     WORKFLOW_APPROVAL_EXPIRY = "workflow_approval_expiry"  # Sweep for expired approvals
     WORKFLOW_RESUME = "workflow_resume"  # Resume workflow after approval resolution
 

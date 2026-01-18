@@ -6,13 +6,22 @@ Run with: python -m scripts.seed_mock_data
 import os
 import random
 import hashlib
+import re
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
 from app.db.session import SessionLocal
-from app.db.models import Organization, User, Surrogate, IntendedParent, PipelineStage
+from app.db.models import (
+    Organization,
+    User,
+    Surrogate,
+    IntendedParent,
+    PipelineStage,
+    SurrogateStatusHistory,
+)
 from app.services import pipeline_service
+from app.services import template_seeder
 
 # Sample data pools
 FIRST_NAMES_FEMALE = [
@@ -72,6 +81,25 @@ HOSPITAL_NAMES = [
 IP_STATUSES = ["inquiry", "in_progress", "approved", "matched", "closed"]
 
 SURROGATE_SOURCES = ["website", "referral", "social_media", "agency", "other"]
+TERMINAL_STAGE_SLUGS = {"lost", "disqualified"}
+PREGNANCY_STAGE_SLUGS = {
+    "transfer_cycle",
+    "second_hcg_confirmed",
+    "heartbeat_confirmed",
+    "ob_care_established",
+    "anatomy_scanned",
+    "delivered",
+}
+
+
+def mask_email(email: str) -> str:
+    """Mask email to avoid logging raw PII."""
+    if "@" not in email:
+        return "***"
+    local, domain = email.split("@", 1)
+    if len(local) <= 2:
+        return f"{local[0]}***@{domain}"
+    return f"{local[0]}***{local[-1]}@{domain}"
 
 
 def hash_pii(value: str) -> str:
@@ -122,10 +150,134 @@ def email_from_name(name: str, prefix: str = "info") -> str:
     return f"{prefix}@{safe}.com"
 
 
-def create_surrogates(db, org_id: uuid4, owner_id: uuid4, stage_id: uuid4, count: int = 40):
+def _next_number(values: list[str], prefix: str, fallback: int) -> int:
+    """Get next numeric ID for a prefixed identifier."""
+    pattern = re.compile(rf"^{re.escape(prefix)}(\d+)$")
+    numbers = []
+    for value in values:
+        match = pattern.match(value or "")
+        if match:
+            numbers.append(int(match.group(1)))
+    return max(numbers, default=fallback - 1) + 1
+
+
+def get_next_surrogate_number(db, org_id: uuid4) -> int:
+    """Get next surrogate number for the org."""
+    values = [
+        row[0]
+        for row in db.query(Surrogate.surrogate_number)
+        .filter(Surrogate.organization_id == org_id)
+        .all()
+    ]
+    return _next_number(values, "S", 10001)
+
+
+def get_next_intended_parent_number(db, org_id: uuid4) -> int:
+    """Get next intended parent number for the org."""
+    values = [
+        row[0]
+        for row in db.query(IntendedParent.intended_parent_number)
+        .filter(IntendedParent.organization_id == org_id)
+        .all()
+    ]
+    return _next_number(values, "I", 10001)
+
+
+def pick_stage(stages: list[PipelineStage]) -> PipelineStage:
+    """Pick a stage using weighted distribution."""
+    weights_by_slug = {
+        "new_unread": 8,
+        "contacted": 6,
+        "qualified": 6,
+        "application_submitted": 5,
+        "interview_scheduled": 4,
+        "under_review": 4,
+        "approved": 4,
+        "ready_to_match": 5,
+        "matched": 4,
+        "medical_clearance_passed": 3,
+        "legal_clearance_passed": 3,
+        "transfer_cycle": 2,
+        "second_hcg_confirmed": 2,
+        "heartbeat_confirmed": 2,
+        "ob_care_established": 1,
+        "anatomy_scanned": 1,
+        "delivered": 1,
+        "lost": 1,
+        "disqualified": 1,
+    }
+    weights = [
+        weights_by_slug.get(stage.slug, 2 if stage.stage_type != "terminal" else 1)
+        for stage in stages
+    ]
+    return random.choices(stages, weights=weights, k=1)[0]
+
+
+def build_stage_path(stages_sorted: list[PipelineStage], target: PipelineStage) -> list[PipelineStage]:
+    """Build a realistic stage path ending at target."""
+    if target.slug in TERMINAL_STAGE_SLUGS:
+        cutoff = random.randint(2, max(2, min(6, len(stages_sorted) - 2)))
+        return stages_sorted[:cutoff] + [target]
+    try:
+        index = next(i for i, stage in enumerate(stages_sorted) if stage.id == target.id)
+    except StopIteration:
+        return [target]
+    return stages_sorted[: index + 1]
+
+
+def create_status_history(
+    db,
+    org_id: uuid4,
+    owner_id: uuid4,
+    surrogate_id: uuid4,
+    stage_path: list[PipelineStage],
+    created_at: datetime,
+) -> dict[str, datetime]:
+    """Create status history entries for the stage path."""
+    now = datetime.now(timezone.utc)
+    cursor = created_at + timedelta(days=random.randint(0, 3))
+    contact_times: dict[str, datetime] = {}
+    previous = None
+    for stage in stage_path:
+        effective_at = min(cursor, now)
+        recorded_at = min(effective_at + timedelta(minutes=random.randint(5, 240)), now)
+        db.add(
+            SurrogateStatusHistory(
+                surrogate_id=surrogate_id,
+                organization_id=org_id,
+                from_stage_id=previous.id if previous else None,
+                to_stage_id=stage.id,
+                from_label_snapshot=previous.label if previous else None,
+                to_label_snapshot=stage.label,
+                changed_by_user_id=owner_id,
+                reason=None,
+                effective_at=effective_at,
+                recorded_at=recorded_at,
+                changed_at=effective_at,
+            )
+        )
+        if stage.slug == "contacted":
+            contact_times["contacted_at"] = effective_at
+        previous = stage
+        cursor = min(effective_at + timedelta(days=random.randint(3, 18)), now)
+    contact_times["last_stage_at"] = cursor
+    return contact_times
+
+
+def create_surrogates(
+    db,
+    org_id: uuid4,
+    owner_id: uuid4,
+    stages_sorted: list[PipelineStage],
+    count: int = 40,
+):
     """Create mock surrogates with complete data."""
     print(f"Creating {count} surrogates...")
-    
+
+    next_number = get_next_surrogate_number(db, org_id)
+    stage_by_slug = {stage.slug: stage for stage in stages_sorted}
+    contacted_stage = stage_by_slug.get("contacted")
+
     for i in range(count):
         first = random.choice(FIRST_NAMES_FEMALE)
         last = random.choice(LAST_NAMES)
@@ -140,19 +292,72 @@ def create_surrogates(db, org_id: uuid4, owner_id: uuid4, stage_id: uuid4, count
         monitoring_addr = random_address()
         ob_addr = random_address()
         hospital_addr = random_address()
+        stage = pick_stage(stages_sorted)
+        created_min = 10 + stage.order * 5
+        created_max = created_min + 120
+        created_at = datetime.now(timezone.utc) - timedelta(days=random.randint(created_min, created_max))
+        assigned_at = created_at + timedelta(days=random.randint(0, 14))
+
         pregnancy_start = date.today() - timedelta(days=random.randint(30, 220))
         pregnancy_due = pregnancy_start + timedelta(days=280)
-        
+        stage_path = build_stage_path(stages_sorted, stage)
+
+        surrogate_id = uuid4()
+        contact_times = create_status_history(
+            db=db,
+            org_id=org_id,
+            owner_id=owner_id,
+            surrogate_id=surrogate_id,
+            stage_path=stage_path,
+            created_at=created_at,
+        )
+
+        is_reached = False
+        if contacted_stage:
+            is_reached = stage.order >= contacted_stage.order
+
+        last_contacted_at = contact_times.get("last_stage_at") if is_reached else None
+        contacted_at = contact_times.get("contacted_at")
+
+        # Campaign metadata (30% of records)
+        meta_ad = None
+        meta_form = None
+        meta_campaign = None
+        meta_adset = None
+        if random.random() < 0.3:
+            meta_ad = f"ad_{random.randint(1000, 9999)}"
+            meta_form = f"form_{random.randint(1000, 9999)}"
+            meta_campaign = f"camp_{random.randint(1000, 9999)}"
+            meta_adset = f"adset_{random.randint(1000, 9999)}"
+
+        # Pregnancy fields for later stages
+        pregnancy_start_date = pregnancy_start if stage.slug in PREGNANCY_STAGE_SLUGS else None
+        pregnancy_due_date = pregnancy_due if stage.slug in PREGNANCY_STAGE_SLUGS else None
+        actual_delivery_date = None
+        if stage.slug == "delivered":
+            delivered_start = date.today() - timedelta(days=random.randint(250, 330))
+            pregnancy_start_date = delivered_start
+            pregnancy_due_date = delivered_start + timedelta(days=280)
+            actual_delivery_date = min(
+                date.today(),
+                pregnancy_due_date + timedelta(days=random.randint(-10, 10)),
+            )
+
         surrogate = Surrogate(
-            id=uuid4(),
-            surrogate_number=f"S{10001 + i}",
+            id=surrogate_id,
+            surrogate_number=f"S{next_number + i}",
             organization_id=org_id,
-            stage_id=stage_id,
-            status_label="New Unread",
+            stage_id=stage.id,
+            status_label=stage.label,
             source=random.choice(SURROGATE_SOURCES),
             is_priority=random.random() < 0.2,  # 20% priority
             owner_type="user",
             owner_id=owner_id,
+            created_by_user_id=owner_id,
+            meta_ad_external_id=meta_ad,
+            meta_form_id=meta_form,
+            meta_campaign_external_id=meta_campaign,
+            meta_adset_external_id=meta_adset,
             
             # Contact info
             full_name=full_name,
@@ -229,15 +434,20 @@ def create_surrogates(db, org_id: uuid4, owner_id: uuid4, stage_id: uuid4, count
             delivery_hospital_email=email_from_name(random.choice(HOSPITAL_NAMES), prefix="labor"),
 
             # Pregnancy tracking
-            pregnancy_start_date=pregnancy_start,
-            pregnancy_due_date=pregnancy_due,
+            pregnancy_start_date=pregnancy_start_date,
+            pregnancy_due_date=pregnancy_due_date,
+            actual_delivery_date=actual_delivery_date,
             
             # Contact tracking
-            contact_status="unreached",
+            contact_status="reached" if is_reached else "unreached",
+            assigned_at=assigned_at,
+            contacted_at=contacted_at,
+            last_contacted_at=last_contacted_at,
+            last_contact_method=random.choice(["email", "phone", "note"]) if is_reached else None,
             
             # Timestamps
-            created_at=datetime.now(timezone.utc) - timedelta(days=random.randint(1, 90)),
-            updated_at=datetime.now(timezone.utc),
+            created_at=created_at,
+            updated_at=max(created_at, contact_times.get("last_stage_at", created_at)),
         )
         
         db.add(surrogate)
@@ -249,7 +459,8 @@ def create_surrogates(db, org_id: uuid4, owner_id: uuid4, stage_id: uuid4, count
 def create_intended_parents(db, org_id: uuid4, owner_id: uuid4, count: int = 40):
     """Create mock intended parents with complete data."""
     print(f"Creating {count} intended parents...")
-    
+
+    next_number = get_next_intended_parent_number(db, org_id)
     for i in range(count):
         # Create couples - both partners' names
         first1 = random.choice(FIRST_NAMES_FEMALE + PARTNER_NAMES_MALE)
@@ -264,7 +475,7 @@ def create_intended_parents(db, org_id: uuid4, owner_id: uuid4, count: int = 40)
         intended_parent = IntendedParent(
             id=uuid4(),
             organization_id=org_id,
-            intended_parent_number=f"I{10001 + i}",
+            intended_parent_number=f"I{next_number + i}",
             
             # Contact info
             full_name=full_name,
@@ -291,7 +502,7 @@ def create_intended_parents(db, org_id: uuid4, owner_id: uuid4, count: int = 40)
             last_activity=datetime.now(timezone.utc) - timedelta(days=random.randint(0, 30)),
             
             # Timestamps
-            created_at=datetime.now(timezone.utc) - timedelta(days=random.randint(1, 120)),
+            created_at=datetime.now(timezone.utc) - timedelta(days=random.randint(5, 540)),
             updated_at=datetime.now(timezone.utc),
         )
         
@@ -328,31 +539,60 @@ def main():
             print("ERROR: No user found.")
             return
         
-        print(f"Using user as owner: {user.email} ({user.id})")
+        print(f"Using user as owner: {mask_email(user.email)} ({user.id})")
         
         # Get the default pipeline stage for surrogates
         pipeline = pipeline_service.get_or_create_default_pipeline(db, org.id, user.id)
         
         print(f"Using pipeline: {pipeline.name}")
         
-        # Get first stage
-        first_stage = db.query(PipelineStage).filter(
-            PipelineStage.pipeline_id == pipeline.id
-        ).order_by(PipelineStage.order.asc()).first()
-        
-        if not first_stage:
+        stages_sorted = (
+            db.query(PipelineStage)
+            .filter(PipelineStage.pipeline_id == pipeline.id)
+            .order_by(PipelineStage.order.asc())
+            .all()
+        )
+
+        if not stages_sorted:
             print("ERROR: No pipeline stages found.")
             return
-        
-        print(f"Using first stage: {first_stage.label} ({first_stage.id})")
-        
+
+        print(f"Using pipeline stages: {len(stages_sorted)}")
+
+        # Seed system templates & workflows (idempotent)
+        template_result = template_seeder.seed_all(db, org.id, user.id)
+        print(f"Seeded templates: {template_result['templates_created']}, workflows: {template_result['workflows_created']}")
+
+        # Seed signature defaults for org and user
+        org.signature_company_name = org.name
+        org.signature_address = "123 Market St, Austin, TX"
+        org.signature_phone = "+1 (512) 555-0199"
+        org.signature_website = "https://surrogacycrm.test"
+        org.signature_primary_color = "#0ea5e9"
+        org.signature_disclaimer = "This message contains confidential information intended only for the recipient."
+        org.signature_social_links = [
+            {"platform": "linkedin", "url": "https://linkedin.com/company/surrogacy-crm"},
+            {"platform": "instagram", "url": "https://instagram.com/surrogacy-crm"},
+        ]
+        user.signature_name = user.display_name
+        user.signature_title = "Case Manager"
+        user.signature_phone = "+1 (512) 555-0142"
+        user.signature_linkedin = "https://linkedin.com/in/case-manager"
+        user.signature_twitter = "https://twitter.com/surrogacycrm"
+
+        db.commit()
+
         # Create mock data
-        create_surrogates(db, org.id, user.id, first_stage.id, count=40)
-        create_intended_parents(db, org.id, user.id, count=40)
+        surrogate_count = int(os.getenv("SEED_SURROGATES", "40"))
+        intended_parent_count = int(os.getenv("SEED_INTENDED_PARENTS", "40"))
+        create_surrogates(db, org.id, user.id, stages_sorted, count=surrogate_count)
+        if intended_parent_count > 0:
+            create_intended_parents(db, org.id, user.id, count=intended_parent_count)
         
         print("\nMock data seeded successfully!")
-        print("  - 40 surrogates created")
-        print("  - 40 intended parents created")
+        print(f"  - {surrogate_count} surrogates created")
+        if intended_parent_count > 0:
+            print(f"  - {intended_parent_count} intended parents created")
         
     except Exception as e:
         print(f"ERROR: {e}")
