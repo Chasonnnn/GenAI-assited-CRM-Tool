@@ -3,7 +3,6 @@
 Handles AI conversations with context injection and action parsing.
 """
 
-import asyncio
 import json
 import logging
 import re
@@ -30,6 +29,7 @@ from app.services.ai_provider import ChatMessage, ChatResponse
 from app.services import ai_settings_service
 from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_text
 from app.types import JsonObject
+from app.core.async_utils import run_async
 
 logger = logging.getLogger(__name__)
 
@@ -893,7 +893,7 @@ def chat(
     user_integrations: list[str] | None = None,
 ) -> JsonObject:
     """Synchronous wrapper for chat_async (used by API routes)."""
-    return asyncio.run(
+    return run_async(
         chat_async(
             db=db,
             organization_id=organization_id,
