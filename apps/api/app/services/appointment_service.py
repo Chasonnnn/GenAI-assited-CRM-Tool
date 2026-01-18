@@ -1254,9 +1254,11 @@ def approve_booking(
             appointment.zoom_join_url = meeting.join_url
 
     elif meeting_mode == MeetingMode.GOOGLE_MEET.value:
-        # Check if Gmail is connected
-        if not calendar_service.check_user_has_gmail(db, appointment.user_id):
-            raise ValueError("Gmail not connected. Please connect in Settings → Integrations.")
+        # Check if Google Calendar is connected
+        if not calendar_service.check_user_has_google_calendar(db, appointment.user_id):
+            raise ValueError(
+                "Google Calendar not connected. Please connect in Settings → Integrations."
+            )
 
         # Create Google Meet link
         result = _run_async(

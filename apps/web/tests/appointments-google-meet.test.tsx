@@ -36,7 +36,7 @@ vi.mock("@/lib/auth-context", () => ({
 
 vi.mock("@/lib/hooks/use-user-integrations", () => ({
     useUserIntegrations: () => ({
-        data: [{ integration_type: "gmail", connected: true }],
+        data: [{ integration_type: "google_calendar", connected: true }],
         isLoading: false,
         isError: false,
     }),

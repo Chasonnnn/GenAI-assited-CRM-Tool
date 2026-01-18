@@ -41,7 +41,6 @@ import {
     Loader2Icon,
     LinkIcon,
     XIcon,
-    MailIcon,
 } from "lucide-react"
 import { useAppointments, useRescheduleAppointment, useGoogleCalendarEvents, useUpdateAppointmentLink } from "@/lib/hooks/use-appointments"
 import { useTasks } from "@/lib/hooks/use-tasks"
@@ -1175,12 +1174,12 @@ export function UnifiedCalendar({
                     <>
                         {includeGoogleEvents && !calendarConnected && (
                             <Alert className="mb-4 border-amber-500/60 bg-amber-50 text-amber-900">
-                                <MailIcon className="size-4" />
+                                <CalendarIcon className="size-4" />
                                 <AlertTitle>Google Calendar not connected</AlertTitle>
                                 <AlertDescription>
                                     {calendarError === "token_expired"
-                                        ? "Your Gmail token expired. Reconnect to show Google Calendar events."
-                                        : "Connect Gmail to show Google Calendar events alongside appointments."}
+                                        ? "Your Google Calendar token expired. Reconnect to show Google Calendar events."
+                                        : "Connect Google Calendar to show Google Calendar events alongside appointments."}
                                 </AlertDescription>
                                 <AlertAction>
                                     <Link href="/settings/integrations">

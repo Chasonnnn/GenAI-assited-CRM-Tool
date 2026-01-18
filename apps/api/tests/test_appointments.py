@@ -895,7 +895,9 @@ def test_approve_booking_creates_google_meet_link(
 
     monkeypatch.setattr(appointment_service, "_sync_to_google_calendar", lambda *a, **k: None)
 
-    monkeypatch.setattr(calendar_service, "check_user_has_gmail", lambda *a, **k: True, raising=False)
+    monkeypatch.setattr(
+        calendar_service, "check_user_has_google_calendar", lambda *a, **k: True, raising=False
+    )
 
     async def fake_create_google_meet_link(*args, **kwargs):
         return {"event_id": "event_123", "meet_url": "https://meet.google.com/abc-defg-hij"}
@@ -961,10 +963,10 @@ def test_reschedule_booking_regenerates_zoom_link(
     assert updated.zoom_join_url == "https://zoom.us/j/999"
 
 
-def test_approve_booking_fails_when_gmail_not_connected(
+def test_approve_booking_fails_when_google_calendar_not_connected(
     db, test_org, test_user, appointment_type, availability_rules, monkeypatch
 ):
-    """Google Meet mode should require Gmail integration."""
+    """Google Meet mode should require Google Calendar integration."""
     from app.services import appointment_service, calendar_service
 
     appointment_type.meeting_mode = "google_meet"
@@ -976,9 +978,11 @@ def test_approve_booking_fails_when_gmail_not_connected(
 
     appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
 
-    monkeypatch.setattr(calendar_service, "check_user_has_gmail", lambda *a, **k: False, raising=False)
+    monkeypatch.setattr(
+        calendar_service, "check_user_has_google_calendar", lambda *a, **k: False, raising=False
+    )
 
-    with pytest.raises(ValueError, match="Gmail not connected"):
+    with pytest.raises(ValueError, match="Google Calendar not connected"):
         appointment_service.approve_booking(db, appt, approved_by_user_id=test_user.id)
 
     db.refresh(appt)
