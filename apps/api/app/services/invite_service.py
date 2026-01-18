@@ -8,6 +8,7 @@ from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 
 from app.db.models import OrgInvite, Membership, User, Organization
+from app.services import org_service
 
 
 # Rate limit configuration
@@ -205,7 +206,7 @@ def get_invite_details(
         return None, "Unknown Organization", None
 
     org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
-    org_name = org.name if org else "Unknown Organization"
+    org_name = org_service.get_org_display_name(org)
 
     inviter_name = None
     if invite.invited_by_user_id:
@@ -266,7 +267,7 @@ def accept_invite(
             user.active_org_id = invite.organization_id
         db.commit()
         org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
-        org_name = org.name if org else "Unknown"
+        org_name = org_service.get_org_display_name(org)
         return {
             "organization_id": str(invite.organization_id),
             "organization_name": org_name,
@@ -288,7 +289,7 @@ def accept_invite(
     db.commit()
 
     org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
-    org_name = org.name if org else "Unknown"
+    org_name = org_service.get_org_display_name(org)
 
     return {
         "organization_id": str(invite.organization_id),

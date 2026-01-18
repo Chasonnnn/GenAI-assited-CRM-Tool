@@ -75,6 +75,14 @@ def get_org_portal_base_url(org: Organization | None) -> str:
     return settings.FRONTEND_URL.rstrip("/") if settings.FRONTEND_URL else ""
 
 
+def get_org_display_name(org: Organization | None) -> str:
+    """Resolve the organization name for external display."""
+    if not org:
+        return "Unknown Organization"
+    branded_name = (org.signature_company_name or "").strip()
+    return branded_name or org.name
+
+
 def update_org_settings(
     db: Session,
     org: Organization,

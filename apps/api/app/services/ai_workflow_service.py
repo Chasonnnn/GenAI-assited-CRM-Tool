@@ -169,7 +169,7 @@ CONDITION_OPERATORS = [
 # Workflow Generation Prompt
 # =============================================================================
 
-WORKFLOW_GENERATION_PROMPT = """You are a workflow configuration assistant for a surrogacy agency CRM.
+WORKFLOW_GENERATION_PROMPT = """You are a workflow configuration assistant for a surrogacy agency using Surrogacy Force.
 
 Your task is to generate a workflow configuration JSON based on the user's natural language description.
 

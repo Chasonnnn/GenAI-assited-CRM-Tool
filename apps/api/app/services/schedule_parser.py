@@ -57,7 +57,7 @@ class ParseScheduleResult(BaseModel):
 # AI Prompt
 # ============================================================================
 
-PARSE_SCHEDULE_SYSTEM_PROMPT = """You are a schedule parser for a surrogacy agency CRM. 
+PARSE_SCHEDULE_SYSTEM_PROMPT = """You are a schedule parser for a surrogacy agency using Surrogacy Force. 
 Extract tasks from medication schedules, exam dates, and appointment lists.
 
 Return a JSON array with objects containing:

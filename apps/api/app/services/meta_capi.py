@@ -2,7 +2,7 @@
 
 Sends lead status updates back to Meta to optimize ad targeting.
 When a Meta-sourced case advances, we notify Meta with the
-appropriate CRM status label so they can learn lead quality.
+appropriate status label so they can learn lead quality.
 
 Enterprise implementation includes:
 - Hashed email/phone for better user matching
@@ -34,7 +34,7 @@ CAPI_URL = f"https://graph.facebook.com/{settings.META_API_VERSION}"
 # HTTP client settings
 HTTPX_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 
-# Meta Ads CRM status labels (must match configured labels in Meta)
+# Meta Ads lead status labels (must match configured labels in Meta)
 META_STATUS_INTAKE = "Intake"
 META_STATUS_QUALIFIED = "Qualified/Converted"
 META_STATUS_DISQUALIFIED = "Not qualified/Lost"
@@ -175,7 +175,7 @@ async def send_lead_event(
 
 
 def map_surrogate_status_to_meta_status(surrogate_status: str) -> str | None:
-    """Map internal case status slug to Meta Ads CRM status label."""
+    """Map internal case status slug to Meta Ads status label."""
     if not surrogate_status:
         return None
     if surrogate_status in META_LOST_STATUSES:
@@ -207,8 +207,8 @@ async def send_status_event(
 
     Args:
         meta_lead_id: Original Meta leadgen_id
-        surrogate_status: The CRM status that triggered this
-        meta_status: Meta Ads CRM status label
+        surrogate_status: The status that triggered this
+        meta_status: Meta Ads status label
         email: Optional email for hashed matching
         phone: Optional phone for hashed matching
         access_token: CAPI access token
@@ -387,8 +387,8 @@ async def send_status_event_for_account(
     Args:
         meta_lead_id: Original Meta leadgen_id
         ad_account: MetaAdAccount with CAPI configuration
-        surrogate_status: The CRM status that triggered this
-        meta_status: Meta Ads CRM status label
+        surrogate_status: The status that triggered this
+        meta_status: Meta Ads status label
         email: Optional email for hashed matching
         phone: Optional phone for hashed matching
     """

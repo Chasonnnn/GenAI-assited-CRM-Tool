@@ -1,15 +1,16 @@
-"""CLI tools for CRM administration."""
+"""CLI tools for Surrogacy Force administration."""
 
 import click
+from sqlalchemy import func
 
 from app.db.enums import Role
-from app.db.models import Organization, OrgInvite
+from app.db.models import Organization, OrgInvite, User, Membership
 from app.db.session import SessionLocal
 
 
 @click.group()
 def cli():
-    """CRM CLI tools."""
+    """Surrogacy Force CLI tools."""
     pass
 
 
@@ -17,7 +18,8 @@ def cli():
 @click.option("--name", required=True, help="Organization name")
 @click.option("--slug", required=True, help="URL-friendly slug (lowercase, no spaces)")
 @click.option("--admin-email", required=True, help="Admin email address")
-def create_org(name: str, slug: str, admin_email: str):
+@click.option("--developer-email", required=False, help="Developer email address (optional)")
+def create_org(name: str, slug: str, admin_email: str, developer_email: str | None):
     """
     Create organization and initial admin invite.
 
@@ -26,9 +28,13 @@ def create_org(name: str, slug: str, admin_email: str):
 
     Example:
         python -m app.cli create-org --name "Acme Corp" --slug "acme" --admin-email "admin@acme.com"
+        python -m app.cli create-org --name "Acme Corp" --slug "acme" --admin-email "admin@acme.com" --developer-email "dev@acme.com"
     """
     db = SessionLocal()
     try:
+        admin_email = admin_email.lower().strip()
+        developer_email = developer_email.lower().strip() if developer_email else None
+
         # Validate slug format
         slug = slug.lower().strip()
         if not slug.replace("-", "").replace("_", "").isalnum():
@@ -41,38 +47,159 @@ def create_org(name: str, slug: str, admin_email: str):
             click.echo(f"[ERROR] Organization with slug '{slug}' already exists")
             return
 
-        # Check for existing pending invite for this email
-        existing_invite = (
+        if developer_email == admin_email:
+            click.echo("[INFO] Admin email matches developer email; creating developer invite only.")
+            developer_email = None
+            admin_role = Role.DEVELOPER.value
+        else:
+            admin_role = Role.ADMIN.value
+
+        # Check for existing pending invite for admin email
+        existing_admin_invite = (
             db.query(OrgInvite)
-            .filter(OrgInvite.email == admin_email.lower(), OrgInvite.accepted_at.is_(None))
+            .filter(
+                OrgInvite.email == admin_email,
+                OrgInvite.accepted_at.is_(None),
+                OrgInvite.revoked_at.is_(None),
+            )
             .first()
         )
-        if existing_invite:
+        if existing_admin_invite:
             click.echo(f"[ERROR] Pending invite already exists for {admin_email}")
             return
+
+        if developer_email:
+            existing_dev_invite = (
+                db.query(OrgInvite)
+                .filter(
+                    OrgInvite.email == developer_email,
+                    OrgInvite.accepted_at.is_(None),
+                    OrgInvite.revoked_at.is_(None),
+                )
+                .first()
+            )
+            if existing_dev_invite:
+                click.echo(f"[ERROR] Pending invite already exists for {developer_email}")
+                return
+
+        # Check if admin email is already bound to a different org
+        existing_user = db.query(User).filter(func.lower(User.email) == admin_email).first()
+        if existing_user:
+            existing_membership = (
+                db.query(Membership)
+                .filter(
+                    Membership.user_id == existing_user.id,
+                    Membership.is_active.is_(True),
+                )
+                .first()
+            )
+            if existing_membership:
+                click.echo(f"[ERROR] User already belongs to an organization: {admin_email}")
+                return
+
+        if developer_email:
+            existing_dev_user = (
+                db.query(User).filter(func.lower(User.email) == developer_email).first()
+            )
+            if existing_dev_user:
+                existing_dev_membership = (
+                    db.query(Membership)
+                    .filter(
+                        Membership.user_id == existing_dev_user.id,
+                        Membership.is_active.is_(True),
+                    )
+                    .first()
+                )
+                if existing_dev_membership:
+                    click.echo(f"[ERROR] User already belongs to an organization: {developer_email}")
+                    return
 
         # Create organization
         org = Organization(name=name, slug=slug)
         db.add(org)
         db.flush()
 
-        # Create invite (never expires for bootstrap)
+        # Create admin invite (never expires for bootstrap)
         invite = OrgInvite(
             organization_id=org.id,
-            email=admin_email.lower(),
-            role=Role.ADMIN.value,
+            email=admin_email,
+            role=admin_role,
             expires_at=None,  # Never expires
             invited_by_user_id=None,  # CLI bootstrap has no inviter
         )
         db.add(invite)
+
+        if developer_email:
+            dev_invite = OrgInvite(
+                organization_id=org.id,
+                email=developer_email,
+                role=Role.DEVELOPER.value,
+                expires_at=None,
+                invited_by_user_id=None,
+            )
+            db.add(dev_invite)
         db.commit()
 
         click.echo(f"[OK] Created organization: {name}")
         click.echo(f"  ID: {org.id}")
         click.echo(f"  Slug: {slug}")
-        click.echo(f"[OK] Created invite for {admin_email} with role: admin")
-        click.echo("→ Admin should log in with Google using that email")
+        click.echo(f"[OK] Created invite for {admin_email} with role: {admin_role}")
+        if developer_email:
+            click.echo(f"[OK] Created invite for {developer_email} with role: developer")
+        click.echo("→ Invitee should log in with Google using that email")
 
+    except Exception as e:
+        db.rollback()
+        click.echo(f"[ERROR] Error: {e}")
+    finally:
+        db.close()
+
+
+@cli.command()
+@click.option("--email", required=True, help="User email to promote")
+@click.option("--org-slug", required=False, help="Org slug for membership validation")
+def promote_to_developer(email: str, org_slug: str | None):
+    """
+    Promote an existing member to Developer role.
+
+    Example:
+        python -m app.cli promote-to-developer --email "dev@acme.com"
+        python -m app.cli promote-to-developer --email "dev@acme.com" --org-slug "acme"
+    """
+    db = SessionLocal()
+    try:
+        email = email.lower().strip()
+        user = db.query(User).filter(func.lower(User.email) == email).first()
+        if not user:
+            click.echo(f"[ERROR] User not found: {email}")
+            return
+
+        membership = (
+            db.query(Membership)
+            .filter(Membership.user_id == user.id, Membership.is_active.is_(True))
+            .first()
+        )
+        if not membership:
+            click.echo(f"[ERROR] No active membership found for {email}")
+            return
+
+        if org_slug:
+            org = db.query(Organization).filter(Organization.slug == org_slug.lower()).first()
+            if not org:
+                click.echo(f"[ERROR] Organization not found: {org_slug}")
+                return
+            if membership.organization_id != org.id:
+                click.echo("[ERROR] Membership does not match the specified org slug")
+                return
+
+        if membership.role == Role.DEVELOPER.value:
+            click.echo(f"[OK] {email} is already a developer")
+            return
+
+        membership.role = Role.DEVELOPER.value
+        db.commit()
+
+        click.echo(f"[OK] Promoted {email} to developer role")
     except Exception as e:
         db.rollback()
         click.echo(f"[ERROR] Error: {e}")
