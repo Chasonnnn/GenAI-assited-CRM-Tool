@@ -1,6 +1,6 @@
 # Backup and Restore Runbook
 
-This runbook covers database and file storage backups for the CRM stack.
+This runbook covers database and file storage backups for the Surrogacy Force stack.
 
 ## Scope
 - Postgres data (all application data and metadata)

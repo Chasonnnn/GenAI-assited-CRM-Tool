@@ -1,6 +1,6 @@
 # Terraform Deployment Guide (Step-by-Step)
 
-This is a beginner-friendly checklist to deploy the CRM on GCP using Terraform + Cloud Build.
+This is a beginner-friendly checklist to deploy Surrogacy Force on GCP using Terraform + Cloud Build.
 Follow the steps in order. Anything marked "manual" is something you must do in the GCP console.
 
 ## 0) What you need

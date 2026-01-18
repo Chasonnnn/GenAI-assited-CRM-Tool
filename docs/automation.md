@@ -3,7 +3,7 @@
 **Last Updated:** 2025-12-25  
 **Version:** 0.15.00
 
-This document describes the automation system for the CRM platform, including workflows, campaigns, and email templates.
+This document describes the automation system for Surrogacy Force, including workflows, campaigns, and email templates.
 
 ---
 
@@ -21,7 +21,7 @@ This document describes the automation system for the CRM platform, including wo
 
 ## Workflow Engine
 
-The workflow engine automatically executes actions based on events occurring in the CRM.
+The workflow engine automatically executes actions based on events occurring in Surrogacy Force.
 
 ### Architecture
 
