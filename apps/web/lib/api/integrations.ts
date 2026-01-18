@@ -87,6 +87,13 @@ export async function getGmailConnectUrl(): Promise<{ auth_url: string }> {
 }
 
 /**
+ * Get Google Calendar OAuth authorization URL.
+ */
+export async function getGoogleCalendarConnectUrl(): Promise<{ auth_url: string }> {
+    return api.get<{ auth_url: string }>('/integrations/google-calendar/connect')
+}
+
+/**
  * Check if current user has Zoom connected.
  */
 export async function getZoomStatus(): Promise<ZoomStatusResponse> {

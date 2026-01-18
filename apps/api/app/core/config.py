@@ -12,6 +12,7 @@ DEFAULT_CORS_ORIGINS = "http://localhost:3000"
 DEFAULT_GOOGLE_REDIRECT_URI = "http://localhost:8000/auth/google/callback"
 DEFAULT_ZOOM_REDIRECT_URI = "http://localhost:8000/integrations/zoom/callback"
 DEFAULT_GMAIL_REDIRECT_URI = "http://localhost:8000/integrations/gmail/callback"
+DEFAULT_GOOGLE_CALENDAR_REDIRECT_URI = "http://localhost:8000/integrations/google-calendar/callback"
 DEFAULT_DUO_REDIRECT_URI = "http://localhost:3000/auth/duo/callback"
 
 
@@ -101,6 +102,8 @@ class Settings(BaseSettings):
 
     # Gmail OAuth (per-user, different from Google Login OAuth)
     GMAIL_REDIRECT_URI: str = ""
+    # Google Calendar OAuth (per-user, used for Meet + calendar sync)
+    GOOGLE_CALENDAR_REDIRECT_URI: str = ""
 
     # Error Tracking (optional, set in production)
     SENTRY_DSN: str = ""  # Get from https://sentry.io
@@ -152,6 +155,8 @@ class Settings(BaseSettings):
                 self.ZOOM_REDIRECT_URI = DEFAULT_ZOOM_REDIRECT_URI
             if not self.GMAIL_REDIRECT_URI:
                 self.GMAIL_REDIRECT_URI = DEFAULT_GMAIL_REDIRECT_URI
+            if not self.GOOGLE_CALENDAR_REDIRECT_URI:
+                self.GOOGLE_CALENDAR_REDIRECT_URI = DEFAULT_GOOGLE_CALENDAR_REDIRECT_URI
             if not self.DUO_REDIRECT_URI:
                 self.DUO_REDIRECT_URI = DEFAULT_DUO_REDIRECT_URI
             return

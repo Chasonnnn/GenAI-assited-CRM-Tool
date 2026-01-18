@@ -21,13 +21,14 @@ import {
     ZapIcon,
     VideoIcon,
     MailIcon,
+    CalendarIcon,
     LinkIcon,
     UnlinkIcon,
     SparklesIcon,
     CheckIcon,
 } from "lucide-react"
 import { useIntegrationHealth } from "@/lib/hooks/use-ops"
-import { useUserIntegrations, useConnectZoom, useConnectGmail, useDisconnectIntegration } from "@/lib/hooks/use-user-integrations"
+import { useUserIntegrations, useConnectZoom, useConnectGmail, useConnectGoogleCalendar, useDisconnectIntegration } from "@/lib/hooks/use-user-integrations"
 import { useAISettings, useUpdateAISettings, useTestAPIKey } from "@/lib/hooks/use-ai"
 import { formatDistanceToNow } from "date-fns"
 
@@ -309,10 +310,12 @@ export default function IntegrationsPage() {
     const { data: userIntegrations } = useUserIntegrations()
     const connectZoom = useConnectZoom()
     const connectGmail = useConnectGmail()
+    const connectGoogleCalendar = useConnectGoogleCalendar()
     const disconnectIntegration = useDisconnectIntegration()
 
     const zoomIntegration = userIntegrations?.find(i => i.integration_type === 'zoom')
     const gmailIntegration = userIntegrations?.find(i => i.integration_type === 'gmail')
+    const googleCalendarIntegration = userIntegrations?.find(i => i.integration_type === 'google_calendar')
 
     return (
         <div className="flex min-h-screen flex-col">
@@ -432,6 +435,57 @@ export default function IntegrationsPage() {
                                             <LinkIcon className="mr-2 size-4" />
                                         )}
                                         Connect Gmail
+                                    </Button>
+                                )}
+                            </CardContent>
+                        </Card>
+
+                        {/* Google Calendar + Meeting */}
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900">
+                                        <CalendarIcon className="size-5 text-emerald-600 dark:text-emerald-400" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-base">Google Calendar + Meeting</CardTitle>
+                                        <CardDescription className="text-xs">Two-way calendar sync + meeting links</CardDescription>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                {googleCalendarIntegration ? (
+                                    <div className="space-y-3">
+                                        <div className="flex items-center gap-2">
+                                            <Badge variant="default" className="bg-green-600">
+                                                <CheckCircleIcon className="mr-1 size-3" />
+                                                Connected
+                                            </Badge>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">{googleCalendarIntegration.account_email}</p>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="w-full"
+                                            onClick={() => disconnectIntegration.mutate('google_calendar')}
+                                            disabled={disconnectIntegration.isPending}
+                                        >
+                                            <UnlinkIcon className="mr-2 size-3" />
+                                            Disconnect
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <Button
+                                        className="w-full"
+                                        onClick={() => connectGoogleCalendar.mutate()}
+                                        disabled={connectGoogleCalendar.isPending}
+                                    >
+                                        {connectGoogleCalendar.isPending ? (
+                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                        ) : (
+                                            <LinkIcon className="mr-2 size-4" />
+                                        )}
+                                        Connect Google Calendar
                                     </Button>
                                 )}
                             </CardContent>
