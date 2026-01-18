@@ -224,6 +224,17 @@ def require_permission(permission: str | PermissionKey):
     return dependency
 
 
+def require_ai_enabled(request: Request, db: Session = Depends(get_db)):
+    """Ensure the organization has AI enabled."""
+    from app.db.models import Organization
+
+    session = get_current_session(request, db)
+    org = db.query(Organization).filter(Organization.id == session.org_id).first()
+    if not org or not org.ai_enabled:
+        raise HTTPException(status_code=403, detail="AI is not enabled for this organization")
+    return session
+
+
 def require_any_permissions(permissions: list[str | PermissionKey]):
     """
     Dependency factory for OR-based permission checks.

@@ -14,6 +14,7 @@ from app.core.security import create_session_token
 from app.db.enums import Role
 from app.db.models import Surrogate, IntendedParent, Match, Membership, Task, User
 from app.main import app
+from app.routers.ai import ParseScheduleRequest, BulkTaskCreateRequest
 from app.utils.normalization import normalize_email
 
 
@@ -68,6 +69,24 @@ def _create_match(db, org_id, user_id, stage):
     db.add(match)
     db.flush()
     return match
+
+
+def test_parse_schedule_accepts_case_id_alias():
+    case_id = uuid.uuid4()
+    payload = {"text": "Schedule", "case_id": str(case_id)}
+    parsed = ParseScheduleRequest.model_validate(payload)
+    assert parsed.surrogate_id == case_id
+
+
+def test_bulk_task_create_accepts_case_id_alias():
+    case_id = uuid.uuid4()
+    payload = {
+        "request_id": str(uuid.uuid4()),
+        "case_id": str(case_id),
+        "tasks": [{"title": "Task", "task_type": "other"}],
+    }
+    parsed = BulkTaskCreateRequest.model_validate(payload)
+    assert parsed.surrogate_id == case_id
 
 
 @pytest.fixture

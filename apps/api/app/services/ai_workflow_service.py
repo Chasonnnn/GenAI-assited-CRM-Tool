@@ -232,7 +232,9 @@ Respond with ONLY a valid JSON object (no markdown, no explanation) in this exac
 # =============================================================================
 
 
-def _get_context_for_prompt(db: Session, org_id: UUID) -> dict[str, str]:
+def _get_context_for_prompt(
+    db: Session, org_id: UUID, *, anonymize_pii: bool = False
+) -> dict[str, str]:
     """Build context strings for the generation prompt."""
     # Get triggers
     triggers_text = "\n".join([f"- {k}: {v}" for k, v in AVAILABLE_TRIGGERS.items()])
@@ -250,7 +252,7 @@ def _get_context_for_prompt(db: Session, org_id: UUID) -> dict[str, str]:
         db.query(EmailTemplate)
         .filter(
             EmailTemplate.organization_id == org_id,
-            EmailTemplate.is_archived.is_(False),
+            EmailTemplate.is_active.is_(True),
         )
         .limit(20)
         .all()
@@ -273,10 +275,11 @@ def _get_context_for_prompt(db: Session, org_id: UUID) -> dict[str, str]:
         .limit(20)
         .all()
     )
-    users_text = (
-        "\n".join([f"- {m.user_id}: {u.display_name or u.email}" for m, u in members])
-        or "No users available"
-    )
+    users_lines = []
+    for idx, (membership, user) in enumerate(members, start=1):
+        label = f"User {idx}" if anonymize_pii else (user.display_name or user.email)
+        users_lines.append(f"- {membership.user_id}: {label}")
+    users_text = "\n".join(users_lines) or "No users available"
 
     # Get pipeline stages
     pipelines = db.query(Pipeline).filter(Pipeline.organization_id == org_id).all()
@@ -345,7 +348,7 @@ def generate_workflow(
         )
 
     # Build prompt context
-    context = _get_context_for_prompt(db, org_id)
+    context = _get_context_for_prompt(db, org_id, anonymize_pii=settings.anonymize_pii)
     prompt = WORKFLOW_GENERATION_PROMPT.format(
         triggers=context["triggers"],
         actions=context["actions"],

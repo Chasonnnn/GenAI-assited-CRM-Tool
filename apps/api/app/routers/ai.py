@@ -17,10 +17,12 @@ from sqlalchemy.orm import Session
 from app.core.deps import (
     get_db,
     get_current_session,
+    require_ai_enabled,
     require_all_permissions,
     require_csrf_header,
     require_permission,
 )
+from app.core.encryption import encrypt_value
 from app.core.permissions import PermissionKey as P
 from app.core.surrogate_access import check_surrogate_access
 from app.db.enums import SurrogateActivityType, JobStatus, JobType, Role
@@ -343,7 +345,7 @@ def accept_consent(
 @router.post(
     "/chat",
     response_model=ChatResponseModel,
-    dependencies=[Depends(require_csrf_header)],
+    dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
 @limiter.limit("60/minute")
 def chat(
@@ -439,7 +441,7 @@ def chat(
     "/chat/async",
     response_model=ChatJobResponse,
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require_csrf_header)],
+    dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
 @limiter.limit("60/minute")
 def chat_async(
@@ -502,7 +504,7 @@ def chat_async(
         payload={
             "entity_type": entity_type,
             "entity_id": str(entity_id),
-            "message": body.message,
+            "message_encrypted": encrypt_value(body.message),
             "user_id": str(session.user_id),
         },
     )
@@ -1148,10 +1150,10 @@ Highlight key qualifications and background while being professional and respect
 @router.post(
     "/summarize-surrogate",
     response_model=SummarizeSurrogateResponse,
-    dependencies=[Depends(require_csrf_header)],
+    dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
 @limiter.limit("30/minute")
-def summarize_surrogate(
+async def summarize_surrogate(
     request: Request,
     body: SummarizeSurrogateRequest,
     db: Session = Depends(get_db),
@@ -1163,6 +1165,7 @@ def summarize_surrogate(
     """
     from app.services import ai_settings_service
     from app.services.ai_provider import ChatMessage, get_provider
+    from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_data
 
     # Check AI is enabled and consent accepted
     settings = ai_settings_service.get_ai_settings(db, session.org_id)
@@ -1181,6 +1184,13 @@ def summarize_surrogate(
     surrogate = surrogate_service.get_surrogate(db, session.org_id, body.surrogate_id)
     if not surrogate:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Surrogate not found")
+    check_surrogate_access(
+        surrogate=surrogate,
+        user_role=session.role,
+        user_id=session.user_id,
+        db=db,
+        org_id=session.org_id,
+    )
 
     # Load notes and tasks
     notes = note_service.list_notes_limited(
@@ -1190,7 +1200,7 @@ def summarize_surrogate(
         entity_id=surrogate.id,
         limit=10,
     )
-    tasks = task_service.list_open_tasks_for_case(
+    tasks = task_service.list_open_tasks_for_surrogate(
         db=db,
         surrogate_id=surrogate.id,
         org_id=session.org_id,
@@ -1219,6 +1229,14 @@ Recent Notes:
 Pending Tasks:
 {tasks_text}"""
 
+    pii_mapping = PIIMapping() if settings.anonymize_pii else None
+    if settings.anonymize_pii and pii_mapping:
+        known_names = []
+        if surrogate.full_name:
+            known_names.append(surrogate.full_name)
+            known_names.extend(surrogate.full_name.split())
+        context = anonymize_text(context, pii_mapping, known_names)
+
     prompt = f"""Analyze this surrogate and provide a comprehensive summary.
 
 {context}
@@ -1241,19 +1259,15 @@ Be concise and professional. Focus on actionable insights."""
 
     provider = get_provider(settings.provider, api_key, settings.model)
 
-    import asyncio
-
-    response = asyncio.get_event_loop().run_until_complete(
-        provider.chat(
-            [
-                ChatMessage(
-                    role="system",
-                    content="You are a helpful CRM assistant for a surrogacy agency. Always respond with valid JSON.",
-                ),
-                ChatMessage(role="user", content=prompt),
-            ],
-            temperature=0.3,
-        )
+    response = await provider.chat(
+        [
+            ChatMessage(
+                role="system",
+                content="You are a helpful CRM assistant for a surrogacy agency. Always respond with valid JSON.",
+            ),
+            ChatMessage(role="user", content=prompt),
+        ],
+        temperature=0.3,
     )
 
     # Parse response
@@ -1275,6 +1289,9 @@ Be concise and professional. Focus on actionable insights."""
             "recent_activity": "See notes above",
             "suggested_next_steps": ["Review case details", "Follow up with applicant"],
         }
+
+    if settings.anonymize_pii and pii_mapping:
+        parsed = rehydrate_data(parsed, pii_mapping)
 
     # Build key dates
     key_dates = {
@@ -1307,10 +1324,10 @@ Be concise and professional. Focus on actionable insights."""
 @router.post(
     "/draft-email",
     response_model=DraftEmailResponse,
-    dependencies=[Depends(require_csrf_header)],
+    dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
 @limiter.limit("30/minute")
-def draft_email(
+async def draft_email(
     request: Request,
     body: DraftEmailRequest,
     db: Session = Depends(get_db),
@@ -1322,33 +1339,61 @@ def draft_email(
     """
     from app.services import ai_settings_service
     from app.services.ai_provider import ChatMessage, get_provider
+    from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_data
 
     # Check AI is enabled
     settings = ai_settings_service.get_ai_settings(db, session.org_id)
     if not settings or not settings.is_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="AI is not enabled")
     if ai_settings_service.is_consent_required(settings):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="AI consent not accepted")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="AI consent not accepted",
+        )
 
     # Load surrogate
     surrogate = surrogate_service.get_surrogate(db, session.org_id, body.surrogate_id)
     if not surrogate:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Surrogate not found")
+    check_surrogate_access(
+        surrogate=surrogate,
+        user_role=session.role,
+        user_id=session.user_id,
+        db=db,
+        org_id=session.org_id,
+    )
 
     # Get user name for signature
     user = user_service.get_user_by_id(db, session.user_id)
-    sender_name = user.full_name if user else "Your Case Manager"
+    if user:
+        sender_name = user.signature_name or user.display_name
+    else:
+        sender_name = "Your Case Manager"
 
     # Build email prompt
     email_instruction = EMAIL_PROMPTS[body.email_type]
-    additional = (
-        f"\nAdditional context: {body.additional_context}" if body.additional_context else ""
-    )
+    additional_context = body.additional_context or ""
+    pii_mapping = PIIMapping() if settings.anonymize_pii else None
+    recipient_name = surrogate.full_name
+    recipient_email = surrogate.email
+    if settings.anonymize_pii and pii_mapping:
+        known_names = []
+        if surrogate.full_name:
+            known_names.append(surrogate.full_name)
+            known_names.extend(surrogate.full_name.split())
+        if recipient_name:
+            recipient_name = pii_mapping.add_name(recipient_name)
+        if recipient_email:
+            recipient_email = pii_mapping.add_email(recipient_email)
+        if additional_context:
+            additional_context = anonymize_text(additional_context, pii_mapping, known_names)
+
+    additional = f"\nAdditional context: {additional_context}" if additional_context else ""
 
     prompt = f"""{email_instruction}
 
-Recipient: {surrogate.full_name}
-Email: {surrogate.email}
+Recipient: {recipient_name}
+Email: {recipient_email}
 Surrogate Status: {surrogate.status_label}
 {additional}
 
@@ -1371,19 +1416,15 @@ Be professional, warm, and concise."""
 
     provider = get_provider(settings.provider, api_key, settings.model)
 
-    import asyncio
-
-    response = asyncio.get_event_loop().run_until_complete(
-        provider.chat(
-            [
-                ChatMessage(
-                    role="system",
-                    content="You are a professional email writer for a surrogacy agency. Always respond with valid JSON.",
-                ),
-                ChatMessage(role="user", content=prompt),
-            ],
-            temperature=0.5,
-        )
+    response = await provider.chat(
+        [
+            ChatMessage(
+                role="system",
+                content="You are a professional email writer for a surrogacy agency. Always respond with valid JSON.",
+            ),
+            ChatMessage(role="user", content=prompt),
+        ],
+        temperature=0.5,
     )
 
     # Parse response
@@ -1405,6 +1446,9 @@ Be professional, warm, and concise."""
             "body": response.content,
         }
 
+    if settings.anonymize_pii and pii_mapping:
+        parsed = rehydrate_data(parsed, pii_mapping)
+
     return DraftEmailResponse(
         subject=parsed.get("subject", "Following up"),
         body=parsed.get("body", ""),
@@ -1417,10 +1461,10 @@ Be professional, warm, and concise."""
 @router.post(
     "/analyze-dashboard",
     response_model=AnalyzeDashboardResponse,
-    dependencies=[Depends(require_csrf_header)],
+    dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
 @limiter.limit("10/minute")
-def analyze_dashboard(
+async def analyze_dashboard(
     request: Request,
     db: Session = Depends(get_db),
     session: UserSession = Depends(require_all_permissions([P.AI_USE, P.REPORTS_VIEW])),
@@ -1433,6 +1477,11 @@ def analyze_dashboard(
     settings = ai_settings_service.get_ai_settings(db, session.org_id)
     if not settings or not settings.is_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="AI is not enabled")
+    if ai_settings_service.is_consent_required(settings):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="AI consent not accepted",
+        )
 
     # Gather dashboard stats
     now = datetime.now(timezone.utc)
@@ -1510,19 +1559,15 @@ Focus on:
 
     provider = get_provider(settings.provider, api_key, settings.model)
 
-    import asyncio
-
-    response = asyncio.get_event_loop().run_until_complete(
-        provider.chat(
-            [
-                ChatMessage(
-                    role="system",
-                    content="You are a CRM analytics expert for a surrogacy agency. Provide actionable business insights. Always respond with valid JSON.",
-                ),
-                ChatMessage(role="user", content=prompt),
-            ],
-            temperature=0.4,
-        )
+    response = await provider.chat(
+        [
+            ChatMessage(
+                role="system",
+                content="You are a CRM analytics expert for a surrogacy agency. Provide actionable business insights. Always respond with valid JSON.",
+            ),
+            ChatMessage(role="user", content=prompt),
+        ],
+        temperature=0.4,
     )
 
     # Parse response
@@ -1604,7 +1649,7 @@ class SaveWorkflowResponse(BaseModel):
 @router.post(
     "/workflows/generate",
     response_model=GenerateWorkflowResponse,
-    dependencies=[Depends(require_csrf_header)],
+    dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
 @limiter.limit("10/minute")
 def generate_workflow(
@@ -1748,16 +1793,22 @@ class ParseScheduleRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=10000)
     # At least one entity ID must be provided
     surrogate_id: uuid.UUID | None = None
-    surrogate_id: uuid.UUID | None = None
     intended_parent_id: uuid.UUID | None = None
     match_id: uuid.UUID | None = None
     user_timezone: str | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_case_id(cls, values):
+        if isinstance(values, dict) and not values.get("surrogate_id") and values.get("case_id"):
+            values["surrogate_id"] = values["case_id"]
+        return values
+
     @model_validator(mode="after")
     def _validate_entity_ids(self):
-        if not any([self.surrogate_id, self.surrogate_id, self.intended_parent_id, self.match_id]):
+        if not any([self.surrogate_id, self.intended_parent_id, self.match_id]):
             raise ValueError(
-                "At least one of surrogate_id, surrogate_id, intended_parent_id, or match_id must be provided"
+                "At least one of surrogate_id, intended_parent_id, or match_id must be provided"
             )
         return self
 
@@ -1774,7 +1825,7 @@ class ParseScheduleResponse(BaseModel):
 @router.post(
     "/parse-schedule",
     response_model=ParseScheduleResponse,
-    dependencies=[Depends(require_csrf_header)],
+    dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
 @limiter.limit("10/minute")
 async def parse_schedule(
@@ -1802,9 +1853,9 @@ async def parse_schedule(
     # Verify entity exists and belongs to org
     entity_type = None
     entity_id = None
+    known_names: list[str] = []
 
-    # NOTE: surrogate_id is treated as a surrogate_id alias (the CRM uses Surrogate as the surrogate record)
-    surrogate_id = body.surrogate_id or body.surrogate_id
+    surrogate_id = body.surrogate_id
     if surrogate_id:
         surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
         if not surrogate:
@@ -1817,6 +1868,9 @@ async def parse_schedule(
             db=db,
             org_id=session.org_id,
         )
+        if surrogate.full_name:
+            known_names.append(surrogate.full_name)
+            known_names.extend(surrogate.full_name.split())
         entity_type = "case"
         entity_id = surrogate_id
     elif body.intended_parent_id:
@@ -1826,6 +1880,9 @@ async def parse_schedule(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Intended parent not found",
             )
+        if parent.full_name:
+            known_names.append(parent.full_name)
+            known_names.extend(parent.full_name.split())
         entity_type = "intended_parent"
         entity_id = body.intended_parent_id
     elif body.match_id:
@@ -1843,6 +1900,9 @@ async def parse_schedule(
                     db=db,
                     org_id=session.org_id,
                 )
+                if surrogate.full_name:
+                    known_names.append(surrogate.full_name)
+                    known_names.extend(surrogate.full_name.split())
         entity_type = "match"
         entity_id = body.match_id
 
@@ -1858,6 +1918,7 @@ async def parse_schedule(
         org_id=session.org_id,
         text=body.text,
         user_timezone=body.user_timezone,
+        known_names=known_names or None,
     )
 
     return ParseScheduleResponse(
@@ -1885,16 +1946,22 @@ class BulkTaskCreateRequest(BaseModel):
     request_id: uuid.UUID  # Idempotency key
     # At least one entity ID must be provided
     surrogate_id: uuid.UUID | None = None
-    surrogate_id: uuid.UUID | None = None
     intended_parent_id: uuid.UUID | None = None
     match_id: uuid.UUID | None = None
     tasks: list[BulkTaskItem] = Field(..., min_length=1, max_length=50)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_case_id(cls, values):
+        if isinstance(values, dict) and not values.get("surrogate_id") and values.get("case_id"):
+            values["surrogate_id"] = values["case_id"]
+        return values
+
     @model_validator(mode="after")
     def _validate_entity_ids(self):
-        if not any([self.surrogate_id, self.surrogate_id, self.intended_parent_id, self.match_id]):
+        if not any([self.surrogate_id, self.intended_parent_id, self.match_id]):
             raise ValueError(
-                "At least one of surrogate_id, surrogate_id, intended_parent_id, or match_id must be provided"
+                "At least one of surrogate_id, intended_parent_id, or match_id must be provided"
             )
         return self
 
@@ -1947,8 +2014,7 @@ async def create_bulk_tasks(
     match = None
     surrogate_for_access = None
 
-    # NOTE: surrogate_id is treated as a surrogate_id alias (the CRM uses Surrogate as the surrogate record)
-    surrogate_id = body.surrogate_id or body.surrogate_id
+    surrogate_id = body.surrogate_id
     if surrogate_id:
         surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
         if not surrogate:

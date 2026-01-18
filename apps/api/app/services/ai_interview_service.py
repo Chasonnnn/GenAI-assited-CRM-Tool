@@ -5,12 +5,13 @@ Provides AI-powered summarization for interviews using configured AI provider.
 
 import json
 import logging
+import re
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import SurrogateInterview, InterviewNote
+from app.db.models import SurrogateInterview, InterviewNote, Surrogate
 from app.services.ai_provider import ChatMessage, get_provider
 from app.services.ai_settings_service import (
     get_ai_settings,
@@ -20,6 +21,8 @@ from app.services.ai_settings_service import (
 from app.services.ai_usage_service import log_usage
 
 logger = logging.getLogger(__name__)
+
+NAME_PATTERN = re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b")
 
 
 INTERVIEW_SUMMARY_PROMPT = """Analyze the following interview transcript and notes for a surrogacy candidate.
@@ -96,6 +99,24 @@ def _parse_json_response(content: str) -> dict:
         raise AIInterviewError("Failed to parse AI response")
 
 
+def _extend_known_names_from_text(
+    known_names: list[str],
+    text: str | None,
+    max_names: int = 20,
+) -> None:
+    """Add likely full names from text to known_names for anonymization."""
+    if not text:
+        return
+    count = 0
+    for match in NAME_PATTERN.finditer(text):
+        candidate = match.group(1).strip()
+        if candidate and candidate not in known_names:
+            known_names.append(candidate)
+            count += 1
+        if count >= max_names:
+            break
+
+
 def _strip_html(content: str) -> str:
     """Convert HTML content into readable text for AI prompts."""
     import re
@@ -141,6 +162,23 @@ async def summarize_interview(
     if not transcript:
         raise AIInterviewError("Interview has no transcript to summarize")
 
+    pii_mapping = None
+    known_names: list[str] = []
+    if ai_settings.anonymize_pii:
+        from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_data
+
+        pii_mapping = PIIMapping()
+        surrogate = (
+            db.query(Surrogate)
+            .filter(Surrogate.id == interview.surrogate_id, Surrogate.organization_id == org_id)
+            .first()
+        )
+        if surrogate and surrogate.full_name:
+            known_names.append(surrogate.full_name)
+            known_names.extend(surrogate.full_name.split())
+        _extend_known_names_from_text(known_names, transcript)
+        transcript = anonymize_text(transcript, pii_mapping, known_names)
+
     # Get notes
     notes = db.scalars(
         select(InterviewNote).where(
@@ -149,6 +187,9 @@ async def summarize_interview(
         )
     ).all()
     notes_text = "\n".join([_strip_html(n.content) for n in notes]) if notes else "No notes"
+    if ai_settings.anonymize_pii and pii_mapping:
+        _extend_known_names_from_text(known_names, notes_text)
+        notes_text = anonymize_text(notes_text, pii_mapping, known_names)
 
     # Build prompt
     prompt = INTERVIEW_SUMMARY_PROMPT.format(
@@ -178,6 +219,8 @@ async def summarize_interview(
 
         # Parse response
         result = _parse_json_response(response.content)
+        if ai_settings.anonymize_pii and pii_mapping:
+            result = rehydrate_data(result, pii_mapping)
 
         # Record usage
         log_usage(
@@ -246,6 +289,21 @@ async def summarize_all_interviews(
     if not interviews:
         raise AIInterviewError("No interviews found for this surrogate")
 
+    pii_mapping = None
+    known_names: list[str] = []
+    if ai_settings.anonymize_pii:
+        from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_data
+
+        pii_mapping = PIIMapping()
+        surrogate = (
+            db.query(Surrogate)
+            .filter(Surrogate.id == surrogate_id, Surrogate.organization_id == org_id)
+            .first()
+        )
+        if surrogate and surrogate.full_name:
+            known_names.append(surrogate.full_name)
+            known_names.extend(surrogate.full_name.split())
+
     # Build content for all interviews
     interviews_content = []
     for interview in interviews:
@@ -257,6 +315,11 @@ async def summarize_all_interviews(
             )
         ).all()
         notes_text = "\n".join([_strip_html(n.content) for n in notes]) if notes else "No notes"
+        if ai_settings.anonymize_pii and pii_mapping:
+            _extend_known_names_from_text(known_names, transcript)
+            _extend_known_names_from_text(known_names, notes_text)
+            transcript = anonymize_text(transcript, pii_mapping, known_names)
+            notes_text = anonymize_text(notes_text, pii_mapping, known_names)
 
         interviews_content.append(
             f"""--- Interview {len(interviews_content) + 1} ---
@@ -304,6 +367,8 @@ Notes:
 
         # Parse response
         result = _parse_json_response(response.content)
+        if ai_settings.anonymize_pii and pii_mapping:
+            result = rehydrate_data(result, pii_mapping)
 
         # Record usage
         log_usage(

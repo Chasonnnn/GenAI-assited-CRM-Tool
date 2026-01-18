@@ -2,10 +2,14 @@
 Tests for AI workflow generation and action execution.
 """
 
+import json
 import uuid
+from datetime import datetime, timezone
 
 from app.core.encryption import hash_email
-from app.db.models import Surrogate, EntityNote, Task, EmailTemplate, PipelineStage
+from app.db.models import Surrogate, EntityNote, Task, EmailTemplate, PipelineStage, AISettings
+from app.services import ai_settings_service
+from app.services.ai_provider import ChatResponse
 from app.services.ai_workflow_service import GeneratedWorkflow, validate_workflow
 from app.services.ai_action_executor import (
     AddNoteExecutor,
@@ -20,6 +24,64 @@ from app.utils.normalization import normalize_email
 # =============================================================================
 # AI Workflow Validation Tests
 # =============================================================================
+
+
+def test_ai_workflow_prompt_anonymizes_users(db, test_org, test_user, monkeypatch):
+    settings = AISettings(
+        organization_id=test_org.id,
+        is_enabled=True,
+        provider="openai",
+        model="gpt-4o-mini",
+        current_version=1,
+        anonymize_pii=True,
+        consent_accepted_at=datetime.now(timezone.utc),
+        consent_accepted_by=test_user.id,
+        api_key_encrypted=ai_settings_service.encrypt_api_key("sk-test"),
+    )
+    db.add(settings)
+    db.flush()
+
+    captured = []
+    workflow_payload = {
+        "name": "Test Workflow",
+        "description": "Test",
+        "icon": "zap",
+        "trigger_type": "surrogate_created",
+        "trigger_config": {},
+        "conditions": [],
+        "condition_logic": "AND",
+        "actions": [{"action_type": "add_note", "content": "Hello"}],
+    }
+
+    class StubProvider:
+        async def chat(self, messages, **kwargs):  # noqa: ARG002
+            captured.extend(messages)
+            return ChatResponse(
+                content=json.dumps(workflow_payload),
+                prompt_tokens=10,
+                completion_tokens=5,
+                total_tokens=15,
+                model="gpt-4o-mini",
+            )
+
+    monkeypatch.setattr(
+        "app.services.ai_provider.get_provider",
+        lambda *_args, **_kwargs: StubProvider(),
+    )
+
+    from app.services import ai_workflow_service
+
+    result = ai_workflow_service.generate_workflow(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        description="Create a workflow",
+    )
+
+    combined = "\n".join(msg.content for msg in captured)
+    assert test_user.email not in combined
+    assert test_user.display_name not in combined
+    assert result.success is True
 
 
 class TestWorkflowValidation:
