@@ -38,16 +38,16 @@ export const STAGE_DEFS: StageDef[] = [
         "stageType": "intake"
     },
     {
-        "slug": "interview_scheduled",
-        "label": "Interview Scheduled",
-        "color": "#A855F7",
+        "slug": "application_submitted",
+        "label": "Application Submitted",
+        "color": "#8B5CF6",
         "order": 4,
         "stageType": "intake"
     },
     {
-        "slug": "application_submitted",
-        "label": "Application Submitted",
-        "color": "#8B5CF6",
+        "slug": "interview_scheduled",
+        "label": "Interview Scheduled",
+        "color": "#A855F7",
         "order": 5,
         "stageType": "intake"
     },
@@ -177,8 +177,8 @@ export const DEFAULT_STAGE_ORDER: string[] = [
     "new_unread",
     "contacted",
     "qualified",
-    "interview_scheduled",
     "application_submitted",
+    "interview_scheduled",
     "under_review",
     "approved",
     "ready_to_match",
