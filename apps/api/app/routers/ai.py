@@ -1346,6 +1346,8 @@ async def draft_email(
     if not settings or not settings.is_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="AI is not enabled")
     if ai_settings_service.is_consent_required(settings):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="AI consent not accepted")
+    if ai_settings_service.is_consent_required(settings):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="AI consent not accepted",
