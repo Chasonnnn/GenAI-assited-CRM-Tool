@@ -8,9 +8,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
-import asyncio
 import logging
 import threading
+import asyncio
+import anyio
 from sqlalchemy.orm import Session
 
 from app.db.enums import NotificationType, Role, OwnerType
@@ -284,22 +285,19 @@ def mark_all_read(
 
 def _schedule_ws_send(coro: asyncio.Future) -> None:
     """Schedule websocket sends without blocking the request cycle."""
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-
-    if loop and loop.is_running():
-        loop.create_task(coro)
-        return
-
-    def _runner() -> None:
+    async def _runner() -> None:
         try:
-            asyncio.run(coro)
+            await coro
         except Exception:
             logger.exception("Failed to push websocket notification")
 
-    threading.Thread(target=_runner, daemon=True).start()
+    async def _spawn() -> None:
+        asyncio.create_task(_runner())
+
+    try:
+        anyio.from_thread.run(_spawn)
+    except RuntimeError:
+        threading.Thread(target=lambda: anyio.run(_runner), daemon=True).start()
 
 
 async def _send_ws_updates(user_id: UUID, notification: Notification, unread_count: int) -> None:

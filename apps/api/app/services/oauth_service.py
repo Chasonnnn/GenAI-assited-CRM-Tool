@@ -14,6 +14,7 @@ from cryptography.fernet import Fernet
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.async_utils import run_async
 from app.db.models import UserIntegration
 from app.types import JsonObject
 
@@ -396,10 +397,8 @@ def _log_token_refresh(db: Session, integration: UserIntegration, integration_ty
 def refresh_token(db: Session, integration: UserIntegration, integration_type: str) -> bool:
     """Refresh an expired token. Returns True if successful.
 
-    Note: This function creates a new event loop if needed, or uses an existing one.
+    Note: This function bridges to async refresh without creating a request-thread event loop.
     """
-    import asyncio
-
     if not integration.refresh_token_encrypted:
         return False
 
@@ -415,17 +414,7 @@ def refresh_token(db: Session, integration: UserIntegration, integration_type: s
         return None
 
     try:
-        # Check if we're in an existing event loop
-        try:
-            asyncio.get_running_loop()
-            # We're in an async context - create a task
-            import concurrent.futures
-
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                result = pool.submit(asyncio.run, do_refresh()).result()
-        except RuntimeError:
-            # No event loop running - safe to use asyncio.run
-            result = asyncio.run(do_refresh())
+        result = run_async(do_refresh())
 
         if not result:
             return False

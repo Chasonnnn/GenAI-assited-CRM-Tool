@@ -10,8 +10,11 @@ from uuid import UUID
 import asyncio
 import json
 import os
+import logging
 
 from fastapi import WebSocket
+
+logger = logging.getLogger(__name__)
 
 
 class ConnectionManager:
@@ -83,19 +86,37 @@ class ConnectionManager:
         """Send a message to all connections for a specific user."""
         async with self._lock:
             connections = self._connections.get(user_id, set()).copy()
+            org_id = self._user_orgs.get(user_id)
 
         if not connections:
             return
 
         data = json.dumps(message)
         closed = []
+        errors: list[Exception] = []
 
         for ws in connections:
             try:
                 await ws.send_text(data)
-            except Exception:
+            except Exception as exc:
                 # Connection closed or errored
                 closed.append(ws)
+                errors.append(exc)
+
+        if errors:
+            message_type = message.get("type")
+            logger.warning(
+                "ws_send_failed",
+                extra={
+                    "event": "ws_send_failed",
+                    "user_id": str(user_id),
+                    "org_id": str(org_id) if org_id else None,
+                    "message_type": message_type,
+                    "failed_count": len(errors),
+                    "connection_count": len(connections),
+                    "error_class": errors[0].__class__.__name__,
+                },
+            )
 
         # Clean up closed connections
         if closed:
