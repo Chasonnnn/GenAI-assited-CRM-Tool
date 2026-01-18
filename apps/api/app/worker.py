@@ -25,7 +25,7 @@ from app.core.gcp_monitoring import report_exception, setup_gcp_monitoring
 from app.core.structured_logging import build_log_context
 from app.db.session import SessionLocal
 from app.db.models import EmailLog
-from app.db.enums import JobType
+from app.db.enums import JobType, JobStatus
 from app.services import job_service, email_service
 
 monitoring = setup_gcp_monitoring(f"{settings.GCP_SERVICE_NAME}-worker")
@@ -757,6 +757,14 @@ async def worker_loop() -> None:
                         # Record failure for integration health
                         _record_job_failure(db, job, error_msg, exception=e)
 
+                        if job.job_type == JobType.AI_CHAT.value and job.status == JobStatus.FAILED.value:
+                            payload = job.payload or {}
+                            if "message" in payload or "message_encrypted" in payload:
+                                payload.pop("message", None)
+                                payload.pop("message_encrypted", None)
+                                job.payload = payload
+                                db.commit()
+
                         # Also mark email as failed if applicable
                         if job.job_type == JobType.SEND_EMAIL.value:
                             email_log_id = job.payload.get("email_log_id")
@@ -970,12 +978,20 @@ async def process_admin_export(db, job) -> None:
 async def process_ai_chat(db, job) -> None:
     """Process AI chat job."""
     from app.services import ai_chat_service, oauth_service
+    from app.core.encryption import decrypt_value
 
     payload = job.payload or {}
     user_id = payload.get("user_id")
     message = payload.get("message")
+    message_encrypted = payload.get("message_encrypted")
     entity_type = payload.get("entity_type") or "global"
     entity_id = payload.get("entity_id")
+
+    if message_encrypted:
+        try:
+            message = decrypt_value(message_encrypted)
+        except Exception:
+            raise Exception("Failed to decrypt AI chat message")
 
     if not user_id or not message:
         raise Exception("Missing user_id or message in AI chat payload")
@@ -1002,6 +1018,7 @@ async def process_ai_chat(db, job) -> None:
 
     updated_payload = dict(payload)
     updated_payload.pop("message", None)
+    updated_payload.pop("message_encrypted", None)
     updated_payload["result"] = {
         "content": result.get("content"),
         "proposed_actions": result.get("proposed_actions", []),

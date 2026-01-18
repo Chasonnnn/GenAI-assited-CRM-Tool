@@ -154,6 +154,9 @@ class SurrogateActivityType(str, Enum):
     MEDICAL_INFO_UPDATED = "medical_info_updated"
     INSURANCE_INFO_UPDATED = "insurance_info_updated"
     PREGNANCY_DATES_UPDATED = "pregnancy_dates_updated"
+    # Journey featured images
+    JOURNEY_IMAGE_SET = "journey_image_set"
+    JOURNEY_IMAGE_CLEARED = "journey_image_cleared"
 
 
 class MatchStatus(str, Enum):
