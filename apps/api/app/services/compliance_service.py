@@ -28,6 +28,11 @@ from app.db.models import (
     Match,
     Task,
     User,
+    AIConversation,
+    AIMessage,
+    AIActionApproval,
+    AIUsageLog,
+    AIEntitySummary,
 )
 from app.services import audit_service, job_service
 
@@ -575,6 +580,11 @@ def seed_default_retention_policies(
         "tasks",
         "entity_notes",
         "surrogate_activity",
+        "ai_conversations",
+        "ai_messages",
+        "ai_action_approvals",
+        "ai_usage_log",
+        "ai_entity_summaries",
     ]
     existing = {policy.entity_type for policy in list_retention_policies(db, org_id)}
     created: list[DataRetentionPolicy] = []
@@ -822,6 +832,99 @@ def _build_retention_query(
         if entity_hold_ids.get("surrogate_activity"):
             query = query.filter(
                 ~SurrogateActivityLog.id.in_(entity_hold_ids["surrogate_activity"])
+            )
+        return query
+    if entity_type == "ai_conversations":
+        query = db.query(AIConversation).filter(
+            AIConversation.organization_id == org_id,
+            AIConversation.updated_at < cutoff,
+        )
+        if surrogate_hold_ids:
+            query = query.filter(
+                or_(
+                    ~AIConversation.entity_type.in_(("surrogate", "case")),
+                    ~AIConversation.entity_id.in_(surrogate_hold_ids),
+                )
+            )
+        if entity_hold_ids.get("ai_conversation"):
+            query = query.filter(~AIConversation.id.in_(entity_hold_ids["ai_conversation"]))
+        return query
+    if entity_type == "ai_messages":
+        query = (
+            db.query(AIMessage)
+            .join(AIConversation, AIMessage.conversation_id == AIConversation.id)
+            .filter(
+                AIConversation.organization_id == org_id,
+                AIMessage.created_at < cutoff,
+            )
+        )
+        if surrogate_hold_ids:
+            query = query.filter(
+                or_(
+                    ~AIConversation.entity_type.in_(("surrogate", "case")),
+                    ~AIConversation.entity_id.in_(surrogate_hold_ids),
+                )
+            )
+        if entity_hold_ids.get("ai_message"):
+            query = query.filter(~AIMessage.id.in_(entity_hold_ids["ai_message"]))
+        return query
+    if entity_type == "ai_action_approvals":
+        query = (
+            db.query(AIActionApproval)
+            .join(AIMessage, AIActionApproval.message_id == AIMessage.id)
+            .join(AIConversation, AIMessage.conversation_id == AIConversation.id)
+            .filter(
+                AIConversation.organization_id == org_id,
+                AIActionApproval.created_at < cutoff,
+            )
+        )
+        if surrogate_hold_ids:
+            query = query.filter(
+                or_(
+                    ~AIConversation.entity_type.in_(("surrogate", "case")),
+                    ~AIConversation.entity_id.in_(surrogate_hold_ids),
+                )
+            )
+        if entity_hold_ids.get("ai_action_approval"):
+            query = query.filter(
+                ~AIActionApproval.id.in_(entity_hold_ids["ai_action_approval"])
+            )
+        return query
+    if entity_type == "ai_usage_log":
+        query = (
+            db.query(AIUsageLog)
+            .outerjoin(AIConversation, AIUsageLog.conversation_id == AIConversation.id)
+            .filter(
+                AIUsageLog.organization_id == org_id,
+                AIUsageLog.created_at < cutoff,
+            )
+        )
+        if surrogate_hold_ids:
+            query = query.filter(
+                or_(
+                    AIConversation.id.is_(None),
+                    ~AIConversation.entity_type.in_(("surrogate", "case")),
+                    ~AIConversation.entity_id.in_(surrogate_hold_ids),
+                )
+            )
+        if entity_hold_ids.get("ai_usage_log"):
+            query = query.filter(~AIUsageLog.id.in_(entity_hold_ids["ai_usage_log"]))
+        return query
+    if entity_type == "ai_entity_summaries":
+        query = db.query(AIEntitySummary).filter(
+            AIEntitySummary.organization_id == org_id,
+            AIEntitySummary.updated_at < cutoff,
+        )
+        if surrogate_hold_ids:
+            query = query.filter(
+                or_(
+                    ~AIEntitySummary.entity_type.in_(("surrogate", "case")),
+                    ~AIEntitySummary.entity_id.in_(surrogate_hold_ids),
+                )
+            )
+        if entity_hold_ids.get("ai_entity_summary"):
+            query = query.filter(
+                ~AIEntitySummary.id.in_(entity_hold_ids["ai_entity_summary"])
             )
         return query
     raise ValueError(f"Unsupported retention entity type: {entity_type}")
