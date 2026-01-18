@@ -91,6 +91,7 @@ vi.mock('@/lib/hooks/use-attachments', () => ({
     useUploadIPAttachment: () => ({ mutateAsync: async () => ({}), isPending: false }),
     useDeleteAttachment: () => ({ mutateAsync: async () => ({}), isPending: false }),
     useDownloadAttachment: () => ({ mutate: () => { }, isPending: false }),
+    useAttachmentDownloadUrl: () => ({ mutateAsync: async () => ({ download_url: "" }), isPending: false }),
 }))
 
 // Mock tasks hook

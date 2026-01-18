@@ -121,7 +121,7 @@ export interface WorkflowOptions {
     email_templates: { id: string; name: string }[]
     users: { id: string; display_name: string }[]
     queues: { id: string; name: string }[]
-    statuses: { value: string; label: string }[]
+    statuses: { id?: string; value: string; label: string; is_active?: boolean }[]
 }
 
 export interface WorkflowTestRequest {

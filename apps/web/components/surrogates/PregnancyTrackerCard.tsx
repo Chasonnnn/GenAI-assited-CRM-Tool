@@ -5,7 +5,6 @@ import { HeartPulseIcon } from "lucide-react"
 import { parseISO, differenceInDays, addDays, format, isValid } from "date-fns"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { InlineDateField } from "@/components/inline-date-field"
 import { SurrogateRead } from "@/lib/types/surrogate"
 import { SurrogateUpdatePayload } from "@/lib/api/surrogates"
@@ -91,8 +90,8 @@ export function PregnancyTrackerCard({
     const hasManualDueDate = !!surrogateData.pregnancy_due_date
     const [isEditingDueDate, setIsEditingDueDate] = useState(false)
 
-    const handleClearDueDateOverride = async () => {
-        await onUpdate({ pregnancy_due_date: null })
+    const handleEditDueDate = () => {
+        setIsEditingDueDate(true)
     }
 
     return (
@@ -156,7 +155,7 @@ export function PregnancyTrackerCard({
                         />
                     </div>
 
-                    {/* Due Date with edit/clear controls (only show if start date is set) */}
+                    {/* Due Date with inline editor (only show if start date is set) */}
                     {surrogateData.pregnancy_start_date && (
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground w-24 shrink-0">Due Date:</span>
@@ -177,41 +176,15 @@ export function PregnancyTrackerCard({
                                         {pregnancy?.dueDate ? format(pregnancy.dueDate, 'MMM d, yyyy') : '-'}
                                     </span>
 
-                                    {hasManualDueDate ? (
-                                        <>
-                                            <Badge variant="outline" className="text-xs">manual</Badge>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-6 px-2 text-xs"
-                                                onClick={() => setIsEditingDueDate(true)}
-                                            >
-                                                Edit
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-6 px-2 text-xs text-muted-foreground"
-                                                onClick={handleClearDueDateOverride}
-                                            >
-                                                Reset to calculated
-                                            </Button>
-                                        </>
-                                    ) : (
-                                        <>
-                                            {pregnancy?.calculatedDueDate && (
-                                                <Badge variant="secondary" className="text-xs">calculated</Badge>
-                                            )}
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-6 px-2 text-xs"
-                                                onClick={() => setIsEditingDueDate(true)}
-                                            >
-                                                Override
-                                            </Button>
-                                        </>
-                                    )}
+                                    <Badge
+                                        variant={hasManualDueDate ? "outline" : "secondary"}
+                                        className="text-xs cursor-pointer select-none"
+                                        render={<button type="button" />}
+                                        onClick={handleEditDueDate}
+                                        title="Edit due date"
+                                    >
+                                        {hasManualDueDate ? "manual" : "calculated"}
+                                    </Badge>
                                 </>
                             )}
                         </div>

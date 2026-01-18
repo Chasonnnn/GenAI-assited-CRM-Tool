@@ -155,6 +155,8 @@ export default function AutomationPage() {
     const { data: workflows, isLoading: workflowsLoading } = useWorkflows()
     const { data: stats, isLoading: statsLoading } = useWorkflowStats()
     const { data: options } = useWorkflowOptions()
+    const statusOptions = options?.statuses ?? []
+    const activeStatusOptions = statusOptions.filter((status) => status.is_active !== false)
     const { data: executions } = useWorkflowExecutions(selectedWorkflowId || "", { limit: 20 })
 
     const createWorkflow = useCreateWorkflow()
@@ -656,13 +658,13 @@ export default function AutomationPage() {
                                                 <SelectValue placeholder="Select status">
                                                     {(value: string | null) => {
                                                         if (!value) return "Select status"
-                                                        const status = options?.statuses.find(s => s.value === value)
+                                                        const status = statusOptions.find((s) => s.value === value)
                                                         return status?.label ?? value
                                                     }}
                                                 </SelectValue>
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {options?.statuses.map((s) => (
+                                                {activeStatusOptions.map((s) => (
                                                     <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
                                                 ))}
                                             </SelectContent>
