@@ -3,7 +3,7 @@
  * Matches backend stage-based pipeline model.
  */
 
-export type SurrogateSource = 'manual' | 'meta' | 'website' | 'referral';
+export type SurrogateSource = 'manual' | 'meta' | 'website' | 'referral' | 'import' | 'agency';
 
 // List item (minimal for table display)
 export interface SurrogateListItem {

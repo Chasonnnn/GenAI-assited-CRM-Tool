@@ -39,6 +39,7 @@ class SurrogateCreate(BaseModel):
     # Workflow
     source: SurrogateSource = SurrogateSource.MANUAL
     is_priority: bool = False
+    assign_to_user: bool | None = None
 
     # =========================================================================
     # INSURANCE INFO

@@ -74,6 +74,7 @@ export interface SurrogateCreatePayload {
     num_csections?: number;
     source?: SurrogateSource;
     is_priority?: boolean;
+    assign_to_user?: boolean;
 }
 
 // Update surrogate payload (partial; mirrors backend SurrogateUpdate schema)
