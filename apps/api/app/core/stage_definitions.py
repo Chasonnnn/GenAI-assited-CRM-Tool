@@ -50,6 +50,12 @@ STAGE_TYPE_MAP = {
     "disqualified": "terminal",
 }
 
+LABEL_OVERRIDES = {
+    "second_hcg_confirmed": "Second hCG confirmed",
+    "transfer_cycle": "Transfer Cycle Initiated",
+    "ob_care_established": "OB Care Established",
+}
+
 DEFAULT_STAGE_ORDER = [
     "new_unread",
     "contacted",
@@ -67,9 +73,9 @@ DEFAULT_STAGE_ORDER = [
     "heartbeat_confirmed",
     "ob_care_established",
     "anatomy_scanned",
+    "delivered",
     "lost",
     "disqualified",
-    "delivered",
 ]
 
 
@@ -80,7 +86,7 @@ def get_default_stage_defs() -> list[dict[str, object]]:
         stages.append(
             {
                 "slug": slug,
-                "label": slug.replace("_", " ").title(),
+                "label": LABEL_OVERRIDES.get(slug, slug.replace("_", " ").title()),
                 "color": DEFAULT_COLORS.get(slug, "#6B7280"),
                 "order": order,
                 "stage_type": STAGE_TYPE_MAP.get(slug, "intake"),
