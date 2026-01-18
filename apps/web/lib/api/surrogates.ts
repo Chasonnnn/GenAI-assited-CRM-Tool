@@ -40,6 +40,11 @@ export interface SurrogateStats {
     pending_tasks: number;
 }
 
+export interface SurrogateStatsParams {
+    pipeline_id?: string;
+    owner_id?: string;
+}
+
 // Status history entry
 export interface SurrogateStatusHistory {
     id: string;
@@ -195,8 +200,12 @@ export interface SurrogateSendEmailResponse {
 /**
  * Get surrogate statistics for dashboard.
  */
-export function getSurrogateStats(): Promise<SurrogateStats> {
-    return api.get<SurrogateStats>('/surrogates/stats');
+export function getSurrogateStats(params: SurrogateStatsParams = {}): Promise<SurrogateStats> {
+    const searchParams = new URLSearchParams();
+    if (params.pipeline_id) searchParams.set('pipeline_id', params.pipeline_id);
+    if (params.owner_id) searchParams.set('owner_id', params.owner_id);
+    const query = searchParams.toString();
+    return api.get<SurrogateStats>(`/surrogates/stats${query ? `?${query}` : ''}`);
 }
 
 export function getSurrogates(params: SurrogateListParams = {}): Promise<SurrogateListResponse> {

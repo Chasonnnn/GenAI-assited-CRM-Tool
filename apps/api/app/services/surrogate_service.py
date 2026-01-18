@@ -1366,7 +1366,12 @@ def hard_delete_surrogate(db: Session, surrogate: Surrogate) -> bool:
     return True
 
 
-def get_surrogate_stats(db: Session, org_id: UUID) -> dict:
+def get_surrogate_stats(
+    db: Session,
+    org_id: UUID,
+    pipeline_id: UUID | None = None,
+    owner_id: UUID | None = None,
+) -> dict:
     """
     Get aggregated surrogatestatistics for dashboard.
 
@@ -1382,23 +1387,46 @@ def get_surrogate_stats(db: Session, org_id: UUID) -> dict:
     month_ago = now - timedelta(days=30)
     two_months_ago = now - timedelta(days=60)
 
+    from app.db.models import Task, PipelineStage
+    from app.db.enums import TaskType
+
     # Base query for non-archived surrogates
     base = db.query(Surrogate).filter(
         Surrogate.organization_id == org_id,
         Surrogate.is_archived.is_(False),
     )
+    if pipeline_id:
+        base = base.join(PipelineStage, Surrogate.stage_id == PipelineStage.id).filter(
+            PipelineStage.pipeline_id == pipeline_id
+        )
+    if owner_id:
+        base = base.filter(
+            Surrogate.owner_type == OwnerType.USER.value,
+            Surrogate.owner_id == owner_id,
+        )
 
     # Total count
     total = base.count()
 
     # Count by status
-    status_counts = (
+    status_query = (
         db.query(Surrogate.status_label, func.count(Surrogate.id).label("count"))
         .filter(
             Surrogate.organization_id == org_id,
             Surrogate.is_archived.is_(False),
         )
-        .group_by(Surrogate.status_label)
+    )
+    if pipeline_id:
+        status_query = status_query.join(PipelineStage, Surrogate.stage_id == PipelineStage.id).filter(
+            PipelineStage.pipeline_id == pipeline_id
+        )
+    if owner_id:
+        status_query = status_query.filter(
+            Surrogate.owner_type == OwnerType.USER.value,
+            Surrogate.owner_id == owner_id,
+        )
+    status_counts = (
+        status_query.group_by(Surrogate.status_label)
         .all()
     )
 
@@ -1426,19 +1454,30 @@ def get_surrogate_stats(db: Session, org_id: UUID) -> dict:
     month_change_pct = calc_change_pct(this_month, last_month)
 
     # Pending tasks count (for dashboard)
-    from app.db.models import Task
-    from app.db.enums import TaskType
-
-    pending_tasks = (
+    task_query = (
         db.query(func.count(Task.id))
         .filter(
             Task.organization_id == org_id,
             Task.is_completed.is_(False),
             Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
         )
-        .scalar()
-        or 0
     )
+    if owner_id:
+        task_query = task_query.filter(
+            Task.owner_type == OwnerType.USER.value,
+            Task.owner_id == owner_id,
+        )
+    if pipeline_id:
+        task_query = (
+            task_query.join(Surrogate, Task.surrogate_id == Surrogate.id)
+            .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
+            .filter(
+                Surrogate.organization_id == org_id,
+                Surrogate.is_archived.is_(False),
+                PipelineStage.pipeline_id == pipeline_id,
+            )
+        )
+    pending_tasks = task_query.scalar() or 0
 
     return {
         "total": total,

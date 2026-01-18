@@ -401,6 +401,7 @@ def list_tasks(
     owner_id: UUID | None = None,
     surrogate_id: UUID | None = None,
     intended_parent_id: UUID | None = None,
+    pipeline_id: UUID | None = None,
     is_completed: bool | None = None,
     task_type: TaskType | None = None,
     status: str | None = None,
@@ -487,6 +488,20 @@ def list_tasks(
     # Surrogate filter
     if surrogate_id:
         query = query.filter(Task.surrogate_id == surrogate_id)
+
+    # Pipeline filter (only tasks tied to surrogates in pipeline)
+    if pipeline_id:
+        from app.db.models import PipelineStage
+
+        query = (
+            query.join(Surrogate, Task.surrogate_id == Surrogate.id)
+            .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
+            .filter(
+                Surrogate.organization_id == org_id,
+                Surrogate.is_archived.is_(False),
+                PipelineStage.pipeline_id == pipeline_id,
+            )
+        )
 
     # Intended Parent filter
     if intended_parent_id:

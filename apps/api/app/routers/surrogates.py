@@ -14,7 +14,7 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
-from app.db.enums import AuditEventType, SurrogateSource, OwnerType
+from app.db.enums import AuditEventType, SurrogateSource, OwnerType, Role
 from app.db.models import User
 from app.schemas.auth import UserSession
 from app.schemas.surrogate import (
@@ -199,9 +199,19 @@ def _surrogate_to_list_item(
 def get_surrogate_stats(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
+    pipeline_id: UUID | None = Query(None, description="Filter by pipeline UUID"),
+    owner_id: UUID | None = Query(None, description="Filter by owner UUID"),
 ):
     """Get aggregated surrogate statistics for dashboard with period comparisons."""
-    stats = surrogate_service.get_surrogate_stats(db, session.org_id)
+    if owner_id and owner_id != session.user_id and session.role not in (Role.ADMIN, Role.DEVELOPER):
+        raise HTTPException(status_code=403, detail="Not authorized to view other users' stats")
+
+    stats = surrogate_service.get_surrogate_stats(
+        db,
+        session.org_id,
+        pipeline_id=pipeline_id,
+        owner_id=owner_id,
+    )
 
     return SurrogateStats(
         total=stats["total"],

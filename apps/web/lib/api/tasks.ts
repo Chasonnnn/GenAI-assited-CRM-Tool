@@ -79,6 +79,7 @@ export interface TaskListParams {
     owner_id?: string;
     surrogate_id?: string;
     intended_parent_id?: string;
+    pipeline_id?: string;
     is_completed?: boolean;
     task_type?: TaskType;
     status?: TaskStatus | TaskStatus[];
@@ -117,6 +118,7 @@ export function getTasks(params: TaskListParams = {}): Promise<TaskListResponse>
     if (params.owner_id) searchParams.set('owner_id', params.owner_id);
     if (params.surrogate_id) searchParams.set('surrogate_id', params.surrogate_id);
     if (params.intended_parent_id) searchParams.set('intended_parent_id', params.intended_parent_id);
+    if (params.pipeline_id) searchParams.set('pipeline_id', params.pipeline_id);
     if (params.is_completed !== undefined) searchParams.set('is_completed', String(params.is_completed));
     if (params.task_type) searchParams.set('task_type', params.task_type);
     if (params.status) {

@@ -21,10 +21,10 @@ export const surrogateKeys = {
  * Fetch surrogate statistics for dashboard.
  * Auto-refreshes every 60 seconds for real-time updates.
  */
-export function useSurrogateStats() {
+export function useSurrogateStats(params: surrogatesApi.SurrogateStatsParams = {}) {
     return useQuery({
-        queryKey: surrogateKeys.stats(),
-        queryFn: surrogatesApi.getSurrogateStats,
+        queryKey: [...surrogateKeys.stats(), params] as const,
+        queryFn: () => surrogatesApi.getSurrogateStats(params),
         staleTime: 30 * 1000, // 30 seconds
         refetchInterval: (query) => (query.state.status === 'error' ? false : 60 * 1000),
     });
