@@ -441,6 +441,7 @@ class SurrogateListItem(BaseModel):
     # Calculated fields for table display
     age: int | None = None  # Calculated from date_of_birth
     bmi: float | None = None  # Calculated from height_ft and weight_lb
+    last_activity_at: datetime | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
