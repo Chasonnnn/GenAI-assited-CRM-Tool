@@ -76,3 +76,20 @@ If using S3 exports, include the export bucket in your S3 DR plan.
 ## Notes
 - Restores require the original encryption keys to read encrypted fields.
 - For production, schedule automated backups (daily) and test restores monthly.
+
+## Quarterly Restore Test (Required)
+Run a full restore test quarterly and record the outcome.
+
+### Procedure
+1. Select the most recent production backup artifact.
+2. Restore into an isolated environment (staging or a dedicated restore sandbox).
+3. Verify encryption keys are loaded (`FERNET_KEY`, `DATA_ENCRYPTION_KEY`, `PII_HASH_KEY`, `META_ENCRYPTION_KEY`, `VERSION_ENCRYPTION_KEY`).
+4. Run basic data checks:
+   - `select count(*) from organizations;`
+   - Spot-check a surrogate + intended parent record.
+5. Record results below.
+
+### Restore Test Log
+| Date (UTC) | Environment | Backup Artifact | Result | Verified By | Notes |
+|---|---|---|---|---|---|
+| | | | | | |
