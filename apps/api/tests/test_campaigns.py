@@ -205,6 +205,46 @@ def test_campaign_service_create(db, test_org, test_user, test_template):
     assert campaign.status == "draft"
 
 
+def test_campaign_preview_filters_intended_parent_status(db, test_org):
+    from app.db.enums import IntendedParentStatus
+    from app.db.models import IntendedParent
+    from app.services import campaign_service
+
+    email_new = normalize_email("ip.new@example.com")
+    email_matched = normalize_email("ip.matched@example.com")
+
+    ip_new = IntendedParent(
+        id=uuid4(),
+        organization_id=test_org.id,
+        intended_parent_number="I10001",
+        full_name="IP New",
+        email=email_new,
+        email_hash=hash_email(email_new),
+        status=IntendedParentStatus.NEW.value,
+    )
+    ip_matched = IntendedParent(
+        id=uuid4(),
+        organization_id=test_org.id,
+        intended_parent_number="I10002",
+        full_name="IP Matched",
+        email=email_matched,
+        email_hash=hash_email(email_matched),
+        status=IntendedParentStatus.MATCHED.value,
+    )
+    db.add_all([ip_new, ip_matched])
+    db.flush()
+
+    preview = campaign_service.preview_recipients(
+        db,
+        test_org.id,
+        "intended_parent",
+        {"stage_slugs": [IntendedParentStatus.MATCHED.value]},
+    )
+
+    assert preview.total_count == 1
+    assert preview.sample_recipients[0].entity_id == ip_matched.id
+
+
 def test_is_email_suppressed(db, test_org):
     """Test suppression checking function."""
     from app.services import campaign_service
