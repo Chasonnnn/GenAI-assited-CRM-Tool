@@ -1347,11 +1347,6 @@ async def draft_email(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="AI is not enabled")
     if ai_settings_service.is_consent_required(settings):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="AI consent not accepted")
-    if ai_settings_service.is_consent_required(settings):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="AI consent not accepted",
-        )
 
     # Load surrogate
     surrogate = surrogate_service.get_surrogate(db, session.org_id, body.surrogate_id)
@@ -1839,7 +1834,7 @@ async def parse_schedule(
     """
     Parse schedule text using AI and extract task proposals.
 
-    At least one of surrogate_id, surrogate_id, intended_parent_id, or match_id must be provided.
+    At least one of surrogate_id, intended_parent_id, or match_id must be provided.
     User reviews and approves before tasks are created.
     """
     from app.services.schedule_parser import parse_schedule_text
