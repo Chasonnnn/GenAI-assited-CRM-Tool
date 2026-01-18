@@ -1263,7 +1263,7 @@ Be concise and professional. Focus on actionable insights."""
         [
             ChatMessage(
                 role="system",
-                content="You are a helpful CRM assistant for a surrogacy agency. Always respond with valid JSON.",
+                content="You are a helpful Surrogacy Force assistant for a surrogacy agency. Always respond with valid JSON.",
             ),
             ChatMessage(role="user", content=prompt),
         ],
@@ -1533,7 +1533,7 @@ async def analyze_dashboard(
             stats=stats,
         )
 
-    prompt = f"""Analyze this CRM dashboard data for a surrogacy agency:
+    prompt = f"""Analyze this Surrogacy Force dashboard data for a surrogacy agency:
 
 Total Active Surrogates: {total_surrogates}
 Surrogates This Week: {surrogates_this_week}
@@ -1560,7 +1560,7 @@ Focus on:
         [
             ChatMessage(
                 role="system",
-                content="You are a CRM analytics expert for a surrogacy agency. Provide actionable business insights. Always respond with valid JSON.",
+                content="You are a Surrogacy Force analytics expert for a surrogacy agency. Provide actionable business insights. Always respond with valid JSON.",
             ),
             ChatMessage(role="user", content=prompt),
         ],

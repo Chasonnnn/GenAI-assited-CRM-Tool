@@ -112,7 +112,7 @@ export default function InviteAcceptPage() {
                         </div>
                     </div>
                     <div className="space-y-1">
-                        <div className="text-xs font-semibold text-gray-500 tracking-widest">SURROGACY CRM</div>
+                        <div className="text-xs font-semibold text-gray-500 tracking-widest">SURROGACY FORCE</div>
                         <CardTitle className="text-3xl font-bold text-gray-900">
                             {isLoading ? "Loading..." : accepted ? "Welcome!" : "You're Invited"}
                         </CardTitle>
@@ -229,7 +229,7 @@ export default function InviteAcceptPage() {
 
                     <div className="pt-4 border-t border-gray-100">
                         <div className="text-center">
-                            <p className="text-xs text-gray-400">© 2025 Surrogacy CRM. All rights reserved.</p>
+                            <p className="text-xs text-gray-400">© 2025 Surrogacy Force. All rights reserved.</p>
                         </div>
                     </div>
                 </CardContent>

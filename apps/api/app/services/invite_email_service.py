@@ -113,7 +113,7 @@ async def send_invite_email(
     """
     # Get org name
     org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
-    org_name = org.name if org else "the organization"
+    org_name = org_service.get_org_display_name(org) if org else "the organization"
     base_url = org_service.get_org_portal_base_url(org)
 
     # Get inviter name

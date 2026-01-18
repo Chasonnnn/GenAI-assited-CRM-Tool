@@ -1,4 +1,4 @@
-"""Rate limiting configuration for the CRM API."""
+"""Rate limiting configuration for the Surrogacy Force API."""
 
 import logging
 import os

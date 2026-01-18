@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-# Default stage colors (matching typical CRM conventions)
+# Default stage colors (matching Surrogacy Force conventions)
 DEFAULT_COLORS = {
     # Stage A: Intake Pipeline (blues/greens)
     "new_unread": "#3B82F6",  # Blue
