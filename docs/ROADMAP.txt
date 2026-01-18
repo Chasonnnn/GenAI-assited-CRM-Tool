@@ -1,4 +1,4 @@
-Surrogacy CRM Platform — 12-Week Roadmap (AI-ready, Multi-tenant, OSS-ready)
+Surrogacy Force Platform — 12-Week Roadmap (AI-ready, Multi-tenant, OSS-ready)
 Last updated: 2025-12-18
 
 Assumptions (important)

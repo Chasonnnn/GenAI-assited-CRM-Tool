@@ -73,7 +73,7 @@ export default function LoginPage() {
             </div>
           </div>
           <div className="space-y-1">
-            <div className="text-xs font-semibold text-gray-500 tracking-widest">SURROGACY CRM</div>
+            <div className="text-xs font-semibold text-gray-500 tracking-widest">SURROGACY FORCE</div>
             <CardTitle className="text-3xl font-bold text-gray-900">Welcome Back</CardTitle>
           </div>
           <CardDescription className="text-gray-500">
@@ -153,7 +153,7 @@ export default function LoginPage() {
               </p>
             </div>
             <div className="text-center">
-              <p className="text-xs text-gray-400">© 2025 Surrogacy CRM. All rights reserved.</p>
+              <p className="text-xs text-gray-400">© 2025 Surrogacy Force. All rights reserved.</p>
             </div>
           </div>
         </CardContent>

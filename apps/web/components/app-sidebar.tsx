@@ -237,7 +237,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                             <Link href="/dashboard">
                                 <SidebarMenuButton
                                     size="lg"
-                                    tooltip="Surrogacy CRM"
+                                    tooltip="Surrogacy Force"
                                 >
                                     <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
                                         <svg
@@ -257,9 +257,9 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                         </svg>
                                     </div>
                                     <div className="grid flex-1 text-left text-sm leading-tight">
-                                        <span className="truncate font-semibold">Surrogacy CRM</span>
+                                        <span className="truncate font-semibold">Surrogacy Force</span>
                                         <span className="truncate text-xs text-muted-foreground">
-                                            {user?.org_name || "Loading..."}
+                                            {user?.org_display_name || user?.org_name || "Loading..."}
                                         </span>
                                     </div>
                                 </SidebarMenuButton>

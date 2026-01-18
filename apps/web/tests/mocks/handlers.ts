@@ -37,6 +37,7 @@ export const mockUser = (overrides = {}) => ({
     role: 'admin',
     org_id: '550e8400-e29b-41d4-a716-446655440030',
     org_name: 'Test Organization',
+    org_display_name: 'Test Organization',
     org_slug: 'test-org',
     org_timezone: 'America/Los_Angeles',
     ai_enabled: true,

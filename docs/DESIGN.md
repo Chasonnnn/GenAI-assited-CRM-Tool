@@ -1,4 +1,4 @@
-# Design Documentation — CRM Platform Backend
+# Design Documentation — Surrogacy Force Platform Backend
 
 This document describes the design decisions, patterns, and features implemented in the backend API.
 
