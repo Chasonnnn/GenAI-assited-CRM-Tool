@@ -672,8 +672,12 @@ class Surrogate(Base):
     # MONITORING CLINIC
     # ============================================
     monitoring_clinic_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    monitoring_clinic_address_line1: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
-    monitoring_clinic_address_line2: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    monitoring_clinic_address_line1: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True
+    )
+    monitoring_clinic_address_line2: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True
+    )
     monitoring_clinic_city: Mapped[str | None] = mapped_column(String(100), nullable=True)
     monitoring_clinic_state: Mapped[str | None] = mapped_column(String(2), nullable=True)
     monitoring_clinic_postal: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -697,8 +701,12 @@ class Surrogate(Base):
     # DELIVERY HOSPITAL
     # ============================================
     delivery_hospital_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    delivery_hospital_address_line1: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
-    delivery_hospital_address_line2: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    delivery_hospital_address_line1: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True
+    )
+    delivery_hospital_address_line2: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True
+    )
     delivery_hospital_city: Mapped[str | None] = mapped_column(String(100), nullable=True)
     delivery_hospital_state: Mapped[str | None] = mapped_column(String(2), nullable=True)
     delivery_hospital_postal: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -2000,9 +2008,7 @@ class IntendedParentStatusHistory(Base):
 
     # Dual timestamps for backdating support
     effective_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    recorded_at: Mapped[datetime] = mapped_column(
-        server_default=text("now()"), nullable=False
-    )
+    recorded_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     # Audit fields for approval flow
     requested_at: Mapped[datetime | None] = mapped_column(nullable=True)
@@ -2010,9 +2016,7 @@ class IntendedParentStatusHistory(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     approved_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    is_undo: Mapped[bool] = mapped_column(
-        server_default=text("false"), nullable=False
-    )
+    is_undo: Mapped[bool] = mapped_column(server_default=text("false"), nullable=False)
     request_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("status_change_requests.id", ondelete="SET NULL"),
@@ -2617,6 +2621,7 @@ class AIBulkTaskRequest(Base):
     request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     response_payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+
 
 class AIEntitySummary(Base):
     """
@@ -3603,7 +3608,9 @@ class ZoomWebhookEvent(Base):
     provider_event_id: Mapped[str] = mapped_column(
         String(255), unique=True, nullable=False
     )  # Dedupe key from Zoom
-    event_type: Mapped[str] = mapped_column(String(50), nullable=False)  # meeting.started, meeting.ended
+    event_type: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # meeting.started, meeting.ended
     zoom_meeting_id: Mapped[str] = mapped_column(String(100), nullable=False)
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
     processed_at: Mapped[datetime] = mapped_column(
@@ -5189,3 +5196,63 @@ class InterviewAttachment(Base):
     interview: Mapped["SurrogateInterview"] = relationship(back_populates="interview_attachments")
     attachment: Mapped["Attachment"] = relationship()
     organization: Mapped["Organization"] = relationship()
+
+
+# =============================================================================
+# Journey Featured Images
+# =============================================================================
+
+
+class JourneyFeaturedImage(Base):
+    """
+    Featured image selection for journey milestones.
+
+    Allows case managers to select from surrogate attachments
+    as the featured image for each milestone in the journey timeline.
+    """
+
+    __tablename__ = "journey_featured_images"
+    __table_args__ = (
+        UniqueConstraint("surrogate_id", "milestone_slug", name="uq_journey_featured_image"),
+        Index("ix_journey_featured_images_surrogate", "surrogate_id"),
+        Index("ix_journey_featured_images_org", "organization_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    surrogate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("surrogates.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    milestone_slug: Mapped[str] = mapped_column(String(100), nullable=False)
+    attachment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("attachments.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # Audit fields
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("now()"), onupdate=text("now()"), nullable=False
+    )
+
+    # Relationships
+    surrogate: Mapped["Surrogate"] = relationship()
+    organization: Mapped["Organization"] = relationship()
+    attachment: Mapped["Attachment"] = relationship()
+    created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
+    updated_by: Mapped["User | None"] = relationship(foreign_keys=[updated_by_user_id])

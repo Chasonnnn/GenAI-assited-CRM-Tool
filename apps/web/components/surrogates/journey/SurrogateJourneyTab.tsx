@@ -1,10 +1,19 @@
 "use client"
 
-import { Loader2Icon, SparklesIcon } from "lucide-react"
+import { useState, useCallback } from "react"
+import { DownloadIcon, Loader2Icon, SparklesIcon } from "lucide-react"
 import { format } from "date-fns"
 import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { useSurrogateJourney } from "@/lib/hooks/use-journey"
+import { exportJourneyPdf } from "@/lib/api/journey"
+import { useAuth } from "@/lib/auth-context"
 import { JourneyTimeline } from "./JourneyTimeline"
+import { MilestoneImageSelector } from "./MilestoneImageSelector"
+import { toast } from "sonner"
+
+// Roles that can edit journey images
+const CAN_EDIT_ROLES = ["case_manager", "admin", "developer"]
 
 interface SurrogateJourneyTabProps {
     surrogateId: string
@@ -12,6 +21,52 @@ interface SurrogateJourneyTabProps {
 
 export function SurrogateJourneyTab({ surrogateId }: SurrogateJourneyTabProps) {
     const { data: journey, isLoading, error } = useSurrogateJourney(surrogateId)
+    const { user } = useAuth()
+
+    // Image selector state
+    const [selectorOpen, setSelectorOpen] = useState(false)
+    const [selectedMilestone, setSelectedMilestone] = useState<{
+        slug: string
+        label: string
+        currentAttachmentId: string | null
+    } | null>(null)
+
+    // Check if user can edit images
+    const canEditImages = user?.role ? CAN_EDIT_ROLES.includes(user.role) : false
+
+    const [isExporting, setIsExporting] = useState(false)
+
+    const handleExport = useCallback(async () => {
+        setIsExporting(true)
+        try {
+            await exportJourneyPdf(surrogateId)
+            toast.success("Journey exported as PDF")
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Failed to export journey"
+            toast.error(message)
+        } finally {
+            setIsExporting(false)
+        }
+    }, [surrogateId])
+
+    // Handle opening the image selector
+    const handleEditImage = useCallback((milestoneSlug: string) => {
+        if (!journey) return
+
+        // Find the milestone to get its label and current attachment
+        for (const phase of journey.phases) {
+            const milestone = phase.milestones.find((m) => m.slug === milestoneSlug)
+            if (milestone) {
+                setSelectedMilestone({
+                    slug: milestoneSlug,
+                    label: milestone.label,
+                    currentAttachmentId: milestone.featured_image_id,
+                })
+                setSelectorOpen(true)
+                return
+            }
+        }
+    }, [journey])
 
     if (isLoading) {
         return (
@@ -52,9 +107,34 @@ export function SurrogateJourneyTab({ surrogateId }: SurrogateJourneyTabProps) {
     const generatedDate = format(new Date(), "MMMM yyyy")
 
     return (
-        <Card className="overflow-hidden print:border-0 print:shadow-none">
+        <Card className="relative overflow-hidden bg-gradient-to-br from-stone-50 via-stone-50/80 to-white dark:from-stone-900 dark:via-stone-900/90 dark:to-stone-950 print:border-0 print:bg-white print:shadow-none">
+            {/* Paper grain texture overlay - hidden in print */}
+            <div
+                className="pointer-events-none absolute inset-0 opacity-[0.03] dark:opacity-[0.02] print:hidden"
+                style={{
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='2' cy='2' r='0.5' fill='%2378716c'/%3E%3C/svg%3E")`,
+                    backgroundSize: "4px 4px",
+                }}
+            />
+
             {/* Document-style header */}
-            <div className="border-b border-stone-200 bg-gradient-to-b from-stone-50 to-white px-6 py-8 dark:border-stone-700 dark:from-stone-900 dark:to-stone-900/50 print:bg-white print:py-6">
+            <div className="relative border-b border-stone-200/80 px-6 py-8 dark:border-stone-700/50 print:py-6">
+                <div className="absolute right-6 top-6 print:hidden">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-2"
+                        onClick={handleExport}
+                        disabled={isExporting}
+                    >
+                        {isExporting ? (
+                            <Loader2Icon className="size-4 animate-spin" />
+                        ) : (
+                            <DownloadIcon className="size-4" />
+                        )}
+                        {isExporting ? "Exporting" : "Export"}
+                    </Button>
+                </div>
                 <div className="mx-auto max-w-[900px] text-center">
                     <h2 className="text-2xl font-semibold tracking-tight text-foreground">
                         Surrogacy Journey
@@ -69,9 +149,14 @@ export function SurrogateJourneyTab({ surrogateId }: SurrogateJourneyTabProps) {
             </div>
 
             {/* Timeline content with max-width constraint */}
-            <CardContent className="p-6 pt-8 print:p-8 print:pt-6">
+            <CardContent className="relative p-6 pt-8 print:p-8 print:pt-6">
                 <div className="mx-auto max-w-[900px]">
-                    <JourneyTimeline journey={journey} />
+                    <JourneyTimeline
+                        journey={journey}
+                        surrogateId={surrogateId}
+                        canEditImages={canEditImages}
+                        onEditImage={handleEditImage}
+                    />
                 </div>
 
                 {/* Footer note for print */}
@@ -83,6 +168,18 @@ export function SurrogateJourneyTab({ surrogateId }: SurrogateJourneyTabProps) {
                     </p>
                 </footer>
             </CardContent>
+
+            {/* Image selector dialog */}
+            {selectedMilestone && (
+                <MilestoneImageSelector
+                    open={selectorOpen}
+                    onOpenChange={setSelectorOpen}
+                    surrogateId={surrogateId}
+                    milestoneSlug={selectedMilestone.slug}
+                    milestoneLabel={selectedMilestone.label}
+                    currentAttachmentId={selectedMilestone.currentAttachmentId}
+                />
+            )}
         </Card>
     )
 }

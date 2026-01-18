@@ -6,14 +6,17 @@ import html
 import math
 import os
 import uuid
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import quote
 
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.models import SurrogateInterview, FormSubmission
-from app.services import form_service, interview_service, profile_service, tiptap_service
+from app.core.security import create_export_token
+from app.db.models import Attachment, SurrogateInterview, FormSubmission
+from app.services import form_service, interview_service, journey_service, profile_service, tiptap_service
 
 
 # Chart colors matching frontend design system
@@ -37,6 +40,25 @@ async def _render_html_to_pdf(html_content: str) -> bytes:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
         await page.set_content(html_content, wait_until="networkidle")
+        pdf_bytes = await page.pdf(
+            format="Letter",
+            print_background=True,
+            margin={"top": "0.75in", "bottom": "0.75in", "left": "0.75in", "right": "0.75in"},
+        )
+        await browser.close()
+        return pdf_bytes
+
+
+async def _render_url_to_pdf(url: str) -> bytes:
+    """Render a URL to PDF using Playwright."""
+    from playwright.async_api import async_playwright
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page(viewport={"width": 1280, "height": 720})
+        await page.goto(url, wait_until="networkidle")
+        await page.emulate_media(media="screen")
+        await page.wait_for_selector("[data-journey-print='ready']")
         pdf_bytes = await page.pdf(
             format="Letter",
             print_background=True,
@@ -1828,3 +1850,297 @@ def export_analytics_pdf(
         )
     finally:
         loop.close()
+
+
+# =============================================================================
+# Journey Export
+# =============================================================================
+
+
+def _format_month_year(dt: datetime | None) -> str:
+    if not dt:
+        return ""
+    return dt.astimezone(timezone.utc).strftime("%B %Y")
+
+
+def _format_iso_month_year(value: str | None) -> str:
+    if not value:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    return parsed.astimezone(timezone.utc).strftime("%B %Y")
+
+
+def _find_repo_root() -> Path | None:
+    path = Path(__file__).resolve()
+    for parent in path.parents:
+        if (parent / "apps").exists():
+            return parent
+    return None
+
+
+def _get_default_image_data_url(slug: str) -> str | None:
+    repo_root = _find_repo_root()
+    if not repo_root:
+        return None
+    defaults_dir = repo_root / "apps" / "web" / "public" / "journey" / "defaults"
+    for ext in ("jpg", "jpeg", "png", "webp"):
+        image_path = defaults_dir / f"{slug}.{ext}"
+        if image_path.exists():
+            data = image_path.read_bytes()
+            b64 = base64.b64encode(data).decode("ascii")
+            mime = f"image/{'jpeg' if ext in ('jpg', 'jpeg') else ext}"
+            return f"data:{mime};base64,{b64}"
+    return None
+
+
+def _build_attachment_data_url(attachment: Attachment) -> str | None:
+    if not attachment.content_type.startswith("image/"):
+        return None
+    data, content_type = _load_file_bytes(attachment.storage_key)
+    if not data:
+        return None
+    mime_type = content_type or attachment.content_type
+    b64 = base64.b64encode(data).decode("ascii")
+    return f"data:{mime_type};base64,{b64}"
+
+
+def _generate_journey_html(
+    journey: journey_service.JourneyResponse,
+    milestone_images: dict[str, str],
+) -> str:
+    surrogate_name = html.escape(journey.surrogate_name)
+    generated_at = datetime.now(timezone.utc).strftime("%B %Y")
+
+    terminal_html = ""
+    if journey.is_terminal and journey.terminal_message:
+        terminal_date = _format_iso_month_year(journey.terminal_date)
+        date_suffix = f" - {terminal_date}" if terminal_date else ""
+        terminal_html = f"""
+        <div class="terminal-banner">
+            <span>{html.escape(journey.terminal_message)}{html.escape(date_suffix)}</span>
+        </div>
+        """
+
+    phases_html = ""
+    for phase in journey.phases:
+        phase_label = html.escape(phase.label.upper())
+        milestones_html = ""
+        for milestone in phase.milestones:
+            status_label = ""
+            if milestone.status == "completed" and milestone.completed_at and not milestone.is_soft:
+                completed_at = _format_month_year(milestone.completed_at)
+                status_label = f"Completed {completed_at}" if completed_at else ""
+
+            status_html = (
+                f'<div class="milestone-status">{html.escape(status_label)}</div>'
+                if status_label
+                else ""
+            )
+
+            image_src = milestone_images.get(milestone.slug, milestone.default_image_url)
+            image_html = (
+                f'<img class="milestone-image" src="{html.escape(image_src)}" alt="{html.escape(milestone.label)}" />'
+                if image_src
+                else ""
+            )
+
+            dot_class = f"dot-{milestone.status}"
+
+            milestones_html += f"""
+            <div class="milestone-row">
+                <div class="dot {dot_class}"></div>
+                <div class="milestone-card">
+                    <div class="milestone-title">{html.escape(milestone.label)}</div>
+                    <div class="milestone-desc">{html.escape(milestone.description)}</div>
+                    {status_html}
+                    {image_html}
+                </div>
+            </div>
+            """
+
+        phases_html += f"""
+        <section class="phase">
+            <div class="phase-header">
+                <span class="phase-line"></span>
+                <span class="phase-label">{phase_label}</span>
+                <span class="phase-line"></span>
+            </div>
+            <div class="milestone-stack">
+                {milestones_html}
+            </div>
+        </section>
+        """
+
+    return f"""
+    <!doctype html>
+    <html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>Surrogacy Journey</title>
+        <style>
+            * {{
+                box-sizing: border-box;
+            }}
+            body {{
+                margin: 0;
+                font-family: "Helvetica Neue", Arial, sans-serif;
+                color: #111827;
+                background: #ffffff;
+            }}
+            .container {{
+                max-width: 900px;
+                margin: 0 auto;
+                padding: 6px 0 24px;
+            }}
+            .header {{
+                text-align: center;
+                margin-bottom: 32px;
+            }}
+            .title {{
+                font-size: 24px;
+                font-weight: 600;
+                margin: 0;
+            }}
+            .subtitle {{
+                font-size: 14px;
+                color: #6b7280;
+                margin-top: 4px;
+            }}
+            .meta {{
+                font-size: 11px;
+                color: #9ca3af;
+                margin-top: 10px;
+            }}
+            .terminal-banner {{
+                border: 1px solid #e5e7eb;
+                background: #f9fafb;
+                border-radius: 10px;
+                padding: 12px 16px;
+                font-size: 12px;
+                color: #6b7280;
+                margin-bottom: 24px;
+                text-align: center;
+            }}
+            .phase {{
+                margin-top: 26px;
+            }}
+            .phase-header {{
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                margin-bottom: 22px;
+            }}
+            .phase-line {{
+                flex: 1;
+                height: 1px;
+                background: #e5e7eb;
+            }}
+            .phase-label {{
+                font-size: 10px;
+                letter-spacing: 0.25em;
+                color: #9ca3af;
+                white-space: nowrap;
+            }}
+            .milestone-stack {{
+                display: flex;
+                flex-direction: column;
+                gap: 28px;
+            }}
+            .milestone-row {{
+                display: grid;
+                grid-template-columns: 18px 1fr;
+                gap: 16px;
+                align-items: flex-start;
+            }}
+            .dot {{
+                width: 10px;
+                height: 10px;
+                border-radius: 999px;
+                margin-top: 6px;
+            }}
+            .dot-completed {{
+                background: #10b981;
+            }}
+            .dot-current {{
+                background: #2563eb;
+                box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+            }}
+            .dot-upcoming {{
+                border: 2px solid #d1d5db;
+                background: transparent;
+                width: 10px;
+                height: 10px;
+            }}
+            .milestone-card {{
+                break-inside: avoid;
+            }}
+            .milestone-title {{
+                font-size: 18px;
+                font-weight: 600;
+                margin-bottom: 6px;
+            }}
+            .milestone-desc {{
+                font-size: 13px;
+                color: #6b7280;
+                margin-bottom: 6px;
+            }}
+            .milestone-status {{
+                font-size: 11px;
+                color: #6b7280;
+                margin-bottom: 10px;
+            }}
+            .milestone-image {{
+                width: 100%;
+                border-radius: 12px;
+                display: block;
+                margin-top: 12px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1 class="title">Surrogacy Journey</h1>
+                <div class="subtitle">{surrogate_name}</div>
+                <div class="meta">Generated {html.escape(generated_at)}</div>
+            </div>
+            {terminal_html}
+            {phases_html}
+        </div>
+    </body>
+    </html>
+    """
+
+
+def export_journey_pdf(
+    db: Session,
+    org_id: uuid.UUID,
+    surrogate_id: uuid.UUID,
+) -> bytes:
+    journey = journey_service.get_journey(db, org_id, surrogate_id)
+    if not journey:
+        raise ValueError("Surrogate not found")
+
+    if not settings.FRONTEND_URL:
+        raise ValueError("FRONTEND_URL is not configured")
+
+    export_token = create_export_token(org_id, surrogate_id)
+    token_param = quote(export_token)
+    frontend_base = settings.FRONTEND_URL.rstrip("/")
+    print_url = (
+        f"{frontend_base}/surrogates/{surrogate_id}/journey/print"
+        f"?export_token={token_param}"
+    )
+
+    loop = asyncio.new_event_loop()
+    try:
+        pdf_bytes = loop.run_until_complete(_render_url_to_pdf(print_url))
+    except Exception as exc:
+        raise ValueError("Failed to render journey export") from exc
+    finally:
+        loop.close()
+
+    return pdf_bytes

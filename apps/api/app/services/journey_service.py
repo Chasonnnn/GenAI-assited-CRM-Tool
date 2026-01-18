@@ -13,15 +13,16 @@ import re
 from typing import Literal
 from uuid import UUID
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.config import settings
 from app.db.models import (
-    Organization,
+    JourneyFeaturedImage,
     PipelineStage,
     Surrogate,
     SurrogateStatusHistory,
 )
+from app.services import attachment_service
 
 
 # Journey version for audit trails and export stability
@@ -29,6 +30,12 @@ JOURNEY_VERSION = 1
 
 # Terminal stage slugs (journey ended early)
 TERMINAL_STAGE_SLUGS = {"lost", "disqualified"}
+
+
+def get_default_image_url(milestone_slug: str) -> str:
+    """Build absolute URL for default milestone image from frontend public folder."""
+    frontend_url = settings.FRONTEND_URL.rstrip("/")
+    return f"{frontend_url}/journey/defaults/{milestone_slug}.jpg"
 
 
 @dataclass(frozen=True)
@@ -181,8 +188,9 @@ class JourneyMilestone:
     status: Literal["completed", "current", "upcoming"]
     completed_at: datetime | None
     is_soft: bool
-    featured_image_url: str | None = None  # Phase 2
-    featured_image_id: str | None = None  # Phase 2
+    default_image_url: str  # Absolute URL to default image in frontend public folder
+    featured_image_url: str | None = None  # Signed URL to custom featured image
+    featured_image_id: str | None = None  # Attachment ID if featured image is set
 
 
 @dataclass
@@ -396,7 +404,11 @@ def get_journey(
                 or entry.changed_at
                 or datetime.min,
             )
-            entry_date = terminal_entry.effective_at or terminal_entry.recorded_at or terminal_entry.changed_at
+            entry_date = (
+                terminal_entry.effective_at
+                or terminal_entry.recorded_at
+                or terminal_entry.changed_at
+            )
             if entry_date:
                 terminal_date = entry_date.isoformat()
 
@@ -409,6 +421,31 @@ def get_journey(
     delivery_completed_at = _get_completion_date_for_milestone(
         len(MILESTONES) - 1, history_entries, pipeline_stages
     )
+
+    # Load featured images for this surrogate
+    featured_images = (
+        db.query(JourneyFeaturedImage)
+        .options(joinedload(JourneyFeaturedImage.attachment))
+        .filter(
+            JourneyFeaturedImage.surrogate_id == surrogate_id,
+            JourneyFeaturedImage.organization_id == org_id,
+        )
+        .all()
+    )
+
+    # Build a map of milestone_slug -> (attachment_id, signed_url)
+    featured_image_map: dict[str, tuple[str, str]] = {}
+    for fi in featured_images:
+        attachment = fi.attachment
+        # Skip if attachment is deleted or quarantined
+        if not attachment or attachment.deleted_at or attachment.quarantined:
+            continue
+        # Generate fresh signed URL
+        signed_url = attachment_service.generate_signed_url(attachment.storage_key)
+        if signed_url:
+            if signed_url.startswith("/"):
+                signed_url = f"{settings.API_BASE_URL.rstrip('/')}{signed_url}"
+            featured_image_map[fi.milestone_slug] = (str(fi.attachment_id), signed_url)
 
     # Build milestones with statuses
     phases: list[JourneyPhase] = []
@@ -441,6 +478,11 @@ def get_journey(
             else:
                 status = "upcoming"
 
+            # Get featured image info if set
+            featured_info = featured_image_map.get(milestone_def.slug)
+            featured_image_id = featured_info[0] if featured_info else None
+            featured_image_url = featured_info[1] if featured_info else None
+
             phase_milestones.append(
                 JourneyMilestone(
                     slug=milestone_def.slug,
@@ -449,8 +491,9 @@ def get_journey(
                     status=status,
                     completed_at=completed_at,
                     is_soft=milestone_def.is_soft,
-                    featured_image_url=None,  # Phase 2
-                    featured_image_id=None,  # Phase 2
+                    default_image_url=get_default_image_url(milestone_def.slug),
+                    featured_image_url=featured_image_url,
+                    featured_image_id=featured_image_id,
                 )
             )
 
