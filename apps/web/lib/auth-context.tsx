@@ -13,6 +13,7 @@ export interface User {
     title?: string;
     org_id: string;
     org_name: string;
+    org_display_name: string;
     org_slug: string;
     org_timezone: string;
     org_portal_domain?: string;

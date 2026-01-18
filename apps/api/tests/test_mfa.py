@@ -6,6 +6,8 @@ Tests cover:
 - MFA enrollment flow
 """
 
+from urllib.parse import urlparse, parse_qs
+
 from app.services import mfa_service
 
 
@@ -32,7 +34,9 @@ class TestTOTPGeneration:
         uri = mfa_service.get_totp_provisioning_uri(secret, email)
 
         assert uri.startswith("otpauth://totp/")
-        assert "SurrogacyCRM" in uri  # Issuer
+        parsed = urlparse(uri)
+        query = parse_qs(parsed.query)
+        assert query.get("issuer", [""])[0] == "Surrogacy Force"
         assert "test%40example.com" in uri or "test@example.com" in uri  # Email
 
 

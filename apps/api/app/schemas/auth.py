@@ -47,6 +47,7 @@ class MeResponse(BaseModel):
     title: str | None = None
     org_id: UUID
     org_name: str
+    org_display_name: str
     org_slug: str
     org_timezone: str
     org_portal_domain: str | None = None
