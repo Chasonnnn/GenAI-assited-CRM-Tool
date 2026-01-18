@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.19.6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.19.5...surrogacy-crm-platform-v0.19.6) (2026-01-18)
+
+
+### Features
+
+* **auth:** improve auth router and MFA service ([b7ca5b0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b7ca5b0a6df0b981176db18a974d243c8c3c895d))
+
 ## [0.19.5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.19.4...surrogacy-crm-platform-v0.19.5) (2026-01-18)
 
 
