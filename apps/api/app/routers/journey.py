@@ -10,10 +10,11 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_session, get_db, require_permission, require_csrf_header
 from app.core.policies import POLICIES
 from app.core.security import decode_export_token
+from app.core.surrogate_access import check_surrogate_access
 from app.db.enums import Role
 from app.db.models import Attachment, JourneyFeaturedImage, Surrogate
 from app.schemas.auth import UserSession
-from app.services import activity_service, journey_service
+from app.services import activity_service, journey_service, surrogate_service
 
 
 router = APIRouter(
@@ -87,6 +88,17 @@ def get_surrogate_journey(
     Returns phases and milestones with computed statuses based on current stage
     and status history. All status derivation happens server-side.
     """
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+    check_surrogate_access(
+        surrogate=surrogate,
+        user_role=session.role,
+        user_id=session.user_id,
+        db=db,
+        org_id=session.org_id,
+    )
+
     journey = journey_service.get_journey(db, session.org_id, surrogate_id)
 
     if not journey:

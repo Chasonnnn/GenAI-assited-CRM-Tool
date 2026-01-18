@@ -1,14 +1,19 @@
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from uuid import UUID
 import uuid
 from zoneinfo import ZoneInfo
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 
-from app.db.models import Surrogate
-from app.services import pdf_export_service
-from app.services import pipeline_service
-from app.core.security import create_export_token
+from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
+from app.core.deps import COOKIE_NAME, get_db
+from app.core.security import create_export_token, create_session_token
+from app.db.enums import Role
+from app.db.models import Membership, Surrogate, User
+from app.main import app
+from app.services import pdf_export_service, pipeline_service, session_service
 
 
 def _get_stage(db, org_id, slug: str):
@@ -16,6 +21,41 @@ def _get_stage(db, org_id, slug: str):
     stage = pipeline_service.get_stage_by_slug(db, pipeline.id, slug)
     assert stage is not None
     return stage
+
+
+@asynccontextmanager
+async def _authed_client_for_user(db, org_id, user, role):
+    token = create_session_token(
+        user_id=user.id,
+        org_id=org_id,
+        role=role.value,
+        token_version=user.token_version,
+        mfa_verified=True,
+        mfa_required=True,
+    )
+    session_service.create_session(
+        db=db,
+        user_id=user.id,
+        org_id=org_id,
+        token=token,
+        request=None,
+    )
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    csrf_token = generate_csrf_token()
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="https://test",
+        cookies={COOKIE_NAME: token, CSRF_COOKIE_NAME: csrf_token},
+        headers={CSRF_HEADER: csrf_token},
+    ) as client:
+        yield client
+
+    app.dependency_overrides.clear()
 
 
 async def _create_surrogate(authed_client):
@@ -128,6 +168,36 @@ async def test_journey_unknown_stage_falls_back_to_first_milestone(authed_client
 
     application_intake = _find_milestone(payload, "application_intake")
     assert application_intake["status"] == "current"
+
+
+@pytest.mark.asyncio
+async def test_journey_requires_surrogate_access(db, test_org, authed_client):
+    surrogate = await _create_surrogate(authed_client)
+
+    intake_user = User(
+        id=uuid.uuid4(),
+        email=f"intake-{uuid.uuid4().hex[:8]}@test.com",
+        display_name="Intake User",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(intake_user)
+    db.flush()
+
+    membership = Membership(
+        id=uuid.uuid4(),
+        user_id=intake_user.id,
+        organization_id=test_org.id,
+        role=Role.INTAKE_SPECIALIST,
+    )
+    db.add(membership)
+    db.flush()
+
+    async with _authed_client_for_user(
+        db, test_org.id, intake_user, Role.INTAKE_SPECIALIST
+    ) as client:
+        response = await client.get(f"/journey/surrogates/{surrogate['id']}")
+        assert response.status_code == 403
 
 
 @pytest.mark.asyncio
