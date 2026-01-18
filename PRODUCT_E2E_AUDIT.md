@@ -195,7 +195,7 @@ Directory/module overview:
 
 ### Admin Imports and Exports
 - Description: Admin-level config and analytics exports, bulk imports
-- UI entry points: `/settings/admin`, `/settings/import`
+- UI entry points: `/settings/admin`, `/surrogates/import`
 - API entry points: `/admin/exports/*`, `/admin/imports/*`, `/jobs/*`
 - Data models: `ExportJob`, `SurrogateImport`, `Job`
 - Jobs/queues: `ADMIN_EXPORT`, `CSV_IMPORT`
