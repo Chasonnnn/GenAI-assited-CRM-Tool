@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { PaginationJump } from "@/components/ui/pagination-jump"
 import {
     Table,
     TableBody,
@@ -68,53 +69,121 @@ const STATUS_COLORS: Record<IntendedParentStatus, string> = {
 
 const STATUS_OPTIONS: IntendedParentStatus[] = ["new", "ready_to_match", "matched", "delivered"]
 const VALID_STATUSES = ["all", ...STATUS_OPTIONS]
+const VALID_DATE_RANGES: DateRangePreset[] = ["all", "today", "week", "month", "custom"]
+const isDateRangePreset = (value: string | null): value is DateRangePreset =>
+    value !== null && VALID_DATE_RANGES.includes(value as DateRangePreset)
+
+const parsePageParam = (value: string | null): number => {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1
+}
+
+const parseDateParam = (value: string | null): Date | undefined => {
+    if (!value) return undefined
+    const parsed = parseDateInput(value)
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed
+}
+
+const datesEqual = (left?: Date, right?: Date) => {
+    return (left?.getTime() ?? null) === (right?.getTime() ?? null)
+}
 
 export default function IntendedParentsPage() {
     const searchParams = useSearchParams()
     const router = useRouter()
+    const currentQuery = searchParams.toString()
 
     // Read initial values from URL params
     const urlStatus = searchParams.get("status")
     const urlSearch = searchParams.get("q")
+    const urlPage = searchParams.get("page")
+    const urlRange = searchParams.get("range")
+    const urlFrom = searchParams.get("from")
+    const urlTo = searchParams.get("to")
 
     const [search, setSearch] = useState(urlSearch || "")
     const [debouncedSearch, setDebouncedSearch] = useState(urlSearch || "")
     const [statusFilter, setStatusFilter] = useState<string>(
         urlStatus && VALID_STATUSES.includes(urlStatus) ? urlStatus : "all"
     )
-    const [dateRange, setDateRange] = useState<DateRangePreset>('all')
-    const [customRange, setCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
-        from: undefined,
-        to: undefined,
-    })
-    const [page, setPage] = useState(1)
+    const initialRange = isDateRangePreset(urlRange) ? urlRange : "all"
+    const initialCustomRange = initialRange === "custom"
+        ? {
+            from: parseDateParam(urlFrom),
+            to: parseDateParam(urlTo),
+        }
+        : { from: undefined, to: undefined }
+    const [dateRange, setDateRange] = useState<DateRangePreset>(initialRange)
+    const [customRange, setCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>(initialCustomRange)
+    const [page, setPage] = useState(parsePageParam(urlPage))
     const [isCreateOpen, setIsCreateOpen] = useState(false)
     const [sortBy, setSortBy] = useState<string | null>("intended_parent_number")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
 
     // Sync state changes back to URL
-    const updateUrlParams = useCallback((status: string, searchValue: string) => {
-        const newParams = new URLSearchParams(searchParams.toString())
+    const updateUrlParams = useCallback((
+        status: string,
+        searchValue: string,
+        currentPage: number,
+        range: DateRangePreset,
+        rangeDates: { from: Date | undefined; to: Date | undefined }
+    ) => {
+        const newParams = new URLSearchParams()
         if (status !== "all") {
             newParams.set("status", status)
-        } else {
-            newParams.delete("status")
         }
         if (searchValue) {
             newParams.set("q", searchValue)
-        } else {
-            newParams.delete("q")
         }
-        const newUrl = newParams.toString() ? `?${newParams}` : ""
+        if (currentPage > 1) {
+            newParams.set("page", String(currentPage))
+        }
+        if (range !== "all") {
+            newParams.set("range", range)
+            if (range === "custom") {
+                if (rangeDates.from) {
+                    newParams.set("from", formatLocalDate(rangeDates.from))
+                }
+                if (rangeDates.to) {
+                    newParams.set("to", formatLocalDate(rangeDates.to))
+                }
+            }
+        }
+        const nextQuery = newParams.toString()
+        if (nextQuery === currentQuery) return
+        const newUrl = nextQuery ? `?${nextQuery}` : ""
         router.replace(`/intended-parents${newUrl}`, { scroll: false })
-    }, [searchParams, router])
+    }, [router, currentQuery])
 
     // Handle status filter change
     const handleStatusChange = useCallback((status: string) => {
         setStatusFilter(status)
         setPage(1)
-        updateUrlParams(status, debouncedSearch)
-    }, [debouncedSearch, updateUrlParams])
+        updateUrlParams(status, debouncedSearch, 1, dateRange, customRange)
+    }, [debouncedSearch, updateUrlParams, dateRange, customRange])
+
+    const handlePageChange = useCallback((nextPage: number) => {
+        setPage(nextPage)
+        updateUrlParams(statusFilter, debouncedSearch, nextPage, dateRange, customRange)
+    }, [statusFilter, debouncedSearch, updateUrlParams, dateRange, customRange])
+
+    const handlePresetChange = useCallback((preset: DateRangePreset) => {
+        setDateRange(preset)
+        if (preset !== "custom") {
+            setCustomRange({ from: undefined, to: undefined })
+        }
+        setPage(1)
+        updateUrlParams(statusFilter, debouncedSearch, 1, preset, preset === "custom" ? customRange : { from: undefined, to: undefined })
+    }, [statusFilter, debouncedSearch, updateUrlParams, customRange])
+
+    const handleCustomRangeChange = useCallback((range: { from: Date | undefined; to: Date | undefined }) => {
+        setCustomRange(range)
+        if (dateRange !== "custom") {
+            setDateRange("custom")
+        }
+        setPage(1)
+        updateUrlParams(statusFilter, debouncedSearch, 1, "custom", range)
+    }, [statusFilter, debouncedSearch, updateUrlParams, dateRange])
 
     // Debounce search input
     useEffect(() => {
@@ -124,15 +193,46 @@ export default function IntendedParentsPage() {
 
     // Sync debouncedSearch to URL
     useEffect(() => {
-        const urlSearch = searchParams.get("q")
-        if (debouncedSearch !== (urlSearch || "")) {
-            updateUrlParams(statusFilter, debouncedSearch)
+        const urlSearchValue = searchParams.get("q") || ""
+        if (debouncedSearch !== urlSearchValue) {
+            setPage(1)
+            updateUrlParams(statusFilter, debouncedSearch, 1, dateRange, customRange)
         }
-    }, [debouncedSearch]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [debouncedSearch, searchParams, statusFilter, updateUrlParams, dateRange, customRange])
 
+    // Sync state when URL changes (back/forward)
     useEffect(() => {
-        setPage(1)
-    }, [dateRange, customRange])
+        const nextStatus = searchParams.get("status") && VALID_STATUSES.includes(searchParams.get("status") as string)
+            ? searchParams.get("status") as string
+            : "all"
+        if (nextStatus !== statusFilter) {
+            setStatusFilter(nextStatus)
+        }
+        const nextSearch = searchParams.get("q") || ""
+        if (nextSearch !== search) {
+            setSearch(nextSearch)
+        }
+        if (nextSearch !== debouncedSearch) {
+            setDebouncedSearch(nextSearch)
+        }
+        const nextPage = parsePageParam(searchParams.get("page"))
+        if (nextPage !== page) {
+            setPage(nextPage)
+        }
+        const nextRange = isDateRangePreset(searchParams.get("range")) ? searchParams.get("range") as DateRangePreset : "all"
+        if (nextRange !== dateRange) {
+            setDateRange(nextRange)
+        }
+        if (nextRange === "custom") {
+            const nextFrom = parseDateParam(searchParams.get("from"))
+            const nextTo = parseDateParam(searchParams.get("to"))
+            if (!datesEqual(nextFrom, customRange.from) || !datesEqual(nextTo, customRange.to)) {
+                setCustomRange({ from: nextFrom, to: nextTo })
+            }
+        } else if (customRange.from || customRange.to) {
+            setCustomRange({ from: undefined, to: undefined })
+        }
+    }, [currentQuery]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Form state
     const [formData, setFormData] = useState({
@@ -300,9 +400,9 @@ export default function IntendedParentsPage() {
                     </Select>
                     <DateRangePicker
                         preset={dateRange}
-                        onPresetChange={setDateRange}
+                        onPresetChange={handlePresetChange}
                         customRange={customRange}
-                        onCustomRangeChange={setCustomRange}
+                        onCustomRangeChange={handleCustomRangeChange}
                     />
                     <div className="flex-1" />
                     <div className="relative w-full max-w-sm">
@@ -401,11 +501,11 @@ export default function IntendedParentsPage() {
                             Showing {(page - 1) * data.per_page + 1} to{" "}
                             {Math.min(page * data.per_page, data.total)} of {data.total}
                         </p>
-                        <div className="flex gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                onClick={() => handlePageChange(Math.max(1, page - 1))}
                                 disabled={page === 1}
                             >
                                 <ChevronLeftIcon className="size-4" />
@@ -413,11 +513,12 @@ export default function IntendedParentsPage() {
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                onClick={() => handlePageChange(Math.min(totalPages, page + 1))}
                                 disabled={page === totalPages}
                             >
                                 <ChevronRightIcon className="size-4" />
                             </Button>
+                            <PaginationJump page={page} totalPages={totalPages} onPageChange={handlePageChange} />
                         </div>
                     </div>
                 )}
