@@ -10,7 +10,7 @@
 import { AppointmentSettings } from "@/components/appointments"
 
 export const metadata = {
-    title: "Appointment Settings | CRM",
+    title: "Appointment Settings | Surrogacy Force",
     description: "Configure your availability and appointment types",
 }
 
@@ -34,4 +34,3 @@ export default function AppointmentSettingsPage() {
         </div>
     )
 }
-

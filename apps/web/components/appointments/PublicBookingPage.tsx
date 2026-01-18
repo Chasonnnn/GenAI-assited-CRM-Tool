@@ -528,7 +528,7 @@ function generateICSFile(
     const ics = [
         'BEGIN:VCALENDAR',
         'VERSION:2.0',
-        'PRODID:-//CRM Platform//Booking//EN',
+        'PRODID:-//Surrogacy Force//Booking//EN',
         'CALSCALE:GREGORIAN',
         'METHOD:PUBLISH',
         'BEGIN:VEVENT',
@@ -916,7 +916,7 @@ export function PublicBookingPage({
 
                 {/* Footer */}
                 <p className="text-center text-xs text-muted-foreground mt-6">
-                    Powered by CRM Platform
+                    Powered by Surrogacy Force
                 </p>
             </div>
         </div>

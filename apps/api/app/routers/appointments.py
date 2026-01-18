@@ -389,7 +389,7 @@ def get_booking_preview(
         raise HTTPException(status_code=404, detail="Staff not found")
 
     org = org_service.get_org_by_id(db, session.org_id)
-    org_name = org.name if org else None
+    org_name = org_service.get_org_display_name(org) if org else None
     org_timezone = org.timezone if org else None
 
     types = appointment_service.list_appointment_types(

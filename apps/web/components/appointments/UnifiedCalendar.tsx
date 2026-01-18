@@ -682,7 +682,7 @@ function MonthView({
                                 {format(day, "d")}
                             </div>
                             <div className="space-y-1 mt-1">
-                                {/* CRM Appointments */}
+                                {/* Surrogacy Force Appointments */}
                                 {shownAppointments.map((appt) => (
                                     <EventItem
                                         key={appt.id}

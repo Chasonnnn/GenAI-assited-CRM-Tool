@@ -113,7 +113,7 @@ def get_booking_page(
 
     # Get org name
     org = org_service.get_org_by_id(db, link.organization_id)
-    org_name = org.name if org else None
+    org_name = org_service.get_org_display_name(org) if org else None
     org_timezone = org.timezone if org else None
 
     # Get appointment types
