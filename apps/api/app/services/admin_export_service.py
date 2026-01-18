@@ -20,6 +20,16 @@ from app.db.enums import OwnerType
 from app.db.models import (
     AISettings,
     AutomationWorkflow,
+    AvailabilityOverride,
+    AvailabilityRule,
+    AppointmentType,
+    BookingLink,
+    DataRetentionPolicy,
+    Form,
+    FormFieldMapping,
+    FormLogo,
+    LegalHold,
+    OrgCounter,
     Surrogate,
     EmailTemplate,
     Membership,
@@ -34,6 +44,7 @@ from app.db.models import (
     User,
     UserIntegration,
     UserNotificationSettings,
+    WorkflowTemplate,
 )
 from app.services import ai_usage_service, analytics_service
 
@@ -450,6 +461,258 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
         for w in workflows
     ]
 
+    forms = (
+        db.query(Form)
+        .filter(Form.organization_id == org_id)
+        .order_by(Form.created_at.asc())
+        .all()
+    )
+    form_payload = [
+        {
+            "id": str(form.id),
+            "organization_id": str(form.organization_id),
+            "name": form.name,
+            "description": form.description,
+            "status": form.status,
+            "schema_json": form.schema_json,
+            "published_schema_json": form.published_schema_json,
+            "max_file_size_bytes": form.max_file_size_bytes,
+            "max_file_count": form.max_file_count,
+            "allowed_mime_types": form.allowed_mime_types,
+            "created_by_user_id": str(form.created_by_user_id)
+            if form.created_by_user_id
+            else None,
+            "updated_by_user_id": str(form.updated_by_user_id)
+            if form.updated_by_user_id
+            else None,
+            "created_at": form.created_at,
+            "updated_at": form.updated_at,
+        }
+        for form in forms
+    ]
+
+    form_logos = (
+        db.query(FormLogo)
+        .filter(FormLogo.organization_id == org_id)
+        .order_by(FormLogo.created_at.asc())
+        .all()
+    )
+    form_logo_payload = [
+        {
+            "id": str(logo.id),
+            "organization_id": str(logo.organization_id),
+            "storage_key": logo.storage_key,
+            "filename": logo.filename,
+            "content_type": logo.content_type,
+            "file_size": logo.file_size,
+            "created_by_user_id": str(logo.created_by_user_id)
+            if logo.created_by_user_id
+            else None,
+            "created_at": logo.created_at,
+        }
+        for logo in form_logos
+    ]
+
+    form_field_mappings = (
+        db.query(FormFieldMapping)
+        .join(Form, FormFieldMapping.form_id == Form.id)
+        .filter(Form.organization_id == org_id)
+        .order_by(FormFieldMapping.created_at.asc())
+        .all()
+    )
+    form_field_mapping_payload = [
+        {
+            "id": str(mapping.id),
+            "form_id": str(mapping.form_id),
+            "field_key": mapping.field_key,
+            "surrogate_field": mapping.surrogate_field,
+            "created_at": mapping.created_at,
+        }
+        for mapping in form_field_mappings
+    ]
+
+    appointment_types = (
+        db.query(AppointmentType)
+        .filter(AppointmentType.organization_id == org_id)
+        .order_by(AppointmentType.created_at.asc())
+        .all()
+    )
+    appointment_type_payload = [
+        {
+            "id": str(appointment_type.id),
+            "organization_id": str(appointment_type.organization_id),
+            "user_id": str(appointment_type.user_id),
+            "name": appointment_type.name,
+            "slug": appointment_type.slug,
+            "description": appointment_type.description,
+            "duration_minutes": appointment_type.duration_minutes,
+            "buffer_before_minutes": appointment_type.buffer_before_minutes,
+            "buffer_after_minutes": appointment_type.buffer_after_minutes,
+            "meeting_mode": appointment_type.meeting_mode,
+            "reminder_hours_before": appointment_type.reminder_hours_before,
+            "is_active": appointment_type.is_active,
+            "created_at": appointment_type.created_at,
+            "updated_at": appointment_type.updated_at,
+        }
+        for appointment_type in appointment_types
+    ]
+
+    availability_rules = (
+        db.query(AvailabilityRule)
+        .filter(AvailabilityRule.organization_id == org_id)
+        .order_by(AvailabilityRule.created_at.asc())
+        .all()
+    )
+    availability_rule_payload = [
+        {
+            "id": str(rule.id),
+            "organization_id": str(rule.organization_id),
+            "user_id": str(rule.user_id),
+            "day_of_week": rule.day_of_week,
+            "start_time": rule.start_time,
+            "end_time": rule.end_time,
+            "timezone": rule.timezone,
+            "created_at": rule.created_at,
+            "updated_at": rule.updated_at,
+        }
+        for rule in availability_rules
+    ]
+
+    availability_overrides = (
+        db.query(AvailabilityOverride)
+        .filter(AvailabilityOverride.organization_id == org_id)
+        .order_by(AvailabilityOverride.created_at.asc())
+        .all()
+    )
+    availability_override_payload = [
+        {
+            "id": str(override.id),
+            "organization_id": str(override.organization_id),
+            "user_id": str(override.user_id),
+            "override_date": override.override_date,
+            "is_unavailable": override.is_unavailable,
+            "start_time": override.start_time,
+            "end_time": override.end_time,
+            "reason": override.reason,
+            "created_at": override.created_at,
+        }
+        for override in availability_overrides
+    ]
+
+    booking_links = (
+        db.query(BookingLink)
+        .filter(BookingLink.organization_id == org_id)
+        .order_by(BookingLink.created_at.asc())
+        .all()
+    )
+    booking_link_payload = [
+        {
+            "id": str(link.id),
+            "organization_id": str(link.organization_id),
+            "user_id": str(link.user_id),
+            "public_slug": link.public_slug,
+            "is_active": link.is_active,
+            "created_at": link.created_at,
+            "updated_at": link.updated_at,
+        }
+        for link in booking_links
+    ]
+
+    workflow_templates = (
+        db.query(WorkflowTemplate)
+        .filter(WorkflowTemplate.organization_id == org_id)
+        .order_by(WorkflowTemplate.created_at.asc())
+        .all()
+    )
+    workflow_template_payload = [
+        {
+            "id": str(template.id),
+            "name": template.name,
+            "description": template.description,
+            "icon": template.icon,
+            "category": template.category,
+            "trigger_type": template.trigger_type,
+            "trigger_config": template.trigger_config,
+            "conditions": template.conditions,
+            "condition_logic": template.condition_logic,
+            "actions": template.actions,
+            "is_global": template.is_global,
+            "organization_id": str(template.organization_id)
+            if template.organization_id
+            else None,
+            "usage_count": template.usage_count,
+            "created_by_user_id": str(template.created_by_user_id)
+            if template.created_by_user_id
+            else None,
+            "created_at": template.created_at,
+            "updated_at": template.updated_at,
+        }
+        for template in workflow_templates
+    ]
+
+    retention_policies = (
+        db.query(DataRetentionPolicy)
+        .filter(DataRetentionPolicy.organization_id == org_id)
+        .order_by(DataRetentionPolicy.entity_type)
+        .all()
+    )
+    retention_policy_payload = [
+        {
+            "id": str(policy.id),
+            "organization_id": str(policy.organization_id),
+            "entity_type": policy.entity_type,
+            "retention_days": policy.retention_days,
+            "is_active": policy.is_active,
+            "created_by_user_id": str(policy.created_by_user_id)
+            if policy.created_by_user_id
+            else None,
+            "created_at": policy.created_at,
+            "updated_at": policy.updated_at,
+        }
+        for policy in retention_policies
+    ]
+
+    legal_holds = (
+        db.query(LegalHold)
+        .filter(LegalHold.organization_id == org_id)
+        .order_by(LegalHold.created_at.asc())
+        .all()
+    )
+    legal_hold_payload = [
+        {
+            "id": str(hold.id),
+            "organization_id": str(hold.organization_id),
+            "entity_type": hold.entity_type,
+            "entity_id": str(hold.entity_id) if hold.entity_id else None,
+            "reason": hold.reason,
+            "created_by_user_id": str(hold.created_by_user_id)
+            if hold.created_by_user_id
+            else None,
+            "released_by_user_id": str(hold.released_by_user_id)
+            if hold.released_by_user_id
+            else None,
+            "created_at": hold.created_at,
+            "released_at": hold.released_at,
+        }
+        for hold in legal_holds
+    ]
+
+    org_counters = (
+        db.query(OrgCounter)
+        .filter(OrgCounter.organization_id == org_id)
+        .order_by(OrgCounter.counter_type)
+        .all()
+    )
+    org_counter_payload = [
+        {
+            "organization_id": str(counter.organization_id),
+            "counter_type": counter.counter_type,
+            "current_value": counter.current_value,
+            "updated_at": counter.updated_at,
+        }
+        for counter in org_counters
+    ]
+
     members = (
         db.query(User, Membership)
         .join(Membership, Membership.user_id == User.id)
@@ -467,6 +730,12 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "is_active": user.is_active,
             "created_at": user.created_at,
             "updated_at": user.updated_at,
+            "phone": user.phone,
+            "title": user.title,
+            "signature_name": user.signature_name,
+            "signature_title": user.signature_title,
+            "signature_phone": user.signature_phone,
+            "signature_photo_url": user.signature_photo_url,
             "signature_linkedin": user.signature_linkedin,
             "signature_twitter": user.signature_twitter,
             "signature_instagram": user.signature_instagram,
@@ -651,9 +920,19 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "id": str(org.id),
             "name": org.name,
             "slug": org.slug,
+            "portal_domain": org.portal_domain,
             "timezone": org.timezone,
             "ai_enabled": org.ai_enabled,
             "current_version": org.current_version,
+            "signature_template": org.signature_template,
+            "signature_logo_url": org.signature_logo_url,
+            "signature_primary_color": org.signature_primary_color,
+            "signature_company_name": org.signature_company_name,
+            "signature_address": org.signature_address,
+            "signature_phone": org.signature_phone,
+            "signature_website": org.signature_website,
+            "signature_social_links": org.signature_social_links,
+            "signature_disclaimer": org.signature_disclaimer,
             "created_at": org.created_at,
             "updated_at": org.updated_at,
         }
@@ -678,6 +957,20 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
         archive.writestr("email_templates.json", _write_json(template_payload))
         archive.writestr("notification_settings.json", _write_json(notification_payload))
         archive.writestr("workflows.json", _write_json(workflow_payload))
+        archive.writestr("forms.json", _write_json(form_payload))
+        archive.writestr("form_logos.json", _write_json(form_logo_payload))
+        archive.writestr("form_field_mappings.json", _write_json(form_field_mapping_payload))
+        archive.writestr("appointment_types.json", _write_json(appointment_type_payload))
+        archive.writestr("availability_rules.json", _write_json(availability_rule_payload))
+        archive.writestr(
+            "availability_overrides.json",
+            _write_json(availability_override_payload),
+        )
+        archive.writestr("booking_links.json", _write_json(booking_link_payload))
+        archive.writestr("workflow_templates.json", _write_json(workflow_template_payload))
+        archive.writestr("data_retention_policies.json", _write_json(retention_policy_payload))
+        archive.writestr("legal_holds.json", _write_json(legal_hold_payload))
+        archive.writestr("org_counters.json", _write_json(org_counter_payload))
         archive.writestr("integrations.json", _write_json(integration_payload))
         archive.writestr("meta_pages.json", _write_json(meta_page_payload))
         archive.writestr("ai_settings.json", _write_json(ai_payload))

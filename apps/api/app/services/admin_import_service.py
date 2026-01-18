@@ -6,7 +6,7 @@ import csv
 import io
 import json
 import zipfile
-from datetime import datetime, date, timezone
+from datetime import datetime, date, time, timezone
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -19,12 +19,22 @@ from app.db.enums import OwnerType
 from app.db.models import (
     AISettings,
     AutomationWorkflow,
+    AvailabilityOverride,
+    AvailabilityRule,
+    AppointmentType,
+    BookingLink,
+    DataRetentionPolicy,
+    Form,
+    FormFieldMapping,
+    FormLogo,
+    LegalHold,
     Surrogate,
     EmailTemplate,
     Membership,
     MetaLead,
     MetaPageMapping,
     Organization,
+    OrgCounter,
     Pipeline,
     PipelineStage,
     Queue,
@@ -34,6 +44,7 @@ from app.db.models import (
     UserIntegration,
     UserNotificationSettings,
     UserPermissionOverride,
+    WorkflowTemplate,
 )
 from app.utils.normalization import normalize_email, normalize_phone
 
@@ -74,7 +85,7 @@ def _parse_datetime(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
-def _parse_json(value: str | None) -> dict | None:
+def _parse_json(value: str | None) -> dict | list | None:
     if not value:
         return None
     trimmed = value.strip()
@@ -84,6 +95,12 @@ def _parse_json(value: str | None) -> dict | None:
         return json.loads(trimmed)
     except json.JSONDecodeError as exc:
         raise ValueError(f"Invalid JSON payload: {exc}") from exc
+
+
+def _parse_time(value: str | None) -> time | None:
+    if not value:
+        return None
+    return time.fromisoformat(value)
 
 
 def _load_json(archive: zipfile.ZipFile, name: str, default: Any) -> Any:
@@ -96,6 +113,24 @@ def _load_json(archive: zipfile.ZipFile, name: str, default: Any) -> Any:
 def _ensure_empty_org(db: Session, org_id: UUID) -> None:
     checks = {
         "surrogates": db.query(Surrogate).filter(Surrogate.organization_id == org_id).count(),
+        "forms": db.query(Form).filter(Form.organization_id == org_id).count(),
+        "form_logos": db.query(FormLogo).filter(FormLogo.organization_id == org_id).count(),
+        "form_field_mappings": db.query(FormFieldMapping)
+        .join(Form, FormFieldMapping.form_id == Form.id)
+        .filter(Form.organization_id == org_id)
+        .count(),
+        "appointment_types": db.query(AppointmentType)
+        .filter(AppointmentType.organization_id == org_id)
+        .count(),
+        "availability_rules": db.query(AvailabilityRule)
+        .filter(AvailabilityRule.organization_id == org_id)
+        .count(),
+        "availability_overrides": db.query(AvailabilityOverride)
+        .filter(AvailabilityOverride.organization_id == org_id)
+        .count(),
+        "booking_links": db.query(BookingLink)
+        .filter(BookingLink.organization_id == org_id)
+        .count(),
         "pipelines": db.query(Pipeline).filter(Pipeline.organization_id == org_id).count(),
         "pipeline_stages": db.query(PipelineStage)
         .join(Pipeline, PipelineStage.pipeline_id == Pipeline.id)
@@ -103,6 +138,9 @@ def _ensure_empty_org(db: Session, org_id: UUID) -> None:
         .count(),
         "workflows": db.query(AutomationWorkflow)
         .filter(AutomationWorkflow.organization_id == org_id)
+        .count(),
+        "workflow_templates": db.query(WorkflowTemplate)
+        .filter(WorkflowTemplate.organization_id == org_id)
         .count(),
         "email_templates": db.query(EmailTemplate)
         .filter(EmailTemplate.organization_id == org_id)
@@ -150,6 +188,17 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
         meta_pages_payload = _load_json(archive, "meta_pages.json", [])
         integrations_payload = _load_json(archive, "integrations.json", [])
         ai_settings_payload = _load_json(archive, "ai_settings.json", None)
+        forms_payload = _load_json(archive, "forms.json", [])
+        form_logos_payload = _load_json(archive, "form_logos.json", [])
+        form_field_mappings_payload = _load_json(archive, "form_field_mappings.json", [])
+        appointment_types_payload = _load_json(archive, "appointment_types.json", [])
+        availability_rules_payload = _load_json(archive, "availability_rules.json", [])
+        availability_overrides_payload = _load_json(archive, "availability_overrides.json", [])
+        booking_links_payload = _load_json(archive, "booking_links.json", [])
+        workflow_templates_payload = _load_json(archive, "workflow_templates.json", [])
+        retention_policies_payload = _load_json(archive, "data_retention_policies.json", [])
+        legal_holds_payload = _load_json(archive, "legal_holds.json", [])
+        org_counters_payload = _load_json(archive, "org_counters.json", [])
 
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
@@ -162,6 +211,26 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
         org.ai_enabled = organization_payload.get("ai_enabled", org.ai_enabled)
         if organization_payload.get("current_version"):
             org.current_version = organization_payload["current_version"]
+        if "portal_domain" in organization_payload:
+            org.portal_domain = organization_payload.get("portal_domain")
+        if "signature_template" in organization_payload:
+            org.signature_template = organization_payload.get("signature_template")
+        if "signature_logo_url" in organization_payload:
+            org.signature_logo_url = organization_payload.get("signature_logo_url")
+        if "signature_primary_color" in organization_payload:
+            org.signature_primary_color = organization_payload.get("signature_primary_color")
+        if "signature_company_name" in organization_payload:
+            org.signature_company_name = organization_payload.get("signature_company_name")
+        if "signature_address" in organization_payload:
+            org.signature_address = organization_payload.get("signature_address")
+        if "signature_phone" in organization_payload:
+            org.signature_phone = organization_payload.get("signature_phone")
+        if "signature_website" in organization_payload:
+            org.signature_website = organization_payload.get("signature_website")
+        if "signature_social_links" in organization_payload:
+            org.signature_social_links = organization_payload.get("signature_social_links")
+        if "signature_disclaimer" in organization_payload:
+            org.signature_disclaimer = organization_payload.get("signature_disclaimer")
 
     export_user_ids = {UUID(item["id"]) for item in users_payload if item.get("id")}
     export_emails = {item.get("email", "").lower() for item in users_payload if item.get("email")}
@@ -195,6 +264,12 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             user.display_name = user_data.get("display_name", user.display_name)
             user.avatar_url = user_data.get("avatar_url")
             user.is_active = user_data.get("is_active", user.is_active)
+            user.phone = user_data.get("phone")
+            user.title = user_data.get("title")
+            user.signature_name = user_data.get("signature_name")
+            user.signature_title = user_data.get("signature_title")
+            user.signature_phone = user_data.get("signature_phone")
+            user.signature_photo_url = user_data.get("signature_photo_url")
             user.signature_linkedin = user_data.get("signature_linkedin")
             user.signature_twitter = user_data.get("signature_twitter")
             user.signature_instagram = user_data.get("signature_instagram")
@@ -205,6 +280,12 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
                 display_name=user_data.get("display_name"),
                 avatar_url=user_data.get("avatar_url"),
                 is_active=user_data.get("is_active", True),
+                phone=user_data.get("phone"),
+                title=user_data.get("title"),
+                signature_name=user_data.get("signature_name"),
+                signature_title=user_data.get("signature_title"),
+                signature_phone=user_data.get("signature_phone"),
+                signature_photo_url=user_data.get("signature_photo_url"),
                 signature_linkedin=user_data.get("signature_linkedin"),
                 signature_twitter=user_data.get("signature_twitter"),
                 signature_instagram=user_data.get("signature_instagram"),
@@ -357,6 +438,143 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
         )
         db.add(workflow)
 
+    for form_data in forms_payload:
+        schema_json = form_data.get("schema_json")
+        if isinstance(schema_json, str):
+            schema_json = _parse_json(schema_json)
+        published_schema_json = form_data.get("published_schema_json")
+        if isinstance(published_schema_json, str):
+            published_schema_json = _parse_json(published_schema_json)
+        allowed_mime_types = form_data.get("allowed_mime_types")
+        if isinstance(allowed_mime_types, str):
+            allowed_mime_types = _parse_json(allowed_mime_types)
+
+        form = Form(
+            id=UUID(form_data["id"]),
+            organization_id=org_id,
+            name=form_data.get("name"),
+            description=form_data.get("description"),
+            status=form_data.get("status"),
+            schema_json=schema_json,
+            published_schema_json=published_schema_json,
+            max_file_size_bytes=form_data.get("max_file_size_bytes"),
+            max_file_count=form_data.get("max_file_count"),
+            allowed_mime_types=allowed_mime_types,
+            created_by_user_id=_map_user_id(_parse_uuid(form_data.get("created_by_user_id"))),
+            updated_by_user_id=_map_user_id(_parse_uuid(form_data.get("updated_by_user_id"))),
+            created_at=_parse_datetime(form_data.get("created_at")) or datetime.now(timezone.utc),
+            updated_at=_parse_datetime(form_data.get("updated_at")) or datetime.now(timezone.utc),
+        )
+        db.add(form)
+
+    for logo_data in form_logos_payload:
+        logo = FormLogo(
+            id=UUID(logo_data["id"]),
+            organization_id=org_id,
+            storage_key=logo_data.get("storage_key"),
+            filename=logo_data.get("filename"),
+            content_type=logo_data.get("content_type"),
+            file_size=logo_data.get("file_size"),
+            created_by_user_id=_map_user_id(_parse_uuid(logo_data.get("created_by_user_id"))),
+            created_at=_parse_datetime(logo_data.get("created_at")) or datetime.now(timezone.utc),
+        )
+        db.add(logo)
+
+    for mapping_data in form_field_mappings_payload:
+        mapping = FormFieldMapping(
+            id=UUID(mapping_data["id"]),
+            form_id=UUID(mapping_data["form_id"]),
+            field_key=mapping_data.get("field_key"),
+            surrogate_field=mapping_data.get("surrogate_field"),
+            created_at=_parse_datetime(mapping_data.get("created_at")) or datetime.now(timezone.utc),
+        )
+        db.add(mapping)
+
+    for appointment_type_data in appointment_types_payload:
+        appointment_type = AppointmentType(
+            id=UUID(appointment_type_data["id"]),
+            organization_id=org_id,
+            user_id=_map_user_id(UUID(appointment_type_data["user_id"])),
+            name=appointment_type_data.get("name"),
+            slug=appointment_type_data.get("slug"),
+            description=appointment_type_data.get("description"),
+            duration_minutes=appointment_type_data.get("duration_minutes") or 30,
+            buffer_before_minutes=appointment_type_data.get("buffer_before_minutes") or 0,
+            buffer_after_minutes=appointment_type_data.get("buffer_after_minutes") or 0,
+            meeting_mode=appointment_type_data.get("meeting_mode"),
+            reminder_hours_before=appointment_type_data.get("reminder_hours_before") or 24,
+            is_active=appointment_type_data.get("is_active", True),
+            created_at=_parse_datetime(appointment_type_data.get("created_at"))
+            or datetime.now(timezone.utc),
+            updated_at=_parse_datetime(appointment_type_data.get("updated_at"))
+            or datetime.now(timezone.utc),
+        )
+        db.add(appointment_type)
+
+    for rule_data in availability_rules_payload:
+        rule = AvailabilityRule(
+            id=UUID(rule_data["id"]),
+            organization_id=org_id,
+            user_id=_map_user_id(UUID(rule_data["user_id"])),
+            day_of_week=rule_data.get("day_of_week") or 0,
+            start_time=_parse_time(rule_data.get("start_time")) or time(9, 0),
+            end_time=_parse_time(rule_data.get("end_time")) or time(17, 0),
+            timezone=rule_data.get("timezone") or "America/Los_Angeles",
+            created_at=_parse_datetime(rule_data.get("created_at"))
+            or datetime.now(timezone.utc),
+            updated_at=_parse_datetime(rule_data.get("updated_at"))
+            or datetime.now(timezone.utc),
+        )
+        db.add(rule)
+
+    for override_data in availability_overrides_payload:
+        override = AvailabilityOverride(
+            id=UUID(override_data["id"]),
+            organization_id=org_id,
+            user_id=_map_user_id(UUID(override_data["user_id"])),
+            override_date=_parse_date(override_data.get("override_date")) or date.today(),
+            is_unavailable=override_data.get("is_unavailable", True),
+            start_time=_parse_time(override_data.get("start_time")),
+            end_time=_parse_time(override_data.get("end_time")),
+            reason=override_data.get("reason"),
+            created_at=_parse_datetime(override_data.get("created_at"))
+            or datetime.now(timezone.utc),
+        )
+        db.add(override)
+
+    for link_data in booking_links_payload:
+        link = BookingLink(
+            id=UUID(link_data["id"]),
+            organization_id=org_id,
+            user_id=_map_user_id(UUID(link_data["user_id"])),
+            public_slug=link_data.get("public_slug"),
+            is_active=link_data.get("is_active", True),
+            created_at=_parse_datetime(link_data.get("created_at")) or datetime.now(timezone.utc),
+            updated_at=_parse_datetime(link_data.get("updated_at")) or datetime.now(timezone.utc),
+        )
+        db.add(link)
+
+    for template_data in workflow_templates_payload:
+        template = WorkflowTemplate(
+            id=UUID(template_data["id"]),
+            name=template_data.get("name"),
+            description=template_data.get("description"),
+            icon=template_data.get("icon", "template"),
+            category=template_data.get("category", "general"),
+            trigger_type=template_data.get("trigger_type"),
+            trigger_config=template_data.get("trigger_config") or {},
+            conditions=template_data.get("conditions") or [],
+            condition_logic=template_data.get("condition_logic", "AND"),
+            actions=template_data.get("actions") or [],
+            is_global=template_data.get("is_global", False),
+            organization_id=org_id,
+            usage_count=template_data.get("usage_count") or 0,
+            created_by_user_id=_map_user_id(_parse_uuid(template_data.get("created_by_user_id"))),
+            created_at=_parse_datetime(template_data.get("created_at")) or datetime.now(timezone.utc),
+            updated_at=_parse_datetime(template_data.get("updated_at")) or datetime.now(timezone.utc),
+        )
+        db.add(template)
+
     for settings_data in notification_payload:
         settings_row = UserNotificationSettings(
             user_id=_map_user_id(UUID(settings_data["user_id"])),
@@ -418,6 +636,60 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
         )
         db.add(meta_page)
 
+    if retention_policies_payload:
+        db.query(DataRetentionPolicy).filter(
+            DataRetentionPolicy.organization_id == org_id
+        ).delete()
+        for policy_data in retention_policies_payload:
+            policy = DataRetentionPolicy(
+                id=UUID(policy_data["id"]),
+                organization_id=org_id,
+                entity_type=policy_data.get("entity_type"),
+                retention_days=policy_data.get("retention_days") or 0,
+                is_active=policy_data.get("is_active", True),
+                created_by_user_id=_map_user_id(
+                    _parse_uuid(policy_data.get("created_by_user_id"))
+                ),
+                created_at=_parse_datetime(policy_data.get("created_at"))
+                or datetime.now(timezone.utc),
+                updated_at=_parse_datetime(policy_data.get("updated_at"))
+                or datetime.now(timezone.utc),
+            )
+            db.add(policy)
+
+    if legal_holds_payload:
+        db.query(LegalHold).filter(LegalHold.organization_id == org_id).delete()
+        for hold_data in legal_holds_payload:
+            hold = LegalHold(
+                id=UUID(hold_data["id"]),
+                organization_id=org_id,
+                entity_type=hold_data.get("entity_type"),
+                entity_id=_parse_uuid(hold_data.get("entity_id")),
+                reason=hold_data.get("reason") or "",
+                created_by_user_id=_map_user_id(
+                    _parse_uuid(hold_data.get("created_by_user_id"))
+                ),
+                released_by_user_id=_map_user_id(
+                    _parse_uuid(hold_data.get("released_by_user_id"))
+                ),
+                created_at=_parse_datetime(hold_data.get("created_at"))
+                or datetime.now(timezone.utc),
+                released_at=_parse_datetime(hold_data.get("released_at")),
+            )
+            db.add(hold)
+
+    if org_counters_payload:
+        db.query(OrgCounter).filter(OrgCounter.organization_id == org_id).delete()
+        for counter_data in org_counters_payload:
+            counter = OrgCounter(
+                organization_id=org_id,
+                counter_type=counter_data.get("counter_type"),
+                current_value=counter_data.get("current_value") or 0,
+                updated_at=_parse_datetime(counter_data.get("updated_at"))
+                or datetime.now(timezone.utc),
+            )
+            db.add(counter)
+
     db.query(RolePermission).filter(RolePermission.organization_id == org_id).delete()
     for permission_data in role_permissions_payload:
         permission = RolePermission(
@@ -460,11 +732,22 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
         "pipelines": len(pipelines_payload),
         "templates": len(templates_payload),
         "workflows": len(workflows_payload),
+        "forms": len(forms_payload),
+        "form_logos": len(form_logos_payload),
+        "form_field_mappings": len(form_field_mappings_payload),
+        "appointment_types": len(appointment_types_payload),
+        "availability_rules": len(availability_rules_payload),
+        "availability_overrides": len(availability_overrides_payload),
+        "booking_links": len(booking_links_payload),
+        "workflow_templates": len(workflow_templates_payload),
         "notification_settings": len(notification_payload),
         "role_permissions": len(role_permissions_payload),
         "user_permission_overrides": len(user_overrides_payload),
         "meta_pages": len(meta_pages_payload),
         "ai_settings": 1 if ai_settings_payload else 0,
+        "data_retention_policies": len(retention_policies_payload),
+        "legal_holds": len(legal_holds_payload),
+        "org_counters": len(org_counters_payload),
         "integrations_skipped": len(integrations_payload),
     }
 
