@@ -20,6 +20,7 @@ from app.db.models import (
     PipelineStage,
     SurrogateStatusHistory,
 )
+from app.db.enums import IntendedParentStatus, SurrogateSource
 from app.services import pipeline_service
 from app.services import template_seeder
 
@@ -78,9 +79,20 @@ HOSPITAL_NAMES = [
     "Stanford Hospital", "Mount Sinai Hospital", "NewYork-Presbyterian Hospital"
 ]
 
-IP_STATUSES = ["inquiry", "in_progress", "approved", "matched", "closed"]
+IP_STATUSES = [
+    IntendedParentStatus.NEW.value,
+    IntendedParentStatus.READY_TO_MATCH.value,
+    IntendedParentStatus.MATCHED.value,
+    IntendedParentStatus.DELIVERED.value,
+]
 
-SURROGATE_SOURCES = ["website", "referral", "social_media", "agency", "other"]
+SURROGATE_SOURCES = [
+    SurrogateSource.MANUAL.value,
+    SurrogateSource.META.value,
+    SurrogateSource.WEBSITE.value,
+    SurrogateSource.REFERRAL.value,
+    SurrogateSource.AGENCY.value,
+]
 TERMINAL_STAGE_SLUGS = {"lost", "disqualified"}
 PREGNANCY_STAGE_SLUGS = {
     "transfer_cycle",
