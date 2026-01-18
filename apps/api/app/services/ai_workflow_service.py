@@ -362,8 +362,7 @@ def generate_workflow(
     try:
         provider = get_provider(settings.provider, api_key, settings.model)
 
-        import asyncio
-        import concurrent.futures
+        from app.core.async_utils import run_async
 
         async def _run_chat():
             return await provider.chat(
@@ -377,12 +376,7 @@ def generate_workflow(
                 temperature=0.3,
             )
 
-        try:
-            asyncio.get_running_loop()
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                response = pool.submit(asyncio.run, _run_chat()).result()
-        except RuntimeError:
-            response = asyncio.run(_run_chat())
+        response = run_async(_run_chat())
 
         # Parse response
         content = response.content.strip()

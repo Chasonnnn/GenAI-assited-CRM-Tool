@@ -351,7 +351,7 @@ class SendEmailExecutor(ActionExecutor):
         entity_id: uuid.UUID,
     ) -> JsonObject:
         """Execute email send via Gmail API."""
-        import asyncio
+        from app.core.async_utils import run_async
         from app.services import gmail_service
 
         to = payload.get("to")
@@ -367,7 +367,7 @@ class SendEmailExecutor(ActionExecutor):
             }
 
         # Try to send via Gmail API
-        result = asyncio.run(
+        result = run_async(
             gmail_service.send_email_logged(
                 db=db,
                 org_id=org_id,
