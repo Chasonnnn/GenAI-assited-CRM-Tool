@@ -19,6 +19,26 @@ async def test_case_create_sets_owner_fields(authed_client, test_auth):
     assert data["owner_id"] == str(test_auth.user.id)
 
 
+@pytest.mark.asyncio
+async def test_case_create_assign_to_user_false_uses_queue(authed_client, db, test_org):
+    resp = await authed_client.post(
+        "/surrogates",
+        json={
+            "full_name": "Unassigned Case",
+            "email": f"unassigned-{uuid.uuid4().hex[:8]}@example.com",
+            "assign_to_user": False,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+
+    data = resp.json()
+    from app.services import queue_service
+
+    default_queue = queue_service.get_or_create_default_queue(db, test_org.id)
+    assert data["owner_type"] == "queue"
+    assert data["owner_id"] == str(default_queue.id)
+
+
 def test_system_case_defaults_to_unassigned_queue(db, test_org):
     from app.schemas.surrogate import SurrogateCreate
     from app.services import surrogate_service, queue_service
