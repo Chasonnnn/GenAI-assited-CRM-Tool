@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
+import { useSearchParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -21,6 +22,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { PaginationJump } from "@/components/ui/pagination-jump"
 import {
     HeartHandshakeIcon,
     Loader2Icon,
@@ -54,17 +56,89 @@ type MatchStatusFilter = (typeof MATCH_STATUSES)[number] | "all"
 const isMatchStatus = (value: string): value is MatchStatus =>
     MATCH_STATUSES.includes(value as MatchStatus)
 
+const parsePageParam = (value: string | null): number => {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1
+}
+
 export default function MatchesPage() {
-    const [statusFilter, setStatusFilter] = useState<MatchStatusFilter>("all")
-    const [page, setPage] = useState(1)
-    const [search, setSearch] = useState("")
-    const [debouncedSearch, setDebouncedSearch] = useState("")
+    const searchParams = useSearchParams()
+    const router = useRouter()
+    const currentQuery = searchParams.toString()
+
+    const urlStatus = searchParams.get("status")
+    const urlSearch = searchParams.get("q")
+    const urlPage = searchParams.get("page")
+
+    const [statusFilter, setStatusFilter] = useState<MatchStatusFilter>(
+        urlStatus && (urlStatus === "all" || isMatchStatus(urlStatus)) ? urlStatus : "all"
+    )
+    const [page, setPage] = useState(parsePageParam(urlPage))
+    const [search, setSearch] = useState(urlSearch || "")
+    const [debouncedSearch, setDebouncedSearch] = useState(urlSearch || "")
+
+    const updateUrlParams = useCallback((status: MatchStatusFilter, searchValue: string, currentPage: number) => {
+        const newParams = new URLSearchParams()
+        if (status !== "all") {
+            newParams.set("status", status)
+        }
+        if (searchValue) {
+            newParams.set("q", searchValue)
+        }
+        if (currentPage > 1) {
+            newParams.set("page", String(currentPage))
+        }
+        const nextQuery = newParams.toString()
+        if (nextQuery === currentQuery) return
+        const newUrl = nextQuery ? `?${nextQuery}` : ""
+        router.replace(`/intended-parents/matches${newUrl}`, { scroll: false })
+    }, [router, currentQuery])
+
+    const handleStatusChange = useCallback((value: string) => {
+        const nextStatus = value === "all" || isMatchStatus(value) ? value : "all"
+        setStatusFilter(nextStatus)
+        setPage(1)
+        updateUrlParams(nextStatus, debouncedSearch, 1)
+    }, [debouncedSearch, updateUrlParams])
+
+    const handlePageChange = useCallback((nextPage: number) => {
+        setPage(nextPage)
+        updateUrlParams(statusFilter, debouncedSearch, nextPage)
+    }, [statusFilter, debouncedSearch, updateUrlParams])
 
     // Debounce search input
     useEffect(() => {
         const timer = setTimeout(() => setDebouncedSearch(search), 300)
         return () => clearTimeout(timer)
     }, [search])
+
+    useEffect(() => {
+        const urlSearchValue = searchParams.get("q") || ""
+        if (debouncedSearch !== urlSearchValue) {
+            setPage(1)
+            updateUrlParams(statusFilter, debouncedSearch, 1)
+        }
+    }, [debouncedSearch, searchParams, statusFilter, updateUrlParams])
+
+    useEffect(() => {
+        const nextStatus = searchParams.get("status") && (searchParams.get("status") === "all" || isMatchStatus(searchParams.get("status") as string))
+            ? (searchParams.get("status") as MatchStatusFilter)
+            : "all"
+        if (nextStatus !== statusFilter) {
+            setStatusFilter(nextStatus)
+        }
+        const nextSearch = searchParams.get("q") || ""
+        if (nextSearch !== search) {
+            setSearch(nextSearch)
+        }
+        if (nextSearch !== debouncedSearch) {
+            setDebouncedSearch(nextSearch)
+        }
+        const nextPage = parsePageParam(searchParams.get("page"))
+        if (nextPage !== page) {
+            setPage(nextPage)
+        }
+    }, [currentQuery]) // eslint-disable-line react-hooks/exhaustive-deps
 
     const filters = {
         page,
@@ -130,7 +204,7 @@ export default function MatchesPage() {
 
                 {/* Filters */}
                 <div className="flex flex-col gap-4 md:flex-row md:items-center">
-                    <Select value={statusFilter} onValueChange={(v) => { if (v) { setStatusFilter(v); setPage(1) } }}>
+                    <Select value={statusFilter} onValueChange={(v) => { if (v) { handleStatusChange(v) } }}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="All Stages">
                                 {(value: string | null) => {
@@ -157,7 +231,6 @@ export default function MatchesPage() {
                             value={search}
                             onChange={(e) => {
                                 setSearch(e.target.value)
-                                setPage(1)
                             }}
                             className="pl-9"
                         />
@@ -278,11 +351,11 @@ export default function MatchesPage() {
                             Showing {(page - 1) * data.per_page + 1} to{" "}
                             {Math.min(page * data.per_page, data.total)} of {data.total}
                         </p>
-                        <div className="flex gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                onClick={() => handlePageChange(Math.max(1, page - 1))}
                                 disabled={page === 1}
                             >
                                 <ChevronLeftIcon className="size-4" />
@@ -290,11 +363,12 @@ export default function MatchesPage() {
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                onClick={() => handlePageChange(Math.min(totalPages, page + 1))}
                                 disabled={page === totalPages}
                             >
                                 <ChevronRightIcon className="size-4" />
                             </Button>
+                            <PaginationJump page={page} totalPages={totalPages} onPageChange={handlePageChange} />
                         </div>
                     </div>
                 )}

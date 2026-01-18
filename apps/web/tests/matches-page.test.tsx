@@ -9,6 +9,20 @@ vi.mock('next/link', () => ({
     ),
 }))
 
+const mockSearchParams = new URLSearchParams()
+const mockRouterReplace = vi.fn()
+
+vi.mock('next/navigation', () => ({
+    useSearchParams: () => ({
+        get: (key: string) => mockSearchParams.get(key),
+        toString: () => mockSearchParams.toString(),
+    }),
+    useRouter: () => ({
+        push: vi.fn(),
+        replace: mockRouterReplace,
+    }),
+}))
+
 const mockUseMatches = vi.fn()
 
 vi.mock('@/lib/hooks/use-matches', () => ({
@@ -59,6 +73,9 @@ describe('MatchesPage', () => {
 
     beforeEach(() => {
         vi.clearAllMocks()
+        mockSearchParams.delete('page')
+        mockSearchParams.delete('status')
+        mockSearchParams.delete('q')
         mockUseMatches.mockReturnValue({
             data: mockMatchData,
             isLoading: false,
@@ -137,6 +154,21 @@ describe('MatchesPage', () => {
             sort_by: 'match_number',
             sort_order: 'desc',
         })
+    })
+
+    it('uses page from URL params', () => {
+        mockSearchParams.set('page', '2')
+        mockUseMatches.mockReturnValue({
+            data: { items: [], total: 0, per_page: 20, page: 2 },
+            isLoading: false,
+        })
+
+        render(<MatchesPage />)
+        expect(mockUseMatches).toHaveBeenCalledWith(
+            expect.objectContaining({
+                page: 2,
+            })
+        )
     })
 
     it('shows pagination when needed', () => {

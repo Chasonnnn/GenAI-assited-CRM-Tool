@@ -8,15 +8,18 @@ vi.mock('next/link', () => ({
     ),
 }))
 
+const mockSearchParams = new URLSearchParams()
+const mockRouterReplace = vi.fn()
+
 // Mock Next.js navigation
 vi.mock('next/navigation', () => ({
     useSearchParams: () => ({
-        get: () => null,
-        toString: () => '',
+        get: (key: string) => mockSearchParams.get(key),
+        toString: () => mockSearchParams.toString(),
     }),
     useRouter: () => ({
         push: vi.fn(),
-        replace: vi.fn(),
+        replace: mockRouterReplace,
     }),
 }))
 
@@ -36,6 +39,9 @@ vi.mock('@/lib/hooks/use-intended-parents', () => ({
 
 describe('IntendedParentsPage', () => {
     beforeEach(() => {
+        mockSearchParams.delete('page')
+        mockSearchParams.delete('status')
+        mockSearchParams.delete('q')
         mockUseIntendedParents.mockReturnValue({
             data: {
                 items: [
@@ -68,5 +74,25 @@ describe('IntendedParentsPage', () => {
         expect(screen.getByText('Intended Parents')).toBeInTheDocument()
         expect(screen.getByText('Bob Parent')).toBeInTheDocument()
         expect(screen.getByText('bob@example.com')).toBeInTheDocument()
+    })
+
+    it('uses page from URL params', () => {
+        mockSearchParams.set('page', '4')
+        mockUseIntendedParents.mockReturnValue({
+            data: {
+                items: [],
+                total: 0,
+                per_page: 20,
+                page: 4,
+            },
+            isLoading: false,
+        })
+
+        render(<IntendedParentsPage />)
+        expect(mockUseIntendedParents).toHaveBeenCalledWith(
+            expect.objectContaining({
+                page: 4,
+            })
+        )
     })
 })
