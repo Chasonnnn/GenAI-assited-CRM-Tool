@@ -13,9 +13,9 @@ from botocore.exceptions import ClientError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.enums import AuditEventType
+from app.db.enums import AuditEventType, JobType
 from app.db.models import Attachment
-from app.services import audit_service
+from app.services import audit_service, job_service
 
 
 # =============================================================================
@@ -293,13 +293,14 @@ def upload_attachment(
 
     # Enqueue virus scan job if scanning is enabled
     if scan_enabled:
-        # Note: In production, this should be enqueued to a background worker
-        # For now, we log the intent - the job can be run manually or via cron
-        import logging
-
-        logging.info(f"Attachment {attachment_id} queued for virus scan")
-        # To run synchronously (blocking, not recommended for prod):
-        # scan_attachment_job(attachment_id)
+        job_service.enqueue_job(
+            db=db,
+            org_id=org_id,
+            job_type=JobType.ATTACHMENT_SCAN,
+            payload={"attachment_id": str(attachment_id)},
+            run_at=datetime.now(timezone.utc),
+            commit=False,
+        )
 
     return attachment
 
