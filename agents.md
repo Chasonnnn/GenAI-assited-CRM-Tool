@@ -1,4 +1,4 @@
-# agents.md — Surrogacy CRM Platform
+# agents.md — Surrogacy Force Platform
 
 > The single source of truth for building this project. Every contributor (human or AI) must follow these rules.
 

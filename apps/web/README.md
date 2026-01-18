@@ -1,6 +1,6 @@
-# Surrogacy CRM - Web Frontend
+# Surrogacy Force - Web Frontend
 
-Next.js 14 frontend for the Surrogacy CRM platform.
+Next.js 14 frontend for the Surrogacy Force platform.
 
 ## Tech Stack
 

@@ -12,8 +12,8 @@ const notoSans = Noto_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Surrogacy CRM",
-  description: "Surrogacy surrogate management system",
+  title: "Surrogacy Force",
+  description: "Surrogacy Force CRM and case management platform",
 };
 
 export default function RootLayout({
