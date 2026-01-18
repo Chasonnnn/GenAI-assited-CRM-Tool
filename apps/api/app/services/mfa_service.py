@@ -22,7 +22,7 @@ from app.db.models import User
 # Configuration
 # =============================================================================
 
-MFA_ISSUER = "SurrogacyCRM"
+MFA_ISSUER = "Surrogacy Force"
 RECOVERY_CODE_COUNT = 8
 RECOVERY_CODE_LENGTH = 8  # Characters per code
 

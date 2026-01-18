@@ -28,3 +28,15 @@ async def test_authed_me_returns_user(authed_client: AsyncClient, test_auth):
     assert response.status_code == 200
     data = response.json()
     assert "email" in data
+
+
+@pytest.mark.asyncio
+async def test_authed_me_returns_org_display_name(authed_client: AsyncClient, db, test_auth):
+    """Authenticated /me should include org display name."""
+    test_auth.org.signature_company_name = "Acme Surrogacy"
+    db.flush()
+
+    response = await authed_client.get("/auth/me")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["org_display_name"] == "Acme Surrogacy"
