@@ -22,7 +22,7 @@ export interface CampaignCreate {
     name: string
     description?: string
     email_template_id: string
-    recipient_type: "surrogate" | "intended_parent"
+    recipient_type: "case" | "intended_parent"
     filter_criteria?: FilterCriteria
     scheduled_at?: string
 }
@@ -31,7 +31,7 @@ export interface CampaignUpdate {
     name?: string
     description?: string
     email_template_id?: string
-    recipient_type?: "surrogate" | "intended_parent"
+    recipient_type?: "case" | "intended_parent"
     filter_criteria?: FilterCriteria
     scheduled_at?: string
 }
@@ -42,7 +42,7 @@ export interface Campaign {
     description: string | null
     email_template_id: string
     email_template_name: string | null
-    recipient_type: string
+    recipient_type: "case" | "intended_parent"
     filter_criteria: FilterCriteria
     scheduled_at: string | null
     status: "draft" | "scheduled" | "sending" | "completed" | "cancelled" | "failed"
@@ -62,7 +62,7 @@ export interface CampaignListItem {
     id: string
     name: string
     email_template_name: string | null
-    recipient_type: string
+    recipient_type: "case" | "intended_parent"
     status: "draft" | "scheduled" | "sending" | "completed" | "cancelled" | "failed"
     scheduled_at: string | null
     total_recipients: number
@@ -165,7 +165,7 @@ export async function duplicateCampaign(id: string): Promise<Campaign> {
     const payload: CampaignCreate = {
         name: `${original.name} (Copy)`,
         email_template_id: original.email_template_id,
-        recipient_type: original.recipient_type as "surrogate" | "intended_parent",
+        recipient_type: original.recipient_type,
         filter_criteria: original.filter_criteria,
     }
     if (original.description) {
@@ -189,7 +189,7 @@ export async function previewRecipients(
  * Use this in Step 4 of campaign creation to show recipient count.
  */
 export async function previewFilters(
-    recipientType: "surrogate" | "intended_parent",
+    recipientType: "case" | "intended_parent",
     filterCriteria: FilterCriteria,
     limit?: number
 ): Promise<CampaignPreview> {
