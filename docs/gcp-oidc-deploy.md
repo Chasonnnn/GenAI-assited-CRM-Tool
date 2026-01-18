@@ -45,7 +45,7 @@ gcloud services enable \
 gcloud artifacts repositories create crm-api \
   --repository-format=docker \
   --location=us-central1 \
-  --description="CRM API images"
+  --description="Surrogacy Force API images"
 ```
 
 ## 3) Create a GitHub Actions deployer service account
@@ -106,7 +106,7 @@ The runtime account reads secrets at runtime.
 
 ```bash
 gcloud iam service-accounts create crm-api-runtime \
-  --display-name="CRM API Runtime"
+  --display-name="Surrogacy Force API Runtime"
 ```
 
 Grant secret access to the runtime account (tighter than project-wide):

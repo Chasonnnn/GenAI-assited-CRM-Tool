@@ -1,0 +1,12 @@
+project_id        = "your-project-id"
+region            = "us-central1"
+domain            = "example.com"
+github_owner      = "your-github-org-or-user"
+github_repo       = "your-repo-name"
+
+database_password = "replace-me"
+s3_bucket         = "your-s3-bucket"
+export_s3_bucket  = "your-export-s3-bucket"
+
+# Optional
+allowed_email_domains = ""

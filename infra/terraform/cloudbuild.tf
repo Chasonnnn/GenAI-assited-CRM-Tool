@@ -1,0 +1,47 @@
+resource "google_cloudbuild_trigger" "api" {
+  name        = "crm-api-deploy"
+  description = "Build and deploy API + worker on main"
+  filename    = "cloudbuild/api.yaml"
+
+  github {
+    owner = var.github_owner
+    name  = var.github_repo
+
+    push {
+      branch = var.github_branch
+    }
+  }
+
+  substitutions = {
+    _REGION      = var.region
+    _API_SERVICE = var.api_service_name
+    _WORKER_JOB  = var.worker_job_name
+    _IMAGE_API   = local.api_image
+  }
+
+  service_account = google_service_account.cloudbuild.id
+}
+
+resource "google_cloudbuild_trigger" "web" {
+  name        = "crm-web-deploy"
+  description = "Build and deploy web on main"
+  filename    = "cloudbuild/web.yaml"
+
+  github {
+    owner = var.github_owner
+    name  = var.github_repo
+
+    push {
+      branch = var.github_branch
+    }
+  }
+
+  substitutions = {
+    _REGION       = var.region
+    _WEB_SERVICE  = var.web_service_name
+    _IMAGE_WEB    = local.web_image
+    _API_BASE_URL = local.api_url
+  }
+
+  service_account = google_service_account.cloudbuild.id
+}

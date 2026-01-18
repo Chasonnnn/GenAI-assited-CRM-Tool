@@ -1,0 +1,22 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - "build"
+      - "-f"
+      - "apps/web/Dockerfile"
+      - "-t"
+      - "$_IMAGE_WEB"
+      - "--build-arg"
+      - "NEXT_PUBLIC_API_BASE_URL=$_API_BASE_URL"
+      - "."
+  - name: gcr.io/cloud-builders/docker
+    args: ["push", "$_IMAGE_WEB"]
+  - name: gcr.io/cloud-builders/gcloud
+    args: ["run", "services", "update", "$_WEB_SERVICE", "--image", "$_IMAGE_WEB", "--region", "$_REGION", "--quiet"]
+images:
+  - "$_IMAGE_WEB"
+substitutions:
+  _REGION: "us-central1"
+  _WEB_SERVICE: "crm-web"
+  _IMAGE_WEB: "gcr.io/placeholder/web:latest"
+  _API_BASE_URL: "https://api.example.com"
