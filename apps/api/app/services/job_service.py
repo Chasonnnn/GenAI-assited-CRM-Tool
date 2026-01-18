@@ -9,16 +9,17 @@ from app.db.models import Job
 from app.db.enums import JobStatus, JobType
 
 
-def schedule_job(
+def enqueue_job(
     db: Session,
     org_id: UUID,
     job_type: JobType,
     payload: dict,
     run_at: datetime | None = None,
     idempotency_key: str | None = None,
+    commit: bool = True,
 ) -> Job:
     """
-    Schedule a new background job.
+    Enqueue a new background job.
 
     If run_at is None, the job runs immediately.
     If idempotency_key is provided, duplicate jobs with same key will fail
@@ -33,9 +34,32 @@ def schedule_job(
         idempotency_key=idempotency_key,
     )
     db.add(job)
-    db.commit()
-    db.refresh(job)
+    if commit:
+        db.commit()
+        db.refresh(job)
+    else:
+        db.flush()
     return job
+
+
+def schedule_job(
+    db: Session,
+    org_id: UUID,
+    job_type: JobType,
+    payload: dict,
+    run_at: datetime | None = None,
+    idempotency_key: str | None = None,
+) -> Job:
+    """Schedule a new background job and commit it."""
+    return enqueue_job(
+        db=db,
+        org_id=org_id,
+        job_type=job_type,
+        payload=payload,
+        run_at=run_at,
+        idempotency_key=idempotency_key,
+        commit=True,
+    )
 
 
 def get_pending_jobs(db: Session, limit: int = 10) -> list[Job]:
@@ -55,6 +79,39 @@ def get_pending_jobs(db: Session, limit: int = 10) -> list[Job]:
         .limit(limit)
         .all()
     )
+
+
+def claim_pending_jobs(db: Session, limit: int = 10) -> list[Job]:
+    """
+    Atomically claim pending jobs by marking them running.
+
+    Uses row locking on Postgres to avoid duplicate claims across workers.
+    """
+    now = datetime.now(timezone.utc)
+    query = (
+        db.query(Job)
+        .filter(
+            Job.status == JobStatus.PENDING.value,
+            Job.run_at <= now,
+        )
+        .order_by(Job.run_at)
+        .limit(limit)
+    )
+    if getattr(db.get_bind(), "dialect", None) and db.get_bind().dialect.name == "postgresql":
+        query = query.with_for_update(skip_locked=True)
+
+    jobs = query.all()
+    if not jobs:
+        return []
+
+    for job in jobs:
+        job.status = JobStatus.RUNNING.value
+        job.attempts += 1
+
+    db.commit()
+    for job in jobs:
+        db.refresh(job)
+    return jobs
 
 
 def get_job(db: Session, job_id: UUID, org_id: UUID | None = None) -> Job | None:

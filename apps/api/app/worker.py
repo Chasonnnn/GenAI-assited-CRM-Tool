@@ -243,6 +243,14 @@ async def process_job(db, job) -> None:
     elif job.job_type == JobType.INTERVIEW_TRANSCRIPTION.value:
         await process_interview_transcription(db, job)
 
+    elif job.job_type == JobType.ATTACHMENT_SCAN.value:
+        attachment_id = job.payload.get("attachment_id")
+        if not attachment_id:
+            raise Exception("Missing attachment_id in job payload")
+        from app.jobs.scan_attachment import scan_attachment_job
+
+        scan_attachment_job(UUID(attachment_id))
+
     elif job.job_type == JobType.WORKFLOW_APPROVAL_EXPIRY.value:
         await process_workflow_approval_expiry(db, job)
 
@@ -734,14 +742,13 @@ async def worker_loop() -> None:
                         logger.warning("Session cleanup failed: %s", exc)
                     last_session_cleanup = now
 
-                jobs = job_service.get_pending_jobs(db, limit=BATCH_SIZE)
+                jobs = job_service.claim_pending_jobs(db, limit=BATCH_SIZE)
 
                 if jobs:
                     logger.info(f"Found {len(jobs)} pending jobs")
 
                 for job in jobs:
                     try:
-                        job_service.mark_job_running(db, job)
                         await process_job(db, job)
                         job_service.mark_job_completed(db, job)
                         logger.info(f"Job {job.id} completed successfully")
