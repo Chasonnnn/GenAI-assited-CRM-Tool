@@ -26,6 +26,7 @@ export interface SurrogateListItem {
     is_archived: boolean;
     age: number | null;  // Calculated from date_of_birth
     bmi: number | null;  // Calculated from height_ft and weight_lb
+    last_activity_at: string | null;
     created_at: string;
 }
 

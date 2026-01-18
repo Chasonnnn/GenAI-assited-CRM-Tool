@@ -112,6 +112,7 @@ class SurrogateSource(str, Enum):
     WEBSITE = "website"
     REFERRAL = "referral"
     IMPORT = "import"  # CSV bulk import
+    AGENCY = "agency"  # Created by agency staff
 
 
 class SurrogateActivityType(str, Enum):

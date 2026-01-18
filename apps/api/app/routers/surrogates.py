@@ -142,7 +142,9 @@ def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
     )
 
 
-def _surrogate_to_list_item(surrogate, db: Session) -> SurrogateListItem:
+def _surrogate_to_list_item(
+    surrogate, db: Session, last_activity_at=None
+) -> SurrogateListItem:
     """Convert Surrogate model to SurrogateListItem schema."""
     from datetime import date
 
@@ -180,6 +182,7 @@ def _surrogate_to_list_item(surrogate, db: Session) -> SurrogateListItem:
         email=surrogate.email,
         phone=surrogate.phone,
         state=surrogate.state,
+        race=surrogate.race,
         owner_type=surrogate.owner_type,
         owner_id=surrogate.owner_id,
         owner_name=owner_name,
@@ -187,6 +190,7 @@ def _surrogate_to_list_item(surrogate, db: Session) -> SurrogateListItem:
         is_archived=surrogate.is_archived,
         age=age,
         bmi=bmi,
+        last_activity_at=last_activity_at or surrogate.updated_at,
         created_at=surrogate.created_at,
     )
 
@@ -326,8 +330,31 @@ def list_surrogates(
     )
     db.commit()
 
+    from app.db.models import SurrogateActivityLog
+    from sqlalchemy import func
+
+    surrogate_ids = [surrogate.id for surrogate in surrogates]
+    last_activity_map = {}
+    if surrogate_ids:
+        last_activity_rows = (
+            db.query(
+                SurrogateActivityLog.surrogate_id,
+                func.max(SurrogateActivityLog.created_at),
+            )
+            .filter(
+                SurrogateActivityLog.organization_id == session.org_id,
+                SurrogateActivityLog.surrogate_id.in_(surrogate_ids),
+            )
+            .group_by(SurrogateActivityLog.surrogate_id)
+            .all()
+        )
+        last_activity_map = {row[0]: row[1] for row in last_activity_rows}
+
     return SurrogateListResponse(
-        items=[_surrogate_to_list_item(s, db) for s in surrogates],
+        items=[
+            _surrogate_to_list_item(s, db, last_activity_at=last_activity_map.get(s.id))
+            for s in surrogates
+        ],
         total=total,
         page=page,
         per_page=per_page,
