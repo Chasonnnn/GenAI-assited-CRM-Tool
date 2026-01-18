@@ -216,6 +216,26 @@ export function PregnancyTrackerCard({
                             )}
                         </div>
                     )}
+
+                    {/* Actual Delivery Date - shown once pregnancy tracking has started */}
+                    {surrogateData.pregnancy_start_date && (
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground w-24 shrink-0">Actual Delivery Date:</span>
+                            <InlineDateField
+                                value={surrogateData.actual_delivery_date}
+                                onSave={async (v) => {
+                                    await onUpdate({ actual_delivery_date: v })
+                                }}
+                                label="Actual delivery date"
+                                placeholder="Set when delivered"
+                            />
+                            {surrogateData.actual_delivery_date && (
+                                <Badge variant="default" className="text-xs bg-green-500/10 text-green-600 border-green-500/20">
+                                    Delivered
+                                </Badge>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Trimester Badge */}

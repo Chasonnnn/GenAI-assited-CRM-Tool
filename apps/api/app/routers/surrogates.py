@@ -134,6 +134,7 @@ def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
         # Pregnancy tracking
         pregnancy_start_date=surrogate.pregnancy_start_date,
         pregnancy_due_date=surrogate.pregnancy_due_date,
+        actual_delivery_date=surrogate.actual_delivery_date,
         is_archived=surrogate.is_archived,
         archived_at=surrogate.archived_at,
         created_at=surrogate.created_at,
@@ -890,7 +891,13 @@ def update_surrogate(
     Update surrogate fields.
 
     Requires: creator or admin+ (blocked after claim for intake)
+
+    Auto-behaviors for actual_delivery_date:
+    - When set: auto-advance stage to 'delivered' if not already there
+    - Clearing does NOT revert stage (stage changes remain explicit)
     """
+    from app.services import pipeline_service
+
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
@@ -902,6 +909,16 @@ def update_surrogate(
     if not can_modify_surrogate(surrogate, str(session.user_id), session.role):
         raise HTTPException(status_code=403, detail="Not authorized to update this surrogate")
 
+    # Track if delivery date is being set for the first time
+    was_delivery_date_empty = surrogate.actual_delivery_date is None
+    update_data = data.model_dump(exclude_unset=True)
+    is_setting_delivery_date = (
+        "actual_delivery_date" in update_data
+        and update_data["actual_delivery_date"] is not None
+        and was_delivery_date_empty
+    )
+    delivery_date_value = update_data.get("actual_delivery_date") if is_setting_delivery_date else None
+
     try:
         surrogate = surrogate_service.update_surrogate(
             db,
@@ -912,6 +929,40 @@ def update_surrogate(
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+    # Auto-advance to 'delivered' stage when delivery date is set
+    if is_setting_delivery_date and surrogate.stage_id:
+        current_stage = pipeline_service.get_stage_by_id(db, surrogate.stage_id)
+        if current_stage and current_stage.slug != "delivered":
+            # Get the delivered stage
+            delivered_stage = pipeline_service.get_stage_by_slug(
+                db, current_stage.pipeline_id, "delivered"
+            )
+            if delivered_stage:
+                # Auto-advance stage (best-effort: don't fail the update if stage change fails)
+                try:
+                    from datetime import datetime, time
+
+                    effective_at = (
+                        datetime.combine(delivery_date_value, time(0, 0))
+                        if delivery_date_value
+                        else None
+                    )
+                    surrogate_service.change_status(
+                        db=db,
+                        surrogate=surrogate,
+                        new_stage_id=delivered_stage.id,
+                        user_id=session.user_id,
+                        user_role=session.role,
+                        reason="Auto-advanced: Actual delivery date was recorded",
+                        effective_at=effective_at,
+                    )
+                    # Refresh surrogate to get updated stage
+                    db.refresh(surrogate)
+                except ValueError:
+                    # Stage change may require approval or fail for other reasons
+                    # Don't fail the update - the date is already saved
+                    pass
 
     return _surrogate_to_read(surrogate, db)
 
@@ -937,10 +988,16 @@ def change_status(
     - Regression (earlier stage): Requires reason + admin approval
     - Undo within 5-min grace period: Bypasses admin approval
 
+    Auto-behaviors for 'delivered' stage:
+    - When changing to 'delivered' and actual_delivery_date is empty, set it to today
+
     Returns:
         status='applied' if change was applied immediately
         status='pending_approval' if regression needs admin approval
     """
+    from datetime import date
+    from app.services import pipeline_service
+
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
@@ -950,6 +1007,10 @@ def change_status(
 
     if surrogate.is_archived:
         raise HTTPException(status_code=400, detail="Cannot change status of archived surrogate")
+
+    # Check if we're changing to 'delivered' stage
+    target_stage = pipeline_service.get_stage_by_id(db, data.stage_id)
+    is_changing_to_delivered = target_stage and target_stage.slug == "delivered"
 
     try:
         result = surrogate_service.change_status(
@@ -963,6 +1024,22 @@ def change_status(
         )
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
+
+    # Auto-set actual_delivery_date when changing to 'delivered' and it's empty
+    if (
+        result["status"] == "applied"
+        and is_changing_to_delivered
+        and result["surrogate"]
+        and result["surrogate"].actual_delivery_date is None
+    ):
+        # Use effective_at date if backdating, otherwise today
+        if data.effective_at:
+            delivery_date = data.effective_at.date() if hasattr(data.effective_at, "date") else date.today()
+        else:
+            delivery_date = date.today()
+        result["surrogate"].actual_delivery_date = delivery_date
+        db.commit()
+        db.refresh(result["surrogate"])
 
     dashboard_service.push_dashboard_stats(db, session.org_id)
 

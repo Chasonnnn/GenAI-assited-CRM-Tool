@@ -106,6 +106,7 @@ class SurrogateCreate(BaseModel):
     # =========================================================================
     pregnancy_start_date: date | None = None
     pregnancy_due_date: date | None = None
+    actual_delivery_date: date | None = None
 
     @field_validator("phone")
     @classmethod
@@ -241,6 +242,7 @@ class SurrogateUpdate(BaseModel):
     # =========================================================================
     pregnancy_start_date: date | None = None
     pregnancy_due_date: date | None = None
+    actual_delivery_date: date | None = None
 
     @field_validator("phone")
     @classmethod
@@ -403,6 +405,7 @@ class SurrogateRead(BaseModel):
     # =========================================================================
     pregnancy_start_date: date | None = None
     pregnancy_due_date: date | None = None
+    actual_delivery_date: date | None = None
 
     # Soft delete
     is_archived: bool

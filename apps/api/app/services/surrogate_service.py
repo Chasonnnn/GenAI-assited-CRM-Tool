@@ -251,6 +251,7 @@ def create_surrogate(
             # Pregnancy tracking
             pregnancy_start_date=data.pregnancy_start_date,
             pregnancy_due_date=data.pregnancy_due_date,
+            actual_delivery_date=data.actual_delivery_date,
             is_priority=data.is_priority if hasattr(data, "is_priority") else False,
         )
         db.add(surrogate)
@@ -369,6 +370,7 @@ def update_surrogate(
         # Pregnancy fields
         "pregnancy_start_date",
         "pregnancy_due_date",
+        "actual_delivery_date",
     }
 
     # Track changes for activity log (new values only)
@@ -484,7 +486,7 @@ def update_surrogate(
                     db.flush()
 
             # Pregnancy fields
-            pregnancy_fields = {"pregnancy_start_date", "pregnancy_due_date"}
+            pregnancy_fields = {"pregnancy_start_date", "pregnancy_due_date", "actual_delivery_date"}
             if changed_fields & pregnancy_fields:
                 activity_service.log_pregnancy_dates_updated(
                     db=db,

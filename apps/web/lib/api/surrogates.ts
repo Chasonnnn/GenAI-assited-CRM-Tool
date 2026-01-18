@@ -151,6 +151,7 @@ export interface SurrogateUpdatePayload {
     // Pregnancy tracking
     pregnancy_start_date?: string | null;
     pregnancy_due_date?: string | null;
+    actual_delivery_date?: string | null;
 }
 
 // Status change payload

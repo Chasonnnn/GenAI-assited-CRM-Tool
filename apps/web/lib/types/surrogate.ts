@@ -112,6 +112,7 @@ export interface SurrogateRead extends SurrogateListItem {
     // =========================================================================
     pregnancy_start_date: string | null;  // ISO date string
     pregnancy_due_date: string | null;    // ISO date string
+    actual_delivery_date: string | null;  // ISO date string
 }
 
 // Paginated response
