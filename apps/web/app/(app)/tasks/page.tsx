@@ -140,10 +140,14 @@ type TaskEditPayload = {
 export default function TasksPage() {
     const searchParams = useSearchParams()
     const router = useRouter()
+    const { user: currentUser } = useAuth()
 
     // Read initial values from URL params
     const urlFilter = searchParams.get("filter")
     const urlFocus = searchParams.get("focus")
+    const urlOwnerId = searchParams.get("owner_id")
+    const canViewOtherOwners = ["admin", "developer"].includes(currentUser?.role || "")
+    const ownerOverride = canViewOtherOwners && urlOwnerId ? urlOwnerId : null
 
     const [filter, setFilter] = useState<FilterType>(
         isFilterType(urlFilter) ? urlFilter : "my_tasks"
@@ -208,6 +212,9 @@ export default function TasksPage() {
         setEditingTask(null)
     }
 
+    const taskOwnerId = ownerOverride ?? undefined
+    const useMyTasks = !taskOwnerId && filter === "my_tasks"
+
     // Fetch incomplete tasks
     const {
         data: incompleteTasks,
@@ -215,7 +222,8 @@ export default function TasksPage() {
         isError: incompleteError,
         refetch: refetchIncomplete,
     } = useTasks({
-        my_tasks: filter === "my_tasks",
+        my_tasks: useMyTasks,
+        owner_id: taskOwnerId,
         is_completed: false,
         per_page: 100,
         exclude_approvals: true,
@@ -228,7 +236,8 @@ export default function TasksPage() {
         isError: completedError,
         refetch: refetchCompleted,
     } = useTasks({
-        my_tasks: filter === "my_tasks",
+        my_tasks: useMyTasks,
+        owner_id: taskOwnerId,
         is_completed: true,
         per_page: 50,
         exclude_approvals: true,
@@ -236,15 +245,13 @@ export default function TasksPage() {
 
     // Fetch pending workflow approvals (always my_tasks)
     const { data: pendingApprovals, isLoading: loadingApprovals } = useTasks({
-        my_tasks: true,
+        my_tasks: !taskOwnerId,
+        owner_id: taskOwnerId,
         task_type: "workflow_approval",
         status: ["pending", "in_progress"],
         exclude_approvals: false,
         per_page: 50,
     })
-
-    // Get current user for ownership check
-    const { user: currentUser } = useAuth()
 
     const canViewStatusRequests = ["admin", "developer"].includes(currentUser?.role || "")
 
