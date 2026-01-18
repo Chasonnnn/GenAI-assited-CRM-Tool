@@ -12,7 +12,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.core.encryption import hash_email
-from app.db.models import AIActionApproval, AISettings, Surrogate
+from app.db.models import AIActionApproval, AISettings, Surrogate, AIEntitySummary
 from app.services import ai_settings_service
 from app.services.ai_provider import ChatResponse
 from app.utils.normalization import normalize_email
@@ -186,3 +186,71 @@ async def test_ai_chat_anonymizes_case_messages(
     combined = "\n".join(msg.content for msg in captured_messages)
     assert surrogate.full_name not in combined
     assert email not in combined
+
+
+@pytest.mark.asyncio
+async def test_ai_chat_creates_entity_summary(
+    db, authed_client: AsyncClient, test_auth, default_stage, monkeypatch
+):
+    email = f"case-{uuid.uuid4().hex[:8]}@test.com"
+    surrogate = Surrogate(
+        surrogate_number=f"S{uuid.uuid4().int % 90000 + 10000:05d}",
+        organization_id=test_auth.org.id,
+        stage_id=default_stage.id,
+        status_label=default_stage.label,
+        owner_type="user",
+        owner_id=test_auth.user.id,
+        full_name="Test Case",
+        email=normalize_email(email),
+        email_hash=hash_email(email),
+    )
+    db.add(surrogate)
+    db.flush()
+
+    ai_settings = AISettings(
+        organization_id=test_auth.org.id,
+        is_enabled=False,
+        provider="openai",
+        model="gpt-4o-mini",
+        current_version=1,
+    )
+    db.add(ai_settings)
+    db.flush()
+
+    class StubProvider:
+        async def chat(self, messages):  # noqa: ARG002
+            return ChatResponse(
+                content="Ok",
+                prompt_tokens=1,
+                completion_tokens=1,
+                total_tokens=2,
+                model="gpt-4o-mini",
+            )
+
+    monkeypatch.setattr(
+        ai_settings_service,
+        "get_ai_provider_for_org",
+        lambda _db, _org_id: StubProvider(),
+    )
+
+    response = await authed_client.post(
+        "/ai/chat",
+        json={
+            "entity_type": "case",
+            "entity_id": str(surrogate.id),
+            "message": "Hello",
+        },
+    )
+    assert response.status_code == 200
+
+    summary = (
+        db.query(AIEntitySummary)
+        .filter(
+            AIEntitySummary.organization_id == test_auth.org.id,
+            AIEntitySummary.entity_type == "surrogate",
+            AIEntitySummary.entity_id == surrogate.id,
+        )
+        .first()
+    )
+    assert summary is not None
+    assert summary.summary_text

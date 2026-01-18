@@ -186,6 +186,12 @@ def get_ai_provider_for_org(db: Session, organization_id: uuid.UUID) -> AIProvid
 
     Returns None if AI is not enabled or not configured.
     """
+    from app.db.models import Organization
+
+    org = db.query(Organization).filter(Organization.id == organization_id).first()
+    if not org or not org.ai_enabled:
+        return None
+
     ai_settings = get_ai_settings(db, organization_id)
 
     if not ai_settings:

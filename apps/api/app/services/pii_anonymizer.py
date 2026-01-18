@@ -122,6 +122,17 @@ def rehydrate_text(text: str, mapping: PIIMapping) -> str:
     return result
 
 
+def rehydrate_data(value, mapping: PIIMapping):
+    """Rehydrate placeholders in nested structures."""
+    if isinstance(value, str):
+        return rehydrate_text(value, mapping)
+    if isinstance(value, list):
+        return [rehydrate_data(item, mapping) for item in value]
+    if isinstance(value, dict):
+        return {key: rehydrate_data(item, mapping) for key, item in value.items()}
+    return value
+
+
 def anonymize_surrogate_context(
     first_name: str | None,
     last_name: str | None,

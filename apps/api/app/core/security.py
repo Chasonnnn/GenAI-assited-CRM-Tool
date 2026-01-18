@@ -64,6 +64,47 @@ def decode_session_token(token: str) -> dict:
 
 
 # =============================================================================
+# Export Token (short-lived, read-only)
+# =============================================================================
+
+
+def create_export_token(
+    org_id: UUID,
+    surrogate_id: UUID,
+    ttl_minutes: int = 5,
+) -> str:
+    """
+    Create a short-lived export token for Journey PDF rendering.
+
+    Purpose-bound and scoped to org + surrogate.
+    """
+    payload = {
+        "org_id": str(org_id),
+        "surrogate_id": str(surrogate_id),
+        "purpose": "journey_export",
+        "iat": datetime.now(timezone.utc),
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes),
+    }
+    return jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
+
+
+def decode_export_token(token: str) -> dict:
+    """
+    Decode and verify export token.
+
+    Uses the same secret rotation strategy as session tokens.
+    """
+    last_error = None
+    for secret in settings.jwt_secrets:
+        try:
+            return jwt.decode(token, secret, algorithms=["HS256"])
+        except jwt.InvalidTokenError as e:
+            last_error = e
+            continue
+    raise last_error  # type: ignore
+
+
+# =============================================================================
 # OAuth State/Nonce with User-Agent Binding
 # =============================================================================
 

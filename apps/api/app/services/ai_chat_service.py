@@ -19,6 +19,7 @@ from app.db.models import (
     AIMessage,
     AIActionApproval,
     AIUsageLog,
+    AIEntitySummary,
     Surrogate,
     EntityNote,
     Task,
@@ -130,6 +131,8 @@ Example action:
 - Keep responses focused on the current task context
 """
 
+ENTITY_SUMMARY_TTL_MINUTES = 10
+
 
 def _build_performance_context(
     db: Session,
@@ -227,6 +230,7 @@ def _build_dynamic_context(
     user_integrations: list[str],
     anonymize: bool = False,
     pii_mapping: PIIMapping | None = None,
+    include_integrations: bool = True,
 ) -> str:
     """Build dynamic context string for the current surrogate.
 
@@ -298,15 +302,85 @@ def _build_dynamic_context(
             lines.append(f"- {task.title}{due}")
 
     # Add user integrations
-    lines.append("\n## Your Connected Integrations")
+    if include_integrations:
+        lines.append("\n## Your Connected Integrations")
+        if "gmail" in user_integrations:
+            lines.append("- ✓ Gmail (can send emails)")
+        else:
+            lines.append("- ✗ Gmail not connected (can only draft emails)")
+        if "zoom" in user_integrations:
+            lines.append("- ✓ Zoom (can create meetings)")
+
+    return "\n".join(lines)
+
+
+def _build_integrations_context(user_integrations: list[str]) -> str:
+    lines = ["## Your Connected Integrations"]
     if "gmail" in user_integrations:
         lines.append("- ✓ Gmail (can send emails)")
     else:
         lines.append("- ✗ Gmail not connected (can only draft emails)")
     if "zoom" in user_integrations:
         lines.append("- ✓ Zoom (can create meetings)")
-
     return "\n".join(lines)
+
+
+def _get_or_update_entity_summary(
+    db: Session,
+    organization_id: uuid.UUID,
+    entity_type: str,
+    entity_id: uuid.UUID,
+    summary_text: str,
+) -> AIEntitySummary:
+    now = datetime.now(timezone.utc)
+    summary = (
+        db.query(AIEntitySummary)
+        .filter(
+            AIEntitySummary.organization_id == organization_id,
+            AIEntitySummary.entity_type == entity_type,
+            AIEntitySummary.entity_id == entity_id,
+        )
+        .first()
+    )
+    if summary:
+        summary.summary_text = summary_text
+        summary.updated_at = now
+        return summary
+
+    summary = AIEntitySummary(
+        organization_id=organization_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        summary_text=summary_text,
+        notes_plain_text=None,
+        updated_at=now,
+    )
+    db.add(summary)
+    return summary
+
+
+def _get_cached_entity_summary(
+    db: Session,
+    organization_id: uuid.UUID,
+    entity_type: str,
+    entity_id: uuid.UUID,
+) -> str | None:
+    summary = (
+        db.query(AIEntitySummary)
+        .filter(
+            AIEntitySummary.organization_id == organization_id,
+            AIEntitySummary.entity_type == entity_type,
+            AIEntitySummary.entity_id == entity_id,
+        )
+        .first()
+    )
+    if not summary:
+        return None
+    if summary.updated_at < datetime.now(timezone.utc) - timedelta(
+        minutes=ENTITY_SUMMARY_TTL_MINUTES
+    ):
+        return None
+    return summary.summary_text
 
 
 def _parse_actions(content: str) -> list[JsonObject]:
@@ -587,26 +661,62 @@ async def chat_async(
     dynamic_context = ""
 
     if normalized_entity_type == SURROGATE_ENTITY_TYPE:
-        surrogate, notes, tasks = get_surrogate_context(
-            db=db,
-            surrogate_id=entity_id,
-            organization_id=organization_id,
-            notes_limit=notes_limit,
+        cached_summary = _get_cached_entity_summary(
+            db, organization_id, SURROGATE_ENTITY_TYPE, entity_id
         )
-        if not surrogate:
-            return {
-                "content": "Surrogate not found.",
-                "proposed_actions": [],
-                "tokens_used": {"prompt": 0, "completion": 0, "total": 0},
-            }
-        dynamic_context = _build_dynamic_context(
-            surrogate,
-            notes,
-            tasks,
-            user_integrations,
-            anonymize=should_anonymize,
-            pii_mapping=pii_mapping,
-        )
+        if cached_summary:
+            surrogate = (
+                db.query(Surrogate)
+                .filter(
+                    Surrogate.id == entity_id,
+                    Surrogate.organization_id == organization_id,
+                )
+                .first()
+            )
+            if not surrogate:
+                return {
+                    "content": "Surrogate not found.",
+                    "proposed_actions": [],
+                    "tokens_used": {"prompt": 0, "completion": 0, "total": 0},
+                }
+            summary_text = cached_summary
+        else:
+            surrogate, notes, tasks = get_surrogate_context(
+                db=db,
+                surrogate_id=entity_id,
+                organization_id=organization_id,
+                notes_limit=notes_limit,
+            )
+            if not surrogate:
+                return {
+                    "content": "Surrogate not found.",
+                    "proposed_actions": [],
+                    "tokens_used": {"prompt": 0, "completion": 0, "total": 0},
+                }
+            summary_text = _build_dynamic_context(
+                surrogate,
+                notes,
+                tasks,
+                user_integrations,
+                anonymize=False,
+                pii_mapping=None,
+                include_integrations=False,
+            )
+            _get_or_update_entity_summary(
+                db,
+                organization_id,
+                SURROGATE_ENTITY_TYPE,
+                entity_id,
+                summary_text,
+            )
+
+        dynamic_context = summary_text + "\n\n" + _build_integrations_context(user_integrations)
+        if should_anonymize and pii_mapping:
+            known_names = []
+            if surrogate.full_name:
+                known_names.append(surrogate.full_name)
+                known_names.extend(surrogate.full_name.split())
+            dynamic_context = anonymize_text(dynamic_context, pii_mapping, known_names)
     elif normalized_entity_type == "task":
         task, related_surrogate = get_task_context(db, entity_id, organization_id)
         if not task:
