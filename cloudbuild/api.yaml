@@ -9,6 +9,8 @@ steps:
     args: ["run", "jobs", "update", "$_WORKER_JOB", "--image", "$_IMAGE_API", "--region", "$_REGION", "--quiet"]
 images:
   - "$_IMAGE_API"
+options:
+  logging: CLOUD_LOGGING_ONLY
 substitutions:
   _REGION: "us-central1"
   _API_SERVICE: "crm-api"
