@@ -504,3 +504,171 @@ def test_campaign_run_skips_existing_recipient(
 
     assert result["total_count"] == 1
     assert result["sent_count"] == 1
+
+
+def test_execute_campaign_run_streams_recipients(db, test_org, test_user, test_template, monkeypatch):
+    """Execute should stream recipients without calling .all()."""
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from app.db.models import CampaignRun
+    from app.schemas.campaign import CampaignCreate
+    from app.services import campaign_service, email_service
+
+    class FakeQuery:
+        def __init__(self, recipients):
+            self._recipients = recipients
+
+        def count(self):
+            return len(self._recipients)
+
+        def order_by(self, *args, **kwargs):
+            return self
+
+        def yield_per(self, *args, **kwargs):
+            return self
+
+        def execution_options(self, **kwargs):
+            return self
+
+        def options(self, *args, **kwargs):
+            return self
+
+        def all(self):
+            raise AssertionError("execute_campaign_run should not call .all()")
+
+        def __iter__(self):
+            return iter(self._recipients)
+
+    create_data = CampaignCreate(
+        name="Streamed Campaign",
+        email_template_id=test_template.id,
+        recipient_type="case",
+        filter_criteria={},
+    )
+    campaign = campaign_service.create_campaign(db, test_org.id, test_user.id, create_data)
+
+    run = CampaignRun(
+        id=uuid4(),
+        organization_id=test_org.id,
+        campaign_id=campaign.id,
+        status="pending",
+        total_count=0,
+        sent_count=0,
+        failed_count=0,
+        skipped_count=0,
+    )
+    db.add(run)
+    db.flush()
+
+    recipient = SimpleNamespace(
+        id=uuid4(),
+        email="stream@example.com",
+        full_name="Stream Recipient",
+        first_name="Stream",
+    )
+
+    monkeypatch.setattr(
+        campaign_service,
+        "_build_recipient_query",
+        lambda *args, **kwargs: FakeQuery([recipient]),
+    )
+
+    def fake_send_email(*args, **kwargs):
+        return SimpleNamespace(id=uuid4()), None
+
+    monkeypatch.setattr(email_service, "send_email", fake_send_email)
+
+    result = campaign_service.execute_campaign_run(
+        db=db,
+        org_id=test_org.id,
+        campaign_id=campaign.id,
+        run_id=run.id,
+    )
+
+    assert result["total_count"] == 1
+
+
+def test_execute_campaign_run_uses_bulk_suppression(db, test_org, test_user, test_template, monkeypatch):
+    """Execute should not call per-recipient suppression checks."""
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from app.db.models import CampaignRun
+    from app.schemas.campaign import CampaignCreate
+    from app.services import campaign_service, email_service
+
+    class FakeQuery:
+        def __init__(self, recipients):
+            self._recipients = recipients
+
+        def count(self):
+            return len(self._recipients)
+
+        def order_by(self, *args, **kwargs):
+            return self
+
+        def yield_per(self, *args, **kwargs):
+            return self
+
+        def execution_options(self, **kwargs):
+            return self
+
+        def options(self, *args, **kwargs):
+            return self
+
+        def __iter__(self):
+            return iter(self._recipients)
+
+    create_data = CampaignCreate(
+        name="Bulk Suppression Campaign",
+        email_template_id=test_template.id,
+        recipient_type="case",
+        filter_criteria={},
+    )
+    campaign = campaign_service.create_campaign(db, test_org.id, test_user.id, create_data)
+
+    run = CampaignRun(
+        id=uuid4(),
+        organization_id=test_org.id,
+        campaign_id=campaign.id,
+        status="pending",
+        total_count=0,
+        sent_count=0,
+        failed_count=0,
+        skipped_count=0,
+    )
+    db.add(run)
+    db.flush()
+
+    recipient = SimpleNamespace(
+        id=uuid4(),
+        email="bulk@example.com",
+        full_name="Bulk Recipient",
+        first_name="Bulk",
+    )
+
+    monkeypatch.setattr(
+        campaign_service,
+        "_build_recipient_query",
+        lambda *args, **kwargs: FakeQuery([recipient]),
+    )
+
+    def fake_send_email(*args, **kwargs):
+        return SimpleNamespace(id=uuid4()), None
+
+    monkeypatch.setattr(email_service, "send_email", fake_send_email)
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("Per-recipient suppression check should not be called")
+
+    monkeypatch.setattr(campaign_service, "is_email_suppressed", fail_if_called)
+
+    result = campaign_service.execute_campaign_run(
+        db=db,
+        org_id=test_org.id,
+        campaign_id=campaign.id,
+        run_id=run.id,
+    )
+
+    assert result["total_count"] == 1
