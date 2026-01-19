@@ -15,6 +15,8 @@ steps:
     args: ["run", "services", "update", "$_WEB_SERVICE", "--image", "$_IMAGE_WEB", "--region", "$_REGION", "--quiet"]
 images:
   - "$_IMAGE_WEB"
+options:
+  logging: CLOUD_LOGGING_ONLY
 substitutions:
   _REGION: "us-central1"
   _WEB_SERVICE: "crm-web"
