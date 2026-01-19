@@ -1,5 +1,6 @@
 """Campaign service for bulk email management."""
 
+import os
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -27,6 +28,9 @@ from app.schemas.campaign import (
     RecipientPreview,
     FilterCriteria,
 )
+
+
+CAMPAIGN_SEND_BATCH_SIZE = int(os.getenv("CAMPAIGN_SEND_BATCH_SIZE", "200"))
 
 
 # =============================================================================
@@ -259,6 +263,35 @@ def _build_recipient_query(db: Session, org_id: UUID, recipient_type: str, filte
         return query
 
     raise ValueError(f"Unknown recipient type: {recipient_type}")
+
+
+def _load_suppressed_emails(db: Session, org_id: UUID) -> set[str]:
+    rows = (
+        db.query(EmailSuppression.email)
+        .filter(EmailSuppression.organization_id == org_id)
+        .all()
+    )
+    return {row.email.lower() for row in rows if row.email}
+
+
+def _load_existing_recipients(
+    db: Session,
+    run_id: UUID,
+    entity_type: str,
+    entity_ids: list[UUID],
+) -> dict[UUID, CampaignRecipient]:
+    if not entity_ids:
+        return {}
+    recipients = (
+        db.query(CampaignRecipient)
+        .filter(
+            CampaignRecipient.run_id == run_id,
+            CampaignRecipient.entity_type == entity_type,
+            CampaignRecipient.entity_id.in_(entity_ids),
+        )
+        .all()
+    )
+    return {recipient.entity_id: recipient for recipient in recipients}
 
 
 def preview_recipients(
@@ -643,160 +676,164 @@ def execute_campaign_run(
     run.started_at = datetime.now(timezone.utc)
     db.commit()
 
-    # Get recipients
-    recipients = _build_recipient_query(
+    recipient_query = _build_recipient_query(
         db, org_id, campaign.recipient_type, campaign.filter_criteria or {}
-    ).all()
+    )
+    if campaign.recipient_type == "case":
+        email_col = Surrogate.email
+        id_col = Surrogate.id
+    else:
+        email_col = IntendedParent.email
+        id_col = IntendedParent.id
 
-    recipients.sort(key=lambda r: ((r.email or "").lower(), str(r.id)))
-
-    run.total_count = len(recipients)
+    recipient_query = recipient_query.order_by(func.lower(email_col), id_col)
+    run.total_count = recipient_query.count()
     db.commit()
 
     seen_emails: dict[str, str | None] = {}
+    suppressed_emails = _load_suppressed_emails(db, org_id)
 
-    for recipient in recipients:
-        # Get email and name
-        if campaign.recipient_type == "case":
-            email = recipient.email
-            name = recipient.full_name or recipient.first_name
-            entity_id = recipient.id
-        else:  # intended_parent
-            email = recipient.email
-            name = recipient.full_name or recipient.first_name
-            entity_id = recipient.id
-
-        if not email:
-            continue
-
-        email_norm = email.strip().lower()
-        if not email_norm:
-            continue
-
-        existing = (
-            db.query(CampaignRecipient)
-            .filter(
-                CampaignRecipient.run_id == run_id,
-                CampaignRecipient.entity_type == campaign.recipient_type,
-                CampaignRecipient.entity_id == entity_id,
-            )
-            .first()
-        )
-
-        if email_norm in seen_emails:
-            skip_reason = seen_emails[email_norm] or "duplicate_email"
-            if not existing:
-                existing = CampaignRecipient(
-                    organization_id=org_id,
-                    run_id=run_id,
-                    entity_type=campaign.recipient_type,
-                    entity_id=entity_id,
-                    recipient_email=email,
-                    recipient_name=name,
-                )
-                db.add(existing)
-                db.flush()
-            if existing.status not in (
-                CampaignRecipientStatus.SENT.value,
-                CampaignRecipientStatus.SKIPPED.value,
-            ):
-                existing.status = CampaignRecipientStatus.SKIPPED.value
-                existing.skip_reason = skip_reason
-                db.commit()
-            continue
-
-        # Check suppression
-        if is_email_suppressed(db, org_id, email_norm):
-            seen_emails[email_norm] = "suppressed"
-            if not existing:
-                existing = CampaignRecipient(
-                    organization_id=org_id,
-                    run_id=run_id,
-                    entity_type=campaign.recipient_type,
-                    entity_id=entity_id,
-                    recipient_email=email,
-                    recipient_name=name,
-                )
-                db.add(existing)
-                db.flush()
-            if existing.status not in (
-                CampaignRecipientStatus.SENT.value,
-                CampaignRecipientStatus.SKIPPED.value,
-            ):
-                existing.status = CampaignRecipientStatus.SKIPPED.value
-                existing.skip_reason = "suppressed"
-                db.commit()
-            continue
-
-        seen_emails[email_norm] = None
-
-        # Build email from template with variable substitution
-        subject = template.subject
-        body = template.body
-
-        # Basic variable replacement
-        variables = {
-            "first_name": name.split()[0] if name else "",
-            "full_name": name or "",
-            "email": email,
-        }
-
-        for key, value in variables.items():
-            placeholder = "{{" + key + "}}"
-            subject = subject.replace(placeholder, str(value) if value else "")
-            body = body.replace(placeholder, str(value) if value else "")
-
-        # Create recipient record
-        cr = existing
-        if not cr:
-            from app.services import tracking_service
-
-            cr = CampaignRecipient(
-                organization_id=org_id,
+    def _mark_skipped(existing_recipient, reason, email, name, entity_id):
+        if not existing_recipient:
+            existing_recipient = CampaignRecipient(
                 run_id=run_id,
                 entity_type=campaign.recipient_type,
                 entity_id=entity_id,
                 recipient_email=email,
                 recipient_name=name,
-                status=CampaignRecipientStatus.PENDING.value,
-                tracking_token=tracking_service.generate_tracking_token(),
+                status=CampaignRecipientStatus.SKIPPED.value,
+                skip_reason=reason,
             )
-            db.add(cr)
-            db.flush()
-        elif cr.status in (
+            db.add(existing_recipient)
+            return
+        if existing_recipient.status not in (
             CampaignRecipientStatus.SENT.value,
             CampaignRecipientStatus.SKIPPED.value,
         ):
-            continue
+            existing_recipient.status = CampaignRecipientStatus.SKIPPED.value
+            existing_recipient.skip_reason = reason
 
-        # Ensure tracking token exists (for retried sends)
-        if not cr.tracking_token:
+    batch_size = max(1, CAMPAIGN_SEND_BATCH_SIZE)
+    recipients_buffer = []
+    recipient_iter = recipient_query.execution_options(stream_results=True).yield_per(batch_size)
+
+    def _process_batch(batch):
+        entity_ids = [recipient.id for recipient in batch]
+        existing_by_entity = _load_existing_recipients(
+            db,
+            run_id,
+            campaign.recipient_type,
+            entity_ids,
+        )
+
+        for recipient in batch:
+            # Get email and name
+            if campaign.recipient_type == "case":
+                email = recipient.email
+                name = recipient.full_name or recipient.first_name
+                entity_id = recipient.id
+            else:  # intended_parent
+                email = recipient.email
+                name = recipient.full_name or recipient.first_name
+                entity_id = recipient.id
+
+            if not email:
+                continue
+
+            email_norm = email.strip().lower()
+            if not email_norm:
+                continue
+
+            existing = existing_by_entity.get(entity_id)
+
+            if email_norm in seen_emails:
+                skip_reason = seen_emails[email_norm] or "duplicate_email"
+                _mark_skipped(existing, skip_reason, email, name, entity_id)
+                continue
+
+            # Check suppression
+            if email_norm in suppressed_emails:
+                seen_emails[email_norm] = "suppressed"
+                _mark_skipped(existing, "suppressed", email, name, entity_id)
+                continue
+
+            seen_emails[email_norm] = None
+
+            # Build email from template with variable substitution
+            subject = template.subject
+            body = template.body
+
+            # Basic variable replacement
+            variables = {
+                "first_name": name.split()[0] if name else "",
+                "full_name": name or "",
+                "email": email,
+            }
+
+            for key, value in variables.items():
+                placeholder = "{{" + key + "}}"
+                subject = subject.replace(placeholder, str(value) if value else "")
+                body = body.replace(placeholder, str(value) if value else "")
+
+            # Create recipient record
+            cr = existing
+            if not cr:
+                from app.services import tracking_service
+
+                cr = CampaignRecipient(
+                    run_id=run_id,
+                    entity_type=campaign.recipient_type,
+                    entity_id=entity_id,
+                    recipient_email=email,
+                    recipient_name=name,
+                    status=CampaignRecipientStatus.PENDING.value,
+                    tracking_token=tracking_service.generate_tracking_token(),
+                )
+                db.add(cr)
+            elif cr.status in (
+                CampaignRecipientStatus.SENT.value,
+                CampaignRecipientStatus.SKIPPED.value,
+            ):
+                continue
+
+            # Ensure tracking token exists (for retried sends)
+            if not cr.tracking_token:
+                from app.services import tracking_service
+
+                cr.tracking_token = tracking_service.generate_tracking_token()
+
+            # Inject tracking pixel and wrap links
             from app.services import tracking_service
 
-            cr.tracking_token = tracking_service.generate_tracking_token()
+            tracked_body = tracking_service.prepare_email_for_tracking(body, cr.tracking_token)
 
-        # Inject tracking pixel and wrap links
-        from app.services import tracking_service
-
-        tracked_body = tracking_service.prepare_email_for_tracking(body, cr.tracking_token)
-
-        try:
-            # Queue email (actual send happens in background job)
-            email_log, _job = email_service.send_email(
-                db=db,
-                org_id=org_id,
-                template_id=template.id,
-                recipient_email=email,
-                subject=subject,
-                body=tracked_body,
-            )
-            cr.status = CampaignRecipientStatus.PENDING.value
-            cr.external_message_id = str(email_log.id)
-        except Exception as e:
-            cr.status = CampaignRecipientStatus.FAILED.value
-            cr.error = str(e)[:500]
+            try:
+                # Queue email (actual send happens in background job)
+                email_log, _job = email_service.send_email(
+                    db=db,
+                    org_id=org_id,
+                    template_id=template.id,
+                    recipient_email=email,
+                    subject=subject,
+                    body=tracked_body,
+                    commit=False,
+                )
+                cr.status = CampaignRecipientStatus.PENDING.value
+                cr.external_message_id = str(email_log.id)
+            except Exception as e:
+                cr.status = CampaignRecipientStatus.FAILED.value
+                cr.error = str(e)[:500]
 
         db.commit()
+
+    for recipient in recipient_iter:
+        recipients_buffer.append(recipient)
+        if len(recipients_buffer) >= batch_size:
+            _process_batch(recipients_buffer)
+            recipients_buffer = []
+
+    if recipients_buffer:
+        _process_batch(recipients_buffer)
 
     # Update run and campaign status
     status_rows = (
