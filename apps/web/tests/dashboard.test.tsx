@@ -1,6 +1,6 @@
 import type { PropsWithChildren } from "react"
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { ApiError } from '@/lib/api'
 import { formatLocalDate } from '@/lib/utils/date'
 import DashboardPage from '../app/(app)/dashboard/page'
@@ -245,6 +245,8 @@ describe('DashboardPage', () => {
         })
 
         render(<DashboardPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: /Upcoming This Week/i }))
 
         expect(screen.getByText('Overdue tasks')).toBeInTheDocument()
         expect(screen.queryByText('Overdue Task 1')).not.toBeInTheDocument()
