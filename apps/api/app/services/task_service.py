@@ -604,6 +604,70 @@ def list_open_tasks_for_surrogate(
     return query.order_by(Task.due_date.asc()).limit(limit).all()
 
 
+def iter_tasks_due_in_window(
+    db: Session,
+    org_id: UUID,
+    window_start,
+    window_end,
+    batch_size: int = 1000,
+):
+    """Yield tasks due within a time window (org-scoped)."""
+    from datetime import datetime as dt
+    from app.db.models import Surrogate
+
+    start_date = window_start.date()
+    end_date = window_end.date()
+    tzinfo = window_start.tzinfo
+
+    query = (
+        db.query(Task)
+        .join(Surrogate)
+        .filter(
+            Surrogate.organization_id == org_id,
+            Task.due_date.isnot(None),
+            Task.due_date >= start_date,
+            Task.due_date <= end_date,
+            Task.is_completed.is_(False),
+            Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
+        )
+        .order_by(Task.due_date.asc(), Task.id.asc())
+    )
+
+    for task in query.yield_per(batch_size):
+        if not task.due_date:
+            continue
+        due_dt = dt.combine(task.due_date, task.due_time or dt.min.time())
+        if tzinfo:
+            due_dt = due_dt.replace(tzinfo=tzinfo)
+        if window_start <= due_dt <= window_end:
+            yield task
+
+
+def iter_overdue_tasks(
+    db: Session,
+    org_id: UUID,
+    today,
+    batch_size: int = 1000,
+):
+    """Yield overdue tasks (org-scoped)."""
+    from app.db.models import Surrogate
+
+    query = (
+        db.query(Task)
+        .join(Surrogate)
+        .filter(
+            Surrogate.organization_id == org_id,
+            Task.due_date.isnot(None),
+            Task.due_date < today,
+            Task.is_completed.is_(False),
+            Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
+        )
+        .order_by(Task.due_date.asc(), Task.id.asc())
+    )
+
+    yield from query.yield_per(batch_size)
+
+
 def list_user_tasks_due_on(
     db: Session,
     org_id: UUID,
