@@ -3,6 +3,7 @@ region            = "us-central1"
 domain            = "example.com"
 github_owner      = "your-github-org-or-user"
 github_repo       = "your-repo-name"
+cloudbuild_repository = "projects/PROJECT/locations/REGION/connections/CONNECTION/repositories/REPO"
 
 database_password = "replace-me"
 s3_bucket         = "your-s3-bucket"
