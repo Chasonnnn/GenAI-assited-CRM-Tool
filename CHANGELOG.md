@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.21.0...surrogacy-crm-platform-v0.22.0) (2026-01-19)
+
+
+### Features
+
+* **api:** add cursor-based pagination for high-volume lists ([f0ef13b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f0ef13b65139f677908ff1d9cc78888312fa88cd))
+* **db:** add indexes for analytics and activity log queries ([e647930](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e6479302aab34f0e5d9f60b43e5981e3129d594d))
+* **email:** add email service enhancements ([f5f24aa](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f5f24aa46e3514ab17f37b7e48d69285e24edef2))
+* **import:** store CSV content in DB and improve import handling ([237cedc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/237cedc0537387d1aa81614400843fcb65592bba))
+* **org:** add portal domain support and bootstrap tests ([2c1945d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2c1945d06ccef97dec1b82ef2f574dd7919b866d))
+* **realtime:** add Redis pub/sub backplane for WebSocket ([e4ee1a5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e4ee1a507b89370b489e0a25f6f41ad2a0da84e3))
+* **tasks:** add task service improvements ([96d5256](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/96d525646eaf24c15e709e391582aa506f99d296))
+* **worker:** add job type segregation for priority handling ([f317b8d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f317b8d940656ad604b087efcc3956314b75f1f2))
+
+
+### Bug Fixes
+
+* **api:** minor router and security fixes ([c8d2aec](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c8d2aec0d1cb0a6c7942c7e02911e8a91c782649))
+
+
+### Performance Improvements
+
+* **analytics:** optimize date queries with expression indexes ([05cca34](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/05cca344266c200e5a9249f0360ca072b06e4909))
+* **campaigns:** batch recipient processing and reduce commits ([cf8c7ba](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cf8c7ba36c1142d5b4f14b37aa435fcad459e81b))
+* **worker:** optimize task sweep with SQL date filtering ([d35bdd1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d35bdd1995d009399f695108b66173cc7896cfa2))
+
 ## [0.21.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.20.0...surrogacy-crm-platform-v0.21.0) (2026-01-19)
 
 
