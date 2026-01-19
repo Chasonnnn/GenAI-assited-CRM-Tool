@@ -40,6 +40,29 @@ async def test_zoom_connect_sets_state_cookie_and_returns_auth_url(
 
 
 @pytest.mark.asyncio
+async def test_zoom_connect_uses_cross_site_cookie_settings_when_enabled(
+    authed_client: AsyncClient,
+    monkeypatch,
+):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "COOKIE_SAMESITE", "none")
+
+    response = await authed_client.get("/integrations/zoom/connect")
+    assert response.status_code == 200
+
+    cookie_headers = response.headers.get_list("set-cookie")
+    zoom_cookie = next(
+        header
+        for header in cookie_headers
+        if "integration_oauth_state_zoom=" in header
+    )
+    zoom_cookie_lower = zoom_cookie.lower()
+    assert "samesite=none" in zoom_cookie_lower
+    assert "secure" in zoom_cookie_lower
+
+
+@pytest.mark.asyncio
 async def test_zoom_callback_requires_state_cookie(authed_client: AsyncClient):
     response = await authed_client.get(
         "/integrations/zoom/callback",

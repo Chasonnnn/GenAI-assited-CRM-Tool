@@ -94,7 +94,7 @@ def login_as(
         value=token,
         max_age=settings.JWT_EXPIRES_HOURS * 3600,
         httponly=True,
-        samesite="lax",
+        samesite=settings.cookie_samesite,
         secure=settings.cookie_secure,
         path="/",
     )

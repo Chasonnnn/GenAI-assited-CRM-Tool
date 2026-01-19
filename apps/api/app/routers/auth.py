@@ -104,7 +104,7 @@ def google_login(request: Request, login_hint: str | None = None):
         value=state_payload,
         max_age=OAUTH_STATE_MAX_AGE,
         httponly=True,
-        samesite="lax",
+        samesite=settings.cookie_samesite,
         secure=settings.cookie_secure,
         path="/auth",
     )
@@ -207,7 +207,7 @@ async def google_callback(
         value=session_token,
         max_age=settings.JWT_EXPIRES_HOURS * 3600,
         httponly=True,
-        samesite="lax",
+        samesite=settings.cookie_samesite,
         secure=settings.cookie_secure,
         path="/",
     )
