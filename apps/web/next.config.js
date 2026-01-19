@@ -1,8 +1,7 @@
-const bundleAnalyzer = require("@next/bundle-analyzer");
-
-const withBundleAnalyzer = bundleAnalyzer({
-  enabled: process.env.ANALYZE === "true",
-});
+const withBundleAnalyzer =
+  process.env.ANALYZE === "true"
+    ? require("@next/bundle-analyzer")({ enabled: true })
+    : (config) => config;
 
 module.exports = withBundleAnalyzer({
   turbopack: {
