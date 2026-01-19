@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     JWT_SECRET: str = ""
     JWT_SECRET_PREVIOUS: str = ""  # Set during rotation, clear after
     JWT_EXPIRES_HOURS: int = 4
+    COOKIE_SAMESITE: str = "lax"
 
     # Google OAuth
     GOOGLE_CLIENT_ID: str = ""
@@ -319,8 +320,18 @@ class Settings(BaseSettings):
         return secrets
 
     @property
+    def cookie_samesite(self) -> str:
+        """Normalize SameSite setting for cookies."""
+        value = (self.COOKIE_SAMESITE or "lax").strip().lower()
+        if value not in {"lax", "strict", "none"}:
+            raise ValueError("COOKIE_SAMESITE must be one of: lax, strict, none")
+        return value
+
+    @property
     def cookie_secure(self) -> bool:
         """Secure cookies only in production."""
+        if self.cookie_samesite == "none":
+            return True
         return not self.is_dev
 
 
