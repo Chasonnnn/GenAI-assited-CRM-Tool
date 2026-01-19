@@ -1,7 +1,10 @@
 """Application configuration with environment variables."""
 
+import json
 import os
+from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_JWT_SECRET = "change-this-in-production"
@@ -14,6 +17,40 @@ DEFAULT_ZOOM_REDIRECT_URI = "http://localhost:8000/integrations/zoom/callback"
 DEFAULT_GMAIL_REDIRECT_URI = "http://localhost:8000/integrations/gmail/callback"
 DEFAULT_GOOGLE_CALENDAR_REDIRECT_URI = "http://localhost:8000/integrations/google-calendar/callback"
 DEFAULT_DUO_REDIRECT_URI = "http://localhost:3000/auth/duo/callback"
+RELEASE_PLEASE_MANIFEST_NAME = ".release-please-manifest.json"
+FALLBACK_APP_VERSION = "0.20.0"
+
+
+def _read_release_please_manifest_version(path: Path) -> str | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    version = data.get(".")
+    if isinstance(version, str) and version.strip():
+        return version.strip()
+    return None
+
+
+def _load_release_please_version() -> str | None:
+    override = os.getenv("RELEASE_PLEASE_MANIFEST_PATH")
+    if override:
+        override_path = Path(override)
+        if override_path.is_file():
+            return _read_release_please_manifest_version(override_path)
+        return None
+
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / RELEASE_PLEASE_MANIFEST_NAME
+        if candidate.is_file():
+            return _read_release_please_manifest_version(candidate)
+    return None
+
+
+def _default_app_version() -> str:
+    return _load_release_please_version() or FALLBACK_APP_VERSION
 
 
 class Settings(BaseSettings):
@@ -25,7 +62,7 @@ class Settings(BaseSettings):
     ENV: str
 
     # App Version (SemVer: MAJOR.MINOR.PATCH)
-    VERSION: str = "0.16.0"
+    VERSION: str = Field(default_factory=_default_app_version)
 
     # Version Control Encryption (Fernet key for config snapshots)
     VERSION_ENCRYPTION_KEY: str = ""  # Falls back to META_ENCRYPTION_KEY if empty
