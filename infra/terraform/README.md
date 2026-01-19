@@ -36,9 +36,18 @@ gcloud auth application-default login
 gcloud config set project YOUR_PROJECT_ID
 ```
 
-Connect GitHub to Cloud Build (Console):
-- Cloud Build -> Settings -> GitHub -> Connect
-- Ensure the repo is authorized
+Connect GitHub to Cloud Build (Console, 2nd gen):
+- Cloud Build -> Repositories -> Create host connection
+- Link the repo to that connection
+- Make sure the connection and linked repo are in the same region as `var.region` (e.g. us-central1).
+
+Get the repository resource name:
+```bash
+gcloud beta builds repositories list \
+  --connection=YOUR_CONNECTION \
+  --region=us-central1 \
+  --format="value(name)"
+```
 
 ## 2) Configure variables
 
@@ -49,6 +58,7 @@ region             = "us-central1"
 domain             = "example.com"
 github_owner       = "your-org"
 github_repo        = "your-repo"
+cloudbuild_repository = "projects/PROJECT/locations/REGION/connections/CONNECTION/repositories/REPO"
 
 database_password  = "..."
 s3_bucket          = "..."

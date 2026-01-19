@@ -58,9 +58,18 @@ scripts/bootstrap_tf_state_bucket.sh "$PROJECT_ID" "$TF_STATE_BUCKET" "US"
 
 ## 4) Connect GitHub to Cloud Build (manual)
 In the GCP Console:
-1. Go to Cloud Build -> Settings -> GitHub.
-2. Connect your GitHub account/org.
-3. Authorize the repo you want to deploy.
+1. Go to Cloud Build -> Repositories.
+2. Create a host connection (GitHub) in your region.
+3. Link your repo to that connection.
+4. Ensure the connection + linked repo live in the same region as `region` (e.g. us-central1).
+
+Get the repository resource name:
+```bash
+gcloud beta builds repositories list \
+  --connection=YOUR_CONNECTION \
+  --region=us-central1 \
+  --format="value(name)"
+```
 
 ## 5) Create `terraform.tfvars` (do not commit)
 Create `infra/terraform/terraform.tfvars` with your values:
@@ -70,6 +79,7 @@ region            = "us-central1"
 domain            = "example.com"
 github_owner      = "your-github-org-or-user"
 github_repo       = "your-repo-name"
+cloudbuild_repository = "projects/PROJECT/locations/REGION/connections/CONNECTION/repositories/REPO"
 
 database_password = "replace-me"
 s3_bucket         = "your-s3-bucket"

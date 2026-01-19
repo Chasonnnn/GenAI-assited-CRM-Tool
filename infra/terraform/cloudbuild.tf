@@ -3,11 +3,10 @@ resource "google_cloudbuild_trigger" "api" {
   name        = "crm-api-deploy"
   description = "Build and deploy API + worker on main"
   filename    = "cloudbuild/api.yaml"
+  location    = var.region
 
-  github {
-    owner = var.github_owner
-    name  = var.github_repo
-
+  repository_event_config {
+    repository = var.cloudbuild_repository
     push {
       branch = var.github_branch
     }
@@ -28,11 +27,10 @@ resource "google_cloudbuild_trigger" "web" {
   name        = "crm-web-deploy"
   description = "Build and deploy web on main"
   filename    = "cloudbuild/web.yaml"
+  location    = var.region
 
-  github {
-    owner = var.github_owner
-    name  = var.github_repo
-
+  repository_event_config {
+    repository = var.cloudbuild_repository
     push {
       branch = var.github_branch
     }

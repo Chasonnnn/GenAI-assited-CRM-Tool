@@ -30,6 +30,12 @@ variable "github_repo" {
   description = "GitHub repo name for Cloud Build triggers"
 }
 
+variable "cloudbuild_repository" {
+  type        = string
+  description = "Cloud Build repository resource name (2nd gen)."
+  default     = ""
+}
+
 variable "github_branch" {
   type        = string
   description = "GitHub branch for Cloud Build triggers"
