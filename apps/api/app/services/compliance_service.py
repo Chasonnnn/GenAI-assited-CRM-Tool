@@ -313,7 +313,9 @@ def _upload_to_s3(file_path: str, key: str) -> None:
     if not settings.EXPORT_S3_BUCKET:
         raise RuntimeError("EXPORT_S3_BUCKET must be set for S3 exports")
 
-    client = boto3.client("s3", region_name=settings.EXPORT_S3_REGION or None)
+    from app.services import storage_client
+
+    client = storage_client.get_export_s3_client()
     client.upload_file(file_path, settings.EXPORT_S3_BUCKET, key)
 
 
@@ -325,7 +327,9 @@ def _generate_s3_url(file_path: str) -> str:
     if not settings.EXPORT_S3_BUCKET:
         raise RuntimeError("EXPORT_S3_BUCKET must be set for S3 exports")
 
-    client = boto3.client("s3", region_name=settings.EXPORT_S3_REGION or None)
+    from app.services import storage_client
+
+    client = storage_client.get_export_s3_client()
     return client.generate_presigned_url(
         "get_object",
         Params={"Bucket": settings.EXPORT_S3_BUCKET, "Key": file_path},

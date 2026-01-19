@@ -6,7 +6,6 @@ import os
 import tempfile
 from uuid import UUID
 
-import boto3
 import httpx
 from botocore.client import BaseClient
 from sqlalchemy import select
@@ -18,7 +17,7 @@ from app.db.models import (
     SurrogateInterview,
     InterviewAttachment,
 )
-from app.services import interview_service
+from app.services import interview_service, storage_client
 from app.services.ai_settings_service import (
     get_ai_settings,
     get_decrypted_key,
@@ -59,12 +58,7 @@ def is_transcribable(content_type: str) -> bool:
 
 def _get_s3_client() -> BaseClient:
     """Get boto3 S3 client."""
-    return boto3.client(
-        "s3",
-        region_name=getattr(settings, "S3_REGION", "us-east-1"),
-        aws_access_key_id=getattr(settings, "AWS_ACCESS_KEY_ID", None),
-        aws_secret_access_key=getattr(settings, "AWS_SECRET_ACCESS_KEY", None),
-    )
+    return storage_client.get_s3_client()
 
 
 def _download_file(storage_key: str) -> bytes:

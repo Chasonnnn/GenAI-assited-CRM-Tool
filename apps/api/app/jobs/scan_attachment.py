@@ -30,14 +30,9 @@ def _download_to_temp(attachment: Attachment) -> str:
     backend = attachment_service._get_storage_backend()
 
     if backend == "s3":
-        import boto3
+        from app.services import storage_client
 
-        s3 = boto3.client(
-            "s3",
-            region_name=getattr(settings, "S3_REGION", "us-east-1"),
-            aws_access_key_id=getattr(settings, "AWS_ACCESS_KEY_ID", None),
-            aws_secret_access_key=getattr(settings, "AWS_SECRET_ACCESS_KEY", None),
-        )
+        s3 = storage_client.get_s3_client()
         bucket = getattr(settings, "S3_BUCKET", "crm-attachments")
 
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
