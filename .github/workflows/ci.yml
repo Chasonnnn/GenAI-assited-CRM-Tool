@@ -130,6 +130,21 @@ jobs:
           pnpm install
           pnpm run typecheck
 
+  terraform-fmt:
+    name: Terraform Format
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.6"
+
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive infra/terraform
+
   security-scans:
     name: Security Scans
     runs-on: ubuntu-latest
