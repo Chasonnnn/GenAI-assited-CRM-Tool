@@ -1,435 +1,254 @@
 "use client"
 
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import {
-  CheckSquareIcon,
-  UsersIcon,
-  TrendingUpIcon,
-  TrendingDownIcon,
-  Loader2Icon,
-  AlertCircleIcon,
-} from "lucide-react"
-import { useMemo, useState } from "react"
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis, Cell } from "recharts"
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { useSurrogateStats } from "@/lib/hooks/use-surrogates"
-import { useTasks } from "@/lib/hooks/use-tasks"
-import { useSurrogatesTrend, useSurrogatesByStatus } from "@/lib/hooks/use-analytics"
-import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
+import { Suspense, useMemo, useCallback, useEffect } from "react"
 import { useAuth } from "@/lib/auth-context"
 import { useDashboardSocket } from "@/lib/hooks/use-dashboard-socket"
-import type { TaskListItem } from "@/lib/types/task"
-import { parseDateInput, startOfLocalDay } from "@/lib/utils/date"
+import { useSurrogateStats } from "@/lib/hooks/use-surrogates"
+import { useSurrogatesTrend, useSurrogatesByStatus } from "@/lib/hooks/use-analytics"
+import { useAttention, useUpcoming } from "@/lib/hooks/use-dashboard"
+import { useTasks, taskKeys } from "@/lib/hooks/use-tasks"
+import { useQueryClient } from "@tanstack/react-query"
 
-// Check if task is overdue
-function isOverdue(dueDate: string | null): boolean {
-  if (!dueDate) return false
-  return parseDateInput(dueDate) < startOfLocalDay()
-}
+import { DashboardFiltersProvider, useDashboardFilters } from "./context/dashboard-filters"
+import { DashboardFilterBar } from "./components/dashboard-filter-bar"
+import { KPICardsSection } from "./components/kpi-cards-section"
+import { TrendChart } from "./components/trend-chart"
+import { StageChart } from "./components/stage-chart"
+import { AttentionNeededPanel } from "./components/attention-needed-panel"
 
-// Get user's first name
+// =============================================================================
+// Helpers
+// =============================================================================
+
 function getFirstName(displayName: string | undefined): string {
-  if (!displayName) return 'there'
-  const [firstName] = displayName.split(' ')
-  return firstName || displayName
+    if (!displayName) return "there"
+    const [firstName] = displayName.split(" ")
+    return firstName || displayName
 }
+
+// =============================================================================
+// Dashboard Content (requires filter context)
+// =============================================================================
+
+function DashboardContent() {
+    const { user } = useAuth()
+    const queryClient = useQueryClient()
+    const { getDateParams, filters } = useDashboardFilters()
+    const dateParams = getDateParams()
+    const statsParams = {
+        ...(filters.assigneeId ? { owner_id: filters.assigneeId } : {}),
+    }
+    const trendParams = {
+        period: "day" as const,
+        ...dateParams,
+        ...(filters.assigneeId ? { owner_id: filters.assigneeId } : {}),
+    }
+    const statusParams = {
+        ...dateParams,
+        ...(filters.assigneeId ? { owner_id: filters.assigneeId } : {}),
+    }
+    const attentionParams = {
+        ...(filters.assigneeId ? { assignee_id: filters.assigneeId } : {}),
+        days_unreached: 7,
+        days_stuck: 30,
+    }
+    const tasksParams = {
+        is_completed: false,
+        per_page: 5,
+        exclude_approvals: true,
+        ...(filters.assigneeId ? { owner_id: filters.assigneeId } : user?.user_id ? { owner_id: user.user_id } : {}),
+    }
+    const upcomingParams = {
+        days: 7,
+        include_overdue: true,
+        ...(filters.assigneeId ? { assignee_id: filters.assigneeId } : {}),
+    }
+
+    // WebSocket for real-time updates
+    useDashboardSocket()
+
+    // Fetch data for "last updated" calculation
+    const statsQuery = useSurrogateStats(statsParams)
+    const trendQuery = useSurrogatesTrend(trendParams)
+    const statusQuery = useSurrogatesByStatus(statusParams)
+    const attentionQuery = useAttention(attentionParams)
+    const tasksQuery = useTasks(tasksParams)
+    const upcomingQuery = useUpcoming(upcomingParams)
+
+    const statusTotal = useMemo(() => {
+        if (!statusQuery.data?.length) return 0
+        return statusQuery.data.reduce((sum, item) => sum + item.count, 0)
+    }, [statusQuery.data])
+
+    const kpiTotalForCheck = useMemo(() => {
+        if (filters.dateRange !== "all") {
+            return statusQuery.data ? statusTotal : (statsQuery.data?.total ?? 0)
+        }
+        return statsQuery.data?.total ?? statusTotal
+    }, [filters.dateRange, statusQuery.data, statusTotal, statsQuery.data?.total])
+
+    // Calculate last updated timestamp
+    const lastUpdated = useMemo(() => {
+        const timestamps = [
+            statsQuery.dataUpdatedAt,
+            trendQuery.dataUpdatedAt,
+            statusQuery.dataUpdatedAt,
+            attentionQuery.dataUpdatedAt,
+            tasksQuery.dataUpdatedAt,
+            upcomingQuery.dataUpdatedAt,
+        ].filter(Boolean)
+        return timestamps.length ? Math.max(...timestamps) : null
+    }, [
+        statsQuery.dataUpdatedAt,
+        trendQuery.dataUpdatedAt,
+        statusQuery.dataUpdatedAt,
+        attentionQuery.dataUpdatedAt,
+        tasksQuery.dataUpdatedAt,
+        upcomingQuery.dataUpdatedAt,
+    ])
+
+    // Check if any query is currently fetching
+    const isRefreshing =
+        statsQuery.isFetching ||
+        trendQuery.isFetching ||
+        statusQuery.isFetching ||
+        attentionQuery.isFetching ||
+        tasksQuery.isFetching ||
+        upcomingQuery.isFetching
+
+    useEffect(() => {
+        if (process.env.NODE_ENV !== "development") return
+        if (!statusQuery.data || statsQuery.data?.total === undefined) return
+        const delta = Math.abs(kpiTotalForCheck - statusTotal)
+        const ratio = delta / Math.max(kpiTotalForCheck || 1, 1)
+        if (delta >= 5 && ratio >= 0.2) {
+            console.warn("[dashboard] KPI vs distribution mismatch", {
+                kpiTotal: kpiTotalForCheck,
+                distributionTotal: statusTotal,
+                filters,
+                dateParams,
+            })
+        }
+    }, [
+        dateParams,
+        filters,
+        kpiTotalForCheck,
+        statsQuery.data?.total,
+        statusQuery.data,
+        statusTotal,
+    ])
+
+    // Refresh all dashboard data
+    const handleRefresh = useCallback(() => {
+        queryClient.invalidateQueries({ queryKey: ["surrogates", "stats"] })
+        queryClient.invalidateQueries({ queryKey: ["analytics"] })
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] })
+        queryClient.invalidateQueries({ queryKey: taskKeys.all })
+    }, [queryClient])
+
+    // Current date for header
+    const currentDate = new Date().toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+    })
+
+    return (
+        <div className="flex flex-1 flex-col gap-6 p-6">
+            {/* Welcome Header */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold">
+                        Welcome back, {getFirstName(user?.display_name)}
+                    </h1>
+                    <p className="text-sm text-muted-foreground">{currentDate}</p>
+                </div>
+            </div>
+
+            {/* Filter Bar */}
+            <DashboardFilterBar
+                lastUpdated={lastUpdated}
+                onRefresh={handleRefresh}
+                isRefreshing={isRefreshing}
+            />
+
+            <div className="grid gap-6 lg:grid-cols-12">
+                <div className="space-y-6 lg:col-span-8">
+                    {/* KPI Cards */}
+                    <KPICardsSection />
+
+                    {/* Charts Row */}
+                    <div className="grid gap-6 lg:grid-cols-2">
+                        <TrendChart />
+                        <StageChart />
+                    </div>
+                </div>
+
+                <div className="space-y-6 lg:col-span-4">
+                    {/* Action Panels */}
+                    <AttentionNeededPanel />
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// =============================================================================
+// Main Page Component
+// =============================================================================
 
 export default function DashboardPage() {
-  const { user } = useAuth()
-  const { data: stats, isLoading: statsLoading, isError: statsError, refetch: refetchStats } = useSurrogateStats()
-  const { data: tasksData, isLoading: tasksLoading, isError: tasksError, refetch: refetchTasks } = useTasks({ my_tasks: true, is_completed: false, per_page: 5, exclude_approvals: true })
-  type TrendPeriod = "day" | "week" | "month"
-  const isTrendPeriod = (value: string | null): value is TrendPeriod =>
-    value === "day" || value === "week" || value === "month"
+    return (
+        <Suspense fallback={<DashboardSkeleton />}>
+            <DashboardFiltersProvider>
+                <DashboardContent />
+            </DashboardFiltersProvider>
+        </Suspense>
+    )
+}
 
-  const [trendPeriod, setTrendPeriod] = useState<TrendPeriod>('day')
-  const { data: trendData, isLoading: trendLoading, isError: trendError, refetch: refetchTrend } = useSurrogatesTrend({ period: trendPeriod })
-  const { data: statusData, isLoading: statusLoading, isError: statusError, refetch: refetchStatus } = useSurrogatesByStatus()
-  const { data: defaultPipeline } = useDefaultPipeline()
+// =============================================================================
+// Loading Skeleton
+// =============================================================================
 
-  // WebSocket for real-time updates (falls back to polling if disconnected)
-  useDashboardSocket()
+function DashboardSkeleton() {
+    return (
+        <div className="flex flex-1 flex-col gap-6 p-6 animate-pulse">
+            {/* Header skeleton */}
+            <div className="space-y-2">
+                <div className="h-8 w-64 bg-muted rounded" />
+                <div className="h-4 w-48 bg-muted rounded" />
+            </div>
 
-  // Count overdue tasks
-  const overdueCount = tasksError
-    ? 0
-    : tasksData?.items.filter((t: TaskListItem) => !t.is_completed && isOverdue(t.due_date)).length || 0
-  const pendingTasksCount = tasksError ? 0 : tasksData?.items.length || 0
+            {/* Filter bar skeleton */}
+            <div className="flex items-center justify-between">
+                <div className="h-10 w-44 bg-muted rounded" />
+                <div className="h-8 w-32 bg-muted rounded" />
+            </div>
 
-  // Current date for header
-  const currentDate = new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })
+            <div className="grid gap-6 lg:grid-cols-12">
+                <div className="space-y-6 lg:col-span-8">
+                    {/* KPI cards skeleton */}
+                    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                        {Array.from({ length: 3 }).map((_, i) => (
+                            <div key={i} className="h-40 bg-muted rounded-lg" />
+                        ))}
+                    </div>
 
-  // Transform trend data for chart
-  const chartTrendData = trendData?.map((item: { date: string; count: number }) => ({
-    date: parseDateInput(item.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-    surrogates: item.count,
-  })) || []
+                    {/* Charts skeleton */}
+                    <div className="grid gap-6 lg:grid-cols-2">
+                        <div className="h-80 bg-muted rounded-lg" />
+                        <div className="h-80 bg-muted rounded-lg" />
+                    </div>
+                </div>
 
-  const stageByLabel = useMemo(() => {
-    const stages = defaultPipeline?.stages || []
-    return new Map(stages.map(stage => [stage.label, stage]))
-  }, [defaultPipeline])
-
-  // Transform status data for bar chart (StatusCount[] from API) with stage colors
-  const chartStatusData = Array.isArray(statusData) ? statusData.map((item) => {
-    const stage = stageByLabel.get(item.status)
-    return {
-      status: stage?.label || item.status,
-      count: item.count,
-      fill: stage?.color || '#6b7280',
-    }
-  }) : []
-
-  return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
-      {/* Welcome Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Welcome back, {getFirstName(user?.display_name)}</h1>
-          <p className="text-sm text-muted-foreground">{currentDate}</p>
+                {/* Panels skeleton */}
+                <div className="space-y-6 lg:col-span-4">
+                    <div className="h-64 bg-muted rounded-lg" />
+                    <div className="h-64 bg-muted rounded-lg" />
+                </div>
+            </div>
         </div>
-      </div>
-
-      {/* Stats Cards - 4 columns */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        {/* Active Surrogates */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Active Surrogates</CardTitle>
-              {stats?.week_change_pct !== null && stats?.week_change_pct !== undefined && (
-                <div className={`flex items-center gap-1 text-xs font-medium ${(stats.week_change_pct || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {(stats.week_change_pct || 0) >= 0 ? <TrendingUpIcon className="h-3 w-3" /> : <TrendingDownIcon className="h-3 w-3" />}
-                  {(stats.week_change_pct || 0) >= 0 ? '+' : ''}{stats.week_change_pct}%
-                </div>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {statsLoading ? (
-              <Loader2Icon className="h-6 w-6 animate-spin text-muted-foreground" />
-            ) : statsError ? (
-              <div className="flex items-center justify-between text-xs text-destructive">
-                <div className="flex items-center">
-                  <AlertCircleIcon className="mr-1 h-4 w-4" />
-                  Unable to load
-                </div>
-                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => refetchStats()}>
-                  Retry
-                </Button>
-              </div>
-            ) : (
-              <>
-                <div className="text-3xl font-bold">{stats?.total || 0}</div>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1 text-sm font-medium">
-                    {stats?.this_week || 0} new this week
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    vs {stats?.last_week || 0} last week
-                  </p>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Pending Tasks */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Pending Tasks</CardTitle>
-              {overdueCount > 0 ? (
-                <div className="flex items-center gap-1 text-xs font-medium text-red-600">
-                  <TrendingDownIcon className="h-3 w-3" />
-                  {overdueCount} overdue
-                </div>
-              ) : (
-                <div className="flex items-center gap-1 text-xs font-medium text-green-600">
-                  <TrendingUpIcon className="h-3 w-3" />
-                  On track
-                </div>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {statsLoading ? (
-              <Loader2Icon className="h-6 w-6 animate-spin text-muted-foreground" />
-            ) : statsError ? (
-              <div className="flex items-center justify-between text-xs text-destructive">
-                <div className="flex items-center">
-                  <AlertCircleIcon className="mr-1 h-4 w-4" />
-                  Unable to load
-                </div>
-                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => refetchStats()}>
-                  Retry
-                </Button>
-              </div>
-            ) : (
-              <>
-                <div className="text-3xl font-bold">{stats?.pending_tasks || 0}</div>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1 text-sm font-medium">
-                    {overdueCount > 0 ? 'Needs attention' : 'All tasks on schedule'}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {overdueCount > 0 ? `${overdueCount} overdue tasks` : 'No overdue tasks'}
-                  </p>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* New Leads (30 days) */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">New Leads (30d)</CardTitle>
-              {stats?.month_change_pct !== null && stats?.month_change_pct !== undefined && (
-                <div className={`flex items-center gap-1 text-xs font-medium ${(stats.month_change_pct || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {(stats.month_change_pct || 0) >= 0 ? <TrendingUpIcon className="h-3 w-3" /> : <TrendingDownIcon className="h-3 w-3" />}
-                  {(stats.month_change_pct || 0) >= 0 ? '+' : ''}{stats.month_change_pct}%
-                </div>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {statsLoading ? (
-              <Loader2Icon className="h-6 w-6 animate-spin text-muted-foreground" />
-            ) : statsError ? (
-              <div className="flex items-center justify-between text-xs text-destructive">
-                <div className="flex items-center">
-                  <AlertCircleIcon className="mr-1 h-4 w-4" />
-                  Unable to load
-                </div>
-                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => refetchStats()}>
-                  Retry
-                </Button>
-              </div>
-            ) : (
-              <>
-                <div className="text-3xl font-bold">{stats?.this_month || 0}</div>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1 text-sm font-medium">
-                    Monthly intake volume
-                    <UsersIcon className="h-3 w-3" />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    vs {stats?.last_month || 0} last month
-                  </p>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* My Tasks */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">My Tasks</CardTitle>
-              <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                <CheckSquareIcon className="h-3 w-3" />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {tasksLoading ? (
-              <Loader2Icon className="h-6 w-6 animate-spin text-muted-foreground" />
-            ) : tasksError ? (
-              <div className="flex items-center justify-between text-xs text-destructive">
-                <div className="flex items-center">
-                  <AlertCircleIcon className="mr-1 h-4 w-4" />
-                  Unable to load
-                </div>
-                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => refetchTasks()}>
-                  Retry
-                </Button>
-              </div>
-            ) : (
-              <>
-                <div className="text-3xl font-bold">{pendingTasksCount}</div>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1 text-sm font-medium">
-                    {pendingTasksCount === 0 ? 'All caught up!' : 'Tasks assigned to you'}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    <Link href="/tasks" className="hover:underline">View all tasks →</Link>
-                  </p>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Charts Section - Two horizontal */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Surrogates Trend Chart */}
-        <Card>
-          <CardHeader className="pb-4 flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="text-lg">Surrogates Trend</CardTitle>
-              <CardDescription className="text-sm">
-                {trendPeriod === 'day' ? 'Daily' : trendPeriod === 'week' ? 'Weekly' : 'Monthly'} new surrogates
-              </CardDescription>
-            </div>
-            <Select
-              value={trendPeriod}
-              onValueChange={(value) => {
-                if (isTrendPeriod(value)) {
-                  setTrendPeriod(value)
-                }
-              }}
-            >
-              <SelectTrigger className="w-28" size="sm">
-                <SelectValue>
-                  {(value: string | null) => {
-                    const labels: Record<string, string> = { day: 'Daily', week: 'Weekly', month: 'Monthly' }
-                    return labels[value ?? 'day'] ?? 'Daily'
-                  }}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="day">Daily</SelectItem>
-                <SelectItem value="week">Weekly</SelectItem>
-                <SelectItem value="month">Monthly</SelectItem>
-              </SelectContent>
-            </Select>
-          </CardHeader>
-          <CardContent className="pb-4">
-            {trendLoading ? (
-              <div className="flex items-center justify-center h-[280px]">
-                <Loader2Icon className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : trendError ? (
-              <div className="flex flex-col items-center justify-center h-[280px] text-destructive gap-2">
-                <div className="flex items-center">
-                  <AlertCircleIcon className="mr-2 h-4 w-4" />
-                  Unable to load data
-                </div>
-                <Button variant="outline" size="sm" onClick={() => refetchTrend()}>
-                  Retry
-                </Button>
-              </div>
-            ) : chartTrendData.length === 0 ? (
-              <div className="flex items-center justify-center h-[280px] text-muted-foreground">
-                No data available
-              </div>
-            ) : (
-              <ChartContainer
-                config={{
-                  surrogates: {
-                    label: "Surrogates",
-                    color: "var(--chart-1)",
-                  },
-                }}
-                className="h-[280px] w-full"
-              >
-                <AreaChart
-                  accessibilityLayer
-                  data={chartTrendData}
-                  margin={{ left: 12, right: 12 }}
-                >
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    dataKey="date"
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                  />
-                  <ChartTooltip
-                    cursor={false}
-                    content={<ChartTooltipContent indicator="line" />}
-                  />
-                  <Area
-                    dataKey="surrogates"
-                    type="natural"
-                    fill="var(--color-surrogates)"
-                    fillOpacity={0.4}
-                    stroke="var(--color-surrogates)"
-                    strokeWidth={2}
-                  />
-                </AreaChart>
-              </ChartContainer>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Surrogates by Stage Chart */}
-        <Card>
-          <CardHeader className="pb-4">
-            <CardTitle className="text-lg">Surrogates by Stage</CardTitle>
-            <CardDescription className="text-sm">Current pipeline distribution</CardDescription>
-          </CardHeader>
-          <CardContent className="pb-4">
-            {statusLoading ? (
-              <div className="flex items-center justify-center h-[280px]">
-                <Loader2Icon className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : statusError ? (
-              <div className="flex flex-col items-center justify-center h-[280px] text-destructive gap-2">
-                <div className="flex items-center">
-                  <AlertCircleIcon className="mr-2 h-4 w-4" />
-                  Unable to load data
-                </div>
-                <Button variant="outline" size="sm" onClick={() => refetchStatus()}>
-                  Retry
-                </Button>
-              </div>
-            ) : chartStatusData.length === 0 ? (
-              <div className="flex items-center justify-center h-[280px] text-muted-foreground">
-                No data available
-              </div>
-            ) : (
-              <ChartContainer
-                config={{
-                  count: {
-                    label: "Surrogates",
-                    color: "var(--chart-2)",
-                  },
-                }}
-                className="h-[280px] w-full"
-              >
-                <BarChart
-                  accessibilityLayer
-                  data={chartStatusData}
-                  layout="vertical"
-                  margin={{ left: 80, right: 12 }}
-                >
-                  <CartesianGrid horizontal={false} />
-                  <XAxis type="number" tickLine={false} axisLine={false} />
-                  <YAxis
-                    type="category"
-                    dataKey="status"
-                    tickLine={false}
-                    axisLine={false}
-                    width={75}
-                  />
-                  <ChartTooltip
-                    cursor={false}
-                    content={<ChartTooltipContent indicator="dashed" />}
-                  />
-                  <Bar dataKey="count" radius={4}>
-                    {chartStatusData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ChartContainer>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  )
+    )
 }
