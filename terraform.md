@@ -13,9 +13,9 @@ Follow the steps in order. Anything marked "manual" is something you must do in 
 ## 1) Set your working variables
 Pick a project and region. Replace placeholders.
 ```bash
-export PROJECT_ID="your-project-id"
+export PROJECT_ID="surrogacy-force-test-deploy"
 export REGION="us-central1"
-export DOMAIN="example.com"
+export DOMAIN="surrogacyforce.com"
 ```
 
 Confirm gcloud is using your project:
@@ -33,13 +33,13 @@ gcloud services enable \
   secretmanager.googleapis.com \
   redis.googleapis.com \
   vpcaccess.googleapis.com
-```
 
 ## 2.1) Authenticate for Terraform (ADC)
 ```bash
 gcloud auth login
 gcloud auth application-default login
 gcloud config set project "$PROJECT_ID"
+```
 ```
 
 ## 3) Create a Terraform state bucket (one-time)
@@ -75,11 +75,11 @@ gcloud beta builds repositories list \
 ## 5) Create `terraform.tfvars` (do not commit)
 Create `infra/terraform/terraform.tfvars` with your values:
 ```hcl
-project_id        = "your-project-id"
+project_id        = "surrogacy-force-test-deploy"
 region            = "us-central1"
-domain            = "example.com"
-github_owner      = "your-github-org-or-user"
-github_repo       = "your-repo-name"
+domain            = "surrogacyforce.com"
+github_owner      = "Chasonnnn"
+github_repo       = "GenAI-assited-CRM-Tool"
 cloudbuild_repository = "projects/PROJECT/locations/REGION/connections/CONNECTION/repositories/REPO"
 
 database_password = "replace-me"
@@ -171,7 +171,6 @@ cd infra/terraform
 terraform import 'google_storage_bucket.attachments[0]' surrogacyforce-attachments-test
 terraform import 'google_storage_bucket.exports[0]' surrogacyforce-exports-test
 ```
-
 ## 7) Terraform init + apply
 From repo root:
 ```bash
@@ -204,7 +203,6 @@ If domain mapping fails due to verification, set:
 enable_domain_mapping = false
 ```
 Then verify ownership in Google Search Console and re-enable.
-
 ## 9) OAuth redirect URIs (manual)
 Update OAuth apps with production URLs:
 - Google Login: `https://api.<domain>/auth/google/callback`

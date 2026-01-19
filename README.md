@@ -149,8 +149,12 @@ cp .env.example .env
 # Run migrations
 alembic upgrade head
 
-# Bootstrap first organization
+# Bootstrap first organization (portal domain optional)
 python -m app.cli create-org --name "Your Agency" --slug "agency" --admin-email "admin@agency.com"
+# Optional: derive portal domain as ap.<domain>
+python -m app.cli create-org --name "Your Agency" --slug "agency" --admin-email "admin@agency.com" --base-domain "agency.com"
+# Optional: set explicit portal domain
+python -m app.cli create-org --name "Your Agency" --slug "agency" --admin-email "admin@agency.com" --portal-domain "ap.agency.com"
 
 # Start server
 uvicorn app.main:app --reload --port 8000
@@ -192,6 +196,8 @@ DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/crm
 JWT_SECRET=your-secret-key-minimum-32-characters
 JWT_SECRET_PREVIOUS=
 JWT_EXPIRES_HOURS=4
+# Cookie SameSite policy (lax, strict, none). None requires HTTPS.
+COOKIE_SAMESITE=lax
 
 # Google OAuth
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
@@ -398,13 +404,13 @@ pnpm test:all        # Full frontend suite
 Use per-client subdomains as branded entry points that redirect to your primary app domain.
 
 1) Create subdomains
-- Portal: `portal.clientdomain.com`
+- Portal: `ap.clientdomain.com`
 
 2) Domain mapping (Cloud Run)
-- Map `portal.clientdomain.com` to a single redirect service that 308-redirects to your primary app.
+- Map `ap.clientdomain.com` to a single redirect service that 308-redirects to your primary app.
 
 3) DNS (CNAME)
-- Point `portal` to the redirect service target hostname provided by Cloud Run.
+- Point `ap` to the redirect service target hostname provided by Cloud Run.
   - For Wix-managed domains, use subdomain CNAMEs (avoid apex CNAMEs)
 
 4) Env vars (stay on the primary domains)
@@ -416,11 +422,14 @@ Use per-client subdomains as branded entry points that redirect to your primary 
   - `NEXT_PUBLIC_API_BASE_URL=https://api.yourdomain.com`
 
 5) Set the org portal domain (drives public links for forms, booking, invites)
-- Settings → Organization → Portal Domain: `portal.clientdomain.com`
+- Settings → Organization → Portal Domain: `ap.clientdomain.com`
+- Or set on org creation:
+  - `--base-domain "clientdomain.com"` (builds `ap.clientdomain.com`)
+  - `--portal-domain "ap.clientdomain.com"`
 
-Note: A fully hosted per-client portal (same-site cookies on the client domain)
-requires a different deployment model (shared host for UI + API or per-client
-cookie domain changes). The redirect approach avoids cross-site cookie issues.
+Note: A fully hosted per-client portal (no redirect) requires HTTPS and either
+same-site hosting for UI + API or `COOKIE_SAMESITE=none` plus updated `CORS_ORIGINS`
+to include the portal domain.
 
 ---
 
