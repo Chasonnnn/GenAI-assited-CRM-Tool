@@ -121,6 +121,10 @@ vi.mock('@/lib/hooks/use-email-templates', () => ({
     useRollbackTemplate: () => ({ mutate: mockRollbackTemplate, isPending: false }),
 }))
 
+vi.mock('@/lib/hooks/use-system', () => ({
+    useSystemHealth: () => ({ data: { version: '0.16.0' }, isLoading: false }),
+}))
+
 describe('SettingsPage', () => {
     beforeEach(() => {
         mockUpdateNotificationSettings.mockReset()
@@ -135,6 +139,7 @@ describe('SettingsPage', () => {
         // There are multiple "General" texts (tab + heading), so use getAllByText
         expect(screen.getAllByText('General').length).toBeGreaterThan(0)
         expect(screen.getByText('Profile and access settings')).toBeDefined()
+        expect(screen.getByText('v0.16.0')).toBeDefined()
     })
 
     // Note: Pipeline version history test removed - pipelines moved to dedicated /settings/pipelines page

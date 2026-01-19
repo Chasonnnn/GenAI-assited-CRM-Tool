@@ -230,9 +230,15 @@ class Settings(BaseSettings):
     LOCAL_STORAGE_PATH: str = ".attachments"
     S3_BUCKET: str = ""
     S3_REGION: str = "us-east-1"
+    S3_ENDPOINT_URL: str = ""  # Optional S3-compatible endpoint (e.g., GCS)
+    S3_PUBLIC_BASE_URL: str = ""  # Optional public base URL for assets
+    S3_URL_STYLE: str = "path"  # path or virtual
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
     ATTACHMENT_SCAN_ENABLED: bool = False
+
+    # Export Storage (optional separate endpoint)
+    EXPORT_S3_ENDPOINT_URL: str = ""
 
     # Duo MFA (Web SDK v4)
     DUO_CLIENT_ID: str = ""  # Integration key from Duo Admin
