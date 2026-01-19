@@ -172,7 +172,6 @@ async def execute_csv_import(
     Queues import for background processing and returns immediately.
     Use GET /surrogates/import/{id} to check status.
     """
-    import base64
     from app.db.enums import JobType
     from app.services import job_service
 
@@ -202,6 +201,7 @@ async def execute_csv_import(
         user_id=session.user_id,
         filename=file.filename,
         total_rows=total_rows,
+        file_content=content,
     )
 
     # Queue background job for processing
@@ -211,7 +211,6 @@ async def execute_csv_import(
         job_type=JobType.CSV_IMPORT,
         payload={
             "import_id": str(import_record.id),
-            "file_content_base64": base64.b64encode(content).decode("utf-8"),
             "dedupe_action": "skip",
         },
     )

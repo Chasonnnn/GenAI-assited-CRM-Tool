@@ -11,7 +11,7 @@ import anyio
 from sqlalchemy import and_, or_, func
 from sqlalchemy.orm import Session
 
-from app.core.websocket import manager
+from app.core.websocket import send_ws_to_org
 from app.db.enums import OwnerType, Role, TaskType
 from app.db.models import Surrogate, SurrogateStatusHistory, Task, ZoomMeeting, PipelineStage
 
@@ -480,7 +480,7 @@ def _schedule_ws_send(coro: asyncio.Future) -> None:
 
 async def _send_dashboard_stats(org_id: UUID, stats: dict) -> None:
     """Send dashboard stats updates to websocket clients."""
-    await manager.send_to_org(
+    await send_ws_to_org(
         org_id,
         {
             "type": "stats_update",

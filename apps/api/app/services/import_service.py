@@ -376,12 +376,14 @@ def create_import_job(
     user_id: UUID,
     filename: str,
     total_rows: int,
+    file_content: bytes | None = None,
 ) -> SurrogateImport:
     """Create an import job record."""
     import_record = SurrogateImport(
         organization_id=org_id,
         created_by_user_id=user_id,
         filename=filename,
+        file_content=file_content,
         status="pending",
         total_rows=total_rows,
     )
