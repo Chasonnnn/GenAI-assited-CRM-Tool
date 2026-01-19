@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import EmailTemplate, EmailLog, Job, Surrogate
 from app.db.enums import EmailStatus, JobType
-from app.services.job_service import schedule_job
+from app.services.job_service import enqueue_job
 from app.services import version_service
 
 
@@ -330,6 +330,7 @@ def send_email(
     body: str,
     surrogate_id: UUID | None = None,
     schedule_at: datetime | None = None,
+    commit: bool = True,
 ) -> tuple[EmailLog, Job]:
     """
     Queue an email for sending.
@@ -351,18 +352,22 @@ def send_email(
     db.flush()  # Get ID before creating job
 
     # Schedule job to send
-    job = schedule_job(
+    job = enqueue_job(
         db=db,
         org_id=org_id,
         job_type=JobType.SEND_EMAIL,
         payload={"email_log_id": str(email_log.id)},
         run_at=schedule_at,
+        commit=commit,
     )
 
     # Link job to email log
     email_log.job_id = job.id
-    db.commit()
-    db.refresh(email_log)
+    if commit:
+        db.commit()
+        db.refresh(email_log)
+    else:
+        db.flush()
 
     return email_log, job
 
