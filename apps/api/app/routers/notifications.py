@@ -43,6 +43,7 @@ class NotificationListResponse(BaseModel):
 
     items: list[NotificationRead]
     unread_count: int
+    next_cursor: str | None = None
 
 
 class UnreadCountResponse(BaseModel):
@@ -88,6 +89,7 @@ def list_notifications(
     notification_types: str | None = Query(None, description="Comma-separated notification types"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    cursor: str | None = Query(None, description="Cursor for keyset pagination"),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
@@ -97,15 +99,19 @@ def list_notifications(
     if notification_types:
         types_list = [t.strip() for t in notification_types.split(",") if t.strip()]
 
-    notifications = notification_service.get_notifications(
-        db=db,
-        user_id=session.user_id,
-        org_id=session.org_id,
-        unread_only=unread_only,
-        notification_types=types_list,
-        limit=limit,
-        offset=offset,
-    )
+    try:
+        notifications, next_cursor = notification_service.get_notifications(
+            db=db,
+            user_id=session.user_id,
+            org_id=session.org_id,
+            unread_only=unread_only,
+            notification_types=types_list,
+            limit=limit,
+            offset=offset,
+            cursor=cursor,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     unread_count = notification_service.get_unread_count(
         db=db,
@@ -128,7 +134,11 @@ def list_notifications(
             )
         )
 
-    return NotificationListResponse(items=items, unread_count=unread_count)
+    return NotificationListResponse(
+        items=items,
+        unread_count=unread_count,
+        next_cursor=next_cursor,
+    )
 
 
 @router.get("/notifications/count", response_model=UnreadCountResponse)

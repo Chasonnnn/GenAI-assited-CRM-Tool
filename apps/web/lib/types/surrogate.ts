@@ -123,4 +123,5 @@ export interface SurrogateListResponse {
     page: number;
     per_page: number;
     pages: number;
+    next_cursor?: string | null;
 }

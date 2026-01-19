@@ -12,6 +12,7 @@ import logging
 import threading
 import asyncio
 import anyio
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.db.enums import NotificationType, Role, OwnerType
@@ -25,7 +26,7 @@ from app.db.models import (
     StatusChangeRequest,
     Match,
 )
-from app.core.websocket import manager
+from app.core.websocket import send_ws_to_user
 
 logger = logging.getLogger(__name__)
 
@@ -202,8 +203,25 @@ def get_notifications(
     notification_types: list[str] | None = None,
     limit: int = 20,
     offset: int = 0,
-) -> list[Notification]:
-    """Get notifications for user."""
+    cursor: str | None = None,
+) -> tuple[list[Notification], str | None]:
+    """Get notifications for user with optional cursor pagination."""
+    import base64
+    from datetime import datetime
+
+    def _encode_cursor(created_at: datetime, notification_id: UUID) -> str:
+        raw = f"{created_at.isoformat()}|{notification_id}"
+        return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii")
+
+    def _decode_cursor(raw: str) -> tuple[datetime, UUID]:
+        try:
+            decoded = base64.urlsafe_b64decode(raw.encode("utf-8")).decode("utf-8")
+            created_str, id_str = decoded.split("|", 1)
+            created_dt = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+            return created_dt, UUID(id_str)
+        except Exception as exc:
+            raise ValueError("Invalid cursor") from exc
+
     query = db.query(Notification).filter(
         Notification.user_id == user_id,
         Notification.organization_id == org_id,
@@ -215,7 +233,28 @@ def get_notifications(
     if notification_types:
         query = query.filter(Notification.type.in_(notification_types))
 
-    return query.order_by(Notification.created_at.desc()).offset(offset).limit(limit).all()
+    query = query.order_by(Notification.created_at.desc(), Notification.id.desc())
+
+    if cursor:
+        cursor_dt, cursor_id = _decode_cursor(cursor)
+        query = query.filter(
+            or_(
+                Notification.created_at < cursor_dt,
+                (Notification.created_at == cursor_dt) & (Notification.id < cursor_id),
+            )
+        )
+
+    if cursor:
+        notifications = query.limit(limit).all()
+    else:
+        notifications = query.offset(offset).limit(limit).all()
+
+    next_cursor = None
+    if notifications and len(notifications) == limit:
+        last = notifications[-1]
+        next_cursor = _encode_cursor(last.created_at, last.id)
+
+    return notifications, next_cursor
 
 
 def get_unread_count(
@@ -313,14 +352,14 @@ async def _send_ws_updates(user_id: UUID, notification: Notification, unread_cou
         "created_at": notification.created_at.isoformat(),
     }
 
-    await manager.send_to_user(
+    await send_ws_to_user(
         user_id,
         {
             "type": "notification",
             "data": payload,
         },
     )
-    await manager.send_to_user(
+    await send_ws_to_user(
         user_id,
         {
             "type": "count_update",
@@ -331,7 +370,7 @@ async def _send_ws_updates(user_id: UUID, notification: Notification, unread_cou
 
 async def _send_ws_count_update(user_id: UUID, unread_count: int) -> None:
     """Send unread count updates to websocket clients."""
-    await manager.send_to_user(
+    await send_ws_to_user(
         user_id,
         {
             "type": "count_update",

@@ -19,6 +19,7 @@ export interface Notification {
 export interface NotificationListResponse {
     items: Notification[]
     unread_count: number
+    next_cursor?: string | null
 }
 
 export interface NotificationSettings {
@@ -37,12 +38,14 @@ export async function getNotifications(options?: {
     unread_only?: boolean
     limit?: number
     offset?: number
+    cursor?: string
     notification_types?: string[]  // Filter by notification types
 }): Promise<NotificationListResponse> {
     const params = new URLSearchParams()
     if (options?.unread_only) params.set('unread_only', 'true')
     if (options?.limit) params.set('limit', String(options.limit))
     if (options?.offset) params.set('offset', String(options.offset))
+    if (options?.cursor) params.set('cursor', options.cursor)
     if (options?.notification_types?.length) {
         params.set('notification_types', options.notification_types.join(','))
     }

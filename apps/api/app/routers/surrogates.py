@@ -246,6 +246,7 @@ def list_surrogates(
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
+    cursor: str | None = Query(None, description="Cursor for keyset pagination"),
     stage_id: UUID | None = None,
     source: SurrogateSource | None = None,
     owner_id: UUID | None = None,
@@ -283,26 +284,30 @@ def list_surrogates(
     ):
         exclude_stage_types.append("post_approval")
 
-    surrogates, total = surrogate_service.list_surrogates(
-        db=db,
-        org_id=session.org_id,
-        page=page,
-        per_page=per_page,
-        stage_id=stage_id,
-        source=source,
-        owner_id=owner_id,
-        q=q,
-        include_archived=include_archived,
-        role_filter=session.role,
-        user_id=session.user_id,
-        owner_type=owner_type,
-        queue_id=queue_id,
-        created_from=created_from,
-        created_to=created_to,
-        exclude_stage_types=exclude_stage_types if exclude_stage_types else None,
-        sort_by=sort_by,
-        sort_order=sort_order,
-    )
+    try:
+        surrogates, total, next_cursor = surrogate_service.list_surrogates(
+            db=db,
+            org_id=session.org_id,
+            page=page,
+            per_page=per_page,
+            cursor=cursor,
+            stage_id=stage_id,
+            source=source,
+            owner_id=owner_id,
+            q=q,
+            include_archived=include_archived,
+            role_filter=session.role,
+            user_id=session.user_id,
+            owner_type=owner_type,
+            queue_id=queue_id,
+            created_from=created_from,
+            created_to=created_to,
+            exclude_stage_types=exclude_stage_types if exclude_stage_types else None,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     pages = (total + per_page - 1) // per_page if per_page > 0 else 0
 
@@ -369,6 +374,7 @@ def list_surrogates(
         page=page,
         per_page=per_page,
         pages=pages,
+        next_cursor=next_cursor,
     )
 
 
