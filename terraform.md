@@ -31,7 +31,15 @@ gcloud services enable \
   artifactregistry.googleapis.com \
   sqladmin.googleapis.com \
   secretmanager.googleapis.com \
-  redis.googleapis.com
+  redis.googleapis.com \
+  vpcaccess.googleapis.com
+```
+
+## 2.1) Authenticate for Terraform (ADC)
+```bash
+gcloud auth login
+gcloud auth application-default login
+gcloud config set project "$PROJECT_ID"
 ```
 
 ## 3) Create a Terraform state bucket (one-time)
@@ -69,6 +77,8 @@ export_s3_bucket  = "your-export-s3-bucket"
 
 # Optional
 allowed_email_domains = ""
+secret_replication_location = "us-central1"
+enable_cloudbuild_triggers = true
 ```
 You can copy the example:
 ```bash
@@ -101,12 +111,56 @@ Helper (optional): set env vars first, then generate JSON:
 export TF_VAR_secrets="$(scripts/prepare_tf_secrets.sh)"
 ```
 
+If your org policy blocks global secrets, set `secret_replication_location` to an allowed region
+(for example `us-central1`).
+
+## 6.1) GCS instead of AWS S3 (optional)
+If you want full GCP storage, use GCS with S3 interoperability.
+
+Manual steps:
+1. Create two GCS buckets (attachments + exports).
+2. Enable HMAC keys: Cloud Storage -> Settings -> Interoperability -> Create key.
+3. Use the HMAC Access Key + Secret as `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`.
+
+Command shortcut:
+```bash
+gcloud storage hmac create SERVICE_ACCOUNT_EMAIL --project "$PROJECT_ID"
+```
+
+Add these optional fields to `terraform.tfvars`:
+```hcl
+s3_bucket             = "your-gcs-attachments-bucket"
+export_s3_bucket      = "your-gcs-exports-bucket"
+s3_endpoint_url       = "https://storage.googleapis.com"
+s3_public_base_url    = "https://storage.googleapis.com"
+s3_url_style          = "path"
+export_s3_endpoint_url = "https://storage.googleapis.com"
+```
+
+## 6.2) Storage hardening (recommended for HIPAA)
+If you want Terraform to enforce private buckets and IAM:
+```hcl
+manage_storage_buckets = true
+storage_bucket_location = "us-central1"
+storage_service_account_email = "crm-storage-sa@your-project-id.iam.gserviceaccount.com"
+```
+If buckets already exist, import them before apply:
+```bash
+cd infra/terraform
+terraform import 'google_storage_bucket.attachments[0]' surrogacyforce-attachments-test
+terraform import 'google_storage_bucket.exports[0]' surrogacyforce-exports-test
+```
+
 ## 7) Terraform init + apply
 From repo root:
 ```bash
 cd infra/terraform
 terraform init -backend-config="bucket=${TF_STATE_BUCKET}"
 terraform apply
+```
+If you see backend/credentials errors, rerun:
+```bash
+terraform init -reconfigure -backend-config="bucket=${TF_STATE_BUCKET}"
 ```
 
 ## 8) Domain mapping (manual)
@@ -146,6 +200,12 @@ gcloud run jobs execute crm-migrate --region "$REGION"
 - `https://app.<domain>` loads
 - `https://api.<domain>/health` returns 200
 - Log in, check core pages
+
+## HIPAA readiness (infra-level)
+Terraform now enables:
+- Cloud SQL backups + PITR
+- Audit logs for GCS + Cloud SQL
+- GCS bucket hardening (if managed via Terraform)
 
 ## Notes for personal vs company accounts
 You must repeat the full flow in the company account:

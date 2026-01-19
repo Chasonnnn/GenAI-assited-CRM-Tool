@@ -10,3 +10,16 @@ export_s3_bucket  = "your-export-s3-bucket"
 
 # Optional
 allowed_email_domains = ""
+secret_replication_location = "us-central1"
+enable_cloudbuild_triggers = true
+
+# Storage hardening (optional)
+# manage_storage_buckets = true
+# storage_bucket_location = "us-central1"
+# storage_service_account_email = "crm-storage-sa@your-project-id.iam.gserviceaccount.com"
+
+# Optional S3-compatible endpoints (for GCS)
+# s3_endpoint_url = "https://storage.googleapis.com"
+# s3_public_base_url = "https://storage.googleapis.com"
+# s3_url_style = "path"
+# export_s3_endpoint_url = "https://storage.googleapis.com"

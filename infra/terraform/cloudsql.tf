@@ -8,6 +8,11 @@ resource "google_sql_database_instance" "crm" {
     ip_configuration {
       ipv4_enabled = true
     }
+    backup_configuration {
+      enabled                        = true
+      start_time                     = var.backup_start_time
+      point_in_time_recovery_enabled = var.enable_pitr
+    }
   }
 
   deletion_protection = true

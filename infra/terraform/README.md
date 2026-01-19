@@ -25,7 +25,15 @@ gcloud services enable \
   artifactregistry.googleapis.com \
   sqladmin.googleapis.com \
   secretmanager.googleapis.com \
-  redis.googleapis.com
+  redis.googleapis.com \
+  vpcaccess.googleapis.com
+```
+
+Authenticate for Terraform (ADC):
+```bash
+gcloud auth login
+gcloud auth application-default login
+gcloud config set project YOUR_PROJECT_ID
 ```
 
 Connect GitHub to Cloud Build (Console):
@@ -48,6 +56,8 @@ export_s3_bucket   = "..."
 
 # Optional
 allowed_email_domains = ""
+secret_replication_location = "us-central1"
+enable_cloudbuild_triggers = true
 ```
 You can copy the example:
 ```bash
@@ -77,11 +87,55 @@ Helper (optional):
 export TF_VAR_secrets="$(scripts/prepare_tf_secrets.sh)"
 ```
 
+If your org policy blocks global secrets, set `secret_replication_location` to an allowed region
+(for example `us-central1`).
+
+## GCS instead of AWS S3 (optional)
+To stay fully on GCP, use GCS with S3 interoperability.
+1. Create two GCS buckets (attachments + exports).
+2. Enable HMAC keys: Cloud Storage -> Settings -> Interoperability -> Create key.
+3. Use the HMAC Access Key + Secret as `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`.
+
+Command shortcut for HMAC keys:
+```bash
+gcloud storage hmac create SERVICE_ACCOUNT_EMAIL --project YOUR_PROJECT_ID
+```
+
+Set these optional vars in `terraform.tfvars`:
+```hcl
+s3_endpoint_url        = "https://storage.googleapis.com"
+s3_public_base_url     = "https://storage.googleapis.com"
+s3_url_style           = "path"
+export_s3_endpoint_url = "https://storage.googleapis.com"
+```
+
+## Storage hardening (recommended for HIPAA)
+To have Terraform enforce private buckets and IAM:
+```hcl
+manage_storage_buckets = true
+storage_bucket_location = "us-central1"
+storage_service_account_email = "crm-storage-sa@your-project-id.iam.gserviceaccount.com"
+```
+If buckets already exist, import them before apply:
+```bash
+terraform import 'google_storage_bucket.attachments[0]' surrogacyforce-attachments-test
+terraform import 'google_storage_bucket.exports[0]' surrogacyforce-exports-test
+```
+
 ## 3) Init + Apply
 ```bash
 terraform init -backend-config="bucket=YOUR_STATE_BUCKET"
 terraform apply
 ```
+If you see backend/credentials errors, rerun:
+```bash
+terraform init -reconfigure -backend-config="bucket=YOUR_STATE_BUCKET"
+```
+
+## What Terraform configures for HIPAA readiness
+- Cloud SQL backups + PITR enabled
+- GCS buckets: public access prevention + uniform bucket-level access (if managed)
+- Audit logs for GCS + Cloud SQL (DATA_READ/DATA_WRITE/ADMIN_READ)
 
 ## 4) DNS
 Terraform creates Cloud Run domain mappings (if enabled). Add the CNAME/TXT records shown in the Cloud Run console

@@ -1,4 +1,5 @@
 resource "google_cloudbuild_trigger" "api" {
+  count       = var.enable_cloudbuild_triggers ? 1 : 0
   name        = "crm-api-deploy"
   description = "Build and deploy API + worker on main"
   filename    = "cloudbuild/api.yaml"
@@ -23,6 +24,7 @@ resource "google_cloudbuild_trigger" "api" {
 }
 
 resource "google_cloudbuild_trigger" "web" {
+  count       = var.enable_cloudbuild_triggers ? 1 : 0
   name        = "crm-web-deploy"
   description = "Build and deploy web on main"
   filename    = "cloudbuild/web.yaml"

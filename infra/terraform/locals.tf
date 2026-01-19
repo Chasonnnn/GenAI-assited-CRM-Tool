@@ -29,7 +29,14 @@ locals {
     REDIS_URL    = local.redis_url
   })
 
-  common_env = {
+  optional_env = merge(
+    var.s3_endpoint_url != "" ? { S3_ENDPOINT_URL = var.s3_endpoint_url } : {},
+    var.s3_public_base_url != "" ? { S3_PUBLIC_BASE_URL = var.s3_public_base_url } : {},
+    var.export_s3_endpoint_url != "" ? { EXPORT_S3_ENDPOINT_URL = var.export_s3_endpoint_url } : {},
+    { S3_URL_STYLE = var.s3_url_style }
+  )
+
+  common_env = merge({
     ENV                          = "production"
     API_BASE_URL                 = local.api_url
     FRONTEND_URL                 = local.app_url
@@ -50,7 +57,7 @@ locals {
     GCP_MONITORING_ENABLED       = tostring(var.gcp_monitoring_enabled)
     GCP_PROJECT_ID               = var.project_id
     GCP_SERVICE_NAME             = var.api_service_name
-  }
+  }, local.optional_env)
 
   common_secret_keys = [
     "DATABASE_URL",
