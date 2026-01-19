@@ -155,7 +155,7 @@ def gmail_connect(
         value=state_payload,
         max_age=OAUTH_STATE_MAX_AGE,
         httponly=True,
-        samesite="lax",
+        samesite=settings.cookie_samesite,
         secure=settings.cookie_secure,
         path=OAUTH_STATE_COOKIE_PATH,
     )
@@ -303,7 +303,7 @@ def google_calendar_connect(
         value=state_payload,
         max_age=OAUTH_STATE_MAX_AGE,
         httponly=True,
-        samesite="lax",
+        samesite=settings.cookie_samesite,
         secure=settings.cookie_secure,
         path=OAUTH_STATE_COOKIE_PATH,
     )
@@ -546,7 +546,7 @@ def zoom_connect(
         value=state_payload,
         max_age=OAUTH_STATE_MAX_AGE,
         httponly=True,
-        samesite="lax",
+        samesite=settings.cookie_samesite,
         secure=settings.cookie_secure,
         path=OAUTH_STATE_COOKIE_PATH,
     )

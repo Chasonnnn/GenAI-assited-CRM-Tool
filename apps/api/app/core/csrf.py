@@ -31,7 +31,7 @@ def set_csrf_cookie(response: Response, token: Optional[str] = None) -> str:
         value=csrf_token,
         max_age=settings.JWT_EXPIRES_HOURS * 3600,
         httponly=False,  # Must be readable by JS for X-CSRF-Token header.
-        samesite="lax",
+        samesite=settings.cookie_samesite,
         secure=settings.cookie_secure,
         path="/",
     )
