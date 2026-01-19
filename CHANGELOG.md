@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.19.7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.19.6...surrogacy-crm-platform-v0.19.7) (2026-01-19)
+
+
+### Features
+
+* **analytics:** add monitoring endpoints and improve analytics ([b7faaa1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b7faaa187d9dea3d821e0f020d4068e99a01e9e1))
+
 ## [0.19.6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.19.5...surrogacy-crm-platform-v0.19.6) (2026-01-18)
 
 
