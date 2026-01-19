@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.21.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.20.0...surrogacy-crm-platform-v0.21.0) (2026-01-19)
+
+
+### Features
+
+* auto-load app version from release-please manifest ([58e95a5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/58e95a5f73cf383b36636f9939969f7f6f6b52b3))
+
+
+### Bug Fixes
+
+* guard bundle analyzer in prod ([cce7d8b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cce7d8b9f387f354866c9acdc8114979f32bddf6))
+
 ## [0.20.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.19.7...surrogacy-crm-platform-v0.20.0) (2026-01-19)
 
 
