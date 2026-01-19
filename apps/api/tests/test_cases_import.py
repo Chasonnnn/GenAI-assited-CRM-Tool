@@ -199,6 +199,7 @@ async def test_execute_import_success(authed_client: AsyncClient, db, test_org):
     assert import_record is not None
     assert import_record.status == "pending"
     assert import_record.total_rows == 2
+    assert import_record.file_content is not None
 
     # Verify background job was queued
     job = (
@@ -211,6 +212,7 @@ async def test_execute_import_success(authed_client: AsyncClient, db, test_org):
     )
     assert job is not None
     assert job.payload["import_id"] == str(import_record.id)
+    assert job.payload.get("file_content_base64") is None
 
 
 @pytest.mark.asyncio
@@ -254,6 +256,7 @@ async def test_execute_import_skips_duplicates(authed_client: AsyncClient, db, t
     assert import_record is not None
     assert import_record.status == "pending"
     assert import_record.total_rows == 2
+    assert import_record.file_content is not None
 
     # Verify job queued with dedupe action
     job = (
@@ -267,6 +270,7 @@ async def test_execute_import_skips_duplicates(authed_client: AsyncClient, db, t
     )
     assert job is not None
     assert job.payload["dedupe_action"] == "skip"
+    assert job.payload.get("file_content_base64") is None
 
 
 async def test_execute_import_handles_validation_errors(authed_client: AsyncClient, db):

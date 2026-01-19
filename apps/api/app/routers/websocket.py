@@ -11,7 +11,7 @@ from uuid import UUID
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.core.config import settings
-from app.core.websocket import manager
+from app.core.websocket import manager, send_ws_to_user, send_ws_to_org
 from app.core.security import decode_session_token
 from app.core.deps import COOKIE_NAME
 from app.db.models import Membership
@@ -142,7 +142,7 @@ async def websocket_notifications(
 # Helper function to push notifications (used by notification_service)
 async def push_notification(user_id: UUID, notification: dict):
     """Push a notification to a connected user."""
-    await manager.send_to_user(
+    await send_ws_to_user(
         user_id,
         {
             "type": "notification",
@@ -153,7 +153,7 @@ async def push_notification(user_id: UUID, notification: dict):
 
 async def push_notification_count(user_id: UUID, count: int):
     """Push updated unread count to a connected user."""
-    await manager.send_to_user(
+    await send_ws_to_user(
         user_id,
         {
             "type": "count_update",
@@ -164,7 +164,7 @@ async def push_notification_count(user_id: UUID, count: int):
 
 async def push_dashboard_stats(org_id: UUID, stats: dict):
     """Push updated dashboard stats to all connected users in an organization."""
-    await manager.send_to_org(
+    await send_ws_to_org(
         org_id,
         {
             "type": "stats_update",

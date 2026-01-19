@@ -179,10 +179,15 @@ if settings.SENTRY_DSN and settings.ENV != "dev":
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from app.core.websocket import manager, start_session_revocation_listener
+    from app.core.websocket import (
+        manager,
+        start_session_revocation_listener,
+        start_websocket_event_listener,
+    )
 
     manager.set_event_loop(asyncio.get_running_loop())
     await start_session_revocation_listener()
+    await start_websocket_event_listener()
     yield
 
 
