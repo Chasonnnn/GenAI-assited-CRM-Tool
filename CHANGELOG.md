@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.20.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.19.7...surrogacy-crm-platform-v0.20.0) (2026-01-19)
+
+
+### Features
+
+* **infra:** add public invoker toggle and improve Docker build ([b700924](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b700924ec4b8601c4707f49ab9d0925a0ec85a08))
+* **infra:** migrate Cloud Build triggers to 2nd gen repository connections ([35157a5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/35157a5b9f00ad352e7e04e32bea8e33ff9f6415))
+
+
+### Bug Fixes
+
+* set cloud build logging to cloud logging only ([188dfe8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/188dfe8b0742fe6b64c7e1c4a609dd585ef888ab))
+* use js next config to avoid runtime typescript install ([6921397](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/69213975b530c9e8a1a9781b49422ed2083b106e))
+
 ## [0.19.7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.19.6...surrogacy-crm-platform-v0.19.7) (2026-01-19)
 
 
