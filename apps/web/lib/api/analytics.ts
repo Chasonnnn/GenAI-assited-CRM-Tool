@@ -16,7 +16,9 @@ export interface AnalyticsSummary {
 
 export interface StatusCount {
     status: string;
+    stage_id: string | null;
     count: number;
+    order: number | null;
 }
 
 export interface AssigneeCount {
@@ -44,8 +46,15 @@ export interface DateRangeParams {
     to_date?: string;
 }
 
+export interface StatusParams extends DateRangeParams {
+    pipeline_id?: string;
+    owner_id?: string;
+}
+
 export interface TrendParams extends DateRangeParams {
     period?: 'day' | 'week' | 'month';
+    pipeline_id?: string;
+    owner_id?: string;
 }
 
 // API Functions
@@ -58,8 +67,15 @@ export async function getAnalyticsSummary(params: DateRangeParams = {}): Promise
     return api.get<AnalyticsSummary>(`/analytics/summary${query ? `?${query}` : ''}`);
 }
 
-export async function getSurrogatesByStatus(): Promise<StatusCount[]> {
-    return api.get<StatusCount[]>('/analytics/surrogates/by-status');
+export async function getSurrogatesByStatus(params: StatusParams = {}): Promise<StatusCount[]> {
+    const searchParams = new URLSearchParams();
+    if (params.from_date) searchParams.set('from_date', params.from_date);
+    if (params.to_date) searchParams.set('to_date', params.to_date);
+    if (params.pipeline_id) searchParams.set('pipeline_id', params.pipeline_id);
+    if (params.owner_id) searchParams.set('owner_id', params.owner_id);
+
+    const query = searchParams.toString();
+    return api.get<StatusCount[]>(`/analytics/surrogates/by-status${query ? `?${query}` : ''}`);
 }
 
 export async function getSurrogatesByAssignee(): Promise<AssigneeCount[]> {
@@ -71,6 +87,8 @@ export async function getSurrogatesTrend(params: TrendParams = {}): Promise<Tren
     if (params.from_date) searchParams.set('from_date', params.from_date);
     if (params.to_date) searchParams.set('to_date', params.to_date);
     if (params.period) searchParams.set('period', params.period);
+    if (params.pipeline_id) searchParams.set('pipeline_id', params.pipeline_id);
+    if (params.owner_id) searchParams.set('owner_id', params.owner_id);
 
     const query = searchParams.toString();
     return api.get<TrendPoint[]>(`/analytics/surrogates/trend${query ? `?${query}` : ''}`);

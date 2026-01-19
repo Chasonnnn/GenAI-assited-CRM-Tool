@@ -15,6 +15,24 @@ This runbook documents GCP Monitoring setup and alert routing verification for n
 2. Confirm logs are flowing to Cloud Logging.
 3. Create Monitoring dashboards (optional but recommended):
    - Request rate, error rate, latency, DB connections.
+4. Configure log-based metrics for app alerts:
+   - Metric: `ws_send_failed_count`
+     - Filter: `jsonPayload.event="ws_send_failed"`
+     - Label extractors:
+       - `org_id`: `EXTRACT(jsonPayload.org_id)`
+       - `user_id`: `EXTRACT(jsonPayload.user_id)`
+       - `message_type`: `EXTRACT(jsonPayload.message_type)`
+   - Metric: `gcp_alert_ingested_count`
+     - Filter: `jsonPayload.event="gcp_alert_ingested"`
+     - Label extractors:
+       - `org_id`: `EXTRACT(jsonPayload.org_id)`
+   - Note: use log-based metrics only; no app-side counters needed.
+5. Create alert policies from log-based metrics:
+   - `ws_send_failed_count` > 0 for 5m (per org).
+   - Optional: `gcp_alert_ingested_count` for webhook health verification.
+6. Wire Monitoring webhook notifications to the app:
+   - Webhook URL: `https://<api-base>/internal/alerts/gcp`
+   - Header: `X-Internal-Secret: <INTERNAL_SECRET>`
 
 ## Alert Routing Verification (Required)
 1. Create a temporary alert policy with a low threshold (example: 5xx > 1 in 5 minutes).
