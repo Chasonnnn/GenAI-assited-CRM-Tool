@@ -197,6 +197,34 @@ def parse_date_range(
     return start, end
 
 
+def _normalize_date_bounds(
+    start_date: date | None,
+    end_date: date | None,
+) -> tuple[datetime | None, datetime | None]:
+    if not start_date and not end_date:
+        return None, None
+    start_dt = (
+        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
+        if start_date
+        else None
+    )
+    end_dt = (
+        datetime.combine(end_date + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
+        if end_date
+        else None
+    )
+    return start_dt, end_dt
+
+
+def _apply_date_range_filters(query, column, start_date: date | None, end_date: date | None):
+    start_dt, end_dt = _normalize_date_bounds(start_date, end_date)
+    if start_dt:
+        query = query.filter(column >= start_dt)
+    if end_dt:
+        query = query.filter(column < end_dt)
+    return query
+
+
 def get_cached_analytics_summary(
     db: Session,
     organization_id: uuid.UUID,
@@ -429,10 +457,7 @@ def get_surrogates_by_status(
         Surrogate.is_archived.is_(False),
     )
 
-    if start_date:
-        query = query.filter(func.date(Surrogate.created_at) >= start_date)
-    if end_date:
-        query = query.filter(func.date(Surrogate.created_at) <= end_date)
+    query = _apply_date_range_filters(query, Surrogate.created_at, start_date, end_date)
     if source:
         query = query.filter(Surrogate.source == source)
     if pipeline_id:
@@ -516,20 +541,14 @@ def get_status_trend(
         start_date = end_date - timedelta(days=30)
 
     # Get status changes over time
+    query = db.query(
+        func.date(SurrogateStatusHistory.changed_at).label("date"),
+        func.coalesce(SurrogateStatusHistory.to_label_snapshot, "unknown").label("status_label"),
+        func.count(SurrogateStatusHistory.id).label("count"),
+    ).filter(SurrogateStatusHistory.organization_id == organization_id)
+    query = _apply_date_range_filters(query, SurrogateStatusHistory.changed_at, start_date, end_date)
     results = (
-        db.query(
-            func.date(SurrogateStatusHistory.changed_at).label("date"),
-            func.coalesce(SurrogateStatusHistory.to_label_snapshot, "unknown").label(
-                "status_label"
-            ),
-            func.count(SurrogateStatusHistory.id).label("count"),
-        )
-        .filter(
-            SurrogateStatusHistory.organization_id == organization_id,
-            SurrogateStatusHistory.changed_at >= start_date,
-            SurrogateStatusHistory.changed_at <= end_date,
-        )
-        .group_by(
+        query.group_by(
             func.date(SurrogateStatusHistory.changed_at),
             func.coalesce(SurrogateStatusHistory.to_label_snapshot, "unknown"),
         )
@@ -570,10 +589,7 @@ def get_surrogates_by_state(
         Surrogate.state.isnot(None),
     )
 
-    if start_date:
-        query = query.filter(func.date(Surrogate.created_at) >= start_date)
-    if end_date:
-        query = query.filter(func.date(Surrogate.created_at) <= end_date)
+    query = _apply_date_range_filters(query, Surrogate.created_at, start_date, end_date)
     if source:
         query = query.filter(Surrogate.source == source)
 
@@ -639,10 +655,7 @@ def get_surrogates_by_source(
         Surrogate.is_archived.is_(False),
     )
 
-    if start_date:
-        query = query.filter(func.date(Surrogate.created_at) >= start_date)
-    if end_date:
-        query = query.filter(func.date(Surrogate.created_at) <= end_date)
+    query = _apply_date_range_filters(query, Surrogate.created_at, start_date, end_date)
 
     results = query.group_by(Surrogate.source).order_by(func.count(Surrogate.id).desc()).all()
 
@@ -711,10 +724,7 @@ def get_surrogates_by_user(
         )
     )
 
-    if start_date:
-        query = query.filter(func.date(Surrogate.created_at) >= start_date)
-    if end_date:
-        query = query.filter(func.date(Surrogate.created_at) <= end_date)
+    query = _apply_date_range_filters(query, Surrogate.created_at, start_date, end_date)
 
     results = (
         query.group_by(Surrogate.owner_id, User.full_name)
@@ -759,10 +769,7 @@ def get_surrogates_by_assignee(
         )
     )
 
-    if start_date:
-        query = query.filter(func.date(Surrogate.created_at) >= start_date)
-    if end_date:
-        query = query.filter(func.date(Surrogate.created_at) <= end_date)
+    query = _apply_date_range_filters(query, Surrogate.created_at, start_date, end_date)
 
     results = (
         query.group_by(Surrogate.owner_id, label_column)
@@ -846,10 +853,7 @@ def get_conversion_funnel(
         Surrogate.is_archived.is_(False),
     )
 
-    if start_date:
-        query = query.filter(func.date(Surrogate.created_at) >= start_date)
-    if end_date:
-        query = query.filter(func.date(Surrogate.created_at) <= end_date)
+    query = _apply_date_range_filters(query, Surrogate.created_at, start_date, end_date)
 
     active_stages = [s for s in stages if s.is_active]
     counts_by_stage = dict(
@@ -932,30 +936,36 @@ def get_summary_kpis(
     prev_end = start_date - timedelta(days=1)
 
     # Current period
-    current = (
+    current_query = (
         db.query(func.count(Surrogate.id))
         .filter(
             Surrogate.organization_id == organization_id,
             Surrogate.is_archived.is_(False),
-            func.date(Surrogate.created_at) >= start_date,
-            func.date(Surrogate.created_at) <= end_date,
         )
-        .scalar()
-        or 0
     )
+    current_query = _apply_date_range_filters(
+        current_query,
+        Surrogate.created_at,
+        start_date,
+        end_date,
+    )
+    current = current_query.scalar() or 0
 
     # Previous period
-    previous = (
+    previous_query = (
         db.query(func.count(Surrogate.id))
         .filter(
             Surrogate.organization_id == organization_id,
             Surrogate.is_archived.is_(False),
-            func.date(Surrogate.created_at) >= prev_start,
-            func.date(Surrogate.created_at) <= prev_end,
         )
-        .scalar()
-        or 0
     )
+    previous_query = _apply_date_range_filters(
+        previous_query,
+        Surrogate.created_at,
+        prev_start,
+        prev_end,
+    )
+    previous = previous_query.scalar() or 0
 
     # Calculate change
     if previous > 0:
@@ -1255,10 +1265,7 @@ def get_funnel_with_filter(
         Surrogate.is_archived.is_(False),
     )
 
-    if start_date:
-        query = query.filter(func.date(Surrogate.created_at) >= start_date)
-    if end_date:
-        query = query.filter(func.date(Surrogate.created_at) <= end_date)
+    query = _apply_date_range_filters(query, Surrogate.created_at, start_date, end_date)
     if ad_id:
         query = query.filter(Surrogate.meta_ad_external_id == ad_id)
 
@@ -1340,10 +1347,7 @@ def get_surrogates_by_state_with_filter(
         Surrogate.state.isnot(None),
     )
 
-    if start_date:
-        query = query.filter(func.date(Surrogate.created_at) >= start_date)
-    if end_date:
-        query = query.filter(func.date(Surrogate.created_at) <= end_date)
+    query = _apply_date_range_filters(query, Surrogate.created_at, start_date, end_date)
     if ad_id:
         query = query.filter(Surrogate.meta_ad_external_id == ad_id)
 
@@ -2806,11 +2810,6 @@ def get_leads_by_form(
 
     # Build date filter
     lead_time = func.coalesce(MetaLead.meta_created_time, MetaLead.received_at)
-    date_filters = [MetaLead.organization_id == organization_id]
-    if start_date:
-        date_filters.append(func.date(lead_time) >= start_date)
-    if end_date:
-        date_filters.append(func.date(lead_time) <= end_date)
 
     # Get lead counts by form
     lead_counts_query = (
@@ -2819,9 +2818,12 @@ def get_leads_by_form(
             func.count(MetaLead.id).label("lead_count"),
             func.count(MetaLead.converted_surrogate_id).label("surrogate_count"),
         )
-        .filter(*date_filters)
+        .filter(MetaLead.organization_id == organization_id)
         .filter(MetaLead.meta_form_id.isnot(None))
         .group_by(MetaLead.meta_form_id)
+    )
+    lead_counts_query = _apply_date_range_filters(
+        lead_counts_query, lead_time, start_date, end_date
     )
 
     lead_counts = {r.form_external_id: r for r in lead_counts_query.all()}
@@ -2853,10 +2855,9 @@ def get_leads_by_form(
                 Surrogate.stage_id.in_(qualified_stage_ids),
             )
         )
-        if start_date:
-            qualified_query = qualified_query.filter(func.date(lead_time) >= start_date)
-        if end_date:
-            qualified_query = qualified_query.filter(func.date(lead_time) <= end_date)
+        qualified_query = _apply_date_range_filters(
+            qualified_query, lead_time, start_date, end_date
+        )
 
         qualified_query = qualified_query.group_by(MetaLead.meta_form_id)
 
