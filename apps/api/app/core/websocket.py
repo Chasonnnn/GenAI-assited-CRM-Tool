@@ -6,7 +6,7 @@ server-sent messages to reach connected clients instantly.
 """
 
 from typing import Dict, Set
-from uuid import UUID
+from uuid import UUID, uuid4
 import asyncio
 import json
 import os
@@ -15,6 +15,12 @@ import logging
 from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
+
+WEBSOCKET_EVENT_CHANNEL = "websocket_events"
+WEBSOCKET_INSTANCE_ID = (
+    os.getenv("WEBSOCKET_INSTANCE_ID") or os.getenv("HOSTNAME") or str(uuid4())
+)
+_ws_publish_client = None
 
 
 class ConnectionManager:
@@ -188,6 +194,51 @@ class ConnectionManager:
 SESSION_REVOKE_CHANNEL = "session_revoked"
 
 
+def should_deliver_ws_event(event: dict, instance_id: str) -> bool:
+    source_id = event.get("source_id")
+    return not source_id or source_id != instance_id
+
+
+async def _publish_ws_event(event: dict) -> None:
+    redis_url = os.getenv("REDIS_URL")
+    if not redis_url or redis_url == "memory://":
+        return
+
+    try:
+        import redis.asyncio as redis
+    except Exception:
+        return
+
+    global _ws_publish_client
+    if _ws_publish_client is None:
+        _ws_publish_client = redis.from_url(redis_url)
+    await _ws_publish_client.publish(WEBSOCKET_EVENT_CHANNEL, json.dumps(event))
+
+
+async def send_ws_to_user(user_id: UUID, message: dict) -> None:
+    await manager.send_to_user(user_id, message)
+    await _publish_ws_event(
+        {
+            "source_id": WEBSOCKET_INSTANCE_ID,
+            "target": "user",
+            "user_id": str(user_id),
+            "message": message,
+        }
+    )
+
+
+async def send_ws_to_org(org_id: UUID, message: dict) -> None:
+    await manager.send_to_org(org_id, message)
+    await _publish_ws_event(
+        {
+            "source_id": WEBSOCKET_INSTANCE_ID,
+            "target": "org",
+            "org_id": str(org_id),
+            "message": message,
+        }
+    )
+
+
 async def start_session_revocation_listener() -> None:
     """Listen for session revocation events and close matching sockets."""
     redis_url = os.getenv("REDIS_URL")
@@ -210,6 +261,44 @@ async def start_session_revocation_listener() -> None:
             data = message.get("data")
             token_hash = data.decode() if isinstance(data, bytes) else str(data)
             await manager.close_by_token_hash(token_hash)
+
+    asyncio.create_task(_listen())
+
+
+async def start_websocket_event_listener() -> None:
+    """Listen for websocket events from other instances."""
+    redis_url = os.getenv("REDIS_URL")
+    if not redis_url or redis_url == "memory://":
+        return
+
+    try:
+        import redis.asyncio as redis
+    except Exception:
+        return
+
+    client = redis.from_url(redis_url)
+    pubsub = client.pubsub()
+    await pubsub.subscribe(WEBSOCKET_EVENT_CHANNEL)
+
+    async def _listen() -> None:
+        async for message in pubsub.listen():
+            if message.get("type") != "message":
+                continue
+            data = message.get("data")
+            raw = data.decode() if isinstance(data, bytes) else data
+            try:
+                event = json.loads(raw)
+            except Exception:
+                continue
+            if not should_deliver_ws_event(event, WEBSOCKET_INSTANCE_ID):
+                continue
+
+            target = event.get("target")
+            payload = event.get("message")
+            if target == "user" and event.get("user_id"):
+                await manager.send_to_user(UUID(event["user_id"]), payload)
+            elif target == "org" and event.get("org_id"):
+                await manager.send_to_org(UUID(event["org_id"]), payload)
 
     asyncio.create_task(_listen())
 
