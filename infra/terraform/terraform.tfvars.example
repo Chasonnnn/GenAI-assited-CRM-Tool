@@ -12,6 +12,8 @@ export_s3_bucket  = "your-export-s3-bucket"
 allowed_email_domains = ""
 secret_replication_location = "us-central1"
 enable_cloudbuild_triggers = true
+enable_public_invoker = true
+enable_domain_mapping = true
 
 # Storage hardening (optional)
 # manage_storage_buckets = true

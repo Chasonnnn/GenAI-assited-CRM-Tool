@@ -79,6 +79,8 @@ export_s3_bucket  = "your-export-s3-bucket"
 allowed_email_domains = ""
 secret_replication_location = "us-central1"
 enable_cloudbuild_triggers = true
+enable_public_invoker = true
+enable_domain_mapping = true
 ```
 You can copy the example:
 ```bash
@@ -172,6 +174,17 @@ gcloud run domain-mappings describe "api.${DOMAIN}" --region "$REGION"
 gcloud run domain-mappings describe "app.${DOMAIN}" --region "$REGION"
 ```
 Add the DNS records in Cloudflare and wait for verification.
+
+If your org policy blocks public invokers, set:
+```hcl
+enable_public_invoker = false
+```
+
+If domain mapping fails due to verification, set:
+```hcl
+enable_domain_mapping = false
+```
+Then verify ownership in Google Search Console and re-enable.
 
 ## 9) OAuth redirect URIs (manual)
 Update OAuth apps with production URLs:

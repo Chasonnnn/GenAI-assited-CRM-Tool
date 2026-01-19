@@ -58,6 +58,8 @@ export_s3_bucket   = "..."
 allowed_email_domains = ""
 secret_replication_location = "us-central1"
 enable_cloudbuild_triggers = true
+enable_public_invoker = true
+enable_domain_mapping = true
 ```
 You can copy the example:
 ```bash
@@ -140,6 +142,18 @@ terraform init -reconfigure -backend-config="bucket=YOUR_STATE_BUCKET"
 ## 4) DNS
 Terraform creates Cloud Run domain mappings (if enabled). Add the CNAME/TXT records shown in the Cloud Run console
 for `api.<domain>` and `app.<domain>` in Cloudflare.
+
+If your org policy blocks `allUsers`, set:
+```hcl
+enable_public_invoker = false
+```
+You can re-enable after you wire up a private invoker/IAP.
+
+If domain mapping fails due to verification, set:
+```hcl
+enable_domain_mapping = false
+```
+Then verify domain ownership in Google Search Console and re-enable.
 
 ## 5) Build + Deploy
 Cloud Build triggers are created for API and Web builds.

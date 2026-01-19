@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:20-bullseye-slim AS BUILDER
+FROM node:20-bullseye-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
@@ -18,7 +18,12 @@ COPY scripts ./scripts
 
 WORKDIR /app/apps/web
 
-RUN pnpm install --frozen-lockfile
+ENV NPM_CONFIG_OPTIONAL=true
+ENV npm_config_optional=true
+ENV PNPM_CONFIG_OPTIONAL=true
+
+RUN rm -rf node_modules
+RUN pnpm install --frozen-lockfile --config.optional=true
 
 ARG NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
@@ -28,7 +33,7 @@ RUN pnpm build
 RUN pnpm prune --prod
 
 
-FROM node:20-bullseye-slim AS RUNNER
+FROM node:20-bullseye-slim AS runner
 
 WORKDIR /app/apps/web
 
