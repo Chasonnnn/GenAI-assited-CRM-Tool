@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.db.models import Surrogate, Task, Match, Attachment, EntityNote, Appointment
-from app.db.enums import WorkflowTriggerType, WorkflowEventSource, TaskType
+from app.db.enums import WorkflowTriggerType, WorkflowEventSource
 from app.services.workflow_engine import engine
 
 
@@ -314,7 +314,8 @@ def trigger_task_due_sweep(db: Session, org_id: UUID) -> None:
     """Find and trigger task_due workflows for tasks due soon."""
     from datetime import datetime, timedelta
     from zoneinfo import ZoneInfo
-    from app.db.models import AutomationWorkflow, Task, Surrogate, Organization
+    from app.db.models import AutomationWorkflow, Organization
+    from app.services import task_service
 
     org = db.query(Organization).filter(Organization.id == org_id).first()
     tz_name = org.timezone if org and org.timezone else "UTC"
@@ -339,35 +340,21 @@ def trigger_task_due_sweep(db: Session, org_id: UUID) -> None:
         window_start = now + timedelta(hours=hours_before - 1)
         window_end = now + timedelta(hours=hours_before + 1)
 
-        # Find tasks due within the window
-        tasks = (
-            db.query(Task)
-            .join(Surrogate)
-            .filter(
-                Surrogate.organization_id == org_id,
-                Task.due_date.isnot(None),
-                Task.is_completed.is_(False),
-                Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
-            )
-            .all()
-        )
-
-        for task in tasks:
-            if task.due_date:
-                from datetime import datetime as dt
-
-                due_dt = dt.combine(task.due_date, task.due_time or dt.min.time())
-                due_dt = due_dt.replace(tzinfo=org_tz)
-
-                if window_start <= due_dt <= window_end:
-                    trigger_task_due(db, task)
+        for task in task_service.iter_tasks_due_in_window(
+            db,
+            org_id,
+            window_start,
+            window_end,
+        ):
+            trigger_task_due(db, task)
 
 
 def trigger_task_overdue_sweep(db: Session, org_id: UUID) -> None:
     """Find and trigger task_overdue workflows for overdue tasks."""
     from datetime import datetime
     from zoneinfo import ZoneInfo
-    from app.db.models import Task, Surrogate, Organization
+    from app.db.models import Organization
+    from app.services import task_service
 
     org = db.query(Organization).filter(Organization.id == org_id).first()
     tz_name = org.timezone if org and org.timezone else "UTC"
@@ -378,20 +365,7 @@ def trigger_task_overdue_sweep(db: Session, org_id: UUID) -> None:
     now = datetime.now(org_tz)
     today = now.date()
 
-    overdue_tasks = (
-        db.query(Task)
-        .join(Surrogate)
-        .filter(
-            Surrogate.organization_id == org_id,
-            Task.due_date.isnot(None),
-            Task.due_date < today,
-            Task.is_completed.is_(False),
-            Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
-        )
-        .all()
-    )
-
-    for task in overdue_tasks:
+    for task in task_service.iter_overdue_tasks(db, org_id, today):
         trigger_task_overdue(db, task)
 
 
