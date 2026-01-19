@@ -236,6 +236,11 @@ variable "enable_domain_mapping" {
   default     = true
 }
 
+variable "enable_public_invoker" {
+  type        = bool
+  default     = true
+}
+
 variable "enable_cloudbuild_triggers" {
   type        = bool
   default     = true

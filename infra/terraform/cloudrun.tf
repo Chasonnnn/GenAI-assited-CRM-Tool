@@ -128,6 +128,7 @@ resource "google_cloud_run_service" "web" {
 }
 
 resource "google_cloud_run_service_iam_member" "api_invoker" {
+  count    = var.enable_public_invoker ? 1 : 0
   service  = google_cloud_run_service.api.name
   location = google_cloud_run_service.api.location
   role     = "roles/run.invoker"
@@ -135,6 +136,7 @@ resource "google_cloud_run_service_iam_member" "api_invoker" {
 }
 
 resource "google_cloud_run_service_iam_member" "web_invoker" {
+  count    = var.enable_public_invoker ? 1 : 0
   service  = google_cloud_run_service.web.name
   location = google_cloud_run_service.web.location
   role     = "roles/run.invoker"
