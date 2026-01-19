@@ -89,3 +89,24 @@ def test_claim_pending_jobs_skip_locked(db_engine):
         session2.close()
         conn1.close()
         conn2.close()
+
+
+def test_claim_pending_jobs_filters_by_type(db, test_org):
+    job_service.schedule_job(
+        db=db,
+        org_id=test_org.id,
+        job_type=JobType.NOTIFICATION,
+        payload={"message": "job-1"},
+        run_at=datetime.now(timezone.utc),
+    )
+    job_service.schedule_job(
+        db=db,
+        org_id=test_org.id,
+        job_type=JobType.CAMPAIGN_SEND,
+        payload={"message": "job-2"},
+        run_at=datetime.now(timezone.utc),
+    )
+
+    claimed = job_service.claim_pending_jobs(db, limit=10, job_types=[JobType.NOTIFICATION])
+    assert len(claimed) == 1
+    assert claimed[0].job_type == JobType.NOTIFICATION.value

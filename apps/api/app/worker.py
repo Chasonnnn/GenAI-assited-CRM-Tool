@@ -49,6 +49,36 @@ BATCH_SIZE = int(os.getenv("WORKER_BATCH_SIZE", "10"))
 SESSION_CLEANUP_INTERVAL_SECONDS = int(os.getenv("SESSION_CLEANUP_INTERVAL_SECONDS", "3600"))
 
 
+def parse_worker_job_types(raw: str | None) -> list[str] | None:
+    if raw is None:
+        return None
+    if not raw.strip():
+        return None
+    allowed_values = {job.value for job in JobType}
+    values: list[str] = []
+    seen = set()
+    for item in raw.split(","):
+        token = item.strip()
+        if not token:
+            continue
+        token_norm = token.lower()
+        resolved = None
+        if token_norm in allowed_values:
+            resolved = token_norm
+        else:
+            try:
+                resolved = JobType[token.upper()].value
+            except KeyError:
+                resolved = None
+        if resolved and resolved not in seen:
+            seen.add(resolved)
+            values.append(resolved)
+    return values if values else []
+
+
+WORKER_JOB_TYPES = parse_worker_job_types(os.getenv("WORKER_JOB_TYPES"))
+
+
 def _mask_email(email: str | None) -> str:
     if not email:
         return ""
@@ -716,8 +746,17 @@ async def process_meta_capi_event(db, job) -> None:
 
 async def worker_loop() -> None:
     """Main worker loop - polls for and processes pending jobs."""
+    if WORKER_JOB_TYPES is None:
+        job_types_display = "all"
+    elif WORKER_JOB_TYPES:
+        job_types_display = ",".join(WORKER_JOB_TYPES)
+    else:
+        job_types_display = "none"
     logger.info(
-        f"Worker starting (poll interval: {POLL_INTERVAL_SECONDS}s, batch size: {BATCH_SIZE})"
+        "Worker starting (poll interval: %ss, batch size: %s, job types: %s)",
+        POLL_INTERVAL_SECONDS,
+        BATCH_SIZE,
+        job_types_display,
     )
 
     if not RESEND_API_KEY:
@@ -742,7 +781,11 @@ async def worker_loop() -> None:
                         logger.warning("Session cleanup failed: %s", exc)
                     last_session_cleanup = now
 
-                jobs = job_service.claim_pending_jobs(db, limit=BATCH_SIZE)
+                jobs = job_service.claim_pending_jobs(
+                    db,
+                    limit=BATCH_SIZE,
+                    job_types=WORKER_JOB_TYPES,
+                )
 
                 if jobs:
                     logger.info(f"Found {len(jobs)} pending jobs")
@@ -859,33 +902,29 @@ async def process_csv_import(db, job) -> None:
     Process CSV import job in background.
 
     Payload:
-        - import_id: UUID of the CaseImport record
-        - file_content_base64: Base64-encoded CSV content
+        - import_id: UUID of the SurrogateImport record
         - dedupe_action: "skip" (default) or other action
     """
     from app.services import import_service
-    from app.db.models import CaseImport
-    import base64
+    from app.db.models import SurrogateImport
 
     payload = job.payload or {}
     import_id = payload.get("import_id")
-    file_content_b64 = payload.get("file_content_base64")
     dedupe_action = payload.get("dedupe_action", "skip")
 
-    if not import_id or not file_content_b64:
-        raise Exception("Missing import_id or file_content_base64 in payload")
-
-    # Decode file content
-    try:
-        file_content = base64.b64decode(file_content_b64)
-    except Exception as e:
-        raise Exception(f"Failed to decode file content: {e}")
+    if not import_id:
+        raise Exception("Missing import_id in payload")
 
     # Get import record
-    import_record = db.query(CaseImport).filter(CaseImport.id == UUID(import_id)).first()
+    import_record = (
+        db.query(SurrogateImport).filter(SurrogateImport.id == UUID(import_id)).first()
+    )
 
     if not import_record:
         raise Exception(f"Import record {import_id} not found")
+
+    if not import_record.file_content:
+        raise Exception(f"Import record {import_id} missing file content")
 
     # Update status to running
     import_record.status = "running"
@@ -900,9 +939,11 @@ async def process_csv_import(db, job) -> None:
             org_id=job.organization_id,
             user_id=import_record.created_by_user_id,
             import_id=import_record.id,
-            file_content=file_content,
+            file_content=import_record.file_content,
             dedupe_action=dedupe_action,
         )
+        import_record.file_content = None
+        db.commit()
         logger.info(f"CSV import completed: {import_id}")
     except Exception as e:
         # Update import status to failed

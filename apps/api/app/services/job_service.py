@@ -81,22 +81,33 @@ def get_pending_jobs(db: Session, limit: int = 10) -> list[Job]:
     )
 
 
-def claim_pending_jobs(db: Session, limit: int = 10) -> list[Job]:
+def claim_pending_jobs(
+    db: Session,
+    limit: int = 10,
+    job_types: list[JobType] | list[str] | None = None,
+) -> list[Job]:
     """
     Atomically claim pending jobs by marking them running.
 
     Uses row locking on Postgres to avoid duplicate claims across workers.
     """
     now = datetime.now(timezone.utc)
-    query = (
-        db.query(Job)
-        .filter(
-            Job.status == JobStatus.PENDING.value,
-            Job.run_at <= now,
-        )
-        .order_by(Job.run_at)
-        .limit(limit)
+    type_values: list[str] | None = None
+    if job_types is not None:
+        type_values = [
+            jt.value if isinstance(jt, JobType) else str(jt)
+            for jt in job_types
+            if jt
+        ]
+        if not type_values:
+            return []
+    query = db.query(Job).filter(
+        Job.status == JobStatus.PENDING.value,
+        Job.run_at <= now,
     )
+    if type_values:
+        query = query.filter(Job.job_type.in_(type_values))
+    query = query.order_by(Job.run_at).limit(limit)
     if getattr(db.get_bind(), "dialect", None) and db.get_bind().dialect.name == "postgresql":
         query = query.with_for_update(skip_locked=True)
 
