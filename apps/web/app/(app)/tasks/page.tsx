@@ -214,6 +214,7 @@ export default function TasksPage() {
 
     const taskOwnerId = ownerOverride ?? undefined
     const useMyTasks = !taskOwnerId && filter === "my_tasks"
+    const ownerParams = taskOwnerId ? { owner_id: taskOwnerId } : {}
 
     // Fetch incomplete tasks
     const {
@@ -223,7 +224,7 @@ export default function TasksPage() {
         refetch: refetchIncomplete,
     } = useTasks({
         my_tasks: useMyTasks,
-        owner_id: taskOwnerId,
+        ...ownerParams,
         is_completed: false,
         per_page: 100,
         exclude_approvals: true,
@@ -237,7 +238,7 @@ export default function TasksPage() {
         refetch: refetchCompleted,
     } = useTasks({
         my_tasks: useMyTasks,
-        owner_id: taskOwnerId,
+        ...ownerParams,
         is_completed: true,
         per_page: 50,
         exclude_approvals: true,
@@ -246,7 +247,7 @@ export default function TasksPage() {
     // Fetch pending workflow approvals (always my_tasks)
     const { data: pendingApprovals, isLoading: loadingApprovals } = useTasks({
         my_tasks: !taskOwnerId,
-        owner_id: taskOwnerId,
+        ...ownerParams,
         task_type: "workflow_approval",
         status: ["pending", "in_progress"],
         exclude_approvals: false,
