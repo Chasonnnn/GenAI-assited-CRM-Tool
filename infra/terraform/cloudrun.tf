@@ -4,18 +4,18 @@ resource "google_cloud_run_service" "api" {
 
   metadata {
     annotations = {
-      "run.googleapis.com/ingress"             = "all"
+      "run.googleapis.com/ingress" = "all"
     }
   }
 
   template {
     metadata {
       annotations = {
-        "autoscaling.knative.dev/minScale"       = tostring(var.run_min_instances)
-        "autoscaling.knative.dev/maxScale"       = tostring(var.run_max_instances)
-        "run.googleapis.com/cloudsql-instances"  = google_sql_database_instance.crm.connection_name
+        "autoscaling.knative.dev/minScale"        = tostring(var.run_min_instances)
+        "autoscaling.knative.dev/maxScale"        = tostring(var.run_max_instances)
+        "run.googleapis.com/cloudsql-instances"   = google_sql_database_instance.crm.connection_name
         "run.googleapis.com/vpc-access-connector" = google_vpc_access_connector.crm.id
-        "run.googleapis.com/vpc-access-egress"     = "private-ranges-only"
+        "run.googleapis.com/vpc-access-egress"    = "private-ranges-only"
       }
     }
 
@@ -78,7 +78,7 @@ resource "google_cloud_run_service" "web" {
 
   metadata {
     annotations = {
-      "run.googleapis.com/ingress"        = "all"
+      "run.googleapis.com/ingress" = "all"
     }
   }
 

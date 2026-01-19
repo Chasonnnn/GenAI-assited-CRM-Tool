@@ -43,78 +43,78 @@ variable "github_branch" {
 }
 
 variable "api_service_name" {
-  type        = string
-  default     = "crm-api"
+  type    = string
+  default = "crm-api"
 }
 
 variable "web_service_name" {
-  type        = string
-  default     = "crm-web"
+  type    = string
+  default = "crm-web"
 }
 
 variable "worker_job_name" {
-  type        = string
-  default     = "crm-worker"
+  type    = string
+  default = "crm-worker"
 }
 
 variable "migrate_job_name" {
-  type        = string
-  default     = "crm-migrate"
+  type    = string
+  default = "crm-migrate"
 }
 
 variable "database_tier" {
-  type        = string
-  default     = "db-g1-small"
+  type    = string
+  default = "db-g1-small"
 }
 
 variable "database_version" {
-  type        = string
-  default     = "POSTGRES_15"
+  type    = string
+  default = "POSTGRES_15"
 }
 
 variable "database_name" {
-  type        = string
-  default     = "crm"
+  type    = string
+  default = "crm"
 }
 
 variable "database_user" {
-  type        = string
-  default     = "crm_user"
+  type    = string
+  default = "crm_user"
 }
 
 variable "database_password" {
-  type        = string
-  sensitive   = true
+  type      = string
+  sensitive = true
 }
 
 variable "redis_memory_size_gb" {
-  type        = number
-  default     = 1
+  type    = number
+  default = 1
 }
 
 variable "vpc_connector_cidr" {
-  type        = string
-  default     = "10.8.0.0/28"
+  type    = string
+  default = "10.8.0.0/28"
 }
 
 variable "backup_start_time" {
-  type        = string
-  default     = "03:00"
+  type    = string
+  default = "03:00"
 }
 
 variable "enable_pitr" {
-  type        = bool
-  default     = true
+  type    = bool
+  default = true
 }
 
 variable "manage_storage_buckets" {
-  type        = bool
-  default     = false
+  type    = bool
+  default = false
 }
 
 variable "storage_bucket_location" {
-  type        = string
-  default     = "us-central1"
+  type    = string
+  default = "us-central1"
 }
 
 variable "secret_replication_location" {
@@ -124,91 +124,91 @@ variable "secret_replication_location" {
 }
 
 variable "storage_service_account_email" {
-  type        = string
-  default     = ""
+  type    = string
+  default = ""
 }
 
 variable "run_cpu" {
-  type        = string
-  default     = "1"
+  type    = string
+  default = "1"
 }
 
 variable "run_memory" {
-  type        = string
-  default     = "1Gi"
+  type    = string
+  default = "1Gi"
 }
 
 variable "run_min_instances" {
-  type        = number
-  default     = 0
+  type    = number
+  default = 0
 }
 
 variable "run_max_instances" {
-  type        = number
-  default     = 10
+  type    = number
+  default = 10
 }
 
 variable "storage_backend" {
-  type        = string
-  default     = "s3"
+  type    = string
+  default = "s3"
 }
 
 variable "s3_bucket" {
-  type        = string
+  type = string
 }
 
 variable "s3_region" {
-  type        = string
-  default     = "us-east-1"
+  type    = string
+  default = "us-east-1"
 }
 
 variable "s3_endpoint_url" {
-  type        = string
-  default     = ""
+  type    = string
+  default = ""
 }
 
 variable "s3_public_base_url" {
-  type        = string
-  default     = ""
+  type    = string
+  default = ""
 }
 
 variable "s3_url_style" {
-  type        = string
-  default     = "path"
+  type    = string
+  default = "path"
 }
 
 variable "export_storage_backend" {
-  type        = string
-  default     = "s3"
+  type    = string
+  default = "s3"
 }
 
 variable "export_s3_bucket" {
-  type        = string
+  type = string
 }
 
 variable "export_s3_region" {
-  type        = string
-  default     = "us-east-1"
+  type    = string
+  default = "us-east-1"
 }
 
 variable "export_s3_endpoint_url" {
-  type        = string
-  default     = ""
+  type    = string
+  default = ""
 }
 
 variable "attachment_scan_enabled" {
-  type        = bool
-  default     = true
+  type    = bool
+  default = true
 }
 
 variable "allowed_email_domains" {
-  type        = string
-  default     = ""
+  type    = string
+  default = ""
 }
 
 variable "gcp_monitoring_enabled" {
-  type        = bool
-  default     = true
+  type    = bool
+  default = true
 }
 
 variable "logging_retention_days" {
@@ -251,16 +251,16 @@ variable "secrets" {
 }
 
 variable "enable_domain_mapping" {
-  type        = bool
-  default     = true
+  type    = bool
+  default = true
 }
 
 variable "enable_public_invoker" {
-  type        = bool
-  default     = true
+  type    = bool
+  default = true
 }
 
 variable "enable_cloudbuild_triggers" {
-  type        = bool
-  default     = true
+  type    = bool
+  default = true
 }
