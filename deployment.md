@@ -98,8 +98,11 @@ These must be set in non-dev environments:
 - `ATTACHMENT_SCAN_ENABLED=true`
 - `STORAGE_BACKEND=s3` (Cloud Run local disk is ephemeral)
 - `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+- Optional GCS (S3 interoperability): `S3_ENDPOINT_URL=https://storage.googleapis.com`,
+  `S3_PUBLIC_BASE_URL=https://storage.googleapis.com`, `S3_URL_STYLE=path`
 - `EXPORT_STORAGE_BACKEND=s3` (recommended)
 - `EXPORT_S3_BUCKET`, `EXPORT_S3_REGION`
+- Optional GCS export endpoint: `EXPORT_S3_ENDPOINT_URL=https://storage.googleapis.com`
 - Encryption keys: `FERNET_KEY`, `DATA_ENCRYPTION_KEY`, `PII_HASH_KEY`, `META_ENCRYPTION_KEY`
 - OAuth redirects:
   - `GOOGLE_REDIRECT_URI=https://api.<domain>/auth/google/callback`

@@ -91,6 +91,37 @@ variable "vpc_connector_cidr" {
   default     = "10.8.0.0/28"
 }
 
+variable "backup_start_time" {
+  type        = string
+  default     = "03:00"
+}
+
+variable "enable_pitr" {
+  type        = bool
+  default     = true
+}
+
+variable "manage_storage_buckets" {
+  type        = bool
+  default     = false
+}
+
+variable "storage_bucket_location" {
+  type        = string
+  default     = "us-central1"
+}
+
+variable "secret_replication_location" {
+  type        = string
+  description = "Secret Manager replica location (must comply with org policy)."
+  default     = "us-central1"
+}
+
+variable "storage_service_account_email" {
+  type        = string
+  default     = ""
+}
+
 variable "run_cpu" {
   type        = string
   default     = "1"
@@ -125,6 +156,21 @@ variable "s3_region" {
   default     = "us-east-1"
 }
 
+variable "s3_endpoint_url" {
+  type        = string
+  default     = ""
+}
+
+variable "s3_public_base_url" {
+  type        = string
+  default     = ""
+}
+
+variable "s3_url_style" {
+  type        = string
+  default     = "path"
+}
+
 variable "export_storage_backend" {
   type        = string
   default     = "s3"
@@ -137,6 +183,11 @@ variable "export_s3_bucket" {
 variable "export_s3_region" {
   type        = string
   default     = "us-east-1"
+}
+
+variable "export_s3_endpoint_url" {
+  type        = string
+  default     = ""
 }
 
 variable "attachment_scan_enabled" {
@@ -181,6 +232,11 @@ variable "secrets" {
 }
 
 variable "enable_domain_mapping" {
+  type        = bool
+  default     = true
+}
+
+variable "enable_cloudbuild_triggers" {
   type        = bool
   default     = true
 }
