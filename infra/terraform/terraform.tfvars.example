@@ -12,6 +12,8 @@ export_s3_bucket  = "your-export-s3-bucket"
 # Optional
 allowed_email_domains = ""
 secret_replication_location = "us-central1"
+logging_retention_days = 90
+manage_secret_versions = true
 enable_cloudbuild_triggers = true
 enable_public_invoker = true
 enable_domain_mapping = true

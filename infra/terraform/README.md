@@ -10,11 +10,12 @@ Create a GCS bucket for Terraform state (global unique name):
 gcloud storage buckets create gs://YOUR_STATE_BUCKET \
   --project YOUR_PROJECT_ID \
   --location US \
-  --uniform-bucket-level-access
+  --uniform-bucket-level-access \
+  --public-access-prevention=ENFORCED
 ```
 Helper:
 ```bash
-scripts/bootstrap_tf_state_bucket.sh YOUR_PROJECT_ID YOUR_STATE_BUCKET US
+scripts/bootstrap_tf_state_bucket.sh YOUR_PROJECT_ID YOUR_STATE_BUCKET US [KMS_KEY]
 ```
 
 Enable required APIs:
@@ -67,6 +68,8 @@ export_s3_bucket   = "..."
 # Optional
 allowed_email_domains = ""
 secret_replication_location = "us-central1"
+logging_retention_days = 90
+manage_secret_versions = true
 enable_cloudbuild_triggers = true
 enable_public_invoker = true
 enable_domain_mapping = true
@@ -76,7 +79,7 @@ You can copy the example:
 cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars
 ```
 
-Provide secrets via environment variable:
+Provide secrets via environment variable (when `manage_secret_versions = true`):
 ```bash
 export TF_VAR_secrets='{
   "JWT_SECRET":"...",
@@ -98,6 +101,12 @@ Helper (optional):
 ```bash
 export TF_VAR_secrets="$(scripts/prepare_tf_secrets.sh)"
 ```
+
+If you want to avoid storing secret values in Terraform state, set:
+```hcl
+manage_secret_versions = false
+```
+Then add secret versions out-of-band (for example with `gcloud secrets versions add ...`).
 
 If your org policy blocks global secrets, set `secret_replication_location` to an allowed region
 (for example `us-central1`).
