@@ -1130,6 +1130,7 @@ def list_surrogates(
     org_id: UUID,
     page: int = 1,
     per_page: int = 20,
+    cursor: str | None = None,
     stage_id: UUID | None = None,
     source: SurrogateSource | None = None,
     owner_id: UUID | None = None,
@@ -1160,12 +1161,26 @@ def list_surrogates(
         sort_order: Sort direction ('asc' or 'desc')
 
     Returns:
-        (surrogates, total_count)
+        (surrogates, total_count, next_cursor)
     """
+    import base64
     from app.db.enums import Role, OwnerType
     from app.db.models import PipelineStage
     from datetime import datetime
     from sqlalchemy import asc, desc
+
+    def _encode_cursor(created_at: datetime, surrogate_id: UUID) -> str:
+        raw = f"{created_at.isoformat()}|{surrogate_id}"
+        return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii")
+
+    def _decode_cursor(raw: str) -> tuple[datetime, UUID]:
+        try:
+            decoded = base64.urlsafe_b64decode(raw.encode("utf-8")).decode("utf-8")
+            created_str, id_str = decoded.split("|", 1)
+            created_dt = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+            return created_dt, UUID(id_str)
+        except Exception as exc:
+            raise ValueError("Invalid cursor") from exc
 
     query = (
         db.query(Surrogate)
@@ -1276,19 +1291,46 @@ def list_surrogates(
     }
 
     if sort_by and sort_by in sortable_columns:
-        query = query.order_by(order_func(sortable_columns[sort_by]))
+        if sort_by == "created_at":
+            query = query.order_by(order_func(sortable_columns[sort_by]), order_func(Surrogate.id))
+        else:
+            query = query.order_by(order_func(sortable_columns[sort_by]))
     else:
         # Default: created_at desc
-        query = query.order_by(Surrogate.created_at.desc())
+        query = query.order_by(Surrogate.created_at.desc(), Surrogate.id.desc())
+
+    base_query = query
+
+    if cursor:
+        if sort_by and sort_by != "created_at":
+            raise ValueError("Cursor pagination only supports created_at sorting")
+        if sort_order != "desc":
+            raise ValueError("Cursor pagination only supports desc sorting")
+        cursor_dt, cursor_id = _decode_cursor(cursor)
+        query = query.filter(
+            or_(
+                Surrogate.created_at < cursor_dt,
+                (Surrogate.created_at == cursor_dt) & (Surrogate.id < cursor_id),
+            )
+        )
 
     # Count total
-    total = query.count()
+    total = base_query.count()
 
     # Paginate
-    offset = (page - 1) * per_page
-    surrogates = query.offset(offset).limit(per_page).all()
+    next_cursor = None
+    if cursor:
+        surrogates = query.limit(per_page).all()
+    else:
+        offset = (page - 1) * per_page
+        surrogates = query.offset(offset).limit(per_page).all()
 
-    return surrogates, total
+    cursor_allowed = (sort_by in (None, "created_at")) and sort_order == "desc"
+    if cursor_allowed and surrogates and len(surrogates) == per_page:
+        last = surrogates[-1]
+        next_cursor = _encode_cursor(last.created_at, last.id)
+
+    return surrogates, total, next_cursor
 
 
 def list_claim_queue(

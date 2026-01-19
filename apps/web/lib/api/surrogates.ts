@@ -14,6 +14,7 @@ import type {
 export interface SurrogateListParams {
     page?: number;
     per_page?: number;
+    cursor?: string;
     stage_id?: string;
     source?: SurrogateSource;
     owner_id?: string;
@@ -213,6 +214,7 @@ export function getSurrogates(params: SurrogateListParams = {}): Promise<Surroga
 
     if (params.page) searchParams.set('page', String(params.page));
     if (params.per_page) searchParams.set('per_page', String(params.per_page));
+    if (params.cursor) searchParams.set('cursor', params.cursor);
     if (params.stage_id) searchParams.set('stage_id', params.stage_id);
     if (params.source) searchParams.set('source', params.source);
     if (params.owner_id) searchParams.set('owner_id', params.owner_id);

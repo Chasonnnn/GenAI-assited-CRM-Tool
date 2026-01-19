@@ -456,6 +456,7 @@ class SurrogateListResponse(BaseModel):
     page: int
     per_page: int
     pages: int
+    next_cursor: str | None = None
 
 
 class SurrogateStatusChange(BaseModel):
