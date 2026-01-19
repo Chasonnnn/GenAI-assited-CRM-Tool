@@ -211,12 +211,25 @@ variable "gcp_monitoring_enabled" {
   default     = true
 }
 
+variable "logging_retention_days" {
+  type        = number
+  description = "Cloud Logging retention in days for the default bucket."
+  default     = 90
+}
+
+variable "manage_secret_versions" {
+  type        = bool
+  description = "Whether Terraform should create Secret Manager versions (stores secret values in state)."
+  default     = true
+}
+
 variable "secrets" {
   type        = map(string)
   sensitive   = true
   description = "Map of secret values (provided via TF_VAR_secrets)."
+  default     = {}
   validation {
-    condition = alltrue([
+    condition = var.manage_secret_versions ? alltrue([
       for k in [
         "JWT_SECRET",
         "DEV_SECRET",
@@ -232,8 +245,8 @@ variable "secrets" {
         "AWS_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY"
       ] : contains(keys(var.secrets), k)
-    ])
-    error_message = "secrets map is missing one or more required keys."
+    ]) : true
+    error_message = "secrets map is missing one or more required keys when manage_secret_versions=true."
   }
 }
 

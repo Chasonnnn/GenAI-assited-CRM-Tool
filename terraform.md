@@ -49,11 +49,12 @@ export TF_STATE_BUCKET="${PROJECT_ID}-tfstate"
 gcloud storage buckets create "gs://${TF_STATE_BUCKET}" \
   --project "$PROJECT_ID" \
   --location "US" \
-  --uniform-bucket-level-access
+  --uniform-bucket-level-access \
+  --public-access-prevention=ENFORCED
 ```
 Or use the helper script:
 ```bash
-scripts/bootstrap_tf_state_bucket.sh "$PROJECT_ID" "$TF_STATE_BUCKET" "US"
+scripts/bootstrap_tf_state_bucket.sh "$PROJECT_ID" "$TF_STATE_BUCKET" "US" [KMS_KEY]
 ```
 
 ## 4) Connect GitHub to Cloud Build (manual)
@@ -88,6 +89,8 @@ export_s3_bucket  = "your-export-s3-bucket"
 # Optional
 allowed_email_domains = ""
 secret_replication_location = "us-central1"
+logging_retention_days = 90
+manage_secret_versions = true
 enable_cloudbuild_triggers = true
 enable_public_invoker = true
 enable_domain_mapping = true
@@ -98,7 +101,7 @@ cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars
 ```
 
 ## 6) Provide secrets (manual + local)
-Terraform expects secrets via `TF_VAR_secrets` (never commit this).
+Terraform expects secrets via `TF_VAR_secrets` when `manage_secret_versions = true` (never commit this).
 
 Example:
 ```bash
@@ -122,6 +125,12 @@ Helper (optional): set env vars first, then generate JSON:
 ```bash
 export TF_VAR_secrets="$(scripts/prepare_tf_secrets.sh)"
 ```
+
+If you want to avoid storing secret values in Terraform state, set:
+```hcl
+manage_secret_versions = false
+```
+Then add secret versions out-of-band (for example with `gcloud secrets versions add ...`).
 
 If your org policy blocks global secrets, set `secret_replication_location` to an allowed region
 (for example `us-central1`).

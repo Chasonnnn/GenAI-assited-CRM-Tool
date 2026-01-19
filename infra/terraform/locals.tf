@@ -24,10 +24,10 @@ locals {
   database_url = "postgresql+psycopg://${var.database_user}:${var.database_password}@/crm?host=/cloudsql/${google_sql_database_instance.crm.connection_name}"
   redis_url    = "redis://${google_redis_instance.crm.host}:6379/0"
 
-  secret_values = merge(var.secrets, {
+  secret_values = var.manage_secret_versions ? merge(var.secrets, {
     DATABASE_URL = local.database_url
     REDIS_URL    = local.redis_url
-  })
+  }) : {}
 
   optional_env = merge(
     var.s3_endpoint_url != "" ? { S3_ENDPOINT_URL = var.s3_endpoint_url } : {},

@@ -12,7 +12,7 @@ resource "google_secret_manager_secret" "secrets" {
 }
 
 resource "google_secret_manager_secret_version" "secrets" {
-  for_each    = toset(local.common_secret_keys)
+  for_each    = var.manage_secret_versions ? toset(local.common_secret_keys) : toset([])
   secret      = google_secret_manager_secret.secrets[each.value].id
   secret_data = local.secret_values[each.value]
 }
