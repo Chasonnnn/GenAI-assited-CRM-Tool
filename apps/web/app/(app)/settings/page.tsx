@@ -40,6 +40,7 @@ import {
   useUploadAvatar,
   useDeleteAvatar,
 } from "@/lib/hooks/use-sessions"
+import { useSystemHealth } from "@/lib/hooks/use-system"
 import type { SocialLink } from "@/lib/api/signature"
 import { toast } from "sonner"
 import { getOrgSignaturePreview } from "@/lib/api/signature"
@@ -354,6 +355,15 @@ function ActiveSessionsSection() {
 // =============================================================================
 // Organization Section (Moved to Email Signature tab)
 // =============================================================================
+
+function AppVersion() {
+  const { data } = useSystemHealth()
+  const versionLabel = data?.version ? `v${data.version}` : "—"
+
+  return (
+    <p className="text-xs text-muted-foreground">{versionLabel}</p>
+  )
+}
 
 function OrganizationSection() {
   const { user, refetch } = useAuth()
@@ -1021,7 +1031,7 @@ export default function SettingsPage() {
                       <p className="text-xs text-muted-foreground">
                         Account deletion is managed by your organization admin.
                       </p>
-                      <p className="text-xs text-muted-foreground">v0.16.00</p>
+                      <AppVersion />
                     </div>
                   </div>
                 </CardContent>

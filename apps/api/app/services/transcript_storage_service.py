@@ -6,11 +6,11 @@ import tempfile
 from datetime import datetime, timezone
 from uuid import UUID
 
-import boto3
 from botocore.client import BaseClient
 from botocore.exceptions import ClientError
 
 from app.core.config import settings
+from app.services import storage_client
 
 # Size threshold for S3 offloading (100KB)
 OFFLOAD_THRESHOLD_BYTES = 100 * 1024
@@ -23,12 +23,7 @@ OFFLOAD_THRESHOLD_BYTES = 100 * 1024
 
 def _get_s3_client() -> BaseClient:
     """Get boto3 S3 client."""
-    return boto3.client(
-        "s3",
-        region_name=getattr(settings, "S3_REGION", "us-east-1"),
-        aws_access_key_id=getattr(settings, "AWS_ACCESS_KEY_ID", None),
-        aws_secret_access_key=getattr(settings, "AWS_SECRET_ACCESS_KEY", None),
-    )
+    return storage_client.get_s3_client()
 
 
 def _get_storage_backend() -> str:
