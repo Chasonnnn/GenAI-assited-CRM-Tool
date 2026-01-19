@@ -1,6 +1,6 @@
 # Surrogacy Force Platform
 
-**Version:** 0.20.0 | **Last Updated:** January 15, 2026
+**Version:** 0.22.0 | **Last Updated:** January 19, 2026
 
 A modern, multi-tenant Surrogacy Force platform purpose-built for surrogacy agencies. Manage surrogates from lead intake through delivery with customizable pipelines, intended parent matching, AI-powered assistance, and comprehensive automation.
 
