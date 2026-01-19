@@ -5,8 +5,6 @@ import logging
 import re
 from urllib.parse import urlencode, urlparse
 from uuid import UUID as UUIDType
-
-import boto3
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -38,6 +36,8 @@ from app.schemas.auth import MeResponse, SessionResponse, UserSession
 from app.services import (
     media_service,
     org_service,
+    storage_client,
+    storage_url_service,
     session_service,
     signature_template_service,
     user_service,
@@ -418,23 +418,18 @@ def _resize_avatar(file_content: bytes, content_type: str) -> bytes:
 
 def _delete_old_avatar(avatar_url: str):
     """Background task to delete old avatar from S3."""
-    if not avatar_url or "avatars/" not in avatar_url:
+    if not avatar_url:
         return
 
     try:
         from app.core.config import settings as app_settings
 
-        # Extract key from URL
-        key = avatar_url.split("/avatars/")[-1]
-        key = f"avatars/{key}"
-
-        s3 = boto3.client(
-            "s3",
-            region_name=getattr(app_settings, "S3_REGION", "us-east-1"),
-            aws_access_key_id=getattr(app_settings, "AWS_ACCESS_KEY_ID", None),
-            aws_secret_access_key=getattr(app_settings, "AWS_SECRET_ACCESS_KEY", None),
-        )
         bucket = getattr(app_settings, "S3_BUCKET", "crm-attachments")
+        key = storage_url_service.extract_storage_key(avatar_url, bucket)
+        if not key or not key.startswith("avatars/"):
+            return
+
+        s3 = storage_client.get_s3_client()
         s3.delete_object(Bucket=bucket, Key=key)
     except Exception:
         pass  # Best effort
@@ -495,12 +490,7 @@ async def upload_avatar(
     )
     key = f"avatars/{session.org_id}/{session.user_id}/{file_id}.{ext}"
 
-    s3 = boto3.client(
-        "s3",
-        region_name=getattr(app_settings, "S3_REGION", "us-east-1"),
-        aws_access_key_id=getattr(app_settings, "AWS_ACCESS_KEY_ID", None),
-        aws_secret_access_key=getattr(app_settings, "AWS_SECRET_ACCESS_KEY", None),
-    )
+    s3 = storage_client.get_s3_client()
     bucket = getattr(app_settings, "S3_BUCKET", "crm-attachments")
 
     s3.put_object(
@@ -511,11 +501,7 @@ async def upload_avatar(
     )
 
     # Get public URL
-    s3_url_style = getattr(app_settings, "S3_URL_STYLE", "path")
-    if s3_url_style == "virtual":
-        avatar_url = f"https://{bucket}.s3.amazonaws.com/{key}"
-    else:
-        avatar_url = f"https://s3.amazonaws.com/{bucket}/{key}"
+    avatar_url = storage_url_service.build_public_url(bucket, key)
 
     # Get old avatar URL for deletion
     user = user_service.get_user_by_id(db, session.user_id)
@@ -832,23 +818,18 @@ class SignaturePhotoResponse(BaseModel):
 
 def _delete_old_signature_photo(photo_url: str):
     """Background task to delete old signature photo from S3."""
-    if not photo_url or "signatures/" not in photo_url:
+    if not photo_url:
         return
 
     try:
         from app.core.config import settings as app_settings
 
-        # Extract key from URL
-        key = photo_url.split("/signatures/")[-1]
-        key = f"signatures/{key}"
-
-        s3 = boto3.client(
-            "s3",
-            region_name=getattr(app_settings, "S3_REGION", "us-east-1"),
-            aws_access_key_id=getattr(app_settings, "AWS_ACCESS_KEY_ID", None),
-            aws_secret_access_key=getattr(app_settings, "AWS_SECRET_ACCESS_KEY", None),
-        )
         bucket = getattr(app_settings, "S3_BUCKET", "crm-attachments")
+        key = storage_url_service.extract_storage_key(photo_url, bucket)
+        if not key or not key.startswith("signatures/"):
+            return
+
+        s3 = storage_client.get_s3_client()
         s3.delete_object(Bucket=bucket, Key=key)
     except Exception:
         pass  # Best effort
@@ -906,12 +887,7 @@ async def upload_signature_photo(
     )
     key = f"signatures/{session.org_id}/{session.user_id}/{file_id}.{ext}"
 
-    s3 = boto3.client(
-        "s3",
-        region_name=getattr(app_settings, "S3_REGION", "us-east-1"),
-        aws_access_key_id=getattr(app_settings, "AWS_ACCESS_KEY_ID", None),
-        aws_secret_access_key=getattr(app_settings, "AWS_SECRET_ACCESS_KEY", None),
-    )
+    s3 = storage_client.get_s3_client()
     bucket = getattr(app_settings, "S3_BUCKET", "crm-attachments")
 
     s3.put_object(
@@ -922,11 +898,7 @@ async def upload_signature_photo(
     )
 
     # Get public URL
-    s3_url_style = getattr(app_settings, "S3_URL_STYLE", "path")
-    if s3_url_style == "virtual":
-        photo_url = f"https://{bucket}.s3.amazonaws.com/{key}"
-    else:
-        photo_url = f"https://s3.amazonaws.com/{bucket}/{key}"
+    photo_url = storage_url_service.build_public_url(bucket, key)
 
     # Get old photo URL for deletion
     user = user_service.get_user_by_id(db, session.user_id)

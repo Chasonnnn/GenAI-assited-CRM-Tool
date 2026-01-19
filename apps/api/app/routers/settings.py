@@ -21,7 +21,13 @@ from app.core.deps import (
 from app.core.policies import POLICIES
 from app.db.enums import Role
 from app.schemas.auth import UserSession
-from app.services import media_service, org_service, signature_template_service
+from app.services import (
+    media_service,
+    org_service,
+    signature_template_service,
+    storage_client,
+    storage_url_service,
+)
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -489,15 +495,9 @@ def _upload_logo_to_storage(org_id: uuid_lib.UUID, file_bytes: bytes, extension:
     filename = f"logos/{org_id}/{uuid_lib.uuid4()}.{extension}"
 
     if backend == "s3":
-        import boto3
         from app.core.config import settings
 
-        s3 = boto3.client(
-            "s3",
-            region_name=getattr(settings, "S3_REGION", "us-east-1"),
-            aws_access_key_id=getattr(settings, "AWS_ACCESS_KEY_ID", None),
-            aws_secret_access_key=getattr(settings, "AWS_SECRET_ACCESS_KEY", None),
-        )
+        s3 = storage_client.get_s3_client()
         bucket = getattr(settings, "S3_BUCKET", "crm-attachments")
         s3.put_object(
             Bucket=bucket,
@@ -505,9 +505,7 @@ def _upload_logo_to_storage(org_id: uuid_lib.UUID, file_bytes: bytes, extension:
             Body=file_bytes,
             ContentType=f"image/{extension}",
         )
-        # Return public S3 URL
-        region = getattr(settings, "S3_REGION", "us-east-1")
-        return f"https://{bucket}.s3.{region}.amazonaws.com/{filename}"
+        return storage_url_service.build_public_url(bucket, filename)
     else:
         # Local storage - serve from public directory or temp
         local_path = os.path.join(_get_local_logo_path(), filename)
@@ -526,19 +524,14 @@ def _delete_logo_from_storage(logo_url: str) -> None:
     backend = _get_logo_storage_backend()
 
     try:
-        if backend == "s3" and ".s3." in logo_url:
-            import boto3
+        if backend == "s3":
             from app.core.config import settings
 
-            # Extract key from S3 URL
-            key = logo_url.split(".amazonaws.com/")[-1]
-            s3 = boto3.client(
-                "s3",
-                region_name=getattr(settings, "S3_REGION", "us-east-1"),
-                aws_access_key_id=getattr(settings, "AWS_ACCESS_KEY_ID", None),
-                aws_secret_access_key=getattr(settings, "AWS_SECRET_ACCESS_KEY", None),
-            )
             bucket = getattr(settings, "S3_BUCKET", "crm-attachments")
+            key = storage_url_service.extract_storage_key(logo_url, bucket)
+            if not key:
+                return
+            s3 = storage_client.get_s3_client()
             s3.delete_object(Bucket=bucket, Key=key)
         elif logo_url.startswith("/static/"):
             # Local file
