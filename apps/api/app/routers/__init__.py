@@ -8,6 +8,7 @@ from app.routers.webhooks import router as webhooks_router
 from app.routers.internal import router as internal_router
 from app.routers.analytics import router as analytics_router
 from app.routers.ops import router as ops_router
+from app.routers.monitoring import router as monitoring_router
 
 __all__ = [
     "auth_router",
@@ -18,4 +19,5 @@ __all__ = [
     "internal_router",
     "analytics_router",
     "ops_router",
+    "monitoring_router",
 ]

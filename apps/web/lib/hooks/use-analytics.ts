@@ -4,13 +4,13 @@
 
 import { useQuery } from '@tanstack/react-query';
 import * as analyticsApi from '../api/analytics';
-import type { DateRangeParams, TrendParams, PerformanceByUserParams } from '../api/analytics';
+import type { DateRangeParams, TrendParams, StatusParams, PerformanceByUserParams } from '../api/analytics';
 
 // Query keys
 export const analyticsKeys = {
     all: ['analytics'] as const,
     summary: (params?: DateRangeParams) => [...analyticsKeys.all, 'summary', params] as const,
-    byStatus: () => [...analyticsKeys.all, 'by-status'] as const,
+    byStatus: (params?: StatusParams) => [...analyticsKeys.all, 'by-status', params] as const,
     byAssignee: () => [...analyticsKeys.all, 'by-assignee'] as const,
     trend: (params?: TrendParams) => [...analyticsKeys.all, 'trend', params] as const,
     metaPerformance: (params?: DateRangeParams) => [...analyticsKeys.all, 'meta', params] as const,
@@ -31,10 +31,10 @@ export function useAnalyticsSummary(params: DateRangeParams = {}) {
  * Fetch surrogates by status.
  * Auto-refreshes every 60 seconds for real-time updates.
  */
-export function useSurrogatesByStatus() {
+export function useSurrogatesByStatus(params: StatusParams = {}) {
     return useQuery({
-        queryKey: analyticsKeys.byStatus(),
-        queryFn: analyticsApi.getSurrogatesByStatus,
+        queryKey: analyticsKeys.byStatus(params),
+        queryFn: () => analyticsApi.getSurrogatesByStatus(params),
         staleTime: 60 * 1000,
         refetchInterval: 60 * 1000, // Auto-refresh every 60 seconds
     });

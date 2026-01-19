@@ -61,6 +61,7 @@ from app.routers import (
     matches,
     metadata,
     mfa,
+    monitoring,
     notes,
     notifications,
     ops,
@@ -186,8 +187,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="CRM API",
-    description="Multi-tenant CRM and case management API",
+    title="Surrogacy Force API",
+    description="Multi-tenant Surrogacy Force case management API",
     version=settings.VERSION,
     docs_url="/docs" if settings.is_dev else None,
     redoc_url="/redoc" if settings.is_dev else None,
@@ -392,6 +393,7 @@ app.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 
 # Internal endpoints (scheduled/cron jobs - protected by INTERNAL_SECRET)
 app.include_router(internal.router)
+app.include_router(monitoring.router)
 
 # Analytics endpoints (admin dashboards)
 app.include_router(analytics.router)

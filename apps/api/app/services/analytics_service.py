@@ -312,6 +312,7 @@ def get_surrogates_trend(
     end: datetime | None = None,
     source: str | None = None,
     owner_id: uuid.UUID | None = None,
+    pipeline_id: uuid.UUID | None = None,
     group_by: str = "day",  # day, week, month
 ) -> list[dict[str, Any]]:
     """Get new surrogates created over time."""
@@ -345,6 +346,10 @@ def get_surrogates_trend(
             Surrogate.owner_type == OwnerType.USER.value,
             Surrogate.owner_id == owner_id,
         )
+    if pipeline_id:
+        results = results.join(PipelineStage, Surrogate.stage_id == PipelineStage.id).filter(
+            PipelineStage.pipeline_id == pipeline_id
+        )
 
     results = results.group_by(date_trunc).order_by(date_trunc).all()
 
@@ -367,18 +372,30 @@ def get_cached_surrogates_trend(
     start: datetime,
     end: datetime,
     group_by: str = "day",
+    pipeline_id: uuid.UUID | None = None,
+    owner_id: uuid.UUID | None = None,
 ) -> list[dict[str, Any]]:
     params = {
         "start": start.isoformat(),
         "end": end.isoformat(),
         "group_by": group_by,
+        "pipeline_id": str(pipeline_id) if pipeline_id else None,
+        "owner_id": str(owner_id) if owner_id else None,
     }
     return _get_or_compute_snapshot(
         db,
         organization_id,
         "surrogates_trend",
         params,
-        lambda: get_surrogates_trend(db, organization_id, start=start, end=end, group_by=group_by),
+        lambda: get_surrogates_trend(
+            db,
+            organization_id,
+            start=start,
+            end=end,
+            group_by=group_by,
+            pipeline_id=pipeline_id,
+            owner_id=owner_id,
+        ),
         range_start=start,
         range_end=end,
     )
@@ -395,11 +412,18 @@ def get_surrogates_by_status(
     start_date: date | None = None,
     end_date: date | None = None,
     source: str | None = None,
+    pipeline_id: uuid.UUID | None = None,
+    owner_id: uuid.UUID | None = None,
 ) -> list[dict[str, Any]]:
-    """Get current case count by status."""
+    """Get current case count by status with stage metadata."""
+    # Join with PipelineStage to get stage_id and order
     query = db.query(
-        Surrogate.status_label.label("status"),
+        PipelineStage.label.label("status"),
+        PipelineStage.id.label("stage_id"),
+        PipelineStage.order.label("stage_order"),
         func.count(Surrogate.id).label("count"),
+    ).join(
+        Surrogate, Surrogate.stage_id == PipelineStage.id
     ).filter(
         Surrogate.organization_id == organization_id,
         Surrogate.is_archived.is_(False),
@@ -411,10 +435,29 @@ def get_surrogates_by_status(
         query = query.filter(func.date(Surrogate.created_at) <= end_date)
     if source:
         query = query.filter(Surrogate.source == source)
+    if pipeline_id:
+        query = query.filter(PipelineStage.pipeline_id == pipeline_id)
+    if owner_id:
+        query = query.filter(
+            Surrogate.owner_type == OwnerType.USER.value,
+            Surrogate.owner_id == owner_id,
+        )
 
-    results = query.group_by(Surrogate.status_label).order_by(func.count(Surrogate.id).desc()).all()
+    results = (
+        query.group_by(PipelineStage.id, PipelineStage.label, PipelineStage.order)
+        .order_by(PipelineStage.order)
+        .all()
+    )
 
-    return [{"status": r.status, "count": r.count} for r in results]
+    return [
+        {
+            "status": r.status,
+            "stage_id": str(r.stage_id),
+            "count": r.count,
+            "order": r.stage_order,
+        }
+        for r in results
+    ]
 
 
 def get_cached_surrogates_by_status(
@@ -423,11 +466,15 @@ def get_cached_surrogates_by_status(
     start_date: date | None = None,
     end_date: date | None = None,
     source: str | None = None,
+    pipeline_id: uuid.UUID | None = None,
+    owner_id: uuid.UUID | None = None,
 ) -> list[dict[str, Any]]:
     params = {
         "start_date": start_date.isoformat() if start_date else None,
         "end_date": end_date.isoformat() if end_date else None,
         "source": source,
+        "pipeline_id": str(pipeline_id) if pipeline_id else None,
+        "owner_id": str(owner_id) if owner_id else None,
     }
     range_start = (
         datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
@@ -448,6 +495,8 @@ def get_cached_surrogates_by_status(
             start_date=start_date,
             end_date=end_date,
             source=source,
+            pipeline_id=pipeline_id,
+            owner_id=owner_id,
         ),
         range_start=range_start,
         range_end=range_end,

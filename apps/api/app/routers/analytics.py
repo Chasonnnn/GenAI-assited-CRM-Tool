@@ -5,9 +5,10 @@ Provides surrogate statistics, trends, and Meta performance metrics.
 """
 
 from datetime import datetime, timezone
+from uuid import UUID
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,7 @@ from app.core.policies import POLICIES
 
 from app.services import analytics_service
 from app.schemas.auth import UserSession
+from app.db.enums import Role
 
 
 router = APIRouter(
@@ -39,7 +41,9 @@ class AnalyticsSummary(BaseModel):
 
 class StatusCount(BaseModel):
     status: str
+    stage_id: str | None = None  # Stage UUID for linking
     count: int
+    order: int | None = None  # Pipeline stage order
 
 
 class AssigneeCount(BaseModel):
@@ -132,13 +136,29 @@ def get_analytics_summary(
 
 @router.get("/surrogates/by-status", response_model=list[StatusCount])
 def get_surrogates_by_status(
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    pipeline_id: UUID | None = Query(None, description="Filter by pipeline UUID"),
+    owner_id: UUID | None = Query(None, description="Filter by owner UUID"),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """Get surrogate counts grouped by status."""
-    from app.services import analytics_service
+    if owner_id and owner_id != session.user_id and session.role not in (Role.ADMIN, Role.DEVELOPER):
+        raise HTTPException(status_code=403, detail="Not authorized to view other users' analytics")
 
-    data = analytics_service.get_cached_surrogates_by_status(db, session.org_id)
+    start, end = analytics_service.parse_date_range(from_date, to_date)
+    start_date = start.date() if start else None
+    end_date = end.date() if end else None
+
+    data = analytics_service.get_cached_surrogates_by_status(
+        db,
+        session.org_id,
+        start_date=start_date,
+        end_date=end_date,
+        pipeline_id=pipeline_id,
+        owner_id=owner_id,
+    )
     return [StatusCount(**item) for item in data]
 
 
@@ -159,15 +179,24 @@ def get_surrogates_trend(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
     period: Literal["day", "week", "month"] = Query("day"),
+    pipeline_id: UUID | None = Query(None, description="Filter by pipeline UUID"),
+    owner_id: UUID | None = Query(None, description="Filter by owner UUID"),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """Get surrogate creation trend over time."""
-    from app.services import analytics_service
+    if owner_id and owner_id != session.user_id and session.role not in (Role.ADMIN, Role.DEVELOPER):
+        raise HTTPException(status_code=403, detail="Not authorized to view other users' analytics")
 
     start, end = analytics_service.parse_date_range(from_date, to_date)
     data = analytics_service.get_cached_surrogates_trend(
-        db, session.org_id, start=start, end=end, group_by=period
+        db,
+        session.org_id,
+        start=start,
+        end=end,
+        group_by=period,
+        pipeline_id=pipeline_id,
+        owner_id=owner_id,
     )
     return [TrendPoint(**item) for item in data]
 
