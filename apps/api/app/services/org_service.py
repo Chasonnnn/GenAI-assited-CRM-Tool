@@ -25,7 +25,12 @@ def get_org_by_slug(db: Session, slug: str) -> Organization | None:
     return db.query(Organization).filter(Organization.slug == slug.lower()).first()
 
 
-def create_org(db: Session, name: str, slug: str) -> Organization:
+def create_org(
+    db: Session,
+    name: str,
+    slug: str,
+    portal_domain: str | None = None,
+) -> Organization:
     """
     Create a new organization.
 
@@ -33,6 +38,8 @@ def create_org(db: Session, name: str, slug: str) -> Organization:
         IntegrityError: If slug already exists
     """
     org = Organization(name=name, slug=slug.lower())
+    if portal_domain:
+        org.portal_domain = normalize_portal_domain(portal_domain)
     db.add(org)
     db.commit()
     db.refresh(org)
@@ -45,7 +52,28 @@ def create_org(db: Session, name: str, slug: str) -> Organization:
 
     compliance_service.seed_default_retention_policies(db, org.id)
 
+    seed_org_defaults(db, org.id)
+
     return org
+
+
+def seed_org_defaults(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID | None = None,
+) -> dict:
+    """Seed default org configuration for pipelines, queues, and templates."""
+    from app.services import queue_service, template_seeder
+
+    seed_result = template_seeder.seed_all(db, org_id, user_id)
+    queue_service.get_or_create_default_queue(db, org_id)
+    queue_service.get_or_create_surrogate_pool_queue(db, org_id)
+    db.commit()
+
+    return {
+        **seed_result,
+        "queues_seeded": True,
+    }
 
 
 def normalize_portal_domain(domain: str) -> str:
@@ -66,6 +94,17 @@ def normalize_portal_domain(domain: str) -> str:
     if parsed.port:
         host = f"{host}:{parsed.port}"
     return host
+
+
+def build_portal_domain(base_domain: str, prefix: str = "ap") -> str:
+    """Build a portal domain from a base domain and prefix."""
+    base_host = normalize_portal_domain(base_domain)
+    prefix_value = prefix.strip().lower().strip(".")
+    if not prefix_value:
+        raise ValueError("Portal prefix must not be empty")
+    if base_host.startswith(f"{prefix_value}."):
+        return base_host
+    return normalize_portal_domain(f"{prefix_value}.{base_host}")
 
 
 def get_org_portal_base_url(org: Organization | None) -> str:
