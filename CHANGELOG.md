@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.22.0...surrogacy-crm-platform-v0.22.1) (2026-01-20)
+
+
+### Bug Fixes
+
+* **terraform:** use ssl_mode instead of deprecated require_ssl ([95fc89f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/95fc89fa59b356f7d535576df1e3b7f5bd8051b2))
+
 ## [0.22.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.21.0...surrogacy-crm-platform-v0.22.0) (2026-01-19)
 
 
