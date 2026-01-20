@@ -11,7 +11,7 @@ gcloud storage buckets create gs://YOUR_STATE_BUCKET \
   --project YOUR_PROJECT_ID \
   --location US \
   --uniform-bucket-level-access \
-  --public-access-prevention=ENFORCED
+  --public-access-prevention
 ```
 Helper:
 ```bash
