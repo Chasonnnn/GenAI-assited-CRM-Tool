@@ -19,7 +19,6 @@ resource "google_cloudbuild_trigger" "api" {
     _IMAGE_API   = local.api_image
   }
 
-  service_account = google_service_account.cloudbuild.id
 }
 
 resource "google_cloudbuild_trigger" "web" {
@@ -43,5 +42,4 @@ resource "google_cloudbuild_trigger" "web" {
     _API_BASE_URL = local.api_url
   }
 
-  service_account = google_service_account.cloudbuild.id
 }
