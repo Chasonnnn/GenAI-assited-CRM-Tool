@@ -18,7 +18,7 @@ create_args=(
   "--project" "$project_id"
   "--location" "$location"
   "--uniform-bucket-level-access"
-  "--public-access-prevention=enforced"
+  "--public-access-prevention"
 )
 
 if [[ -n "$kms_key" ]]; then

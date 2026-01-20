@@ -50,7 +50,7 @@ gcloud storage buckets create "gs://${TF_STATE_BUCKET}" \
   --project "$PROJECT_ID" \
   --location "US" \
   --uniform-bucket-level-access \
-  --public-access-prevention=ENFORCED
+  --public-access-prevention
 ```
 Or use the helper script:
 ```bash
