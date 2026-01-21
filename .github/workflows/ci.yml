@@ -44,24 +44,25 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
       
       - name: Install dependencies
         working-directory: apps/api
-        run: |
-          pip install -r requirements.txt
-          pip install -r test-requirements.txt
+        run: uv sync --frozen --extra test
       
       - name: Run migrations
         working-directory: apps/api
-        run: alembic upgrade head
+        run: uv run -m alembic upgrade head
 
       - name: Verify models have migrations
         working-directory: apps/api
-        run: alembic check
+        run: uv run -m alembic check
       
       - name: Run tests
         working-directory: apps/api
-        run: PYTHONPATH=. pytest tests/ -v --tb=short
+        run: PYTHONPATH=. uv run -m pytest tests/ -v --tb=short
 
   frontend-tests:
     name: Frontend Tests
@@ -182,20 +183,20 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Install Python dependencies
         working-directory: apps/api
-        run: |
-          pip install -r requirements.txt
-          pip install -r test-requirements.txt
-          pip install bandit pip-audit
+        run: uv sync --frozen --extra test
 
       - name: Run bandit (SAST)
         working-directory: apps/api
-        run: bandit -r app -ll
+        run: uv run --with bandit -- bandit -r app -ll
 
       - name: Run pip-audit (Dependency Scan)
         working-directory: apps/api
-        run: pip-audit -r requirements.txt -r test-requirements.txt
+        run: uv run --with pip-audit -- pip-audit
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v2
@@ -219,12 +220,12 @@ jobs:
 
       - name: Run migrations
         working-directory: apps/api
-        run: alembic upgrade head
+        run: uv run -m alembic upgrade head
 
       - name: Start API server
         working-directory: apps/api
         run: |
-          PYTHONPATH=. uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          PYTHONPATH=. uv run -- uvicorn app.main:app --host 0.0.0.0 --port 8000 &
           echo $! > /tmp/uvicorn.pid
           sleep 5
 
