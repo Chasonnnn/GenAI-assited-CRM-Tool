@@ -65,10 +65,11 @@ Build FULLY FUNCTIONAL, POLISHED features — not MVPs.
 
 ```bash
 # Backend
-cd apps/api && PYTHONPATH=. .venv/bin/python -m uvicorn app.main:app --reload
-cd apps/api && .venv/bin/python -m pytest -v
+cd apps/api && uv sync --extra test
+cd apps/api && uv run -- uvicorn app.main:app --reload
+cd apps/api && uv run -m pytest -v
 ruff check . --fix && ruff format .
-alembic upgrade head
+cd apps/api && uv run -m alembic upgrade head
 
 # Frontend
 cd apps/web && pnpm dev
@@ -76,7 +77,7 @@ pnpm tsc --noEmit
 pnpm test --run
 
 # Build-time stage map (frontend constants)
-apps/api/.venv/bin/python scripts/gen_stage_map.py
+cd apps/api && uv run -- python scripts/gen_stage_map.py
 ```
 
 ### Core Rules

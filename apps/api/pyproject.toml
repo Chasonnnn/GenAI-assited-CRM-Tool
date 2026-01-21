@@ -1,3 +1,110 @@
+[project]
+name = "surrogacy-force-api"
+# App version is tracked in app/core/config.py.
+version = "0.0.0"
+requires-python = ">=3.11"
+dependencies = [
+    "alembic==1.18.1",
+    "annotated-doc==0.0.4",
+    "annotated-types==0.7.0",
+    "anyio==4.12.1",
+    "click==8.3.1",
+    "fastapi==0.128.0",
+    "h11==0.16.0",
+    "idna==3.11",
+    "mako==1.3.10",
+    "markupsafe==3.0.3",
+    "psycopg[binary]==3.3.2",
+    "pydantic==2.12.5",
+    "pydantic-core==2.41.5",
+    "pydantic-settings==2.12.0",
+    "python-dotenv==1.2.1",
+    "pyyaml==6.0.3",
+    "sqlalchemy==2.0.45",
+    "starlette==0.50.0",
+    "typing-extensions==4.15.0",
+    "typing-inspection==0.4.2",
+    "uvicorn[standard]==0.40.0",
+
+    # Required for UploadFile/Form parsing (FastAPI will error at import-time without it)
+    "python-multipart==0.0.21",
+
+    # Auth dependencies
+    "httpx==0.28.1",
+    "pyjwt==2.10.1",
+    "google-auth==2.47.0",
+    "requests==2.32.5",
+    "email-validator==2.3.0",
+
+    # Security
+    "nh3==0.3.2",
+
+    # Email
+    "resend==2.19.0",
+
+    # Encryption (for Meta page tokens)
+    "cryptography==46.0.3",
+
+    # Rate limiting
+    "slowapi==0.1.9",
+
+    # Error tracking (optional)
+    "sentry-sdk[fastapi]==2.49.0",
+    "google-cloud-logging==3.13.0",
+    "google-cloud-error-reporting==1.14.0",
+
+    # Observability (OpenTelemetry)
+    "opentelemetry-api==1.39.1",
+    "opentelemetry-sdk==1.39.1",
+    "opentelemetry-exporter-otlp==1.39.1",
+    "opentelemetry-instrumentation==0.60b1",
+    "opentelemetry-instrumentation-fastapi==0.60b1",
+    "opentelemetry-instrumentation-httpx==0.60b1",
+    "opentelemetry-instrumentation-requests==0.60b1",
+    "opentelemetry-instrumentation-sqlalchemy==0.60b1",
+
+    # Protobuf (avoid deprecated PyType_Spec usage warnings in Python 3.14+)
+    "protobuf==6.33.4",
+
+    # Timezone support (for containers without system tzdata)
+    "tzdata==2025.3",
+    "holidays>=0.40",
+
+    # Rate limiting (distributed storage for multi-worker setups)
+    "redis==7.1.0",
+
+    # Export storage (S3)
+    "boto3==1.42.29",
+
+    # Image processing (EXIF stripping)
+    "pillow>=10.2.0",
+    "reportlab==4.4.9",
+
+    # MFA/TOTP support
+    "pyotp==2.9.0",
+    "duo_universal==2.2.0",
+    "playwright==1.57.0",
+
+    # Session tracking (user agent parsing)
+    "user-agents==2.2.0",
+
+    # Google Cloud resolver pins (formerly constraints.txt)
+    "google-api-core==2.29.0",
+    "google-cloud-core==2.5.0",
+    "googleapis-common-protos==1.72.0",
+    "grpc-google-iam-v1==0.14.3",
+    "grpcio==1.76.0",
+    "grpcio-status==1.76.0",
+    "proto-plus==1.27.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest==9.0.2",
+    "pytest-asyncio==1.3.0",
+    "pytest-env==1.2.0",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

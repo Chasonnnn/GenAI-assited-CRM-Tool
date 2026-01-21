@@ -8,22 +8,12 @@ echo "Starting backend tests..."
 # Ensure we are in the api directory
 cd "$(dirname "$0")"
 
-# Check if venv exists
-if [ ! -d ".venv" ]; then
-    echo "Creating virtual environment..."
-    python3 -m venv .venv
-fi
-
-# Activate venv
-source .venv/bin/activate
-
-# Install dependencies if needed
-echo "Installing test dependencies..."
-pip install -r requirements.txt
-pip install -r test-requirements.txt
+# Sync dependencies with uv
+echo "Syncing test dependencies with uv..."
+uv sync --frozen --extra test --no-install-project
 
 # Run pytest
 echo "Running pytest..."
-pytest -v
+.venv/bin/pytest -v
 
 echo "Tests completed."

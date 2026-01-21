@@ -124,9 +124,9 @@ Recommended fix order: 1.
 
 ### Backend
 ```bash
-cd apps/api && .venv/bin/python -m pytest -v
+cd apps/api && uv run -m pytest -v
 cd apps/api && ruff check . --fix && ruff format .
-cd apps/api && alembic upgrade head
+cd apps/api && uv run -m alembic upgrade head
 ```
 
 ### Frontend
