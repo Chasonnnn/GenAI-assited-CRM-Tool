@@ -1,8 +1,0 @@
-# Google Cloud dependency pins to avoid pip resolver backtracking.
-google-api-core==2.29.0
-google-cloud-core==2.5.0
-googleapis-common-protos==1.72.0
-grpc-google-iam-v1==0.14.3
-grpcio==1.76.0
-grpcio-status==1.76.0
-proto-plus==1.27.0

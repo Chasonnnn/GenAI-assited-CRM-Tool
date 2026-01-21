@@ -11,17 +11,17 @@ This runbook defines the staging migration procedure and the idempotency check f
 1. Confirm current revision and head:
    ```bash
    cd apps/api
-   .venv/bin/python -m alembic current
-   .venv/bin/python -m alembic heads
+   uv run -m alembic current
+   uv run -m alembic heads
    ```
 2. Run the migration:
    ```bash
-   .venv/bin/python -m alembic upgrade head
+   uv run -m alembic upgrade head
    ```
 3. Idempotency check (required):
    ```bash
-   .venv/bin/python -m alembic upgrade head
-   .venv/bin/python -m alembic current
+   uv run -m alembic upgrade head
+   uv run -m alembic current
    ```
    - Expect no new migrations applied.
    - `alembic current` should match `alembic heads`.

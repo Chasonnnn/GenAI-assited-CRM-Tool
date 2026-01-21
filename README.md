@@ -120,6 +120,7 @@ A modern, multi-tenant Surrogacy Force platform purpose-built for surrogacy agen
 - **Node.js** ≥ 20 (LTS)
 - **pnpm** (package manager)
 - **Python** ≥ 3.11
+- **uv** (Python package manager)
 - **Docker** & Docker Compose
 
 ### 1. Start Database
@@ -135,29 +136,25 @@ PostgreSQL runs on `localhost:5432` (database: `crm`, user: `postgres`, password
 ```bash
 cd apps/api
 
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-
 # Install dependencies
-pip install -r requirements.txt
+uv sync --extra test
 
 # Configure environment
 cp .env.example .env
 # Edit .env with your settings
 
 # Run migrations
-alembic upgrade head
+uv run -m alembic upgrade head
 
 # Bootstrap first organization (portal domain optional)
-python -m app.cli create-org --name "Your Agency" --slug "agency" --admin-email "admin@agency.com"
+uv run -m app.cli create-org --name "Your Agency" --slug "agency" --admin-email "admin@agency.com"
 # Optional: derive portal domain as ap.<domain>
-python -m app.cli create-org --name "Your Agency" --slug "agency" --admin-email "admin@agency.com" --base-domain "agency.com"
+uv run -m app.cli create-org --name "Your Agency" --slug "agency" --admin-email "admin@agency.com" --base-domain "agency.com"
 # Optional: set explicit portal domain
-python -m app.cli create-org --name "Your Agency" --slug "agency" --admin-email "admin@agency.com" --portal-domain "ap.agency.com"
+uv run -m app.cli create-org --name "Your Agency" --slug "agency" --admin-email "admin@agency.com" --portal-domain "ap.agency.com"
 
 # Start server
-uvicorn app.main:app --reload --port 8000
+uv run -- uvicorn app.main:app --reload --port 8000
 ```
 
 API: `http://localhost:8000` | Docs: `http://localhost:8000/docs`
@@ -292,7 +289,7 @@ docker-compose down -v && docker-compose up -d
 
 # 2. Run migrations
 cd apps/api
-.venv/bin/python -m alembic upgrade head
+uv run -m alembic upgrade head
 
 # 3. Seed a test org and users (dev endpoints)
 curl -s -X POST http://localhost:8000/dev/seed \

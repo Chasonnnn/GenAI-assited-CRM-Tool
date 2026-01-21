@@ -6,10 +6,11 @@ This README covers local usage and the recommended org bootstrap flow.
 
 ```bash
 # Start dev server
-cd apps/api && PYTHONPATH=. .venv/bin/python -m uvicorn app.main:app --reload
+cd apps/api && uv sync --extra test
+cd apps/api && uv run -- uvicorn app.main:app --reload
 
 # Run tests
-cd apps/api && .venv/bin/python -m pytest -v
+cd apps/api && uv run -m pytest -v
 
 # Format and lint
 ruff check . --fix && ruff format .
@@ -23,7 +24,7 @@ Surrogacy Force is invite-only and enforces one active org per user.
 
 ```bash
 cd apps/api
-.venv/bin/python -m app.cli create-org \
+uv run -m app.cli create-org \
   --name "Acme Agency" \
   --slug "acme" \
   --admin-email "admin@acme.com" \
@@ -62,7 +63,7 @@ If you need to elevate an existing member:
 
 ```bash
 cd apps/api
-.venv/bin/python -m app.cli promote-to-developer \
+uv run -m app.cli promote-to-developer \
   --email "dev@acme.com" \
   --org-slug "acme"
 ```

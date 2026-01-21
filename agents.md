@@ -9,36 +9,37 @@
 ### Backend (apps/api)
 ```bash
 # Start dev server
-cd apps/api && PYTHONPATH=. .venv/bin/python -m uvicorn app.main:app --reload
+cd apps/api && uv sync --extra test
+cd apps/api && uv run -- uvicorn app.main:app --reload
 
 # Run all tests
-cd apps/api && .venv/bin/python -m pytest -v
+cd apps/api && uv run -m pytest -v
 
 # Run specific test file
-cd apps/api && .venv/bin/python -m pytest tests/test_auth.py -v
+cd apps/api && uv run -m pytest tests/test_auth.py -v
 
 # Format & lint
 ruff check . --fix && ruff format .
 
 # Run migrations
-alembic upgrade head
+cd apps/api && uv run -m alembic upgrade head
 
 # Create new migration
-alembic revision --autogenerate -m "description"
+cd apps/api && uv run -m alembic revision --autogenerate -m "description"
 
 # Migration naming convention: YYYYMMDD_HHMM_<slug>.py
 # Use a time-based rev-id + slug to match filename pattern
-alembic revision --autogenerate --rev-id 20260111_1420 -m "add_surrogate_flags"
+cd apps/api && uv run -m alembic revision --autogenerate --rev-id 20260111_1420 -m "add_surrogate_flags"
 
 # Baseline reset (rare)
 # 1) Archive old versions/ to versions_archive/
 # 2) Generate a consolidated baseline in versions/
 # 3) Stamp all existing DBs to the new revision
-#    alembic stamp --purge <new_revision_id>
+#    uv run -m alembic stamp --purge <new_revision_id>
 # 4) Verify alembic upgrade head is a no-op
 
 # Bootstrap org (CLI)
-cd apps/api && .venv/bin/python -m app.cli create-org
+cd apps/api && uv run -m app.cli create-org
 ```
 
 ### Frontend (apps/web)
@@ -77,7 +78,7 @@ print("inline script")
 PY
 
 # Regenerate frontend stage constants (build-time sync)
-apps/api/.venv/bin/python scripts/gen_stage_map.py
+cd apps/api && uv run -- python scripts/gen_stage_map.py
 ```
 
 ---
