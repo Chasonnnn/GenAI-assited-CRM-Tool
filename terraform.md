@@ -86,6 +86,19 @@ enable_cloudbuild_triggers = true
 enable_public_invoker = true
 enable_domain_mapping = true
 
+# Monitoring + budgets (recommended)
+alert_notification_channel_ids = ["projects/PROJECT_ID/notificationChannels/CHANNEL_ID"]
+billing_account_id = "000000-000000-000000"
+billing_budget_amount_usd = 300
+billing_budget_thresholds = [0.5, 0.75, 0.9, 1.0]
+
+# Weekly billing summary (optional)
+billing_weekly_summary_enabled = true
+billing_export_dataset = "billing_export"
+billing_export_dataset_location = "US"
+billing_weekly_summary_cron = "0 13 * * 1"
+billing_weekly_summary_timezone = "Etc/UTC"
+
 # Private Service Access (optional override)
 # private_service_access_address = "10.10.0.0"
 # private_service_access_prefix_length = 16
@@ -105,6 +118,7 @@ Terraform creates Secret Manager containers only. Add secret versions out-of-ban
 gcloud secrets versions add JWT_SECRET --data-file=- <<<"your-secret"
 gcloud secrets versions add DATABASE_URL --data-file=- <<<"postgresql+psycopg://crm_user:<password>@/crm?host=/cloudsql/<connection_name>"
 gcloud secrets versions add REDIS_URL --data-file=- <<<"redis://:<redis-auth>@<redis-host>:6379/0"
+gcloud secrets versions add BILLING_SLACK_WEBHOOK_URL --data-file=- <<<"https://hooks.slack.com/services/..."
 ```
 
 Database user/password are managed outside Terraform to keep secrets out of state.
@@ -115,6 +129,20 @@ If your org policy blocks global secrets, set `secret_replication_location` to a
 
 Cloud SQL uses private IP only; Terraform creates the Private Service Access range + connection.
 Override `private_service_access_address`/`private_service_access_prefix_length` if needed.
+
+## 6.0) Monitoring + budgets
+Terraform creates alert policies for Cloud SQL CPU/memory/disk, Redis memory usage, and Cloud Run 5xx spikes.
+Create the Slack notification channel out-of-band and pass its ID via `alert_notification_channel_ids`
+so the webhook never enters Terraform state.
+
+Budget alerts use the same channel. Set `billing_account_id` and `billing_budget_amount_usd`.
+
+## 6.0.1) Weekly spend summary (optional)
+Terraform creates a BigQuery dataset and a Cloud Run job that posts weekly spend to Slack.
+Enable Cloud Billing export to BigQuery (manual):
+1. Cloud Billing -> Billing export -> BigQuery export.
+2. Select dataset `billing_export` (or your configured `billing_export_dataset`).
+3. Wait for `gcp_billing_export_v1_<billing_account>` to appear before the first run.
 
 Enable Redis AUTH out-of-band to avoid storing auth strings in Terraform state:
 ```bash

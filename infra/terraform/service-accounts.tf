@@ -17,3 +17,8 @@ resource "google_service_account" "cloudbuild" {
   account_id   = "crm-cloudbuild-sa"
   display_name = "Surrogacy Force Cloud Build Service Account"
 }
+
+resource "google_service_account" "billing_report" {
+  account_id   = "crm-billing-report-sa"
+  display_name = "Surrogacy Force Billing Summary Service Account"
+}

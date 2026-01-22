@@ -5,6 +5,8 @@ locals {
   api_image = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_repo}/api:latest"
   web_image = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_repo}/web:latest"
 
+  alerting_enabled = length(var.alert_notification_channel_ids) > 0
+
   optional_env = merge(
     var.s3_endpoint_url != "" ? { S3_ENDPOINT_URL = var.s3_endpoint_url } : {},
     var.s3_public_base_url != "" ? { S3_PUBLIC_BASE_URL = var.s3_public_base_url } : {},
@@ -52,4 +54,12 @@ locals {
     "AWS_ACCESS_KEY_ID",
     "AWS_SECRET_ACCESS_KEY"
   ]
+
+  billing_secret_keys = [
+    "BILLING_SLACK_WEBHOOK_URL"
+  ]
+
+  all_secret_keys = concat(local.common_secret_keys, local.billing_secret_keys)
+
+  billing_export_table = "gcp_billing_export_v1_${replace(var.billing_account_id, "-", "")}"
 }

@@ -253,3 +253,70 @@ variable "enable_cloudbuild_triggers" {
   type    = bool
   default = true
 }
+
+variable "alert_notification_channel_ids" {
+  type        = list(string)
+  description = "Monitoring notification channel IDs for alerts (Slack/email)."
+  default     = []
+}
+
+variable "billing_account_id" {
+  type        = string
+  description = "Billing account ID for budget alerts and exports."
+  default     = ""
+  validation {
+    condition     = (var.billing_budget_enabled || var.billing_weekly_summary_enabled) ? length(var.billing_account_id) > 0 : true
+    error_message = "billing_account_id is required when billing budgets or weekly summaries are enabled."
+  }
+}
+
+variable "billing_budget_enabled" {
+  type    = bool
+  default = true
+}
+
+variable "billing_budget_amount_usd" {
+  type        = number
+  description = "Monthly budget amount in USD."
+  default     = 300
+}
+
+variable "billing_budget_thresholds" {
+  type        = list(number)
+  description = "Budget alert thresholds (0-1)."
+  default     = [0.5, 0.75, 0.9, 1.0]
+}
+
+variable "billing_export_dataset" {
+  type        = string
+  description = "BigQuery dataset for Cloud Billing export."
+  default     = "billing_export"
+}
+
+variable "billing_export_dataset_location" {
+  type        = string
+  description = "BigQuery dataset location for Cloud Billing export."
+  default     = "US"
+}
+
+variable "billing_weekly_summary_enabled" {
+  type    = bool
+  default = false
+}
+
+variable "billing_weekly_job_name" {
+  type    = string
+  default = "crm-billing-weekly"
+}
+
+variable "billing_weekly_summary_cron" {
+  type        = string
+  description = "Cron schedule for weekly billing summary."
+  default     = "0 13 * * 1"
+}
+
+variable "billing_weekly_summary_timezone" {
+  type        = string
+  description = "Timezone for weekly billing summary schedule."
+  default     = "Etc/UTC"
+}
