@@ -12,6 +12,10 @@ locals {
     "servicenetworking.googleapis.com",
     "vpcaccess.googleapis.com",
     "redis.googleapis.com",
+    "bigquery.googleapis.com",
+    "cloudscheduler.googleapis.com",
+    "billingbudgets.googleapis.com",
+    "cloudbilling.googleapis.com",
   ])
 }
 

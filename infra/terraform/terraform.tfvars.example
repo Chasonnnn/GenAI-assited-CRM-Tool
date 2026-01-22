@@ -16,6 +16,19 @@ enable_cloudbuild_triggers = true
 enable_public_invoker = true
 enable_domain_mapping = true
 
+# Monitoring + budgets (recommended)
+# alert_notification_channel_ids = ["projects/PROJECT_ID/notificationChannels/CHANNEL_ID"]
+# billing_account_id = "000000-000000-000000"
+# billing_budget_amount_usd = 300
+# billing_budget_thresholds = [0.5, 0.75, 0.9, 1.0]
+
+# Weekly billing summary (optional)
+# billing_weekly_summary_enabled = true
+# billing_export_dataset = "billing_export"
+# billing_export_dataset_location = "US"
+# billing_weekly_summary_cron = "0 13 * * 1"
+# billing_weekly_summary_timezone = "Etc/UTC"
+
 # Storage hardening (optional)
 # manage_storage_buckets = true
 # storage_bucket_location = "us-central1"
