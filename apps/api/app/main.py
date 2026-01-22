@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import os
 from contextlib import asynccontextmanager
 from time import perf_counter
 from uuid import UUID
@@ -27,6 +26,7 @@ from app.core.csrf import CSRF_HEADER, CSRF_COOKIE_NAME, set_csrf_cookie, valida
 from app.core.gcp_monitoring import report_exception, setup_gcp_monitoring
 from app.core.structured_logging import build_log_context
 from app.core.rate_limit import limiter
+from app.core.redis_client import get_sync_redis_client
 from app.core.telemetry import configure_telemetry
 from app.db.session import SessionLocal, engine
 from app.db.enums import AlertSeverity, AlertType
@@ -547,14 +547,10 @@ def _check_db_connection() -> None:
 
 
 def _check_redis_connection() -> None:
-    redis_url = os.getenv("REDIS_URL")
-    if not redis_url or redis_url == "memory://":
-        return
-
     try:
-        import redis
-
-        client = redis.from_url(redis_url, socket_connect_timeout=1)
+        client = get_sync_redis_client()
+        if client is None:
+            return
         client.ping()
     except Exception as exc:
         logger.warning("Readiness Redis check failed: %s", exc)

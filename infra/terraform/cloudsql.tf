@@ -6,8 +6,9 @@ resource "google_sql_database_instance" "crm" {
   settings {
     tier = var.database_tier
     ip_configuration {
-      ipv4_enabled = true
-      ssl_mode     = "ENCRYPTED_ONLY"
+      ipv4_enabled    = false
+      private_network = google_compute_network.crm.id
+      ssl_mode        = "ENCRYPTED_ONLY"
     }
     backup_configuration {
       enabled                        = true
@@ -17,6 +18,7 @@ resource "google_sql_database_instance" "crm" {
   }
 
   deletion_protection = true
+  depends_on          = [google_service_networking_connection.private_vpc_connection]
 }
 
 resource "google_sql_database" "crm" {
@@ -25,6 +27,7 @@ resource "google_sql_database" "crm" {
 }
 
 resource "google_sql_user" "crm" {
+  count    = var.manage_database_user ? 1 : 0
   name     = var.database_user
   instance = google_sql_database_instance.crm.name
   password = var.database_password

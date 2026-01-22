@@ -7,6 +7,8 @@ Provides a WebSocket endpoint that:
 3. Sends real-time notifications when events occur
 """
 
+import asyncio
+import time
 from uuid import UUID
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -19,6 +21,8 @@ from app.db.session import SessionLocal
 from app.services import session_service
 
 router = APIRouter(prefix="/ws", tags=["WebSocket"])
+# Periodic DB check to close revoked sessions if Redis pub/sub is unavailable.
+SESSION_RECHECK_SECONDS = 60
 
 
 def _normalize_origin(origin: str) -> str:
@@ -123,18 +127,30 @@ async def websocket_notifications(
     # Register connection with org tracking
     await manager.connect(websocket, user_id, org_id, token_hash=token_hash)
 
+    last_recheck = time.monotonic()
     try:
         # Keep connection alive, handle incoming messages (heartbeat/pings)
         while True:
+            timeout = max(1.0, SESSION_RECHECK_SECONDS - (time.monotonic() - last_recheck))
             try:
                 # Wait for client messages (pings, close, etc.)
-                data = await websocket.receive_text()
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=timeout)
 
                 # Handle ping
                 if data == "ping":
                     await websocket.send_text("pong")
+            except asyncio.TimeoutError:
+                pass
             except WebSocketDisconnect:
                 break
+
+            if time.monotonic() - last_recheck >= SESSION_RECHECK_SECONDS:
+                with SessionLocal() as db:
+                    db_session = session_service.get_session_by_token_hash(db, token_hash)
+                    if not db_session:
+                        await websocket.close(code=4001, reason="Session revoked")
+                        break
+                last_recheck = time.monotonic()
     finally:
         await manager.disconnect(websocket, user_id)
 

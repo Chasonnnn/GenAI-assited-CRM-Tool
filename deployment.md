@@ -54,7 +54,12 @@ gcloud sql users create crm_user --instance crm-db --password 'REPLACE_ME'
 gcloud redis instances create crm-redis \
   --size=1 --region="$REGION"
 ```
-Use the instance IP for `REDIS_URL`.
+Enable AUTH and fetch the auth string + host:
+```bash
+gcloud redis instances update crm-redis --region "$REGION" --enable-auth
+gcloud redis instances describe crm-redis --region "$REGION" --format="value(authString)"
+gcloud redis instances describe crm-redis --region "$REGION" --format="value(host)"
+```
 
 ## 6) Service Accounts
 ```bash
@@ -84,6 +89,7 @@ Create secrets for all production-required values:
 ```bash
 echo -n "super-secret" | gcloud secrets create JWT_SECRET --data-file=-
 echo -n "internal-secret" | gcloud secrets create INTERNAL_SECRET --data-file=-
+echo -n "redis://:<redis-auth>@<memorystore-host>:6379/0" | gcloud secrets create REDIS_URL --data-file=-
 # Repeat for GOOGLE_CLIENT_SECRET, ZOOM_CLIENT_SECRET, GMAIL_CLIENT_SECRET, etc.
 ```
 
@@ -94,7 +100,7 @@ These must be set in non-dev environments:
 - `API_BASE_URL=https://api.<domain>`
 - `FRONTEND_URL=https://app.<domain>`
 - `CORS_ORIGINS=https://app.<domain>`
-- `REDIS_URL=redis://<memorystore-ip>:6379/0`
+- Secret: `REDIS_URL=redis://:<redis-auth>@<memorystore-host>:6379/0`
 - `ATTACHMENT_SCAN_ENABLED=true`
 - `STORAGE_BACKEND=s3` (Cloud Run local disk is ephemeral)
 - `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
@@ -125,8 +131,8 @@ gcloud run deploy crm-api \
   --service-account "crm-api-sa@$PROJECT_ID.iam.gserviceaccount.com" \
   --port 8000 \
   --add-cloudsql-instances "$PROJECT_ID:$REGION:crm-db" \
-  --set-env-vars "ENV=production,API_BASE_URL=https://api.${DOMAIN},FRONTEND_URL=https://app.${DOMAIN},CORS_ORIGINS=https://app.${DOMAIN},REDIS_URL=redis://<memorystore-ip>:6379/0,ATTACHMENT_SCAN_ENABLED=true,STORAGE_BACKEND=s3,EXPORT_STORAGE_BACKEND=s3" \
-  --set-secrets "JWT_SECRET=JWT_SECRET:latest,DEV_SECRET=DEV_SECRET:latest,INTERNAL_SECRET=INTERNAL_SECRET:latest,FERNET_KEY=FERNET_KEY:latest,DATA_ENCRYPTION_KEY=DATA_ENCRYPTION_KEY:latest,PII_HASH_KEY=PII_HASH_KEY:latest,META_ENCRYPTION_KEY=META_ENCRYPTION_KEY:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,ZOOM_CLIENT_ID=ZOOM_CLIENT_ID:latest,ZOOM_CLIENT_SECRET=ZOOM_CLIENT_SECRET:latest,GMAIL_CLIENT_ID=GMAIL_CLIENT_ID:latest,GMAIL_CLIENT_SECRET=GMAIL_CLIENT_SECRET:latest"
+  --set-env-vars "ENV=production,API_BASE_URL=https://api.${DOMAIN},FRONTEND_URL=https://app.${DOMAIN},CORS_ORIGINS=https://app.${DOMAIN},ATTACHMENT_SCAN_ENABLED=true,STORAGE_BACKEND=s3,EXPORT_STORAGE_BACKEND=s3" \
+  --set-secrets "JWT_SECRET=JWT_SECRET:latest,DEV_SECRET=DEV_SECRET:latest,INTERNAL_SECRET=INTERNAL_SECRET:latest,FERNET_KEY=FERNET_KEY:latest,DATA_ENCRYPTION_KEY=DATA_ENCRYPTION_KEY:latest,PII_HASH_KEY=PII_HASH_KEY:latest,META_ENCRYPTION_KEY=META_ENCRYPTION_KEY:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,ZOOM_CLIENT_ID=ZOOM_CLIENT_ID:latest,ZOOM_CLIENT_SECRET=ZOOM_CLIENT_SECRET:latest,GMAIL_CLIENT_ID=GMAIL_CLIENT_ID:latest,GMAIL_CLIENT_SECRET=GMAIL_CLIENT_SECRET:latest,REDIS_URL=REDIS_URL:latest"
 ```
 
 ## 10) Migrations (Cloud Run Job)
@@ -150,7 +156,8 @@ gcloud run jobs create crm-worker \
   --command "python" --args "-m","app.worker" \
   --add-cloudsql-instances "$PROJECT_ID:$REGION:crm-db" \
   --service-account "crm-worker-sa@$PROJECT_ID.iam.gserviceaccount.com" \
-  --set-env-vars "ENV=production,DATABASE_URL=postgresql+psycopg://crm_user:PASS@/crm?host=/cloudsql/$PROJECT_ID:$REGION:crm-db,REDIS_URL=redis://<memorystore-ip>:6379/0"
+  --set-env-vars "ENV=production,DATABASE_URL=postgresql+psycopg://crm_user:PASS@/crm?host=/cloudsql/$PROJECT_ID:$REGION:crm-db" \
+  --set-secrets "REDIS_URL=REDIS_URL:latest"
 ```
 
 ## 12) Build + Deploy Web (Cloud Run)

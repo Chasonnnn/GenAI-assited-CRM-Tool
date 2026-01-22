@@ -73,6 +73,11 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: str
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_TIMEOUT: int = 30
+    DB_POOL_RECYCLE: int = -1
+    DB_POOL_PRE_PING: bool = True
 
     # Session Token (supports key rotation)
     JWT_SECRET: str = ""
@@ -159,6 +164,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_SEARCH: int = 30  # Global search
     RATE_LIMIT_PUBLIC_READ: int = 60  # Public GET endpoints
     RATE_LIMIT_PUBLIC_FORMS: int = 10  # Public form submissions
+    RATE_LIMIT_FAIL_OPEN: bool = True
 
     # Analytics caching
     ANALYTICS_CACHE_TTL_SECONDS: int = 300

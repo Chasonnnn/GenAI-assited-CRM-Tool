@@ -5,30 +5,6 @@ locals {
   api_image = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_repo}/api:latest"
   web_image = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_repo}/web:latest"
 
-  required_secret_keys = [
-    "JWT_SECRET",
-    "DEV_SECRET",
-    "INTERNAL_SECRET",
-    "META_ENCRYPTION_KEY",
-    "FERNET_KEY",
-    "DATA_ENCRYPTION_KEY",
-    "PII_HASH_KEY",
-    "GOOGLE_CLIENT_ID",
-    "GOOGLE_CLIENT_SECRET",
-    "ZOOM_CLIENT_ID",
-    "ZOOM_CLIENT_SECRET",
-    "AWS_ACCESS_KEY_ID",
-    "AWS_SECRET_ACCESS_KEY"
-  ]
-
-  database_url = "postgresql+psycopg://${var.database_user}:${var.database_password}@/crm?host=/cloudsql/${google_sql_database_instance.crm.connection_name}"
-  redis_url    = "redis://${google_redis_instance.crm.host}:6379/0"
-
-  secret_values = var.manage_secret_versions ? merge(var.secrets, {
-    DATABASE_URL = local.database_url
-    REDIS_URL    = local.redis_url
-  }) : {}
-
   optional_env = merge(
     var.s3_endpoint_url != "" ? { S3_ENDPOINT_URL = var.s3_endpoint_url } : {},
     var.s3_public_base_url != "" ? { S3_PUBLIC_BASE_URL = var.s3_public_base_url } : {},

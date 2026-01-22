@@ -82,9 +82,20 @@ variable "database_user" {
   default = "crm_user"
 }
 
+variable "manage_database_user" {
+  type        = bool
+  description = "Whether Terraform should create the database user (password stored in state)."
+  default     = false
+}
+
 variable "database_password" {
   type      = string
   sensitive = true
+  default   = ""
+  validation {
+    condition     = var.manage_database_user ? length(var.database_password) > 0 : true
+    error_message = "database_password is required when manage_database_user=true."
+  }
 }
 
 variable "redis_memory_size_gb" {
@@ -97,6 +108,17 @@ variable "vpc_connector_cidr" {
   default = "10.8.0.0/28"
 }
 
+variable "private_service_access_address" {
+  type        = string
+  description = "Optional base address for the Private Service Access range (leave null for auto-assignment)."
+  default     = null
+}
+
+variable "private_service_access_prefix_length" {
+  type        = number
+  description = "Prefix length for the Private Service Access range."
+  default     = 16
+}
 variable "backup_start_time" {
   type    = string
   default = "03:00"
@@ -215,39 +237,6 @@ variable "logging_retention_days" {
   type        = number
   description = "Cloud Logging retention in days for the default bucket."
   default     = 90
-}
-
-variable "manage_secret_versions" {
-  type        = bool
-  description = "Whether Terraform should create Secret Manager versions (stores secret values in state)."
-  default     = true
-}
-
-variable "secrets" {
-  type        = map(string)
-  sensitive   = true
-  description = "Map of secret values (provided via TF_VAR_secrets)."
-  default     = {}
-  validation {
-    condition = var.manage_secret_versions ? alltrue([
-      for k in [
-        "JWT_SECRET",
-        "DEV_SECRET",
-        "INTERNAL_SECRET",
-        "META_ENCRYPTION_KEY",
-        "FERNET_KEY",
-        "DATA_ENCRYPTION_KEY",
-        "PII_HASH_KEY",
-        "GOOGLE_CLIENT_ID",
-        "GOOGLE_CLIENT_SECRET",
-        "ZOOM_CLIENT_ID",
-        "ZOOM_CLIENT_SECRET",
-        "AWS_ACCESS_KEY_ID",
-        "AWS_SECRET_ACCESS_KEY"
-      ] : contains(keys(var.secrets), k)
-    ]) : true
-    error_message = "secrets map is missing one or more required keys when manage_secret_versions=true."
-  }
 }
 
 variable "enable_domain_mapping" {

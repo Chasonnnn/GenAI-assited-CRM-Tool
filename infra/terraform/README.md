@@ -1,7 +1,7 @@
 # Terraform (GCP + Cloud Build)
 
 This folder provisions infrastructure for Cloud Run + Cloud Build with remote state.
-It expects you to provide secrets via `TF_VAR_secrets` (never commit them).
+Secret values are added out-of-band (never commit them).
 
 ## 1) One-time bootstrap
 
@@ -18,17 +18,9 @@ Helper:
 scripts/bootstrap_tf_state_bucket.sh YOUR_PROJECT_ID YOUR_STATE_BUCKET US [KMS_KEY]
 ```
 
-Enable required APIs:
-```bash
-gcloud services enable \
-  run.googleapis.com \
-  cloudbuild.googleapis.com \
-  artifactregistry.googleapis.com \
-  sqladmin.googleapis.com \
-  secretmanager.googleapis.com \
-  redis.googleapis.com \
-  vpcaccess.googleapis.com
-```
+Terraform enables required APIs (Cloud Run, Cloud SQL, Secret Manager, Artifact Registry,
+Cloud Build, Logging/Monitoring, IAM, Compute, Service Networking, VPC Access, Redis).
+Ensure your Terraform credentials can enable services.
 
 Authenticate for Terraform (ADC):
 ```bash
@@ -61,7 +53,6 @@ github_owner       = "your-org"
 github_repo        = "your-repo"
 cloudbuild_repository = "projects/PROJECT/locations/REGION/connections/CONNECTION/repositories/REPO"
 
-database_password  = "..."
 s3_bucket          = "..."
 export_s3_bucket   = "..."
 
@@ -69,7 +60,6 @@ export_s3_bucket   = "..."
 allowed_email_domains = ""
 secret_replication_location = "us-central1"
 logging_retention_days = 90
-manage_secret_versions = true
 enable_cloudbuild_triggers = true
 enable_public_invoker = true
 enable_domain_mapping = true
@@ -79,37 +69,44 @@ You can copy the example:
 cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars
 ```
 
-Provide secrets via environment variable (when `manage_secret_versions = true`):
+Terraform only creates Secret Manager containers. Add secret versions out-of-band (manual or CI):
 ```bash
-export TF_VAR_secrets='{
-  "JWT_SECRET":"...",
-  "DEV_SECRET":"...",
-  "INTERNAL_SECRET":"...",
-  "META_ENCRYPTION_KEY":"...",
-  "FERNET_KEY":"...",
-  "DATA_ENCRYPTION_KEY":"...",
-  "PII_HASH_KEY":"...",
-  "GOOGLE_CLIENT_ID":"...",
-  "GOOGLE_CLIENT_SECRET":"...",
-  "ZOOM_CLIENT_ID":"...",
-  "ZOOM_CLIENT_SECRET":"...",
-  "AWS_ACCESS_KEY_ID":"...",
-  "AWS_SECRET_ACCESS_KEY":"..."
-}'
-```
-Helper (optional):
-```bash
-export TF_VAR_secrets="$(scripts/prepare_tf_secrets.sh)"
+gcloud secrets versions add JWT_SECRET --data-file=- <<<"your-secret"
+gcloud secrets versions add DATABASE_URL --data-file=- <<<"postgresql+psycopg://crm_user:<password>@/crm?host=/cloudsql/<connection_name>"
+gcloud secrets versions add REDIS_URL --data-file=- <<<"redis://:<redis-auth>@<redis-host>:6379/0"
 ```
 
-If you want to avoid storing secret values in Terraform state, set:
-```hcl
-manage_secret_versions = false
+Redis AUTH is enabled out-of-band to avoid storing auth strings in Terraform state:
+```bash
+gcloud redis instances update crm-redis --region us-central1 --enable-auth
 ```
-Then add secret versions out-of-band (for example with `gcloud secrets versions add ...`).
+
+Fetch the auth string and host, then write REDIS_URL directly to Secret Manager:
+```bash
+gcloud redis instances describe crm-redis --region us-central1 --format="value(authString)"
+terraform -chdir=infra/terraform output -raw redis_host
+```
+
+If Terraform refreshes the Redis instance after AUTH is enabled, the provider will record the auth
+string in state. To keep state clean, avoid refresh/apply against the Redis resource after enabling
+AUTH, or remove the Redis resource from state once it is created.
+If auth strings have already been captured, treat the Terraform state as sensitive and rotate
+the Redis auth string.
+
+Safe sequence:
+1) `terraform apply` (creates Redis with AUTH disabled).
+2) `gcloud redis instances update ... --enable-auth`.
+3) `gcloud redis instances describe ...` + `gcloud secrets versions add REDIS_URL ...`.
+4) Deploy Cloud Run services to pick up the secret.
+
+Database user/password are managed outside Terraform to keep secrets out of state.
+Create the user and set the password manually (or via a secure job).
 
 If your org policy blocks global secrets, set `secret_replication_location` to an allowed region
 (for example `us-central1`).
+
+Cloud SQL is private IP only; Terraform creates the Private Service Access range and connection.
+Set `private_service_access_address`/`private_service_access_prefix_length` if you need a specific range.
 
 ## GCS instead of AWS S3 (optional)
 To stay fully on GCP, use GCS with S3 interoperability.
