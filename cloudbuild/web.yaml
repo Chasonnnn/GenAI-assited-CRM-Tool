@@ -16,9 +16,9 @@ steps:
 images:
   - "$_IMAGE_WEB"
 options:
-  logging: CLOUD_LOGGING_ONLY
+  logging: GCS_ONLY
 substitutions:
   _REGION: "us-central1"
   _WEB_SERVICE: "crm-web"
-  _IMAGE_WEB: "gcr.io/placeholder/web:latest"
-  _API_BASE_URL: "https://api.example.com"
+  _IMAGE_WEB: "us-central1-docker.pkg.dev/probable-dream-484923-n7/crm/web:latest"
+  _API_BASE_URL: "https://api.surrogacyforce.com"
