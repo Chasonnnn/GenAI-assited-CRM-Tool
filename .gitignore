@@ -47,3 +47,4 @@ infra/terraform/*.tfstate
 infra/terraform/*.tfstate.*
 infra/terraform/terraform.tfvars
 infra/terraform/*.auto.tfvars
+.secrets.env

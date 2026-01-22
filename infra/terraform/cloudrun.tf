@@ -1,58 +1,55 @@
-resource "google_cloud_run_service" "api" {
+resource "google_cloud_run_v2_service" "api" {
   name     = var.api_service_name
-  location = var.region
-
-  metadata {
-    annotations = {
-      "run.googleapis.com/ingress" = "all"
-    }
-  }
+  location = var.run_region
+  ingress  = "INGRESS_TRAFFIC_ALL"
 
   template {
-    metadata {
-      annotations = {
-        "autoscaling.knative.dev/minScale"        = tostring(var.run_min_instances)
-        "autoscaling.knative.dev/maxScale"        = tostring(var.run_max_instances)
-        "run.googleapis.com/cloudsql-instances"   = google_sql_database_instance.crm.connection_name
-        "run.googleapis.com/vpc-access-connector" = google_vpc_access_connector.crm.id
-        "run.googleapis.com/vpc-access-egress"    = "private-ranges-only"
-      }
+    annotations = {
+      "run.googleapis.com/cloudsql-instances" = google_sql_database_instance.crm.connection_name
     }
 
-    spec {
-      service_account_name = google_service_account.api.email
+    service_account = google_service_account.api.email
 
-      containers {
-        image = local.api_image
+    scaling {
+      min_instance_count = var.run_min_instances
+      max_instance_count = var.run_max_instances
+    }
 
-        resources {
-          limits = {
-            cpu    = var.run_cpu
-            memory = var.run_memory
-          }
+    vpc_access {
+      connector = google_vpc_access_connector.crm.id
+      egress    = "PRIVATE_RANGES_ONLY"
+    }
+
+    containers {
+      image = local.api_image
+
+      resources {
+        limits = {
+          cpu    = var.run_cpu
+          memory = var.run_memory
         }
+      }
 
-        ports {
-          container_port = 8000
+      ports {
+        container_port = 8000
+      }
+
+      dynamic "env" {
+        for_each = local.common_env
+        content {
+          name  = env.key
+          value = env.value
         }
+      }
 
-        dynamic "env" {
-          for_each = local.common_env
-          content {
-            name  = env.key
-            value = env.value
-          }
-        }
-
-        dynamic "env" {
-          for_each = toset(local.common_secret_keys)
-          content {
-            name = env.value
-            value_from {
-              secret_key_ref {
-                name = google_secret_manager_secret.secrets[env.value].secret_id
-                key  = "latest"
-              }
+      dynamic "env" {
+        for_each = toset(local.common_secret_keys)
+        content {
+          name = env.value
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.secrets[env.value].secret_id
+              version = "latest"
             }
           }
         }
@@ -61,84 +58,75 @@ resource "google_cloud_run_service" "api" {
   }
 
   traffic {
-    percent         = 100
-    latest_revision = true
+    percent = 100
+    type    = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
   }
 
   lifecycle {
     ignore_changes = [
-      template[0].spec[0].containers[0].image
+      template[0].containers[0].image
     ]
   }
 }
 
-resource "google_cloud_run_service" "web" {
+resource "google_cloud_run_v2_service" "web" {
   name     = var.web_service_name
   location = var.region
-
-  metadata {
-    annotations = {
-      "run.googleapis.com/ingress" = "all"
-    }
-  }
+  ingress  = "INGRESS_TRAFFIC_ALL"
 
   template {
-    metadata {
-      annotations = {
-        "autoscaling.knative.dev/minScale" = tostring(var.run_min_instances)
-        "autoscaling.knative.dev/maxScale" = tostring(var.run_max_instances)
-      }
+    service_account = google_service_account.web.email
+
+    scaling {
+      min_instance_count = var.run_min_instances
+      max_instance_count = var.run_max_instances
     }
 
-    spec {
-      service_account_name = google_service_account.web.email
+    containers {
+      image = local.web_image
 
-      containers {
-        image = local.web_image
-
-        resources {
-          limits = {
-            cpu    = var.run_cpu
-            memory = var.run_memory
-          }
+      resources {
+        limits = {
+          cpu    = var.run_cpu
+          memory = var.run_memory
         }
+      }
 
-        ports {
-          container_port = 3000
-        }
+      ports {
+        container_port = 3000
+      }
 
-        env {
-          name  = "NEXT_PUBLIC_API_BASE_URL"
-          value = local.api_url
-        }
+      env {
+        name  = "NEXT_PUBLIC_API_BASE_URL"
+        value = local.api_url
       }
     }
   }
 
   traffic {
-    percent         = 100
-    latest_revision = true
+    percent = 100
+    type    = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
   }
 
   lifecycle {
     ignore_changes = [
-      template[0].spec[0].containers[0].image
+      template[0].containers[0].image
     ]
   }
 }
 
-resource "google_cloud_run_service_iam_member" "api_invoker" {
+resource "google_cloud_run_v2_service_iam_member" "api_invoker" {
   count    = var.enable_public_invoker ? 1 : 0
-  service  = google_cloud_run_service.api.name
-  location = google_cloud_run_service.api.location
+  name     = google_cloud_run_v2_service.api.name
+  location = google_cloud_run_v2_service.api.location
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
 
-resource "google_cloud_run_service_iam_member" "web_invoker" {
+resource "google_cloud_run_v2_service_iam_member" "web_invoker" {
   count    = var.enable_public_invoker ? 1 : 0
-  service  = google_cloud_run_service.web.name
-  location = google_cloud_run_service.web.location
+  name     = google_cloud_run_v2_service.web.name
+  location = google_cloud_run_v2_service.web.location
   role     = "roles/run.invoker"
   member   = "allUsers"
 }

@@ -8,7 +8,7 @@ resource "google_cloud_run_domain_mapping" "api" {
   }
 
   spec {
-    route_name = google_cloud_run_service.api.name
+    route_name = google_cloud_run_v2_service.api.name
   }
 }
 
@@ -22,6 +22,6 @@ resource "google_cloud_run_domain_mapping" "web" {
   }
 
   spec {
-    route_name = google_cloud_run_service.web.name
+    route_name = google_cloud_run_v2_service.web.name
   }
 }

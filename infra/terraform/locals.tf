@@ -52,7 +52,11 @@ locals {
     "ZOOM_CLIENT_ID",
     "ZOOM_CLIENT_SECRET",
     "AWS_ACCESS_KEY_ID",
-    "AWS_SECRET_ACCESS_KEY"
+    "AWS_SECRET_ACCESS_KEY",
+    "META_APP_ID",
+    "META_APP_SECRET",
+    "META_VERIFY_TOKEN",
+    "META_ACCESS_TOKEN"
   ]
 
   billing_secret_keys = [

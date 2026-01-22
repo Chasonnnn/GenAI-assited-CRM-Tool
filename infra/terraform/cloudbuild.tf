@@ -3,7 +3,7 @@ resource "google_cloudbuild_trigger" "api" {
   name        = "crm-api-deploy"
   description = "Build and deploy API + worker on main"
   filename    = "cloudbuild/api.yaml"
-  location    = var.region
+  location    = var.cloudbuild_location
 
   repository_event_config {
     repository = var.cloudbuild_repository

@@ -36,6 +36,16 @@ variable "cloudbuild_repository" {
   default     = ""
 }
 
+variable "run_region" {
+  type        = string
+  description = "Region for Cloud Run, Cloud SQL, Redis"
+}
+
+variable "cloudbuild_location" {
+  type        = string
+  description = "Location/region for Cloud Build v2 connections and triggers"
+}
+
 variable "github_branch" {
   type        = string
   description = "GitHub branch for Cloud Build triggers"
