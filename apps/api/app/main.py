@@ -576,6 +576,20 @@ def readyz():
     return {"status": "ok", "env": settings.ENV, "version": settings.VERSION}
 
 
+@app.get("/health/live")
+@limiter.exempt
+def health_live():
+    """Liveness alias."""
+    return healthz()
+
+
+@app.get("/health/ready")
+@limiter.exempt
+def health_ready():
+    """Readiness alias."""
+    return readyz()
+
+
 @app.get("/health")
 @limiter.exempt
 def health():

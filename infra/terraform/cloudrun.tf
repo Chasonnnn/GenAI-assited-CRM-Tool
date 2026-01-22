@@ -34,6 +34,20 @@ resource "google_cloud_run_v2_service" "api" {
         container_port = 8000
       }
 
+      startup_probe {
+        http_get {
+          path = "/health/ready"
+          port = 8000
+        }
+      }
+
+      liveness_probe {
+        http_get {
+          path = "/health/live"
+          port = 8000
+        }
+      }
+
       dynamic "env" {
         for_each = local.common_env
         content {
