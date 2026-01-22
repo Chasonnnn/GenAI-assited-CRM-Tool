@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.23.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.22.1...surrogacy-crm-platform-v0.23.0) (2026-01-22)
+
+
+### Features
+
+* **api:** add configurable DB connection pooling and Redis client ([169737b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/169737b5b91c01d0f5ab882f09088291687c79c1))
+
+
+### Bug Fixes
+
+* CI updated for UV migration ([f812d9e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f812d9eb0d85ea37cec9af8aa25a41eaf56765f7))
+* more CI fixes for UV migration ([22e2ecd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/22e2ecd4d5d98518e035d2fe737bf7b5754bf2b0))
+
 ## [0.22.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.22.0...surrogacy-crm-platform-v0.22.1) (2026-01-20)
 
 
