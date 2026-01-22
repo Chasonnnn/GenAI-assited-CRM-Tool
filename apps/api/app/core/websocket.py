@@ -14,13 +14,14 @@ import logging
 
 from fastapi import WebSocket
 
+from app.core.redis_client import get_async_redis_client
+
 logger = logging.getLogger(__name__)
 
 WEBSOCKET_EVENT_CHANNEL = "websocket_events"
 WEBSOCKET_INSTANCE_ID = (
     os.getenv("WEBSOCKET_INSTANCE_ID") or os.getenv("HOSTNAME") or str(uuid4())
 )
-_ws_publish_client = None
 
 
 class ConnectionManager:
@@ -200,19 +201,16 @@ def should_deliver_ws_event(event: dict, instance_id: str) -> bool:
 
 
 async def _publish_ws_event(event: dict) -> None:
-    redis_url = os.getenv("REDIS_URL")
-    if not redis_url or redis_url == "memory://":
+    client = get_async_redis_client()
+    if client is None:
         return
-
     try:
-        import redis.asyncio as redis
+        await client.publish(WEBSOCKET_EVENT_CHANNEL, json.dumps(event))
     except Exception:
-        return
-
-    global _ws_publish_client
-    if _ws_publish_client is None:
-        _ws_publish_client = redis.from_url(redis_url)
-    await _ws_publish_client.publish(WEBSOCKET_EVENT_CHANNEL, json.dumps(event))
+        logger.warning(
+            "ws_event_publish_failed",
+            extra={"event": "ws_event_publish_failed", "channel": WEBSOCKET_EVENT_CHANNEL},
+        )
 
 
 async def send_ws_to_user(user_id: UUID, message: dict) -> None:
@@ -241,66 +239,70 @@ async def send_ws_to_org(org_id: UUID, message: dict) -> None:
 
 async def start_session_revocation_listener() -> None:
     """Listen for session revocation events and close matching sockets."""
-    redis_url = os.getenv("REDIS_URL")
-    if not redis_url or redis_url == "memory://":
+    if get_async_redis_client() is None:
         return
 
-    try:
-        import redis.asyncio as redis
-    except Exception:
-        return
+    async def _handle_message(message: dict) -> None:
+        data = message.get("data")
+        token_hash = data.decode() if isinstance(data, bytes) else str(data)
+        await manager.close_by_token_hash(token_hash)
 
-    client = redis.from_url(redis_url)
-    pubsub = client.pubsub()
-    await pubsub.subscribe(SESSION_REVOKE_CHANNEL)
-
-    async def _listen() -> None:
-        async for message in pubsub.listen():
-            if message.get("type") != "message":
-                continue
-            data = message.get("data")
-            token_hash = data.decode() if isinstance(data, bytes) else str(data)
-            await manager.close_by_token_hash(token_hash)
-
-    asyncio.create_task(_listen())
+    asyncio.create_task(_listen_channel(SESSION_REVOKE_CHANNEL, _handle_message))
 
 
 async def start_websocket_event_listener() -> None:
     """Listen for websocket events from other instances."""
-    redis_url = os.getenv("REDIS_URL")
-    if not redis_url or redis_url == "memory://":
+    if get_async_redis_client() is None:
         return
 
-    try:
-        import redis.asyncio as redis
-    except Exception:
+    async def _handle_message(message: dict) -> None:
+        data = message.get("data")
+        raw = data.decode() if isinstance(data, bytes) else data
+        try:
+            event = json.loads(raw)
+        except Exception:
+            return
+        if not should_deliver_ws_event(event, WEBSOCKET_INSTANCE_ID):
+            return
+
+        target = event.get("target")
+        payload = event.get("message")
+        if target == "user" and event.get("user_id"):
+            await manager.send_to_user(UUID(event["user_id"]), payload)
+        elif target == "org" and event.get("org_id"):
+            await manager.send_to_org(UUID(event["org_id"]), payload)
+
+    asyncio.create_task(_listen_channel(WEBSOCKET_EVENT_CHANNEL, _handle_message))
+
+
+async def _listen_channel(channel: str, handler) -> None:
+    client = get_async_redis_client()
+    if client is None:
         return
 
-    client = redis.from_url(redis_url)
-    pubsub = client.pubsub()
-    await pubsub.subscribe(WEBSOCKET_EVENT_CHANNEL)
-
-    async def _listen() -> None:
-        async for message in pubsub.listen():
-            if message.get("type") != "message":
-                continue
-            data = message.get("data")
-            raw = data.decode() if isinstance(data, bytes) else data
-            try:
-                event = json.loads(raw)
-            except Exception:
-                continue
-            if not should_deliver_ws_event(event, WEBSOCKET_INSTANCE_ID):
-                continue
-
-            target = event.get("target")
-            payload = event.get("message")
-            if target == "user" and event.get("user_id"):
-                await manager.send_to_user(UUID(event["user_id"]), payload)
-            elif target == "org" and event.get("org_id"):
-                await manager.send_to_org(UUID(event["org_id"]), payload)
-
-    asyncio.create_task(_listen())
+    while True:
+        pubsub = None
+        try:
+            pubsub = client.pubsub()
+            await pubsub.subscribe(channel)
+            async for message in pubsub.listen():
+                if message.get("type") != "message":
+                    continue
+                await handler(message)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.warning(
+                "redis_pubsub_failed",
+                extra={"event": "redis_pubsub_failed", "channel": channel},
+            )
+            await asyncio.sleep(2)
+        finally:
+            if pubsub is not None:
+                try:
+                    await pubsub.close()
+                except Exception:
+                    pass
 
 
 # Singleton instance

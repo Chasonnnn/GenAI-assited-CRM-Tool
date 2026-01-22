@@ -5,7 +5,6 @@ github_owner      = "your-github-org-or-user"
 github_repo       = "your-repo-name"
 cloudbuild_repository = "projects/PROJECT/locations/REGION/connections/CONNECTION/repositories/REPO"
 
-database_password = "replace-me"
 s3_bucket         = "your-s3-bucket"
 export_s3_bucket  = "your-export-s3-bucket"
 
@@ -13,7 +12,6 @@ export_s3_bucket  = "your-export-s3-bucket"
 allowed_email_domains = ""
 secret_replication_location = "us-central1"
 logging_retention_days = 90
-manage_secret_versions = true
 enable_cloudbuild_triggers = true
 enable_public_invoker = true
 enable_domain_mapping = true
@@ -22,6 +20,14 @@ enable_domain_mapping = true
 # manage_storage_buckets = true
 # storage_bucket_location = "us-central1"
 # storage_service_account_email = "crm-storage-sa@your-project-id.iam.gserviceaccount.com"
+
+# Private Service Access (optional override)
+# private_service_access_address = "10.10.0.0"
+# private_service_access_prefix_length = 16
+
+# Database user management (optional)
+# manage_database_user = true
+# database_password = "replace-me"
 
 # Optional S3-compatible endpoints (for GCS)
 # s3_endpoint_url = "https://storage.googleapis.com"

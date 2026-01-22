@@ -9,15 +9,16 @@ from slowapi.util import get_remote_address
 import slowapi.extension as slowapi_extension
 
 from app.core.config import settings
+from app.core.redis_client import get_redis_url, get_sync_redis_client
 
 # Patch slowapi for Python 3.14+ where asyncio.iscoroutinefunction is deprecated.
 slowapi_extension.asyncio.iscoroutinefunction = inspect.iscoroutinefunction
 
-# Configure rate limiter with Redis for multi-worker support
-# Falls back to in-memory if Redis is not available (dev/test mode)
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+# Configure rate limiter with Redis for multi-worker support.
+# Falls back to in-memory storage if Redis is unavailable.
+REDIS_URL = get_redis_url()
 IS_TESTING = os.getenv("TESTING", "").lower() in ("1", "true", "yes")
-IS_DEV = settings.is_dev
+FAIL_OPEN = settings.RATE_LIMIT_FAIL_OPEN
 DEFAULT_LIMITS = (
     [] if IS_TESTING or settings.RATE_LIMIT_API <= 0 else [f"{settings.RATE_LIMIT_API}/minute"]
 )
@@ -29,25 +30,33 @@ if IS_TESTING:
         storage_uri="memory://",
         default_limits=DEFAULT_LIMITS,
     )
+elif not REDIS_URL:
+    if FAIL_OPEN:
+        limiter = Limiter(
+            key_func=get_remote_address,
+            storage_uri="memory://",
+            default_limits=DEFAULT_LIMITS,
+        )
+    else:
+        raise RuntimeError("REDIS_URL must be set when RATE_LIMIT_FAIL_OPEN is false")
 else:
     try:
-        import redis
-
-        # Test connection upfront
-        r = redis.from_url(REDIS_URL, socket_connect_timeout=1)
-        r.ping()
+        client = get_sync_redis_client()
+        if client is None:
+            raise RuntimeError("Redis client unavailable")
+        client.ping()
         limiter = Limiter(
             key_func=get_remote_address,
             storage_uri=REDIS_URL,
             default_limits=DEFAULT_LIMITS,
         )
-    except Exception as e:
-        if IS_DEV:
-            logging.warning(f"Redis unavailable for rate limiting, using in-memory: {e}")
+    except Exception as exc:
+        if FAIL_OPEN:
+            logging.warning("Redis unavailable for rate limiting, using in-memory: %s", exc)
             limiter = Limiter(
                 key_func=get_remote_address,
                 storage_uri="memory://",
                 default_limits=DEFAULT_LIMITS,
             )
         else:
-            raise RuntimeError("Redis is required for rate limiting in non-dev environments") from e
+            raise RuntimeError("Redis is required for rate limiting") from exc

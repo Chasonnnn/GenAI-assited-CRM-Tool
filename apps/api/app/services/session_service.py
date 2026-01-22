@@ -3,7 +3,6 @@
 import hashlib
 import ipaddress
 import logging
-import os
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -17,6 +16,7 @@ except Exception:  # pragma: no cover - optional dependency in some envs
     parse_user_agent = None
 
 from app.core.config import settings
+from app.core.redis_client import get_sync_redis_client
 from app.db.models import UserSession
 
 logger = logging.getLogger(__name__)
@@ -381,15 +381,10 @@ def _publish_session_revoked(token_hash: str) -> None:
     except Exception:
         logger.debug("Local WebSocket revocation notify failed", exc_info=True)
 
-    redis_url = os.getenv("REDIS_URL")
-    if not redis_url or redis_url == "memory://":
-        return
-
     try:
-        import redis
-
-        client = redis.from_url(redis_url)
+        client = get_sync_redis_client()
+        if client is None:
+            return
         client.publish(SESSION_REVOKE_CHANNEL, token_hash)
-        client.close()
     except Exception:
         logger.warning("Failed to publish session revocation", exc_info=True)
