@@ -211,7 +211,7 @@ def get_invite_details(
     inviter_name = None
     if invite.invited_by_user_id:
         inviter = db.query(User).filter(User.id == invite.invited_by_user_id).first()
-        inviter_name = inviter.full_name if inviter else None
+        inviter_name = inviter.display_name if inviter else None
 
     return invite, org_name, inviter_name
 
@@ -243,11 +243,11 @@ def accept_invite(
     if user.email.lower() != invite.email.lower():
         raise PermissionError("This invite was sent to a different email address")
 
-    role_map = {
-        "member": RoleEnum.MEMBER,
-        "admin": RoleEnum.ADMIN,
-    }
-    role = role_map.get(invite.role, RoleEnum.MEMBER)
+    role_value = invite.role.value if hasattr(invite.role, "value") else invite.role
+    try:
+        RoleEnum(role_value)
+    except ValueError as exc:
+        raise ValueError("Invalid invite role") from exc
 
     existing = (
         db.query(Membership)
@@ -260,11 +260,9 @@ def accept_invite(
     if existing:
         if existing.is_active:
             raise ValueError("Already a member of this organization")
-        existing.role = role
+        existing.role = role_value
         existing.is_active = True
         invite.accepted_at = datetime.now(timezone.utc)
-        if not user.active_org_id:
-            user.active_org_id = invite.organization_id
         db.commit()
         org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
         org_name = org_service.get_org_display_name(org)
@@ -276,15 +274,12 @@ def accept_invite(
     membership = Membership(
         user_id=user_id,
         organization_id=invite.organization_id,
-        role=role,
+        role=role_value,
         is_active=True,
     )
     db.add(membership)
 
     invite.accepted_at = datetime.now(timezone.utc)
-
-    if not user.active_org_id:
-        user.active_org_id = invite.organization_id
 
     db.commit()
 
