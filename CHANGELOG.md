@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.25.2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.25.1...surrogacy-crm-platform-v0.25.2) (2026-01-23)
+
+
+### Bug Fixes
+
+* **web:** improve TypeScript types and Link component usage ([747d1d3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/747d1d3385817ca44f6256721b322311ac255162))
+* **web:** improve TypeScript types and Link component usage ([329ab27](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/329ab274e85b85f19eabc5b5f38d44ac2c456822))
+
 ## [0.25.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.25.0...surrogacy-crm-platform-v0.25.1) (2026-01-23)
 
 
