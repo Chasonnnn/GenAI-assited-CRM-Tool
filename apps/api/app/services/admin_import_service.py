@@ -235,13 +235,14 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
     export_user_ids = {UUID(item["id"]) for item in users_payload if item.get("id")}
     export_emails = {item.get("email", "").lower() for item in users_payload if item.get("email")}
 
-    existing_users_by_id = {
-        user.id: user for user in db.query(User).filter(User.id.in_(export_user_ids)).all()
-    }
-    existing_users_by_email = {
-        user.email.lower(): user
-        for user in db.query(User).filter(func.lower(User.email).in_(export_emails)).all()
-    }
+    # Consolidate into single query (avoids 2 separate queries)
+    all_users = (
+        db.query(User)
+        .filter(User.id.in_(export_user_ids) | func.lower(User.email).in_(export_emails))
+        .all()
+    )
+    existing_users_by_id = {user.id: user for user in all_users}
+    existing_users_by_email = {user.email.lower(): user for user in all_users if user.email}
 
     user_id_map: dict[UUID, UUID] = {}
 
@@ -486,7 +487,8 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             form_id=UUID(mapping_data["form_id"]),
             field_key=mapping_data.get("field_key"),
             surrogate_field=mapping_data.get("surrogate_field"),
-            created_at=_parse_datetime(mapping_data.get("created_at")) or datetime.now(timezone.utc),
+            created_at=_parse_datetime(mapping_data.get("created_at"))
+            or datetime.now(timezone.utc),
         )
         db.add(mapping)
 
@@ -520,10 +522,8 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             start_time=_parse_time(rule_data.get("start_time")) or time(9, 0),
             end_time=_parse_time(rule_data.get("end_time")) or time(17, 0),
             timezone=rule_data.get("timezone") or "America/Los_Angeles",
-            created_at=_parse_datetime(rule_data.get("created_at"))
-            or datetime.now(timezone.utc),
-            updated_at=_parse_datetime(rule_data.get("updated_at"))
-            or datetime.now(timezone.utc),
+            created_at=_parse_datetime(rule_data.get("created_at")) or datetime.now(timezone.utc),
+            updated_at=_parse_datetime(rule_data.get("updated_at")) or datetime.now(timezone.utc),
         )
         db.add(rule)
 
@@ -570,8 +570,10 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             organization_id=org_id,
             usage_count=template_data.get("usage_count") or 0,
             created_by_user_id=_map_user_id(_parse_uuid(template_data.get("created_by_user_id"))),
-            created_at=_parse_datetime(template_data.get("created_at")) or datetime.now(timezone.utc),
-            updated_at=_parse_datetime(template_data.get("updated_at")) or datetime.now(timezone.utc),
+            created_at=_parse_datetime(template_data.get("created_at"))
+            or datetime.now(timezone.utc),
+            updated_at=_parse_datetime(template_data.get("updated_at"))
+            or datetime.now(timezone.utc),
         )
         db.add(template)
 
@@ -637,9 +639,7 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
         db.add(meta_page)
 
     if retention_policies_payload:
-        db.query(DataRetentionPolicy).filter(
-            DataRetentionPolicy.organization_id == org_id
-        ).delete()
+        db.query(DataRetentionPolicy).filter(DataRetentionPolicy.organization_id == org_id).delete()
         for policy_data in retention_policies_payload:
             policy = DataRetentionPolicy(
                 id=UUID(policy_data["id"]),
@@ -647,9 +647,7 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
                 entity_type=policy_data.get("entity_type"),
                 retention_days=policy_data.get("retention_days") or 0,
                 is_active=policy_data.get("is_active", True),
-                created_by_user_id=_map_user_id(
-                    _parse_uuid(policy_data.get("created_by_user_id"))
-                ),
+                created_by_user_id=_map_user_id(_parse_uuid(policy_data.get("created_by_user_id"))),
                 created_at=_parse_datetime(policy_data.get("created_at"))
                 or datetime.now(timezone.utc),
                 updated_at=_parse_datetime(policy_data.get("updated_at"))
@@ -666,12 +664,8 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
                 entity_type=hold_data.get("entity_type"),
                 entity_id=_parse_uuid(hold_data.get("entity_id")),
                 reason=hold_data.get("reason") or "",
-                created_by_user_id=_map_user_id(
-                    _parse_uuid(hold_data.get("created_by_user_id"))
-                ),
-                released_by_user_id=_map_user_id(
-                    _parse_uuid(hold_data.get("released_by_user_id"))
-                ),
+                created_by_user_id=_map_user_id(_parse_uuid(hold_data.get("created_by_user_id"))),
+                released_by_user_id=_map_user_id(_parse_uuid(hold_data.get("released_by_user_id"))),
                 created_at=_parse_datetime(hold_data.get("created_at"))
                 or datetime.now(timezone.utc),
                 released_at=_parse_datetime(hold_data.get("released_at")),
