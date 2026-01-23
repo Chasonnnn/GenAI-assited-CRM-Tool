@@ -40,7 +40,7 @@ const STATUS_STYLES: Record<JourneyMilestoneStatus, {
 export function JourneyMilestoneCard({
     milestone,
     side,
-    surrogateId,
+    surrogateId: _surrogateId,
     canEdit = false,
     onEditImage,
 }: JourneyMilestoneCardProps) {
@@ -108,6 +108,9 @@ export function JourneyMilestoneCard({
                         src={imageUrl}
                         alt={`${milestone.label} milestone`}
                         className="size-full object-cover"
+                        width={320}
+                        height={180}
+                        loading="lazy"
                         onError={() => setImageError(true)}
                     />
                 ) : (

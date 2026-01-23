@@ -88,7 +88,7 @@ export function JourneyTimeline({
             )}
 
             {/* Journey content with phases */}
-            {phasesWithMeta.map((phase, phaseIndex) => (
+            {phasesWithMeta.map((phase) => (
                 <section key={phase.slug}>
                     {/* Phase header - full width divider */}
                     <header className="mb-10 flex items-center gap-4 print:mb-6">

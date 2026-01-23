@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { CheckIcon, ImageOffIcon, Loader2Icon, XIcon } from "lucide-react"
+import { CheckIcon, ImageOffIcon, Loader2Icon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -87,9 +87,15 @@ export function MilestoneImageSelector({
                 { description: `${milestoneLabel} featured image has been ${selectedId ? "updated" : "reset to default"}.` }
             )
             onOpenChange(false)
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : typeof error === "string"
+                        ? error
+                        : "Please try again."
             toast.error("Failed to update image", {
-                description: error?.message || "Please try again.",
+                description: message,
             })
         }
     }

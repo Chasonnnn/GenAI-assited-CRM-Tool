@@ -42,7 +42,6 @@ export function TrendChart() {
     const orgStatsQuery = useSurrogateStats()
     const isRestricted = error instanceof ApiError && error.status === 403
     const orgTotal = orgStatsQuery.data?.total
-    const hasOrgSurrogates = (orgTotal ?? 0) > 0
 
     // Transform data for chart
     const chartData = useMemo(() => {

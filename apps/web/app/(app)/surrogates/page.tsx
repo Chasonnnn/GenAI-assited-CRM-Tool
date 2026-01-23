@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useTransition } from "react"
 import Link from "next/link"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
@@ -197,6 +197,7 @@ export default function SurrogatesPage() {
     const perPage = 20
     const { user } = useAuth()
     const createMutation = useCreateSurrogate()
+    const [isFilterPending, startFilterTransition] = useTransition()
 
     // Sync state changes back to URL
     const updateUrlParams = useCallback((
@@ -241,46 +242,58 @@ export default function SurrogatesPage() {
         router.replace(`/surrogates${newUrl}`, { scroll: false })
     }, [router, currentQuery])
 
-    // Update URL when filters change
+    // Update URL when filters change - wrapped in startTransition for smoother UI
     const handleStageChange = useCallback((stage: string) => {
-        setStageFilter(stage)
-        setPage(1)
-        updateUrlParams(stage, sourceFilter, queueFilter, debouncedSearch, 1, dateRange, customRange)
+        startFilterTransition(() => {
+            setStageFilter(stage)
+            setPage(1)
+            updateUrlParams(stage, sourceFilter, queueFilter, debouncedSearch, 1, dateRange, customRange)
+        })
     }, [sourceFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, customRange])
 
     const handleSourceChange = useCallback((source: SurrogateSource | "all") => {
-        setSourceFilter(source)
-        setPage(1)
-        updateUrlParams(stageFilter, source, queueFilter, debouncedSearch, 1, dateRange, customRange)
+        startFilterTransition(() => {
+            setSourceFilter(source)
+            setPage(1)
+            updateUrlParams(stageFilter, source, queueFilter, debouncedSearch, 1, dateRange, customRange)
+        })
     }, [stageFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, customRange])
 
     const handleQueueChange = useCallback((queue: string) => {
-        setQueueFilter(queue)
-        setPage(1)
-        updateUrlParams(stageFilter, sourceFilter, queue, debouncedSearch, 1, dateRange, customRange)
+        startFilterTransition(() => {
+            setQueueFilter(queue)
+            setPage(1)
+            updateUrlParams(stageFilter, sourceFilter, queue, debouncedSearch, 1, dateRange, customRange)
+        })
     }, [stageFilter, sourceFilter, debouncedSearch, updateUrlParams, dateRange, customRange])
 
     const handlePageChange = useCallback((nextPage: number) => {
-        setPage(nextPage)
-        updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, nextPage, dateRange, customRange)
+        startFilterTransition(() => {
+            setPage(nextPage)
+            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, nextPage, dateRange, customRange)
+        })
     }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, customRange])
 
     const handlePresetChange = useCallback((preset: DateRangePreset) => {
-        setDateRange(preset)
-        if (preset !== "custom") {
-            setCustomRange({ from: undefined, to: undefined })
-        }
-        setPage(1)
-        updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, 1, preset, preset === "custom" ? customRange : { from: undefined, to: undefined })
+        startFilterTransition(() => {
+            setDateRange(preset)
+            if (preset !== "custom") {
+                setCustomRange({ from: undefined, to: undefined })
+            }
+            setPage(1)
+            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, 1, preset, preset === "custom" ? customRange : { from: undefined, to: undefined })
+        })
     }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, updateUrlParams, customRange])
 
     const handleCustomRangeChange = useCallback((range: { from: Date | undefined; to: Date | undefined }) => {
-        setCustomRange(range)
-        if (dateRange !== "custom") {
-            setDateRange("custom")
-        }
-        setPage(1)
-        updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, 1, "custom", range)
+        startFilterTransition(() => {
+            setCustomRange(range)
+            if (dateRange !== "custom") {
+                setDateRange("custom")
+            }
+            setPage(1)
+            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, 1, "custom", range)
+        })
     }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange])
 
     // Fetch queues for filter dropdown (case_manager+ only)
@@ -717,7 +730,7 @@ export default function SurrogatesPage() {
                 {/* Surrogates Table */}
                 {!isLoading && !isError && data && data.items.length > 0 && (
                     <Card className="overflow-hidden py-0">
-                        <Table className="min-w-max [&_th]:!text-center [&_td]:!text-center [&_th>div]:justify-center">
+                        <Table className={cn("min-w-max [&_th]:!text-center [&_td]:!text-center [&_th>div]:justify-center transition-opacity", isFilterPending && "opacity-60")}>
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead className="w-[40px]">
@@ -752,7 +765,10 @@ export default function SurrogatesPage() {
                                         const mutedCellClass = surrogateItem.is_priority ? "text-amber-600" : "text-muted-foreground"
 
                                         return (
-                                            <TableRow key={surrogateItem.id} className={rowClass}>
+                                            <TableRow
+                                                key={surrogateItem.id}
+                                                className={cn(rowClass, "[content-visibility:auto] [contain-intrinsic-size:auto_53px]")}
+                                            >
                                                 <TableCell>
                                                     <Checkbox
                                                         checked={selectedSurrogates.has(surrogateItem.id)}

@@ -321,6 +321,8 @@ class SendEmailExecutor(ActionExecutor):
             return False, "Email subject is required"
         if not body:
             return False, "Email body is required"
+        if idempotency_key is not None and not isinstance(idempotency_key, str):
+            return False, "idempotency_key must be a string"
 
         # Check if user has Gmail integration
         from app.db.models import UserIntegration
@@ -357,6 +359,8 @@ class SendEmailExecutor(ActionExecutor):
         to = payload.get("to")
         subject = payload.get("subject")
         body = payload.get("body")
+        raw_idempotency_key = payload.get("idempotency_key")
+        idempotency_key = raw_idempotency_key if isinstance(raw_idempotency_key, str) else None
 
         surrogate = _get_surrogate_for_action(db, entity_id, org_id)
         if not surrogate:

@@ -4,6 +4,7 @@ import * as React from "react"
 import { useState, useCallback } from "react"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
+import { useSearchHotkey } from "@/components/search-command"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -213,17 +214,8 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const [searchOpen, setSearchOpen] = useState(false)
     const openSearch = useCallback(() => setSearchOpen(true), [])
 
-    // Register ⌘K / Ctrl+K keyboard shortcut
-    React.useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-                e.preventDefault()
-                setSearchOpen(true)
-            }
-        }
-        document.addEventListener("keydown", handleKeyDown)
-        return () => document.removeEventListener("keydown", handleKeyDown)
-    }, [])
+    // Register ⌘K / Ctrl+K using shared hook - avoids duplicate listeners
+    useSearchHotkey(openSearch)
 
     // Dynamic import to avoid circular deps
     const SearchCommandDialog = React.lazy(() => import("@/components/search-command").then(mod => ({ default: mod.SearchCommandDialog })))

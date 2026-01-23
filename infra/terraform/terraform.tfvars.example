@@ -4,6 +4,7 @@ domain            = "example.com"
 github_owner      = "your-github-org-or-user"
 github_repo       = "your-repo-name"
 cloudbuild_repository = "projects/PROJECT/locations/REGION/connections/CONNECTION/repositories/REPO"
+github_tag_regex  = "^v.*$"
 
 s3_bucket         = "your-s3-bucket"
 export_s3_bucket  = "your-export-s3-bucket"

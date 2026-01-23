@@ -12,10 +12,12 @@ Browser -> Next.js route -> `apps/web/lib/api.ts` or `apps/web/lib/api/*` -> Fas
 
 ### Auth + Security Flow
 - Cookie sessions + CSRF: `apps/api/app/core/csrf.py`, middleware in `apps/api/app/main.py`, client headers in `apps/web/lib/csrf.ts`
+- Cookie domain sharing: `COOKIE_DOMAIN` setting for cross-subdomain auth (app/ops)
 - RBAC + policies: `apps/api/app/core/permissions.py`, `apps/api/app/core/policies.py`, `apps/api/app/services/permission_service.py`
+- Platform admin access: `require_platform_admin` in `apps/api/app/core/deps.py` (DB flag + email allowlist)
 - Owner-based surrogate access: `apps/api/app/core/surrogate_access.py`
 - Encryption: `apps/api/app/core/encryption.py`, `apps/api/app/db/types.py`
-- Audit logging: `apps/api/app/services/audit_service.py`
+- Audit logging: `apps/api/app/services/audit_service.py`, `apps/api/app/services/platform_service.py` (admin actions)
 
 ---
 
@@ -50,11 +52,13 @@ Browser -> Next.js route -> `apps/web/lib/api.ts` or `apps/web/lib/api/*` -> Fas
 - Authenticated layout: `apps/web/app/(app)/layout.tsx`
 - Public routes: `apps/web/app/login/page.tsx`, `apps/web/app/mfa/page.tsx`, `apps/web/app/invite/[id]/page.tsx`, `apps/web/app/apply/[token]/page.tsx`, `apps/web/app/book/*`
 - Core pages: `apps/web/app/(app)/dashboard/page.tsx`, `apps/web/app/(app)/surrogates/page.tsx`, `apps/web/app/(app)/surrogates/[id]/page.tsx`, `apps/web/app/(app)/intended-parents/page.tsx`, `apps/web/app/(app)/matches/page.tsx`, `apps/web/app/(app)/tasks/page.tsx`, `apps/web/app/(app)/ai-assistant/page.tsx`, `apps/web/app/(app)/reports/page.tsx`, `apps/web/app/(app)/automation/page.tsx`, `apps/web/app/(app)/settings/*`
+- Ops Console (platform admin): `apps/web/app/ops/layout.tsx`, `apps/web/app/ops/page.tsx`, `apps/web/app/ops/login/page.tsx`, `apps/web/app/ops/agencies/*`, `apps/web/app/ops/alerts/page.tsx`
 - Dashboard widgets: `apps/web/app/(app)/dashboard/components/*` (KPI cards, trend chart, stage chart, attention panel)
 - Dashboard state: `apps/web/app/(app)/dashboard/context/dashboard-filters.tsx`
 - Components: `apps/web/components/*` (surrogates, interviews, matches, tasks, appointments, AI, reports)
-- API + hooks: `apps/web/lib/api.ts`, `apps/web/lib/api/*`, `apps/web/lib/hooks/*`
+- API + hooks: `apps/web/lib/api.ts`, `apps/web/lib/api/*` (includes `platform.ts` for ops console), `apps/web/lib/hooks/*`
 - Context/state: `apps/web/lib/auth-context.tsx`, `apps/web/lib/context/ai-context.tsx`, `apps/web/lib/store/*`
+- Routing: `apps/web/next.config.js` rewrites (host-based routing for ops subdomain)
 - Tests: `apps/web/tests/*`
 
 ---
@@ -77,6 +81,7 @@ Browser -> Next.js route -> `apps/web/lib/api.ts` or `apps/web/lib/api/*` -> Fas
 - Notifications: UI in `apps/web/app/(app)/notifications/page.tsx`; API in `apps/api/app/routers/notifications.py`, `apps/api/app/routers/websocket.py`; services in `apps/api/app/services/notification_service.py`
 - Integrations: UI in `apps/web/app/(app)/settings/integrations/*`; API in `apps/api/app/routers/integrations.py`, `apps/api/app/routers/webhooks.py`; services in `apps/api/app/services/google_oauth.py`, `apps/api/app/services/gmail_service.py`, `apps/api/app/services/zoom_service.py`, `apps/api/app/services/meta_*`
 - Compliance + audit: UI in `apps/web/app/(app)/settings/compliance/page.tsx`, `apps/web/app/(app)/settings/audit/page.tsx`; API in `apps/api/app/routers/compliance.py`, `apps/api/app/routers/audit.py`; services in `apps/api/app/services/compliance_service.py`, `apps/api/app/services/audit_service.py`
+- Platform admin (Ops Console): UI in `apps/web/app/ops/*`; API in `apps/api/app/routers/platform.py`; services in `apps/api/app/services/platform_service.py`; cross-org management of agencies, subscriptions, members, invites, alerts, and admin action logs
 
 ---
 
@@ -85,7 +90,8 @@ Models live in `apps/api/app/db/models.py` with migrations in `apps/api/alembic/
 
 ### Auth + Org
 - `Organization` (organizations)
-- `User` (users)
+- `OrganizationSubscription` (organization_subscriptions) - plan, status, auto_renew, period dates
+- `User` (users) - includes `is_platform_admin` flag
 - `Membership` (memberships)
 - `AuthIdentity` (auth_identities)
 - `UserSession` (user_sessions)
@@ -94,6 +100,7 @@ Models live in `apps/api/app/db/models.py` with migrations in `apps/api/alembic/
 - `UserPermissionOverride` (user_permission_overrides)
 - `UserNotificationSettings` (user_notification_settings)
 - `OrgCounter` (org_counters)
+- `AdminActionLog` (admin_action_logs) - platform admin audit trail with HMAC'd IP/UA
 
 ### Surrogates + Journey + Profile
 - `Surrogate` (surrogates)
@@ -239,8 +246,9 @@ See each router for full endpoint list.
 - Admin meta: `apps/api/app/routers/admin_meta.py` (prefix `/admin/meta-pages` + meta sync)
 - Admin versions: `apps/api/app/routers/admin_versions.py` (prefix `/admin/versions`)
 - Jobs list: `apps/api/app/routers/jobs.py` (prefix `/jobs`)
-- Internal schedules: `apps/api/app/routers/internal.py` (prefix `/internal/scheduled`)
+- Internal schedules: `apps/api/app/routers/internal.py` (prefix `/internal/scheduled`) - includes subscription-sweep
 - Monitoring alerts: `apps/api/app/routers/monitoring.py` (prefix `/internal/alerts`)
+- Platform admin: `apps/api/app/routers/platform.py` (prefix `/platform`) - cross-org management
 - Metadata: `apps/api/app/routers/metadata.py` (prefix `/metadata`)
 - Dev-only: `apps/api/app/routers/dev.py` (prefix `/dev`)
 

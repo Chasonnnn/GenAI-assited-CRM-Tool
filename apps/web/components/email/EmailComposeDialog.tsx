@@ -174,8 +174,11 @@ export function EmailComposeDialog({
                         <Label htmlFor="recipient">To</Label>
                         <Input
                             id="recipient"
+                            name="recipient"
                             value={surrogateData.email}
                             readOnly
+                            autoComplete="email"
+                            spellCheck={false}
                             className="bg-muted/50 cursor-not-allowed"
                         />
                     </div>
@@ -185,9 +188,11 @@ export function EmailComposeDialog({
                         <Label htmlFor="subject">Subject</Label>
                         <Input
                             id="subject"
+                            name="subject"
                             value={subject}
                             onChange={(e) => setSubject(e.target.value)}
                             placeholder="Enter email subject..."
+                            autoComplete="off"
                         />
                         {!isPreview && subject && (
                             <div className="text-xs text-muted-foreground">{renderWithHighlights(subject)}</div>

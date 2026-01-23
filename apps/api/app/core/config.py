@@ -99,6 +99,23 @@ class Settings(BaseSettings):
     # Frontend (for safe redirects)
     FRONTEND_URL: str = ""
 
+    # Ops Console frontend URL (for platform admin redirects)
+    OPS_FRONTEND_URL: str = ""
+
+    # Cookie domain for cross-subdomain sharing (e.g., ".surrogacyforce.com")
+    # Leave empty for host-only cookies (local dev)
+    COOKIE_DOMAIN: str = ""
+
+    # Platform admin emails (comma-separated, for allowlist-based access)
+    PLATFORM_ADMIN_EMAILS: str = ""
+
+    # HMAC secret for PII-safe audit logging (IP, user agent)
+    AUDIT_HMAC_SECRET: str = ""
+
+    # Support session settings (platform admin role override)
+    SUPPORT_SESSION_TTL_MINUTES: int = 60
+    SUPPORT_SESSION_ALLOW_READ_ONLY: bool = False
+
     # API base URL (for tracking, callbacks)
     API_BASE_URL: str = ""
 
@@ -306,6 +323,11 @@ class Settings(BaseSettings):
         return self.ENV.lower() in {"dev", "development", "test"}
 
     @property
+    def is_prod(self) -> bool:
+        """True for production-like environments."""
+        return self.ENV.lower() in {"prod", "production"}
+
+    @property
     def cors_origins_list(self) -> list[str]:
         """Parse CORS_ORIGINS into a list."""
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
@@ -316,6 +338,13 @@ class Settings(BaseSettings):
         if not self.ALLOWED_EMAIL_DOMAINS:
             return []
         return [d.strip().lower() for d in self.ALLOWED_EMAIL_DOMAINS.split(",")]
+
+    @property
+    def platform_admin_emails_list(self) -> list[str]:
+        """Parse PLATFORM_ADMIN_EMAILS into lowercase list."""
+        if not self.PLATFORM_ADMIN_EMAILS:
+            return []
+        return [e.strip().lower() for e in self.PLATFORM_ADMIN_EMAILS.split(",") if e.strip()]
 
     @property
     def jwt_secrets(self) -> list[str]:
