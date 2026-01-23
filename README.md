@@ -186,7 +186,7 @@ Frontend: `http://localhost:3000`
 # Environment
 ENV=dev
 
-# Database
+# Database (psycopg3; keep the +psycopg scheme)
 DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/crm
 
 # Authentication (JWT in HTTP-only cookie)

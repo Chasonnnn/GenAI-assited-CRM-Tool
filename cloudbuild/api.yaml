@@ -10,9 +10,9 @@ steps:
 images:
   - "$_IMAGE_API"
 options:
-  logging: CLOUD_LOGGING_ONLY
+  logging: GCS_ONLY
 substitutions:
   _REGION: "us-central1"
   _API_SERVICE: "crm-api"
   _WORKER_JOB: "crm-worker"
-  _IMAGE_API: "gcr.io/placeholder/api:latest"
+  _IMAGE_API: "us-central1-docker.pkg.dev/probable-dream-484923-n7/crm/api:latest"

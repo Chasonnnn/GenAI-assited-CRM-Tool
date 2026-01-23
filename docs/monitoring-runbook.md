@@ -8,8 +8,10 @@ This runbook documents GCP Monitoring setup and alert routing verification for n
   - `roles/monitoring.metricWriter`
 - API service has one of the following env vars set:
   - `GCP_PROJECT_ID` or `GOOGLE_CLOUD_PROJECT`
+ - Monitoring notification channel exists (Slack/email), created out-of-band.
 
 ## Setup Checklist
+0. If using Terraform, set `alert_notification_channel_ids` to your Monitoring channel ID.
 1. Confirm env vars on the API service:
    - `GCP_PROJECT_ID` or `GOOGLE_CLOUD_PROJECT`
 2. Confirm logs are flowing to Cloud Logging.

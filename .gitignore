@@ -41,9 +41,13 @@ report_json.json
 report_md.md
 report_html.html
 zap.yaml
+
+# Local gcloud config/credentials (never commit)
+.gcloud/
 # Terraform (repo-local)
 infra/terraform/.terraform/
 infra/terraform/*.tfstate
 infra/terraform/*.tfstate.*
 infra/terraform/terraform.tfvars
 infra/terraform/*.auto.tfvars
+.secrets.env
