@@ -20,7 +20,6 @@ from app.core.deps import (
 )
 from app.core.csrf import set_csrf_cookie, CSRF_COOKIE_NAME, get_csrf_cookie
 from app.core.config import settings
-from app.core.security import decode_session_token
 from app.services import platform_service, session_service
 from app.db.enums import Role
 
