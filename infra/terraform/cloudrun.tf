@@ -35,8 +35,16 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       startup_probe {
+        # Cloud Run startup probes are strict by default (short timeouts / low
+        # retries). Give the container a few minutes to finish cold start and
+        # bind the port.
+        failure_threshold = 18
+        period_seconds    = 10
+        timeout_seconds   = 5
         http_get {
-          path = "/health/ready"
+          # Keep startup checks lightweight; /health/ready depends on DB/Redis and
+          # can flap during VPC connector / dependency warm-up.
+          path = "/health/live"
           port = 8000
         }
       }
