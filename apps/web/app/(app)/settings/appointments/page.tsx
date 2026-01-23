@@ -7,7 +7,7 @@
  * - Booking link management
  */
 
-import { AppointmentSettings } from "@/components/appointments"
+import { AppointmentSettings } from "@/components/appointments/AppointmentSettings"
 
 export const metadata = {
     title: "Appointment Settings | Surrogacy Force",

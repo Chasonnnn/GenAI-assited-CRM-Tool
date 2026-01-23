@@ -10,7 +10,7 @@
  * - Click to view details
  */
 
-import { useState, useMemo, useCallback, useEffect } from "react"
+import { memo, useState, useMemo, useCallback, useEffect } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -96,7 +96,7 @@ type ViewType = "month" | "week" | "day"
 // Task Item Component
 // =============================================================================
 
-function TaskItem({
+const TaskItem = memo(function TaskItem({
     task,
     compact = false,
     onClick,
@@ -142,13 +142,13 @@ function TaskItem({
             )}
         </div>
     )
-}
+})
 
 // =============================================================================
 // Google Calendar Event Component
 // =============================================================================
 
-function GoogleEventItem({
+const GoogleEventItem = memo(function GoogleEventItem({
     event,
     compact = false,
 }: {
@@ -190,13 +190,13 @@ function GoogleEventItem({
             <p className="text-xs text-muted-foreground/70">Google Calendar</p>
         </div>
     )
-}
+})
 
 // =============================================================================
 // Event Item Component
 // =============================================================================
 
-function EventItem({
+const EventItem = memo(function EventItem({
     appointment,
     onClick,
     compact = false,
@@ -246,7 +246,7 @@ function EventItem({
             )}
         </div>
     )
-}
+})
 
 // =============================================================================
 // Appointment Detail Dialog
