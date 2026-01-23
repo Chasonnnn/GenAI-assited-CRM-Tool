@@ -26,7 +26,7 @@ import {
     InboxIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { UnifiedCalendar } from "@/components/appointments"
+import { UnifiedCalendar } from "@/components/appointments/UnifiedCalendar"
 import type { TaskListItem } from "@/lib/api/tasks"
 
 interface SurrogateTasksCalendarProps {

@@ -3,43 +3,28 @@
 import { useMemo } from "react"
 import { UsersIcon, UserPlusIcon, CheckSquareIcon } from "lucide-react"
 import { KPICard } from "./kpi-card"
-import { useSurrogateStats } from "@/lib/hooks/use-surrogates"
-import { useTasks } from "@/lib/hooks/use-tasks"
-import { useSurrogatesTrend, useSurrogatesByStatus } from "@/lib/hooks/use-analytics"
+import type { useSurrogateStats } from "@/lib/hooks/use-surrogates"
+import type { useTasks } from "@/lib/hooks/use-tasks"
+import type { useSurrogatesTrend, useSurrogatesByStatus } from "@/lib/hooks/use-analytics"
 import { useDashboardFilters } from "../context/dashboard-filters"
 import { useAuth } from "@/lib/auth-context"
 import { formatLocalDate } from "@/lib/utils/date"
 
-export function KPICardsSection() {
-    const { filters, getDateParams } = useDashboardFilters()
-    const { user } = useAuth()
-    const dateParams = getDateParams()
-    const ownerId = filters.assigneeId
-    const taskOwnerId = filters.assigneeId ?? user?.user_id
-    const statsParams = {
-        ...(ownerId ? { owner_id: ownerId } : {}),
-    }
-    const tasksParams = {
-        is_completed: false,
-        per_page: 5,
-        exclude_approvals: true,
-        ...(taskOwnerId ? { owner_id: taskOwnerId } : {}),
-    }
-    const trendParams = {
-        period: "day" as const,
-        ...dateParams,
-        ...(ownerId ? { owner_id: ownerId } : {}),
-    }
-    const statusParams = {
-        ...dateParams,
-        ...(ownerId ? { owner_id: ownerId } : {}),
-    }
+interface KPICardsSectionProps {
+    statsQuery: ReturnType<typeof useSurrogateStats>
+    tasksQuery: ReturnType<typeof useTasks>
+    trendQuery: ReturnType<typeof useSurrogatesTrend>
+    statusQuery: ReturnType<typeof useSurrogatesByStatus>
+}
 
-    // Fetch data
-    const statsQuery = useSurrogateStats(statsParams)
-    const tasksQuery = useTasks(tasksParams)
-    const trendQuery = useSurrogatesTrend(trendParams)
-    const statusQuery = useSurrogatesByStatus(statusParams)
+export function KPICardsSection({
+    statsQuery,
+    tasksQuery,
+    trendQuery,
+    statusQuery,
+}: KPICardsSectionProps) {
+    const { filters } = useDashboardFilters()
+    const { user } = useAuth()
 
     // Compute sparkline data from trend
     const sparklineData = useMemo(() => {

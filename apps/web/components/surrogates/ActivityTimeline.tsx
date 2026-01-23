@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { memo, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { formatDistanceToNow, isBefore, parseISO, startOfToday } from "date-fns"
 import {
@@ -320,7 +320,7 @@ function buildTimelineData(
 // Activity Row Component
 // ============================================================================
 
-function ActivityRow({ item }: { item: ActivityItem }) {
+const ActivityRow = memo(function ActivityRow({ item }: { item: ActivityItem }) {
     const config = getActivityConfig(item.type)
     const Icon = config.icon
 
@@ -344,9 +344,9 @@ function ActivityRow({ item }: { item: ActivityItem }) {
             <div className="text-xs text-muted-foreground shrink-0">{item.relativeDate}</div>
         </div>
     )
-}
+})
 
-function StageEntryRow({
+const StageEntryRow = memo(function StageEntryRow({
     entryLabel,
     isBackdated,
 }: {
@@ -370,13 +370,13 @@ function StageEntryRow({
             <div className="text-xs text-muted-foreground shrink-0">{entryLabel}</div>
         </div>
     )
-}
+})
 
 // ============================================================================
 // Task Row Component
 // ============================================================================
 
-function TaskRow({ task, isOverdue = false }: { task: TaskListItem; isOverdue?: boolean }) {
+const TaskRow = memo(function TaskRow({ task, isOverdue = false }: { task: TaskListItem; isOverdue?: boolean }) {
     const dueDate = task.due_date ? parseISO(task.due_date) : null
 
     let dueLabel = ""
@@ -404,7 +404,7 @@ function TaskRow({ task, isOverdue = false }: { task: TaskListItem; isOverdue?: 
             </span>
         </div>
     )
-}
+})
 
 // ============================================================================
 // Main Component

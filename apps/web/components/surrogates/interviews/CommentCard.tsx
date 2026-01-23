@@ -9,7 +9,7 @@
  * - Inline editing support
  */
 
-import { useState, useCallback, useRef, useEffect } from "react"
+import { memo, useState, useCallback, useRef, useEffect } from "react"
 import { formatDistanceToNow } from "date-fns"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -43,7 +43,7 @@ interface CommentCardProps {
 /**
  * Single reply item within a thread
  */
-function ReplyItem({
+const ReplyItem = memo(function ReplyItem({
     reply,
     canEdit,
     onDelete,
@@ -160,9 +160,9 @@ function ReplyItem({
             )}
         </div>
     )
-}
+})
 
-export function CommentCard({
+export const CommentCard = memo(function CommentCard({
     note,
     isHovered,
     isFocused,
@@ -429,4 +429,4 @@ export function CommentCard({
             </div>
         </Card>
     )
-}
+})
