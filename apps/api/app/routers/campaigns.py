@@ -364,7 +364,7 @@ def _campaign_to_response(db: Session, campaign) -> CampaignResponse:
         scheduled_at=campaign.scheduled_at,
         status=campaign.status,
         created_by_user_id=campaign.created_by_user_id,
-        created_by_name=campaign.created_by.full_name if campaign.created_by else None,
+        created_by_name=campaign.created_by.display_name if campaign.created_by else None,
         created_at=campaign.created_at,
         updated_at=campaign.updated_at,
         total_recipients=latest_run.total_count if latest_run else 0,

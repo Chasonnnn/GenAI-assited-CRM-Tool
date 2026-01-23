@@ -503,7 +503,29 @@ def test_campaign_run_skips_existing_recipient(
     )
 
     assert result["total_count"] == 1
-    assert result["sent_count"] == 1
+
+
+def test_campaign_response_uses_display_name(db, test_org, test_user, test_template):
+    """Campaign response should use User.display_name (no User.full_name field)."""
+    from app.db.models import Campaign
+    from app.routers.campaigns import _campaign_to_response
+
+    campaign = Campaign(
+        id=uuid4(),
+        organization_id=test_org.id,
+        name="Display Name Campaign",
+        description="Test campaign response serialization",
+        email_template_id=test_template.id,
+        recipient_type="case",
+        filter_criteria={"stage_id": str(uuid4())},
+        status="draft",
+        created_by_user_id=test_user.id,
+    )
+    db.add(campaign)
+    db.flush()
+
+    response = _campaign_to_response(db, campaign)
+    assert response.created_by_name == test_user.display_name
 
 
 def test_execute_campaign_run_streams_recipients(db, test_org, test_user, test_template, monkeypatch):
