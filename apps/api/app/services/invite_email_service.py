@@ -120,7 +120,7 @@ async def send_invite_email(
     inviter_name = None
     if invite.invited_by_user_id:
         inviter = db.query(User).filter(User.id == invite.invited_by_user_id).first()
-        inviter_name = inviter.full_name if inviter else None
+        inviter_name = inviter.display_name if inviter else None
 
     # Format expiry
     expires_at = None
