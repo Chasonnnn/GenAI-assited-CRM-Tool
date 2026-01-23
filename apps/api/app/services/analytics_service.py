@@ -713,7 +713,7 @@ def get_surrogates_by_user(
     query = (
         db.query(
             Surrogate.owner_id,
-            User.full_name,
+            User.display_name,
             func.count(Surrogate.id).label("count"),
         )
         .outerjoin(User, Surrogate.owner_id == User.id)
@@ -727,7 +727,7 @@ def get_surrogates_by_user(
     query = _apply_date_range_filters(query, Surrogate.created_at, start_date, end_date)
 
     results = (
-        query.group_by(Surrogate.owner_id, User.full_name)
+        query.group_by(Surrogate.owner_id, User.display_name)
         .order_by(func.count(Surrogate.id).desc())
         .all()
     )
@@ -735,7 +735,7 @@ def get_surrogates_by_user(
     return [
         {
             "user_id": str(r.owner_id) if r.owner_id else None,
-            "user_name": r.full_name or "Unassigned",
+            "user_name": r.display_name or "Unassigned",
             "count": r.count,
         }
         for r in results

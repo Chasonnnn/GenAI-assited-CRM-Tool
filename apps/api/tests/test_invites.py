@@ -1,0 +1,89 @@
+"""Tests for invite service and email sending."""
+
+from datetime import datetime, timedelta, timezone
+from uuid import uuid4
+
+import pytest
+
+
+def test_accept_invite_creates_membership(db, test_org):
+    """Accepting an invite should not access missing user fields."""
+    from app.db.models import User, OrgInvite, Membership
+    from app.services import invite_service
+
+    user = User(
+        id=uuid4(),
+        email="invited-user@example.com",
+        display_name="Invited User",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+
+    invite = OrgInvite(
+        id=uuid4(),
+        organization_id=test_org.id,
+        email=user.email,
+        role="intake_specialist",
+        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+    )
+    db.add(invite)
+    db.flush()
+
+    result = invite_service.accept_invite(db, invite.id, user.id)
+
+    membership = (
+        db.query(Membership)
+        .filter(
+            Membership.user_id == user.id,
+            Membership.organization_id == test_org.id,
+        )
+        .first()
+    )
+
+    assert membership is not None
+    assert invite.accepted_at is not None
+    assert result["organization_id"] == str(test_org.id)
+
+
+@pytest.mark.asyncio
+async def test_send_invite_email_uses_display_name(db, test_org, test_user, monkeypatch):
+    """Invite emails should use display_name (User has no full_name)."""
+    from app.db.models import OrgInvite
+    from app.services import invite_email_service, gmail_service
+
+    invite = OrgInvite(
+        id=uuid4(),
+        organization_id=test_org.id,
+        email="new-user@example.com",
+        role="case_manager",
+        invited_by_user_id=test_user.id,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+    )
+    db.add(invite)
+    db.flush()
+
+    captured = {}
+
+    async def fake_send_email_logged(
+        db,
+        org_id,
+        user_id,
+        to,
+        subject,
+        body,
+        html,
+        template_id,
+        surrogate_id,
+        idempotency_key,
+    ):
+        captured["body"] = body
+        return {"success": True}
+
+    monkeypatch.setattr(gmail_service, "send_email_logged", fake_send_email_logged)
+
+    result = await invite_email_service.send_invite_email(db, invite)
+
+    assert result["success"] is True
+    assert test_user.display_name in captured["body"]

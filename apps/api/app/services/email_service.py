@@ -10,6 +10,8 @@ from uuid import UUID
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+import nh3
+
 from app.db.models import EmailTemplate, EmailLog, Job, Surrogate
 from app.db.enums import EmailStatus, JobType
 from app.services.job_service import enqueue_job
@@ -20,6 +22,32 @@ from app.services import version_service
 VARIABLE_PATTERN = re.compile(r"\{\{(\w+)\}\}")
 
 ENTITY_TYPE = "email_template"
+
+ALLOWED_TEMPLATE_TAGS = {
+    "p",
+    "br",
+    "strong",
+    "b",
+    "em",
+    "u",
+    "ul",
+    "ol",
+    "li",
+    "a",
+    "blockquote",
+    "h1",
+    "h2",
+    "h3",
+    "code",
+    "pre",
+    "span",
+}
+ALLOWED_TEMPLATE_ATTRS = {"a": {"href", "target"}}
+
+
+def sanitize_template_html(html: str) -> str:
+    """Sanitize email template HTML to prevent XSS."""
+    return nh3.clean(html, tags=ALLOWED_TEMPLATE_TAGS, attributes=ALLOWED_TEMPLATE_ATTRS)
 
 
 def _template_payload(template: EmailTemplate) -> dict:
@@ -41,12 +69,13 @@ def create_template(
     body: str,
 ) -> EmailTemplate:
     """Create a new email template with initial version snapshot."""
+    clean_body = sanitize_template_html(body)
     template = EmailTemplate(
         organization_id=org_id,
         created_by_user_id=user_id,
         name=name,
         subject=subject,
-        body=body,
+        body=clean_body,
         is_active=True,
         current_version=1,
     )
@@ -95,7 +124,7 @@ def update_template(
     if subject is not None:
         template.subject = subject
     if body is not None:
-        template.body = body
+        template.body = sanitize_template_html(body)
     if is_active is not None:
         template.is_active = is_active
 
@@ -162,7 +191,8 @@ def rollback_template(
     payload = version_service.decrypt_payload(new_version.payload_encrypted)
     template.name = payload.get("name", template.name)
     template.subject = payload.get("subject", template.subject)
-    template.body = payload.get("body", template.body)
+    if "body" in payload:
+        template.body = sanitize_template_html(payload.get("body") or "")
     template.is_active = payload.get("is_active", template.is_active)
     template.current_version = new_version.version
     template.updated_at = datetime.now(timezone.utc)

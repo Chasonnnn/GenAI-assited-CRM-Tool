@@ -6,7 +6,7 @@ import DOMPurify from 'dompurify'
  */
 export function sanitizeHtml(html: string): string {
     return DOMPurify.sanitize(html, {
-        ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'a', 'ul', 'ol', 'li', 'span'],
+        ALLOWED_TAGS: ['p', 'br', 'strong', 'b', 'em', 'u', 'a', 'ul', 'ol', 'li', 'span', 'mark'],
         ALLOWED_ATTR: ['href', 'target', 'rel', 'class'],
     })
 }
