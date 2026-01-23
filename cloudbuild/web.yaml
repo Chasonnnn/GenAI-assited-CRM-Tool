@@ -16,7 +16,8 @@ steps:
 images:
   - "$_IMAGE_WEB"
 options:
-  logging: GCS_ONLY
+  # BYOSA (build.service_account) requires Cloud Logging or an explicit logs bucket.
+  logging: CLOUD_LOGGING_ONLY
 substitutions:
   _REGION: "us-central1"
   _WEB_SERVICE: "crm-web"
