@@ -5,7 +5,7 @@
  */
 
 import { Metadata } from "next"
-import { PublicBookingPage } from "@/components/appointments"
+import { PublicBookingPage } from "@/components/appointments/PublicBookingPage"
 
 export const metadata: Metadata = {
     title: "Booking Page Preview",

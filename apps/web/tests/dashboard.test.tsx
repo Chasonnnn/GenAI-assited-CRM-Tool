@@ -141,7 +141,7 @@ describe('DashboardPage', () => {
         })
     })
 
-    it('renders stats cards with surrogate data', () => {
+    it('renders stats cards with surrogate data', async () => {
         render(<DashboardPage />)
 
         // Check welcome header
@@ -153,11 +153,11 @@ describe('DashboardPage', () => {
         expect(screen.getByText('My Tasks')).toBeInTheDocument()
 
         // Check chart sections exist
-        expect(screen.getByText('Surrogates Trend')).toBeInTheDocument()
-        expect(screen.getByText('Pipeline Distribution')).toBeInTheDocument()
+        expect(await screen.findByText('Surrogates Trend')).toBeInTheDocument()
+        expect(await screen.findByText('Pipeline Distribution')).toBeInTheDocument()
     })
 
-    it('shows restricted state for charts without reports access', () => {
+    it('shows restricted state for charts without reports access', async () => {
         mockUseSurrogatesTrend.mockReturnValue({
             data: [],
             isLoading: false,
@@ -173,24 +173,25 @@ describe('DashboardPage', () => {
 
         render(<DashboardPage />)
 
-        expect(screen.getAllByText('Analytics unavailable').length).toBeGreaterThan(0)
+        const unavailable = await screen.findAllByText('Analytics unavailable')
+        expect(unavailable.length).toBeGreaterThan(0)
     })
 
-    it('shows contextual empty state when trend has no new surrogates', () => {
+    it('shows contextual empty state when trend has no new surrogates', async () => {
         render(<DashboardPage />)
 
-        expect(screen.getByText('No new surrogates in this period')).toBeInTheDocument()
-        expect(screen.getByText('View surrogates')).toBeInTheDocument()
-        expect(screen.getByText('Adjust date range')).toBeInTheDocument()
+        expect(await screen.findByText('No new surrogates in this period')).toBeInTheDocument()
+        expect(await screen.findByText('View surrogates')).toBeInTheDocument()
+        expect(await screen.findByText('Adjust date range')).toBeInTheDocument()
     })
 
-    it('shows filter-empty state for pipeline distribution when range filters exclude all', () => {
+    it('shows filter-empty state for pipeline distribution when range filters exclude all', async () => {
         mockUseSearchParams.mockReturnValue(new URLSearchParams('range=week'))
 
         render(<DashboardPage />)
 
-        expect(screen.getByText('No surrogates match your filters')).toBeInTheDocument()
-        expect(screen.getByText('Reset filters')).toBeInTheDocument()
+        expect(await screen.findByText('No surrogates match your filters')).toBeInTheDocument()
+        expect(await screen.findByText('Reset filters')).toBeInTheDocument()
     })
 
     it('formats KPI deltas without percent when values drop to zero', () => {

@@ -457,6 +457,55 @@ def meta_spend_sync(
     )
 
 
+class SubscriptionSweepResponse(BaseModel):
+    extended_count: int
+
+
+@router.post("/subscription-sweep", response_model=SubscriptionSweepResponse)
+def subscription_sweep(x_internal_secret: str = Header(...)):
+    """
+    Auto-extend expired subscriptions with auto_renew enabled.
+
+    Called by external cron (daily recommended).
+    Atomic and idempotent - safe to run multiple times.
+    """
+    verify_internal_secret(x_internal_secret)
+
+    from sqlalchemy import text
+    from app.services.platform_service import log_admin_action
+
+    extended_count = 0
+
+    with SessionLocal() as db:
+        # Atomic update with RETURNING to avoid race conditions
+        result = db.execute(
+            text("""
+                UPDATE organization_subscriptions
+                SET current_period_end = current_period_end + INTERVAL '30 days',
+                    updated_at = now()
+                WHERE auto_renew = true
+                  AND current_period_end < now()
+                RETURNING id, organization_id
+            """)
+        )
+        extended = result.fetchall()
+
+        # Log each extension
+        for row in extended:
+            log_admin_action(
+                db,
+                actor_id=None,  # System action
+                action="subscription.auto_extend",
+                target_org_id=row.organization_id,
+                metadata={"days": 30, "trigger": "scheduled"},
+            )
+            extended_count += 1
+
+        db.commit()
+
+    return SubscriptionSweepResponse(extended_count=extended_count)
+
+
 class MetaFormsSyncResponse(BaseModel):
     pages_processed: int
     jobs_created: int

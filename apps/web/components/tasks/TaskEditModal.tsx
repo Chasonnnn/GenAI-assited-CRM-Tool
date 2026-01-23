@@ -9,6 +9,16 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -71,6 +81,7 @@ export function TaskEditModal({
     const [dueDate, setDueDate] = useState<Date | undefined>(undefined)
     const [dueTime, setDueTime] = useState("")
     const [isSaving, setIsSaving] = useState(false)
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
     // Populate form when task changes
     useEffect(() => {
@@ -111,11 +122,15 @@ export function TaskEditModal({
         }
     }
 
-    const handleDelete = async () => {
+    const handleDelete = () => {
         if (!task || !onDelete) return
-        const confirmed = window.confirm("Delete this task? This cannot be undone.")
-        if (!confirmed) return
+        setDeleteDialogOpen(true)
+    }
+
+    const confirmDelete = async () => {
+        if (!task || !onDelete) return
         await onDelete(task.id)
+        setDeleteDialogOpen(false)
         onClose()
     }
 
@@ -136,10 +151,12 @@ export function TaskEditModal({
                             <Label htmlFor="title">Title</Label>
                             <Input
                                 id="title"
+                                name="title"
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
                                 placeholder="Task title"
                                 required
+                                autoComplete="off"
                             />
                         </div>
 
@@ -238,6 +255,29 @@ export function TaskEditModal({
                         </Button>
                     </DialogFooter>
                 </form>
+
+                {/* Delete Confirmation Dialog */}
+                <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Task</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This action cannot be undone. This will permanently delete the task.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={confirmDelete}
+                                disabled={isDeleting}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                                {isDeleting && <Loader2 className="mr-2 size-4 animate-spin" />}
+                                Delete
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
             </DialogContent>
         </Dialog>
     )

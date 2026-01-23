@@ -9,6 +9,7 @@ import os
 import tempfile
 import zipfile
 from datetime import datetime, timezone
+from importlib.util import find_spec
 from typing import Any, Iterable, Iterator, Sequence
 from uuid import UUID
 
@@ -77,10 +78,8 @@ def _build_admin_export_key(org_id: UUID, filename: str) -> str:
 
 
 def _upload_to_s3(file_path: str, key: str) -> None:
-    try:
-        import boto3  # type: ignore
-    except ImportError as exc:
-        raise RuntimeError("boto3 is required for S3 export storage") from exc
+    if find_spec("boto3") is None:
+        raise RuntimeError("boto3 is required for S3 export storage")
     if not settings.EXPORT_S3_BUCKET:
         raise RuntimeError("EXPORT_S3_BUCKET must be set for S3 export storage")
 

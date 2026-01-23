@@ -6,7 +6,7 @@
  */
 
 import { Metadata } from "next"
-import { PublicBookingPage } from "@/components/appointments"
+import { PublicBookingPage } from "@/components/appointments/PublicBookingPage"
 
 interface PageProps {
     params: {

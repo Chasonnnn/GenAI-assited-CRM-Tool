@@ -45,9 +45,50 @@ def list_campaigns(
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[CampaignListItem], int]:
-    """List campaigns for an organization."""
+    """List campaigns for an organization with optimized run stats query."""
+    # Base query for count
+    base_query = db.query(Campaign).filter(Campaign.organization_id == org_id)
+
+    if status:
+        base_query = base_query.filter(Campaign.status == status)
+
+    total = base_query.count()
+
+    # Subquery: Get latest run per campaign using window function
+    # This avoids N+1 queries by fetching all latest runs in one query
+    run_subq = (
+        db.query(
+            CampaignRun.campaign_id,
+            CampaignRun.total_count,
+            CampaignRun.sent_count,
+            CampaignRun.failed_count,
+            CampaignRun.opened_count,
+            CampaignRun.clicked_count,
+            func.row_number()
+            .over(
+                partition_by=CampaignRun.campaign_id,
+                order_by=CampaignRun.started_at.desc(),
+            )
+            .label("rn"),
+        )
+        .filter(CampaignRun.organization_id == org_id)
+        .subquery()
+    )
+
+    # Main query with LEFT JOIN to latest run stats
     query = (
-        db.query(Campaign)
+        db.query(
+            Campaign,
+            run_subq.c.total_count,
+            run_subq.c.sent_count,
+            run_subq.c.failed_count,
+            run_subq.c.opened_count,
+            run_subq.c.clicked_count,
+        )
+        .outerjoin(
+            run_subq,
+            (Campaign.id == run_subq.c.campaign_id) & (run_subq.c.rn == 1),
+        )
         .filter(Campaign.organization_id == org_id)
         .options(joinedload(Campaign.email_template))
     )
@@ -55,20 +96,12 @@ def list_campaigns(
     if status:
         query = query.filter(Campaign.status == status)
 
-    total = query.count()
+    rows = query.order_by(Campaign.created_at.desc()).offset(offset).limit(limit).all()
 
-    campaigns = query.order_by(Campaign.created_at.desc()).offset(offset).limit(limit).all()
-
-    # Get latest run stats for each campaign
+    # Build result from joined data
     result = []
-    for c in campaigns:
-        latest_run = (
-            db.query(CampaignRun)
-            .filter(CampaignRun.campaign_id == c.id)
-            .order_by(CampaignRun.started_at.desc())
-            .first()
-        )
-
+    for row in rows:
+        c = row[0]  # Campaign object
         result.append(
             CampaignListItem(
                 id=c.id,
@@ -77,11 +110,11 @@ def list_campaigns(
                 recipient_type=c.recipient_type,
                 status=c.status,
                 scheduled_at=c.scheduled_at,
-                total_recipients=latest_run.total_count if latest_run else 0,
-                sent_count=latest_run.sent_count if latest_run else 0,
-                failed_count=latest_run.failed_count if latest_run else 0,
-                opened_count=latest_run.opened_count if latest_run else 0,
-                clicked_count=latest_run.clicked_count if latest_run else 0,
+                total_recipients=row.total_count or 0,
+                sent_count=row.sent_count or 0,
+                failed_count=row.failed_count or 0,
+                opened_count=row.opened_count or 0,
+                clicked_count=row.clicked_count or 0,
                 created_at=c.created_at,
             )
         )
@@ -266,11 +299,7 @@ def _build_recipient_query(db: Session, org_id: UUID, recipient_type: str, filte
 
 
 def _load_suppressed_emails(db: Session, org_id: UUID) -> set[str]:
-    rows = (
-        db.query(EmailSuppression.email)
-        .filter(EmailSuppression.organization_id == org_id)
-        .all()
-    )
+    rows = db.query(EmailSuppression.email).filter(EmailSuppression.organization_id == org_id).all()
     return {row.email.lower() for row in rows if row.email}
 
 

@@ -11,7 +11,8 @@ resource "google_cloudbuild_trigger" "api" {
   repository_event_config {
     repository = var.cloudbuild_repository
     push {
-      branch = "^${var.github_branch}$"
+      # Deploy only on version tags (e.g. v0.24.0), not on every main commit.
+      tag = var.github_tag_regex
     }
   }
 
@@ -37,7 +38,8 @@ resource "google_cloudbuild_trigger" "web" {
   repository_event_config {
     repository = var.cloudbuild_repository
     push {
-      branch = "^${var.github_branch}$"
+      # Deploy only on version tags (e.g. v0.24.0), not on every main commit.
+      tag = var.github_tag_regex
     }
   }
 

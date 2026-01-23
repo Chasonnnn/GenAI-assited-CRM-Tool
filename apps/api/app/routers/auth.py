@@ -55,6 +55,9 @@ logger = logging.getLogger(__name__)
 OAUTH_STATE_COOKIE = "oauth_state"
 OAUTH_STATE_MAX_AGE = 300  # 5 minutes
 
+# Allowlist for return_to parameter (prevents open redirect)
+ALLOWED_RETURN_TO = {"app", "ops"}
+
 
 # =============================================================================
 # OAuth Endpoints
@@ -63,7 +66,11 @@ OAUTH_STATE_MAX_AGE = 300  # 5 minutes
 
 @router.get("/google/login")
 @limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
-def google_login(request: Request, login_hint: str | None = None):
+def google_login(
+    request: Request,
+    login_hint: str | None = None,
+    return_to: str = "app",
+):
     """
     Initiate Google OAuth flow.
 
@@ -74,12 +81,19 @@ def google_login(request: Request, login_hint: str | None = None):
     The state prevents CSRF attacks.
     The nonce prevents replay attacks (verified in ID token).
     User-agent binding adds another layer of protection.
+
+    Args:
+        return_to: Target app after auth. Strict allowlist: "app" or "ops".
     """
+    # Validate return_to against strict allowlist
+    if return_to not in ALLOWED_RETURN_TO:
+        return_to = "app"
+
     state = generate_oauth_state()
     nonce = generate_oauth_nonce()
     user_agent = request.headers.get("user-agent", "")
 
-    state_payload = create_oauth_state_payload(state, nonce, user_agent)
+    state_payload = create_oauth_state_payload(state, nonce, user_agent, return_to=return_to)
 
     # Build Google auth URL
     # Note: We skip access_type=offline and prompt=consent since we only
@@ -130,64 +144,71 @@ async def google_callback(
     5. Find existing user or create from invite
     6. Set session cookie and redirect
     """
+    # Default return_to if we can't parse state
+    return_to = "app"
+
     # Prepare error response (always cleans up state cookie)
-    error_response = RedirectResponse(url=_get_error_redirect("auth_failed"), status_code=302)
+    error_response = RedirectResponse(url=_get_error_redirect("auth_failed", return_to=return_to), status_code=302)
     error_response.delete_cookie(OAUTH_STATE_COOKIE, path="/auth")
 
     # Check for error from Google
     if error:
-        error_response.headers["location"] = _get_error_redirect(f"google_{error}")
+        error_response.headers["location"] = _get_error_redirect(f"google_{error}", return_to=return_to)
         return error_response
 
     if not code or not state:
-        error_response.headers["location"] = _get_error_redirect("missing_params")
+        error_response.headers["location"] = _get_error_redirect("missing_params", return_to=return_to)
         return error_response
 
     # Get state cookie
     state_cookie = request.cookies.get(OAUTH_STATE_COOKIE)
     if not state_cookie:
-        error_response.headers["location"] = _get_error_redirect("state_expired")
+        error_response.headers["location"] = _get_error_redirect("state_expired", return_to=return_to)
         return error_response
 
     # Parse and verify state
     try:
         stored_payload = parse_oauth_state_payload(state_cookie)
+        # Extract return_to from stored payload (strict allowlist)
+        return_to = stored_payload.get("return_to", "app")
+        if return_to not in ALLOWED_RETURN_TO:
+            return_to = "app"
     except Exception:
-        error_response.headers["location"] = _get_error_redirect("invalid_state")
+        error_response.headers["location"] = _get_error_redirect("invalid_state", return_to=return_to)
         return error_response
 
     user_agent = request.headers.get("user-agent", "")
     valid, _ = verify_oauth_state(stored_payload, state, user_agent)
     if not valid:
-        error_response.headers["location"] = _get_error_redirect("state_mismatch")
+        error_response.headers["location"] = _get_error_redirect("state_mismatch", return_to=return_to)
         return error_response
 
     # Exchange code for tokens
     try:
         tokens = await exchange_code_for_tokens(code)
     except Exception:
-        error_response.headers["location"] = _get_error_redirect("token_exchange_failed")
+        error_response.headers["location"] = _get_error_redirect("token_exchange_failed", return_to=return_to)
         return error_response
 
     # Verify ID token
     try:
         google_user = verify_id_token(tokens["id_token"], expected_nonce=stored_payload["nonce"])
     except ValueError:
-        error_response.headers["location"] = _get_error_redirect("token_invalid")
+        error_response.headers["location"] = _get_error_redirect("token_invalid", return_to=return_to)
         return error_response
 
     # Validate domain restriction
     try:
         validate_email_domain(google_user.email)
     except ValueError:
-        error_response.headers["location"] = _get_error_redirect("domain_not_allowed")
+        error_response.headers["location"] = _get_error_redirect("domain_not_allowed", return_to=return_to)
         return error_response
 
     # Resolve user and create session (delegated to service layer)
     session_token, error_code = resolve_user_and_create_session(db, google_user, request=request)
 
     if error_code:
-        error_response.headers["location"] = _get_error_redirect(error_code)
+        error_response.headers["location"] = _get_error_redirect(error_code, return_to=return_to)
         return error_response
 
     # Success! Set session cookie and redirect
@@ -200,11 +221,22 @@ async def google_callback(
             base_url = org_service.get_org_portal_base_url(org)
     except Exception:
         base_url = None
-    success_response = RedirectResponse(url=_get_success_redirect(base_url), status_code=302)
+
+    success_response = RedirectResponse(
+        url=_get_success_redirect(base_url, return_to=return_to), status_code=302
+    )
     success_response.delete_cookie(OAUTH_STATE_COOKIE, path="/auth")
+
+    # Clear legacy host-only cookies before setting new domain cookies (migration safety)
+    if settings.COOKIE_DOMAIN:
+        success_response.delete_cookie(COOKIE_NAME, path="/")
+        success_response.delete_cookie(CSRF_COOKIE_NAME, path="/")
+
+    # Set session cookie with domain (for cross-subdomain sharing)
     success_response.set_cookie(
         key=COOKIE_NAME,
         value=session_token,
+        domain=settings.COOKIE_DOMAIN or None,
         max_age=settings.JWT_EXPIRES_HOURS * 3600,
         httponly=True,
         samesite=settings.cookie_samesite,
@@ -981,6 +1013,12 @@ def logout(
     )
     db.commit()
 
+    # Clear domain cookies (new) for cross-subdomain logout
+    if settings.COOKIE_DOMAIN:
+        response.delete_cookie(COOKIE_NAME, domain=settings.COOKIE_DOMAIN, path="/")
+        response.delete_cookie(CSRF_COOKIE_NAME, domain=settings.COOKIE_DOMAIN, path="/")
+
+    # Clear host-only cookies (legacy migration safety)
     response.delete_cookie(COOKIE_NAME, path="/")
     response.delete_cookie(CSRF_COOKIE_NAME, path="/")
     return {"status": "logged_out"}
@@ -991,13 +1029,32 @@ def logout(
 # =============================================================================
 
 
-def _get_success_redirect(base_url: str | None = None) -> str:
-    """Safe success redirect URL - fixed path, no user input."""
+def _get_success_redirect(base_url: str | None = None, return_to: str = "app") -> str:
+    """
+    Safe success redirect URL - fixed path, no user input.
+
+    Args:
+        base_url: Optional org portal base URL (takes precedence for app redirects).
+        return_to: Target app ("app" or "ops").
+    """
+    if return_to == "ops":
+        base = settings.OPS_FRONTEND_URL.rstrip("/") if settings.OPS_FRONTEND_URL else settings.FRONTEND_URL.rstrip("/")
+        return f"{base}/"
     base = base_url or settings.FRONTEND_URL.rstrip("/")
     return f"{base}/dashboard"
 
 
-def _get_error_redirect(error_code: str, base_url: str | None = None) -> str:
-    """Safe error redirect URL - fixed path with error code."""
+def _get_error_redirect(error_code: str, base_url: str | None = None, return_to: str = "app") -> str:
+    """
+    Safe error redirect URL - fixed path with error code.
+
+    Args:
+        error_code: Error code to include in query string.
+        base_url: Optional org portal base URL (takes precedence for app redirects).
+        return_to: Target app ("app" or "ops").
+    """
+    if return_to == "ops":
+        base = settings.OPS_FRONTEND_URL.rstrip("/") if settings.OPS_FRONTEND_URL else settings.FRONTEND_URL.rstrip("/")
+        return f"{base}/login?error={error_code}"
     base = base_url or settings.FRONTEND_URL.rstrip("/")
     return f"{base}/login?error={error_code}"

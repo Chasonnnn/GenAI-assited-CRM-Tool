@@ -32,7 +32,7 @@ def global_search(
     db: Session = Depends(get_db),
 ):
     """
-    Global search across cases, notes, attachments, and intended parents.
+    Global search across surrogates, notes, attachments, and intended parents.
 
     Results are:
     - Org-scoped to the current user's organization
@@ -47,11 +47,17 @@ def global_search(
     """
     # Parse entity types
     entity_types = [t.strip() for t in types.split(",") if t.strip()]
-    valid_types = {"case", "note", "attachment", "intended_parent"}
+    # Backwards-compat: "case" is the legacy name for "surrogate".
+    valid_types = {"case", "surrogate", "note", "attachment", "intended_parent"}
     entity_types = [t for t in entity_types if t in valid_types]
 
     if not entity_types:
-        entity_types = list(valid_types)
+        entity_types = ["surrogate", "note", "attachment", "intended_parent"]
+
+    # Normalize legacy type names to the service-layer expected values.
+    entity_types = ["surrogate" if t == "case" else t for t in entity_types]
+    # Preserve order, drop duplicates.
+    entity_types = list(dict.fromkeys(entity_types))
 
     effective_permissions = permission_service.get_effective_permissions(
         db=db,

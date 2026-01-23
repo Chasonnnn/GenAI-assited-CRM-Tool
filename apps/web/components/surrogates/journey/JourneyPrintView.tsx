@@ -23,9 +23,6 @@ interface PhaseWithMilestones {
 export function JourneyPrintView({ journey }: JourneyPrintViewProps) {
     const generatedDate = format(new Date(), "MMMM yyyy")
 
-    const allMilestones = journey.phases.flatMap((phase) => phase.milestones)
-    const totalMilestones = allMilestones.length
-
     let globalIndex = 0
     const phasesWithMeta: PhaseWithMilestones[] = journey.phases.map((phase) => ({
         slug: phase.slug,

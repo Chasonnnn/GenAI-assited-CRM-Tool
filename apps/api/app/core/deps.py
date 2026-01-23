@@ -1,5 +1,6 @@
 """FastAPI dependencies for authentication, authorization, and database access."""
 
+from datetime import datetime, timezone
 from typing import Generator
 from uuid import UUID
 
@@ -134,6 +135,72 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
 
     # Update last_active_at (throttled to reduce DB writes)
     session_service.update_last_active(db, db_session)
+
+    # Support session override (platform admin acting within org)
+    if payload.get("support") is True:
+        from app.db.models import SupportSession
+
+        support_session_id = payload.get("support_session_id")
+        if not support_session_id:
+            raise HTTPException(status_code=401, detail="Invalid support session")
+
+        try:
+            support_session_uuid = UUID(str(support_session_id))
+        except Exception:
+            raise HTTPException(status_code=401, detail="Invalid support session")
+
+        support_session = (
+            db.query(SupportSession).filter(SupportSession.id == support_session_uuid).first()
+        )
+        if not support_session:
+            raise HTTPException(status_code=401, detail="Support session not found")
+
+        now = datetime.now(timezone.utc)
+        if support_session.revoked_at or support_session.expires_at <= now:
+            raise HTTPException(status_code=401, detail="Support session expired or revoked")
+
+        if support_session.actor_user_id != user.id:
+            raise HTTPException(status_code=401, detail="Support session mismatch")
+
+        if support_session.mode == "read_only":
+            method = request.method.upper()
+            if method not in ("GET", "HEAD", "OPTIONS"):
+                # Allow logout to avoid trapping users in a read-only support session.
+                if not (method == "POST" and request.url.path == "/auth/logout"):
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Support session is read-only; mutations not allowed",
+                    )
+
+        role_value = support_session.role_override
+        if not Role.has_value(role_value):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Unknown role '{role_value}'. Contact administrator.",
+            )
+
+        role = Role(role_value)
+
+        session = UserSession(
+            user_id=user.id,
+            org_id=support_session.organization_id,
+            role=role,
+            email=user.email,
+            display_name=user.display_name,
+            mfa_verified=mfa_verified,
+            mfa_required=mfa_required,
+            token_hash=token_hash,
+        )
+
+        if session.mfa_required and not session.mfa_verified:
+            if not _is_mfa_bypass_allowed(request):
+                raise HTTPException(status_code=403, detail="MFA verification required")
+
+        request.state.support_session_id = support_session.id
+        request.state.support_role = support_session.role_override
+        request.state.support_mode = support_session.mode
+        request.state.user_session = session
+        return session
 
     membership = db.query(Membership).filter(Membership.user_id == user.id).first()
 
@@ -382,3 +449,109 @@ def is_owner_or_assignee_or_admin(
 
     is_owner = owner_type == OwnerType.USER.value and owner_id == session.user_id
     return session.user_id == created_by_user_id or is_owner or session.role in ROLES_CAN_ARCHIVE
+
+
+# =============================================================================
+# Platform Admin Dependencies (Cross-Org Access)
+# =============================================================================
+
+
+class PlatformUserSession:
+    """Session context for platform admin users (cross-org)."""
+
+    def __init__(
+        self,
+        user_id: UUID,
+        email: str,
+        display_name: str,
+        is_platform_admin: bool,
+        token_version: int,
+        mfa_verified: bool,
+        mfa_required: bool,
+    ):
+        self.user_id = user_id
+        self.email = email
+        self.display_name = display_name
+        self.is_platform_admin = is_platform_admin
+        self.token_version = token_version
+        self.mfa_verified = mfa_verified
+        self.mfa_required = mfa_required
+
+
+def require_platform_admin(
+    request: Request, db: Session = Depends(get_db)
+) -> PlatformUserSession:
+    """
+    Require platform admin access for cross-org operations.
+
+    Platform admins do NOT need org membership - the ops console is cross-org by design.
+
+    Access rules:
+    - Production: is_platform_admin AND email in allowlist (defense in depth)
+    - Non-prod: is_platform_admin OR email in allowlist (easier testing)
+
+    This ensures production has break-glass protection while allowing
+    easier development and testing.
+    """
+    from app.core.config import settings
+    from app.db.models import User
+    from app.services import session_service
+
+    # Get and validate session cookie
+    token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        payload = decode_session_token(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    # Validate session exists in DB (for revocation support)
+    token_hash = session_service.hash_token(token)
+    db_session = session_service.get_session_by_token_hash(db, token_hash)
+    if not db_session:
+        raise HTTPException(status_code=401, detail="Session revoked or expired")
+
+    # Get user from DB
+    user = db.query(User).filter(User.id == payload["sub"]).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    if not user.is_active:
+        raise HTTPException(status_code=401, detail="Account disabled")
+
+    # Token version check (revocation support)
+    if user.token_version != payload.get("token_version"):
+        raise HTTPException(status_code=401, detail="Session revoked")
+
+    # Enforce MFA if required (matches get_current_session behavior)
+    mfa_verified = payload.get("mfa_verified", False)
+    mfa_required = payload.get("mfa_required", True)
+    if mfa_required and not mfa_verified:
+        if not _is_mfa_bypass_allowed(request):
+            raise HTTPException(status_code=403, detail="MFA verification required")
+
+    # Check platform admin access
+    has_db_flag = user.is_platform_admin
+    in_allowlist = user.email.lower() in settings.platform_admin_emails_list
+
+    # Prod: require BOTH (break-glass pattern for safety)
+    # Non-prod: require EITHER (easier testing)
+    if settings.is_prod:
+        is_admin = has_db_flag and in_allowlist
+    else:
+        is_admin = has_db_flag or in_allowlist
+
+    if not is_admin:
+        raise HTTPException(status_code=403, detail="Platform admin access required")
+
+    return PlatformUserSession(
+        user_id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        is_platform_admin=user.is_platform_admin,
+        token_version=user.token_version,
+        mfa_verified=mfa_verified,
+        mfa_required=mfa_required,
+    )

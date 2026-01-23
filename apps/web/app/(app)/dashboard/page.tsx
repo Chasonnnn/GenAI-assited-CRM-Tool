@@ -1,6 +1,7 @@
 "use client"
 
 import { Suspense, useMemo, useCallback, useEffect } from "react"
+import dynamic from "next/dynamic"
 import { useAuth } from "@/lib/auth-context"
 import { useDashboardSocket } from "@/lib/hooks/use-dashboard-socket"
 import { useSurrogateStats } from "@/lib/hooks/use-surrogates"
@@ -8,13 +9,22 @@ import { useSurrogatesTrend, useSurrogatesByStatus } from "@/lib/hooks/use-analy
 import { useAttention, useUpcoming } from "@/lib/hooks/use-dashboard"
 import { useTasks, taskKeys } from "@/lib/hooks/use-tasks"
 import { useQueryClient } from "@tanstack/react-query"
+import { Skeleton } from "@/components/ui/skeleton"
 
 import { DashboardFiltersProvider, useDashboardFilters } from "./context/dashboard-filters"
 import { DashboardFilterBar } from "./components/dashboard-filter-bar"
 import { KPICardsSection } from "./components/kpi-cards-section"
-import { TrendChart } from "./components/trend-chart"
-import { StageChart } from "./components/stage-chart"
 import { AttentionNeededPanel } from "./components/attention-needed-panel"
+
+const TrendChart = dynamic(
+    () => import("./components/trend-chart").then((mod) => mod.TrendChart),
+    { ssr: false, loading: () => <Skeleton className="h-80 w-full rounded-lg" /> }
+)
+
+const StageChart = dynamic(
+    () => import("./components/stage-chart").then((mod) => mod.StageChart),
+    { ssr: false, loading: () => <Skeleton className="h-80 w-full rounded-lg" /> }
+)
 
 // =============================================================================
 // Helpers
@@ -176,7 +186,12 @@ function DashboardContent() {
             <div className="grid gap-6 lg:grid-cols-12">
                 <div className="space-y-6 lg:col-span-8">
                     {/* KPI Cards */}
-                    <KPICardsSection />
+                    <KPICardsSection
+                        statsQuery={statsQuery}
+                        tasksQuery={tasksQuery}
+                        trendQuery={trendQuery}
+                        statusQuery={statusQuery}
+                    />
 
                     {/* Charts Row */}
                     <div className="grid gap-6 lg:grid-cols-2">
