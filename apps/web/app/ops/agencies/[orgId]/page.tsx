@@ -102,6 +102,13 @@ const INVITE_STATUS_VARIANTS: Record<string, string> = {
     revoked: 'bg-red-500/10 text-red-600 border-red-500/20',
 };
 
+const INVITE_ROLE_OPTIONS = ['intake_specialist', 'case_manager', 'admin'] as const;
+const INVITE_ROLE_LABELS: Record<(typeof INVITE_ROLE_OPTIONS)[number], string> = {
+    intake_specialist: 'Intake Specialist',
+    case_manager: 'Case Manager',
+    admin: 'Admin',
+};
+
 const ALERT_STATUS_BADGES: Record<string, string> = {
     open: 'bg-red-500/10 text-red-600 border-red-500/20',
     acknowledged: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20',
@@ -183,7 +190,10 @@ export default function AgencyDetailPage() {
     const [alertsUpdating, setAlertsUpdating] = useState<string | null>(null);
     const [inviteOpen, setInviteOpen] = useState(false);
     const [inviteSubmitting, setInviteSubmitting] = useState(false);
-    const [inviteForm, setInviteForm] = useState({ email: '', role: 'admin' });
+    const [inviteForm, setInviteForm] = useState({
+        email: '',
+        role: INVITE_ROLE_OPTIONS[0],
+    });
     const [inviteError, setInviteError] = useState<string | null>(null);
     const [notesDraft, setNotesDraft] = useState('');
     const [notesSaving, setNotesSaving] = useState(false);
@@ -653,14 +663,11 @@ export default function AgencyDetailPage() {
                                                         <SelectValue />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                        <SelectItem value="intake_specialist">
-                                                            Intake Specialist
-                                                        </SelectItem>
-                                                        <SelectItem value="case_manager">
-                                                            Case Manager
-                                                        </SelectItem>
-                                                        <SelectItem value="admin">Admin</SelectItem>
-                                                        <SelectItem value="developer">Developer</SelectItem>
+                                                        {INVITE_ROLE_OPTIONS.map((roleOption) => (
+                                                            <SelectItem key={roleOption} value={roleOption}>
+                                                                {INVITE_ROLE_LABELS[roleOption]}
+                                                            </SelectItem>
+                                                        ))}
                                                     </SelectContent>
                                                 </Select>
                                             </div>
