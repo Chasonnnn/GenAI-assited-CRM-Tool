@@ -43,6 +43,38 @@ def create_session_token(
     return jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
 
 
+def create_support_session_token(
+    user_id: UUID,
+    org_id: UUID,
+    role: str,
+    token_version: int,
+    support_session_id: UUID,
+    mode: str,
+    ttl_minutes: int,
+    mfa_verified: bool = False,
+    mfa_required: bool = True,
+) -> str:
+    """
+    Create signed session JWT for support session role override.
+
+    Adds support flags for downstream auth checks.
+    """
+    payload = {
+        "sub": str(user_id),
+        "org_id": str(org_id),
+        "role": role,
+        "token_version": token_version,
+        "mfa_verified": mfa_verified,
+        "mfa_required": mfa_required,
+        "support": True,
+        "support_session_id": str(support_session_id),
+        "support_mode": mode,
+        "iat": datetime.now(timezone.utc),
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes),
+    }
+    return jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
+
+
 def decode_session_token(token: str) -> dict:
     """
     Decode and verify session JWT.
@@ -129,7 +161,9 @@ def hash_user_agent(user_agent: str) -> str:
     return hashlib.sha256(user_agent.encode()).hexdigest()[:16]
 
 
-def create_oauth_state_payload(state: str, nonce: str, user_agent: str) -> str:
+def create_oauth_state_payload(
+    state: str, nonce: str, user_agent: str, return_to: str | None = None
+) -> str:
     """
     Create JSON payload for OAuth state cookie.
 
@@ -137,12 +171,15 @@ def create_oauth_state_payload(state: str, nonce: str, user_agent: str) -> str:
     - state: CSRF protection
     - nonce: Replay protection (verified in ID token)
     - ua_hash: User-agent binding
+    - return_to: Target app after auth ("app" or "ops")
     """
     payload = {
         "state": state,
         "nonce": nonce,
         "ua_hash": hash_user_agent(user_agent),
     }
+    if return_to:
+        payload["return_to"] = return_to
     return json.dumps(payload)
 
 

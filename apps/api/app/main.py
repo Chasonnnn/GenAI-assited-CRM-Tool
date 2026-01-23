@@ -67,6 +67,7 @@ from app.routers import (
     ops,
     permissions,
     pipelines,
+    platform,
     profile,
     queues,
     search,
@@ -405,6 +406,9 @@ app.include_router(analytics.router)
 
 # Ops endpoints (integration health, alerts)
 app.include_router(ops.router)
+
+# Platform admin endpoints (ops console - cross-org)
+app.include_router(platform.router, prefix="/platform", tags=["platform"])
 
 # AI Assistant endpoints
 app.include_router(ai.router)

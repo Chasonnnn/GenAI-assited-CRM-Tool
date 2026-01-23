@@ -182,6 +182,11 @@ class User(Base):
         nullable=True,  # When MFA enforcement started for this user
     )
 
+    # Platform admin flag (cross-org access for ops console)
+    is_platform_admin: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
+    )
+
     # Relationships
     membership: Mapped["Membership | None"] = relationship(
         back_populates="user", cascade="all, delete-orphan", uselist=False
@@ -428,6 +433,153 @@ class OrgInvite(Base):
     organization: Mapped["Organization"] = relationship(back_populates="invites")
     invited_by: Mapped["User | None"] = relationship(foreign_keys=[invited_by_user_id])
     revoked_by: Mapped["User | None"] = relationship(foreign_keys=[revoked_by_user_id])
+
+
+class OrganizationSubscription(Base):
+    """
+    Subscription/billing status for an organization.
+
+    Tracks plan, status, and renewal settings. Currently used as a placeholder
+    for future billing enforcement - no charges are processed.
+    """
+
+    __tablename__ = "organization_subscriptions"
+    __table_args__ = (
+        CheckConstraint(
+            "plan_key IN ('starter', 'professional', 'enterprise')",
+            name="ck_organization_subscriptions_plan_key",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'trial', 'past_due', 'canceled')",
+            name="ck_organization_subscriptions_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
+    plan_key: Mapped[str] = mapped_column(
+        String(50), server_default="starter", nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        String(30), server_default="active", nullable=False
+    )
+    auto_renew: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("true"), nullable=False
+    )
+    current_period_end: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False
+    )
+    trial_end: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+
+
+class AdminActionLog(Base):
+    """
+    Audit log for platform admin actions.
+
+    Tracks who did what, when, and to which org/user. IP and user agent are
+    stored as HMACs (salted hashes) for PII safety while maintaining traceability.
+    actor_user_id is nullable for system-triggered actions (e.g., auto-extend).
+    """
+
+    __tablename__ = "admin_action_logs"
+    __table_args__ = (
+        Index("idx_admin_action_logs_created_at", text("created_at DESC")),
+        Index("idx_admin_action_logs_target_org", "target_organization_id"),
+        Index("idx_admin_action_logs_actor", "actor_user_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,  # Nullable for system actions
+    )
+    action: Mapped[str] = mapped_column(String(100), nullable=False)
+    target_organization_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    target_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    metadata_: Mapped[dict | None] = mapped_column(
+        "metadata", JSONB, nullable=True
+    )  # IDs only, NO PII
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ip_address_hmac: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_agent_hmac: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+
+    # Relationships
+    actor: Mapped["User | None"] = relationship(foreign_keys=[actor_user_id])
+    target_organization: Mapped["Organization | None"] = relationship(
+        foreign_keys=[target_organization_id]
+    )
+    target_user: Mapped["User | None"] = relationship(foreign_keys=[target_user_id])
+
+
+class SupportSession(Base):
+    """
+    Platform support session for cross-org role override.
+
+    Used by platform admins to view/manage an org as a specific role without
+    creating a membership. Time-boxed and revocable.
+    """
+
+    __tablename__ = "support_sessions"
+    __table_args__ = (
+        Index("idx_support_sessions_actor", "actor_user_id"),
+        Index("idx_support_sessions_org", "organization_id"),
+        Index("idx_support_sessions_expires_at", "expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    role_override: Mapped[str] = mapped_column(String(50), nullable=False)
+    mode: Mapped[str] = mapped_column(String(20), server_default="write", nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(50), nullable=False)
+    reason_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+
+    actor: Mapped["User"] = relationship(foreign_keys=[actor_user_id])
+    organization: Mapped["Organization"] = relationship(foreign_keys=[organization_id])
 
 
 # =============================================================================

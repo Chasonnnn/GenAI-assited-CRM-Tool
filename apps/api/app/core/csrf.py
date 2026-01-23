@@ -29,6 +29,7 @@ def set_csrf_cookie(response: Response, token: Optional[str] = None) -> str:
     response.set_cookie(
         key=CSRF_COOKIE_NAME,
         value=csrf_token,
+        domain=settings.COOKIE_DOMAIN or None,
         max_age=settings.JWT_EXPIRES_HOURS * 3600,
         httponly=False,  # Must be readable by JS for X-CSRF-Token header.
         samesite=settings.cookie_samesite,

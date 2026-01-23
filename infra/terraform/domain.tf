@@ -25,3 +25,17 @@ resource "google_cloud_run_domain_mapping" "web" {
     route_name = google_cloud_run_v2_service.web.name
   }
 }
+
+resource "google_cloud_run_domain_mapping" "ops" {
+  count    = var.enable_domain_mapping ? 1 : 0
+  location = var.region
+  name     = "ops.${var.domain}"
+
+  metadata {
+    namespace = var.project_id
+  }
+
+  spec {
+    route_name = google_cloud_run_v2_service.web.name
+  }
+}
