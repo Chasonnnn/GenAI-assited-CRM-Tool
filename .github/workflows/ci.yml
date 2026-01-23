@@ -196,7 +196,7 @@ jobs:
 
       - name: Run pip-audit (Dependency Scan)
         working-directory: apps/api
-        run: uv run --with pip-audit -- pip-audit
+        run: uv run --with pip-audit -- python scripts/pip_audit_guard.py
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v2
