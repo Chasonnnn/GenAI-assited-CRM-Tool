@@ -16,6 +16,7 @@ dist/
 build/
 *.egg-info/
 .exports/
+apps/web/node-compile-cache/
 
 # IDE
 .idea/
@@ -50,4 +51,5 @@ infra/terraform/*.tfstate
 infra/terraform/*.tfstate.*
 infra/terraform/terraform.tfvars
 infra/terraform/*.auto.tfvars
+infra/terraform/tfplan
 .secrets.env
