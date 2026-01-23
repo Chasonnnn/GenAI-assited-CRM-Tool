@@ -162,6 +162,16 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
         if support_session.actor_user_id != user.id:
             raise HTTPException(status_code=401, detail="Support session mismatch")
 
+        if support_session.mode == "read_only":
+            method = request.method.upper()
+            if method not in ("GET", "HEAD", "OPTIONS"):
+                # Allow logout to avoid trapping users in a read-only support session.
+                if not (method == "POST" and request.url.path == "/auth/logout"):
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Support session is read-only; mutations not allowed",
+                    )
+
         role_value = support_session.role_override
         if not Role.has_value(role_value):
             raise HTTPException(
