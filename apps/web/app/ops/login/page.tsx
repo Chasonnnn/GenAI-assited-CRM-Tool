@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,7 +15,7 @@ const ERROR_MESSAGES: Record<string, string> = {
     state_mismatch: 'Security verification failed. Please try again.',
 };
 
-export default function OpsLoginPage() {
+function OpsLoginContent() {
     const [isLoading, setIsLoading] = useState(false);
     const searchParams = useSearchParams();
     const errorCode = searchParams.get('error');
@@ -91,5 +91,45 @@ export default function OpsLoginPage() {
                 </CardContent>
             </Card>
         </div>
+    );
+}
+
+function OpsLoginFallback() {
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-stone-100 dark:bg-stone-950 p-4">
+            <Card className="w-full max-w-md border-stone-200 dark:border-stone-800 shadow-lg">
+                <CardHeader className="text-center space-y-4 pb-4">
+                    <Badge className="mx-auto bg-teal-600 text-white px-3 py-1 text-xs tracking-widest font-semibold">
+                        OPS CONSOLE
+                    </Badge>
+                    <div className="w-14 h-14 mx-auto rounded-xl bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 flex items-center justify-center">
+                        <ShieldCheck className="w-8 h-8 text-teal-600" strokeWidth={1.5} />
+                    </div>
+                    <CardTitle className="text-2xl font-semibold text-stone-900 dark:text-stone-100">
+                        Platform Administration
+                    </CardTitle>
+                    <CardDescription className="text-stone-500 dark:text-stone-400">
+                        Sign in to manage agencies and platform operations
+                    </CardDescription>
+                </CardHeader>
+
+                <CardContent className="space-y-4">
+                    <Button
+                        className="w-full py-6 bg-stone-900 hover:bg-stone-800 dark:bg-stone-100 dark:hover:bg-stone-200 dark:text-stone-900"
+                        disabled
+                    >
+                        Loading…
+                    </Button>
+                </CardContent>
+            </Card>
+        </div>
+    );
+}
+
+export default function OpsLoginPage() {
+    return (
+        <Suspense fallback={<OpsLoginFallback />}>
+            <OpsLoginContent />
+        </Suspense>
     );
 }
