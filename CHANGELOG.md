@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.25.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.24.0...surrogacy-crm-platform-v0.25.0) (2026-01-23)
+
+
+### Features
+
+* **api:** add support session constraints and operational indexes ([74760ec](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/74760ecf9715456925cfd9be6c5d1816080bbdc5))
+* **load-tests:** expand k6 coverage with realistic UI flows ([1e479e4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1e479e40e31e199f192f42cf18fa7c7eab3e5c4d))
+* **web:** update appointments, dashboard, and calendar components ([16412ab](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/16412abd8731a2833e1d1353bf63afd0e45d7a68))
+* **web:** update dashboard, ops pages, journey and interview components ([1fdbba2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1fdbba20e88a1def8a8a7cf269a768fe542e38d4))
+* **web:** update rich text editor, file upload, and styling components ([a84c061](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a84c061f974870287293faf70fa6534d97d7c48e))
+
+
+### Bug Fixes
+
+* **api:** add idempotency_key type validation in SendEmailExecutor ([432140c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/432140c1b0f468f679c5073d29605176afc3ef22))
+* **api:** include surrogates in default search types ([535190f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/535190fd27ef69dac4a700a1d7eb67bd8eeafd1c))
+* **api:** support session improvements and test updates ([fe6f350](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fe6f35038ea867482193677b32138f0695594630))
+* **web:** wrap ops login with Suspense for useSearchParams ([042747a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/042747aeca61e8e6ce8d56018376860faf0caf8d))
+
+
+### Performance Improvements
+
+* **api:** add index on organization_subscriptions status column ([233ddff](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/233ddff7cb9f7b82b7ebf67768692385a1790c5b))
+
 ## [0.24.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.23.0...surrogacy-crm-platform-v0.24.0) (2026-01-23)
 
 
