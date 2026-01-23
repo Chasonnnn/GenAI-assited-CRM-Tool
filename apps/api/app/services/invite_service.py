@@ -7,6 +7,7 @@ import uuid
 from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 
+from app.db.enums import Role
 from app.db.models import OrgInvite, Membership, User, Organization
 from app.services import org_service
 
@@ -16,6 +17,18 @@ INVITE_RESEND_COOLDOWN_MINUTES = 5
 MAX_RESENDS_PER_DAY = 3
 INVITE_EXPIRY_DAYS = 7
 MAX_PENDING_INVITES_PER_ORG = 50
+INVITE_ALLOWED_ROLES = {
+    Role.INTAKE_SPECIALIST.value,
+    Role.CASE_MANAGER.value,
+    Role.ADMIN.value,
+}
+
+
+def validate_invite_role(role: str) -> str:
+    role_value = role.value if hasattr(role, "value") else role
+    if not Role.has_value(role_value) or role_value not in INVITE_ALLOWED_ROLES:
+        raise ValueError("Invalid invite role")
+    return role_value
 
 
 def get_invite_status(
@@ -81,6 +94,7 @@ def create_invite(
 ) -> OrgInvite:
     """Create a new invitation."""
     email = email.lower().strip()
+    role_value = validate_invite_role(role)
 
     # Check org limit
     pending_count = count_pending_invites(db, org_id)
@@ -117,7 +131,7 @@ def create_invite(
     invite = OrgInvite(
         organization_id=org_id,
         email=email,
-        role=role,
+        role=role_value,
         invited_by_user_id=invited_by_user_id,
         expires_at=datetime.now(timezone.utc) + timedelta(days=INVITE_EXPIRY_DAYS),
         resend_count=0,
@@ -222,8 +236,6 @@ def accept_invite(
     user_id: uuid.UUID,
 ) -> dict:
     """Accept an invitation and create membership."""
-    from app.db.enums import Role as RoleEnum
-
     invite = get_invite_by_id(db, invite_id)
     if not invite:
         raise ValueError("Invite not found")
@@ -243,11 +255,7 @@ def accept_invite(
     if user.email.lower() != invite.email.lower():
         raise PermissionError("This invite was sent to a different email address")
 
-    role_value = invite.role.value if hasattr(invite.role, "value") else invite.role
-    try:
-        RoleEnum(role_value)
-    except ValueError as exc:
-        raise ValueError("Invalid invite role") from exc
+    role_value = validate_invite_role(invite.role)
 
     existing = (
         db.query(Membership)

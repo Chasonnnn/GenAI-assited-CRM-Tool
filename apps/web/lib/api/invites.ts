@@ -4,6 +4,8 @@
 
 import api from "./index"
 
+export type InviteRole = "intake_specialist" | "case_manager" | "admin"
+
 export interface Invite {
     id: string
     email: string
@@ -24,7 +26,7 @@ export interface InviteListResponse {
 
 export interface CreateInviteRequest {
     email: string
-    role: string
+    role: InviteRole
 }
 
 export const invitesApi = {
