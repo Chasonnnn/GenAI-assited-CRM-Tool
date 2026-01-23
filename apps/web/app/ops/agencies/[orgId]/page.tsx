@@ -103,7 +103,8 @@ const INVITE_STATUS_VARIANTS: Record<string, string> = {
 };
 
 const INVITE_ROLE_OPTIONS = ['intake_specialist', 'case_manager', 'admin'] as const;
-const INVITE_ROLE_LABELS: Record<(typeof INVITE_ROLE_OPTIONS)[number], string> = {
+type InviteRole = (typeof INVITE_ROLE_OPTIONS)[number];
+const INVITE_ROLE_LABELS: Record<InviteRole, string> = {
     intake_specialist: 'Intake Specialist',
     case_manager: 'Case Manager',
     admin: 'Admin',
@@ -190,7 +191,7 @@ export default function AgencyDetailPage() {
     const [alertsUpdating, setAlertsUpdating] = useState<string | null>(null);
     const [inviteOpen, setInviteOpen] = useState(false);
     const [inviteSubmitting, setInviteSubmitting] = useState(false);
-    const [inviteForm, setInviteForm] = useState({
+    const [inviteForm, setInviteForm] = useState<{ email: string; role: InviteRole }>({
         email: '',
         role: INVITE_ROLE_OPTIONS[0],
     });
@@ -327,7 +328,7 @@ export default function AgencyDetailPage() {
             });
             setInvites((prev) => [invite, ...prev]);
             setInviteOpen(false);
-            setInviteForm({ email: '', role: 'admin' });
+            setInviteForm({ email: '', role: INVITE_ROLE_OPTIONS[0] });
             toast.success('Invite created');
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Failed to create invite';
@@ -654,7 +655,7 @@ export default function AgencyDetailPage() {
                                                         if (value) {
                                                             setInviteForm((prev) => ({
                                                                 ...prev,
-                                                                role: value,
+                                                                role: value as InviteRole,
                                                             }));
                                                         }
                                                     }}

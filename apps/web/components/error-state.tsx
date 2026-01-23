@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { AlertCircle, ChevronDown, ChevronUp } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
     Empty,
     EmptyHeader,
@@ -53,9 +53,12 @@ export function ErrorState({
                 <div className="flex items-center gap-2">
                     <Button onClick={reset}>Try again</Button>
                     {secondaryHref && (
-                        <Button variant="outline" asChild>
-                            <Link href={secondaryHref}>{secondaryLabel}</Link>
-                        </Button>
+                        <Link
+                            href={secondaryHref}
+                            className={buttonVariants({ variant: "outline" })}
+                        >
+                            {secondaryLabel}
+                        </Link>
                     )}
                 </div>
 
