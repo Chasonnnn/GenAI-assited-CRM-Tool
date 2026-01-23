@@ -99,6 +99,19 @@ def _safe_url(url: str | None) -> str:
     return f"{parts.scheme}://{parts.netloc}{parts.path}"
 
 
+def _ensure_attachment_scanner_available() -> None:
+    if settings.ATTACHMENT_SCAN_ENABLED and not settings.is_dev:
+        from app.jobs.scan_attachment import get_available_scanner
+
+        scanner = get_available_scanner()
+        if not scanner:
+            raise RuntimeError(
+                "ATTACHMENT_SCAN_ENABLED is true but no ClamAV scanner was found "
+                "(expected clamdscan or clamscan in PATH)."
+            )
+        logger.info("Attachment scanning enabled; using %s", scanner)
+
+
 async def send_email_async(email_log: EmailLog) -> None:
     """
     Send an email using Resend API.
@@ -1574,6 +1587,7 @@ async def process_meta_form_sync(db, job) -> None:
 def main() -> None:
     """Entry point for the worker."""
     try:
+        _ensure_attachment_scanner_available()
         asyncio.run(worker_loop())
     except KeyboardInterrupt:
         logger.info("Worker shutting down")
