@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.25.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.25.0...surrogacy-crm-platform-v0.25.1) (2026-01-23)
+
+
+### Bug Fixes
+
+* **api:** improve ClamAV scanner detection and error handling ([9a01a7f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9a01a7f836a17037489eb73d9a2f7e82fc2124a6))
+* **api:** improve invite service role handling and display name ([4d2d0fb](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4d2d0fb6ca461f5142dce8a093486299f2ebff32))
+* **api:** minor campaign and analytics service fixes ([583e98c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/583e98cd644a18851653f91d34fc19f152e741ec))
+* **web:** update invite page, search, and sanitization ([45697a6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/45697a6cc948fd55e21000ee807f06f0b05b1114))
+
 ## [0.25.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.24.0...surrogacy-crm-platform-v0.25.0) (2026-01-23)
 
 
