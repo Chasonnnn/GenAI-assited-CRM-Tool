@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.24.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.23.0...surrogacy-crm-platform-v0.24.0) (2026-01-23)
+
+
+### Features
+
+* **infra:** add monitoring alerts, billing budgets, and weekly cost reports ([f6517c3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f6517c3687f4ae114aa3ebd0783d5c8790bd3c82))
+
+
+### Bug Fixes
+
+* **infra:** improve startup probe and Cloud Build trigger configuration ([2bb01f5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2bb01f5fa20b24212928a9ec079e596864892694))
+* use Cloud Logging for Cloud Build BYOSA ([6e0f092](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6e0f092a409b24bb2f7d8de83ff38f88b76ab6e3))
+* use Cloud Logging for Cloud Build BYOSA ([2c4f2e0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2c4f2e0ac1070383b54df9f222cc7538039d5b05))
+
 ## [0.23.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.22.1...surrogacy-crm-platform-v0.23.0) (2026-01-22)
 
 
