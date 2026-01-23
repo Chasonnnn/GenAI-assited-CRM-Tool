@@ -14,12 +14,16 @@ from typing import AsyncGenerator, Generator
 from dataclasses import dataclass
 
 import pytest
+from cryptography.fernet import Fernet
 
 # Set test environment variables BEFORE any app imports
 os.environ.setdefault("TESTING", "1")  # Enable test mode (in-memory rate limiter)
 os.environ.setdefault("ENV", "test")
-os.environ.setdefault("FERNET_KEY", "_uKVT313or8juloqHLg9OtBNJv9LCBzEC6mJ1yG9S_E=")
-os.environ.setdefault("DATA_ENCRYPTION_KEY", "_uKVT313or8juloqHLg9OtBNJv9LCBzEC6mJ1yG9S_E=")
+_test_fernet_key = os.environ.get("FERNET_KEY") or Fernet.generate_key().decode()
+os.environ.setdefault("FERNET_KEY", _test_fernet_key)
+os.environ.setdefault("META_ENCRYPTION_KEY", _test_fernet_key)
+os.environ.setdefault("VERSION_ENCRYPTION_KEY", _test_fernet_key)
+os.environ.setdefault("DATA_ENCRYPTION_KEY", _test_fernet_key)
 os.environ.setdefault("ZOOM_CLIENT_ID", "test-zoom-client-id")
 os.environ.setdefault("ZOOM_CLIENT_SECRET", "test-zoom-client-secret")
 os.environ.setdefault("GOOGLE_CLIENT_ID", "test-google-client-id")
