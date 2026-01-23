@@ -36,6 +36,7 @@ import {
     UploadIcon,
 } from "lucide-react"
 import { useMatch, matchKeys, useAcceptMatch, useRejectMatch, useCancelMatch } from "@/lib/hooks/use-matches"
+import { NotFoundState } from "@/components/not-found-state"
 import { MatchTasksCalendar } from "@/components/matches/MatchTasksCalendar"
 import { RejectMatchDialog } from "@/components/matches/RejectMatchDialog"
 import { CancelMatchDialog } from "@/components/matches/CancelMatchDialog"
@@ -489,15 +490,10 @@ export default function MatchDetailPage() {
 
     if (!match) {
         return (
-            <div className="flex min-h-screen flex-col items-center justify-center">
-                <h2 className="text-xl font-semibold">Match not found</h2>
-                <Link href="/intended-parents/matches">
-                    <Button variant="outline" className="mt-4">
-                        <ArrowLeftIcon className="mr-2 size-4" />
-                        Back to Matches
-                    </Button>
-                </Link>
-            </div>
+            <NotFoundState
+                title="Match not found"
+                backUrl="/intended-parents/matches"
+            />
         )
     }
 

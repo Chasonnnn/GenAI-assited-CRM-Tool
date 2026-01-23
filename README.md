@@ -432,10 +432,13 @@ to include the portal domain.
 
 ## 📝 License
 
-Private — All rights reserved.
+Licensed under the PolyForm Noncommercial 1.0.0 license. See `LICENSE`.
+
+Commercial use requires a separate commercial license/permission from the maintainers.
 
 ---
 
 ## 🤝 Contributing
 
-This is a private project. For questions or access, contact the maintainers.
+This project is source-available under PolyForm Noncommercial 1.0.0.
+For questions, contributions, or commercial licensing, contact the maintainers.

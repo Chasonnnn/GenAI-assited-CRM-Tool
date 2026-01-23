@@ -22,7 +22,7 @@ describe('InvitePage', () => {
         mockApiGet.mockResolvedValue({
             id: 'inv-123',
             organization_name: 'Test Org',
-            role: 'member',
+            role: 'intake_specialist',
             inviter_name: 'Test User',
             expires_at: null,
             status: 'pending',

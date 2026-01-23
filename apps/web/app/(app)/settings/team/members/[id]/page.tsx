@@ -32,6 +32,7 @@ import {
     useRemoveMember,
     useAvailablePermissions
 } from "@/lib/hooks/use-permissions"
+import { NotFoundState } from "@/components/not-found-state"
 import { useAuth } from "@/lib/auth-context"
 import { toast } from "sonner"
 import { formatDistanceToNow, format } from "date-fns"
@@ -263,9 +264,10 @@ export default function MemberDetailPage() {
 
     if (!member) {
         return (
-            <div className="flex flex-1 items-center justify-center p-6">
-                <p>Member not found</p>
-            </div>
+            <NotFoundState
+                title="Member not found"
+                backUrl="/settings/team"
+            />
         )
     }
 

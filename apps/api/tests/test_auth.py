@@ -40,3 +40,31 @@ async def test_authed_me_returns_org_display_name(authed_client: AsyncClient, db
     assert response.status_code == 200
     data = response.json()
     assert data["org_display_name"] == "Acme Surrogacy"
+
+
+@pytest.mark.asyncio
+async def test_authed_me_profile_complete_false_when_title_missing(
+    authed_client: AsyncClient, db, test_auth
+):
+    """Profile is incomplete when title is missing."""
+    test_auth.user.title = None
+    db.flush()
+
+    response = await authed_client.get("/auth/me")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["profile_complete"] is False
+
+
+@pytest.mark.asyncio
+async def test_authed_me_profile_complete_true_when_display_name_and_title_set(
+    authed_client: AsyncClient, db, test_auth
+):
+    """Profile is complete when display_name and title are set."""
+    test_auth.user.title = "Case Manager"
+    db.flush()
+
+    response = await authed_client.get("/auth/me")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["profile_complete"] is True

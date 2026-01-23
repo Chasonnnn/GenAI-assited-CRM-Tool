@@ -56,6 +56,7 @@ class MeResponse(BaseModel):
     mfa_enabled: bool = False
     mfa_required: bool = True
     mfa_verified: bool = False
+    profile_complete: bool = False
 
 
 class SessionResponse(BaseModel):

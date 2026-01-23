@@ -22,6 +22,7 @@ Repo: Surrogacy Force Platform (`GenAI-assited-CRM-Tool`)
 3) ✅ **Attachment “virus scanning” can silently fail open (mark clean) if ClamAV is missing** — **RESOLVED 2026-01-23**  
 4) ✅ **Stored/preview HTML rendering risks (email templates + search snippets) → potential stored XSS** — **RESOLVED 2026-01-23**  
 5) ✅ **Repo contains tracked build/artifact binaries (`infra/terraform/tfplan`, `apps/web/node-compile-cache/...`)** — **RESOLVED 2026-01-23**
+6) ✅ **Protobuf CVE-2026-0994 (ParseDict Any recursion bypass) flagged by audit** — **MITIGATED 2026-01-23**
 
 ### High-value architecture hardening (not in `ENTERPRISE_GAPS.md`)
 
@@ -86,6 +87,18 @@ Repo: Surrogacy Force Platform (`GenAI-assited-CRM-Tool`)
   - Add an explicit **fail-closed** mode for non-dev:
     - If scanning is enabled and scanner is unavailable/error/timeout → keep `quarantined=True` and set `scan_status='error'` (or `'blocked'`) + create a `SystemAlert`.
   - Add a startup self-check for the worker: verify `clamdscan`/`clamscan` availability when `ATTACHMENT_SCAN_ENABLED=true` and `ENV!=dev`.
+
+#### C4) Protobuf CVE-2026-0994 (ParseDict Any recursion bypass)
+
+**Status:** ✅ Mitigated on 2026-01-23 (runtime depth guard + audit ignore until upstream release)
+
+- Evidence:
+  - Dependency audit flags `protobuf==6.33.4` as vulnerable (CVE-2026-0994).
+- Impact:
+  - Potential DoS if untrusted JSON is parsed via `google.protobuf.json_format.ParseDict` on nested `Any` payloads.
+- Mitigation implemented:
+  - Runtime depth guard applied before JSON parse to enforce max recursion depth.
+  - Audit ignore added with the guard in place until upstream releases a patched protobuf version.
 
 ### High
 
