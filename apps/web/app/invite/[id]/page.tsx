@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ShieldCheck, UserPlus, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react"
@@ -18,16 +18,15 @@ interface InviteDetails {
 
 export default function InviteAcceptPage() {
     const params = useParams()
-    const router = useRouter()
     const rawId = params.id
     const inviteId =
         typeof rawId === "string" ? rawId : Array.isArray(rawId) ? rawId[0] : ""
 
     const [invite, setInvite] = useState<InviteDetails | null>(null)
     const [isLoading, setIsLoading] = useState(true)
-    const [isAccepting, setIsAccepting] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const [accepted, setAccepted] = useState(false)
+
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
 
     // Fetch invite details
     useEffect(() => {
@@ -47,27 +46,12 @@ export default function InviteAcceptPage() {
         }
     }, [inviteId])
 
-    const handleAccept = async () => {
-        setIsAccepting(true)
-        setError(null)
-
-        try {
-            await api.post(`/settings/invites/accept/${inviteId}`)
-            setAccepted(true)
-            // Redirect to dashboard after 2 seconds
-            setTimeout(() => {
-                router.push("/")
-            }, 2000)
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to accept invite")
-        } finally {
-            setIsAccepting(false)
-        }
-    }
-
     const handleSignIn = () => {
-        // Redirect to login with return URL
-        router.push(`/api/auth/google?return_to=/invite/${inviteId}`)
+        try {
+            window.location.assign(`${apiBase}/auth/google/login?return_to=app`)
+        } catch {
+            // Ignore navigation errors in non-browser runtimes.
+        }
     }
 
     // Format expiry
@@ -114,7 +98,11 @@ export default function InviteAcceptPage() {
                     <div className="space-y-1">
                         <div className="text-xs font-semibold text-gray-500 tracking-widest">SURROGACY FORCE</div>
                         <CardTitle className="text-3xl font-bold text-gray-900">
-                            {isLoading ? "Loading..." : accepted ? "Welcome!" : "You're Invited"}
+                            {isLoading
+                                ? "Loading..."
+                                : invite?.status === "accepted"
+                                    ? "Welcome!"
+                                    : "You're Invited"}
                         </CardTitle>
                     </div>
                 </CardHeader>
@@ -129,17 +117,13 @@ export default function InviteAcceptPage() {
                             <XCircle className="size-12 mx-auto mb-4 text-red-400" />
                             <p className="text-gray-600">{error}</p>
                         </div>
-                    ) : accepted ? (
-                        <div className="text-center py-6">
-                            <CheckCircle2 className="size-12 mx-auto mb-4 text-green-500" />
-                            <p className="text-gray-600">
-                                You've joined <strong>{invite?.organization_name}</strong>!
-                            </p>
-                            <p className="text-sm text-gray-500 mt-2">Redirecting to dashboard...</p>
-                        </div>
                     ) : invite?.status !== "pending" ? (
                         <div className="text-center py-6">
-                            <XCircle className="size-12 mx-auto mb-4 text-gray-400" />
+                            {invite?.status === "accepted" ? (
+                                <CheckCircle2 className="size-12 mx-auto mb-4 text-green-500" />
+                            ) : (
+                                <XCircle className="size-12 mx-auto mb-4 text-gray-400" />
+                            )}
                             <p className="text-gray-600">
                                 This invite is {invite?.status}.
                             </p>
@@ -147,6 +131,15 @@ export default function InviteAcceptPage() {
                                 <p className="text-sm text-gray-500 mt-2">
                                     Ask the inviter to send a new invitation.
                                 </p>
+                            )}
+                            {invite?.status === "accepted" && (
+                                <Button
+                                    onClick={handleSignIn}
+                                    className="mt-6 w-full font-semibold py-5 rounded-lg bg-green-700 text-white hover:bg-green-800"
+                                >
+                                    <ShieldCheck className="size-5 mr-2" />
+                                    Continue to Sign In
+                                </Button>
                             )}
                         </div>
                     ) : (
@@ -187,31 +180,13 @@ export default function InviteAcceptPage() {
                                 </div>
                             )}
 
-                            <Button
-                                onClick={handleAccept}
-                                className="w-full font-semibold py-6 text-base rounded-full transition-all duration-300 bg-green-700 text-white hover:bg-green-800"
-                                disabled={isAccepting}
-                            >
-                                {isAccepting ? (
-                                    <>
-                                        <Loader2 className="size-5 mr-2 animate-spin" />
-                                        Accepting...
-                                    </>
-                                ) : (
-                                    <>
-                                        <CheckCircle2 className="size-5 mr-2" />
-                                        Accept Invitation
-                                    </>
-                                )}
-                            </Button>
-
                             <div className="relative py-2">
                                 <div className="absolute inset-0 flex items-center">
                                     <span className="w-full border-t border-gray-300/50" />
                                 </div>
                                 <div className="relative flex justify-center text-xs uppercase">
                                     <span className="px-3 bg-transparent text-gray-500 font-medium tracking-wider">
-                                        Not signed in?
+                                        Continue to sign in
                                     </span>
                                 </div>
                             </div>
@@ -222,7 +197,7 @@ export default function InviteAcceptPage() {
                                 className="w-full border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold py-5 rounded-lg"
                             >
                                 <ShieldCheck className="size-5 mr-2" />
-                                Sign in with Google
+                                Continue with Google
                             </Button>
                         </>
                     )}
