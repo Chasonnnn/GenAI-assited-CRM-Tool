@@ -46,16 +46,9 @@ def hmac_hash(value: str) -> str:
 
 def _get_ip_from_request(request: Request | None) -> str | None:
     """Extract client IP from request."""
-    if not request:
-        return None
-    # Check X-Forwarded-For for proxied requests
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    # Fall back to direct client IP
-    if request.client:
-        return request.client.host
-    return None
+    from app.services import audit_service
+
+    return audit_service.get_client_ip(request)
 
 
 # =============================================================================
@@ -803,7 +796,9 @@ def create_invite(
 ) -> dict:
     """Create a new invite for an organization."""
     email = email.lower().strip()
-    role_value = _validate_role(role)
+    from app.services import invite_service
+
+    role_value = invite_service.validate_invite_role(role)
 
     # Check for existing pending invite
     now = datetime.now(timezone.utc)

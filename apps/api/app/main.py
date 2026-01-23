@@ -24,6 +24,7 @@ from app.core.config import settings
 from app.core.deps import COOKIE_NAME
 from app.core.csrf import CSRF_HEADER, CSRF_COOKIE_NAME, set_csrf_cookie, validate_csrf
 from app.core.gcp_monitoring import report_exception, setup_gcp_monitoring
+from app.core.protobuf_guard import apply_protobuf_json_depth_guard
 from app.core.structured_logging import build_log_context
 from app.core.rate_limit import limiter
 from app.core.redis_client import get_sync_redis_client
@@ -85,6 +86,8 @@ from app.services import alert_service, metrics_service
 # ============================================================================
 # GCP Monitoring (Cloud Logging + Error Reporting)
 # ============================================================================
+
+apply_protobuf_json_depth_guard()
 
 gcp_monitoring = setup_gcp_monitoring(settings.GCP_SERVICE_NAME)
 if gcp_monitoring.logging_enabled:

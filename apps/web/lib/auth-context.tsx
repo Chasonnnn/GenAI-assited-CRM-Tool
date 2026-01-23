@@ -22,6 +22,7 @@ export interface User {
     mfa_enabled: boolean;
     mfa_required: boolean;
     mfa_verified: boolean;
+    profile_complete: boolean;
 }
 
 interface AuthContextType {

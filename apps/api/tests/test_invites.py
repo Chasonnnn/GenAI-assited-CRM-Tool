@@ -47,6 +47,20 @@ def test_accept_invite_creates_membership(db, test_org):
     assert result["organization_id"] == str(test_org.id)
 
 
+def test_create_invite_rejects_invalid_role(db, test_org, test_user):
+    """Invalid invite roles should be rejected."""
+    from app.services import invite_service
+
+    with pytest.raises(ValueError):
+        invite_service.create_invite(
+            db=db,
+            org_id=test_org.id,
+            email="new-user@example.com",
+            role="member",
+            invited_by_user_id=test_user.id,
+        )
+
+
 @pytest.mark.asyncio
 async def test_send_invite_email_uses_display_name(db, test_org, test_user, monkeypatch):
     """Invite emails should use display_name (User has no full_name)."""

@@ -49,6 +49,7 @@ import {
     useUpdateForm,
     useUploadFormLogo,
 } from "@/lib/hooks/use-forms"
+import { NotFoundState } from "@/components/not-found-state"
 import type { FieldType, FormSchema, FormFieldOption, FormRead } from "@/lib/api/forms"
 
 // Field type definitions
@@ -650,11 +651,10 @@ export default function FormBuilderPage() {
 
     if (!isNewForm && !formData) {
         return (
-            <div className="flex h-screen items-center justify-center bg-stone-100 dark:bg-stone-950">
-                <div className="text-center text-stone-600 dark:text-stone-400">
-                    <p className="text-sm">Form not found.</p>
-                </div>
-            </div>
+            <NotFoundState
+                title="Form not found"
+                backUrl="/automation?tab=forms"
+            />
         )
     }
 

@@ -34,7 +34,7 @@ router = APIRouter(
 
 class InviteCreate(BaseModel):
     email: EmailStr
-    role: str  # member, admin
+    role: str  # intake_specialist, case_manager, admin
 
 
 class InviteRead(BaseModel):
@@ -114,10 +114,6 @@ async def create_invite(
     session: UserSession = Depends(get_current_session),
 ):
     """Create a new invitation (Admin+ only)."""
-    # Validate role
-    if body.role not in ("member", "admin"):
-        raise HTTPException(status_code=400, detail="Invalid role")
-
     # Check if inviter has Gmail connected (required to send invite email)
     from app.services import oauth_service
     from app.services.google_oauth import validate_email_domain

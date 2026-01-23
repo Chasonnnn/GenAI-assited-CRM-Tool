@@ -47,6 +47,7 @@ import {
     useDeleteCampaign,
     useDuplicateCampaign,
 } from "@/lib/hooks/use-campaigns"
+import { NotFoundState } from "@/components/not-found-state"
 import { useEmailTemplate } from "@/lib/hooks/use-email-templates"
 
 // Status styles
@@ -135,12 +136,10 @@ export default function CampaignDetailPage() {
 
     if (!campaign) {
         return (
-            <div className="flex min-h-screen flex-col items-center justify-center gap-4">
-                <h2 className="text-xl font-semibold">Campaign not found</h2>
-                <Link href="/automation/campaigns">
-                    <Button variant="outline">Back to Campaigns</Button>
-                </Link>
-            </div>
+            <NotFoundState
+                title="Campaign not found"
+                backUrl="/automation/campaigns"
+            />
         )
     }
 
