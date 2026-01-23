@@ -108,6 +108,9 @@ export function JourneyMilestoneCard({
                         src={imageUrl}
                         alt={`${milestone.label} milestone`}
                         className="size-full object-cover"
+                        width={320}
+                        height={180}
+                        loading="lazy"
                         onError={() => setImageError(true)}
                     />
                 ) : (
