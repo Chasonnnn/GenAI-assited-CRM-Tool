@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { ChevronLeft, Shield, Lock, Loader2, Save, AlertTriangle } from "lucide-react"
 import { useRoleDetail, useUpdateRolePermissions } from "@/lib/hooks/use-permissions"
+import { NotFoundState } from "@/components/not-found-state"
 import { useAuth } from "@/lib/auth-context"
 import { toast } from "sonner"
 
@@ -86,9 +87,10 @@ export default function RoleDetailPage() {
 
     if (!roleDetail) {
         return (
-            <div className="flex flex-1 items-center justify-center p-6">
-                <p>Role not found</p>
-            </div>
+            <NotFoundState
+                title="Role not found"
+                backUrl="/settings/team/roles"
+            />
         )
     }
 

@@ -57,9 +57,12 @@ const ROLE_COLORS: Record<string, string> = {
     developer: "bg-orange-100 text-orange-800",
 }
 
+const INVITE_ROLE_OPTIONS = ["intake_specialist", "case_manager", "admin"] as const
+type InviteRole = (typeof INVITE_ROLE_OPTIONS)[number]
+
 function InviteTeamModal({ onClose }: { onClose: () => void }) {
     const [email, setEmail] = useState("")
-    const [role, setRole] = useState("intake_specialist")
+    const [role, setRole] = useState<InviteRole>(INVITE_ROLE_OPTIONS[0])
     const createInvite = useCreateInvite()
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -101,25 +104,20 @@ function InviteTeamModal({ onClose }: { onClose: () => void }) {
 
                     <div className="space-y-2">
                         <Label htmlFor="role">Role</Label>
-                        <Select value={role} onValueChange={(v) => v && setRole(v)}>
+                        <Select value={role} onValueChange={(v) => v && setRole(v as InviteRole)}>
                             <SelectTrigger>
                                 <SelectValue placeholder="Select role">
                                     {(value: string | null) => {
-                                        const labels: Record<string, string> = {
-                                            intake_specialist: "Intake Specialist",
-                                            case_manager: "Case Manager",
-                                            admin: "Admin",
-                                            developer: "Developer",
-                                        }
-                                        return value ? labels[value] || value : "Select role"
+                                        return value ? ROLE_LABELS[value] || value : "Select role"
                                     }}
                                 </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="intake_specialist">Intake Specialist</SelectItem>
-                                <SelectItem value="case_manager">Case Manager</SelectItem>
-                                <SelectItem value="admin">Admin</SelectItem>
-                                <SelectItem value="developer">Developer</SelectItem>
+                                {INVITE_ROLE_OPTIONS.map((roleOption) => (
+                                    <SelectItem key={roleOption} value={roleOption}>
+                                        {ROLE_LABELS[roleOption]}
+                                    </SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                         <p className="text-xs text-muted-foreground">
