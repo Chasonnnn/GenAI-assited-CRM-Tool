@@ -1,6 +1,6 @@
 # LAUNCH_READINESS
 
-Date: 2026-01-15
+Date: 2026-01-23
 Scope: Full-file audit with emphasis on tenant isolation, public attack surfaces, PII handling, and ops readiness.
 
 ## Open Launch Items (Do First)
@@ -9,21 +9,22 @@ Scope: Full-file audit with emphasis on tenant isolation, public attack surfaces
 - [ ] Execute quarterly restore test and record results (`docs/backup-restore-runbook.md`).
 - [ ] Verify GCP alert routing and record results (`docs/monitoring-runbook.md`).
 
-## Executive Summary (Open Blockers + Fix Order)
-1) Blocker: ZAP baseline scan not run against staging.
-2) Action: Staging migration idempotency check not yet logged.
-3) Action: Quarterly restore test not yet recorded.
-4) Action: GCP alert routing verification not yet recorded.
+## Executive Summary (Blockers + Fix Order)
+1) Blocker: ZAP baseline scan not run against staging (no report recorded).
+2) Blocker: Staging migration idempotency check not logged in `docs/migration-runbook.md` (run log empty).
+3) Blocker: Quarterly restore test not recorded in `docs/backup-restore-runbook.md` (restore test log empty).
+4) Blocker: GCP alert routing verification not recorded in `docs/monitoring-runbook.md` (alert test log empty).
 
-Recommended fix order: 1.
+Recommended fix order: 1, then 2–4 (parallelizable).
 
 ## Launch Gates (Open Actions First)
 
 | Gate | Status | Evidence | Required Action |
 |---|---|---|---|
 | ZAP baseline scan | FAIL | No recorded run; config exists (`zap-baseline.conf`) | Run ZAP against staging and fix findings. |
-| Monitoring/alerting | PASS | Non-dev config requires Sentry or GCP monitoring (`apps/api/app/core/config.py`) and initializes Sentry when configured (`apps/api/app/main.py:148-163`). | Use GCP monitoring and verify alert routing (see `docs/monitoring-runbook.md`). |
-| Backups/restore | PASS | Runbook added in `docs/backup-restore-runbook.md`. | Run a quarterly restore test and record results in `docs/backup-restore-runbook.md`. |
+| Staging migration idempotency | FAIL | Runbook exists but run log is empty (`docs/migration-runbook.md`). | Run the staging migration + idempotency check and record it in `docs/migration-runbook.md`. |
+| Monitoring/alerting | FAIL | Code enforcement exists (non-dev config requires Sentry or GCP monitoring in `apps/api/app/core/config.py`, Sentry initializes when configured in `apps/api/app/main.py:148-163`) but alert routing verification is not recorded (alert test log empty in `docs/monitoring-runbook.md`). | Verify alert routing and record results in `docs/monitoring-runbook.md`. |
+| Backups/restore | FAIL | Runbook exists but restore test is not recorded (restore test log empty in `docs/backup-restore-runbook.md`). | Run a quarterly restore test and record results in `docs/backup-restore-runbook.md`. |
 | Tenant isolation | PASS | Org-scoped lookups in `apps/api/app/services/status_change_request_service.py`, `apps/api/app/services/ai_chat_service.py`, `apps/api/app/services/ai_action_executor.py`, `apps/api/app/services/workflow_engine.py`, `apps/api/app/services/workflow_triggers.py`; cross-org tests added in `apps/api/tests/test_status_change_request_scoping.py`, `apps/api/tests/test_ai_action_executor_scoping.py`, `apps/api/tests/test_workflow_trigger_scoping.py`. | None. |
 | Auth hardening | PASS | Membership is_active enforced (`apps/api/app/core/deps.py:152-169`); WebSocket uses cookie auth + Origin allowlist (`apps/api/app/routers/websocket.py:22-132`); dev bypass removed from frontend (`apps/web/lib/auth-context.tsx:1-122`). | None. |
 | PII/secrets handling | PASS | IPs masked in logs (`apps/api/app/services/session_service.py`); transcription errors sanitized (`apps/api/app/services/transcription_service.py`). | None. |
@@ -119,6 +120,9 @@ Recommended fix order: 1.
 7) Resolved: Redis-backed rate limiting is optional; in-memory fallback weakens production protection.
 8) Resolved: Gmail/Zoom send paths now include retries + idempotency keys.
 9) Resolved: Monitoring/alerting enforced in non-dev (Sentry or GCP required).
+
+## Validation Results (Local)
+- 2026-01-23: Backend `pytest` passed (467 tests); `ruff check` passed. Frontend `pnpm tsc --noEmit`, `pnpm test --run`, and `pnpm lint` passed.
 
 ## Validation Commands
 
