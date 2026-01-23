@@ -9,6 +9,7 @@ import re
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from importlib.util import find_spec
 from typing import Any
 from uuid import UUID
 
@@ -305,11 +306,13 @@ def _ensure_local_export_dir(org_id: UUID) -> str:
     return export_dir
 
 
+def _require_boto3() -> None:
+    if find_spec("boto3") is None:
+        raise RuntimeError("boto3 is required for S3 export storage")
+
+
 def _upload_to_s3(file_path: str, key: str) -> None:
-    try:
-        import boto3  # type: ignore
-    except ImportError as exc:
-        raise RuntimeError("boto3 is required for S3 export storage") from exc
+    _require_boto3()
     if not settings.EXPORT_S3_BUCKET:
         raise RuntimeError("EXPORT_S3_BUCKET must be set for S3 exports")
 
@@ -320,10 +323,7 @@ def _upload_to_s3(file_path: str, key: str) -> None:
 
 
 def _generate_s3_url(file_path: str) -> str:
-    try:
-        import boto3  # type: ignore
-    except ImportError as exc:
-        raise RuntimeError("boto3 is required for S3 export storage") from exc
+    _require_boto3()
     if not settings.EXPORT_S3_BUCKET:
         raise RuntimeError("EXPORT_S3_BUCKET must be set for S3 exports")
 
