@@ -55,7 +55,7 @@ In the app, go to Settings -> Team to invite members.
 Requirements:
 - The inviter must connect Gmail (Settings -> Integrations) to send invite emails.
 - If `ALLOWED_EMAIL_DOMAINS` is configured, the invite email must match allowed domains.
-- Invite roles are `member` or `admin`; only a Developer can promote a member to `developer`.
+- Invite roles are `intake_specialist`, `case_manager`, or `admin`; only a Developer can promote a user to `developer`.
 
 ## Promote to Developer (No Manual DB Update)
 
