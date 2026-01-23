@@ -1,14 +1,17 @@
 resource "google_cloudbuild_trigger" "api" {
+  provider    = google-beta
   count       = var.enable_cloudbuild_triggers ? 1 : 0
   name        = "crm-api-deploy"
   description = "Build and deploy API + worker on main"
   filename    = "cloudbuild/api.yaml"
   location    = var.cloudbuild_location
+  # Cloud Build expects a fully-qualified service account resource name.
+  service_account = google_service_account.cloudbuild.name
 
   repository_event_config {
     repository = var.cloudbuild_repository
     push {
-      branch = var.github_branch
+      branch = "^${var.github_branch}$"
     }
   }
 
@@ -22,16 +25,19 @@ resource "google_cloudbuild_trigger" "api" {
 }
 
 resource "google_cloudbuild_trigger" "web" {
+  provider    = google-beta
   count       = var.enable_cloudbuild_triggers ? 1 : 0
   name        = "crm-web-deploy"
   description = "Build and deploy web on main"
   filename    = "cloudbuild/web.yaml"
-  location    = var.region
+  location    = var.cloudbuild_location
+  # Cloud Build expects a fully-qualified service account resource name.
+  service_account = google_service_account.cloudbuild.name
 
   repository_event_config {
     repository = var.cloudbuild_repository
     push {
-      branch = var.github_branch
+      branch = "^${var.github_branch}$"
     }
   }
 
