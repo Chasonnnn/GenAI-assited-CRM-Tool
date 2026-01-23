@@ -284,6 +284,7 @@ def get_me(
         mfa_enabled=user.mfa_enabled,
         mfa_required=session.mfa_required,
         mfa_verified=session.mfa_verified,
+        profile_complete=bool(user.display_name and user.title),
     )
 
 
@@ -332,6 +333,7 @@ def update_me(
         mfa_enabled=user.mfa_enabled,
         mfa_required=session.mfa_required,
         mfa_verified=session.mfa_verified,
+        profile_complete=bool(user.display_name and user.title),
     )
 
 
