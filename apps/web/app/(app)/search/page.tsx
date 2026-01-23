@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import { globalSearch, type SearchResult, type SearchResponse } from "@/lib/api/search"
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
+import { sanitizeHtml } from "@/lib/utils/sanitize"
 
 const ENTITY_CONFIG = {
     surrogate: {
@@ -177,7 +178,7 @@ export default function SearchPage() {
                                                     <p
                                                         className="text-sm text-muted-foreground line-clamp-2"
                                                         dangerouslySetInnerHTML={{
-                                                            __html: result.snippet,
+                                                            __html: sanitizeHtml(result.snippet),
                                                         }}
                                                     />
                                                 )}
