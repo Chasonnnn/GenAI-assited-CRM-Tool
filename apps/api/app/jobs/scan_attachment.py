@@ -12,6 +12,7 @@ Usage:
 
 import logging
 import os
+import shutil
 import subprocess
 import tempfile
 from uuid import UUID
@@ -20,7 +21,8 @@ from uuid import UUID
 from app.core.config import settings
 from app.db.models import Attachment
 from app.db.session import SessionLocal
-from app.services import attachment_service, notification_service
+from app.services import attachment_service, notification_service, alert_service
+from app.db.enums import AlertSeverity, AlertType
 
 logger = logging.getLogger(__name__)
 
@@ -43,48 +45,53 @@ def _download_to_temp(attachment: Attachment) -> str:
         return os.path.join(attachment_service._get_local_storage_path(), attachment.storage_key)
 
 
-def _run_clamav_scan(file_path: str) -> tuple[bool, str]:
+def get_available_scanner() -> str | None:
+    """Return the first available ClamAV scanner binary."""
+    for scanner in ["clamdscan", "clamscan"]:
+        if shutil.which(scanner):
+            return scanner
+    return None
+
+
+def _run_clamav_scan(file_path: str) -> tuple[str, str]:
     """
     Run ClamAV scan on a file.
 
     Returns:
-        (is_clean, message)
+        (status, message)
     """
     try:
-        # Try clamscan (standalone) first, then clamdscan (daemon)
-        for scanner in ["clamdscan", "clamscan"]:
-            try:
-                result = subprocess.run(
-                    [scanner, "--no-summary", file_path],
-                    capture_output=True,
-                    text=True,
-                    timeout=60,  # 60 second timeout
-                )
+        scanner = get_available_scanner()
+        if not scanner:
+            logger.warning("ClamAV not installed, skipping scan")
+            return "scanner_not_available", "scanner_not_available"
 
-                # Exit code 0 = clean, 1 = infected, 2 = error
-                if result.returncode == 0:
-                    return True, "clean"
-                elif result.returncode == 1:
-                    # Parse virus name from output
-                    virus_name = result.stdout.strip().split(":")[-1].strip()
-                    return False, f"infected: {virus_name}"
-                else:
-                    logger.warning(f"ClamAV error: {result.stderr}")
-                    return True, "scan_error"  # Treat errors as clean to avoid blocking
+        result = subprocess.run(
+            [scanner, "--no-summary", file_path],
+            capture_output=True,
+            text=True,
+            timeout=60,  # 60 second timeout
+        )
 
-            except FileNotFoundError:
-                continue
+        # Exit code 0 = clean, 1 = infected, 2 = error
+        if result.returncode == 0:
+            return "clean", "clean"
+        if result.returncode == 1:
+            virus_name = result.stdout.strip().split(":")[-1].strip()
+            return "infected", f"infected: {virus_name}"
 
-        # No scanner found
-        logger.warning("ClamAV not installed, skipping scan")
-        return True, "scanner_not_available"
+        logger.warning(f"ClamAV error: {result.stderr}")
+        return "scan_error", result.stderr.strip() or "scan_error"
 
     except subprocess.TimeoutExpired:
         logger.error(f"ClamAV scan timed out for {file_path}")
-        return True, "timeout"
+        return "timeout", "timeout"
+    except FileNotFoundError:
+        logger.warning("ClamAV scanner not available")
+        return "scanner_not_available", "scanner_not_available"
     except Exception as e:
         logger.error(f"ClamAV scan error: {e}")
-        return True, "error"
+        return "error", str(e)
 
 
 def scan_attachment_job(attachment_id: UUID) -> bool:
@@ -128,13 +135,13 @@ def scan_attachment_job(attachment_id: UUID) -> bool:
         temp_file = _download_to_temp(attachment)
 
         # Run scan
-        is_clean, message = _run_clamav_scan(temp_file)
+        scan_status, message = _run_clamav_scan(temp_file)
 
         # Update status
-        if is_clean:
+        if scan_status == "clean":
             attachment_service.mark_attachment_scanned(db, attachment_id, "clean")
             logger.info(f"Attachment {attachment_id} is clean")
-        else:
+        elif scan_status == "infected":
             attachment_service.mark_attachment_scanned(db, attachment_id, "infected")
             logger.warning(f"Attachment {attachment_id} is infected: {message}")
             try:
@@ -143,6 +150,42 @@ def scan_attachment_job(attachment_id: UUID) -> bool:
                 logger.warning(
                     f"Failed to notify uploader for attachment {attachment_id}: {notify_error}"
                 )
+        else:
+            if settings.is_dev:
+                attachment_service.mark_attachment_scanned(db, attachment_id, "clean")
+                logger.warning(
+                    "Attachment scan unavailable in dev/test (%s); treating as clean",
+                    scan_status,
+                )
+            else:
+                attachment_service.mark_attachment_scanned(db, attachment_id, "error")
+                logger.error(
+                    "Attachment scan failed (%s) for %s: %s",
+                    scan_status,
+                    attachment_id,
+                    message,
+                )
+                try:
+                    alert_service.create_or_update_alert(
+                        db=db,
+                        org_id=attachment.organization_id,
+                        alert_type=AlertType.WORKER_JOB_FAILED,
+                        severity=AlertSeverity.ERROR,
+                        title="Attachment scan failed",
+                        message=f"Attachment scan failed ({scan_status}): {message}",
+                        integration_key="attachment_scan",
+                        error_class=scan_status,
+                        details={
+                            "attachment_id": str(attachment.id),
+                            "storage_key": attachment.storage_key,
+                        },
+                    )
+                except Exception as alert_error:
+                    logger.warning(
+                        "Failed to create scan failure alert for %s: %s",
+                        attachment_id,
+                        alert_error,
+                    )
 
         db.commit()
         return True
