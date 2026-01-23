@@ -52,6 +52,12 @@ variable "github_branch" {
   default     = "main"
 }
 
+variable "github_tag_regex" {
+  type        = string
+  description = "Tag regex (RE2) for Cloud Build deploy triggers (e.g. ^v.*$)."
+  default     = "^v.*$"
+}
+
 variable "api_service_name" {
   type    = string
   default = "crm-api"

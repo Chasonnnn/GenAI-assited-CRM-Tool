@@ -32,7 +32,7 @@ gcloud config set project YOUR_PROJECT_ID
 Connect GitHub to Cloud Build (Console, 2nd gen):
 - Cloud Build -> Repositories -> Create host connection
 - Link the repo to that connection
-- Make sure the connection and linked repo are in the same region as `var.region` (e.g. us-central1).
+- Make sure the connection and linked repo are in the same region as `var.cloudbuild_location` (e.g. us-central1).
 
 Get the repository resource name:
 ```bash
@@ -52,6 +52,7 @@ domain             = "example.com"
 github_owner       = "your-org"
 github_repo        = "your-repo"
 cloudbuild_repository = "projects/PROJECT/locations/REGION/connections/CONNECTION/repositories/REPO"
+github_tag_regex = "^v.*$"
 
 s3_bucket          = "..."
 export_s3_bucket   = "..."
