@@ -453,6 +453,7 @@ class OrganizationSubscription(Base):
             "status IN ('active', 'trial', 'past_due', 'canceled')",
             name="ck_organization_subscriptions_status",
         ),
+        Index("idx_org_subscriptions_status", "status"),
         Index(
             "idx_org_subscriptions_period_end_active",
             "current_period_end",
