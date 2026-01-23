@@ -114,6 +114,14 @@ def log_event(
     # Get previous hash for chain
     prev_hash = version_service.get_last_audit_hash(db, org_id)
 
+    if request and hasattr(request.state, "support_session_id"):
+        support_details = {
+            "support_session_id": str(request.state.support_session_id),
+            "support_role": getattr(request.state, "support_role", None),
+            "support_mode": getattr(request.state, "support_mode", None),
+        }
+        details = {**(details or {}), **support_details}
+
     entry_id = uuid4()
     created_at = datetime.now(timezone.utc)
     ip_address = get_client_ip(request)

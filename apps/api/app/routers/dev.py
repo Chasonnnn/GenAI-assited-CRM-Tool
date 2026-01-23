@@ -92,6 +92,7 @@ def login_as(
     response.set_cookie(
         key=COOKIE_NAME,
         value=token,
+        domain=settings.COOKIE_DOMAIN or None,
         max_age=settings.JWT_EXPIRES_HOURS * 3600,
         httponly=True,
         samesite=settings.cookie_samesite,
