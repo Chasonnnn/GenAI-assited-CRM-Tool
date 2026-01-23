@@ -61,7 +61,7 @@ export default function OpsLayout({ children }: { children: React.ReactNode }) {
                 } catch {
                     setOpenAlertCount(0);
                 }
-            } catch (err) {
+            } catch {
                 // Not authenticated or not platform admin
                 router.replace('/ops/login');
             } finally {

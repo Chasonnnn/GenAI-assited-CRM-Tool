@@ -93,7 +93,7 @@ export default function OpsDashboard() {
                 ]);
                 setStats(statsData);
                 setRecentAlerts(alertsData.items);
-            } catch (error) {
+            } catch {
                 setHasError(true);
                 toast.error('Failed to load ops dashboard');
             } finally {

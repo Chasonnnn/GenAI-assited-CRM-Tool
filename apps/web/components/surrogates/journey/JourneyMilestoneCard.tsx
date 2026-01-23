@@ -40,7 +40,7 @@ const STATUS_STYLES: Record<JourneyMilestoneStatus, {
 export function JourneyMilestoneCard({
     milestone,
     side,
-    surrogateId,
+    surrogateId: _surrogateId,
     canEdit = false,
     onEditImage,
 }: JourneyMilestoneCardProps) {

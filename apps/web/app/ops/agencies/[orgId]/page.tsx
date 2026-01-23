@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -187,6 +187,7 @@ export default function AgencyDetailPage() {
     const [inviteError, setInviteError] = useState<string | null>(null);
     const [notesDraft, setNotesDraft] = useState('');
     const [notesSaving, setNotesSaving] = useState(false);
+    const subscriptionNotes = subscription?.notes ?? '';
 
     useEffect(() => {
         async function fetchData() {
@@ -215,12 +216,10 @@ export default function AgencyDetailPage() {
     }, [orgId]);
 
     useEffect(() => {
-        if (subscription) {
-            setNotesDraft(subscription.notes ?? '');
-        }
-    }, [subscription?.id, subscription?.notes]);
+        setNotesDraft(subscriptionNotes);
+    }, [subscriptionNotes]);
 
-    const fetchOrgAlerts = async () => {
+    const fetchOrgAlerts = useCallback(async () => {
         if (!orgId) return;
         setAlertsLoading(true);
         try {
@@ -233,11 +232,11 @@ export default function AgencyDetailPage() {
         } finally {
             setAlertsLoading(false);
         }
-    };
+    }, [orgId]);
 
     useEffect(() => {
         fetchOrgAlerts();
-    }, [orgId]);
+    }, [fetchOrgAlerts]);
 
     useEffect(() => {
         setOpenAlertCount(
@@ -250,7 +249,7 @@ export default function AgencyDetailPage() {
             const updated = await extendSubscription(orgId, 30);
             setSubscription(updated);
             toast.success('Subscription extended by 30 days');
-        } catch (error) {
+        } catch {
             toast.error('Failed to extend subscription');
         }
     };
@@ -261,7 +260,7 @@ export default function AgencyDetailPage() {
             const updated = await updateSubscription(orgId, { auto_renew: value });
             setSubscription(updated);
             toast.success(`Auto-renew ${value ? 'enabled' : 'disabled'}`);
-        } catch (error) {
+        } catch {
             toast.error('Failed to update auto-renew setting');
         }
     };
@@ -273,7 +272,7 @@ export default function AgencyDetailPage() {
             const updated = await updateSubscription(orgId, { notes: notesDraft });
             setSubscription(updated);
             toast.success('Subscription notes updated');
-        } catch (error) {
+        } catch {
             toast.error('Failed to update subscription notes');
         } finally {
             setNotesSaving(false);
@@ -282,12 +281,12 @@ export default function AgencyDetailPage() {
 
     const handleDeactivateMember = async (memberId: string) => {
         try {
-            const updated = await updateMember(orgId, memberId, { is_active: false });
+            await updateMember(orgId, memberId, { is_active: false });
             setMembers((prev) =>
                 prev.map((m) => (m.id === memberId ? { ...m, is_active: false } : m))
             );
             toast.success('Member deactivated');
-        } catch (error) {
+        } catch {
             toast.error('Failed to deactivate member');
         }
     };
@@ -299,7 +298,7 @@ export default function AgencyDetailPage() {
                 prev.map((i) => (i.id === inviteId ? { ...i, status: 'revoked' } : i))
             );
             toast.success('Invite revoked');
-        } catch (error) {
+        } catch {
             toast.error('Failed to revoke invite');
         }
     };
@@ -338,7 +337,7 @@ export default function AgencyDetailPage() {
                 )
             );
             toast.success('Alert acknowledged');
-        } catch (error) {
+        } catch {
             toast.error('Failed to acknowledge alert');
         } finally {
             setAlertsUpdating(null);
@@ -357,7 +356,7 @@ export default function AgencyDetailPage() {
                 )
             );
             toast.success('Alert resolved');
-        } catch (error) {
+        } catch {
             toast.error('Failed to resolve alert');
         } finally {
             setAlertsUpdating(null);
