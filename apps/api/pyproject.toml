@@ -108,6 +108,3 @@ test = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-
-[tool.pip-audit]
-ignore-vulns = ["CVE-2026-0994"]
