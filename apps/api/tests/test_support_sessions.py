@@ -3,6 +3,7 @@ import uuid
 
 import pytest
 
+from app.core.config import settings
 from app.core.deps import COOKIE_NAME
 
 
@@ -184,3 +185,43 @@ async def test_support_session_admin_log_excludes_reason_text(
     assert log.metadata_.get("mode") == "write"
     assert log.metadata_.get("reason_code") == "billing_help"
     assert "reason_text" not in log.metadata_
+
+
+@pytest.mark.asyncio
+async def test_support_session_read_only_blocks_mutations(authed_client, db, test_user, test_org):
+    test_user.is_platform_admin = True
+    db.commit()
+
+    original_allow_read_only = settings.SUPPORT_SESSION_ALLOW_READ_ONLY
+    settings.SUPPORT_SESSION_ALLOW_READ_ONLY = True
+    try:
+        response = await authed_client.post(
+            "/platform/support-sessions",
+            json={
+                "org_id": str(test_org.id),
+                "role": "developer",
+                "reason_code": "bug_repro",
+                "reason_text": "validate read-only",
+                "mode": "read_only",
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["mode"] == "read_only"
+
+        create_res = await authed_client.post(
+            "/surrogates",
+            json={
+                "full_name": "Read Only Attempt",
+                "email": f"readonly-{uuid.uuid4().hex[:8]}@example.com",
+            },
+        )
+        assert create_res.status_code == 403, create_res.text
+        assert "read-only" in create_res.text.lower()
+
+        logout_res = await authed_client.post("/auth/logout")
+        assert logout_res.status_code == 200, logout_res.text
+
+        me = await authed_client.get("/auth/me")
+        assert me.status_code == 401, me.text
+    finally:
+        settings.SUPPORT_SESSION_ALLOW_READ_ONLY = original_allow_read_only

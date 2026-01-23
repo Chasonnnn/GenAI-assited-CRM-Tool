@@ -13,7 +13,7 @@ from uuid import UUID
 
 from fastapi import Request
 from sqlalchemy import func
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session, aliased, joinedload
 
 from app.core.config import settings
 from app.db.models import (
@@ -755,6 +755,7 @@ def list_invites(db: Session, org_id: UUID) -> list[dict]:
     """List all invites for an organization."""
     invites = (
         db.query(OrgInvite)
+        .options(joinedload(OrgInvite.invited_by))
         .filter(OrgInvite.organization_id == org_id)
         .order_by(OrgInvite.created_at.desc())
         .all()

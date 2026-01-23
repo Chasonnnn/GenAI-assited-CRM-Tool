@@ -453,6 +453,11 @@ class OrganizationSubscription(Base):
             "status IN ('active', 'trial', 'past_due', 'canceled')",
             name="ck_organization_subscriptions_status",
         ),
+        Index(
+            "idx_org_subscriptions_period_end_active",
+            "current_period_end",
+            postgresql_where=text("status IN ('active', 'trial', 'past_due')"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -554,9 +559,19 @@ class SupportSession(Base):
 
     __tablename__ = "support_sessions"
     __table_args__ = (
+        CheckConstraint(
+            "expires_at > created_at",
+            name="ck_support_sessions_expires_after_created",
+        ),
         Index("idx_support_sessions_actor", "actor_user_id"),
         Index("idx_support_sessions_org", "organization_id"),
         Index("idx_support_sessions_expires_at", "expires_at"),
+        Index(
+            "idx_support_sessions_actor_active",
+            "actor_user_id",
+            "expires_at",
+            postgresql_where=text("revoked_at IS NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
