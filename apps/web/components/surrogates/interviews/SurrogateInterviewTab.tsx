@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import dynamic from "next/dynamic"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -60,8 +61,14 @@ import type {
     TipTapDoc,
 } from "@/lib/api/interviews"
 import { useAuth } from "@/lib/auth-context"
-import { TranscriptEditor, isTranscriptEmpty } from "./TranscriptEditor"
+import { isTranscriptEmpty } from "./transcript-utils"
 import { InterviewWithComments } from "./InterviewWithComments"
+import { Skeleton } from "@/components/ui/skeleton"
+
+const TranscriptEditor = dynamic(
+    () => import("./TranscriptEditor").then((mod) => mod.TranscriptEditor),
+    { ssr: false, loading: () => <Skeleton className="h-96 w-full rounded-lg" /> }
+)
 
 interface SurrogateInterviewTabProps {
     surrogateId: string

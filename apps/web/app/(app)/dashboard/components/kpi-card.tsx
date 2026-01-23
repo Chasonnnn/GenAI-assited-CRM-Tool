@@ -8,7 +8,6 @@ import {
     TrendingUpIcon,
     TrendingDownIcon,
     AlertCircleIcon,
-    Loader2Icon,
     ChevronRightIcon,
 } from "lucide-react"
 import { Area, AreaChart, ResponsiveContainer } from "recharts"

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { listAlerts, acknowledgeAlert, resolveAlert, type PlatformAlert } from '@/lib/api/platform';
 import { Button } from '@/components/ui/button';
@@ -57,7 +57,7 @@ export default function GlobalAlertsPage() {
     const [severityFilter, setSeverityFilter] = useState<string>('');
     const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-    const fetchAlerts = async () => {
+    const fetchAlerts = useCallback(async () => {
         setIsLoading(true);
         try {
             const data = await listAlerts({
@@ -72,11 +72,11 @@ export default function GlobalAlertsPage() {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [statusFilter, severityFilter]);
 
     useEffect(() => {
         fetchAlerts();
-    }, [statusFilter, severityFilter]);
+    }, [fetchAlerts]);
 
     const handleAcknowledge = async (alertId: string) => {
         setActionLoading(alertId);

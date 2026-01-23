@@ -1,3 +1,6 @@
+/* global process, require, module, __dirname */
+/* eslint-disable @typescript-eslint/no-require-imports */
+
 const withBundleAnalyzer =
   process.env.ANALYZE === "true"
     ? require("@next/bundle-analyzer")({ enabled: true })
