@@ -17,11 +17,11 @@ Repo: Surrogacy Force Platform (`GenAI-assited-CRM-Tool`)
 
 ### Launch blockers (fix before onboarding the first agency)
 
-1) **Team invite onboarding is broken end-to-end** (backend + frontend)  
-2) **Campaigns API response references a non-existent `User.full_name`** (runtime error)  
-3) **Attachment “virus scanning” can silently fail open (mark clean) if ClamAV is missing**  
-4) **Stored/preview HTML rendering risks (email templates + search snippets) → potential stored XSS**  
-5) **Repo contains tracked build/artifact binaries (`infra/terraform/tfplan`, `apps/web/node-compile-cache/...`)**
+1) ✅ **Team invite onboarding is broken end-to-end** (backend + frontend) — **RESOLVED 2026-01-23**  
+2) ✅ **Campaigns API response references a non-existent `User.full_name`** (runtime error) — **RESOLVED 2026-01-23**  
+3) ✅ **Attachment “virus scanning” can silently fail open (mark clean) if ClamAV is missing** — **RESOLVED 2026-01-23**  
+4) ✅ **Stored/preview HTML rendering risks (email templates + search snippets) → potential stored XSS** — **RESOLVED 2026-01-23**  
+5) ✅ **Repo contains tracked build/artifact binaries (`infra/terraform/tfplan`, `apps/web/node-compile-cache/...`)** — **RESOLVED 2026-01-23**
 
 ### High-value architecture hardening (not in `ENTERPRISE_GAPS.md`)
 
@@ -35,6 +35,8 @@ Repo: Surrogacy Force Platform (`GenAI-assited-CRM-Tool`)
 ### Critical
 
 #### C1) Team invite onboarding is broken (backend + frontend)
+
+**Status:** ✅ Resolved on 2026-01-23
 
 - Evidence (backend):
   - Inviter name uses `User.full_name` but `User` model has `display_name` (no `full_name` field):
@@ -61,6 +63,8 @@ Repo: Surrogacy Force Platform (`GenAI-assited-CRM-Tool`)
 
 #### C2) Tracked Terraform plan file in git
 
+**Status:** ✅ Resolved on 2026-01-23
+
 - Evidence:
   - `infra/terraform/tfplan` is committed (binary, machine-generated).
 - Impact:
@@ -70,6 +74,8 @@ Repo: Surrogacy Force Platform (`GenAI-assited-CRM-Tool`)
   - Remove `infra/terraform/tfplan` from git history and add `infra/terraform/tfplan` to `.gitignore`.
 
 #### C3) Attachment “virus scanning” can fail open when scanner is missing
+
+**Status:** ✅ Resolved on 2026-01-23 (fail-closed in non-dev + worker preflight check)
 
 - Evidence:
   - `apps/api/app/jobs/scan_attachment.py:71-80` treats ClamAV errors / missing scanner as “clean” (`scan_error`, `scanner_not_available`).
@@ -85,6 +91,8 @@ Repo: Surrogacy Force Platform (`GenAI-assited-CRM-Tool`)
 
 #### H1) Campaigns API likely crashes due to `User.full_name`
 
+**Status:** ✅ Resolved on 2026-01-23
+
 - Evidence:
   - `apps/api/app/routers/campaigns.py:367` references `campaign.created_by.full_name`, but `User` model does not have `full_name`.
 - Impact:
@@ -94,6 +102,8 @@ Repo: Surrogacy Force Platform (`GenAI-assited-CRM-Tool`)
   - Add test coverage for campaigns list serialization (at least one campaign with `created_by_user_id` set).
 
 #### H2) Stored XSS risk: email template preview renders raw HTML
+
+**Status:** ✅ Resolved on 2026-01-23 (server-side sanitization + client preview sanitize)
 
 - Evidence:
   - `apps/web/app/(app)/automation/email-templates/page.tsx:972` renders `previewHtml` via `dangerouslySetInnerHTML`.
@@ -109,6 +119,8 @@ Repo: Surrogacy Force Platform (`GenAI-assited-CRM-Tool`)
 ### Medium
 
 #### M1) Search results snippet is treated as HTML in the UI
+
+**Status:** ✅ Resolved on 2026-01-23 (client-side sanitize for snippets)
 
 - Evidence:
   - `apps/web/app/(app)/search/page.tsx:179-182` renders `result.snippet` as HTML.
@@ -198,4 +210,3 @@ Repo: Surrogacy Force Platform (`GenAI-assited-CRM-Tool`)
   - Invite onboarding (happy path + expired/revoked invite).
   - Campaign list serialization (created_by present).
   - Email template preview sanitization (no script execution).
-
