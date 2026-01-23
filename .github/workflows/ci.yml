@@ -30,9 +30,6 @@ jobs:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/crm_test
       JWT_SECRET: test-secret-key-for-ci
       # Fernet keys must be 32 url-safe base64-encoded bytes.
-      VERSION_ENCRYPTION_KEY: "_uKVT313or8juloqHLg9OtBNJv9LCBzEC6mJ1yG9S_E="
-      META_ENCRYPTION_KEY: "_uKVT313or8juloqHLg9OtBNJv9LCBzEC6mJ1yG9S_E="
-      DATA_ENCRYPTION_KEY: ${{ secrets.DATA_ENCRYPTION_KEY || '_uKVT313or8juloqHLg9OtBNJv9LCBzEC6mJ1yG9S_E=' }}
       PII_HASH_KEY: ${{ secrets.PII_HASH_KEY || 'test-pii-hash-key-please-change' }}
       DEV_BYPASS_AUTH: "False"
       ENV: test
@@ -168,9 +165,6 @@ jobs:
     env:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/crm_test
       JWT_SECRET: test-secret-key-for-ci
-      VERSION_ENCRYPTION_KEY: "_uKVT313or8juloqHLg9OtBNJv9LCBzEC6mJ1yG9S_E="
-      META_ENCRYPTION_KEY: "_uKVT313or8juloqHLg9OtBNJv9LCBzEC6mJ1yG9S_E="
-      DATA_ENCRYPTION_KEY: ${{ secrets.DATA_ENCRYPTION_KEY || '_uKVT313or8juloqHLg9OtBNJv9LCBzEC6mJ1yG9S_E=' }}
       PII_HASH_KEY: ${{ secrets.PII_HASH_KEY || 'test-pii-hash-key-please-change' }}
       DEV_BYPASS_AUTH: "True"
       ENV: test
