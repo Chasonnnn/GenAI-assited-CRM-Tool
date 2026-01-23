@@ -220,21 +220,3 @@ export function RichTextEditor({
         </div>
     )
 }
-
-// CSS for the editor placeholder
-const styles = `
-.tiptap p.is-editor-empty:first-child::before {
-    color: hsl(var(--muted-foreground));
-    content: attr(data-placeholder);
-    float: left;
-    height: 0;
-    pointer-events: none;
-}
-`
-
-// Inject styles
-if (typeof document !== 'undefined') {
-    const styleElement = document.createElement('style')
-    styleElement.textContent = styles
-    document.head.appendChild(styleElement)
-}

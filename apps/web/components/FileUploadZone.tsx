@@ -6,6 +6,16 @@ import { Upload, File, Loader2, X, Download, Trash2, AlertTriangle, CheckCircle2
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { cn } from "@/lib/utils"
 import { useUploadAttachment, useAttachments, useDownloadAttachment, useDeleteAttachment } from "@/lib/hooks/use-attachments"
 import type { Attachment } from "@/lib/api/attachments"
@@ -69,6 +79,7 @@ function getScanStatusBadge(status: string, quarantined: boolean) {
 export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) {
     const [uploadProgress, setUploadProgress] = useState<number | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
     const { data: attachments = [], isLoading } = useAttachments(surrogateId)
     const uploadMutation = useUploadAttachment()
@@ -125,8 +136,15 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
     }
 
     const handleDelete = (attachmentId: string) => {
-        if (confirm("Delete this attachment?")) {
-            deleteMutation.mutate({ attachmentId, surrogateId })
+        setDeleteTarget(attachmentId)
+    }
+
+    const confirmDelete = () => {
+        if (deleteTarget) {
+            deleteMutation.mutate(
+                { attachmentId: deleteTarget, surrogateId },
+                { onSuccess: () => setDeleteTarget(null) }
+            )
         }
     }
 
@@ -229,6 +247,29 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
                     No attachments yet
                 </p>
             )}
+
+            {/* Delete Confirmation Dialog */}
+            <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Attachment</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will permanently delete this file.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmDelete}
+                            disabled={deleteMutation.isPending}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {deleteMutation.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }
