@@ -403,6 +403,30 @@ def update_member(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post(
+    "/orgs/{org_id}/members/{member_id}/mfa/reset",
+    dependencies=[Depends(require_csrf_header)],
+)
+def reset_member_mfa(
+    org_id: UUID,
+    member_id: UUID,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Reset MFA for a member and revoke their sessions."""
+    try:
+        return platform_service.reset_member_mfa(
+            db=db,
+            org_id=org_id,
+            member_id=member_id,
+            actor_id=session.user_id,
+            request=request,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 # =============================================================================
 # Invite Management
 # =============================================================================
