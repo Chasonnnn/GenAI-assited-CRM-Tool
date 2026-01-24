@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.28.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.28.0...surrogacy-crm-platform-v0.28.1) (2026-01-24)
+
+
+### Bug Fixes
+
+* restore release-please manifest ([a575e1c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a575e1c2638b6d23ebd8d2e9f5926b89a8e60789))
+* restore release-please manifest ([428555e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/428555e27f260c185378f216e5c56e95481e4ab9))
+* update terraform variables and release-please config ([128da4e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/128da4e2e4aebc586e223904c8f07bfc0f9a4ad7))
+* update terraform variables and release-please config ([d8cd88c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d8cd88c9feeac6c67c546c8022d9296643d8a5fb))
+
 ## [0.28.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.27.0...surrogacy-crm-platform-v0.28.0) (2026-01-24)
 
 
