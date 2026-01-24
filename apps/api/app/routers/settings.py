@@ -125,9 +125,7 @@ def update_org_settings(
         address=body.address,
         phone=body.phone,
         email=body.email,
-        portal_domain=body.portal_domain
-        if portal_domain_set
-        else org_service.PORTAL_DOMAIN_UNSET,
+        portal_domain=body.portal_domain if portal_domain_set else org_service.PORTAL_DOMAIN_UNSET,
     )
     if changed_fields:
         from app.services import audit_service
@@ -648,9 +646,7 @@ async def upload_org_logo(
     )
     db.commit()
 
-    return LogoUploadResponse(
-        signature_logo_url=media_service.get_signed_media_url(new_logo_url)
-    )
+    return LogoUploadResponse(signature_logo_url=media_service.get_signed_media_url(new_logo_url))
 
 
 @router.delete(

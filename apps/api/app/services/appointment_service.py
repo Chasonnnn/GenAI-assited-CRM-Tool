@@ -1248,7 +1248,9 @@ def approve_booking(
         # Create Google Meet link
         result = _run_async(
             calendar_service.create_google_meet_link(
-                access_token=_run_async(calendar_service.get_google_access_token(db, appointment.user_id)),
+                access_token=_run_async(
+                    calendar_service.get_google_access_token(db, appointment.user_id)
+                ),
                 calendar_id="primary",
                 summary=f"{appt_type_name} with {appointment.client_name}",
                 start_time=appointment.scheduled_start,
@@ -1287,6 +1289,7 @@ def approve_booking(
     # Schedule reminder email
     if appt_type and appt_type.reminder_hours_before > 0:
         from app.core.config import settings
+
         appointment_email_service.schedule_reminder_email(
             db=db,
             appointment=appointment,
@@ -1506,7 +1509,9 @@ def cancel_booking(
         try:
             access_token = _run_async(zoom_service.get_user_zoom_token(db, appointment.user_id))
             if access_token:
-                _run_async(zoom_service.delete_zoom_meeting(access_token, appointment.zoom_meeting_id))
+                _run_async(
+                    zoom_service.delete_zoom_meeting(access_token, appointment.zoom_meeting_id)
+                )
         except Exception as e:
             logger.warning(f"Failed to delete Zoom meeting {appointment.zoom_meeting_id}: {e}")
 

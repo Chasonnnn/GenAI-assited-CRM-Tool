@@ -843,7 +843,9 @@ def test_approve_booking_creates_zoom_meeting_and_schedules_reminder(
         called["hours_before"] = hours_before
         return None
 
-    monkeypatch.setattr(appointment_email_service, "schedule_reminder_email", fake_schedule_reminder)
+    monkeypatch.setattr(
+        appointment_email_service, "schedule_reminder_email", fake_schedule_reminder
+    )
 
     approved = appointment_service.approve_booking(db, appt, approved_by_user_id=test_user.id)
 
@@ -902,7 +904,9 @@ def test_approve_booking_creates_google_meet_link(
     async def fake_create_google_meet_link(*args, **kwargs):
         return {"event_id": "event_123", "meet_url": "https://meet.google.com/abc-defg-hij"}
 
-    monkeypatch.setattr(calendar_service, "create_google_meet_link", fake_create_google_meet_link, raising=False)
+    monkeypatch.setattr(
+        calendar_service, "create_google_meet_link", fake_create_google_meet_link, raising=False
+    )
 
     approved = appointment_service.approve_booking(db, appt, approved_by_user_id=test_user.id)
 
@@ -1023,7 +1027,9 @@ def test_cancel_booking_deletes_zoom_meeting(
         return True
 
     monkeypatch.setattr(zoom_service, "get_user_zoom_token", fake_get_user_zoom_token)
-    monkeypatch.setattr(zoom_service, "delete_zoom_meeting", fake_delete_zoom_meeting, raising=False)
+    monkeypatch.setattr(
+        zoom_service, "delete_zoom_meeting", fake_delete_zoom_meeting, raising=False
+    )
 
     cancelled = appointment_service.cancel_booking(db, appt, by_client=False)
 

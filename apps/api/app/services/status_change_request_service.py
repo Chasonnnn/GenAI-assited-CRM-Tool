@@ -88,7 +88,13 @@ def approve_request(
     Raises:
         ValueError: If request not found, not pending, or user not authorized
     """
-    from app.services import surrogate_service, pipeline_service, ip_service, match_service, activity_service
+    from app.services import (
+        surrogate_service,
+        pipeline_service,
+        ip_service,
+        match_service,
+        activity_service,
+    )
 
     request = get_request(db, request_id, org_id)
     if not request:

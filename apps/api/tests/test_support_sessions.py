@@ -39,7 +39,9 @@ async def test_support_session_create_rejects_invalid_role(authed_client, db, te
 
 
 @pytest.mark.asyncio
-async def test_support_session_create_rejects_invalid_reason_code(authed_client, db, test_user, test_org):
+async def test_support_session_create_rejects_invalid_reason_code(
+    authed_client, db, test_user, test_org
+):
     test_user.is_platform_admin = True
     db.commit()
 
@@ -56,7 +58,9 @@ async def test_support_session_create_rejects_invalid_reason_code(authed_client,
 
 
 @pytest.mark.asyncio
-async def test_support_session_rejects_read_only_when_disabled(authed_client, db, test_user, test_org):
+async def test_support_session_rejects_read_only_when_disabled(
+    authed_client, db, test_user, test_org
+):
     test_user.is_platform_admin = True
     db.commit()
 
@@ -125,9 +129,7 @@ async def test_support_session_create_sets_role_and_org_override(
 
 
 @pytest.mark.asyncio
-async def test_support_session_revocation_blocks_access(
-    authed_client, db, test_user, test_org
-):
+async def test_support_session_revocation_blocks_access(authed_client, db, test_user, test_org):
     test_user.is_platform_admin = True
     db.commit()
 

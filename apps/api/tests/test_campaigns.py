@@ -528,7 +528,9 @@ def test_campaign_response_uses_display_name(db, test_org, test_user, test_templ
     assert response.created_by_name == test_user.display_name
 
 
-def test_execute_campaign_run_streams_recipients(db, test_org, test_user, test_template, monkeypatch):
+def test_execute_campaign_run_streams_recipients(
+    db, test_org, test_user, test_template, monkeypatch
+):
     """Execute should stream recipients without calling .all()."""
     from types import SimpleNamespace
     from uuid import uuid4
@@ -611,7 +613,9 @@ def test_execute_campaign_run_streams_recipients(db, test_org, test_user, test_t
     assert result["total_count"] == 1
 
 
-def test_execute_campaign_run_uses_bulk_suppression(db, test_org, test_user, test_template, monkeypatch):
+def test_execute_campaign_run_uses_bulk_suppression(
+    db, test_org, test_user, test_template, monkeypatch
+):
     """Execute should not call per-recipient suppression checks."""
     from types import SimpleNamespace
     from uuid import uuid4

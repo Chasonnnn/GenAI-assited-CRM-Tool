@@ -85,6 +85,7 @@ async def send_email(
 
         # Send via Gmail API (with retries)
         async with httpx.AsyncClient() as client:
+
             async def request_fn():
                 return await client.post(
                     GMAIL_SEND_URL,

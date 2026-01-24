@@ -113,10 +113,7 @@ def get_platform_stats(db: Session) -> dict:
 
     # Count open alerts across all orgs
     open_alerts = (
-        db.query(func.count(SystemAlert.id))
-        .filter(SystemAlert.status == "open")
-        .scalar()
-        or 0
+        db.query(func.count(SystemAlert.id)).filter(SystemAlert.status == "open").scalar() or 0
     )
 
     return {
@@ -186,11 +183,7 @@ def list_organizations(
     if status:
         query = query.filter(OrganizationSubscription.status == status)
 
-    total = (
-        query.with_entities(func.count(func.distinct(Organization.id)))
-        .scalar()
-        or 0
-    )
+    total = query.with_entities(func.count(func.distinct(Organization.id))).scalar() or 0
     rows = query.order_by(Organization.created_at.desc()).offset(offset).limit(limit).all()
 
     items = []
@@ -198,18 +191,20 @@ def list_organizations(
         plan_value = plan_key or "starter"
         status_value = subscription_status or "active"
 
-        items.append({
-            "id": str(org.id),
-            "name": org.name,
-            "slug": org.slug,
-            "portal_domain": org.portal_domain,
-            "timezone": org.timezone,
-            "member_count": member_count or 0,
-            "surrogate_count": surrogate_count or 0,
-            "subscription_plan": plan_value,
-            "subscription_status": status_value,
-            "created_at": org.created_at.isoformat(),
-        })
+        items.append(
+            {
+                "id": str(org.id),
+                "name": org.name,
+                "slug": org.slug,
+                "portal_domain": org.portal_domain,
+                "timezone": org.timezone,
+                "member_count": member_count or 0,
+                "surrogate_count": surrogate_count or 0,
+                "subscription_plan": plan_value,
+                "subscription_status": status_value,
+                "created_at": org.created_at.isoformat(),
+            }
+        )
 
     return items, total
 
@@ -232,10 +227,7 @@ def get_organization_detail(db: Session, org_id: UUID) -> dict | None:
     from app.db.models import Surrogate
 
     surrogate_count = (
-        db.query(func.count(Surrogate.id))
-        .filter(Surrogate.organization_id == org.id)
-        .scalar()
-        or 0
+        db.query(func.count(Surrogate.id)).filter(Surrogate.organization_id == org.id).scalar() or 0
     )
 
     # Get active match count
@@ -424,7 +416,9 @@ def update_subscription(
 
     if status is not None:
         if status not in VALID_STATUSES:
-            raise ValueError(f"Invalid status: {status}. Must be one of: {', '.join(VALID_STATUSES)}")
+            raise ValueError(
+                f"Invalid status: {status}. Must be one of: {', '.join(VALID_STATUSES)}"
+            )
         if subscription.status != status:
             changes["status"] = {"old": subscription.status, "new": status}
             subscription.status = status
@@ -734,7 +728,9 @@ def update_member(
         "display_name": membership.user.display_name,
         "role": membership.role,
         "is_active": membership.is_active,
-        "last_login_at": membership.user.last_login_at.isoformat() if membership.user.last_login_at else None,
+        "last_login_at": membership.user.last_login_at.isoformat()
+        if membership.user.last_login_at
+        else None,
         "created_at": membership.created_at.isoformat(),
     }
 
@@ -815,15 +811,17 @@ def list_invites(db: Session, org_id: UUID) -> list[dict]:
         if inv.invited_by:
             invited_by_name = inv.invited_by.display_name
 
-        results.append({
-            "id": str(inv.id),
-            "email": inv.email,
-            "role": inv.role,
-            "status": status,
-            "invited_by_name": invited_by_name,
-            "expires_at": inv.expires_at.isoformat() if inv.expires_at else None,
-            "created_at": inv.created_at.isoformat(),
-        })
+        results.append(
+            {
+                "id": str(inv.id),
+                "email": inv.email,
+                "role": inv.role,
+                "status": status,
+                "invited_by_name": invited_by_name,
+                "expires_at": inv.expires_at.isoformat() if inv.expires_at else None,
+                "created_at": inv.created_at.isoformat(),
+            }
+        )
 
     return results
 
@@ -885,7 +883,10 @@ def create_invite(
         actor_id=actor_id,
         action="invite.create",
         target_org_id=org_id,
-        metadata={"email_domain": email.split("@")[1], "role": role_value},  # Domain only, not full email
+        metadata={
+            "email_domain": email.split("@")[1],
+            "role": role_value,
+        },  # Domain only, not full email
         request=request,
     )
 
@@ -985,24 +986,21 @@ def get_admin_action_logs(
         query = query.filter(AdminActionLog.target_organization_id == org_id)
 
     total = query.with_entities(func.count(AdminActionLog.id)).scalar() or 0
-    logs = (
-        query.order_by(AdminActionLog.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    logs = query.order_by(AdminActionLog.created_at.desc()).offset(offset).limit(limit).all()
 
     items = []
     for log, actor_email, target_org_name, target_user_email in logs:
-        items.append({
-            "id": str(log.id),
-            "actor_email": actor_email,
-            "action": log.action,
-            "target_org_name": target_org_name,
-            "target_user_email": target_user_email,
-            "metadata": log.metadata_,
-            "created_at": log.created_at.isoformat(),
-        })
+        items.append(
+            {
+                "id": str(log.id),
+                "actor_email": actor_email,
+                "action": log.action,
+                "target_org_name": target_org_name,
+                "target_user_email": target_user_email,
+                "metadata": log.metadata_,
+                "created_at": log.created_at.isoformat(),
+            }
+        )
 
     return items, total
 
@@ -1033,31 +1031,28 @@ def list_platform_alerts(
         query = query.filter(SystemAlert.organization_id == org_id)
 
     total = query.with_entities(func.count(SystemAlert.id)).scalar() or 0
-    alerts = (
-        query.order_by(SystemAlert.last_seen_at.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    alerts = query.order_by(SystemAlert.last_seen_at.desc()).offset(offset).limit(limit).all()
 
     items = []
     for alert, org_name in alerts:
         org_label = org_name or "Unknown"
 
-        items.append({
-            "id": str(alert.id),
-            "organization_id": str(alert.organization_id),
-            "org_name": org_label,
-            "alert_type": alert.alert_type,
-            "severity": alert.severity,
-            "status": alert.status,
-            "title": alert.title,
-            "message": alert.message,
-            "occurrence_count": alert.occurrence_count,
-            "first_seen_at": alert.first_seen_at.isoformat(),
-            "last_seen_at": alert.last_seen_at.isoformat(),
-            "resolved_at": alert.resolved_at.isoformat() if alert.resolved_at else None,
-        })
+        items.append(
+            {
+                "id": str(alert.id),
+                "organization_id": str(alert.organization_id),
+                "org_name": org_label,
+                "alert_type": alert.alert_type,
+                "severity": alert.severity,
+                "status": alert.status,
+                "title": alert.title,
+                "message": alert.message,
+                "occurrence_count": alert.occurrence_count,
+                "first_seen_at": alert.first_seen_at.isoformat(),
+                "last_seen_at": alert.last_seen_at.isoformat(),
+                "resolved_at": alert.resolved_at.isoformat() if alert.resolved_at else None,
+            }
+        )
 
     return items, total
 

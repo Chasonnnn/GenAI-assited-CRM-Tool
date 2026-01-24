@@ -80,9 +80,8 @@ def get_upcoming_items(
 
     task_query = db.query(Task)
     if pipeline_id:
-        task_query = (
-            task_query.join(Surrogate, Task.surrogate_id == Surrogate.id)
-            .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
+        task_query = task_query.join(Surrogate, Task.surrogate_id == Surrogate.id).join(
+            PipelineStage, Surrogate.stage_id == PipelineStage.id
         )
         task_filters.extend(
             [
@@ -139,10 +138,9 @@ def get_upcoming_items(
 
     meeting_query = db.query(ZoomMeeting)
     if pipeline_id:
-        meeting_query = (
-            meeting_query.join(Surrogate, ZoomMeeting.surrogate_id == Surrogate.id)
-            .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
-        )
+        meeting_query = meeting_query.join(
+            Surrogate, ZoomMeeting.surrogate_id == Surrogate.id
+        ).join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
         meeting_filters.extend(
             [
                 Surrogate.organization_id == org_id,
@@ -264,13 +262,15 @@ def get_attention_items(
         else:
             days_since_contact = (now.date() - surrogate.created_at.date()).days
 
-        unreached_leads.append({
-            "id": str(surrogate.id),
-            "surrogate_number": surrogate.surrogate_number,
-            "stage_label": stage_label,
-            "days_since_contact": days_since_contact,
-            "created_at": surrogate.created_at.isoformat(),
-        })
+        unreached_leads.append(
+            {
+                "id": str(surrogate.id),
+                "surrogate_number": surrogate.surrogate_number,
+                "stage_label": stage_label,
+                "days_since_contact": days_since_contact,
+                "created_at": surrogate.created_at.isoformat(),
+            }
+        )
 
     # Total count for unreached (without limit)
     unreached_total = (
@@ -314,10 +314,9 @@ def get_attention_items(
 
     overdue_tasks_query = db.query(Task)
     if pipeline_id:
-        overdue_tasks_query = (
-            overdue_tasks_query.join(Surrogate, Task.surrogate_id == Surrogate.id)
-            .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
-        )
+        overdue_tasks_query = overdue_tasks_query.join(
+            Surrogate, Task.surrogate_id == Surrogate.id
+        ).join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
         task_filters.extend(
             [
                 Surrogate.organization_id == org_id,
@@ -336,26 +335,24 @@ def get_attention_items(
     overdue_tasks = []
     for task in overdue_tasks_query:
         days_overdue = (today - task.due_date).days if task.due_date else 0
-        overdue_tasks.append({
-            "id": str(task.id),
-            "title": task.title,
-            "due_date": task.due_date.isoformat() if task.due_date else None,
-            "days_overdue": days_overdue,
-            "surrogate_id": str(task.surrogate_id) if task.surrogate_id else None,
-        })
+        overdue_tasks.append(
+            {
+                "id": str(task.id),
+                "title": task.title,
+                "due_date": task.due_date.isoformat() if task.due_date else None,
+                "days_overdue": days_overdue,
+                "surrogate_id": str(task.surrogate_id) if task.surrogate_id else None,
+            }
+        )
 
     # Total count for overdue tasks (without limit)
     overdue_count_query = db.query(func.count(Task.id))
     if pipeline_id:
-        overdue_count_query = (
-            overdue_count_query.join(Surrogate, Task.surrogate_id == Surrogate.id)
-            .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
-        )
+        overdue_count_query = overdue_count_query.join(
+            Surrogate, Task.surrogate_id == Surrogate.id
+        ).join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
 
-    overdue_count = (
-        overdue_count_query.filter(and_(*task_filters))
-        .scalar() or 0
-    )
+    overdue_count = overdue_count_query.filter(and_(*task_filters)).scalar() or 0
 
     # -------------------------------------------------------------------------
     # 3. Stuck Surrogates
@@ -405,13 +402,15 @@ def get_attention_items(
     stuck_surrogates = []
     for surrogate, stage_label, last_change in stuck_results:
         days_in_stage = (now - last_change).days if last_change else 0
-        stuck_surrogates.append({
-            "id": str(surrogate.id),
-            "surrogate_number": surrogate.surrogate_number,
-            "stage_label": stage_label,
-            "days_in_stage": days_in_stage,
-            "last_stage_change": last_change.isoformat() if last_change else None,
-        })
+        stuck_surrogates.append(
+            {
+                "id": str(surrogate.id),
+                "surrogate_number": surrogate.surrogate_number,
+                "stage_label": stage_label,
+                "days_in_stage": days_in_stage,
+                "last_stage_change": last_change.isoformat() if last_change else None,
+            }
+        )
 
     # Total count for stuck (without limit)
     stuck_total_query = (
@@ -463,6 +462,7 @@ def push_dashboard_stats(db: Session, org_id: UUID) -> None:
 
 def _schedule_ws_send(coro: asyncio.Future) -> None:
     """Schedule websocket sends without blocking the request cycle."""
+
     async def _runner() -> None:
         try:
             await coro

@@ -11,9 +11,7 @@ from app.utils.normalization import normalize_email
 from sqlalchemy.orm import sessionmaker
 
 
-def test_upload_attachment_enqueues_scan_job(
-    db, test_org, test_user, default_stage, monkeypatch
-):
+def test_upload_attachment_enqueues_scan_job(db, test_org, test_user, default_stage, monkeypatch):
     monkeypatch.setattr(settings, "ATTACHMENT_SCAN_ENABLED", True, raising=False)
     monkeypatch.setattr(attachment_service, "store_file", lambda *_args, **_kwargs: None)
 
@@ -103,9 +101,13 @@ def test_scan_attachment_fail_closed_when_scanner_missing_non_dev(
 
     test_session_factory = sessionmaker(bind=db.connection())
     monkeypatch.setattr(scan_attachment, "SessionLocal", test_session_factory)
-    monkeypatch.setattr(scan_attachment, "_download_to_temp", lambda *_args, **_kwargs: str(temp_file))
     monkeypatch.setattr(
-        scan_attachment, "_run_clamav_scan", lambda *_args, **_kwargs: ("scanner_not_available", "missing")
+        scan_attachment, "_download_to_temp", lambda *_args, **_kwargs: str(temp_file)
+    )
+    monkeypatch.setattr(
+        scan_attachment,
+        "_run_clamav_scan",
+        lambda *_args, **_kwargs: ("scanner_not_available", "missing"),
     )
 
     result = scan_attachment.scan_attachment_job(attachment.id)

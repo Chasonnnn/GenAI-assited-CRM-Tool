@@ -8,10 +8,7 @@ def test_build_portal_domain_prefixes_base():
 
 
 def test_build_portal_domain_accepts_prefixed_domain():
-    assert (
-        org_service.build_portal_domain("ap.ewifamilyglobal.com")
-        == "ap.ewifamilyglobal.com"
-    )
+    assert org_service.build_portal_domain("ap.ewifamilyglobal.com") == "ap.ewifamilyglobal.com"
 
 
 def test_create_org_sets_portal_domain(db):

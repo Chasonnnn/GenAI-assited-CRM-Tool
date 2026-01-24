@@ -147,9 +147,7 @@ async def test_ai_analyze_dashboard_requires_consent(
 
 
 @pytest.mark.asyncio
-async def test_ai_org_ai_enabled_blocks_usage(
-    authed_client: AsyncClient, db, test_org, test_user
-):
+async def test_ai_org_ai_enabled_blocks_usage(authed_client: AsyncClient, db, test_org, test_user):
     test_org.ai_enabled = False
     db.add(test_org)
     db.flush()

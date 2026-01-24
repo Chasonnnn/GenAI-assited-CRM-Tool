@@ -487,7 +487,11 @@ def update_surrogate(
                     db.flush()
 
             # Pregnancy fields
-            pregnancy_fields = {"pregnancy_start_date", "pregnancy_due_date", "actual_delivery_date"}
+            pregnancy_fields = {
+                "pregnancy_start_date",
+                "pregnancy_due_date",
+                "actual_delivery_date",
+            }
             if changed_fields & pregnancy_fields:
                 activity_service.log_pregnancy_dates_updated(
                     db=db,
@@ -599,7 +603,10 @@ def change_status(
             raise ValueError(f"Intake specialists cannot set stage to {new_stage.slug}")
     elif role_str == Role.CASE_MANAGER.value:
         regression_allowed_types = allowed_types | {"intake"}
-        if new_stage.stage_type not in regression_allowed_types and new_stage.slug not in allowed_slugs:
+        if (
+            new_stage.stage_type not in regression_allowed_types
+            and new_stage.slug not in allowed_slugs
+        ):
             raise ValueError("Case managers can only regress to intake or post-approval stages")
 
     # REGRESSION: Create request, don't apply yet (unless within undo grace period)
@@ -1451,26 +1458,20 @@ def get_surrogate_stats(
     total = base.count()
 
     # Count by status
-    status_query = (
-        db.query(Surrogate.status_label, func.count(Surrogate.id).label("count"))
-        .filter(
-            Surrogate.organization_id == org_id,
-            Surrogate.is_archived.is_(False),
-        )
+    status_query = db.query(Surrogate.status_label, func.count(Surrogate.id).label("count")).filter(
+        Surrogate.organization_id == org_id,
+        Surrogate.is_archived.is_(False),
     )
     if pipeline_id:
-        status_query = status_query.join(PipelineStage, Surrogate.stage_id == PipelineStage.id).filter(
-            PipelineStage.pipeline_id == pipeline_id
-        )
+        status_query = status_query.join(
+            PipelineStage, Surrogate.stage_id == PipelineStage.id
+        ).filter(PipelineStage.pipeline_id == pipeline_id)
     if owner_id:
         status_query = status_query.filter(
             Surrogate.owner_type == OwnerType.USER.value,
             Surrogate.owner_id == owner_id,
         )
-    status_counts = (
-        status_query.group_by(Surrogate.status_label)
-        .all()
-    )
+    status_counts = status_query.group_by(Surrogate.status_label).all()
 
     by_status = {row.status_label: row.count for row in status_counts}
 
@@ -1496,13 +1497,10 @@ def get_surrogate_stats(
     month_change_pct = calc_change_pct(this_month, last_month)
 
     # Pending tasks count (for dashboard)
-    task_query = (
-        db.query(func.count(Task.id))
-        .filter(
-            Task.organization_id == org_id,
-            Task.is_completed.is_(False),
-            Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
-        )
+    task_query = db.query(func.count(Task.id)).filter(
+        Task.organization_id == org_id,
+        Task.is_completed.is_(False),
+        Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
     )
     if owner_id:
         task_query = task_query.filter(
