@@ -3,7 +3,13 @@
     ".": {
       "release-type": "simple",
       "package-name": "surrogacy-crm-platform",
+      "versioning": "always-bump-minor",
       "changelog-path": "CHANGELOG.md",
+      "changelog-sections": [
+        { "type": "feat", "section": "Features" },
+        { "type": "fix", "section": "Bug Fixes" },
+        { "type": "chore", "section": "Maintenance" }
+      ],
       "extra-files": [
         "apps/api/app/core/config.py",
         "README.md"
