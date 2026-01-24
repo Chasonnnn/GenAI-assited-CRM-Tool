@@ -14,6 +14,24 @@ variable "domain" {
   description = "Base domain (e.g. example.com)"
 }
 
+variable "ops_frontend_url" {
+  type        = string
+  description = "Ops console frontend URL (for platform admin redirects)."
+  default     = ""
+}
+
+variable "cookie_domain" {
+  type        = string
+  description = "Cookie domain for cross-subdomain auth (e.g., .example.com)."
+  default     = ""
+}
+
+variable "platform_admin_emails" {
+  type        = string
+  description = "Comma-separated platform admin email allowlist."
+  default     = ""
+}
+
 variable "artifact_repo" {
   type        = string
   description = "Artifact Registry repo name"
@@ -86,6 +104,12 @@ variable "database_tier" {
 variable "database_version" {
   type    = string
   default = "POSTGRES_15"
+}
+
+variable "database_deletion_protection" {
+  type        = bool
+  description = "Protect Cloud SQL instance from accidental deletion."
+  default     = true
 }
 
 variable "database_name" {
