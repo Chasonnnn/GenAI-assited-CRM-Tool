@@ -25,6 +25,11 @@ function getOpsOrigin(): string | null {
     return null
 }
 
+function hasAuthReturnToOpsCookie(): boolean {
+    if (typeof document === "undefined") return false
+    return document.cookie.split(";").some((c) => c.trim().startsWith("auth_return_to=ops"))
+}
+
 function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: () => void }) {
     const [copied, setCopied] = useState(false)
 
@@ -97,7 +102,8 @@ function DuoCallbackContent() {
         if (!user) {
             const returnTo =
                 sessionStorage.getItem("auth_return_to") === "ops" ||
-                searchParams.get("return_to") === "ops"
+                searchParams.get("return_to") === "ops" ||
+                hasAuthReturnToOpsCookie()
                     ? "ops"
                     : "app"
 
@@ -120,7 +126,8 @@ function DuoCallbackContent() {
 
         const returnTo =
             sessionStorage.getItem("auth_return_to") === "ops" ||
-            searchParams.get("return_to") === "ops"
+            searchParams.get("return_to") === "ops" ||
+            hasAuthReturnToOpsCookie()
                 ? "ops"
                 : "app"
 
@@ -221,7 +228,8 @@ function DuoCallbackContent() {
                         setRecoveryCodes(null)
                         const returnTo =
                             sessionStorage.getItem("auth_return_to") === "ops" ||
-                            searchParams.get("return_to") === "ops"
+                            searchParams.get("return_to") === "ops" ||
+                            hasAuthReturnToOpsCookie()
                                 ? "ops"
                                 : "app"
                         if (returnTo === "ops") {

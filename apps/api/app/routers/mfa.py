@@ -305,6 +305,9 @@ def complete_mfa_challenge(
     if settings.COOKIE_DOMAIN:
         response.delete_cookie(COOKIE_NAME, path="/")
         response.delete_cookie(CSRF_COOKIE_NAME, path="/")
+        response.delete_cookie("auth_return_to", domain=settings.COOKIE_DOMAIN, path="/")
+    # Clear host-only cookie too (dev / migration safety)
+    response.delete_cookie("auth_return_to", path="/")
     response.set_cookie(
         key=COOKIE_NAME,
         value=new_token,
@@ -432,6 +435,10 @@ def initiate_duo_auth(
 
     allowed_return_to = {"app", "ops"}
     return_to = return_to if return_to in allowed_return_to else None
+    if not return_to:
+        cookie_return_to = request.cookies.get("auth_return_to")
+        if cookie_return_to in allowed_return_to:
+            return_to = cookie_return_to
 
     if return_to == "ops" and settings.OPS_FRONTEND_URL:
         base_url = settings.OPS_FRONTEND_URL.rstrip("/")
@@ -447,8 +454,10 @@ def initiate_duo_auth(
             scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
             base_url = f"{scheme}://{host}".rstrip("/")
 
-    effective_return_to = return_to or ("ops" if base_url == settings.OPS_FRONTEND_URL.rstrip("/") else "app")
-    redirect_uri = f"{base_url}/auth/duo/callback?return_to={effective_return_to}"
+    # Duo Web SDK expects the callback URL to be exact. Avoid adding query params
+    # to the redirect URI (some providers drop auth params if redirect_uri already
+    # contains a query string).
+    redirect_uri = f"{base_url}/auth/duo/callback"
 
     # Create auth URL with user's email
     auth_url = duo_service.create_auth_url(
@@ -496,7 +505,8 @@ def verify_duo_callback(
     else:
         base_url = settings.FRONTEND_URL.rstrip("/") if settings.FRONTEND_URL else ""
 
-    redirect_uri = f"{base_url}/auth/duo/callback?return_to={return_to}" if base_url else None
+    # Must match the redirect URI used during initiation.
+    redirect_uri = f"{base_url}/auth/duo/callback" if base_url else None
 
     # Verify the callback
     is_valid, auth_result = duo_service.verify_callback(
@@ -545,6 +555,8 @@ def verify_duo_callback(
     if settings.COOKIE_DOMAIN:
         response.delete_cookie(COOKIE_NAME, path="/")
         response.delete_cookie(CSRF_COOKIE_NAME, path="/")
+        response.delete_cookie("auth_return_to", domain=settings.COOKIE_DOMAIN, path="/")
+    response.delete_cookie("auth_return_to", path="/")
     response.set_cookie(
         key=COOKIE_NAME,
         value=new_token,
