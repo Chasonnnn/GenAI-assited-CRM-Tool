@@ -1,6 +1,9 @@
 project_id        = "your-project-id"
 region            = "us-central1"
 domain            = "example.com"
+ops_frontend_url  = "https://ops.example.com"
+cookie_domain     = ".example.com"
+platform_admin_emails = "admin@example.com"
 github_owner      = "your-github-org-or-user"
 github_repo       = "your-repo-name"
 cloudbuild_repository = "projects/PROJECT/locations/REGION/connections/CONNECTION/repositories/REPO"
@@ -11,6 +14,8 @@ export_s3_bucket  = "your-export-s3-bucket"
 
 # Optional
 allowed_email_domains = ""
+database_version = "POSTGRES_18"
+database_deletion_protection = true
 secret_replication_location = "us-central1"
 logging_retention_days = 90
 enable_cloudbuild_triggers = true

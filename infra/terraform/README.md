@@ -49,6 +49,9 @@ Create `terraform.tfvars` (do not commit):
 project_id         = "your-project-id"
 region             = "us-central1"
 domain             = "example.com"
+ops_frontend_url   = "https://ops.example.com"
+cookie_domain      = ".example.com"
+platform_admin_emails = "admin@example.com"
 github_owner       = "your-org"
 github_repo        = "your-repo"
 cloudbuild_repository = "projects/PROJECT/locations/REGION/connections/CONNECTION/repositories/REPO"
@@ -88,6 +91,9 @@ Terraform only creates Secret Manager containers. Add secret versions out-of-ban
 gcloud secrets versions add JWT_SECRET --data-file=- <<<"your-secret"
 gcloud secrets versions add DATABASE_URL --data-file=- <<<"postgresql+psycopg://crm_user:<password>@/crm?host=/cloudsql/<connection_name>"
 gcloud secrets versions add REDIS_URL --data-file=- <<<"redis://:<redis-auth>@<redis-host>:6379/0"
+gcloud secrets versions add DUO_CLIENT_ID --data-file=- <<<"your-duo-client-id"
+gcloud secrets versions add DUO_CLIENT_SECRET --data-file=- <<<"your-duo-client-secret"
+gcloud secrets versions add DUO_API_HOST --data-file=- <<<"api-xxxxx.duosecurity.com"
 gcloud secrets versions add BILLING_SLACK_WEBHOOK_URL --data-file=- <<<"https://hooks.slack.com/services/..."
 ```
 
