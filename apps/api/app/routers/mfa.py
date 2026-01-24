@@ -10,13 +10,13 @@ Provides:
 
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import COOKIE_NAME, get_current_session, get_db, require_csrf_header
-from app.core.csrf import set_csrf_cookie
+from app.core.csrf import CSRF_COOKIE_NAME, set_csrf_cookie
 from app.core.security import create_session_token
 from app.schemas.auth import UserSession
 from app.services import duo_service, membership_service, mfa_service, user_service
@@ -302,9 +302,13 @@ def complete_mfa_challenge(
     )
 
     # Set new cookie
+    if settings.COOKIE_DOMAIN:
+        response.delete_cookie(COOKIE_NAME, path="/")
+        response.delete_cookie(CSRF_COOKIE_NAME, path="/")
     response.set_cookie(
         key=COOKIE_NAME,
         value=new_token,
+        domain=settings.COOKIE_DOMAIN or None,
         max_age=settings.JWT_EXPIRES_HOURS * 3600,
         httponly=True,
         samesite=settings.cookie_samesite,
@@ -405,6 +409,7 @@ def duo_health_check():
     dependencies=[Depends(require_csrf_header)],
 )
 def initiate_duo_auth(
+    request: Request,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
@@ -424,11 +429,23 @@ def initiate_duo_auth(
     # Generate secure state token for CSRF protection
     state = secrets.token_urlsafe(32)
 
+    host = (request.headers.get("host") or "").lower()
+    if host.startswith("ops.") and settings.OPS_FRONTEND_URL:
+        base_url = settings.OPS_FRONTEND_URL.rstrip("/")
+    elif settings.FRONTEND_URL:
+        base_url = settings.FRONTEND_URL.rstrip("/")
+    else:
+        scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+        base_url = f"{scheme}://{host}".rstrip("/")
+
+    redirect_uri = f"{base_url}/auth/duo/callback"
+
     # Create auth URL with user's email
     auth_url = duo_service.create_auth_url(
         user_id=user.id,
         username=user.email,
         state=state,
+        redirect_uri=redirect_uri,
     )
 
     return DuoInitiateResponse(auth_url=auth_url, state=state)
@@ -500,9 +517,13 @@ def verify_duo_callback(
         mfa_required=True,
     )
 
+    if settings.COOKIE_DOMAIN:
+        response.delete_cookie(COOKIE_NAME, path="/")
+        response.delete_cookie(CSRF_COOKIE_NAME, path="/")
     response.set_cookie(
         key=COOKIE_NAME,
         value=new_token,
+        domain=settings.COOKIE_DOMAIN or None,
         max_age=settings.JWT_EXPIRES_HOURS * 3600,
         httponly=True,
         samesite=settings.cookie_samesite,

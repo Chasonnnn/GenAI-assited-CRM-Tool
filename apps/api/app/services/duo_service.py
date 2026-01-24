@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-def get_duo_client() -> duo_universal.Client:
+def get_duo_client(redirect_uri: str | None = None) -> duo_universal.Client:
     """
     Create a Duo Universal Prompt client.
 
@@ -33,11 +33,15 @@ def get_duo_client() -> duo_universal.Client:
             "Duo MFA is not configured. Set DUO_CLIENT_ID, DUO_CLIENT_SECRET, and DUO_API_HOST."
         )
 
+    client_redirect_uri = redirect_uri or settings.DUO_REDIRECT_URI
+    if not client_redirect_uri:
+        raise ValueError("Duo redirect URI is not configured.")
+
     return duo_universal.Client(
         client_id=settings.DUO_CLIENT_ID,
         client_secret=settings.DUO_CLIENT_SECRET,
         host=settings.DUO_API_HOST,
-        redirect_uri=settings.DUO_REDIRECT_URI,
+        redirect_uri=client_redirect_uri,
     )
 
 
@@ -64,7 +68,12 @@ def health_check() -> Tuple[bool, str]:
 # =============================================================================
 
 
-def create_auth_url(user_id: UUID, username: str, state: str) -> str:
+def create_auth_url(
+    user_id: UUID,
+    username: str,
+    state: str,
+    redirect_uri: str | None = None,
+) -> str:
     """
     Generate Duo Universal Prompt auth URL.
 
@@ -76,7 +85,7 @@ def create_auth_url(user_id: UUID, username: str, state: str) -> str:
     Returns:
         URL to redirect user to for Duo authentication
     """
-    client = get_duo_client()
+    client = get_duo_client(redirect_uri=redirect_uri)
 
     # The username is used by Duo for enrollment and policy matching
     return client.create_auth_url(username=username, state=state)
