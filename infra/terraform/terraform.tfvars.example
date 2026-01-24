@@ -22,6 +22,12 @@ enable_cloudbuild_triggers = true
 enable_public_invoker = true
 enable_domain_mapping = true
 
+# Cloud Run scaling / perf
+# run_min_instances = 1
+# run_max_instances = 10
+# run_cpu = "1"
+# run_cpu_idle = true
+
 # Monitoring + budgets (recommended)
 # alert_notification_channel_ids = ["projects/PROJECT_ID/notificationChannels/CHANNEL_ID"]
 # billing_account_id = "000000-000000-000000"
