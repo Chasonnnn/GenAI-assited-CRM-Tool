@@ -212,6 +212,13 @@ variable "run_cpu" {
   description = "CPU allocation for Cloud Run services."
   type        = string
   default     = "1"
+
+  # Cloud Run CPU values are strings. We intentionally cap these services at
+  # 0.5–1 vCPU to control cost and latency jitter.
+  validation {
+    condition     = contains(["0.5", "500m", "1", "1000m"], var.run_cpu)
+    error_message = "run_cpu must be 0.5 or 1 vCPU (\"0.5\"/\"500m\" or \"1\"/\"1000m\")."
+  }
 }
 
 variable "run_memory" {
@@ -220,10 +227,16 @@ variable "run_memory" {
   default     = "1Gi"
 }
 
+variable "run_cpu_idle" {
+  description = "Whether Cloud Run should throttle CPU when idle (CPU allocated only during request handling)."
+  type        = bool
+  default     = true
+}
+
 variable "run_min_instances" {
   description = "Minimum number of Cloud Run instances."
   type        = number
-  default     = 0
+  default     = 1
 }
 
 variable "run_max_instances" {
