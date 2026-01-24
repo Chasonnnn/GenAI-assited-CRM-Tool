@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.29.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.28.1...surrogacy-crm-platform-v0.29.0) (2026-01-24)
+
+
+### Features
+
+* **api:** enhance Duo MFA service and router ([c1927b4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c1927b4f55e902b8ac7524ce77f15118a0d81054))
+* **infra:** add Cloud Run job configuration and variable updates ([b0c1030](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b0c103094e66c70747e4c919a33cfabd25cb9f7e))
+* **web:** update MFA pages and ops layout ([60b0401](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/60b0401b46c683cdeae66c6d282a988bf1dfcdab))
+
+
+### Bug Fixes
+
+* **infra:** update Cloud Run and terraform locals ([1d0bbb4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1d0bbb4d8c1985a1a97fcc86fb8cd58781986dab))
+
 ## [0.28.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.28.0...surrogacy-crm-platform-v0.28.1) (2026-01-24)
 
 
