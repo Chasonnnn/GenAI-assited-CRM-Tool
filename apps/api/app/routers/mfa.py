@@ -10,7 +10,7 @@ Provides:
 
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, Response, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -410,6 +410,7 @@ def duo_health_check():
 )
 def initiate_duo_auth(
     request: Request,
+    return_to: str | None = Query(None),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
@@ -429,14 +430,22 @@ def initiate_duo_auth(
     # Generate secure state token for CSRF protection
     state = secrets.token_urlsafe(32)
 
-    host = (request.headers.get("host") or "").lower()
-    if host.startswith("ops.") and settings.OPS_FRONTEND_URL:
+    allowed_return_to = {"app", "ops"}
+    return_to = return_to if return_to in allowed_return_to else None
+
+    if return_to == "ops" and settings.OPS_FRONTEND_URL:
         base_url = settings.OPS_FRONTEND_URL.rstrip("/")
-    elif settings.FRONTEND_URL:
+    elif return_to == "app" and settings.FRONTEND_URL:
         base_url = settings.FRONTEND_URL.rstrip("/")
     else:
-        scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
-        base_url = f"{scheme}://{host}".rstrip("/")
+        host = (request.headers.get("host") or "").lower()
+        if host.startswith("ops.") and settings.OPS_FRONTEND_URL:
+            base_url = settings.OPS_FRONTEND_URL.rstrip("/")
+        elif settings.FRONTEND_URL:
+            base_url = settings.FRONTEND_URL.rstrip("/")
+        else:
+            scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+            base_url = f"{scheme}://{host}".rstrip("/")
 
     redirect_uri = f"{base_url}/auth/duo/callback"
 

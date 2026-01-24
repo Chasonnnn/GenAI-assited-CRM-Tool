@@ -139,8 +139,9 @@ export function checkDuoHealth(): Promise<{ healthy: boolean; message: string }>
  * Initiate Duo authentication flow.
  * Returns a URL to redirect the user to for Duo Universal Prompt.
  */
-export function initiateDuoAuth(): Promise<DuoInitiateResponse> {
-    return api.post<DuoInitiateResponse>('/mfa/duo/initiate');
+export function initiateDuoAuth(returnTo?: 'app' | 'ops'): Promise<DuoInitiateResponse> {
+    const query = returnTo ? `?return_to=${returnTo}` : '';
+    return api.post<DuoInitiateResponse>(`/mfa/duo/initiate${query}`);
 }
 
 /**

@@ -28,7 +28,7 @@ from app.db.models import (
 )
 from app.db.enums import Role
 from app.core.security import create_support_session_token
-from app.services import session_service
+from app.services import mfa_service, session_service
 
 logger = logging.getLogger(__name__)
 
@@ -737,6 +737,48 @@ def update_member(
         "last_login_at": membership.user.last_login_at.isoformat() if membership.user.last_login_at else None,
         "created_at": membership.created_at.isoformat(),
     }
+
+
+def reset_member_mfa(
+    db: Session,
+    org_id: UUID,
+    member_id: UUID,
+    actor_id: UUID,
+    request: Request | None = None,
+) -> dict:
+    """Reset MFA enrollment for a member and revoke their sessions."""
+    membership = (
+        db.query(Membership)
+        .options(joinedload(Membership.user))
+        .filter(
+            Membership.id == member_id,
+            Membership.organization_id == org_id,
+        )
+        .first()
+    )
+    if not membership or not membership.user:
+        raise ValueError("Member not found")
+
+    user = membership.user
+
+    mfa_service.disable_mfa(db, user)
+    user.token_version += 1
+
+    log_admin_action(
+        db=db,
+        actor_id=actor_id,
+        action="member.mfa.reset",
+        target_org_id=org_id,
+        target_user_id=user.id,
+        metadata={"member_id": str(member_id)},
+        request=request,
+    )
+
+    db.commit()
+
+    session_service.revoke_all_user_sessions(db, user.id, org_id)
+
+    return {"message": "MFA reset successfully"}
 
 
 # =============================================================================
