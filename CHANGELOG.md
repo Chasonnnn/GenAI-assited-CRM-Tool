@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.28.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.27.0...surrogacy-crm-platform-v0.28.0) (2026-01-24)
+
+
+### Maintenance
+
+* test cloud build trigger ([eaa2a42](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/eaa2a42300d5e549263871f2bdd760a49c6facbd))
+
 ## [0.27.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.26.0...surrogacy-crm-platform-v0.27.0) (2026-01-24)
 
 
