@@ -15,6 +15,7 @@ import {
     updateSubscription,
     extendSubscription,
     updateMember,
+    resetMemberMfa,
     createInvite,
     revokeInvite,
     type OrganizationDetail,
@@ -77,6 +78,7 @@ import {
     UserMinus,
     Mail,
     Ban,
+    ShieldOff,
     Plus,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -189,6 +191,7 @@ export default function AgencyDetailPage() {
     const [orgAlerts, setOrgAlerts] = useState<PlatformAlert[]>([]);
     const [alertsLoading, setAlertsLoading] = useState(false);
     const [alertsUpdating, setAlertsUpdating] = useState<string | null>(null);
+    const [mfaResetting, setMfaResetting] = useState<string | null>(null);
     const [inviteOpen, setInviteOpen] = useState(false);
     const [inviteSubmitting, setInviteSubmitting] = useState(false);
     const [inviteForm, setInviteForm] = useState<{ email: string; role: InviteRole }>({
@@ -262,6 +265,19 @@ export default function AgencyDetailPage() {
             toast.success('Subscription extended by 30 days');
         } catch {
             toast.error('Failed to extend subscription');
+        }
+    };
+
+    const handleResetMfa = async (member: OrgMember) => {
+        setMfaResetting(member.id);
+        try {
+            await resetMemberMfa(orgId, member.id);
+            toast.success(`MFA reset for ${member.email}`);
+        } catch (error) {
+            console.error('Failed to reset MFA:', error);
+            toast.error('Failed to reset MFA');
+        } finally {
+            setMfaResetting(null);
         }
     };
 
@@ -522,13 +538,13 @@ export default function AgencyDetailPage() {
                                             <TableRow>
                                                 <TableHead>User</TableHead>
                                                 <TableHead>Role</TableHead>
-                                                <TableHead>Status</TableHead>
-                                                <TableHead>Last Login</TableHead>
-                                                <TableHead className="w-10"></TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {members.map((member) => (
+                                            <TableHead>Status</TableHead>
+                                            <TableHead>Last Login</TableHead>
+                                            <TableHead className="w-24 text-right">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {members.map((member) => (
                                                 <TableRow key={member.id}>
                                                     <TableCell>
                                                         <div>
@@ -559,29 +575,29 @@ export default function AgencyDetailPage() {
                                                             : 'Never'}
                                                     </TableCell>
                                                     <TableCell>
-                                                        {member.is_active && (
+                                                        <div className="flex items-center justify-end gap-2">
                                                             <AlertDialog>
                                                                 <AlertDialogTrigger
                                                                     className={buttonVariants({
                                                                         variant: 'ghost',
                                                                         size: 'sm',
-                                                                        className: 'text-destructive',
                                                                     })}
                                                                 >
-                                                                    <UserMinus className="size-4" />
+                                                                    <ShieldOff className="size-4" />
                                                                 </AlertDialogTrigger>
                                                                 <AlertDialogContent>
                                                                     <AlertDialogHeader>
                                                                         <AlertDialogTitle>
-                                                                            Deactivate User?
+                                                                            Reset MFA?
                                                                         </AlertDialogTitle>
                                                                         <AlertDialogDescription>
+                                                                            This will clear MFA enrollment for{' '}
                                                                             <strong>
                                                                                 {member.display_name}
                                                                             </strong>{' '}
-                                                                            ({member.email}) will no longer
-                                                                            be able to access {org.name}.
-                                                                            This action can be reversed.
+                                                                            ({member.email}). They will be
+                                                                            required to set up MFA again on
+                                                                            next login.
                                                                         </AlertDialogDescription>
                                                                     </AlertDialogHeader>
                                                                     <AlertDialogFooter>
@@ -590,18 +606,68 @@ export default function AgencyDetailPage() {
                                                                         </AlertDialogCancel>
                                                                         <AlertDialogAction
                                                                             onClick={() =>
-                                                                                handleDeactivateMember(
-                                                                                    member.id
-                                                                                )
+                                                                                handleResetMfa(member)
                                                                             }
-                                                                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                                            disabled={
+                                                                                mfaResetting === member.id
+                                                                            }
                                                                         >
-                                                                            Deactivate
+                                                                            {mfaResetting === member.id ? (
+                                                                                <span className="inline-flex items-center gap-2">
+                                                                                    <Loader2 className="size-4 animate-spin" />
+                                                                                    Resetting
+                                                                                </span>
+                                                                            ) : (
+                                                                                'Reset MFA'
+                                                                            )}
                                                                         </AlertDialogAction>
                                                                     </AlertDialogFooter>
                                                                 </AlertDialogContent>
                                                             </AlertDialog>
-                                                        )}
+                                                            {member.is_active && (
+                                                                <AlertDialog>
+                                                                    <AlertDialogTrigger
+                                                                        className={buttonVariants({
+                                                                            variant: 'ghost',
+                                                                            size: 'sm',
+                                                                            className: 'text-destructive',
+                                                                        })}
+                                                                    >
+                                                                        <UserMinus className="size-4" />
+                                                                    </AlertDialogTrigger>
+                                                                    <AlertDialogContent>
+                                                                        <AlertDialogHeader>
+                                                                            <AlertDialogTitle>
+                                                                                Deactivate User?
+                                                                            </AlertDialogTitle>
+                                                                            <AlertDialogDescription>
+                                                                                <strong>
+                                                                                    {member.display_name}
+                                                                                </strong>{' '}
+                                                                                ({member.email}) will no longer
+                                                                                be able to access {org.name}.
+                                                                                This action can be reversed.
+                                                                            </AlertDialogDescription>
+                                                                        </AlertDialogHeader>
+                                                                        <AlertDialogFooter>
+                                                                            <AlertDialogCancel>
+                                                                                Cancel
+                                                                            </AlertDialogCancel>
+                                                                            <AlertDialogAction
+                                                                                onClick={() =>
+                                                                                    handleDeactivateMember(
+                                                                                        member.id
+                                                                                    )
+                                                                                }
+                                                                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                                            >
+                                                                                Deactivate
+                                                                            </AlertDialogAction>
+                                                                        </AlertDialogFooter>
+                                                                    </AlertDialogContent>
+                                                                </AlertDialog>
+                                                            )}
+                                                        </div>
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
