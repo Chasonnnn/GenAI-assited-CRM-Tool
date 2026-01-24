@@ -1,11 +1,13 @@
 locals {
   app_url = "https://app.${var.domain}"
+  ops_url = var.ops_frontend_url != "" ? var.ops_frontend_url : "https://ops.${var.domain}"
   api_url = "https://api.${var.domain}"
 
   api_image = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_repo}/api:latest"
   web_image = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_repo}/web:latest"
 
   alerting_enabled = length(var.alert_notification_channel_ids) > 0
+  cors_origins     = join(",", distinct(compact([local.app_url, local.ops_url])))
 
   optional_env = merge(
     var.s3_endpoint_url != "" ? { S3_ENDPOINT_URL = var.s3_endpoint_url } : {},
@@ -18,7 +20,10 @@ locals {
     ENV                          = "production"
     API_BASE_URL                 = local.api_url
     FRONTEND_URL                 = local.app_url
-    CORS_ORIGINS                 = local.app_url
+    OPS_FRONTEND_URL             = local.ops_url
+    COOKIE_DOMAIN                = var.cookie_domain
+    PLATFORM_ADMIN_EMAILS        = var.platform_admin_emails
+    CORS_ORIGINS                 = local.cors_origins
     GOOGLE_REDIRECT_URI          = "${local.api_url}/auth/google/callback"
     ZOOM_REDIRECT_URI            = "${local.api_url}/integrations/zoom/callback"
     GMAIL_REDIRECT_URI           = "${local.api_url}/integrations/gmail/callback"
@@ -56,7 +61,10 @@ locals {
     "META_APP_ID",
     "META_APP_SECRET",
     "META_VERIFY_TOKEN",
-    "META_ACCESS_TOKEN"
+    "META_ACCESS_TOKEN",
+    "DUO_CLIENT_ID",
+    "DUO_CLIENT_SECRET",
+    "DUO_API_HOST"
   ]
 
   billing_secret_keys = [

@@ -141,6 +141,15 @@ Next (30-90 days)
 Later (90+ days)
 - [ ] Dedicated queue system: replace the polling loop in `apps/api/app/worker.py:720-775` with a managed queue (e.g., Postgres-based pg-boss or Redis-backed worker) and update job scheduling APIs in `apps/api/app/services/job_service.py:12-116` and `apps/api/app/db/models.py:1690-1739` accordingly.
 
+### Artifact Registry retention (Deferred)
+
+Evidence
+- `infra/terraform/artifact-registry.tf:1-6` repository exists but has no cleanup policy.
+- `cloudbuild/api.yaml:1-16` and `cloudbuild/web.yaml:1-19` push new images per release tag, accumulating artifacts.
+
+Deferred
+- [ ] Add Artifact Registry cleanup policies to retain a fixed number of tagged images and delete untagged images older than a set age. Implement via Terraform or gcloud policy config, and document defaults in `infra/terraform/README.md:40-80`.
+
 ## Finished (Implemented)
 
 ### Job processing

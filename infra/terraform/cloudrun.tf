@@ -65,7 +65,7 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       dynamic "env" {
-        for_each = toset(local.common_secret_keys)
+        for_each = { for key in sort(local.common_secret_keys) : key => key }
         content {
           name = env.value
           value_source {
@@ -165,6 +165,10 @@ resource "google_cloud_run_v2_job" "worker" {
       containers {
         image   = local.api_image
         command = ["python", "-m", "app.worker"]
+        volume_mounts {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
 
         dynamic "env" {
           for_each = local.common_env
@@ -175,7 +179,7 @@ resource "google_cloud_run_v2_job" "worker" {
         }
 
         dynamic "env" {
-          for_each = toset(local.common_secret_keys)
+          for_each = { for key in sort(local.common_secret_keys) : key => key }
           content {
             name = env.value
             value_source {
@@ -191,6 +195,13 @@ resource "google_cloud_run_v2_job" "worker" {
       vpc_access {
         connector = google_vpc_access_connector.crm.id
         egress    = "PRIVATE_RANGES_ONLY"
+      }
+
+      volumes {
+        name = "cloudsql"
+        cloud_sql_instance {
+          instances = [google_sql_database_instance.crm.connection_name]
+        }
       }
     }
   }
@@ -214,6 +225,10 @@ resource "google_cloud_run_v2_job" "migrate" {
       containers {
         image   = local.api_image
         command = ["alembic", "upgrade", "head"]
+        volume_mounts {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
 
         dynamic "env" {
           for_each = local.common_env
@@ -224,7 +239,7 @@ resource "google_cloud_run_v2_job" "migrate" {
         }
 
         dynamic "env" {
-          for_each = toset(local.common_secret_keys)
+          for_each = { for key in sort(local.common_secret_keys) : key => key }
           content {
             name = env.value
             value_source {
@@ -240,6 +255,13 @@ resource "google_cloud_run_v2_job" "migrate" {
       vpc_access {
         connector = google_vpc_access_connector.crm.id
         egress    = "PRIVATE_RANGES_ONLY"
+      }
+
+      volumes {
+        name = "cloudsql"
+        cloud_sql_instance {
+          instances = [google_sql_database_instance.crm.connection_name]
+        }
       }
     }
   }
