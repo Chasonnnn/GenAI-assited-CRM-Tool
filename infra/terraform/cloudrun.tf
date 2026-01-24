@@ -28,6 +28,7 @@ resource "google_cloud_run_v2_service" "api" {
           cpu    = var.run_cpu
           memory = var.run_memory
         }
+        cpu_idle = var.run_cpu_idle
       }
 
       ports {
@@ -112,6 +113,7 @@ resource "google_cloud_run_v2_service" "web" {
           cpu    = var.run_cpu
           memory = var.run_memory
         }
+        cpu_idle = var.run_cpu_idle
       }
 
       ports {
