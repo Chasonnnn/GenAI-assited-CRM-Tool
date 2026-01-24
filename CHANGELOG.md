@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.27.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.26.0...surrogacy-crm-platform-v0.27.0) (2026-01-24)
+
+
+### Maintenance
+
+* **ci:** improve pip-audit guard and test configuration ([0905f7b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0905f7b56736d6ac9201e1ce87a4a4bcaeb4d1ad))
+* **ci:** improve pip-audit guard and test configuration ([df90f58](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/df90f58ba085705221a78f0e1c858eeff30a0e22))
+* update release-please configuration ([d9d4464](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d9d44648346added00d28e9de41a333024a9c0a7))
+
 ## [0.26.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.25.2...surrogacy-crm-platform-v0.26.0) (2026-01-23)
 
 
