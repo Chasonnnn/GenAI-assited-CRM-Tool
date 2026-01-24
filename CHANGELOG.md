@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.31.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.30.3...surrogacy-crm-platform-v0.31.0) (2026-01-24)
+
+
+### Features
+
+* **mfa:** refine Duo MFA authentication and UI flow ([5bb2f02](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5bb2f023b2280d7a413b0a7251efbf4db92b33bb))
+* **mfa:** refine Duo MFA authentication and UI flow ([8a3390f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8a3390fb6ab3b45ff971f934a886ea4b5d76a6f5))
+
 ## [0.30.3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.30.2...surrogacy-crm-platform-v0.30.3) (2026-01-24)
 
 
