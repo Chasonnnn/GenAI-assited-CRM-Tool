@@ -26,6 +26,7 @@ function OpsLoginContent() {
     const handleGoogleLogin = () => {
         setIsLoading(true);
         try {
+            sessionStorage.setItem('auth_return_to', 'ops');
             // Pass return_to=ops to redirect back to ops console after auth
             window.location.assign(`${apiBase}/auth/google/login?return_to=ops`);
         } catch {

@@ -87,6 +87,11 @@ function DuoCallbackContent() {
     useEffect(() => {
         if (authLoading) return
         if (!user) {
+            const returnTo = sessionStorage.getItem("auth_return_to")
+            if (returnTo === "ops") {
+                router.replace("/ops/login")
+                return
+            }
             router.replace("/login")
         }
     }, [authLoading, user, router])
@@ -121,6 +126,12 @@ function DuoCallbackContent() {
                 await refetch()
                 setStatus("success")
                 if (!result.recovery_codes || result.recovery_codes.length === 0) {
+                    const returnTo = sessionStorage.getItem("auth_return_to")
+                    if (returnTo === "ops") {
+                        sessionStorage.removeItem("auth_return_to")
+                        router.replace("/ops")
+                        return
+                    }
                     router.replace("/")
                 }
             } catch (error) {
@@ -174,6 +185,12 @@ function DuoCallbackContent() {
                     codes={recoveryCodes}
                     onClose={() => {
                         setRecoveryCodes(null)
+                        const returnTo = sessionStorage.getItem("auth_return_to")
+                        if (returnTo === "ops") {
+                            sessionStorage.removeItem("auth_return_to")
+                            router.replace("/ops")
+                            return
+                        }
                         router.replace("/")
                     }}
                 />
@@ -195,4 +212,3 @@ export default function DuoCallbackPage() {
         </Suspense>
     )
 }
-
