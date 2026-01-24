@@ -17,7 +17,7 @@ resource "google_sql_database_instance" "crm" {
     }
   }
 
-  deletion_protection = true
+  deletion_protection = var.database_deletion_protection
   depends_on          = [google_service_networking_connection.private_vpc_connection]
 }
 
