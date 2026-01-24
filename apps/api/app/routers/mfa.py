@@ -253,6 +253,7 @@ class MFACompleteResponse(BaseModel):
     dependencies=[Depends(require_csrf_header)],
 )
 def complete_mfa_challenge(
+    request: Request,
     body: MFAVerifyRequest,
     response: Response,
     session: UserSession = Depends(get_current_session),
@@ -299,6 +300,21 @@ def complete_mfa_challenge(
         user.token_version,
         mfa_verified=True,  # Now verified!
         mfa_required=True,
+    )
+
+    # Rotate the session record so the upgraded JWT is accepted by auth deps
+    # (we validate sessions against the DB for revocation support).
+    from app.services import session_service
+
+    old_token = request.cookies.get(COOKIE_NAME)
+    if old_token:
+        session_service.delete_session_by_token(db, old_token)
+    session_service.create_session(
+        db=db,
+        user_id=user.id,
+        org_id=membership.organization_id,
+        token=new_token,
+        request=request,
     )
 
     # Set new cookie
@@ -475,6 +491,7 @@ def initiate_duo_auth(
     dependencies=[Depends(require_csrf_header)],
 )
 def verify_duo_callback(
+    request: Request,
     body: DuoCallbackRequest,
     response: Response,
     expected_state: str,  # Should come from session in production
@@ -550,6 +567,21 @@ def verify_duo_callback(
         user.token_version,
         mfa_verified=True,
         mfa_required=True,
+    )
+
+    # Rotate the session record so the upgraded JWT is accepted by auth deps
+    # (we validate sessions against the DB for revocation support).
+    from app.services import session_service
+
+    old_token = request.cookies.get(COOKIE_NAME)
+    if old_token:
+        session_service.delete_session_by_token(db, old_token)
+    session_service.create_session(
+        db=db,
+        user_id=user.id,
+        org_id=membership.organization_id,
+        token=new_token,
+        request=request,
     )
 
     if settings.COOKIE_DOMAIN:
