@@ -193,7 +193,8 @@ export default function MFAPage() {
     const handleDuo = async () => {
         setErrorMessage(null)
         try {
-            const result = await initiateDuo.mutateAsync()
+            const returnTo = sessionStorage.getItem("auth_return_to") === "ops" ? "ops" : undefined
+            const result = await initiateDuo.mutateAsync(returnTo)
             sessionStorage.setItem("duo_state", result.state)
             window.location.assign(result.auth_url)
         } catch (error) {

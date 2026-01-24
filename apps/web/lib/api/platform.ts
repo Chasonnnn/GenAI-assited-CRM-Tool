@@ -205,6 +205,13 @@ export function updateMember(
 }
 
 /**
+ * Reset MFA for a member (forces re-enrollment).
+ */
+export function resetMemberMfa(orgId: string, memberId: string): Promise<{ message: string }> {
+    return api.post(`/platform/orgs/${orgId}/members/${memberId}/mfa/reset`);
+}
+
+/**
  * List organization invites.
  */
 export function listInvites(orgId: string): Promise<OrgInvite[]> {
