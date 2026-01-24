@@ -16,10 +16,28 @@ export default function LoginPage() {
 
   const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
 
+  const getReturnTo = () =>
+    typeof window !== "undefined" && window.location.hostname.startsWith("ops.") ? "ops" : "app"
+
+  const buildGoogleLoginUrl = (loginHint?: string) => {
+    const returnTo = getReturnTo()
+    const params = new URLSearchParams()
+    if (loginHint) params.set("login_hint", loginHint)
+    params.set("return_to", returnTo)
+    return `${apiBase}/auth/google/login?${params.toString()}`
+  }
+
   const handleGoogleLogin = () => {
     setIsLoading(true)
     try {
-      window.location.assign(`${apiBase}/auth/google/login`)
+      const returnTo = getReturnTo()
+      const url = buildGoogleLoginUrl()
+      try {
+        sessionStorage.setItem("auth_return_to", returnTo)
+      } catch {
+        // Ignore storage errors (private browsing, etc.)
+      }
+      window.location.assign(url)
     } catch {
       // Ignore navigation errors in non-browser runtimes.
     }
@@ -29,9 +47,15 @@ export default function LoginPage() {
     e.preventDefault()
     setIsLoading(true)
     const hint = username.trim()
-    const hintParam = hint ? `?login_hint=${encodeURIComponent(hint)}` : ""
     try {
-      window.location.assign(`${apiBase}/auth/google/login${hintParam}`)
+      const returnTo = getReturnTo()
+      const url = buildGoogleLoginUrl(hint || undefined)
+      try {
+        sessionStorage.setItem("auth_return_to", returnTo)
+      } catch {
+        // Ignore storage errors (private browsing, etc.)
+      }
+      window.location.assign(url)
     } catch {
       // Ignore navigation errors in non-browser runtimes.
     }
