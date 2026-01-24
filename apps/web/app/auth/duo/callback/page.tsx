@@ -17,6 +17,14 @@ import { CheckIcon, CopyIcon, KeyIcon, Loader2Icon } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { verifyDuoCallback } from "@/lib/api/mfa"
 
+function getOpsOrigin(): string | null {
+    if (typeof window === "undefined") return null
+    const { protocol, hostname, origin } = window.location
+    if (hostname.startsWith("ops.")) return origin
+    if (hostname.startsWith("app.")) return `${protocol}//ops.${hostname.slice(4)}`
+    return null
+}
+
 function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: () => void }) {
     const [copied, setCopied] = useState(false)
 
@@ -87,20 +95,40 @@ function DuoCallbackContent() {
     useEffect(() => {
         if (authLoading) return
         if (!user) {
-            const returnTo = sessionStorage.getItem("auth_return_to")
+            const returnTo =
+                sessionStorage.getItem("auth_return_to") === "ops" ||
+                searchParams.get("return_to") === "ops"
+                    ? "ops"
+                    : "app"
+
             if (returnTo === "ops") {
+                const opsOrigin = getOpsOrigin()
+                if (opsOrigin && opsOrigin !== window.location.origin) {
+                    window.location.replace(`${opsOrigin}/login`)
+                    return
+                }
                 router.replace("/ops/login")
                 return
             }
+
             router.replace("/login")
         }
-    }, [authLoading, user, router])
+    }, [authLoading, user, router, searchParams])
 
     useEffect(() => {
         if (authLoading || !user) return
 
-        // Duo Web SDK can return the authorization parameter as `duo_code` (default)
-        // or `code` depending on the SDK/client configuration.
+        const returnTo =
+            sessionStorage.getItem("auth_return_to") === "ops" ||
+            searchParams.get("return_to") === "ops"
+                ? "ops"
+                : "app"
+
+        if (returnTo === "ops") {
+            sessionStorage.setItem("auth_return_to", "ops")
+        }
+
+        // Duo Web SDK can return the authorization parameter as `duo_code` (default) or `code`.
         const code = searchParams.get("duo_code") ?? searchParams.get("code")
         const state = searchParams.get("state")
         const expectedState = sessionStorage.getItem("duo_state")
@@ -121,16 +149,20 @@ function DuoCallbackContent() {
 
         const verify = async () => {
             try {
-                const result = await verifyDuoCallback(code, state, expectedState)
+                const result = await verifyDuoCallback(code, state, expectedState, returnTo)
                 if (result.recovery_codes && result.recovery_codes.length > 0) {
                     setRecoveryCodes(result.recovery_codes)
                 }
                 await refetch()
                 setStatus("success")
                 if (!result.recovery_codes || result.recovery_codes.length === 0) {
-                    const returnTo = sessionStorage.getItem("auth_return_to")
                     if (returnTo === "ops") {
                         sessionStorage.removeItem("auth_return_to")
+                        const opsOrigin = getOpsOrigin()
+                        if (opsOrigin && opsOrigin !== window.location.origin) {
+                            window.location.replace(`${opsOrigin}/`)
+                            return
+                        }
                         router.replace("/ops")
                         return
                     }
@@ -187,9 +219,18 @@ function DuoCallbackContent() {
                     codes={recoveryCodes}
                     onClose={() => {
                         setRecoveryCodes(null)
-                        const returnTo = sessionStorage.getItem("auth_return_to")
+                        const returnTo =
+                            sessionStorage.getItem("auth_return_to") === "ops" ||
+                            searchParams.get("return_to") === "ops"
+                                ? "ops"
+                                : "app"
                         if (returnTo === "ops") {
                             sessionStorage.removeItem("auth_return_to")
+                            const opsOrigin = getOpsOrigin()
+                            if (opsOrigin && opsOrigin !== window.location.origin) {
+                                window.location.replace(`${opsOrigin}/`)
+                                return
+                            }
                             router.replace("/ops")
                             return
                         }

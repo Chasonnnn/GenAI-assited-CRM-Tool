@@ -447,7 +447,8 @@ def initiate_duo_auth(
             scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
             base_url = f"{scheme}://{host}".rstrip("/")
 
-    redirect_uri = f"{base_url}/auth/duo/callback"
+    effective_return_to = return_to or ("ops" if base_url == settings.OPS_FRONTEND_URL.rstrip("/") else "app")
+    redirect_uri = f"{base_url}/auth/duo/callback?return_to={effective_return_to}"
 
     # Create auth URL with user's email
     auth_url = duo_service.create_auth_url(
@@ -468,6 +469,7 @@ def verify_duo_callback(
     body: DuoCallbackRequest,
     response: Response,
     expected_state: str,  # Should come from session in production
+    return_to: str | None = Query(None),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
@@ -483,12 +485,26 @@ def verify_duo_callback(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    allowed_return_to = {"app", "ops"}
+    return_to = return_to if return_to in allowed_return_to else "app"
+
+    # IMPORTANT: Duo token exchange must use the SAME redirect_uri used during initiation.
+    if return_to == "ops" and settings.OPS_FRONTEND_URL:
+        base_url = settings.OPS_FRONTEND_URL.rstrip("/")
+    elif return_to == "app" and settings.FRONTEND_URL:
+        base_url = settings.FRONTEND_URL.rstrip("/")
+    else:
+        base_url = settings.FRONTEND_URL.rstrip("/") if settings.FRONTEND_URL else ""
+
+    redirect_uri = f"{base_url}/auth/duo/callback?return_to={return_to}" if base_url else None
+
     # Verify the callback
     is_valid, auth_result = duo_service.verify_callback(
         code=body.code,
         state=body.state,
         expected_state=expected_state,
         username=user.email,
+        redirect_uri=redirect_uri,
     )
 
     if not is_valid:
