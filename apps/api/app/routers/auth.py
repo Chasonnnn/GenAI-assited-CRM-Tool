@@ -213,8 +213,12 @@ async def google_callback(
 
     # Success! Set session cookie and redirect
     base_url = None
+    mfa_pending = False
     try:
         payload = decode_session_token(session_token)
+        mfa_required = bool(payload.get("mfa_required", False))
+        mfa_verified = bool(payload.get("mfa_verified", False))
+        mfa_pending = mfa_required and not mfa_verified
         org_id = payload.get("org_id")
         if org_id:
             org = org_service.get_org_by_id(db, UUIDType(str(org_id)))
@@ -223,9 +227,23 @@ async def google_callback(
         base_url = None
 
     success_response = RedirectResponse(
-        url=_get_success_redirect(base_url, return_to=return_to), status_code=302
+        url=_get_success_redirect(base_url, return_to=return_to, mfa_pending=mfa_pending),
+        status_code=302,
     )
     success_response.delete_cookie(OAUTH_STATE_COOKIE, path="/auth")
+
+    # Preserve "return_to" across subdomains during MFA; cleared after MFA completes.
+    # Not sensitive; frontend may read it to route back to ops after verification.
+    success_response.set_cookie(
+        key="auth_return_to",
+        value=return_to,
+        domain=settings.COOKIE_DOMAIN or None,
+        max_age=600,  # 10 minutes
+        httponly=False,
+        samesite=settings.cookie_samesite,
+        secure=settings.cookie_secure,
+        path="/",
+    )
 
     # Clear legacy host-only cookies before setting new domain cookies (migration safety)
     if settings.COOKIE_DOMAIN:
@@ -1031,14 +1049,30 @@ def logout(
 # =============================================================================
 
 
-def _get_success_redirect(base_url: str | None = None, return_to: str = "app") -> str:
+def _get_success_redirect(
+    base_url: str | None = None,
+    return_to: str = "app",
+    mfa_pending: bool = False,
+) -> str:
     """
     Safe success redirect URL - fixed path, no user input.
 
     Args:
         base_url: Optional org portal base URL (takes precedence for app redirects).
         return_to: Target app ("app" or "ops").
+        mfa_pending: If true, redirect to MFA instead of the post-login landing page.
     """
+    if mfa_pending:
+        if return_to == "ops":
+            base = (
+                settings.OPS_FRONTEND_URL.rstrip("/")
+                if settings.OPS_FRONTEND_URL
+                else settings.FRONTEND_URL.rstrip("/")
+            )
+            return f"{base}/mfa?return_to=ops"
+        base = base_url or settings.FRONTEND_URL.rstrip("/")
+        return f"{base}/mfa"
+
     if return_to == "ops":
         base = settings.OPS_FRONTEND_URL.rstrip("/") if settings.OPS_FRONTEND_URL else settings.FRONTEND_URL.rstrip("/")
         return f"{base}/"
