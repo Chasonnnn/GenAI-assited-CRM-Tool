@@ -16,7 +16,7 @@ module.exports = withBundleAnalyzer({
       },
       {
         source:
-          "/:path((?!_next|api|favicon\\.ico|robots\\.txt|sitemap\\.xml|ops).*)",
+          "/:path((?!_next|api|favicon\\.ico|robots\\.txt|sitemap\\.xml|ops|mfa|auth\\/duo\\/callback).*)",
         has: [{ type: "header", key: "host", value: "^ops\\." }],
         destination: "/ops/:path",
       },

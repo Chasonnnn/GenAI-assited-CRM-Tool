@@ -126,14 +126,21 @@ export default function MFAPage() {
 
     useEffect(() => {
         if (authLoading) return
+        if (recoveryCodes) return
         if (!user) {
             router.replace("/login")
             return
         }
         if (!user.mfa_required || user.mfa_verified) {
+            const returnTo = sessionStorage.getItem("auth_return_to")
+            if (returnTo === "ops") {
+                sessionStorage.removeItem("auth_return_to")
+                router.replace("/ops")
+                return
+            }
             router.replace("/")
         }
-    }, [authLoading, user, router])
+    }, [authLoading, user, router, recoveryCodes])
 
     const handleStartSetup = async () => {
         setErrorMessage(null)
@@ -170,6 +177,12 @@ export default function MFAPage() {
         try {
             await completeMFA.mutateAsync(challengeCode)
             await refetch()
+            const returnTo = sessionStorage.getItem("auth_return_to")
+            if (returnTo === "ops") {
+                sessionStorage.removeItem("auth_return_to")
+                router.replace("/ops")
+                return
+            }
             router.replace("/")
         } catch (error) {
             console.error("MFA challenge failed:", error)
@@ -332,6 +345,12 @@ export default function MFAPage() {
                     codes={recoveryCodes}
                     onClose={() => {
                         setRecoveryCodes(null)
+                        const returnTo = sessionStorage.getItem("auth_return_to")
+                        if (returnTo === "ops") {
+                            sessionStorage.removeItem("auth_return_to")
+                            router.replace("/ops")
+                            return
+                        }
                         router.replace("/")
                     }}
                 />

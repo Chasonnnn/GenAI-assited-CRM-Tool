@@ -7,7 +7,7 @@ import { getPlatformMe, getPlatformStats, type PlatformUser } from '@/lib/api/pl
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ShieldCheck, Building2, Bell, LogOut, Loader2 } from 'lucide-react';
-import api from '@/lib/api';
+import api, { ApiError } from '@/lib/api';
 
 function NavLink({
     href,
@@ -61,7 +61,14 @@ export default function OpsLayout({ children }: { children: React.ReactNode }) {
                 } catch {
                     setOpenAlertCount(0);
                 }
-            } catch {
+            } catch (error) {
+                if (error instanceof ApiError && error.status === 403) {
+                    const message = (error.message || '').toLowerCase();
+                    if (message.includes('mfa')) {
+                        router.replace('/mfa');
+                        return;
+                    }
+                }
                 // Not authenticated or not platform admin
                 router.replace('/ops/login');
             } finally {
