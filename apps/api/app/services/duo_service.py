@@ -8,6 +8,8 @@ Provides:
 
 from typing import Tuple
 import logging
+import re
+from urllib.parse import urlparse
 from uuid import UUID
 
 import duo_universal
@@ -15,6 +17,13 @@ import duo_universal
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+_INVISIBLE_CHARS = ("\ufeff", "\u200b", "\u200c", "\u200d", "\u2060")
+
+
+def _strip_invisible(value: str) -> str:
+    return "".join(ch for ch in value if ch not in _INVISIBLE_CHARS)
+
 
 # =============================================================================
 # Duo Client
@@ -33,14 +42,33 @@ def get_duo_client(redirect_uri: str | None = None) -> duo_universal.Client:
             "Duo MFA is not configured. Set DUO_CLIENT_ID, DUO_CLIENT_SECRET, and DUO_API_HOST."
         )
 
-    client_redirect_uri = redirect_uri or settings.DUO_REDIRECT_URI
+    # Duo's Python SDK expects strict credential lengths. Secret sources sometimes
+    # introduce invisible chars or quotes (e.g. copy/paste), so sanitize gently.
+    raw_client_id = _strip_invisible(settings.DUO_CLIENT_ID or "")
+    client_id = re.sub(r"[^A-Za-z0-9]", "", raw_client_id)
+
+    client_secret = _strip_invisible(settings.DUO_CLIENT_SECRET or "").strip().strip('"').strip("'")
+    host = _strip_invisible(settings.DUO_API_HOST or "").strip().strip('"').strip("'")
+    if "://" in host:
+        # Allow users to paste "https://api-xxxxx.duosecurity.com" accidentally.
+        parsed = urlparse(host)
+        host = parsed.hostname or host
+
+    if not (client_id and client_secret and host):
+        raise ValueError(
+            "Duo MFA is not configured. Set DUO_CLIENT_ID, DUO_CLIENT_SECRET, and DUO_API_HOST."
+        )
+
+    client_redirect_uri = _strip_invisible(
+        (redirect_uri or settings.DUO_REDIRECT_URI or "")
+    ).strip().strip('"').strip("'")
     if not client_redirect_uri:
         raise ValueError("Duo redirect URI is not configured.")
 
     return duo_universal.Client(
-        client_id=settings.DUO_CLIENT_ID,
-        client_secret=settings.DUO_CLIENT_SECRET,
-        host=settings.DUO_API_HOST,
+        client_id=client_id,
+        client_secret=client_secret,
+        host=host,
         redirect_uri=client_redirect_uri,
     )
 

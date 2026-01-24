@@ -310,7 +310,11 @@ class Settings(BaseSettings):
     @property
     def duo_enabled(self) -> bool:
         """Check if Duo is configured."""
-        return bool(self.DUO_CLIENT_ID and self.DUO_CLIENT_SECRET and self.DUO_API_HOST)
+        return bool(
+            (self.DUO_CLIENT_ID or "").strip()
+            and (self.DUO_CLIENT_SECRET or "").strip()
+            and (self.DUO_API_HOST or "").strip()
+        )
 
     @property
     def gcp_project_id(self) -> str:
