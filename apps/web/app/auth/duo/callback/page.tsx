@@ -99,7 +99,9 @@ function DuoCallbackContent() {
     useEffect(() => {
         if (authLoading || !user) return
 
-        const code = searchParams.get("code")
+        // Duo Web SDK can return the authorization parameter as `duo_code` (default)
+        // or `code` depending on the SDK/client configuration.
+        const code = searchParams.get("duo_code") ?? searchParams.get("code")
         const state = searchParams.get("state")
         const expectedState = sessionStorage.getItem("duo_state")
 
