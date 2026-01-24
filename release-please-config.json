@@ -3,7 +3,6 @@
     ".": {
       "release-type": "simple",
       "package-name": "surrogacy-crm-platform",
-      "versioning": "always-bump-minor",
       "changelog-path": "CHANGELOG.md",
       "changelog-sections": [
         { "type": "feat", "section": "Features" },
