@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.30.2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.30.1...surrogacy-crm-platform-v0.30.2) (2026-01-24)
+
+
+### Bug Fixes
+
+* **web:** improve Duo callback handling and update tsconfig ([69e5aaa](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/69e5aaaccaf5d223cadbae7f9b8762018f8620de))
+* **web:** improve Duo callback handling and update tsconfig ([fa968e0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fa968e084c64913d54319466546110ddb3d1fd89))
+
 ## [0.30.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.30.0...surrogacy-crm-platform-v0.30.1) (2026-01-24)
 
 
