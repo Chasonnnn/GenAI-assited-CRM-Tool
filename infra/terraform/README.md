@@ -52,7 +52,7 @@ domain             = "example.com"
 github_owner       = "your-org"
 github_repo        = "your-repo"
 cloudbuild_repository = "projects/PROJECT/locations/REGION/connections/CONNECTION/repositories/REPO"
-github_tag_regex = "^v.*$"
+github_tag_regex = "^surrogacy-crm-platform-v.*$"
 
 s3_bucket          = "..."
 export_s3_bucket   = "..."
