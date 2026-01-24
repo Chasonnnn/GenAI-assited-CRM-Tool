@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.31.3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.31.2...surrogacy-crm-platform-v0.31.3) (2026-01-24)
+
+
+### Bug Fixes
+
+* **api:** persist upgraded session on MFA completion ([ac4c970](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ac4c970d7870b87b4f0c71ccd3100557c64e1b22))
+* **api:** persist upgraded session on MFA completion ([5d3e208](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5d3e2088ee701613458a89888432bd55279671b0))
+
 ## [0.31.2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.31.1...surrogacy-crm-platform-v0.31.2) (2026-01-24)
 
 
