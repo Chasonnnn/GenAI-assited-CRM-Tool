@@ -1,27 +1,27 @@
 # LAUNCH_READINESS
 
-Date: 2026-01-23
+Date: 2026-01-24
 Scope: Full-file audit with emphasis on tenant isolation, public attack surfaces, PII handling, and ops readiness.
 
 ## Open Launch Items (Do First)
-- [ ] Run ZAP baseline scan against staging and triage findings (`zap-baseline.conf`).
-- [ ] Run staging migration with idempotency check and log it (`docs/migration-runbook.md`).
-- [ ] Execute quarterly restore test and record results (`docs/backup-restore-runbook.md`).
-- [ ] Verify GCP alert routing and record results (`docs/monitoring-runbook.md`).
+- [x] Run ZAP baseline scan and triage findings (`zap-baseline.conf`). Completed on 2026-01-24 against production (staging unavailable). Report: `zap-baseline-report.html`. Warnings: Cache-Control, HSTS.
+- [ ] Run staging migration with idempotency check and log it (`docs/migration-runbook.md`). Blocked: no staging DB.
+- [ ] Execute quarterly restore test and record results (`docs/backup-restore-runbook.md`). Blocked: no staging DB/restore environment.
+- [ ] Verify GCP alert routing and record results (`docs/monitoring-runbook.md`). Pending: need channel + test details.
 
 ## Executive Summary (Blockers + Fix Order)
-1) Blocker: ZAP baseline scan not run against staging (no report recorded).
-2) Blocker: Staging migration idempotency check not logged in `docs/migration-runbook.md` (run log empty).
-3) Blocker: Quarterly restore test not recorded in `docs/backup-restore-runbook.md` (restore test log empty).
+1) Resolved: ZAP baseline scan completed 2026-01-24 (production). Report: `zap-baseline-report.html` (63 pass, 2 warn, 0 fail).
+2) Blocker: Staging migration idempotency check not logged in `docs/migration-runbook.md` (run log empty; staging DB unavailable).
+3) Blocker: Quarterly restore test not recorded in `docs/backup-restore-runbook.md` (restore test log empty; restore environment unavailable).
 4) Blocker: GCP alert routing verification not recorded in `docs/monitoring-runbook.md` (alert test log empty).
 
-Recommended fix order: 1, then 2–4 (parallelizable).
+Recommended fix order: 2–4 (parallelizable once environments are available).
 
 ## Launch Gates (Open Actions First)
 
 | Gate | Status | Evidence | Required Action |
 |---|---|---|---|
-| ZAP baseline scan | FAIL | No recorded run; config exists (`zap-baseline.conf`) | Run ZAP against staging and fix findings. |
+| ZAP baseline scan | PASS | ZAP baseline report `zap-baseline-report.html` (2026-01-24, production): 63 pass / 2 warn / 0 fail. Warnings: Cache-Control, HSTS. | None required for launch; optional hardening: add HSTS + Cache-Control no-store. Run staging scan when available. |
 | Staging migration idempotency | FAIL | Runbook exists but run log is empty (`docs/migration-runbook.md`). | Run the staging migration + idempotency check and record it in `docs/migration-runbook.md`. |
 | Monitoring/alerting | FAIL | Code enforcement exists (non-dev config requires Sentry or GCP monitoring in `apps/api/app/core/config.py`, Sentry initializes when configured in `apps/api/app/main.py:148-163`) but alert routing verification is not recorded (alert test log empty in `docs/monitoring-runbook.md`). | Verify alert routing and record results in `docs/monitoring-runbook.md`. |
 | Backups/restore | FAIL | Runbook exists but restore test is not recorded (restore test log empty in `docs/backup-restore-runbook.md`). | Run a quarterly restore test and record results in `docs/backup-restore-runbook.md`. |
@@ -109,6 +109,15 @@ Recommended fix order: 1, then 2–4 (parallelizable).
   1) Deploy staging with sample data.
   2) Run baseline scan and export report.
   3) Triage findings and re-run after fixes.
+
+### ZAP Baseline Scan Results (Production)
+- Date: 2026-01-24
+- Environment: Production
+- Report: `zap-baseline-report.html`
+- Summary: 63 pass / 2 warn / 0 fail
+- Warnings:
+  - Cache-control directives (consider `Cache-Control: no-store`)
+  - Strict-Transport-Security header not set (add HSTS)
 
 ## Resolved Items (Historical)
 1) Resolved: AI anonymization bypass (`entity_type=case`), PII can be sent unredacted.
