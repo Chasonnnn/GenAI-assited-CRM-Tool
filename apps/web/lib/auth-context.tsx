@@ -93,7 +93,12 @@ export function useRequireAuth() {
             user.mfa_required &&
             !user.mfa_verified
         ) {
-            window.location.href = '/mfa';
+            const hasOpsCookie = document.cookie
+                .split(';')
+                .some((c) => c.trim().startsWith('auth_return_to=ops'));
+            const isOpsHost = window.location.hostname.startsWith('ops.');
+            const url = hasOpsCookie || isOpsHost ? '/mfa?return_to=ops' : '/mfa';
+            window.location.href = url;
         }
     }, [user, isLoading]);
 

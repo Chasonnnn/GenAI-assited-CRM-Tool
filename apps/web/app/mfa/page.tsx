@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -32,6 +32,19 @@ import {
     useSetupTOTP,
     useVerifyTOTPSetup,
 } from "@/lib/hooks/use-mfa"
+
+function getOpsOrigin(): string | null {
+    if (typeof window === "undefined") return null
+    const { protocol, hostname, origin } = window.location
+    if (hostname.startsWith("ops.")) return origin
+    if (hostname.startsWith("app.")) return `${protocol}//ops.${hostname.slice(4)}`
+    return null
+}
+
+function hasAuthReturnToOpsCookie(): boolean {
+    if (typeof document === "undefined") return false
+    return document.cookie.split(";").some((c) => c.trim().startsWith("auth_return_to=ops"))
+}
 
 function QRCodeDisplay({ data }: { data: string }) {
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data)}`
@@ -109,6 +122,7 @@ function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: ()
 
 export default function MFAPage() {
     const router = useRouter()
+    const searchParams = useSearchParams()
     const { user, isLoading: authLoading, refetch } = useAuth()
     const { data: mfaStatus, isLoading: mfaLoading } = useMFAStatus()
     const { data: duoStatus } = useDuoStatus()
@@ -128,10 +142,13 @@ export default function MFAPage() {
     useEffect(() => {
         // Ensure ops flows keep "return_to=ops" even if the user landed here without coming from /ops/login.
         if (typeof window === "undefined") return
-        if (window.location.hostname.startsWith("ops.")) {
+        const queryReturnTo = searchParams.get("return_to")
+        const isOpsHost = window.location.hostname.startsWith("ops.")
+        const isOps = queryReturnTo === "ops" || isOpsHost || hasAuthReturnToOpsCookie()
+        if (isOps) {
             sessionStorage.setItem("auth_return_to", "ops")
         }
-    }, [])
+    }, [searchParams])
 
     useEffect(() => {
         if (authLoading) return
@@ -144,6 +161,11 @@ export default function MFAPage() {
             const returnTo = sessionStorage.getItem("auth_return_to")
             if (returnTo === "ops") {
                 sessionStorage.removeItem("auth_return_to")
+                const opsOrigin = getOpsOrigin()
+                if (opsOrigin && typeof window !== "undefined" && opsOrigin !== window.location.origin) {
+                    window.location.replace(`${opsOrigin}/`)
+                    return
+                }
                 router.replace("/ops")
                 return
             }
@@ -184,11 +206,16 @@ export default function MFAPage() {
         if (!challengeCode) return
         setErrorMessage(null)
         try {
+            const returnTo = sessionStorage.getItem("auth_return_to")
             await completeMFA.mutateAsync(challengeCode)
             await refetch()
-            const returnTo = sessionStorage.getItem("auth_return_to")
             if (returnTo === "ops") {
                 sessionStorage.removeItem("auth_return_to")
+                const opsOrigin = getOpsOrigin()
+                if (opsOrigin && typeof window !== "undefined" && opsOrigin !== window.location.origin) {
+                    window.location.replace(`${opsOrigin}/`)
+                    return
+                }
                 router.replace("/ops")
                 return
             }
@@ -203,8 +230,17 @@ export default function MFAPage() {
         setErrorMessage(null)
         try {
             const isOpsHost = typeof window !== "undefined" && window.location.hostname.startsWith("ops.")
+            const queryReturnTo = searchParams.get("return_to")
             const returnTo =
-                sessionStorage.getItem("auth_return_to") === "ops" || isOpsHost ? "ops" : undefined
+                queryReturnTo === "ops" ||
+                hasAuthReturnToOpsCookie() ||
+                sessionStorage.getItem("auth_return_to") === "ops" ||
+                isOpsHost
+                    ? "ops"
+                    : undefined
+            if (returnTo === "ops") {
+                sessionStorage.setItem("auth_return_to", "ops")
+            }
             const result = await initiateDuo.mutateAsync(returnTo)
             sessionStorage.setItem("duo_state", result.state)
             window.location.assign(result.auth_url)
@@ -314,17 +350,21 @@ export default function MFAPage() {
 
                     {mfaEnabled && (
                         <div className="space-y-4">
-                            {duoAvailable && duoEnrolled && (
+                            {duoAvailable && (
                                 <Button
                                     onClick={handleDuo}
                                     disabled={initiateDuo.isPending}
                                     className="w-full"
                                 >
-                                    {initiateDuo.isPending ? "Starting Duo..." : "Continue with Duo"}
+                                    {initiateDuo.isPending
+                                        ? "Starting Duo..."
+                                        : duoEnrolled
+                                          ? "Continue with Duo"
+                                          : "Set up Duo"}
                                 </Button>
                             )}
 
-                            {(showCodeEntry || !duoAvailable || !duoEnrolled) && (
+                            {(showCodeEntry || !duoAvailable) && (
                                 <>
                                     <div className="space-y-2">
                                         <Label htmlFor="challenge-code">
@@ -348,7 +388,7 @@ export default function MFAPage() {
                                 </>
                             )}
 
-                            {duoAvailable && duoEnrolled && !showCodeEntry && (
+                            {duoAvailable && !showCodeEntry && (
                                 <Button
                                     variant="ghost"
                                     onClick={() => setShowCodeEntry(true)}
@@ -376,6 +416,15 @@ export default function MFAPage() {
                         const returnTo = sessionStorage.getItem("auth_return_to")
                         if (returnTo === "ops") {
                             sessionStorage.removeItem("auth_return_to")
+                            const opsOrigin = getOpsOrigin()
+                            if (
+                                opsOrigin &&
+                                typeof window !== "undefined" &&
+                                opsOrigin !== window.location.origin
+                            ) {
+                                window.location.replace(`${opsOrigin}/`)
+                                return
+                            }
                             router.replace("/ops")
                             return
                         }
