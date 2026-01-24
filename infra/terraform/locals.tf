@@ -61,7 +61,10 @@ locals {
     "META_APP_ID",
     "META_APP_SECRET",
     "META_VERIFY_TOKEN",
-    "META_ACCESS_TOKEN"
+    "META_ACCESS_TOKEN",
+    "DUO_CLIENT_ID",
+    "DUO_CLIENT_SECRET",
+    "DUO_API_HOST"
   ]
 
   billing_secret_keys = [
