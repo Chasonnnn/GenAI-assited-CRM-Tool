@@ -123,6 +123,15 @@ export default function MFAPage() {
     const [challengeCode, setChallengeCode] = useState("")
     const [errorMessage, setErrorMessage] = useState<string | null>(null)
     const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null)
+    const [showCodeEntry, setShowCodeEntry] = useState(false)
+
+    useEffect(() => {
+        // Ensure ops flows keep "return_to=ops" even if the user landed here without coming from /ops/login.
+        if (typeof window === "undefined") return
+        if (window.location.hostname.startsWith("ops.")) {
+            sessionStorage.setItem("auth_return_to", "ops")
+        }
+    }, [])
 
     useEffect(() => {
         if (authLoading) return
@@ -193,7 +202,9 @@ export default function MFAPage() {
     const handleDuo = async () => {
         setErrorMessage(null)
         try {
-            const returnTo = sessionStorage.getItem("auth_return_to") === "ops" ? "ops" : undefined
+            const isOpsHost = typeof window !== "undefined" && window.location.hostname.startsWith("ops.")
+            const returnTo =
+                sessionStorage.getItem("auth_return_to") === "ops" || isOpsHost ? "ops" : undefined
             const result = await initiateDuo.mutateAsync(returnTo)
             sessionStorage.setItem("duo_state", result.state)
             window.location.assign(result.auth_url)
@@ -238,6 +249,24 @@ export default function MFAPage() {
 
                     {!mfaEnabled && (
                         <div className="space-y-4">
+                            {duoAvailable && !duoEnrolled && (
+                                <div className="rounded-lg border border-dashed p-4">
+                                    <h3 className="text-sm font-semibold mb-1">Duo Security</h3>
+                                    <p className="text-sm text-muted-foreground">
+                                        Continue with Duo (recommended).
+                                    </p>
+                                    <div className="mt-3">
+                                        <Button
+                                            onClick={handleDuo}
+                                            disabled={initiateDuo.isPending}
+                                            className="w-full"
+                                        >
+                                            {initiateDuo.isPending ? "Starting Duo..." : "Continue with Duo"}
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="rounded-lg border border-dashed p-4">
                                 <h3 className="text-sm font-semibold mb-1 flex items-center gap-2">
                                     <SmartphoneIcon className="size-4" />
@@ -256,24 +285,6 @@ export default function MFAPage() {
                                     </Button>
                                 </div>
                             </div>
-
-                            {duoAvailable && !duoEnrolled && (
-                                <div className="rounded-lg border border-dashed p-4">
-                                    <h3 className="text-sm font-semibold mb-1">Duo Security</h3>
-                                    <p className="text-sm text-muted-foreground">
-                                        Complete Duo verification to enroll and continue.
-                                    </p>
-                                    <div className="mt-3">
-                                        <Button
-                                            onClick={handleDuo}
-                                            disabled={initiateDuo.isPending}
-                                            className="w-full"
-                                        >
-                                            {initiateDuo.isPending ? "Starting Duo..." : "Set up Duo"}
-                                        </Button>
-                                    </div>
-                                </div>
-                            )}
 
                             {setupData && (
                                 <div className="space-y-4 rounded-lg border p-4">
@@ -303,31 +314,47 @@ export default function MFAPage() {
 
                     {mfaEnabled && (
                         <div className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="challenge-code">Authenticator or recovery code</Label>
-                                <Input
-                                    id="challenge-code"
-                                    placeholder="123456 or recovery code"
-                                    value={challengeCode}
-                                    onChange={(event) => setChallengeCode(event.target.value)}
-                                />
-                            </div>
-                            <Button
-                                onClick={handleChallenge}
-                                disabled={completeMFA.isPending}
-                                className="w-full"
-                            >
-                                {completeMFA.isPending ? "Verifying..." : "Verify code"}
-                            </Button>
-
                             {duoAvailable && duoEnrolled && (
                                 <Button
-                                    variant="outline"
                                     onClick={handleDuo}
                                     disabled={initiateDuo.isPending}
                                     className="w-full"
                                 >
                                     {initiateDuo.isPending ? "Starting Duo..." : "Continue with Duo"}
+                                </Button>
+                            )}
+
+                            {(showCodeEntry || !duoAvailable || !duoEnrolled) && (
+                                <>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="challenge-code">
+                                            Authenticator or recovery code
+                                        </Label>
+                                        <Input
+                                            id="challenge-code"
+                                            placeholder="123456 or recovery code"
+                                            value={challengeCode}
+                                            onChange={(event) => setChallengeCode(event.target.value)}
+                                        />
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        onClick={handleChallenge}
+                                        disabled={completeMFA.isPending}
+                                        className="w-full"
+                                    >
+                                        {completeMFA.isPending ? "Verifying..." : "Verify code"}
+                                    </Button>
+                                </>
+                            )}
+
+                            {duoAvailable && duoEnrolled && !showCodeEntry && (
+                                <Button
+                                    variant="ghost"
+                                    onClick={() => setShowCodeEntry(true)}
+                                    className="w-full"
+                                >
+                                    Use authenticator / recovery code instead
                                 </Button>
                             )}
 

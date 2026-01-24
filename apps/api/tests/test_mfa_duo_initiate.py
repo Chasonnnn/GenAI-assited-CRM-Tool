@@ -20,7 +20,7 @@ async def test_duo_initiate_prefers_ops_return_to(authed_client, monkeypatch):
 
     response = await authed_client.post("/mfa/duo/initiate?return_to=ops")
     assert response.status_code == 200
-    assert captured["redirect_uri"] == "https://ops.example.com/auth/duo/callback"
+    assert captured["redirect_uri"] == "https://ops.example.com/auth/duo/callback?return_to=ops"
 
 
 @pytest.mark.asyncio
@@ -42,4 +42,4 @@ async def test_duo_initiate_ignores_invalid_return_to(authed_client, monkeypatch
 
     response = await authed_client.post("/mfa/duo/initiate?return_to=evil")
     assert response.status_code == 200
-    assert captured["redirect_uri"] == "https://app.example.com/auth/duo/callback"
+    assert captured["redirect_uri"] == "https://app.example.com/auth/duo/callback?return_to=app"
