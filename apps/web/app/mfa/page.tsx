@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -121,6 +121,20 @@ function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: ()
 }
 
 export default function MFAPage() {
+    return (
+        <Suspense
+            fallback={
+                <div className="flex min-h-screen items-center justify-center">
+                    <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                </div>
+            }
+        >
+            <MFAPageContent />
+        </Suspense>
+    )
+}
+
+function MFAPageContent() {
     const router = useRouter()
     const searchParams = useSearchParams()
     const { user, isLoading: authLoading, refetch } = useAuth()
