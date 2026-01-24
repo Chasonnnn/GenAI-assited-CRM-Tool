@@ -423,9 +423,7 @@ class TestAdminImports:
         assert appointment_type.meeting_mode == "zoom"
 
         availability_rule = (
-            db.query(AvailabilityRule)
-            .filter(AvailabilityRule.id == availability_rule_id)
-            .first()
+            db.query(AvailabilityRule).filter(AvailabilityRule.id == availability_rule_id).first()
         )
         assert availability_rule is not None
         assert availability_rule.user_id == test_user.id
@@ -449,9 +447,7 @@ class TestAdminImports:
         assert booking_link.public_slug == "public-link"
 
         workflow_template = (
-            db.query(WorkflowTemplate)
-            .filter(WorkflowTemplate.id == workflow_template_id)
-            .first()
+            db.query(WorkflowTemplate).filter(WorkflowTemplate.id == workflow_template_id).first()
         )
         assert workflow_template is not None
         assert workflow_template.organization_id == test_org.id

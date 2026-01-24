@@ -5,7 +5,7 @@ def test_get_duo_client_strips_and_parses_settings(monkeypatch):
     monkeypatch.setattr(
         settings,
         "DUO_CLIENT_ID",
-        "\"DI0PSKDRAH9LIS3Q53PW\"" + chr(0x200B) + " \n",
+        '"DI0PSKDRAH9LIS3Q53PW"' + chr(0x200B) + " \n",
     )
     monkeypatch.setattr(settings, "DUO_CLIENT_SECRET", "secret-with-newline\n")
     monkeypatch.setattr(settings, "DUO_API_HOST", "https://api-85d6198d.duosecurity.com/\n")

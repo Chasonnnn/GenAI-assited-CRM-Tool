@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+
 try:  # pragma: no cover - depends on installed middleware
     from starlette.middleware.proxy_headers import ProxyHeadersMiddleware
 except Exception:  # pragma: no cover - fallback for older Starlette

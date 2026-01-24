@@ -70,7 +70,9 @@ async def _create_surrogate(authed_client):
     return response.json()
 
 
-async def _set_stage(authed_client, surrogate_id: str, stage_id: UUID, effective_at: str | None = None):
+async def _set_stage(
+    authed_client, surrogate_id: str, stage_id: UUID, effective_at: str | None = None
+):
     payload: dict[str, str] = {"stage_id": str(stage_id)}
     if effective_at:
         payload["effective_at"] = effective_at

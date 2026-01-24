@@ -445,16 +445,18 @@ def get_surrogates_by_status(
 ) -> list[dict[str, Any]]:
     """Get current case count by status with stage metadata."""
     # Join with PipelineStage to get stage_id and order
-    query = db.query(
-        PipelineStage.label.label("status"),
-        PipelineStage.id.label("stage_id"),
-        PipelineStage.order.label("stage_order"),
-        func.count(Surrogate.id).label("count"),
-    ).join(
-        Surrogate, Surrogate.stage_id == PipelineStage.id
-    ).filter(
-        Surrogate.organization_id == organization_id,
-        Surrogate.is_archived.is_(False),
+    query = (
+        db.query(
+            PipelineStage.label.label("status"),
+            PipelineStage.id.label("stage_id"),
+            PipelineStage.order.label("stage_order"),
+            func.count(Surrogate.id).label("count"),
+        )
+        .join(Surrogate, Surrogate.stage_id == PipelineStage.id)
+        .filter(
+            Surrogate.organization_id == organization_id,
+            Surrogate.is_archived.is_(False),
+        )
     )
 
     query = _apply_date_range_filters(query, Surrogate.created_at, start_date, end_date)
@@ -546,7 +548,9 @@ def get_status_trend(
         func.coalesce(SurrogateStatusHistory.to_label_snapshot, "unknown").label("status_label"),
         func.count(SurrogateStatusHistory.id).label("count"),
     ).filter(SurrogateStatusHistory.organization_id == organization_id)
-    query = _apply_date_range_filters(query, SurrogateStatusHistory.changed_at, start_date, end_date)
+    query = _apply_date_range_filters(
+        query, SurrogateStatusHistory.changed_at, start_date, end_date
+    )
     results = (
         query.group_by(
             func.date(SurrogateStatusHistory.changed_at),
@@ -936,12 +940,9 @@ def get_summary_kpis(
     prev_end = start_date - timedelta(days=1)
 
     # Current period
-    current_query = (
-        db.query(func.count(Surrogate.id))
-        .filter(
-            Surrogate.organization_id == organization_id,
-            Surrogate.is_archived.is_(False),
-        )
+    current_query = db.query(func.count(Surrogate.id)).filter(
+        Surrogate.organization_id == organization_id,
+        Surrogate.is_archived.is_(False),
     )
     current_query = _apply_date_range_filters(
         current_query,
@@ -952,12 +953,9 @@ def get_summary_kpis(
     current = current_query.scalar() or 0
 
     # Previous period
-    previous_query = (
-        db.query(func.count(Surrogate.id))
-        .filter(
-            Surrogate.organization_id == organization_id,
-            Surrogate.is_archived.is_(False),
-        )
+    previous_query = db.query(func.count(Surrogate.id)).filter(
+        Surrogate.organization_id == organization_id,
+        Surrogate.is_archived.is_(False),
     )
     previous_query = _apply_date_range_filters(
         previous_query,

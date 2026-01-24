@@ -28,7 +28,9 @@ def upgrade() -> None:
         postgresql_where=sa.text("idempotency_key IS NOT NULL"),
     )
 
-    op.add_column("zoom_meetings", sa.Column("idempotency_key", sa.String(length=255), nullable=True))
+    op.add_column(
+        "zoom_meetings", sa.Column("idempotency_key", sa.String(length=255), nullable=True)
+    )
     op.create_index(
         "uq_zoom_meetings_idempotency",
         "zoom_meetings",

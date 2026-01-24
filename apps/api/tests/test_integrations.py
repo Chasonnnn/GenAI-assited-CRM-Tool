@@ -53,9 +53,7 @@ async def test_zoom_connect_uses_cross_site_cookie_settings_when_enabled(
 
     cookie_headers = response.headers.get_list("set-cookie")
     zoom_cookie = next(
-        header
-        for header in cookie_headers
-        if "integration_oauth_state_zoom=" in header
+        header for header in cookie_headers if "integration_oauth_state_zoom=" in header
     )
     zoom_cookie_lower = zoom_cookie.lower()
     assert "samesite=none" in zoom_cookie_lower

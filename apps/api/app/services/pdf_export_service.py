@@ -16,7 +16,13 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.security import create_export_token
 from app.db.models import Attachment, SurrogateInterview, FormSubmission
-from app.services import form_service, interview_service, journey_service, profile_service, tiptap_service
+from app.services import (
+    form_service,
+    interview_service,
+    journey_service,
+    profile_service,
+    tiptap_service,
+)
 
 
 # Chart colors matching frontend design system
@@ -2131,8 +2137,7 @@ def export_journey_pdf(
     token_param = quote(export_token)
     frontend_base = settings.FRONTEND_URL.rstrip("/")
     print_url = (
-        f"{frontend_base}/surrogates/{surrogate_id}/journey/print"
-        f"?export_token={token_param}"
+        f"{frontend_base}/surrogates/{surrogate_id}/journey/print?export_token={token_param}"
     )
 
     loop = asyncio.new_event_loop()

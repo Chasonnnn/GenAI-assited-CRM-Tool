@@ -142,9 +142,7 @@ def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
     )
 
 
-def _surrogate_to_list_item(
-    surrogate, db: Session, last_activity_at=None
-) -> SurrogateListItem:
+def _surrogate_to_list_item(surrogate, db: Session, last_activity_at=None) -> SurrogateListItem:
     """Convert Surrogate model to SurrogateListItem schema."""
     from datetime import date
 
@@ -203,7 +201,11 @@ def get_surrogate_stats(
     owner_id: UUID | None = Query(None, description="Filter by owner UUID"),
 ):
     """Get aggregated surrogate statistics for dashboard with period comparisons."""
-    if owner_id and owner_id != session.user_id and session.role not in (Role.ADMIN, Role.DEVELOPER):
+    if (
+        owner_id
+        and owner_id != session.user_id
+        and session.role not in (Role.ADMIN, Role.DEVELOPER)
+    ):
         raise HTTPException(status_code=403, detail="Not authorized to view other users' stats")
 
     stats = surrogate_service.get_surrogate_stats(
@@ -960,7 +962,9 @@ def update_surrogate(
         and update_data["actual_delivery_date"] is not None
         and was_delivery_date_empty
     )
-    delivery_date_value = update_data.get("actual_delivery_date") if is_setting_delivery_date else None
+    delivery_date_value = (
+        update_data.get("actual_delivery_date") if is_setting_delivery_date else None
+    )
 
     try:
         surrogate = surrogate_service.update_surrogate(
@@ -1077,7 +1081,9 @@ def change_status(
     ):
         # Use effective_at date if backdating, otherwise today
         if data.effective_at:
-            delivery_date = data.effective_at.date() if hasattr(data.effective_at, "date") else date.today()
+            delivery_date = (
+                data.effective_at.date() if hasattr(data.effective_at, "date") else date.today()
+            )
         else:
             delivery_date = date.today()
         result["surrogate"].actual_delivery_date = delivery_date

@@ -58,9 +58,7 @@ async def test_dev_login_sets_cookie_domain_for_session_and_csrf(
 
 
 @pytest.mark.asyncio
-async def test_logout_clears_cookie_domain_for_session_and_csrf(
-    authed_client, monkeypatch
-):
+async def test_logout_clears_cookie_domain_for_session_and_csrf(authed_client, monkeypatch):
     from app.core.config import settings
 
     monkeypatch.setattr(settings, "COOKIE_DOMAIN", ".surrogacyforce.com")

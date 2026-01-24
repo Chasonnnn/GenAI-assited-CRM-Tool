@@ -148,22 +148,30 @@ async def google_callback(
     return_to = "app"
 
     # Prepare error response (always cleans up state cookie)
-    error_response = RedirectResponse(url=_get_error_redirect("auth_failed", return_to=return_to), status_code=302)
+    error_response = RedirectResponse(
+        url=_get_error_redirect("auth_failed", return_to=return_to), status_code=302
+    )
     error_response.delete_cookie(OAUTH_STATE_COOKIE, path="/auth")
 
     # Check for error from Google
     if error:
-        error_response.headers["location"] = _get_error_redirect(f"google_{error}", return_to=return_to)
+        error_response.headers["location"] = _get_error_redirect(
+            f"google_{error}", return_to=return_to
+        )
         return error_response
 
     if not code or not state:
-        error_response.headers["location"] = _get_error_redirect("missing_params", return_to=return_to)
+        error_response.headers["location"] = _get_error_redirect(
+            "missing_params", return_to=return_to
+        )
         return error_response
 
     # Get state cookie
     state_cookie = request.cookies.get(OAUTH_STATE_COOKIE)
     if not state_cookie:
-        error_response.headers["location"] = _get_error_redirect("state_expired", return_to=return_to)
+        error_response.headers["location"] = _get_error_redirect(
+            "state_expired", return_to=return_to
+        )
         return error_response
 
     # Parse and verify state
@@ -174,34 +182,44 @@ async def google_callback(
         if return_to not in ALLOWED_RETURN_TO:
             return_to = "app"
     except Exception:
-        error_response.headers["location"] = _get_error_redirect("invalid_state", return_to=return_to)
+        error_response.headers["location"] = _get_error_redirect(
+            "invalid_state", return_to=return_to
+        )
         return error_response
 
     user_agent = request.headers.get("user-agent", "")
     valid, _ = verify_oauth_state(stored_payload, state, user_agent)
     if not valid:
-        error_response.headers["location"] = _get_error_redirect("state_mismatch", return_to=return_to)
+        error_response.headers["location"] = _get_error_redirect(
+            "state_mismatch", return_to=return_to
+        )
         return error_response
 
     # Exchange code for tokens
     try:
         tokens = await exchange_code_for_tokens(code)
     except Exception:
-        error_response.headers["location"] = _get_error_redirect("token_exchange_failed", return_to=return_to)
+        error_response.headers["location"] = _get_error_redirect(
+            "token_exchange_failed", return_to=return_to
+        )
         return error_response
 
     # Verify ID token
     try:
         google_user = verify_id_token(tokens["id_token"], expected_nonce=stored_payload["nonce"])
     except ValueError:
-        error_response.headers["location"] = _get_error_redirect("token_invalid", return_to=return_to)
+        error_response.headers["location"] = _get_error_redirect(
+            "token_invalid", return_to=return_to
+        )
         return error_response
 
     # Validate domain restriction
     try:
         validate_email_domain(google_user.email)
     except ValueError:
-        error_response.headers["location"] = _get_error_redirect("domain_not_allowed", return_to=return_to)
+        error_response.headers["location"] = _get_error_redirect(
+            "domain_not_allowed", return_to=return_to
+        )
         return error_response
 
     # Resolve user and create session (delegated to service layer)
@@ -966,9 +984,7 @@ async def upload_signature_photo(
 
     logger.info("Signature photo uploaded for user %s", session.user_id)
 
-    return SignaturePhotoResponse(
-        signature_photo_url=media_service.get_signed_media_url(photo_url)
-    )
+    return SignaturePhotoResponse(signature_photo_url=media_service.get_signed_media_url(photo_url))
 
 
 @router.delete(
@@ -1074,13 +1090,19 @@ def _get_success_redirect(
         return f"{base}/mfa"
 
     if return_to == "ops":
-        base = settings.OPS_FRONTEND_URL.rstrip("/") if settings.OPS_FRONTEND_URL else settings.FRONTEND_URL.rstrip("/")
+        base = (
+            settings.OPS_FRONTEND_URL.rstrip("/")
+            if settings.OPS_FRONTEND_URL
+            else settings.FRONTEND_URL.rstrip("/")
+        )
         return f"{base}/"
     base = base_url or settings.FRONTEND_URL.rstrip("/")
     return f"{base}/dashboard"
 
 
-def _get_error_redirect(error_code: str, base_url: str | None = None, return_to: str = "app") -> str:
+def _get_error_redirect(
+    error_code: str, base_url: str | None = None, return_to: str = "app"
+) -> str:
     """
     Safe error redirect URL - fixed path with error code.
 
@@ -1090,7 +1112,11 @@ def _get_error_redirect(error_code: str, base_url: str | None = None, return_to:
         return_to: Target app ("app" or "ops").
     """
     if return_to == "ops":
-        base = settings.OPS_FRONTEND_URL.rstrip("/") if settings.OPS_FRONTEND_URL else settings.FRONTEND_URL.rstrip("/")
+        base = (
+            settings.OPS_FRONTEND_URL.rstrip("/")
+            if settings.OPS_FRONTEND_URL
+            else settings.FRONTEND_URL.rstrip("/")
+        )
         return f"{base}/login?error={error_code}"
     base = base_url or settings.FRONTEND_URL.rstrip("/")
     return f"{base}/login?error={error_code}"

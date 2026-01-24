@@ -12,7 +12,9 @@ async def _sample() -> str:
 
 
 @pytest.mark.anyio
-async def test_run_async_avoids_asyncio_run_in_worker_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_run_async_avoids_asyncio_run_in_worker_thread(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def _fail_run(*_args: object, **_kwargs: object) -> None:
         pytest.fail("asyncio.run should not be used in request threads")
 
