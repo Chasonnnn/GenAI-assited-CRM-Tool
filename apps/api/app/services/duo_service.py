@@ -120,7 +120,11 @@ def create_auth_url(
 
 
 def verify_callback(
-    code: str, state: str, expected_state: str, username: str
+    code: str,
+    state: str,
+    expected_state: str,
+    username: str,
+    redirect_uri: str | None = None,
 ) -> Tuple[bool, dict | None]:
     """
     Verify the Duo callback and exchange the code for auth result.
@@ -143,7 +147,7 @@ def verify_callback(
         return False, None
 
     try:
-        client = get_duo_client()
+        client = get_duo_client(redirect_uri=redirect_uri)
         token = client.exchange_authorization_code_for_2fa_result(
             duoCode=code,
             username=username,
