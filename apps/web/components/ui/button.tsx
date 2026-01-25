@@ -44,7 +44,7 @@ interface ButtonProps
 
 /**
  * Button component with variants.
- * 
+ *
  * For Base UI triggers, avoid nesting <Button>. Prefer passing a non-button wrapper
  * as children and apply `buttonVariants` to the trigger element.
  */
