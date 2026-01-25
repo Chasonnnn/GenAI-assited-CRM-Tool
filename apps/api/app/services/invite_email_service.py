@@ -119,8 +119,10 @@ async def send_invite_email(
         {"success": True, "message_id": "..."} or {"success": False, "error": "..."}
     """
     # Get org name
-    org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
-    org_name = org_service.get_org_display_name(org) if org else "the organization"
+    org = org_service.get_org_by_id(db, invite.organization_id)
+    if not org:
+        return {"success": False, "error": "Organization not found"}
+    org_name = org_service.get_org_display_name(org)
     base_url = org_service.get_org_portal_base_url(org)
 
     # Get inviter name

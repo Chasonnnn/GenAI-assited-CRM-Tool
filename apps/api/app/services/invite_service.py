@@ -22,11 +22,13 @@ INVITE_ALLOWED_ROLES = {
     Role.CASE_MANAGER.value,
     Role.ADMIN.value,
 }
+INVITE_ALLOWED_ROLES_PLATFORM = INVITE_ALLOWED_ROLES | {Role.DEVELOPER.value}
 
 
-def validate_invite_role(role: str) -> str:
+def validate_invite_role(role: str, *, allow_developer: bool = False) -> str:
     role_value = role.value if hasattr(role, "value") else role
-    if not Role.has_value(role_value) or role_value not in INVITE_ALLOWED_ROLES:
+    allowed_roles = INVITE_ALLOWED_ROLES_PLATFORM if allow_developer else INVITE_ALLOWED_ROLES
+    if not Role.has_value(role_value) or role_value not in allowed_roles:
         raise ValueError("Invalid invite role")
     return role_value
 
@@ -93,6 +95,9 @@ def create_invite(
     invited_by_user_id: uuid.UUID,
 ) -> OrgInvite:
     """Create a new invitation."""
+    org = org_service.get_org_by_id(db, org_id)
+    if not org:
+        raise ValueError("Organization not found")
     email = email.lower().strip()
     role_value = validate_invite_role(role)
 

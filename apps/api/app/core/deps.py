@@ -103,7 +103,7 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
         return cached
 
     # Import here to avoid circular imports
-    from app.db.models import Membership
+    from app.db.models import Membership, Organization
     from app.db.enums import Role
     from app.schemas.auth import UserSession
     from app.services import session_service
@@ -208,6 +208,9 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=403, detail="No organization membership")
     if not membership.is_active:
         raise HTTPException(status_code=403, detail="Membership inactive")
+    org = db.query(Organization).filter(Organization.id == membership.organization_id).first()
+    if not org or org.deleted_at:
+        raise HTTPException(status_code=403, detail="Organization is scheduled for deletion")
 
     # Validate role is a known enum value - return 403 not 500
     if not Role.has_value(membership.role):

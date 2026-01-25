@@ -302,6 +302,7 @@ class JobType(str, Enum):
     ATTACHMENT_SCAN = "attachment_scan"
     WORKFLOW_APPROVAL_EXPIRY = "workflow_approval_expiry"  # Sweep for expired approvals
     WORKFLOW_RESUME = "workflow_resume"  # Resume workflow after approval resolution
+    ORG_DELETE = "org_delete"  # Hard delete org after grace period
 
 
 class JobStatus(str, Enum):

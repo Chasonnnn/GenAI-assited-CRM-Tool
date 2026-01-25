@@ -22,6 +22,8 @@ import {
     resetMemberMfa,
     createInvite,
     revokeInvite,
+    deleteOrganization,
+    restoreOrganization,
     type PlatformEmailStatus,
     type SystemEmailTemplate,
     type OrganizationDetail,
@@ -113,12 +115,13 @@ const INVITE_STATUS_VARIANTS: Record<string, string> = {
     revoked: 'bg-red-500/10 text-red-600 border-red-500/20',
 };
 
-const INVITE_ROLE_OPTIONS = ['intake_specialist', 'case_manager', 'admin'] as const;
+const INVITE_ROLE_OPTIONS = ['intake_specialist', 'case_manager', 'admin', 'developer'] as const;
 type InviteRole = (typeof INVITE_ROLE_OPTIONS)[number];
 const INVITE_ROLE_LABELS: Record<InviteRole, string> = {
     intake_specialist: 'Intake Specialist',
     case_manager: 'Case Manager',
     admin: 'Admin',
+    developer: 'Developer',
 };
 
 const resolveErrorMessage = (error: unknown, fallback: string) => {
@@ -230,6 +233,9 @@ export default function AgencyDetailPage() {
     const [templateVersion, setTemplateVersion] = useState<number | null>(null);
     const [testEmail, setTestEmail] = useState('');
     const [testSending, setTestSending] = useState(false);
+    const [deleteOpen, setDeleteOpen] = useState(false);
+    const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+    const [restoreSubmitting, setRestoreSubmitting] = useState(false);
 
     useEffect(() => {
         async function fetchData() {
@@ -369,6 +375,37 @@ export default function AgencyDetailPage() {
         }
     };
 
+    const handleDeleteOrganization = async () => {
+        if (!org) return;
+        setDeleteSubmitting(true);
+        try {
+            const updated = await deleteOrganization(org.id);
+            setOrg(updated);
+            toast.success('Organization scheduled for deletion');
+            setDeleteOpen(false);
+        } catch (error) {
+            console.error('Failed to delete organization:', error);
+            toast.error(resolveErrorMessage(error, 'Failed to delete organization'));
+        } finally {
+            setDeleteSubmitting(false);
+        }
+    };
+
+    const handleRestoreOrganization = async () => {
+        if (!org) return;
+        setRestoreSubmitting(true);
+        try {
+            const updated = await restoreOrganization(org.id);
+            setOrg(updated);
+            toast.success('Organization restored');
+        } catch (error) {
+            console.error('Failed to restore organization:', error);
+            toast.error(resolveErrorMessage(error, 'Failed to restore organization'));
+        } finally {
+            setRestoreSubmitting(false);
+        }
+    };
+
     const previewSubject = templateSubject.replace(/\{\{org_name\}\}/g, org?.name ?? 'Organization');
     const previewBody = DOMPurify.sanitize(
         templateBody
@@ -379,7 +416,53 @@ export default function AgencyDetailPage() {
                 /\{\{invite_url\}\}/g,
                 `${org?.portal_domain ? `https://${org.portal_domain}` : 'https://app.example.com'}/invite/EXAMPLE`
             )
-            .replace(/\{\{expires_block\}\}/g, '<p>This invitation expires in 7 days.</p>')
+            .replace(/\{\{expires_block\}\}/g, '<p>This invitation expires in 7 days.</p>'),
+        {
+            USE_PROFILES: { html: true },
+            ADD_TAGS: [
+                'table',
+                'thead',
+                'tbody',
+                'tfoot',
+                'tr',
+                'td',
+                'th',
+                'colgroup',
+                'col',
+                'img',
+                'hr',
+                'div',
+                'span',
+                'center',
+                'h1',
+                'h2',
+                'h3',
+                'h4',
+                'h5',
+                'h6',
+            ],
+            ADD_ATTR: [
+                'style',
+                'class',
+                'align',
+                'valign',
+                'width',
+                'height',
+                'cellpadding',
+                'cellspacing',
+                'border',
+                'bgcolor',
+                'colspan',
+                'rowspan',
+                'role',
+                'target',
+                'rel',
+                'href',
+                'src',
+                'alt',
+                'title',
+            ],
+        }
     );
 
     const handleExtendSubscription = async () => {
@@ -537,6 +620,9 @@ export default function AgencyDetailPage() {
         );
     }
 
+    const isDeleted = Boolean(org.deleted_at);
+    const purgeDate = org.purge_at ? new Date(org.purge_at) : null;
+
     return (
         <div>
             {/* Header */}
@@ -567,6 +653,9 @@ export default function AgencyDetailPage() {
                                 >
                                     {org.subscription_status}
                                 </Badge>
+                                {isDeleted && (
+                                    <Badge variant="destructive">Deletion scheduled</Badge>
+                                )}
                             </div>
                             <div className="flex items-center gap-4 mt-1 text-sm text-stone-500 dark:text-stone-400">
                                 <span className="font-mono">{org.slug}</span>
@@ -644,6 +733,75 @@ export default function AgencyDetailPage() {
                                 </CardContent>
                             </Card>
                         </div>
+
+                        <Card className="mt-6 border-destructive/30">
+                            <CardHeader>
+                                <CardTitle className="text-lg text-destructive">
+                                    Danger Zone
+                                </CardTitle>
+                                <CardDescription>
+                                    Soft delete this organization for 30 days, then permanently remove all data.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                {isDeleted ? (
+                                    <div className="space-y-3">
+                                        <div className="rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-900 dark:border-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-100">
+                                            Deletion scheduled{purgeDate ? ` for ${format(purgeDate, 'MMM d, yyyy h:mm a')}` : ''}.
+                                        </div>
+                                        <Button
+                                            variant="outline"
+                                            onClick={handleRestoreOrganization}
+                                            disabled={restoreSubmitting}
+                                        >
+                                            {restoreSubmitting ? (
+                                                <Loader2 className="mr-2 size-4 animate-spin" />
+                                            ) : null}
+                                            Restore Organization
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+                                        <AlertDialogTrigger
+                                            className={buttonVariants({
+                                                variant: 'destructive',
+                                            })}
+                                        >
+                                            Delete Organization
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle>
+                                                    Delete {org.name}?
+                                                </AlertDialogTitle>
+                                                <AlertDialogDescription>
+                                                    This will disable access immediately. Data will be permanently deleted after 30 days.
+                                                </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                                <AlertDialogCancel>
+                                                    Cancel
+                                                </AlertDialogCancel>
+                                                <AlertDialogAction
+                                                    onClick={handleDeleteOrganization}
+                                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                    disabled={deleteSubmitting}
+                                                >
+                                                    {deleteSubmitting ? (
+                                                        <span className="inline-flex items-center gap-2">
+                                                            <Loader2 className="size-4 animate-spin" />
+                                                            Deleting
+                                                        </span>
+                                                    ) : (
+                                                        'Confirm Delete'
+                                                    )}
+                                                </AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
+                                )}
+                            </CardContent>
+                        </Card>
                     </TabsContent>
 
                     {/* Users Tab */}
@@ -936,6 +1094,8 @@ export default function AgencyDetailPage() {
                                                 <TableHead>Email</TableHead>
                                                 <TableHead>Role</TableHead>
                                                 <TableHead>Status</TableHead>
+                                                <TableHead>Opened</TableHead>
+                                                <TableHead>Clicked</TableHead>
                                                 <TableHead>Created</TableHead>
                                                 <TableHead className="w-10"></TableHead>
                                             </TableRow>
@@ -961,6 +1121,40 @@ export default function AgencyDetailPage() {
                                                         >
                                                             {invite.status}
                                                         </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-sm text-muted-foreground">
+                                                        {invite.open_count && invite.open_count > 0 ? (
+                                                            <div className="flex flex-col">
+                                                                <span>{invite.open_count} open{invite.open_count === 1 ? '' : 's'}</span>
+                                                                {invite.opened_at ? (
+                                                                    <span className="text-xs">
+                                                                        {formatDistanceToNow(
+                                                                            new Date(invite.opened_at),
+                                                                            { addSuffix: true }
+                                                                        )}
+                                                                    </span>
+                                                                ) : null}
+                                                            </div>
+                                                        ) : (
+                                                            '-'
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="text-sm text-muted-foreground">
+                                                        {invite.click_count && invite.click_count > 0 ? (
+                                                            <div className="flex flex-col">
+                                                                <span>{invite.click_count} click{invite.click_count === 1 ? '' : 's'}</span>
+                                                                {invite.clicked_at ? (
+                                                                    <span className="text-xs">
+                                                                        {formatDistanceToNow(
+                                                                            new Date(invite.clicked_at),
+                                                                            { addSuffix: true }
+                                                                        )}
+                                                                    </span>
+                                                                ) : null}
+                                                            </div>
+                                                        ) : (
+                                                            '-'
+                                                        )}
                                                     </TableCell>
                                                     <TableCell className="text-sm text-muted-foreground">
                                                         {formatDistanceToNow(

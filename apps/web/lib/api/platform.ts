@@ -24,6 +24,8 @@ export interface OrganizationSummary {
     subscription_plan: string;
     subscription_status: string;
     created_at: string;
+    deleted_at?: string | null;
+    purge_at?: string | null;
 }
 
 // Organization detail (full info)
@@ -31,6 +33,7 @@ export interface OrganizationDetail extends OrganizationSummary {
     active_match_count: number;
     pending_task_count: number;
     ai_enabled: boolean;
+    deleted_by_user_id?: string | null;
 }
 
 // Organization subscription
@@ -76,6 +79,10 @@ export interface OrgInvite {
     invited_by_name?: string;
     expires_at?: string;
     created_at: string;
+    open_count?: number;
+    opened_at?: string | null;
+    click_count?: number;
+    clicked_at?: string | null;
 }
 
 // Admin action log entry
@@ -258,6 +265,20 @@ export function createInvite(
  */
 export function revokeInvite(orgId: string, inviteId: string): Promise<void> {
     return api.post(`/platform/orgs/${orgId}/invites/${inviteId}/revoke`);
+}
+
+/**
+ * Soft delete an organization (30-day grace period).
+ */
+export function deleteOrganization(orgId: string): Promise<OrganizationDetail> {
+    return api.post<OrganizationDetail>(`/platform/orgs/${orgId}/delete`);
+}
+
+/**
+ * Restore a soft-deleted organization (within grace period).
+ */
+export function restoreOrganization(orgId: string): Promise<OrganizationDetail> {
+    return api.post<OrganizationDetail>(`/platform/orgs/${orgId}/restore`);
 }
 
 /**
