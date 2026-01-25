@@ -390,6 +390,7 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             created_by_user_id=_map_user_id(_parse_uuid(template_data.get("created_by_user_id"))),
             name=template_data.get("name"),
             subject=template_data.get("subject"),
+            from_email=template_data.get("from_email"),
             body=template_data.get("body"),
             is_active=template_data.get("is_active", True),
             is_system_template=template_data.get("is_system_template", False),

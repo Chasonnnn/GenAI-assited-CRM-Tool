@@ -16,6 +16,11 @@ class EmailTemplateCreate(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=100)
     subject: str = Field(..., min_length=1, max_length=200)
+    from_email: str | None = Field(
+        None,
+        max_length=200,
+        description="Optional per-template From header override (e.g., 'Surrogacy Force <invites@surrogacyforce.com>').",
+    )
     body: str = Field(..., min_length=1, max_length=50000)
 
 
@@ -24,6 +29,11 @@ class EmailTemplateUpdate(BaseModel):
 
     name: str | None = Field(None, min_length=1, max_length=100)
     subject: str | None = Field(None, min_length=1, max_length=200)
+    from_email: str | None = Field(
+        None,
+        max_length=200,
+        description="Optional per-template From header override (e.g., 'Surrogacy Force <invites@surrogacyforce.com>').",
+    )
     body: str | None = Field(None, min_length=1, max_length=50000)
     is_active: bool | None = None
     expected_version: int | None = Field(None, description="Required for optimistic locking")
@@ -39,6 +49,7 @@ class EmailTemplateRead(BaseModel):
     created_by_user_id: UUID | None
     name: str
     subject: str
+    from_email: str | None
     body: str
     is_active: bool
     current_version: int  # For optimistic locking
@@ -54,6 +65,7 @@ class EmailTemplateListItem(BaseModel):
     id: UUID
     name: str
     subject: str
+    from_email: str | None
     is_active: bool
     created_at: datetime
     updated_at: datetime

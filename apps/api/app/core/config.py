@@ -109,6 +109,12 @@ class Settings(BaseSettings):
     # Platform admin emails (comma-separated, for allowlist-based access)
     PLATFORM_ADMIN_EMAILS: str = ""
 
+    # Platform/system email sender (Resend)
+    # Intentionally separate from RESEND_API_KEY/EMAIL_FROM (used by campaign/user email paths).
+    PLATFORM_RESEND_API_KEY: str = ""
+    # Optional fallback From header. Recommended: set per-template `from_email` in ops/system templates.
+    PLATFORM_EMAIL_FROM: str = ""
+
     # HMAC secret for PII-safe audit logging (IP, user agent)
     AUDIT_HMAC_SECRET: str = ""
 
