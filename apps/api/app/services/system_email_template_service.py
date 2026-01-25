@@ -78,4 +78,3 @@ def ensure_system_template(db: Session, *, org_id: UUID, system_key: str) -> Ema
     db.add(template)
     db.flush()
     return template
-

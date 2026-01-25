@@ -152,7 +152,9 @@ def update_template(
     if subject is not None:
         template.subject = subject
     if from_email is not _UNSET:
-        template.from_email = _normalize_from_email(from_email if isinstance(from_email, str) else None)
+        template.from_email = _normalize_from_email(
+            from_email if isinstance(from_email, str) else None
+        )
     if body is not None:
         template.body = sanitize_template_html(body)
     if is_active is not None:

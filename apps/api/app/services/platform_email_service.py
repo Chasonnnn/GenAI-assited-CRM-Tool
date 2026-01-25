@@ -78,7 +78,10 @@ async def _send_resend_email(
     api_key = settings.PLATFORM_RESEND_API_KEY
     resolved_from = (from_email or "").strip() or (settings.PLATFORM_EMAIL_FROM or "").strip()
     if not api_key:
-        return {"success": False, "error": "Platform email sender not configured (missing PLATFORM_RESEND_API_KEY)"}
+        return {
+            "success": False,
+            "error": "Platform email sender not configured (missing PLATFORM_RESEND_API_KEY)",
+        }
     if not resolved_from:
         return {
             "success": False,
