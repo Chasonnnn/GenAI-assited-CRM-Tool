@@ -72,6 +72,7 @@ from app.routers import (
     platform,
     profile,
     queues,
+    resend,
     search,
     settings as settings_router,
     status_change_requests,
@@ -484,6 +485,9 @@ app.include_router(invites.router, tags=["invites"])
 
 # Settings (organization and user preferences)
 app.include_router(settings_router.router, tags=["settings"])
+
+# Resend Email Configuration (Admin)
+app.include_router(resend.router)
 
 # Appointments (internal, authenticated)
 app.include_router(appointments.router, prefix="/appointments", tags=["appointments"])
