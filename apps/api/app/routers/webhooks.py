@@ -568,6 +568,9 @@ async def resend_webhook(
         )
 
     elif event_type == "email.opened":
+        email_log.open_count = (email_log.open_count or 0) + 1
+        if not email_log.opened_at:
+            email_log.opened_at = now
         # Update campaign recipient if linked
         campaign_recipient = (
             db.query(CampaignRecipient)
@@ -596,6 +599,9 @@ async def resend_webhook(
             logger.info("Resend: email opened for campaign_recipient=%s", campaign_recipient.id)
 
     elif event_type == "email.clicked":
+        email_log.click_count = (email_log.click_count or 0) + 1
+        if not email_log.clicked_at:
+            email_log.clicked_at = now
         # Update campaign recipient if linked
         campaign_recipient = (
             db.query(CampaignRecipient)
