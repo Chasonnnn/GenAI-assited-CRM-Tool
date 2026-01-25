@@ -10,19 +10,32 @@ from app.db.models import Organization
 from app.services import version_service
 
 
-def get_org_by_id(db: Session, org_id: UUID) -> Organization | None:
+def get_org_by_id(
+    db: Session, org_id: UUID, *, include_deleted: bool = False
+) -> Organization | None:
     """Get organization by ID."""
-    return db.query(Organization).filter(Organization.id == org_id).first()
+    query = db.query(Organization).filter(Organization.id == org_id)
+    if not include_deleted:
+        query = query.filter(Organization.deleted_at.is_(None))
+    return query.first()
 
 
-def list_orgs(db: Session) -> list[Organization]:
+def list_orgs(db: Session, *, include_deleted: bool = False) -> list[Organization]:
     """List all organizations."""
-    return db.query(Organization).all()
+    query = db.query(Organization)
+    if not include_deleted:
+        query = query.filter(Organization.deleted_at.is_(None))
+    return query.all()
 
 
-def get_org_by_slug(db: Session, slug: str) -> Organization | None:
+def get_org_by_slug(
+    db: Session, slug: str, *, include_deleted: bool = False
+) -> Organization | None:
     """Get organization by slug."""
-    return db.query(Organization).filter(Organization.slug == slug.lower()).first()
+    query = db.query(Organization).filter(Organization.slug == slug.lower())
+    if not include_deleted:
+        query = query.filter(Organization.deleted_at.is_(None))
+    return query.first()
 
 
 def create_org(
