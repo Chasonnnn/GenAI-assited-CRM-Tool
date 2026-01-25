@@ -50,13 +50,13 @@ def upgrade() -> None:
         sa.Column("current_version", sa.Integer, nullable=False, server_default="1"),
         sa.Column(
             "created_at",
-            sa.DateTime,
+            sa.TIMESTAMP(timezone=True),
             server_default=sa.text("now()"),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
-            sa.DateTime,
+            sa.TIMESTAMP(timezone=True),
             server_default=sa.text("now()"),
             nullable=False,
         ),
