@@ -114,15 +114,16 @@ async def create_invite(
     session: UserSession = Depends(get_current_session),
 ):
     """Create a new invitation (Admin+ only)."""
-    # Check if inviter has Gmail connected (required to send invite email)
-    from app.services import oauth_service
+    # Ensure we can send invites either via inviter Gmail or platform/system sender
+    from app.services import oauth_service, platform_email_service
     from app.services.google_oauth import validate_email_domain
 
     gmail_integration = oauth_service.get_user_integration(db, session.user_id, "gmail")
-    if not gmail_integration:
+    platform_sender_configured = platform_email_service.platform_sender_configured()
+    if not gmail_integration and not platform_sender_configured:
         raise HTTPException(
             status_code=400,
-            detail="Connect Gmail in Settings → Integrations to send invites",
+            detail="Connect Gmail in Settings → Integrations or configure platform email to send invites",
         )
 
     # Validate invitee email is from allowed domain
