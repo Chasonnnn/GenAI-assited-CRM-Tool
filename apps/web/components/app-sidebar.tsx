@@ -226,11 +226,11 @@ export function AppSidebar({ children }: AppSidebarProps) {
                 <SidebarHeader>
                     <SidebarMenu>
                         <SidebarMenuItem>
-                            <Link href="/dashboard">
-                                <SidebarMenuButton
-                                    size="lg"
-                                    tooltip="Surrogacy Force"
-                                >
+                            <SidebarMenuButton
+                                render={<Link href="/dashboard" />}
+                                size="lg"
+                                tooltip="Surrogacy Force"
+                            >
                                     <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
                                         <svg
                                             xmlns="http://www.w3.org/2000/svg"
@@ -254,8 +254,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                             {user?.org_display_name || user?.org_name || "Loading..."}
                                         </span>
                                     </div>
-                                </SidebarMenuButton>
-                            </Link>
+                            </SidebarMenuButton>
                         </SidebarMenuItem>
                     </SidebarMenu>
                 </SidebarHeader>
@@ -285,15 +284,14 @@ export function AppSidebar({ children }: AppSidebarProps) {
                         <SidebarMenu>
                             {navigation.map((item) => (
                                 <SidebarMenuItem key={item.title}>
-                                    <Link href={item.url}>
-                                        <SidebarMenuButton
-                                            isActive={pathname === item.url || pathname?.startsWith(item.url + "/")}
-                                            tooltip={item.title}
-                                        >
+                                    <SidebarMenuButton
+                                        render={<Link href={item.url} />}
+                                        isActive={pathname === item.url || pathname?.startsWith(item.url + "/")}
+                                        tooltip={item.title}
+                                    >
                                             <item.icon />
                                             <span>{item.title}</span>
-                                        </SidebarMenuButton>
-                                    </Link>
+                                    </SidebarMenuButton>
                                 </SidebarMenuItem>
                             ))}
                             {/* Tasks & Scheduling with sub-menu */}
@@ -368,28 +366,26 @@ export function AppSidebar({ children }: AppSidebarProps) {
                             </Collapsible>
                             {/* Reports */}
                             <SidebarMenuItem>
-                                <Link href={reportsNavigation.url}>
-                                    <SidebarMenuButton
-                                        isActive={pathname === reportsNavigation.url || pathname?.startsWith(reportsNavigation.url + "/")}
-                                        tooltip={reportsNavigation.title}
-                                    >
+                                <SidebarMenuButton
+                                    render={<Link href={reportsNavigation.url} />}
+                                    isActive={pathname === reportsNavigation.url || pathname?.startsWith(reportsNavigation.url + "/")}
+                                    tooltip={reportsNavigation.title}
+                                >
                                         <reportsNavigation.icon />
                                         <span>{reportsNavigation.title}</span>
-                                    </SidebarMenuButton>
-                                </Link>
+                                </SidebarMenuButton>
                             </SidebarMenuItem>
                             {/* AI Assistant - only shown if enabled for org */}
                             {user?.ai_enabled && (
                                 <SidebarMenuItem>
-                                    <Link href={aiNavigation.url}>
-                                        <SidebarMenuButton
-                                            isActive={pathname === aiNavigation.url || pathname?.startsWith(aiNavigation.url + "/")}
-                                            tooltip={aiNavigation.title}
-                                        >
+                                    <SidebarMenuButton
+                                        render={<Link href={aiNavigation.url} />}
+                                        isActive={pathname === aiNavigation.url || pathname?.startsWith(aiNavigation.url + "/")}
+                                        tooltip={aiNavigation.title}
+                                    >
                                             <aiNavigation.icon />
                                             <span>{aiNavigation.title}</span>
-                                        </SidebarMenuButton>
-                                    </Link>
+                                    </SidebarMenuButton>
                                 </SidebarMenuItem>
                             )}
                             {/* Settings with sub-menu */}
@@ -435,11 +431,10 @@ export function AppSidebar({ children }: AppSidebarProps) {
                     <SidebarMenu>
                         <SidebarMenuItem>
                             <DropdownMenu>
-                                <DropdownMenuTrigger className="w-full rounded-lg data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
-                                    <SidebarMenuButton
-                                        render={<span />}
-                                        size="lg"
-                                    >
+                                <DropdownMenuTrigger
+                                    className="w-full rounded-lg data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                                    render={<SidebarMenuButton size="lg" />}
+                                >
                                         <Avatar className="h-8 w-8 rounded-lg">
                                             <AvatarImage src="/placeholder.svg" alt={user?.display_name || "User"} />
                                             <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
@@ -449,7 +444,6 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                             <span className="truncate text-xs text-muted-foreground">{user?.email || ""}</span>
                                         </div>
                                         <ChevronsUpDown className="ml-auto size-4" />
-                                    </SidebarMenuButton>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent
                                     className="w-56 rounded-lg"
@@ -472,23 +466,17 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                     </DropdownMenuGroup>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuGroup>
-                                        <DropdownMenuItem>
-                                            <Link href="/settings" className="flex items-center w-full">
-                                                <User className="mr-2 h-4 w-4" />
-                                                Profile
-                                            </Link>
+                                        <DropdownMenuItem render={<Link href="/settings" />} className="flex items-center">
+                                            <User className="mr-2 h-4 w-4" />
+                                            Profile
                                         </DropdownMenuItem>
-                                        <DropdownMenuItem>
-                                            <Link href="/settings/notifications" className="flex items-center w-full">
-                                                <Bell className="mr-2 h-4 w-4" />
-                                                Notifications
-                                            </Link>
+                                        <DropdownMenuItem render={<Link href="/settings/notifications" />} className="flex items-center">
+                                            <Bell className="mr-2 h-4 w-4" />
+                                            Notifications
                                         </DropdownMenuItem>
-                                        <DropdownMenuItem>
-                                            <Link href="/settings" className="flex items-center w-full">
-                                                <Settings className="mr-2 h-4 w-4" />
-                                                Settings
-                                            </Link>
+                                        <DropdownMenuItem render={<Link href="/settings" />} className="flex items-center">
+                                            <Settings className="mr-2 h-4 w-4" />
+                                            Settings
                                         </DropdownMenuItem>
                                     </DropdownMenuGroup>
                                     <DropdownMenuSeparator />

@@ -179,11 +179,10 @@ export function SidebarIconExample() {
           <SidebarMenu>
             <SidebarMenuItem>
               <DropdownMenu>
-                <DropdownMenuTrigger className="w-full rounded-lg data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
-                  <SidebarMenuButton
-                    render={<span />}
-                    size="lg"
-                  >
+                <DropdownMenuTrigger
+                  className="w-full rounded-lg data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                  render={<SidebarMenuButton size="lg" />}
+                >
                     <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" className="size-4">
                         <rect width="256" height="256" fill="none"></rect>
@@ -216,7 +215,6 @@ export function SidebarIconExample() {
                       <span className="truncate text-xs">{activeTeam.plan}</span>
                     </div>
                     <ChevronsUpDownIcon className="ml-auto" />
-                  </SidebarMenuButton>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
@@ -270,27 +268,29 @@ export function SidebarIconExample() {
                 const collapsibleProps = item.isActive ? { defaultOpen: true } : {}
                 return (
                   <Collapsible key={item.title} className="group/collapsible" {...collapsibleProps}>
-                  <SidebarMenuItem>
-                    <CollapsibleTrigger>
-                      <SidebarMenuButton tooltip={item.title}>
-                        {item.icon}
-                        <span>{item.title}</span>
-                        <ChevronRightIcon className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                      </SidebarMenuButton>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <SidebarMenuSub>
-                        {item.items?.map((subItem) => (
-                          <SidebarMenuSubItem key={subItem.title}>
-                            <SidebarMenuSubButton href={subItem.url}>
-                              <span>{subItem.title}</span>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                        ))}
-                      </SidebarMenuSub>
-                    </CollapsibleContent>
-                  </SidebarMenuItem>
-                </Collapsible>
+                    <SidebarMenuItem>
+                      <CollapsibleTrigger
+                        render={
+                          <SidebarMenuButton tooltip={item.title}>
+                            {item.icon}
+                            <span>{item.title}</span>
+                            <ChevronRightIcon className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                          </SidebarMenuButton>
+                        }
+                      />
+                      <CollapsibleContent>
+                        <SidebarMenuSub>
+                          {item.items?.map((subItem) => (
+                            <SidebarMenuSubItem key={subItem.title}>
+                              <SidebarMenuSubButton href={subItem.url}>
+                                <span>{subItem.title}</span>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
+                        </SidebarMenuSub>
+                      </CollapsibleContent>
+                    </SidebarMenuItem>
+                  </Collapsible>
               )})}
             </SidebarMenu>
           </SidebarGroup>
@@ -309,11 +309,10 @@ export function SidebarIconExample() {
           <SidebarMenu>
             <SidebarMenuItem>
               <DropdownMenu>
-                <DropdownMenuTrigger className="w-full rounded-lg data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
-                  <SidebarMenuButton
-                    render={<span />}
-                    size="lg"
-                  >
+                <DropdownMenuTrigger
+                  className="w-full rounded-lg data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                  render={<SidebarMenuButton size="lg" />}
+                >
                     <Avatar className="h-8 w-8 rounded-lg">
                       <AvatarImage src={data.user.avatar || "/placeholder.svg"} alt={data.user.name} />
                       <AvatarFallback className="rounded-lg">CN</AvatarFallback>
@@ -323,7 +322,6 @@ export function SidebarIconExample() {
                       <span className="truncate text-xs">{data.user.email}</span>
                     </div>
                     <ChevronsUpDownIcon className="ml-auto size-4" />
-                  </SidebarMenuButton>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"

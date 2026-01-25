@@ -40,6 +40,8 @@ locals {
     GCP_MONITORING_ENABLED       = tostring(var.gcp_monitoring_enabled)
     GCP_PROJECT_ID               = var.project_id
     GCP_SERVICE_NAME             = var.api_service_name
+    DB_MIGRATION_CHECK           = tostring(var.db_migration_check)
+    DB_AUTO_MIGRATE              = tostring(var.db_auto_migrate)
   }, local.optional_env)
 
   common_secret_keys = [

@@ -6,7 +6,10 @@ Tests cover:
 - MFA enrollment flow
 """
 
-from urllib.parse import urlparse, parse_qs
+from datetime import datetime, timezone
+from urllib.parse import parse_qs, urlparse
+
+import pytest
 
 from app.services import mfa_service
 
@@ -180,3 +183,67 @@ class TestMFAStatus:
             duo_enrolled_at = None
 
         assert mfa_service.has_mfa_setup(MockUser()) is False
+
+
+class TestMFAEndpoints:
+    """Endpoint-level MFA tests."""
+
+    @pytest.mark.asyncio
+    async def test_duo_enrolled_blocks_totp_verify_with_separators(
+        self, authed_client, db, test_user
+    ):
+        """Duo-enrolled users should not verify TOTP codes, even with separators."""
+        import pyotp
+
+        secret = "JBSWY3DPEHPK3PXP"
+        test_user.mfa_enabled = True
+        test_user.totp_secret = secret
+        test_user.duo_enrolled_at = datetime.now(timezone.utc)
+        db.commit()
+
+        code = pyotp.TOTP(secret).now()
+        code_with_space = f"{code[:3]} {code[3:]}"
+
+        response = await authed_client.post("/mfa/verify", json={"code": code_with_space})
+
+        assert response.status_code == 400
+        assert "Duo verification required" in response.json().get("detail", "")
+
+    @pytest.mark.asyncio
+    async def test_duo_enrolled_blocks_totp_complete_with_separators(
+        self, authed_client, db, test_user
+    ):
+        """Duo-enrolled users should not complete MFA via TOTP, even with separators."""
+        import pyotp
+
+        secret = "JBSWY3DPEHPK3PXP"
+        test_user.mfa_enabled = True
+        test_user.totp_secret = secret
+        test_user.duo_enrolled_at = datetime.now(timezone.utc)
+        db.commit()
+
+        code = pyotp.TOTP(secret).now()
+        code_with_dash = f"{code[:3]}-{code[3:]}"
+
+        response = await authed_client.post("/mfa/complete", json={"code": code_with_dash})
+
+        assert response.status_code == 400
+        assert "Duo verification required" in response.json().get("detail", "")
+
+    @pytest.mark.asyncio
+    async def test_duo_enrolled_allows_recovery_codes(self, authed_client, db, test_user):
+        """Duo-enrolled users should be able to use recovery codes."""
+        recovery_codes = mfa_service.generate_recovery_codes(2)
+        test_user.mfa_enabled = True
+        test_user.mfa_recovery_codes = mfa_service.hash_recovery_codes(recovery_codes)
+        test_user.duo_enrolled_at = datetime.now(timezone.utc)
+        db.commit()
+
+        response = await authed_client.post(
+            "/mfa/verify", json={"code": recovery_codes[0]}
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["valid"] is True
+        assert payload["method"] == "recovery"

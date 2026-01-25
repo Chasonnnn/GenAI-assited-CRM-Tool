@@ -38,6 +38,7 @@ class MFAStatusResponse(BaseModel):
     totp_enabled_at: str | None
     duo_enabled: bool
     duo_enrolled_at: str | None
+    duo_required: bool  # True if Duo enrolled, meaning TOTP is blocked
     recovery_codes_remaining: int
     mfa_required: bool
 
@@ -85,6 +86,20 @@ class MFAVerifyResponse(BaseModel):
 
 
 # =============================================================================
+# Helpers
+# =============================================================================
+
+
+def _normalize_mfa_code(code: str) -> str:
+    return code.strip().replace(" ", "").replace("-", "")
+
+
+def _is_totp_candidate(code: str) -> bool:
+    normalized = _normalize_mfa_code(code)
+    return len(normalized) == 6 and normalized.isdigit()
+
+
+# =============================================================================
 # Endpoints
 # =============================================================================
 
@@ -120,6 +135,13 @@ def setup_totp(
     user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # Block TOTP setup if Duo is enrolled (security: prevent bypass)
+    if user.duo_enrolled_at:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot setup authenticator when Duo is enrolled. Use Duo for MFA.",
+        )
 
     # Don't allow re-setup if already enabled (must disable first)
     if user.mfa_enabled and user.totp_enabled_at:
@@ -159,6 +181,13 @@ def verify_totp_setup(
     user = user_service.get_user_by_id(db, session.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # Block TOTP verification if Duo is enrolled (security: prevent bypass)
+    if user.duo_enrolled_at:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot use authenticator when Duo is enrolled. Use Duo for MFA.",
+        )
 
     if not user.totp_secret:
         raise HTTPException(
@@ -231,7 +260,18 @@ def verify_mfa_code(
     if not user.mfa_enabled:
         raise HTTPException(status_code=400, detail="MFA not enabled for this user")
 
+    # If Duo is enrolled, block TOTP verification (only recovery allowed here)
+    if user.duo_enrolled_at and _is_totp_candidate(body.code):
+        raise HTTPException(
+            status_code=400,
+            detail="Duo verification required. Use Duo or a recovery code.",
+        )
+
     is_valid, method = mfa_service.verify_mfa_code(user, body.code)
+
+    # Double-check: block TOTP if Duo enrolled
+    if is_valid and method == "totp" and user.duo_enrolled_at:
+        return MFAVerifyResponse(valid=False, method=None)
 
     if is_valid and method == "recovery":
         # Consume the recovery code
@@ -275,11 +315,26 @@ def complete_mfa_challenge(
     if not user.mfa_enabled:
         raise HTTPException(status_code=400, detail="MFA not enabled for this user")
 
+    # If Duo is enrolled, user must use Duo (this endpoint only handles TOTP/recovery)
+    # Recovery codes are allowed as emergency fallback
+    if user.duo_enrolled_at and _is_totp_candidate(body.code):
+        raise HTTPException(
+            status_code=400,
+            detail="Duo verification required. Use Duo or a recovery code.",
+        )
+
     # Verify the code
     is_valid, method = mfa_service.verify_mfa_code(user, body.code)
 
     if not is_valid:
         raise HTTPException(status_code=400, detail="Invalid MFA code")
+
+    # If Duo enrolled but user somehow got through with TOTP, block it
+    if user.duo_enrolled_at and method == "totp":
+        raise HTTPException(
+            status_code=400,
+            detail="Duo verification required. TOTP is not allowed when Duo is enrolled.",
+        )
 
     # Consume recovery code if used
     if method == "recovery":

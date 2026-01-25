@@ -287,12 +287,10 @@ export default function MemberDetailPage() {
     return (
         <div className="flex flex-1 flex-col gap-6 p-6 max-w-3xl mx-auto">
             <div className="flex items-center justify-between">
-                <Link href="/settings/team">
-                    <Button variant="ghost" size="sm">
-                        <ChevronLeft className="size-4 mr-1" />
-                        Back to Team
-                    </Button>
-                </Link>
+                <Button variant="ghost" size="sm" render={<Link href="/settings/team" />}>
+                    <ChevronLeft className="size-4 mr-1" />
+                    Back to Team
+                </Button>
                 {hasChanges && (
                     <Button onClick={handleSave} disabled={updateMember.isPending}>
                         {updateMember.isPending ? (

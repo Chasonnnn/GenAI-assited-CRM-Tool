@@ -25,6 +25,7 @@ from app.core.config import settings
 from app.core.deps import COOKIE_NAME
 from app.core.csrf import CSRF_HEADER, CSRF_COOKIE_NAME, set_csrf_cookie, validate_csrf
 from app.core.gcp_monitoring import report_exception, setup_gcp_monitoring
+from app.core import migrations as db_migrations
 from app.core.protobuf_guard import apply_protobuf_json_depth_guard
 from app.core.structured_logging import build_log_context
 from app.core.rate_limit import limiter
@@ -190,6 +191,15 @@ async def lifespan(app: FastAPI):
         start_session_revocation_listener,
         start_websocket_event_listener,
     )
+
+    if settings.DB_MIGRATION_CHECK or settings.DB_AUTO_MIGRATE:
+        status = db_migrations.ensure_migrations(engine, settings.DB_AUTO_MIGRATE)
+        if not status.is_up_to_date and not settings.DB_AUTO_MIGRATE:
+            logging.error(
+                "Database migrations pending at startup: current=%s head=%s",
+                status.current_heads,
+                status.head_revisions,
+            )
 
     manager.set_event_loop(asyncio.get_running_loop())
     await start_session_revocation_listener()
@@ -558,6 +568,30 @@ def _check_db_connection() -> None:
         ) from exc
 
 
+def _check_db_migrations() -> db_migrations.MigrationStatus | None:
+    if not settings.DB_MIGRATION_CHECK:
+        return None
+    try:
+        migration_status = db_migrations.get_migration_status(engine)
+    except Exception as exc:
+        logger.warning("Readiness migration check failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database migration check failed",
+        ) from exc
+    if not migration_status.is_up_to_date:
+        logger.error(
+            "Database migrations pending: current=%s head=%s",
+            migration_status.current_heads,
+            migration_status.head_revisions,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database migrations pending",
+        )
+    return migration_status
+
+
 def _check_redis_connection() -> None:
     try:
         client = get_sync_redis_client()
@@ -584,8 +618,18 @@ def healthz():
 def readyz():
     """Readiness probe (checks database connectivity)."""
     _check_db_connection()
+    migration_status = _check_db_migrations()
     _check_redis_connection()
-    return {"status": "ok", "env": settings.ENV, "version": settings.VERSION}
+    response = {"status": "ok", "env": settings.ENV, "version": settings.VERSION}
+    if settings.DB_MIGRATION_CHECK:
+        response["db_migrations"] = {
+            "status": "ok",
+            "current_heads": list(migration_status.current_heads) if migration_status else [],
+            "head_revisions": list(migration_status.head_revisions) if migration_status else [],
+        }
+    else:
+        response["db_migrations"] = {"status": "skipped"}
+    return response
 
 
 @app.get("/health/live")

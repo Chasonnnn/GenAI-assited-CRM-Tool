@@ -321,6 +321,18 @@ variable "gcp_monitoring_enabled" {
   default     = true
 }
 
+variable "db_migration_check" {
+  description = "Fail readiness checks when database migrations are pending."
+  type        = bool
+  default     = true
+}
+
+variable "db_auto_migrate" {
+  description = "Automatically apply Alembic migrations on API startup."
+  type        = bool
+  default     = false
+}
+
 variable "logging_retention_days" {
   description = "Cloud Logging retention in days for the default bucket."
   type        = number
