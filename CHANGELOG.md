@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.32.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.31.6...surrogacy-crm-platform-v0.32.0) (2026-01-25)
+
+
+### Features
+
+* **api:** add email engagement tracking for invites ([57c47d3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/57c47d37cfbf7fb9fa82cc1867a98513e4c885e3))
+* **api:** add org delete/restore platform endpoints ([cace40c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cace40c937f046c376e54641ffbc76a726f969fe))
+* **api:** add ORG_DELETE worker job handler ([f369ff2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f369ff29d855f258ffd82083e91f38cfb10bca5d))
+* **api:** add organization deletion service logic ([70c3742](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/70c374294292a730645f7cc5434598ef7e005d7a))
+* **api:** add organization soft delete schema ([91227d5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/91227d585663fdd02e9c48604113e7b4492daa44))
+* **api:** block API access for deleted organizations ([6f03c58](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6f03c58e10c1f4e50a720ab88e9e3842080976d6))
+* **api:** expand HTML sanitization for email templates ([84bd5be](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/84bd5bea3093ec87b103d373c375a02ab39d96eb))
+* **api:** filter deleted orgs in org service queries ([6062753](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6062753426988abda57f6ccd2920bc50af021508))
+* **api:** improve invite flow and email template ([1061f56](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1061f568bec4d6f1748f3c359488a9643b155f84))
+* **api:** refactor Resend webhooks and add platform endpoint ([a24824d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a24824d8d08f9edf8c8377e8d06b58f74be162f9))
+* **config:** add platform Resend webhook secret setting ([2d0088a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2d0088a7175265a9c20d72c6c0ca572dee69470e))
+* **web:** add org deletion UI to ops dashboard ([ce86c66](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ce86c6601db0a76b76a1c49cada6c05f206715af))
+* **web:** expand DOMPurify config for template previews ([2d38a97](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2d38a97a958a08f61abcabbe35578551168b50c3))
+
 ## [0.31.6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.31.5...surrogacy-crm-platform-v0.31.6) (2026-01-25)
 
 
