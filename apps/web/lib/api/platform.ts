@@ -96,6 +96,24 @@ export interface PlatformStats {
     open_alerts: number;
 }
 
+// Platform email sender status
+export interface PlatformEmailStatus {
+    configured: boolean;
+    from_email: string | null;
+    provider: string;
+}
+
+// Org-scoped system email template
+export interface SystemEmailTemplate {
+    system_key: string;
+    subject: string;
+    from_email: string | null;
+    body: string;
+    is_active: boolean;
+    current_version: number;
+    updated_at: string | null;
+}
+
 // Platform alert (cross-org)
 export interface PlatformAlert {
     id: string;
@@ -128,6 +146,13 @@ export function getPlatformMe(): Promise<PlatformUser> {
  */
 export function getPlatformStats(): Promise<PlatformStats> {
     return api.get<PlatformStats>('/platform/stats');
+}
+
+/**
+ * Get platform/system email sender status (Resend).
+ */
+export function getPlatformEmailStatus(): Promise<PlatformEmailStatus> {
+    return api.get<PlatformEmailStatus>('/platform/email/status');
 }
 
 /**
@@ -233,6 +258,50 @@ export function createInvite(
  */
 export function revokeInvite(orgId: string, inviteId: string): Promise<void> {
     return api.post(`/platform/orgs/${orgId}/invites/${inviteId}/revoke`);
+}
+
+/**
+ * Get org-scoped system email template by system_key.
+ */
+export function getOrgSystemEmailTemplate(
+    orgId: string,
+    systemKey: string
+): Promise<SystemEmailTemplate> {
+    return api.get<SystemEmailTemplate>(`/platform/orgs/${orgId}/email/system-templates/${systemKey}`);
+}
+
+/**
+ * Update org-scoped system email template by system_key.
+ */
+export function updateOrgSystemEmailTemplate(
+    orgId: string,
+    systemKey: string,
+    data: {
+        subject: string;
+        from_email?: string | null;
+        body: string;
+        is_active: boolean;
+        expected_version?: number;
+    }
+): Promise<SystemEmailTemplate> {
+    return api.put<SystemEmailTemplate>(
+        `/platform/orgs/${orgId}/email/system-templates/${systemKey}`,
+        data
+    );
+}
+
+/**
+ * Send a test email using an org-scoped system email template.
+ */
+export function sendTestOrgSystemEmailTemplate(
+    orgId: string,
+    systemKey: string,
+    data: { to_email: string }
+): Promise<{ sent: boolean; message_id?: string; email_log_id?: string }> {
+    return api.post(
+        `/platform/orgs/${orgId}/email/system-templates/${systemKey}/test`,
+        data
+    );
 }
 
 /**

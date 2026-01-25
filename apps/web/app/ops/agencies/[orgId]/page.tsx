@@ -9,6 +9,10 @@ import {
     listMembers,
     listInvites,
     getAdminActionLogs,
+    getPlatformEmailStatus,
+    getOrgSystemEmailTemplate,
+    updateOrgSystemEmailTemplate,
+    sendTestOrgSystemEmailTemplate,
     listAlerts,
     acknowledgeAlert,
     resolveAlert,
@@ -18,6 +22,8 @@ import {
     resetMemberMfa,
     createInvite,
     revokeInvite,
+    type PlatformEmailStatus,
+    type SystemEmailTemplate,
     type OrganizationDetail,
     type OrganizationSubscription,
     type OrgMember,
@@ -79,10 +85,13 @@ import {
     Mail,
     Ban,
     ShieldOff,
+    Code,
     Plus,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
+import DOMPurify from 'dompurify';
 import { toast } from 'sonner';
+import { RichTextEditor } from '@/components/rich-text-editor';
 
 const STATUS_BADGE_VARIANTS: Record<string, string> = {
     active: 'bg-green-500/10 text-green-600 border-green-500/20',
@@ -202,6 +211,18 @@ export default function AgencyDetailPage() {
     const [notesDraft, setNotesDraft] = useState('');
     const [notesSaving, setNotesSaving] = useState(false);
     const subscriptionNotes = subscription?.notes ?? '';
+    const [platformEmailStatus, setPlatformEmailStatus] = useState<PlatformEmailStatus | null>(null);
+    const [platformEmailLoading, setPlatformEmailLoading] = useState(false);
+    const [inviteTemplate, setInviteTemplate] = useState<SystemEmailTemplate | null>(null);
+    const [inviteTemplateLoading, setInviteTemplateLoading] = useState(false);
+    const [inviteTemplateSaving, setInviteTemplateSaving] = useState(false);
+    const [templateSubject, setTemplateSubject] = useState('');
+    const [templateFromEmail, setTemplateFromEmail] = useState('');
+    const [templateBody, setTemplateBody] = useState('');
+    const [templateActive, setTemplateActive] = useState(true);
+    const [templateVersion, setTemplateVersion] = useState<number | null>(null);
+    const [testEmail, setTestEmail] = useState('');
+    const [testSending, setTestSending] = useState(false);
 
     useEffect(() => {
         async function fetchData() {
@@ -257,6 +278,100 @@ export default function AgencyDetailPage() {
             orgAlerts.filter((alert) => alert.status === 'open').length
         );
     }, [orgAlerts]);
+
+    useEffect(() => {
+        if (activeTab !== 'templates') return;
+
+        async function fetchEmailStatus() {
+            setPlatformEmailLoading(true);
+            try {
+                const status = await getPlatformEmailStatus();
+                setPlatformEmailStatus(status);
+            } catch (error) {
+                console.error('Failed to fetch platform email status:', error);
+                toast.error('Failed to load platform email sender status');
+            } finally {
+                setPlatformEmailLoading(false);
+            }
+        }
+
+        async function fetchInviteTemplate() {
+            setInviteTemplateLoading(true);
+            try {
+                const tpl = await getOrgSystemEmailTemplate(orgId, 'org_invite');
+                setInviteTemplate(tpl);
+                setTemplateSubject(tpl.subject);
+                setTemplateFromEmail(tpl.from_email || '');
+                setTemplateBody(tpl.body);
+                setTemplateActive(tpl.is_active);
+                setTemplateVersion(tpl.current_version);
+            } catch (error) {
+                console.error('Failed to fetch invite template:', error);
+                toast.error('Failed to load invite email template');
+            } finally {
+                setInviteTemplateLoading(false);
+            }
+        }
+
+        fetchEmailStatus();
+        fetchInviteTemplate();
+    }, [activeTab, orgId]);
+
+    const handleSaveInviteTemplate = async () => {
+        setInviteTemplateSaving(true);
+        try {
+            const payload: Parameters<typeof updateOrgSystemEmailTemplate>[2] = {
+                subject: templateSubject,
+                from_email: templateFromEmail.trim() ? templateFromEmail.trim() : null,
+                body: templateBody,
+                is_active: templateActive,
+            };
+            if (templateVersion !== null) {
+                payload.expected_version = templateVersion;
+            }
+
+            const updated = await updateOrgSystemEmailTemplate(orgId, 'org_invite', payload);
+            setInviteTemplate(updated);
+            setTemplateSubject(updated.subject);
+            setTemplateFromEmail(updated.from_email || '');
+            setTemplateBody(updated.body);
+            setTemplateActive(updated.is_active);
+            setTemplateVersion(updated.current_version);
+            toast.success('Invite email template updated');
+        } catch (error) {
+            console.error('Failed to update invite template:', error);
+            toast.error('Failed to update invite email template');
+        } finally {
+            setInviteTemplateSaving(false);
+        }
+    };
+
+    const handleSendTestInviteEmail = async () => {
+        if (!testEmail) return;
+        setTestSending(true);
+        try {
+            await sendTestOrgSystemEmailTemplate(orgId, 'org_invite', { to_email: testEmail });
+            toast.success('Test email sent');
+        } catch (error) {
+            console.error('Failed to send test email:', error);
+            toast.error('Failed to send test email');
+        } finally {
+            setTestSending(false);
+        }
+    };
+
+    const previewSubject = templateSubject.replace(/\{\{org_name\}\}/g, org?.name ?? 'Organization');
+    const previewBody = DOMPurify.sanitize(
+        templateBody
+            .replace(/\{\{org_name\}\}/g, org?.name ?? 'Organization')
+            .replace(/\{\{inviter_text\}\}/g, ' by Platform Admin')
+            .replace(/\{\{role_title\}\}/g, 'Admin')
+            .replace(
+                /\{\{invite_url\}\}/g,
+                `${org?.portal_domain ? `https://${org.portal_domain}` : 'https://app.example.com'}/invite/EXAMPLE`
+            )
+            .replace(/\{\{expires_block\}\}/g, '<p>This invitation expires in 7 days.</p>')
+    );
 
     const handleExtendSubscription = async () => {
         try {
@@ -481,6 +596,7 @@ export default function AgencyDetailPage() {
                                 </Badge>
                             )}
                         </TabsTrigger>
+                        <TabsTrigger value="templates">Templates</TabsTrigger>
                         <TabsTrigger value="audit">Audit Log</TabsTrigger>
                     </TabsList>
                 </Tabs>
@@ -1087,6 +1203,233 @@ export default function AgencyDetailPage() {
                                 )}
                             </CardContent>
                         </Card>
+                    </TabsContent>
+
+                    {/* Templates Tab */}
+                    <TabsContent value="templates" className="mt-0">
+                        <div className="grid gap-6 lg:grid-cols-2">
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="text-lg flex items-center justify-between">
+                                        Invite Email Template
+                                        <Badge variant="outline" className="font-mono text-xs">
+                                            org_invite
+                                        </Badge>
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Used for user invites to this agency. Sent via the platform sender (Resend).
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-5">
+                                    {platformEmailLoading ? (
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                            <Loader2 className="size-4 animate-spin" />
+                                            Loading email sender status...
+                                        </div>
+                                    ) : platformEmailStatus?.configured ? (
+                                        <div className="rounded-md border bg-stone-50 dark:bg-stone-900 p-3 text-sm">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-muted-foreground">
+                                                    Sender configured
+                                                </span>
+                                                <Badge variant="secondary">Resend</Badge>
+                                            </div>
+                                            <div className="mt-1 text-xs text-muted-foreground">
+                                                From: managed per-template
+                                                {platformEmailStatus.from_email ? (
+                                                    <span className="ml-1 font-mono">
+                                                        (fallback: {platformEmailStatus.from_email})
+                                                    </span>
+                                                ) : null}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900">
+                                            Platform sender is not configured. Set PLATFORM_RESEND_API_KEY to
+                                            enable platform/system emails via Resend.
+                                        </div>
+                                    )}
+
+                                    {inviteTemplateLoading ? (
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                            <Loader2 className="size-4 animate-spin" />
+                                            Loading template...
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="space-y-2">
+                                                <Label>From (required for Resend)</Label>
+                                                <Input
+                                                    value={templateFromEmail}
+                                                    onChange={(e) => setTemplateFromEmail(e.target.value)}
+                                                    placeholder="Invites <invites@surrogacyforce.com>"
+                                                />
+                                                <p className="text-xs text-muted-foreground">
+                                                    Choose the sender for this template. You can use different
+                                                    senders per template without Terraform changes (must be on a
+                                                    verified domain in Resend).
+                                                </p>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label>Subject</Label>
+                                                <Input
+                                                    value={templateSubject}
+                                                    onChange={(e) => setTemplateSubject(e.target.value)}
+                                                    placeholder="You're invited to join {{org_name}}"
+                                                />
+                                                <p className="text-xs text-muted-foreground">
+                                                    Variables:{' '}
+                                                    <span className="font-mono">{'{{org_name}}'}</span>
+                                                </p>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <Label>Email Body (HTML)</Label>
+                                                    <Badge variant="outline" className="text-xs">
+                                                        <Code className="size-3 mr-1" />
+                                                        Variables
+                                                    </Badge>
+                                                </div>
+                                                <RichTextEditor
+                                                    content={templateBody}
+                                                    onChange={(html) => setTemplateBody(html)}
+                                                    placeholder="Write your invite email content..."
+                                                    minHeight="220px"
+                                                    maxHeight="420px"
+                                                />
+                                                <p className="text-xs text-muted-foreground">
+                                                    Available variables:{' '}
+                                                    <span className="font-mono">{'{{invite_url}}'}</span>,{' '}
+                                                    <span className="font-mono">{'{{role_title}}'}</span>,{' '}
+                                                    <span className="font-mono">{'{{inviter_text}}'}</span>,{' '}
+                                                    <span className="font-mono">{'{{expires_block}}'}</span>
+                                                </p>
+                                            </div>
+
+                                            <div className="flex items-center justify-between rounded-md border p-3">
+                                                <div>
+                                                    <div className="font-medium">Template active</div>
+                                                    <div className="text-xs text-muted-foreground">
+                                                        If disabled, invites use the default built-in template.
+                                                    </div>
+                                                </div>
+                                                <Switch
+                                                    checked={templateActive}
+                                                    onCheckedChange={setTemplateActive}
+                                                />
+                                            </div>
+
+                                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                                <span>
+                                                    Version:{' '}
+                                                    <span className="font-mono">
+                                                        {templateVersion ?? inviteTemplate?.current_version ?? '-'}
+                                                    </span>
+                                                </span>
+                                                <span>
+                                                    Updated:{' '}
+                                                    {inviteTemplate?.updated_at
+                                                        ? format(new Date(inviteTemplate.updated_at), 'MMM d, yyyy h:mm a')
+                                                        : '-'}
+                                                </span>
+                                            </div>
+
+                                            <div className="flex gap-2">
+                                                <Button
+                                                    onClick={handleSaveInviteTemplate}
+                                                    disabled={inviteTemplateSaving}
+                                                >
+                                                    {inviteTemplateSaving && (
+                                                        <Loader2 className="mr-2 size-4 animate-spin" />
+                                                    )}
+                                                    Save Template
+                                                </Button>
+                                            </div>
+
+                                            <div className="rounded-md border p-4 space-y-3">
+                                                <div className="font-medium">Send Test Email</div>
+                                                <div className="grid gap-2">
+                                                    <Label className="text-xs">To</Label>
+                                                    <Input
+                                                        value={testEmail}
+                                                        onChange={(e) => setTestEmail(e.target.value)}
+                                                        placeholder="name@example.com"
+                                                    />
+                                                </div>
+                                                <Button
+                                                    variant="secondary"
+                                                    onClick={handleSendTestInviteEmail}
+                                                    disabled={
+                                                        !platformEmailStatus?.configured ||
+                                                        testSending ||
+                                                        !(
+                                                            templateFromEmail.trim() ||
+                                                            platformEmailStatus?.from_email
+                                                        )
+                                                    }
+                                                >
+                                                    {testSending && (
+                                                        <Loader2 className="mr-2 size-4 animate-spin" />
+                                                    )}
+                                                    Send Test
+                                                </Button>
+                                                {!platformEmailStatus?.configured && (
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Configure platform email sender to enable test sends.
+                                                    </p>
+                                                )}
+                                                {platformEmailStatus?.configured &&
+                                                    !templateFromEmail.trim() &&
+                                                    !platformEmailStatus?.from_email && (
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Set a From address above to enable test sends.
+                                                        </p>
+                                                    )}
+                                            </div>
+                                        </>
+                                    )}
+                                </CardContent>
+                            </Card>
+
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="text-lg">Preview</CardTitle>
+                                    <CardDescription>
+                                        Sample rendering with mock values.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="rounded-lg border bg-white overflow-hidden">
+                                        <div className="border-b bg-muted/30 px-4 py-3 text-sm space-y-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className="w-16 text-muted-foreground font-medium">From:</span>
+                                                <span className="font-mono text-xs">
+                                                    {templateFromEmail.trim() ||
+                                                        platformEmailStatus?.from_email ||
+                                                        "you@company.com"}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="w-16 text-muted-foreground font-medium">To:</span>
+                                                <span className="font-mono text-xs">person@example.com</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="w-16 text-muted-foreground font-medium">Subject:</span>
+                                                <span className="font-medium">{previewSubject}</span>
+                                            </div>
+                                        </div>
+                                        <div className="p-4">
+                                            <div
+                                                className="prose prose-sm max-w-none [&_p]:whitespace-pre-wrap"
+                                                dangerouslySetInnerHTML={{ __html: previewBody }}
+                                            />
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
                     </TabsContent>
 
                     {/* Audit Log Tab */}
