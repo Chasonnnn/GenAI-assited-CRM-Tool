@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.33.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.32.0...surrogacy-crm-platform-v0.33.0) (2026-01-25)
+
+
+### Features
+
+* **api,web:** add organization context to invite acceptance flow ([15f5f71](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/15f5f71e1a84ad54b0c107952cc796e9fa65e74e))
+* **api:** add database migration checks to readiness probes ([2c4667f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2c4667fc1f2d65088a497ff571326a2f98ce0ed7))
+* **api:** enforce Duo priority over TOTP when enrolled ([42a82ba](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/42a82ba8d87e01ee7cc6b3bbbc2f3fbdeecb3311))
+
+
+### Bug Fixes
+
+* **web:** resolve remaining nested interactive element violations ([f8409ff](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f8409ffc576058fbd17159a48a92eeacbf0c77df))
+
 ## [0.32.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.31.6...surrogacy-crm-platform-v0.32.0) (2026-01-25)
 
 
