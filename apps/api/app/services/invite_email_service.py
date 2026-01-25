@@ -143,7 +143,7 @@ async def send_invite_email(
     # Build URLs and content
     invite_url = _build_invite_url(invite.id, base_url)
     text_body = _build_invite_text(org_name, inviter_name, invite.role, invite_url, expires_at)
-    idempotency_key = f"invite:{invite.id}"
+    idempotency_key = f"invite:{invite.id}:v{invite.resend_count}"
 
     # Prefer the org-scoped system template (editable in ops). Fallback to built-in HTML.
     template = system_email_template_service.get_system_template(
