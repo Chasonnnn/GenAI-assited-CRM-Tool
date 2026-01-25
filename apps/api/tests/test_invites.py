@@ -118,7 +118,7 @@ async def test_send_invite_email_uses_platform_sender_when_configured(db, test_o
         organization_id=test_org.id,
         name="Organization Invite",
         subject="You're invited to join {{org_name}}",
-        body="<p>Invite: <a href=\"{{invite_url}}\">Accept</a></p>",
+        body='<p>Invite: <a href="{{invite_url}}">Accept</a></p>',
         is_active=False,  # Use built-in body, but keep From for platform sender
         is_system_template=True,
         system_key="org_invite",
@@ -155,7 +155,9 @@ async def test_send_invite_email_uses_platform_sender_when_configured(db, test_o
 
 
 @pytest.mark.asyncio
-async def test_send_invite_email_uses_template_from_email_when_platform_sender(db, test_org, monkeypatch):
+async def test_send_invite_email_uses_template_from_email_when_platform_sender(
+    db, test_org, monkeypatch
+):
     """If the org invite system template sets from_email, platform sender should use it."""
     from app.core.config import settings
     from app.db.models import EmailTemplate, OrgInvite
@@ -169,7 +171,7 @@ async def test_send_invite_email_uses_template_from_email_when_platform_sender(d
         organization_id=test_org.id,
         name="Organization Invite",
         subject="You're invited to join {{org_name}}",
-        body="<p>Invite: <a href=\"{{invite_url}}\">Accept</a></p>",
+        body='<p>Invite: <a href="{{invite_url}}">Accept</a></p>',
         is_active=True,
         is_system_template=True,
         system_key="org_invite",

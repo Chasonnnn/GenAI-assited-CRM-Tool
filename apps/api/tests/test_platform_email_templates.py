@@ -20,13 +20,13 @@ async def test_platform_email_status_allows_admin_flag(authed_client, db, test_u
 
 
 @pytest.mark.asyncio
-async def test_platform_get_system_email_template_creates_default(authed_client, db, test_user, test_org):
+async def test_platform_get_system_email_template_creates_default(
+    authed_client, db, test_user, test_org
+):
     test_user.is_platform_admin = True
     db.commit()
 
-    res = await authed_client.get(
-        f"/platform/orgs/{test_org.id}/email/system-templates/org_invite"
-    )
+    res = await authed_client.get(f"/platform/orgs/{test_org.id}/email/system-templates/org_invite")
     assert res.status_code == 200
     data = res.json()
     assert data["system_key"] == "org_invite"

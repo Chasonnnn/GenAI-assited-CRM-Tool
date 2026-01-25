@@ -56,6 +56,22 @@ def test_campaign(db, test_org, test_user, test_template):
     return campaign
 
 
+def _configure_resend_provider(db, org_id):
+    """Configure org-level Resend settings for campaign sends."""
+    from app.services import resend_settings_service
+
+    resend_settings_service.get_or_create_resend_settings(db, org_id, org_id)
+    resend_settings_service.update_resend_settings(
+        db,
+        org_id,
+        org_id,
+        email_provider="resend",
+        api_key="re_test_key",
+        from_email="no-reply@example.com",
+        verified_domain="example.com",
+    )
+
+
 # =============================================================================
 # Campaign Model Tests
 # =============================================================================
@@ -300,6 +316,8 @@ def test_campaign_send_job_creation(db, test_org, test_user, test_campaign):
     from app.db.models import Job
     from app.db.enums import JobType
 
+    _configure_resend_provider(db, test_org.id)
+
     # Enqueue campaign
     message, run_id, scheduled_at = campaign_service.enqueue_campaign_send(
         db=db,
@@ -333,6 +351,8 @@ def test_campaign_send_job_scheduled_run_at(db, test_org, test_user, test_campai
     from app.services import campaign_service
     from app.db.models import Job
     from app.db.enums import JobType
+
+    _configure_resend_provider(db, test_org.id)
 
     scheduled_at = datetime.now(timezone.utc) + timedelta(hours=2)
     test_campaign.scheduled_at = scheduled_at
@@ -370,6 +390,8 @@ def test_campaign_send_requires_scheduled_at_when_send_now_false(
 ):
     """send_now=False should require campaign.scheduled_at."""
     from app.services import campaign_service
+
+    _configure_resend_provider(db, test_org.id)
 
     with pytest.raises(ValueError, match="scheduled_at"):
         campaign_service.enqueue_campaign_send(
