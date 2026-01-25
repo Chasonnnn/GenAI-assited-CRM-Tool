@@ -1,6 +1,7 @@
 """Invite email service.
 
-Sends invitation emails using Gmail API via the inviting user's account.
+Preferred path: send via platform/system sender (Resend) if configured.
+Fallback: send via the inviting user's Gmail integration when platform sender is not configured.
 """
 
 import logging
@@ -9,7 +10,13 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.db.models import OrgInvite, Organization, User
-from app.services import gmail_service, org_service
+from app.services import (
+    email_service,
+    gmail_service,
+    org_service,
+    platform_email_service,
+    system_email_template_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -135,27 +142,80 @@ async def send_invite_email(
 
     # Build URLs and content
     invite_url = _build_invite_url(invite.id, base_url)
-    subject = f"You're invited to join {org_name}"
-    html_body = _build_invite_html(org_name, inviter_name, invite.role, invite_url, expires_at)
+    text_body = _build_invite_text(org_name, inviter_name, invite.role, invite_url, expires_at)
+    idempotency_key = f"invite:{invite.id}"
 
-    # Send via inviter's Gmail (or system default)
-    sender_user_id = invite.invited_by_user_id
-    if not sender_user_id:
-        logger.warning(f"No inviter for invite {invite.id}, cannot send email")
-        return {"success": False, "error": "No inviter to send from"}
-
-    result = await gmail_service.send_email_logged(
-        db=db,
+    # Prefer the org-scoped system template (editable in ops). Fallback to built-in HTML.
+    template = system_email_template_service.get_system_template(
+        db,
         org_id=invite.organization_id,
-        user_id=str(sender_user_id),
-        to=invite.email,
-        subject=subject,
-        body=html_body,
-        html=True,
-        template_id=None,
-        surrogate_id=None,
-        idempotency_key=f"invite:{invite.id}",
+        system_key=system_email_template_service.ORG_INVITE_SYSTEM_KEY,
     )
+
+    # Always allow the system template to define the sender, even if the body is
+    # disabled (in that case we fall back to the built-in HTML, but still need a
+    # From address for platform/system sending).
+    template_from_email = template.from_email if template else None
+
+    if template and template.is_active:
+        inviter_text = f" by {inviter_name}" if inviter_name else ""
+        expires_block = (
+            f"<p>This invitation expires {expires_at}.</p>" if expires_at else ""
+        )
+        variables = {
+            "org_name": org_name,
+            "inviter_text": inviter_text,
+            "role_title": invite.role.title(),
+            "invite_url": invite_url,
+            "expires_block": expires_block,
+        }
+        subject, html_body = email_service.render_template(
+            template.subject,
+            template.body,
+            variables,
+        )
+        template_id = template.id
+    else:
+        subject = f"You're invited to join {org_name}"
+        html_body = _build_invite_html(org_name, inviter_name, invite.role, invite_url, expires_at)
+        template_id = None
+        # template_from_email already set from the system template (if any)
+
+    # Send via platform/system sender when configured (preferred)
+    if platform_email_service.platform_sender_configured():
+        result = await platform_email_service.send_email_logged(
+            db=db,
+            org_id=invite.organization_id,
+            to_email=invite.email,
+            subject=subject,
+            from_email=template_from_email,
+            html=html_body,
+            text=text_body,
+            template_id=template_id,
+            surrogate_id=None,
+            idempotency_key=idempotency_key,
+        )
+        integration_key = "resend"
+    else:
+        # Fallback: send via inviter's Gmail integration
+        sender_user_id = invite.invited_by_user_id
+        if not sender_user_id:
+            logger.warning("No inviter for invite %s, cannot send email", invite.id)
+            return {"success": False, "error": "No inviter to send from"}
+
+        result = await gmail_service.send_email_logged(
+            db=db,
+            org_id=invite.organization_id,
+            user_id=str(sender_user_id),
+            to=invite.email,
+            subject=subject,
+            body=html_body,
+            html=True,
+            template_id=template_id,
+            surrogate_id=None,
+            idempotency_key=idempotency_key,
+        )
+        integration_key = "gmail"
 
     if result.get("success"):
         from app.services import audit_service
@@ -179,7 +239,7 @@ async def send_invite_email(
                 severity=AlertSeverity.ERROR,
                 title="Invite email failed to send",
                 message=result.get("error", "Unknown error")[:500],
-                integration_key="gmail",
+                integration_key=integration_key,
                 error_class="EmailSendError",
             )
         except Exception as alert_err:
