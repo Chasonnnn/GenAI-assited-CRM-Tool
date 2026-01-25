@@ -23,6 +23,7 @@ from app.db.models import (
     User,
     Membership,
     OrgInvite,
+    EmailLog,
     SystemAlert,
     SupportSession,
 )
@@ -904,6 +905,21 @@ def list_invites(db: Session, org_id: UUID) -> list[dict]:
         .all()
     )
 
+    invite_log_keys = {
+        f"invite:{invite.id}:v{invite.resend_count}" for invite in invites
+    }
+    email_logs: dict[str, EmailLog] = {}
+    if invite_log_keys:
+        logs = (
+            db.query(EmailLog)
+            .filter(
+                EmailLog.organization_id == org_id,
+                EmailLog.idempotency_key.in_(invite_log_keys),
+            )
+            .all()
+        )
+        email_logs = {log.idempotency_key: log for log in logs}
+
     now = datetime.now(timezone.utc)
 
     results = []
@@ -923,6 +939,9 @@ def list_invites(db: Session, org_id: UUID) -> list[dict]:
         if inv.invited_by:
             invited_by_name = inv.invited_by.display_name
 
+        log_key = f"invite:{inv.id}:v{inv.resend_count}"
+        email_log = email_logs.get(log_key)
+
         results.append(
             {
                 "id": str(inv.id),
@@ -932,6 +951,18 @@ def list_invites(db: Session, org_id: UUID) -> list[dict]:
                 "invited_by_name": invited_by_name,
                 "expires_at": inv.expires_at.isoformat() if inv.expires_at else None,
                 "created_at": inv.created_at.isoformat(),
+                "open_count": email_log.open_count if email_log else 0,
+                "opened_at": (
+                    email_log.opened_at.isoformat()
+                    if email_log and email_log.opened_at
+                    else None
+                ),
+                "click_count": email_log.click_count if email_log else 0,
+                "clicked_at": (
+                    email_log.clicked_at.isoformat()
+                    if email_log and email_log.clicked_at
+                    else None
+                ),
             }
         )
 
