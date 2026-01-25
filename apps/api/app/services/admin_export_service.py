@@ -409,6 +409,7 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "id": str(t.id),
             "name": t.name,
             "subject": t.subject,
+            "from_email": t.from_email,
             "body": t.body,
             "is_active": t.is_active,
             "is_system_template": t.is_system_template,

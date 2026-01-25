@@ -1966,6 +1966,8 @@ class EmailTemplate(Base):
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     subject: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Optional per-template From header override (e.g. "Surrogacy Force <invites@surrogacyforce.com>")
+    from_email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
 

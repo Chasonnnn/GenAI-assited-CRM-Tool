@@ -67,6 +67,7 @@ def create_template(
         user_id=session.user_id,
         name=data.name,
         subject=data.subject,
+        from_email=data.from_email,
         body=data.body,
     )
     return template
@@ -113,16 +114,20 @@ def update_template(
             )
 
     try:
-        updated = email_service.update_template(
-            db,
-            template,
-            user_id=session.user_id,
-            name=data.name,
-            subject=data.subject,
-            body=data.body,
-            is_active=data.is_active,
-            expected_version=data.expected_version,
-        )
+        kwargs: dict = {
+            "db": db,
+            "template": template,
+            "user_id": session.user_id,
+            "name": data.name,
+            "subject": data.subject,
+            "body": data.body,
+            "is_active": data.is_active,
+            "expected_version": data.expected_version,
+        }
+        if "from_email" in data.model_fields_set:
+            kwargs["from_email"] = data.from_email
+
+        updated = email_service.update_template(**kwargs)
     except version_service.VersionConflictError as e:
         raise HTTPException(
             status_code=409,

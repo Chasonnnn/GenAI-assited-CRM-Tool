@@ -3,6 +3,7 @@
 v2: With version control for templates.
 """
 
+from email.utils import parseaddr
 import re
 from datetime import datetime, timezone
 from uuid import UUID
@@ -11,6 +12,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import nh3
+from email_validator import EmailNotValidError, validate_email
 
 from app.db.models import EmailTemplate, EmailLog, Job, Surrogate
 from app.db.enums import EmailStatus, JobType
@@ -44,10 +46,32 @@ ALLOWED_TEMPLATE_TAGS = {
 }
 ALLOWED_TEMPLATE_ATTRS = {"a": {"href", "target"}}
 
+_UNSET = object()
+
 
 def sanitize_template_html(html: str) -> str:
     """Sanitize email template HTML to prevent XSS."""
     return nh3.clean(html, tags=ALLOWED_TEMPLATE_TAGS, attributes=ALLOWED_TEMPLATE_ATTRS)
+
+
+def _normalize_from_email(value: str | None) -> str | None:
+    """Normalize optional From header overrides.
+
+    Accepts either a bare email (e.g. "invites@surrogacyforce.com") or
+    a display name + email (e.g. "Surrogacy Force <invites@surrogacyforce.com>").
+    """
+    if value is None:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+
+    _, addr = parseaddr(text)
+    try:
+        validate_email(addr, check_deliverability=False)
+    except EmailNotValidError as e:
+        raise ValueError("Invalid from_email") from e
+    return text
 
 
 def _template_payload(template: EmailTemplate) -> dict:
@@ -55,6 +79,7 @@ def _template_payload(template: EmailTemplate) -> dict:
     return {
         "name": template.name,
         "subject": template.subject,
+        "from_email": template.from_email,
         "body": template.body,
         "is_active": template.is_active,
     }
@@ -67,6 +92,7 @@ def create_template(
     name: str,
     subject: str,
     body: str,
+    from_email: str | None = None,
 ) -> EmailTemplate:
     """Create a new email template with initial version snapshot."""
     clean_body = sanitize_template_html(body)
@@ -75,6 +101,7 @@ def create_template(
         created_by_user_id=user_id,
         name=name,
         subject=subject,
+        from_email=_normalize_from_email(from_email),
         body=clean_body,
         is_active=True,
         current_version=1,
@@ -104,6 +131,7 @@ def update_template(
     user_id: UUID,
     name: str | None = None,
     subject: str | None = None,
+    from_email: str | None | object = _UNSET,
     body: str | None = None,
     is_active: bool | None = None,
     expected_version: int | None = None,
@@ -123,6 +151,8 @@ def update_template(
         template.name = name
     if subject is not None:
         template.subject = subject
+    if from_email is not _UNSET:
+        template.from_email = _normalize_from_email(from_email if isinstance(from_email, str) else None)
     if body is not None:
         template.body = sanitize_template_html(body)
     if is_active is not None:
@@ -191,6 +221,7 @@ def rollback_template(
     payload = version_service.decrypt_payload(new_version.payload_encrypted)
     template.name = payload.get("name", template.name)
     template.subject = payload.get("subject", template.subject)
+    template.from_email = payload.get("from_email", template.from_email)
     if "body" in payload:
         template.body = sanitize_template_html(payload.get("body") or "")
     template.is_active = payload.get("is_active", template.is_active)
