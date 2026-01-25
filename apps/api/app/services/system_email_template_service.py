@@ -23,22 +23,31 @@ DEFAULT_SYSTEM_TEMPLATES: dict[str, dict[str, str]] = {
     ORG_INVITE_SYSTEM_KEY: {
         "category": "system",
         "name": "Organization Invite",
-        "subject": "You're invited to join {{org_name}}",
+        "subject": "Invitation to join {{org_name}} as {{role_title}}",
         # NOTE: This HTML must remain compatible with email_service.sanitize_template_html.
         "body": """
 <h1>You're invited to join {{org_name}}</h1>
 
 <p>You've been invited{{inviter_text}} to join <strong>{{org_name}}</strong> as a <strong>{{role_title}}</strong>.</p>
 
-<p>Click the button below to accept the invitation and set up your account.</p>
+<p>Use the link below to accept your invitation:</p>
 
-<p>
-  <a href="{{invite_url}}" target="_blank">Accept invitation</a>
-</p>
+<p><a href="{{invite_url}}" target="_blank"><strong>Accept invitation</strong></a></p>
 
 {{expires_block}}
 
+<h2>What happens next</h2>
+<ul>
+  <li>Set up your account</li>
+  <li>Review your workspace access</li>
+  <li>Start collaborating with your team</li>
+</ul>
+
+<p>If the button doesn't work, paste this link into your browser:</p>
+<p><a href="{{invite_url}}" target="_blank">{{invite_url}}</a></p>
+
 <p>If you didn't expect this invitation, you can safely ignore this email.</p>
+<p>Need help? Reply to this email and our team will assist.</p>
 """.strip(),
     }
 }

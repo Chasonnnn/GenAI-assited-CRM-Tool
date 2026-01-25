@@ -396,6 +396,9 @@ async def process_job(db, job) -> None:
     elif job.job_type == JobType.META_FORM_SYNC.value:
         await process_meta_form_sync(db, job)
 
+    elif job.job_type == JobType.ORG_DELETE.value:
+        await process_org_delete(db, job)
+
     else:
         raise Exception(f"Unknown job type: {job.job_type}")
 
@@ -1670,6 +1673,21 @@ async def process_meta_form_sync(db, job) -> None:
 
     except Exception:
         raise
+
+
+async def process_org_delete(db, job) -> None:
+    """Permanently delete an organization after the grace period."""
+    org_id = job.payload.get("org_id") if job.payload else None
+    if not org_id:
+        raise Exception("Missing org_id in org_delete payload")
+
+    from app.services import platform_service
+
+    deleted = platform_service.purge_organization(db, UUID(str(org_id)))
+    if not deleted:
+        logger.info(
+            "Org delete job no-op for org_id=%s (not due or already deleted)", org_id
+        )
 
 
 def main() -> None:

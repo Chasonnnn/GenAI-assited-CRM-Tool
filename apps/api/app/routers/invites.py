@@ -7,12 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
-from app.core.deps import (
-    get_current_session,
-    get_db,
-    require_permission,
-    require_csrf_header,
-)
+from app.core.deps import get_current_session, get_db, require_permission, require_csrf_header
 from app.core.policies import POLICIES
 
 from app.schemas.auth import UserSession
@@ -23,7 +18,6 @@ from app.services import invite_email_service
 router = APIRouter(
     prefix="/settings/invites",
     tags=["invites"],
-    dependencies=[Depends(require_permission(POLICIES["team"].default))],
 )
 
 
@@ -94,7 +88,7 @@ def _invite_to_read(invite) -> InviteRead:
 @router.get("", response_model=InviteListResponse)
 async def list_invites(
     db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["team"].default)),
 ):
     """List all invitations for the organization (Admin+ only)."""
     invites = invite_service.list_invites(db, session.org_id)
@@ -111,7 +105,7 @@ async def create_invite(
     body: InviteCreate,
     request: Request,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["team"].default)),
 ):
     """Create a new invitation (Admin+ only)."""
     # Ensure we can send invites either via inviter Gmail or platform/system sender
@@ -174,7 +168,7 @@ async def create_invite(
 async def resend_invite(
     invite_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["team"].default)),
 ):
     """Resend an invitation email (Manager+ only)."""
     invite = invite_service.get_invite(db, session.org_id, invite_id)
@@ -206,7 +200,7 @@ async def resend_invite(
 async def revoke_invite(
     invite_id: UUID,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    session: UserSession = Depends(require_permission(POLICIES["team"].default)),
 ):
     """Revoke an invitation (Manager+ only)."""
     invite = invite_service.get_invite(db, session.org_id, invite_id)
