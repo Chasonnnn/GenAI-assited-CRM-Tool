@@ -346,7 +346,52 @@ export default function EmailTemplatesPage() {
     const { data: fullTemplate } = useEmailTemplate(editingTemplate?.id || null)
 
     const sanitizeHtml = useCallback((html: string) => {
-        return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } })
+        return DOMPurify.sanitize(html, {
+            USE_PROFILES: { html: true },
+            ADD_TAGS: [
+                "table",
+                "thead",
+                "tbody",
+                "tfoot",
+                "tr",
+                "td",
+                "th",
+                "colgroup",
+                "col",
+                "img",
+                "hr",
+                "div",
+                "span",
+                "center",
+                "h1",
+                "h2",
+                "h3",
+                "h4",
+                "h5",
+                "h6",
+            ],
+            ADD_ATTR: [
+                "style",
+                "class",
+                "align",
+                "valign",
+                "width",
+                "height",
+                "cellpadding",
+                "cellspacing",
+                "border",
+                "bgcolor",
+                "colspan",
+                "rowspan",
+                "role",
+                "target",
+                "rel",
+                "href",
+                "src",
+                "alt",
+                "title",
+            ],
+        })
     }, [])
 
     const normalizeTemplateHtml = useCallback((html: string) => {

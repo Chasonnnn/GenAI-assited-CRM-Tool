@@ -416,7 +416,53 @@ export default function AgencyDetailPage() {
                 /\{\{invite_url\}\}/g,
                 `${org?.portal_domain ? `https://${org.portal_domain}` : 'https://app.example.com'}/invite/EXAMPLE`
             )
-            .replace(/\{\{expires_block\}\}/g, '<p>This invitation expires in 7 days.</p>')
+            .replace(/\{\{expires_block\}\}/g, '<p>This invitation expires in 7 days.</p>'),
+        {
+            USE_PROFILES: { html: true },
+            ADD_TAGS: [
+                'table',
+                'thead',
+                'tbody',
+                'tfoot',
+                'tr',
+                'td',
+                'th',
+                'colgroup',
+                'col',
+                'img',
+                'hr',
+                'div',
+                'span',
+                'center',
+                'h1',
+                'h2',
+                'h3',
+                'h4',
+                'h5',
+                'h6',
+            ],
+            ADD_ATTR: [
+                'style',
+                'class',
+                'align',
+                'valign',
+                'width',
+                'height',
+                'cellpadding',
+                'cellspacing',
+                'border',
+                'bgcolor',
+                'colspan',
+                'rowspan',
+                'role',
+                'target',
+                'rel',
+                'href',
+                'src',
+                'alt',
+                'title',
+            ],
+        }
     );
 
     const handleExtendSubscription = async () => {
