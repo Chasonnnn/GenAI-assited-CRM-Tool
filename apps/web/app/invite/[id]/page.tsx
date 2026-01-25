@@ -9,11 +9,18 @@ import api from "@/lib/api"
 
 interface InviteDetails {
     id: string
+    organization_id: string
     organization_name: string
     role: string
     inviter_name: string | null
     expires_at: string | null
     status: "pending" | "accepted" | "expired" | "revoked"
+}
+
+interface MeResponse {
+    org_id: string
+    role: string
+    display_name: string
 }
 
 export default function InviteAcceptPage() {
@@ -25,6 +32,7 @@ export default function InviteAcceptPage() {
     const [invite, setInvite] = useState<InviteDetails | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [currentOrgId, setCurrentOrgId] = useState<string | null>(null)
 
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
 
@@ -46,6 +54,24 @@ export default function InviteAcceptPage() {
         }
     }, [inviteId])
 
+    useEffect(() => {
+        let active = true
+        async function fetchMe() {
+            try {
+                const me = await api.get<MeResponse>("/auth/me")
+                if (active) {
+                    setCurrentOrgId(me.org_id)
+                }
+            } catch {
+                // Ignore unauthenticated users
+            }
+        }
+        fetchMe()
+        return () => {
+            active = false
+        }
+    }, [])
+
     const handleSignIn = () => {
         try {
             window.location.assign(`${apiBase}/auth/google/login?return_to=app`)
@@ -58,6 +84,8 @@ export default function InviteAcceptPage() {
     const expiryText = invite?.expires_at
         ? `Expires ${new Date(invite.expires_at).toLocaleDateString()}`
         : null
+
+    const alreadyMember = Boolean(invite && currentOrgId && invite.organization_id === currentOrgId)
 
     return (
         <div
@@ -127,6 +155,12 @@ export default function InviteAcceptPage() {
                             <p className="text-gray-600">
                                 This invite is {invite?.status}.
                             </p>
+                            {alreadyMember && (
+                                <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-left text-sm text-blue-700">
+                                    You already have access to this organization. This invite won&apos;t change your role.
+                                    Sign in and ask an admin to update your role if needed.
+                                </div>
+                            )}
                             {invite?.status === "expired" && (
                                 <p className="text-sm text-gray-500 mt-2">
                                     Ask the inviter to send a new invitation.
@@ -177,6 +211,12 @@ export default function InviteAcceptPage() {
                             {error && (
                                 <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg border border-red-200">
                                     {error}
+                                </div>
+                            )}
+                            {alreadyMember && (
+                                <div className="bg-blue-50 text-blue-700 text-sm p-3 rounded-lg border border-blue-200">
+                                    You already have access to this organization. This invite won&apos;t change your role.
+                                    Sign in and ask an admin to update your role if needed.
                                 </div>
                             )}
 
