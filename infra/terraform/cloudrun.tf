@@ -3,6 +3,10 @@ resource "google_cloud_run_v2_service" "api" {
   location = var.run_region
   ingress  = "INGRESS_TRAFFIC_ALL"
 
+  # Ensure the revision service account has Secret Manager access before we
+  # deploy a revision that references Secret Manager env vars.
+  depends_on = [google_secret_manager_secret_iam_member.api_secret_access]
+
   template {
     annotations = {
       "run.googleapis.com/cloudsql-instances" = google_sql_database_instance.crm.connection_name
@@ -160,6 +164,10 @@ resource "google_cloud_run_v2_job" "worker" {
   name     = var.worker_job_name
   location = var.region
 
+  # Ensure the job service account has Secret Manager access before we update
+  # the job template to reference Secret Manager env vars.
+  depends_on = [google_secret_manager_secret_iam_member.worker_secret_access]
+
   template {
     template {
       service_account = google_service_account.worker.email
@@ -219,6 +227,9 @@ resource "google_cloud_run_v2_job" "migrate" {
   provider = google-beta
   name     = var.migrate_job_name
   location = var.region
+
+  # See note in google_cloud_run_v2_job.worker.
+  depends_on = [google_secret_manager_secret_iam_member.worker_secret_access]
 
   template {
     template {

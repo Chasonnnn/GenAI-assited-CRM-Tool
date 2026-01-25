@@ -11,6 +11,7 @@ export interface EmailTemplate {
     created_by_user_id: string | null
     name: string
     subject: string
+    from_email: string | null
     body: string
     is_active: boolean
     current_version: number
@@ -22,6 +23,7 @@ export interface EmailTemplateListItem {
     id: string
     name: string
     subject: string
+    from_email: string | null
     is_active: boolean
     created_at: string
     updated_at: string
@@ -30,12 +32,14 @@ export interface EmailTemplateListItem {
 export interface EmailTemplateCreate {
     name: string
     subject: string
+    from_email?: string | null
     body: string
 }
 
 export interface EmailTemplateUpdate {
     name?: string
     subject?: string
+    from_email?: string | null
     body?: string
     is_active?: boolean
     expected_version?: number
@@ -70,6 +74,7 @@ export interface EmailTemplateVersion {
     payload: {
         name: string
         subject: string
+        from_email: string | null
         body: string
         is_active: boolean
     }

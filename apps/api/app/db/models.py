@@ -1966,6 +1966,8 @@ class EmailTemplate(Base):
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     subject: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Optional per-template From header override (e.g. "Surrogacy Force <invites@surrogacyforce.com>")
+    from_email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
 
@@ -2044,6 +2046,15 @@ class EmailLog(Base):
     )
     sent_at: Mapped[datetime | None] = mapped_column(nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Resend webhook tracking fields
+    resend_status: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
+    )  # 'sent' | 'delivered' | 'bounced' | 'complained'
+    delivered_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    bounced_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    bounce_type: Mapped[str | None] = mapped_column(String(20), nullable=True)  # 'hard' | 'soft'
+    complained_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
@@ -2642,6 +2653,67 @@ class AISettings(Base):
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
+
+
+class ResendSettings(Base):
+    """
+    Org-level email provider configuration (Resend or Gmail).
+
+    Stores encrypted API keys and webhook secrets.
+    Only one settings record per organization.
+    """
+
+    __tablename__ = "resend_settings"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
+
+    # Provider selection: 'resend' | 'gmail' | None (not configured)
+    email_provider: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    # Resend configuration
+    api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    from_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    from_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    reply_to_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    verified_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_key_validated_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+
+    # Gmail configuration: org-level default sender (must be admin)
+    default_sender_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    # Webhook configuration (unique ID for URL routing)
+    webhook_id: Mapped[str] = mapped_column(
+        String(36), server_default=text("gen_random_uuid()::text"), nullable=False
+    )
+    webhook_secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Version control (same as AI settings)
+    current_version: Mapped[int] = mapped_column(default=1, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    default_sender: Mapped["User | None"] = relationship()
+
+    __table_args__ = (Index("idx_resend_settings_webhook_id", "webhook_id", unique=True),)
 
 
 class AIConversation(Base):
@@ -4922,6 +4994,9 @@ class CampaignRun(Base):
         String(20), server_default=text("'running'"), nullable=False
     )  # 'running' | 'completed' | 'failed'
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Email provider locked at run creation: 'resend' | 'gmail'
+    email_provider: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Counts
     total_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
