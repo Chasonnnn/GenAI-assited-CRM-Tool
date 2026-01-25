@@ -431,11 +431,10 @@ export function AppSidebar({ children }: AppSidebarProps) {
                     <SidebarMenu>
                         <SidebarMenuItem>
                             <DropdownMenu>
-                                <DropdownMenuTrigger className="w-full rounded-lg data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
-                                    <SidebarMenuButton
-                                        render={<span />}
-                                        size="lg"
-                                    >
+                                <DropdownMenuTrigger
+                                    className="w-full rounded-lg data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                                    render={<SidebarMenuButton size="lg" />}
+                                >
                                         <Avatar className="h-8 w-8 rounded-lg">
                                             <AvatarImage src="/placeholder.svg" alt={user?.display_name || "User"} />
                                             <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
@@ -445,7 +444,6 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                             <span className="truncate text-xs text-muted-foreground">{user?.email || ""}</span>
                                         </div>
                                         <ChevronsUpDown className="ml-auto size-4" />
-                                    </SidebarMenuButton>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent
                                     className="w-56 rounded-lg"

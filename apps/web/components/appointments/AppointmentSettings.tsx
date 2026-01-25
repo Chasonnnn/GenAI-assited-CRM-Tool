@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -93,11 +94,14 @@ function GoogleCalendarWarningBanner() {
                     Connect your Google Calendar to enable calendar sync and Google Meet links for appointments.
                 </p>
                 <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" className="border-amber-500 text-amber-700 hover:bg-amber-100">
-                        <a href="/settings/integrations" className="flex items-center">
-                            <ExternalLinkIcon className="size-3 mr-1" />
-                            Connect Google Calendar
-                        </a>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-amber-500 text-amber-700 hover:bg-amber-100"
+                        render={<Link href="/settings/integrations" />}
+                    >
+                        <ExternalLinkIcon className="size-3 mr-1" />
+                        Connect Google Calendar
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => setDismissed(true)}>
                         Dismiss

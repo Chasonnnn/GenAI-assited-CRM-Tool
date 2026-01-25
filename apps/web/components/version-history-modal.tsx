@@ -135,15 +135,17 @@ export function VersionHistoryModal({
                                             </Button>
                                             {canRollback && v.version !== currentVersion && onRollback && (
                                                 <AlertDialog>
-                                                    <AlertDialogTrigger>
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            disabled={isRollingBack}
-                                                        >
-                                                            <RotateCcw className="h-3 w-3 mr-1" />
-                                                            Rollback
-                                                        </Button>
+                                                    <AlertDialogTrigger
+                                                        render={
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                disabled={isRollingBack}
+                                                            />
+                                                        }
+                                                    >
+                                                        <RotateCcw className="h-3 w-3 mr-1" />
+                                                        Rollback
                                                     </AlertDialogTrigger>
                                                     <AlertDialogContent>
                                                         <AlertDialogHeader>
