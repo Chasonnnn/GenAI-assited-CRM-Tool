@@ -388,12 +388,14 @@ def _verify_svix_signature(
     def _pad_b64(value: str) -> str:
         return value + "=" * (-len(value) % 4)
 
-    # Decode the secret (Svix uses whsec_ + base64). If no whsec_ prefix,
+    # Decode the secret (Svix uses whsec_ + base64url). If no whsec_ prefix,
     # treat the secret as raw bytes (matches our tests + backward compatibility).
     if secret.startswith("whsec_"):
         secret = secret[6:]  # Remove "whsec_" prefix
         secret_bytes = None
-        for decoder in (base64.b64decode, base64.urlsafe_b64decode):
+        # Try urlsafe first since our _generate_webhook_secret uses urlsafe_b64encode.
+        # Standard b64decode silently corrupts urlsafe chars instead of raising.
+        for decoder in (base64.urlsafe_b64decode, base64.b64decode):
             try:
                 secret_bytes = decoder(_pad_b64(secret))
                 break
