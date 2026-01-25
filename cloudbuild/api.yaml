@@ -4,6 +4,10 @@ steps:
   - name: gcr.io/cloud-builders/docker
     args: ["push", "$_IMAGE_API"]
   - name: gcr.io/cloud-builders/gcloud
+    args: ["run", "jobs", "update", "$_MIGRATE_JOB", "--image", "$_IMAGE_API", "--region", "$_REGION", "--quiet"]
+  - name: gcr.io/cloud-builders/gcloud
+    args: ["beta", "run", "jobs", "execute", "$_MIGRATE_JOB", "--region", "$_REGION", "--wait", "--quiet"]
+  - name: gcr.io/cloud-builders/gcloud
     args: ["run", "services", "update", "$_API_SERVICE", "--image", "$_IMAGE_API", "--region", "$_REGION", "--quiet"]
   - name: gcr.io/cloud-builders/gcloud
     args: ["run", "jobs", "update", "$_WORKER_JOB", "--image", "$_IMAGE_API", "--region", "$_REGION", "--quiet"]
@@ -16,4 +20,5 @@ substitutions:
   _REGION: "us-central1"
   _API_SERVICE: "crm-api"
   _WORKER_JOB: "crm-worker"
+  _MIGRATE_JOB: "crm-migrate"
   _IMAGE_API: "us-central1-docker.pkg.dev/probable-dream-484923-n7/crm/api:latest"

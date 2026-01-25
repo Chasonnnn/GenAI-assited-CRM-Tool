@@ -78,6 +78,8 @@ class Settings(BaseSettings):
     DB_POOL_TIMEOUT: int = 30
     DB_POOL_RECYCLE: int = -1
     DB_POOL_PRE_PING: bool = True
+    DB_MIGRATION_CHECK: bool = True
+    DB_AUTO_MIGRATE: bool = False
 
     # Session Token (supports key rotation)
     JWT_SECRET: str = ""

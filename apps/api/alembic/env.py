@@ -101,20 +101,31 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    connection = config.attributes.get("connection")
+    if connection is None:
+        connectable = engine_from_config(
+            config.get_section(config.config_ini_section, {}),
+            prefix="sqlalchemy.",
+            poolclass=pool.NullPool,
+        )
 
-    with connectable.connect() as connection:
+        with connectable.connect() as connection:
+            _run_migrations_with_connection(connection)
+    else:
+        _run_migrations_with_connection(connection)
+
+
+def _run_migrations_with_connection(connection) -> None:
+    if not connection.in_transaction():
         with connection.begin():
             _ensure_alembic_version_table(connection)
+    else:
+        _ensure_alembic_version_table(connection)
 
-        context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(connection=connection, target_metadata=target_metadata)
 
-        with context.begin_transaction():
-            context.run_migrations()
+    with context.begin_transaction():
+        context.run_migrations()
 
 
 if context.is_offline_mode():
