@@ -515,16 +515,8 @@ function SidebarMenuButton({
     tooltip?: string | React.ComponentProps<typeof TooltipContent>
   } & VariantProps<typeof sidebarMenuButtonVariants>) {
   const { isMobile, state } = useSidebar()
-  // When tooltip is present, wrap render in TooltipTrigger so the Link is properly composed
-  const renderOverride = !tooltip
-    ? render
-    : ((props: React.HTMLAttributes<HTMLElement>) => (
-      <TooltipTrigger
-        {...(props as React.ComponentProps<typeof TooltipTrigger>)}
-        {...(render ? { render } : {})}
-      />
-    ))
-  const renderProp = renderOverride === undefined ? {} : { render: renderOverride }
+  // Always use the original render prop - compose with Tooltip, don't replace
+  const renderProp = render === undefined ? {} : { render }
   const comp = useRender({
     defaultTagName: "button",
     props: mergeProps<"button">(
@@ -554,7 +546,7 @@ function SidebarMenuButton({
 
   return (
     <Tooltip>
-      {comp}
+      <TooltipTrigger render={comp} />
       <TooltipContent
         side="right"
         align="center"
