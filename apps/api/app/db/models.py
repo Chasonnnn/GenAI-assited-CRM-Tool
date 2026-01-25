@@ -2702,8 +2702,12 @@ class ResendSettings(Base):
     # Version control (same as AI settings)
     current_version: Mapped[int] = mapped_column(default=1, nullable=False)
 
-    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
