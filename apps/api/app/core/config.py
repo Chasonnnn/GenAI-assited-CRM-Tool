@@ -112,6 +112,7 @@ class Settings(BaseSettings):
     # Platform/system email sender (Resend)
     # Intentionally separate from RESEND_API_KEY/EMAIL_FROM (used by campaign/user email paths).
     PLATFORM_RESEND_API_KEY: str = ""
+    PLATFORM_RESEND_WEBHOOK_SECRET: str = ""
     # Optional fallback From header. Recommended: set per-template `from_email` in ops/system templates.
     PLATFORM_EMAIL_FROM: str = ""
 
