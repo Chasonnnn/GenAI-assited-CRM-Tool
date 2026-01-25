@@ -26,11 +26,13 @@ from app.db.models import (
     SystemAlert,
     SupportSession,
 )
-from app.db.enums import Role
+from app.db.enums import Role, JobType
 from app.core.security import create_support_session_token
-from app.services import mfa_service, session_service
+from app.services import mfa_service, session_service, job_service
 
 logger = logging.getLogger(__name__)
+
+ORG_DELETE_GRACE_DAYS = 30
 
 
 # =============================================================================
@@ -97,7 +99,12 @@ def log_admin_action(
 def get_platform_stats(db: Session) -> dict:
     """Get platform-wide statistics for ops dashboard."""
     # Count organizations
-    agency_count = db.query(func.count(Organization.id)).scalar() or 0
+    agency_count = (
+        db.query(func.count(Organization.id))
+        .filter(Organization.deleted_at.is_(None))
+        .scalar()
+        or 0
+    )
 
     # Count active users (logged in within last 30 days)
     thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
@@ -203,6 +210,8 @@ def list_organizations(
                 "subscription_plan": plan_value,
                 "subscription_status": status_value,
                 "created_at": org.created_at.isoformat(),
+                "deleted_at": org.deleted_at.isoformat() if org.deleted_at else None,
+                "purge_at": org.purge_at.isoformat() if org.purge_at else None,
             }
         )
 
@@ -277,7 +286,110 @@ def get_organization_detail(db: Session, org_id: UUID) -> dict | None:
         "subscription_plan": subscription.plan_key if subscription else "starter",
         "subscription_status": subscription.status if subscription else "active",
         "created_at": org.created_at.isoformat(),
+        "deleted_at": org.deleted_at.isoformat() if org.deleted_at else None,
+        "purge_at": org.purge_at.isoformat() if org.purge_at else None,
+        "deleted_by_user_id": str(org.deleted_by_user_id) if org.deleted_by_user_id else None,
     }
+
+
+def request_organization_deletion(
+    db: Session,
+    org_id: UUID,
+    actor_id: UUID,
+    request: Request | None = None,
+) -> dict:
+    """Soft delete an organization and schedule hard delete after grace period."""
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise ValueError("Organization not found")
+    if org.deleted_at:
+        raise ValueError("Organization is already scheduled for deletion")
+
+    now = datetime.now(timezone.utc)
+    org.deleted_at = now
+    org.purge_at = now + timedelta(days=ORG_DELETE_GRACE_DAYS)
+    org.deleted_by_user_id = actor_id
+    org.updated_at = now
+
+    # Revoke active sessions for all members
+    member_ids = (
+        db.query(Membership.user_id)
+        .filter(Membership.organization_id == org.id)
+        .all()
+    )
+    for (user_id,) in member_ids:
+        if user_id == actor_id:
+            continue
+        session_service.revoke_all_user_sessions(db, user_id, org.id)
+
+    # Schedule hard delete job
+    job_service.enqueue_job(
+        db=db,
+        org_id=org.id,
+        job_type=JobType.ORG_DELETE,
+        payload={"org_id": str(org.id)},
+        run_at=org.purge_at,
+        idempotency_key=f"org_delete:{org.id}:{org.purge_at.isoformat()}",
+        commit=False,
+    )
+
+    log_admin_action(
+        db=db,
+        actor_id=actor_id,
+        action="org.delete_requested",
+        target_org_id=org.id,
+        metadata={"purge_at": org.purge_at.isoformat()},
+        request=request,
+    )
+    db.commit()
+
+    return get_organization_detail(db, org.id) or {}
+
+
+def restore_organization_deletion(
+    db: Session,
+    org_id: UUID,
+    actor_id: UUID,
+    request: Request | None = None,
+) -> dict:
+    """Restore an organization during the grace period."""
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise ValueError("Organization not found")
+    if not org.deleted_at:
+        raise ValueError("Organization is not scheduled for deletion")
+    if org.purge_at and org.purge_at <= datetime.now(timezone.utc):
+        raise ValueError("Deletion window has expired")
+
+    org.deleted_at = None
+    org.purge_at = None
+    org.deleted_by_user_id = None
+    org.updated_at = datetime.now(timezone.utc)
+
+    log_admin_action(
+        db=db,
+        actor_id=actor_id,
+        action="org.delete_restored",
+        target_org_id=org.id,
+        metadata={},
+        request=request,
+    )
+    db.commit()
+
+    return get_organization_detail(db, org.id) or {}
+
+
+def purge_organization(db: Session, org_id: UUID) -> bool:
+    """Hard delete an organization if the grace period has elapsed."""
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org or not org.deleted_at or not org.purge_at:
+        return False
+    if org.purge_at > datetime.now(timezone.utc):
+        return False
+
+    db.delete(org)
+    db.commit()
+    return True
 
 
 def create_organization(
@@ -838,7 +950,13 @@ def create_invite(
     email = email.lower().strip()
     from app.services import invite_service
 
-    role_value = invite_service.validate_invite_role(role)
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise ValueError("Organization not found")
+    if org.deleted_at:
+        raise ValueError("Organization is scheduled for deletion")
+
+    role_value = invite_service.validate_invite_role(role, allow_developer=True)
 
     # Check for existing pending invite
     now = datetime.now(timezone.utc)
