@@ -112,18 +112,42 @@ def _ensure_attachment_scanner_available() -> None:
         logger.info("Attachment scanning enabled; using %s", scanner)
 
 
-async def send_email_async(email_log: EmailLog) -> None:
+async def send_email_async(email_log: EmailLog, db=None) -> None:
     """
-    Send an email using Resend API.
+    Send an email using the appropriate provider.
 
-    If RESEND_API_KEY is not set, logs the email instead of sending.
+    For campaign emails: uses the org's configured provider (Resend/Gmail).
+    For other emails: uses the global RESEND_API_KEY if available.
     """
+    # Check if this is a campaign email and get the provider
+    campaign_provider = None
+    campaign_run = None
+    if db:
+        from app.db.models import CampaignRecipient, CampaignRun
+
+        # Find linked campaign recipient
+        campaign_recipient = (
+            db.query(CampaignRecipient)
+            .filter(CampaignRecipient.external_message_id == str(email_log.id))
+            .first()
+        )
+        if campaign_recipient:
+            campaign_run = (
+                db.query(CampaignRun).filter(CampaignRun.id == campaign_recipient.run_id).first()
+            )
+            if campaign_run and campaign_run.email_provider:
+                campaign_provider = campaign_run.email_provider
+
+    # Use org-level provider for campaigns
+    if campaign_provider and db:
+        await _send_via_org_provider(db, email_log, campaign_provider, campaign_run.organization_id)
+        return
+
+    # Fallback to global RESEND_API_KEY for non-campaign emails
     if not RESEND_API_KEY:
         logger.info("[DRY RUN] Email send skipped for email_log=%s", email_log.id)
         return
 
-    # In production, use Resend or another email provider
-    # For now, we'll just import and use resend if available
     try:
         import resend
 
@@ -151,6 +175,69 @@ async def send_email_async(email_log: EmailLog) -> None:
         raise
 
 
+async def _send_via_org_provider(db, email_log: EmailLog, provider: str, org_id) -> None:
+    """Send email using org-level provider configuration."""
+    from app.services import resend_settings_service, gmail_service
+
+    if provider == "resend":
+        settings = resend_settings_service.get_resend_settings(db, org_id)
+        if not settings or not settings.api_key_encrypted:
+            raise Exception("Resend not configured for organization")
+
+        api_key = resend_settings_service.decrypt_api_key(settings.api_key_encrypted)
+
+        from app.services import resend_email_service
+
+        success, error, message_id = await resend_email_service.send_email_direct(
+            api_key=api_key,
+            to_email=email_log.recipient_email,
+            subject=email_log.subject,
+            body=email_log.body,
+            from_email=settings.from_email,
+            from_name=settings.from_name,
+            reply_to=settings.reply_to_email,
+            idempotency_key=f"email-log/{email_log.id}",
+        )
+
+        if success:
+            email_log.external_id = message_id
+            email_log.resend_status = "sent"
+            logger.info(
+                "Email sent via org Resend for email_log=%s message_id=%s",
+                email_log.id,
+                message_id,
+            )
+        else:
+            raise Exception(f"Resend send failed: {error}")
+
+    elif provider == "gmail":
+        settings = resend_settings_service.get_resend_settings(db, org_id)
+        if not settings or not settings.default_sender_user_id:
+            raise Exception("Gmail sender not configured for organization")
+
+        result = await gmail_service.send_email(
+            db=db,
+            user_id=str(settings.default_sender_user_id),
+            to=email_log.recipient_email,
+            subject=email_log.subject,
+            body=email_log.body,
+            html=True,
+        )
+
+        if result.get("success"):
+            email_log.external_id = result.get("message_id")
+            logger.info(
+                "Email sent via Gmail for email_log=%s message_id=%s",
+                email_log.id,
+                result.get("message_id"),
+            )
+        else:
+            raise Exception(f"Gmail send failed: {result.get('error')}")
+
+    else:
+        raise Exception(f"Unknown email provider: {provider}")
+
+
 async def process_job(db, job) -> None:
     """Process a single job based on its type."""
     logger.info(f"Processing job {job.id} (type={job.job_type}, attempt={job.attempts})")
@@ -164,7 +251,7 @@ async def process_job(db, job) -> None:
         if not email_log:
             raise Exception(f"EmailLog {email_log_id} not found")
 
-        await send_email_async(email_log)
+        await send_email_async(email_log, db=db)
         email_service.mark_email_sent(db, email_log)
 
     elif job.job_type == JobType.REMINDER.value:
@@ -902,8 +989,8 @@ async def process_workflow_email(db, job) -> None:
     db.add(email_log)
     db.commit()
 
-    # Send email
-    await send_email_async(email_log)
+    # Send email (workflow emails use global config, not campaign provider)
+    await send_email_async(email_log, db=db)
     email_service.mark_email_sent(db, email_log)
 
     logger.info(
