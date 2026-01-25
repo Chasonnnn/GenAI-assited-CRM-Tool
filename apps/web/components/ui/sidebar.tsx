@@ -518,7 +518,10 @@ function SidebarMenuButton({
   const renderOverride = !tooltip
     ? render
     : ((props: React.HTMLAttributes<HTMLElement>) => (
-      <TooltipTrigger {...(props as React.ComponentProps<typeof TooltipTrigger>)} />
+      <TooltipTrigger
+        {...(props as React.ComponentProps<typeof TooltipTrigger>)}
+        {...(render ? { render } : {})}
+      />
     ))
   const renderProp = renderOverride === undefined ? {} : { render: renderOverride }
   const comp = useRender({

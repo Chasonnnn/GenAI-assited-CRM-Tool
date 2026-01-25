@@ -134,6 +134,7 @@ gcloud run deploy crm-api \
   --set-env-vars "ENV=production,API_BASE_URL=https://api.${DOMAIN},FRONTEND_URL=https://app.${DOMAIN},CORS_ORIGINS=https://app.${DOMAIN},ATTACHMENT_SCAN_ENABLED=true,STORAGE_BACKEND=s3,EXPORT_STORAGE_BACKEND=s3" \
   --set-secrets "JWT_SECRET=JWT_SECRET:latest,DEV_SECRET=DEV_SECRET:latest,INTERNAL_SECRET=INTERNAL_SECRET:latest,FERNET_KEY=FERNET_KEY:latest,DATA_ENCRYPTION_KEY=DATA_ENCRYPTION_KEY:latest,PII_HASH_KEY=PII_HASH_KEY:latest,META_ENCRYPTION_KEY=META_ENCRYPTION_KEY:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,ZOOM_CLIENT_ID=ZOOM_CLIENT_ID:latest,ZOOM_CLIENT_SECRET=ZOOM_CLIENT_SECRET:latest,GMAIL_CLIENT_ID=GMAIL_CLIENT_ID:latest,GMAIL_CLIENT_SECRET=GMAIL_CLIENT_SECRET:latest,REDIS_URL=REDIS_URL:latest"
 ```
+CI note: `cloudbuild/api.yaml` runs the migrate job and waits for completion before updating the API service.
 
 ## 10) Migrations (Cloud Run Job)
 ```bash
@@ -147,6 +148,8 @@ gcloud run jobs create crm-migrate \
 
 gcloud run jobs execute crm-migrate --region "$REGION"
 ```
+Optional: enable automatic migrations on API startup by setting `DB_AUTO_MIGRATE=true`.
+Readiness checks will fail when migrations are pending unless `DB_MIGRATION_CHECK=false`.
 
 ## 11) Worker (Cloud Run Job)
 ```bash

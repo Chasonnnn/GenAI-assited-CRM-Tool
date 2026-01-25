@@ -38,12 +38,10 @@ export default function RolePermissionsPage() {
     return (
         <div className="flex flex-1 flex-col gap-6 p-6 max-w-4xl mx-auto">
             <div className="flex items-center gap-4">
-                <Link href="/settings/team">
-                    <Button variant="ghost" size="sm">
-                        <ChevronLeft className="size-4 mr-1" />
-                        Back to Team
-                    </Button>
-                </Link>
+                <Button variant="ghost" size="sm" render={<Link href="/settings/team" />}>
+                    <ChevronLeft className="size-4 mr-1" />
+                    Back to Team
+                </Button>
             </div>
 
             <div>
@@ -84,12 +82,14 @@ export default function RolePermissionsPage() {
                                         {role.permission_count} permissions
                                     </Badge>
                                     {!role.is_developer && (
-                                        <Link href={`/settings/team/roles/${role.role}`}>
-                                            <Button variant="outline" size="sm">
-                                                {isDeveloper ? "Edit" : "View"}
-                                                <ChevronRight className="size-4 ml-1" />
-                                            </Button>
-                                        </Link>
+                                        <Button
+                                            render={<Link href={`/settings/team/roles/${role.role}`} />}
+                                            variant="outline"
+                                            size="sm"
+                                        >
+                                            {isDeveloper ? "Edit" : "View"}
+                                            <ChevronRight className="size-4 ml-1" />
+                                        </Button>
                                     )}
                                     {role.is_developer && (
                                         <Button variant="ghost" size="sm" disabled>

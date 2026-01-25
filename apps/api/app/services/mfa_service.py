@@ -252,12 +252,14 @@ def regenerate_recovery_codes(db: Session, user: User) -> list[str]:
 
 def get_mfa_status(user: User) -> dict:
     """Get MFA enrollment status for a user."""
+    duo_enrolled = user.duo_enrolled_at is not None
     return {
         "mfa_enabled": user.mfa_enabled,
         "totp_enabled": user.totp_enabled_at is not None,
         "totp_enabled_at": user.totp_enabled_at.isoformat() if user.totp_enabled_at else None,
-        "duo_enabled": user.duo_enrolled_at is not None,
+        "duo_enabled": duo_enrolled,
         "duo_enrolled_at": user.duo_enrolled_at.isoformat() if user.duo_enrolled_at else None,
+        "duo_required": duo_enrolled,  # If Duo enrolled, TOTP is blocked
         "recovery_codes_remaining": len(user.mfa_recovery_codes) if user.mfa_recovery_codes else 0,
         "mfa_required": True,  # Global requirement
     }

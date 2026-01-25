@@ -224,6 +224,7 @@ class InviteDetailsRead(BaseModel):
     """Public invite details (no sensitive info)."""
 
     id: str
+    organization_id: str
     organization_name: str
     role: str
     inviter_name: str | None
@@ -245,6 +246,7 @@ async def get_invite_details(
 
     return InviteDetailsRead(
         id=str(invite.id),
+        organization_id=str(invite.organization_id),
         organization_name=org_name,
         role=invite.role,
         inviter_name=inviter_name,

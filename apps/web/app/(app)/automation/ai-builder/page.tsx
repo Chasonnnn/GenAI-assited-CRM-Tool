@@ -130,11 +130,13 @@ export default function AIWorkflowBuilderPage() {
             <div className="border-b bg-card">
                 <div className="flex items-center justify-between p-6">
                     <div className="flex items-center gap-4">
-                        <Link href="/automation?tab=workflows">
-                            <Button variant="ghost" size="icon-sm">
-                                <ArrowLeftIcon className="size-4" />
-                            </Button>
-                        </Link>
+                        <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            render={<Link href="/automation?tab=workflows" />}
+                        >
+                            <ArrowLeftIcon className="size-4" />
+                        </Button>
                         <div>
                             <div className="flex items-center gap-3">
                                 <SparklesIcon className="size-6 text-teal-500" />

@@ -1182,11 +1182,9 @@ export function UnifiedCalendar({
                                         : "Connect Google Calendar to show Google Calendar events alongside appointments."}
                                 </AlertDescription>
                                 <AlertAction>
-                                    <Link href="/settings/integrations">
-                                        <Button size="sm" variant="outline">
-                                            Reconnect
-                                        </Button>
-                                    </Link>
+                                    <Button size="sm" variant="outline" render={<Link href="/settings/integrations" />}>
+                                        Reconnect
+                                    </Button>
                                 </AlertAction>
                             </Alert>
                         )}
