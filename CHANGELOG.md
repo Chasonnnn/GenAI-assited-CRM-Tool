@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.31.6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.31.5...surrogacy-crm-platform-v0.31.6) (2026-01-25)
+
+
+### Bug Fixes
+
+* improve ops invite template UX ([a79af1c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a79af1cf8193b385da152c5d2095ee03d4909759))
+* improve ops invite template UX ([428436c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/428436c6eb28716b5b8ad3d30484f9e9019f7bde))
+
 ## [0.31.5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.31.4...surrogacy-crm-platform-v0.31.5) (2026-01-25)
 
 
