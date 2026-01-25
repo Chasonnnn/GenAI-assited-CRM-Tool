@@ -349,6 +349,44 @@ def get_organization(
     return result
 
 
+@router.post("/orgs/{org_id}/delete", dependencies=[Depends(require_csrf_header)])
+def delete_organization(
+    org_id: UUID,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Soft delete an organization and schedule hard delete."""
+    try:
+        return platform_service.request_organization_deletion(
+            db=db,
+            org_id=org_id,
+            actor_id=session.user_id,
+            request=request,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/orgs/{org_id}/restore", dependencies=[Depends(require_csrf_header)])
+def restore_organization(
+    org_id: UUID,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Restore a soft-deleted organization."""
+    try:
+        return platform_service.restore_organization_deletion(
+            db=db,
+            org_id=org_id,
+            actor_id=session.user_id,
+            request=request,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 # =============================================================================
 # Subscription Management
 # =============================================================================
