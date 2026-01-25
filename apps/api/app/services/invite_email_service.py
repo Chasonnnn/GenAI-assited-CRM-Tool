@@ -159,9 +159,7 @@ async def send_invite_email(
 
     if template and template.is_active:
         inviter_text = f" by {inviter_name}" if inviter_name else ""
-        expires_block = (
-            f"<p>This invitation expires {expires_at}.</p>" if expires_at else ""
-        )
+        expires_block = f"<p>This invitation expires {expires_at}.</p>" if expires_at else ""
         variables = {
             "org_name": org_name,
             "inviter_text": inviter_text,

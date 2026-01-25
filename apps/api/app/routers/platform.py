@@ -662,7 +662,9 @@ async def send_test_org_system_email_template(
     template = system_email_template_service.ensure_system_template(
         db, org_id=org_id, system_key=system_key
     )
-    resolved_from = (template.from_email or "").strip() or (settings.PLATFORM_EMAIL_FROM or "").strip()
+    resolved_from = (template.from_email or "").strip() or (
+        settings.PLATFORM_EMAIL_FROM or ""
+    ).strip()
     if not resolved_from:
         raise HTTPException(
             status_code=400,
