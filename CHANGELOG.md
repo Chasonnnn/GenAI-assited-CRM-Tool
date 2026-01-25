@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.31.5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.31.4...surrogacy-crm-platform-v0.31.5) (2026-01-25)
+
+
+### Bug Fixes
+
+* **api:** include resend_count in invite email idempotency key ([0047702](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0047702583fdf65fd532091d383bbd314a1e0c84))
+* **api:** use urlsafe_b64decode first for webhook secret ([1bf7fb3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1bf7fb3ba419f916e679a4b2c3af1fb2900b557d))
+
 ## [0.31.4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.31.3...surrogacy-crm-platform-v0.31.4) (2026-01-25)
 
 
