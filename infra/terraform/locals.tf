@@ -65,7 +65,8 @@ locals {
     "DUO_CLIENT_ID",
     "DUO_CLIENT_SECRET",
     "DUO_API_HOST",
-    "PLATFORM_RESEND_API_KEY"
+    "PLATFORM_RESEND_API_KEY",
+    "PLATFORM_RESEND_WEBHOOK_SECRET"
   ]
 
   billing_secret_keys = [
