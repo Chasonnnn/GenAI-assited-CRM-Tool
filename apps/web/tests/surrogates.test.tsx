@@ -175,7 +175,7 @@ describe('SurrogatesPage', () => {
         render(<SurrogatesPage />)
         fireEvent.click(screen.getByRole('button', { name: 'New Surrogates' }))
         expect(screen.getByRole('heading', { name: 'New Surrogates' })).toBeInTheDocument()
-        expect(screen.getByRole('button', { name: 'Import CSV' })).toBeInTheDocument()
+        expect(screen.getByRole('link', { name: 'Import CSV' })).toBeInTheDocument()
     })
 
     it('uses page from URL params', () => {
