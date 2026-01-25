@@ -346,12 +346,14 @@ function MembersTab() {
                                 </TableCell>
                                 <TableCell className="text-center">
                                     <div className="flex items-center justify-center gap-2">
-                                        <Link href={`/settings/team/members/${member.id}`}>
-                                            <Button variant="ghost" size="sm">
-                                                <Settings2 className="size-4 mr-1" />
-                                                Manage
-                                            </Button>
-                                        </Link>
+                                        <Button
+                                            render={<Link href={`/settings/team/members/${member.id}`} />}
+                                            variant="ghost"
+                                            size="sm"
+                                        >
+                                            <Settings2 className="size-4 mr-1" />
+                                            Manage
+                                        </Button>
                                         {member.user_id !== user?.user_id ? (
                                             <Button
                                                 variant="ghost"
@@ -496,12 +498,10 @@ export default function TeamSettingsPage() {
                 </div>
 
                 <div className="flex gap-2">
-                    <Link href="/settings/team/roles">
-                        <Button variant="outline">
-                            <Shield className="size-4 mr-2" />
-                            Role Permissions
-                        </Button>
-                    </Link>
+                    <Button render={<Link href="/settings/team/roles" />} variant="outline">
+                        <Shield className="size-4 mr-2" />
+                        Role Permissions
+                    </Button>
                     <Dialog open={showInviteModal} onOpenChange={setShowInviteModal}>
                         <DialogTrigger render={
                             <Button>

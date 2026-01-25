@@ -661,12 +661,15 @@ export default function SurrogatesPage() {
                                         Bulk upload surrogates from a CSV file.
                                     </p>
                                 </div>
-                                <Link href="/surrogates/import">
-                                    <Button variant="outline" size="sm" onClick={() => setIsCreateOpen(false)}>
-                                        <UploadIcon className="mr-2 size-4" />
-                                        Import CSV
-                                    </Button>
-                                </Link>
+                                <Button
+                                    render={<Link href="/surrogates/import" />}
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setIsCreateOpen(false)}
+                                >
+                                    <UploadIcon className="mr-2 size-4" />
+                                    Import CSV
+                                </Button>
                             </CardContent>
                         </Card>
                     </div>

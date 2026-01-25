@@ -108,12 +108,10 @@ export default function RoleDetailPage() {
         <div className="flex flex-1 flex-col gap-6 p-6 max-w-4xl mx-auto">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                    <Link href="/settings/team/roles">
-                        <Button variant="ghost" size="sm">
-                            <ChevronLeft className="size-4 mr-1" />
-                            Back
-                        </Button>
-                    </Link>
+                    <Button variant="ghost" size="sm" render={<Link href="/settings/team/roles" />}>
+                        <ChevronLeft className="size-4 mr-1" />
+                        Back
+                    </Button>
                 </div>
                 {isDeveloper && hasChanges && (
                     <Button onClick={handleSave} disabled={updatePermissions.isPending}>

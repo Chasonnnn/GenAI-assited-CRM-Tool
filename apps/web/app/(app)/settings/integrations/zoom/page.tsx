@@ -35,11 +35,9 @@ export default function ZoomSettingsPage() {
         <div className="flex flex-1 flex-col gap-6 p-6">
             {/* Header */}
             <div className="flex items-center gap-4">
-                <Link href="/settings/integrations">
-                    <Button variant="ghost" size="icon">
-                        <ArrowLeftIcon className="h-5 w-5" />
-                    </Button>
-                </Link>
+                <Button variant="ghost" size="icon" render={<Link href="/settings/integrations" />}>
+                    <ArrowLeftIcon className="h-5 w-5" />
+                </Button>
                 <div className="flex items-center gap-3">
                     <div className="flex size-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900">
                         <VideoIcon className="size-5 text-blue-600 dark:text-blue-400" />

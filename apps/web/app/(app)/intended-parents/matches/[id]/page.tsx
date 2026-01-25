@@ -503,12 +503,15 @@ export default function MatchDetailPage() {
                 {/* Page Header */}
                 <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                     <div className="flex h-14 items-center gap-4 px-6">
-                        <Link href="/intended-parents/matches">
-                            <Button variant="ghost" size="sm" className="h-7 text-xs">
-                                <ArrowLeftIcon className="mr-1 size-3" />
-                                Matches
-                            </Button>
-                        </Link>
+                        <Button
+                            render={<Link href="/intended-parents/matches" />}
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                        >
+                            <ArrowLeftIcon className="mr-1 size-3" />
+                            Matches
+                        </Button>
                         <div className="flex-1 flex items-center gap-2">
                             <h1 className="text-xl font-semibold">
                                 {match.surrogate_name || "Surrogate"} ↔ {match.ip_name || "Intended Parents"}
@@ -658,9 +661,14 @@ export default function MatchDetailPage() {
                                                 </div>
                                             </div>
 
-                                            <Link href={`/surrogates/${surrogateData.id}`}>
-                                                <Button variant="outline" size="sm" className="w-full text-xs h-7">View Full Profile</Button>
-                                            </Link>
+                                            <Button
+                                                render={<Link href={`/surrogates/${surrogateData.id}`} />}
+                                                variant="outline"
+                                                size="sm"
+                                                className="w-full text-xs h-7"
+                                            >
+                                                View Full Profile
+                                            </Button>
                                         </div>
                                     ) : (
                                         <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
@@ -738,9 +746,14 @@ export default function MatchDetailPage() {
                                                 </>
                                             )}
 
-                                            <Link href={`/intended-parents/${ipData.id}`}>
-                                                <Button variant="outline" size="sm" className="w-full text-xs h-7">View Full Profile</Button>
-                                            </Link>
+                                            <Button
+                                                render={<Link href={`/intended-parents/${ipData.id}`} />}
+                                                variant="outline"
+                                                size="sm"
+                                                className="w-full text-xs h-7"
+                                            >
+                                                View Full Profile
+                                            </Button>
                                         </div>
                                     ) : (
                                         <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
