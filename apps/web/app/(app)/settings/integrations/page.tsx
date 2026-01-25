@@ -30,7 +30,11 @@ import {
 import { useIntegrationHealth } from "@/lib/hooks/use-ops"
 import { useUserIntegrations, useConnectZoom, useConnectGmail, useConnectGoogleCalendar, useDisconnectIntegration } from "@/lib/hooks/use-user-integrations"
 import { useAISettings, useUpdateAISettings, useTestAPIKey } from "@/lib/hooks/use-ai"
+import { useResendSettings, useUpdateResendSettings, useTestResendKey, useRotateWebhook, useEligibleSenders } from "@/lib/hooks/use-resend"
 import { formatDistanceToNow } from "date-fns"
+import { CopyIcon, SendIcon, RotateCwIcon } from "lucide-react"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { toast } from "sonner"
 
 const statusConfig = {
     healthy: { icon: CheckCircleIcon, color: "text-green-600", badge: "default" as const, label: "Healthy" },
@@ -305,6 +309,474 @@ function AIConfigurationSection() {
     )
 }
 
+function EmailConfigurationSection() {
+    const { data: settings, isLoading } = useResendSettings()
+    const updateSettings = useUpdateResendSettings()
+    const testKey = useTestResendKey()
+    const rotateWebhook = useRotateWebhook()
+
+    const [provider, setProvider] = useState<"resend" | "gmail" | "">("")
+    const [apiKey, setApiKey] = useState("")
+    const [fromEmail, setFromEmail] = useState("")
+    const [fromName, setFromName] = useState("")
+    const [replyTo, setReplyTo] = useState("")
+    const [defaultSender, setDefaultSender] = useState("")
+    const [keyTested, setKeyTested] = useState<{ valid: boolean; error?: string | null; verified_domains?: string[] } | null>(null)
+    const [saved, setSaved] = useState(false)
+    const [webhookSecret, setWebhookSecret] = useState<string | null>(null)
+    const [isEditingKey, setIsEditingKey] = useState(false)
+    const [hasUserEdited, setHasUserEdited] = useState(false)
+    const { data: eligibleSenders, isLoading: eligibleSendersLoading } = useEligibleSenders(provider === "gmail")
+
+    // Sync state with fetched settings
+    useEffect(() => {
+        if (settings && !hasUserEdited) {
+            setProvider(settings.email_provider || "")
+            setFromEmail(settings.from_email || "")
+            setFromName(settings.from_name || "")
+            setReplyTo(settings.reply_to_email || "")
+            setDefaultSender(settings.default_sender_user_id || "")
+            setApiKey("")
+            setIsEditingKey(false)
+            setKeyTested(null)
+        }
+    }, [settings, hasUserEdited])
+
+    const getErrorMessage = (error: unknown, fallback: string) => {
+        if (error instanceof Error && error.message) return error.message
+        return fallback
+    }
+
+    const handleProviderChange = (value: "resend" | "gmail" | "") => {
+        setProvider(value)
+        setHasUserEdited(true)
+        setSaved(false)
+        setKeyTested(null)
+        setWebhookSecret(null)
+        if (value !== "resend") {
+            setApiKey("")
+            setIsEditingKey(false)
+        }
+    }
+
+    const handleTestKey = async () => {
+        if (!apiKey.trim()) return
+        setKeyTested(null)
+        try {
+            const result = await testKey.mutateAsync(apiKey)
+            setKeyTested(result)
+            if (result.valid && result.verified_domains.length > 0) {
+                // Auto-suggest from email based on verified domain
+                const domain = result.verified_domains[0]
+                if (!fromEmail) {
+                    setFromEmail(`no-reply@${domain}`)
+                    setHasUserEdited(true)
+                }
+            }
+        } catch (error) {
+            const message = getErrorMessage(error, "Failed to test key")
+            setKeyTested({ valid: false, error: message })
+            toast.error(message)
+        }
+    }
+
+    const handleSave = async () => {
+        const update: {
+            email_provider?: "resend" | "gmail" | "";
+            api_key?: string;
+            from_email?: string;
+            from_name?: string;
+            reply_to_email?: string;
+            default_sender_user_id?: string | null;
+            expected_version?: number;
+        } = {
+            email_provider: provider,
+        }
+
+        if (settings?.current_version !== undefined) {
+            update.expected_version = settings.current_version
+        }
+
+        if (provider === "resend") {
+            if (apiKey.trim()) {
+                update.api_key = apiKey
+            }
+            update.from_email = fromEmail
+            update.from_name = fromName
+            update.reply_to_email = replyTo
+        } else if (provider === "gmail") {
+            update.default_sender_user_id = defaultSender || null
+        }
+
+        try {
+            await updateSettings.mutateAsync(update)
+            setApiKey("") // Clear after save
+            setKeyTested(null)
+            setIsEditingKey(false)
+            setHasUserEdited(false)
+            setSaved(true)
+            toast.success("Email configuration saved")
+            setTimeout(() => setSaved(false), 2000)
+        } catch (error) {
+            const message = getErrorMessage(error, "Failed to save email configuration")
+            toast.error(message)
+        }
+    }
+
+    const handleRotateWebhook = async () => {
+        try {
+            const result = await rotateWebhook.mutateAsync()
+            setWebhookSecret(result.webhook_secret)
+            toast.success("Webhook secret rotated")
+        } catch (error) {
+            toast.error(getErrorMessage(error, "Failed to rotate webhook secret"))
+        }
+    }
+
+    const copyToClipboard = (text: string) => {
+        navigator.clipboard
+            .writeText(text)
+            .then(() => toast.success("Copied to clipboard"))
+            .catch(() => toast.error("Failed to copy"))
+    }
+
+    const hasResendKey = Boolean(apiKey.trim() || settings?.api_key_masked)
+    const hasFromEmail = Boolean(fromEmail.trim())
+    const hasGmailSender = Boolean(defaultSender)
+    const resendReady = provider !== "resend" || (hasResendKey && hasFromEmail)
+    const gmailReady = provider !== "gmail" || hasGmailSender
+    const canSave = Boolean(provider) && resendReady && gmailReady
+    const showMaskedKey = Boolean(settings?.api_key_masked) && !isEditingKey && !apiKey
+
+    if (isLoading) {
+        return (
+            <div className="border-t pt-6">
+                <h2 className="mb-4 text-lg font-semibold">Email Configuration</h2>
+                <div className="flex items-center justify-center py-8">
+                    <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                </div>
+            </div>
+        )
+    }
+
+    return (
+        <div className="border-t pt-6">
+            <h2 className="mb-4 text-lg font-semibold">Email Configuration</h2>
+            <p className="mb-4 text-sm text-muted-foreground">
+                Configure the email provider for campaigns. Choose between Resend (recommended for deliverability) or Gmail.
+            </p>
+
+            <Card>
+                <CardHeader className="pb-3">
+                    <div className="flex items-center gap-3">
+                        <div className="flex size-10 items-center justify-center rounded-lg bg-teal-100 dark:bg-teal-900">
+                            <SendIcon className="size-5 text-teal-600 dark:text-teal-400" />
+                        </div>
+                        <div>
+                            <CardTitle className="text-base">Campaign Email Provider</CardTitle>
+                            <CardDescription className="text-xs">
+                                {settings?.email_provider === "resend"
+                                    ? "Resend"
+                                    : settings?.email_provider === "gmail"
+                                    ? "Gmail"
+                                    : "Not configured"}
+                            </CardDescription>
+                        </div>
+                    </div>
+                </CardHeader>
+
+                <CardContent className="space-y-6">
+                    {/* Provider Selection */}
+                    <div className="space-y-3">
+                        <Label>Email Provider</Label>
+                        <RadioGroup
+                            value={provider}
+                            onValueChange={(v) => handleProviderChange(v as "resend" | "gmail" | "")}
+                            className="flex flex-col gap-3"
+                        >
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="resend" id="provider-resend" />
+                                <Label htmlFor="provider-resend" className="cursor-pointer">
+                                    <span className="font-medium">Resend</span>
+                                    <span className="ml-2 text-xs text-muted-foreground">(Recommended)</span>
+                                </Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="gmail" id="provider-gmail" />
+                                <Label htmlFor="provider-gmail" className="cursor-pointer">
+                                    <span className="font-medium">Gmail</span>
+                                    <span className="ml-2 text-xs text-muted-foreground">(Org admin account)</span>
+                                </Label>
+                            </div>
+                        </RadioGroup>
+                    </div>
+
+                    {/* Resend Configuration */}
+                    {provider === "resend" && (
+                        <div className="space-y-4 rounded-lg border p-4">
+                            <h3 className="text-sm font-medium">Resend Configuration</h3>
+
+                            {/* API Key */}
+                            <div className="space-y-2">
+                                <Label htmlFor="resend-key">API Key</Label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        id="resend-key"
+                                        type="password"
+                                        value={showMaskedKey ? settings?.api_key_masked ?? "" : apiKey}
+                                        onChange={(e) => {
+                                            setApiKey(e.target.value)
+                                            setKeyTested(null)
+                                            setIsEditingKey(true)
+                                            setHasUserEdited(true)
+                                        }}
+                                        placeholder="re_..."
+                                        disabled={showMaskedKey}
+                                        className="flex-1"
+                                    />
+                                    {showMaskedKey ? (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                                setIsEditingKey(true)
+                                                setApiKey("")
+                                                setKeyTested(null)
+                                                setHasUserEdited(true)
+                                            }}
+                                            className="shrink-0"
+                                        >
+                                            Change Key
+                                        </Button>
+                                    ) : (
+                                        <div className="flex gap-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={handleTestKey}
+                                                disabled={!apiKey.trim() || testKey.isPending}
+                                            >
+                                                {testKey.isPending ? (
+                                                    <Loader2Icon className="size-4 animate-spin" />
+                                                ) : keyTested?.valid ? (
+                                                    <CheckIcon className="size-4 text-green-600" />
+                                                ) : keyTested !== null ? (
+                                                    <XCircleIcon className="size-4 text-red-600" />
+                                                ) : (
+                                                    "Test"
+                                                )}
+                                            </Button>
+                                            {settings?.api_key_masked && isEditingKey && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        setIsEditingKey(false)
+                                                        setApiKey("")
+                                                        setKeyTested(null)
+                                                    }}
+                                                >
+                                                    Cancel
+                                                </Button>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                                {keyTested?.valid && (
+                                    <p className="text-xs text-green-600">
+                                        API key is valid! Verified domain{keyTested.verified_domains && keyTested.verified_domains.length > 1 ? "s" : ""}: {keyTested.verified_domains?.join(", ") || settings?.verified_domain}
+                                    </p>
+                                )}
+                                {keyTested && !keyTested.valid && (
+                                    <p className="text-xs text-red-600">{keyTested.error || "API key is invalid"}</p>
+                                )}
+                                <p className="text-xs text-muted-foreground">
+                                    Get your key from <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">resend.com/api-keys</a>
+                                </p>
+                            </div>
+
+                            {/* Verified Domain */}
+                            {settings?.verified_domain && (
+                                <div className="flex items-center gap-2 rounded-md bg-green-50 px-3 py-2 text-sm dark:bg-green-900/20">
+                                    <CheckCircleIcon className="size-4 text-green-600" />
+                                    <span>Verified domain: <strong>{settings.verified_domain}</strong></span>
+                                </div>
+                            )}
+
+                            {/* From Email */}
+                            <div className="space-y-2">
+                                <Label htmlFor="from-email">From Email</Label>
+                                <Input
+                                    id="from-email"
+                                    type="email"
+                                    value={fromEmail}
+                                    onChange={(e) => {
+                                        setFromEmail(e.target.value)
+                                        setHasUserEdited(true)
+                                    }}
+                                    placeholder={settings?.verified_domain ? `no-reply@${settings.verified_domain}` : "no-reply@yourdomain.com"}
+                                />
+                                {settings?.verified_domain && (
+                                    <p className="text-xs text-muted-foreground">
+                                        Must use your verified domain: @{settings.verified_domain}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* From Name */}
+                            <div className="space-y-2">
+                                <Label htmlFor="from-name">From Name (optional)</Label>
+                                <Input
+                                    id="from-name"
+                                    value={fromName}
+                                    onChange={(e) => {
+                                        setFromName(e.target.value)
+                                        setHasUserEdited(true)
+                                    }}
+                                    placeholder="Your Company Name"
+                                />
+                            </div>
+
+                            {/* Reply-To */}
+                            <div className="space-y-2">
+                                <Label htmlFor="reply-to">Reply-To Email (optional)</Label>
+                                <Input
+                                    id="reply-to"
+                                    type="email"
+                                    value={replyTo}
+                                    onChange={(e) => {
+                                        setReplyTo(e.target.value)
+                                        setHasUserEdited(true)
+                                    }}
+                                    placeholder="support@yourdomain.com"
+                                />
+                            </div>
+
+                            {/* Webhook URL */}
+                            {settings?.webhook_url && (
+                                <div className="space-y-2">
+                                    <Label>Webhook URL</Label>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            value={settings.webhook_url}
+                                            readOnly
+                                            className="flex-1 text-xs font-mono"
+                                        />
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => copyToClipboard(settings.webhook_url)}
+                                        >
+                                            <CopyIcon className="size-4" />
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={handleRotateWebhook}
+                                            disabled={rotateWebhook.isPending}
+                                        >
+                                            {rotateWebhook.isPending ? (
+                                                <Loader2Icon className="size-4 animate-spin" />
+                                            ) : (
+                                                <RotateCwIcon className="size-4" />
+                                            )}
+                                        </Button>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                        Add this URL to Resend webhook settings for delivery tracking
+                                    </p>
+                                    {webhookSecret && (
+                                        <div className="mt-2 rounded-md bg-yellow-50 p-3 dark:bg-yellow-900/20">
+                                            <p className="text-xs font-medium text-yellow-800 dark:text-yellow-200">
+                                                New Webhook Secret (copy now - shown only once):
+                                            </p>
+                                            <div className="mt-1 flex items-center gap-2">
+                                                <code className="flex-1 break-all rounded bg-yellow-100 px-2 py-1 text-xs dark:bg-yellow-800/30">
+                                                    {webhookSecret}
+                                                </code>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => copyToClipboard(webhookSecret)}
+                                                >
+                                                    <CopyIcon className="size-4" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Gmail Configuration */}
+                    {provider === "gmail" && (
+                        <div className="space-y-4 rounded-lg border p-4">
+                            <h3 className="text-sm font-medium">Gmail Configuration</h3>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="gmail-sender">Default Sender</Label>
+                                <Select
+                                    value={defaultSender}
+                                    onValueChange={(v) => {
+                                        setDefaultSender(v ?? "")
+                                        setHasUserEdited(true)
+                                    }}
+                                >
+                                    <SelectTrigger id="gmail-sender">
+                                        <SelectValue placeholder={eligibleSendersLoading ? "Loading senders..." : "Select admin with Gmail connected"} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {eligibleSenders?.map((sender) => (
+                                            <SelectItem key={sender.user_id} value={sender.user_id}>
+                                                {sender.display_name} ({sender.gmail_email})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {!eligibleSendersLoading && !eligibleSenders?.length && (
+                                    <p className="text-xs text-yellow-600">
+                                        No eligible senders found. Admin users must connect Gmail first.
+                                    </p>
+                                )}
+                                <p className="text-xs text-muted-foreground">
+                                    Only admin users with Gmail connected can be selected as the default sender.
+                                </p>
+                            </div>
+
+                            {settings?.default_sender_name && (
+                                <div className="flex items-center gap-2 rounded-md bg-green-50 px-3 py-2 text-sm dark:bg-green-900/20">
+                                    <CheckCircleIcon className="size-4 text-green-600" />
+                                    <span>
+                                        Current sender: <strong>{settings.default_sender_name}</strong> ({settings.default_sender_email})
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Save Button */}
+                    <Button onClick={handleSave} disabled={updateSettings.isPending || !canSave} className="w-full">
+                        {updateSettings.isPending ? (
+                            <>
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                Saving...
+                            </>
+                        ) : saved ? (
+                            <>
+                                <CheckIcon className="mr-2 size-4" />
+                                Saved!
+                            </>
+                        ) : (
+                            "Save Email Configuration"
+                        )}
+                    </Button>
+                </CardContent>
+            </Card>
+        </div>
+    )
+}
+
 export default function IntegrationsPage() {
     const { data: healthData, isLoading, refetch, isFetching } = useIntegrationHealth()
     const { data: userIntegrations } = useUserIntegrations()
@@ -518,6 +990,9 @@ export default function IntegrationsPage() {
 
                 {/* AI Configuration Section */}
                 <AIConfigurationSection />
+
+                {/* Email Configuration Section */}
+                <EmailConfigurationSection />
 
                 {/* System Integrations Section */}
                 <div className="border-t pt-6">
