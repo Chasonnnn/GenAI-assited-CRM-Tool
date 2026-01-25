@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.33.2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.33.1...surrogacy-crm-platform-v0.33.2) (2026-01-25)
+
+
+### Bug Fixes
+
+* **web:** fix SidebarMenuButton Link+Tooltip composition ([d7fac48](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d7fac48fc660160d707438f189f4de894a99fb6c))
+* **web:** fix SidebarMenuButton Link+Tooltip composition ([930d3a0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/930d3a05b429a2a8c82ec62e86075ffcfd5d655c))
+
 ## [0.33.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.33.0...surrogacy-crm-platform-v0.33.1) (2026-01-25)
 
 
