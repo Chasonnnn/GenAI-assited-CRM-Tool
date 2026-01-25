@@ -121,6 +121,13 @@ const INVITE_ROLE_LABELS: Record<InviteRole, string> = {
     admin: 'Admin',
 };
 
+const resolveErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message) {
+        return error.message;
+    }
+    return fallback;
+};
+
 const ALERT_STATUS_BADGES: Record<string, string> = {
     open: 'bg-red-500/10 text-red-600 border-red-500/20',
     acknowledged: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20',
@@ -280,7 +287,7 @@ export default function AgencyDetailPage() {
     }, [orgAlerts]);
 
     useEffect(() => {
-        if (activeTab !== 'templates') return;
+        if (activeTab !== 'templates' && activeTab !== 'invites') return;
 
         async function fetchEmailStatus() {
             setPlatformEmailLoading(true);
@@ -295,26 +302,28 @@ export default function AgencyDetailPage() {
             }
         }
 
-        async function fetchInviteTemplate() {
-            setInviteTemplateLoading(true);
-            try {
-                const tpl = await getOrgSystemEmailTemplate(orgId, 'org_invite');
-                setInviteTemplate(tpl);
-                setTemplateSubject(tpl.subject);
-                setTemplateFromEmail(tpl.from_email || '');
-                setTemplateBody(tpl.body);
-                setTemplateActive(tpl.is_active);
-                setTemplateVersion(tpl.current_version);
-            } catch (error) {
-                console.error('Failed to fetch invite template:', error);
-                toast.error('Failed to load invite email template');
-            } finally {
-                setInviteTemplateLoading(false);
-            }
-        }
-
         fetchEmailStatus();
-        fetchInviteTemplate();
+        if (activeTab === 'templates') {
+            async function fetchInviteTemplate() {
+                setInviteTemplateLoading(true);
+                try {
+                    const tpl = await getOrgSystemEmailTemplate(orgId, 'org_invite');
+                    setInviteTemplate(tpl);
+                    setTemplateSubject(tpl.subject);
+                    setTemplateFromEmail(tpl.from_email || '');
+                    setTemplateBody(tpl.body);
+                    setTemplateActive(tpl.is_active);
+                    setTemplateVersion(tpl.current_version);
+                } catch (error) {
+                    console.error('Failed to fetch invite template:', error);
+                    toast.error('Failed to load invite email template');
+                } finally {
+                    setInviteTemplateLoading(false);
+                }
+            }
+
+            fetchInviteTemplate();
+        }
     }, [activeTab, orgId]);
 
     const handleSaveInviteTemplate = async () => {
@@ -340,7 +349,7 @@ export default function AgencyDetailPage() {
             toast.success('Invite email template updated');
         } catch (error) {
             console.error('Failed to update invite template:', error);
-            toast.error('Failed to update invite email template');
+            toast.error(resolveErrorMessage(error, 'Failed to update invite email template'));
         } finally {
             setInviteTemplateSaving(false);
         }
@@ -354,7 +363,7 @@ export default function AgencyDetailPage() {
             toast.success('Test email sent');
         } catch (error) {
             console.error('Failed to send test email:', error);
-            toast.error('Failed to send test email');
+            toast.error(resolveErrorMessage(error, 'Failed to send test email'));
         } finally {
             setTestSending(false);
         }
@@ -807,12 +816,22 @@ export default function AgencyDetailPage() {
                                         Invite User
                                     </DialogTrigger>
                                     <DialogContent>
-                                        <DialogHeader>
-                                            <DialogTitle>Invite user</DialogTitle>
-                                            <DialogDescription>
-                                                Send an invitation to join {org.name}.
-                                            </DialogDescription>
-                                        </DialogHeader>
+                                <DialogHeader>
+                                    <DialogTitle>Invite user</DialogTitle>
+                                    <DialogDescription>
+                                        Send an invitation to join {org.name}.
+                                        <button
+                                            type="button"
+                                            className="ml-2 text-xs text-teal-600 hover:underline"
+                                            onClick={() => {
+                                                setInviteOpen(false);
+                                                setActiveTab('templates');
+                                            }}
+                                        >
+                                            Edit invite template
+                                        </button>
+                                    </DialogDescription>
+                                </DialogHeader>
                                         <div className="space-y-4">
                                             <div className="space-y-2">
                                                 <Label htmlFor="invite-email">Email</Label>
@@ -879,6 +898,33 @@ export default function AgencyDetailPage() {
                                 </Dialog>
                             </CardHeader>
                             <CardContent>
+                                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-600 dark:border-stone-800 dark:bg-stone-900 dark:text-stone-300">
+                                    <div className="flex flex-col gap-1">
+                                        <span>
+                                            Invites use the <span className="font-mono">org_invite</span> template.
+                                        </span>
+                                        {platformEmailLoading ? (
+                                            <span className="text-xs text-muted-foreground">
+                                                Loading sender status...
+                                            </span>
+                                        ) : platformEmailStatus?.configured ? (
+                                            <span className="text-xs text-muted-foreground">
+                                                Platform sender configured (Resend)
+                                            </span>
+                                        ) : (
+                                            <span className="text-xs text-yellow-700 dark:text-yellow-400">
+                                                Platform sender not configured — invite emails may fail.
+                                            </span>
+                                        )}
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setActiveTab('templates')}
+                                    >
+                                        Manage template
+                                    </Button>
+                                </div>
                                 {invites.length === 0 ? (
                                     <p className="text-center py-8 text-muted-foreground">
                                         No invites yet
