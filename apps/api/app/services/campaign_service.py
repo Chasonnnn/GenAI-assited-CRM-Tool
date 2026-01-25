@@ -386,6 +386,8 @@ def enqueue_campaign_send(
 
     Returns: (message, run_id or None, scheduled_at or None)
     """
+    from app.services import email_provider_service
+
     campaign = (
         db.query(Campaign)
         .filter(
@@ -405,12 +407,19 @@ def enqueue_campaign_send(
     ]:
         raise ValueError(f"Cannot send campaign in '{campaign.status}' status")
 
+    # Validate and lock email provider at run creation time
+    try:
+        provider_type, _ = email_provider_service.resolve_campaign_provider(db, org_id)
+    except email_provider_service.ConfigurationError as e:
+        raise ValueError(str(e))
+
     if send_now:
-        # Create run immediately
+        # Create run immediately with locked provider
         run = CampaignRun(
             organization_id=org_id,
             campaign_id=campaign.id,
-            status="pending",
+            status="running",
+            email_provider=provider_type,  # Lock provider at creation
             total_count=0,
             sent_count=0,
             failed_count=0,
@@ -446,7 +455,8 @@ def enqueue_campaign_send(
     run = CampaignRun(
         organization_id=org_id,
         campaign_id=campaign.id,
-        status="pending",
+        status="running",
+        email_provider=provider_type,  # Lock provider at creation
         total_count=0,
         sent_count=0,
         failed_count=0,
@@ -832,9 +842,13 @@ def execute_campaign_run(
                 cr.tracking_token = tracking_service.generate_tracking_token()
 
             # Inject tracking pixel and wrap links
-            from app.services import tracking_service
+            # Skip internal tracking for Resend (uses webhooks instead)
+            if run.email_provider == "resend":
+                tracked_body = body  # No internal tracking for Resend
+            else:
+                from app.services import tracking_service
 
-            tracked_body = tracking_service.prepare_email_for_tracking(body, cr.tracking_token)
+                tracked_body = tracking_service.prepare_email_for_tracking(body, cr.tracking_token)
 
             try:
                 # Queue email (actual send happens in background job)
