@@ -426,87 +426,16 @@ def _verify_svix_signature(
     return False
 
 
-@router.post("/resend/{webhook_id}")
-@limiter.limit(f"{settings.RATE_LIMIT_WEBHOOK}/minute")
-async def resend_webhook(
-    webhook_id: str,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    """
-    Receive Resend webhook events.
+def _process_resend_event(
+    db: Session,
+    *,
+    email_log,
+    event_type: str | None,
+    data: dict,
+) -> None:
+    from app.db.models import CampaignRecipient, CampaignRun
+    from app.services import campaign_service
 
-    Handles email delivery events:
-    - email.delivered: Email was delivered to recipient
-    - email.bounced: Email bounced (hard or soft)
-    - email.complained: Recipient marked as spam
-    - email.opened: Recipient opened the email
-    - email.clicked: Recipient clicked a link
-
-    Security:
-    - Webhook URL uses unique webhook_id per org
-    - Verifies Svix signature before processing
-    - Always returns 200 to avoid leaking information
-    """
-    from app.services import resend_settings_service, campaign_service
-
-    body = await request.body()
-
-    # Check payload size
-    if len(body) > settings.META_WEBHOOK_MAX_PAYLOAD_BYTES:
-        logger.warning("Resend webhook payload too large")
-        return {"status": "ok"}
-
-    # 1. Lookup settings by webhook_id
-    resend_settings = resend_settings_service.get_settings_by_webhook_id(db, webhook_id)
-    if not resend_settings:
-        logger.info("Resend webhook: unknown webhook_id")
-        return {"status": "ok"}  # Don't reveal validity
-
-    # 2. Verify signature BEFORE parsing
-    if resend_settings.webhook_secret_encrypted:
-        webhook_secret = resend_settings_service.decrypt_api_key(
-            resend_settings.webhook_secret_encrypted
-        )
-        headers = {k.lower(): v for k, v in request.headers.items()}
-        if not _verify_svix_signature(body, headers, webhook_secret):
-            logger.warning(
-                "Resend webhook invalid signature for org=%s", resend_settings.organization_id
-            )
-            return {"status": "ok"}
-
-    # 3. Parse and process
-    try:
-        payload = json.loads(body)
-    except json.JSONDecodeError:
-        logger.warning("Resend webhook invalid JSON")
-        return {"status": "ok"}
-
-    event_type = payload.get("type")
-    data = payload.get("data", {})
-    email_id = data.get("email_id")
-
-    if not email_id:
-        logger.info("Resend webhook: no email_id in payload")
-        return {"status": "ok"}
-
-    # Find the EmailLog by external_id
-    from app.db.models import EmailLog, CampaignRecipient, CampaignRun
-
-    email_log = (
-        db.query(EmailLog)
-        .filter(
-            EmailLog.organization_id == resend_settings.organization_id,
-            EmailLog.external_id == email_id,
-        )
-        .first()
-    )
-
-    if not email_log:
-        logger.info("Resend webhook: no EmailLog found for email_id=%s", email_id)
-        return {"status": "ok"}
-
-    # 4. Process events
     now = datetime.now(timezone.utc)
 
     if event_type == "email.delivered":
@@ -532,7 +461,7 @@ async def resend_webhook(
         if email_log.bounce_type == "hard":
             campaign_service.add_to_suppression(
                 db,
-                resend_settings.organization_id,
+                email_log.organization_id,
                 email_log.recipient_email,
                 "bounced",
                 source_type="email_log",
@@ -556,7 +485,7 @@ async def resend_webhook(
         # Add to suppression list for complaints
         campaign_service.add_to_suppression(
             db,
-            resend_settings.organization_id,
+            email_log.organization_id,
             email_log.recipient_email,
             "complaint",
             source_type="email_log",
@@ -678,5 +607,143 @@ async def resend_webhook(
                     .count()
                 )
 
+
+@router.post("/resend/{webhook_id}")
+@limiter.limit(f"{settings.RATE_LIMIT_WEBHOOK}/minute")
+async def resend_webhook(
+    webhook_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Receive Resend webhook events.
+
+    Handles email delivery events:
+    - email.delivered: Email was delivered to recipient
+    - email.bounced: Email bounced (hard or soft)
+    - email.complained: Recipient marked as spam
+    - email.opened: Recipient opened the email
+    - email.clicked: Recipient clicked a link
+
+    Security:
+    - Webhook URL uses unique webhook_id per org
+    - Verifies Svix signature before processing
+    - Always returns 200 to avoid leaking information
+    """
+    from app.services import resend_settings_service
+
+    body = await request.body()
+
+    # Check payload size
+    if len(body) > settings.META_WEBHOOK_MAX_PAYLOAD_BYTES:
+        logger.warning("Resend webhook payload too large")
+        return {"status": "ok"}
+
+    # 1. Lookup settings by webhook_id
+    resend_settings = resend_settings_service.get_settings_by_webhook_id(db, webhook_id)
+    if not resend_settings:
+        logger.info("Resend webhook: unknown webhook_id")
+        return {"status": "ok"}  # Don't reveal validity
+
+    # 2. Verify signature BEFORE parsing
+    if resend_settings.webhook_secret_encrypted:
+        webhook_secret = resend_settings_service.decrypt_api_key(
+            resend_settings.webhook_secret_encrypted
+        )
+        headers = {k.lower(): v for k, v in request.headers.items()}
+        if not _verify_svix_signature(body, headers, webhook_secret):
+            logger.warning(
+                "Resend webhook invalid signature for org=%s", resend_settings.organization_id
+            )
+            return {"status": "ok"}
+
+    # 3. Parse and process
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        logger.warning("Resend webhook invalid JSON")
+        return {"status": "ok"}
+
+    event_type = payload.get("type")
+    data = payload.get("data", {})
+    email_id = data.get("email_id")
+
+    if not email_id:
+        logger.info("Resend webhook: no email_id in payload")
+        return {"status": "ok"}
+
+    # Find the EmailLog by external_id
+    from app.db.models import EmailLog
+
+    email_log = (
+        db.query(EmailLog)
+        .filter(
+            EmailLog.organization_id == resend_settings.organization_id,
+            EmailLog.external_id == email_id,
+        )
+        .first()
+    )
+
+    if not email_log:
+        logger.info("Resend webhook: no EmailLog found for email_id=%s", email_id)
+        return {"status": "ok"}
+
+    # 4. Process events
+    _process_resend_event(db, email_log=email_log, event_type=event_type, data=data)
+
+    db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/resend/platform")
+@limiter.limit(f"{settings.RATE_LIMIT_WEBHOOK}/minute")
+async def resend_platform_webhook(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Receive Resend webhook events for platform/system emails.
+
+    Uses PLATFORM_RESEND_WEBHOOK_SECRET for signature verification.
+    """
+    body = await request.body()
+
+    # Check payload size
+    if len(body) > settings.META_WEBHOOK_MAX_PAYLOAD_BYTES:
+        logger.warning("Platform Resend webhook payload too large")
+        return {"status": "ok"}
+
+    secret = (settings.PLATFORM_RESEND_WEBHOOK_SECRET or "").strip()
+    if not secret:
+        logger.warning("Platform Resend webhook secret not configured")
+        return {"status": "ok"}
+
+    headers = {k.lower(): v for k, v in request.headers.items()}
+    if not _verify_svix_signature(body, headers, secret):
+        logger.warning("Platform Resend webhook invalid signature")
+        return {"status": "ok"}
+
+    # Parse payload
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        logger.warning("Platform Resend webhook invalid JSON")
+        return {"status": "ok"}
+
+    event_type = payload.get("type")
+    data = payload.get("data", {})
+    email_id = data.get("email_id")
+    if not email_id:
+        logger.info("Platform Resend webhook: no email_id in payload")
+        return {"status": "ok"}
+
+    from app.db.models import EmailLog
+
+    email_log = db.query(EmailLog).filter(EmailLog.external_id == email_id).first()
+    if not email_log:
+        logger.info("Platform Resend webhook: no EmailLog found for email_id=%s", email_id)
+        return {"status": "ok"}
+
+    _process_resend_event(db, email_log=email_log, event_type=event_type, data=data)
     db.commit()
     return {"status": "ok"}
