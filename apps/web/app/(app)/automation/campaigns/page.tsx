@@ -256,11 +256,9 @@ export default function CampaignsPage() {
             <div className="border-b bg-card">
                 <div className="flex items-center justify-between p-6">
                     <div className="flex items-center gap-4">
-                        <Link href="/automation">
-                            <Button variant="ghost" size="icon-sm">
-                                <ArrowLeftIcon className="size-4" />
-                            </Button>
-                        </Link>
+                        <Button variant="ghost" size="icon-sm" render={<Link href="/automation" />}>
+                            <ArrowLeftIcon className="size-4" />
+                        </Button>
                         <div>
                             <h1 className="text-2xl font-semibold">Campaigns</h1>
                             <p className="text-sm text-muted-foreground">

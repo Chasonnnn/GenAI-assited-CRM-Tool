@@ -977,12 +977,14 @@ export default function IntegrationsPage() {
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                <Link href="/settings/integrations/meta">
-                                    <Button variant="outline" className="w-full">
-                                        <KeyIcon className="mr-2 size-4" />
-                                        Manage Page Tokens
-                                    </Button>
-                                </Link>
+                                <Button
+                                    render={<Link href="/settings/integrations/meta" />}
+                                    variant="outline"
+                                    className="w-full"
+                                >
+                                    <KeyIcon className="mr-2 size-4" />
+                                    Manage Page Tokens
+                                </Button>
                             </CardContent>
                         </Card>
                     </div>
@@ -1111,15 +1113,18 @@ export default function IntegrationsPage() {
                                         {/* Action buttons */}
                                         {integration.config_status !== "configured" && (
                                             integration.integration_type === "meta_leads" || integration.integration_type === "meta_capi" ? (
-                                                <Link href="/settings/integrations/meta">
-                                                    <Button variant="outline" size="sm" className="w-full">
-                                                        <KeyIcon className="mr-2 size-3" />
-                                                        {integration.config_status === "expired_token"
-                                                            ? "Refresh Token"
-                                                            : "Configure"
-                                                        }
-                                                    </Button>
-                                                </Link>
+                                                <Button
+                                                    render={<Link href="/settings/integrations/meta" />}
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="w-full"
+                                                >
+                                                    <KeyIcon className="mr-2 size-3" />
+                                                    {integration.config_status === "expired_token"
+                                                        ? "Refresh Token"
+                                                        : "Configure"
+                                                    }
+                                                </Button>
                                             ) : (
                                                 <p className="text-xs text-muted-foreground text-center">
                                                     Configure via CLI
